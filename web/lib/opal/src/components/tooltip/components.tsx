@@ -174,7 +174,16 @@ function Tooltip({
     >
       <TooltipPrimitive.Trigger
         asChild
-        onPointerMove={align === "follow" ? trackPointer : undefined}
+        // Radix skips its open handler for a prevented event. Otherwise a
+        // suppressed tooltip still opens in Radix's state, which closes any
+        // enclosing tooltip.
+        onPointerMove={
+          suppressed
+            ? (event) => event.preventDefault()
+            : align === "follow"
+              ? trackPointer
+              : undefined
+        }
       >
         {children}
       </TooltipPrimitive.Trigger>

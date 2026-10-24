@@ -134,7 +134,7 @@ AvailabilityPersists, PartialDefaultChatSelection, ScopedManagerDefaultChatReadO
 DraftsSurviveTabChanges, and UnsavedServerChanges.
 
 [Open the server page](http://localhost:6006/?path=/story/apps-actions-mcp-server-page--ready).
-Tools stories use the same full page. New setup uses a compact modal with two steps. Existing servers use inline Server configuration,
+Tools stories use the same full page. New setup uses a compact modal with two steps. Existing servers use inline Configuration,
 Authentication, and Tools tabs. Drafts remain when users change tabs. All API requests use local
 fixtures, including availability writes.
 

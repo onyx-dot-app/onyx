@@ -56,9 +56,9 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Host $http_host;
         proxy_set_header X-Forwarded-Port $server_port;
-        proxy_set_header Host $host;
+        proxy_set_header Host $http_host;
         proxy_http_version 1.1;
         proxy_buffering off;
         proxy_redirect off;
@@ -69,9 +69,9 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Host $http_host;
         proxy_set_header X-Forwarded-Port $server_port;
-        proxy_set_header Host $host;
+        proxy_set_header Host $http_host;
         proxy_http_version 1.1;
         proxy_buffering off;
         proxy_redirect off;
@@ -90,9 +90,9 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Host $http_host;
         proxy_set_header X-Forwarded-Port $server_port;
-        proxy_set_header Host $host;
+        proxy_set_header Host $http_host;
 
         # need to use 1.1 to support chunked transfers and WebSocket
         proxy_http_version 1.1;
@@ -116,9 +116,9 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Host $http_host;
         proxy_set_header X-Forwarded-Port $server_port;
-        proxy_set_header Host $host;
+        proxy_set_header Host $http_host;
 
         proxy_http_version 1.1;
 

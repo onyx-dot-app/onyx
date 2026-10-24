@@ -34,7 +34,8 @@ The barrel file at `index.ts` re-exports each component and its prop types. Each
 | [InputTypeInTag](./inputs/texts/input-type-in-tag/) | Chips-in-input free tagging (Figma Input/Tags) | [README](./inputs/texts/input-type-in-tag/README.md) |
 | [InputCheckbox](./inputs/booleans/input-checkbox/) | Checkbox with checked/indeterminate states | [README](./inputs/booleans/input-checkbox/README.md) |
 | [InputSwitch](./inputs/booleans/input-switch/) | On/off toggle switch | [README](./inputs/booleans/input-switch/README.md) |
-| [InputNumber](./inputs/input-number/)          | Number field with steppers and reset                         | [README](./inputs/input-number/README.md)      |
+| [InputNumber](./inputs/numbers/input-number/)          | Number field with steppers and reset                         | [README](./inputs/numbers/input-number/README.md)      |
+| [InputCurrency](./inputs/numbers/input-currency/) | Segmented currency amount field (whole . fraction) | [README](./inputs/numbers/input-currency/README.md) |
 | [InputList](./inputs/input-list/)   | Type-and-Enter list builder with removable chips below       | [README](./inputs/input-list/README.md)  |
 
 ## Adding new components

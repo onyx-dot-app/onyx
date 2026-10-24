@@ -3,7 +3,7 @@
   "models": {
     "ada": {
       "cost": {
-        "input": 0.09999999999999999,
+        "input": 0.11,
         "output": 0.0
       },
       "limit": {
@@ -2246,7 +2246,6 @@
       "reasoning": true,
       "release_date": "2026-09-29",
       "structured_output": true,
-      "supports_none_reasoning_effort": true,
       "temperature": false,
       "tool_call": true
     },

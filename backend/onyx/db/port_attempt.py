@@ -640,6 +640,26 @@ def mark_port_in_progress(
         raise
 
 
+def fail_unstarted_port_attempt(
+    db_session: Session, port_attempt_id: int, error_msg: str
+) -> bool:
+    """Flip NOT_STARTED -> FAILED, returning True. Any other status is left alone, so
+    a duplicate task cannot fail an attempt that another worker already claimed."""
+    try:
+        attempt = _get_locked(db_session, port_attempt_id)
+        if attempt.status != PortAttemptStatus.NOT_STARTED:
+            db_session.rollback()
+            return False
+        attempt.status = PortAttemptStatus.FAILED
+        attempt.time_completed = func.now()
+        attempt.error_msg = error_msg
+        db_session.commit()
+        return True
+    except Exception:
+        db_session.rollback()
+        raise
+
+
 def commit_port_cursor(
     db_session: Session,
     port_attempt_id: int,

@@ -7,13 +7,11 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
 from onyx.connectors.capability_checks import findings_setting
 from onyx.connectors.capability_checks.draft_runs import (
-    CachedDraftResult,
-    DraftCheckState,
-    DraftCheckStateKind,
     apply_cached_result,
     cached_check_result,
 )
 from onyx.connectors.capability_checks.models import (
+    CachedDraftResult,
     CapabilityCheck,
     CapabilityCheckContext,
     CapabilityCheckResult,
@@ -22,6 +20,8 @@ from onyx.connectors.capability_checks.models import (
     CheckOutput,
     CountFinding,
     CredentialCapabilityReport,
+    DraftCheckState,
+    DraftCheckStateKind,
 )
 from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.db.enums import CapabilityCheckTrigger, CapabilityReportRunStatus
@@ -96,6 +96,9 @@ def test_findings_turned_off_during_a_run_are_not_kept(
     )
     second: _UsersCheck = _UsersCheck()
     second.check_id = "users_check_2"
+    # Checks run side by side; the second runs after the first, so the setting
+    # is read for them in this order.
+    second.depends_on = ("users_check",)
 
     results: list[CapabilityCheckResult] = run_capability_checks(
         [_UsersCheck(), second], _context()

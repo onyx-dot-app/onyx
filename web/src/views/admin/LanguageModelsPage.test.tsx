@@ -1,6 +1,14 @@
-import { render, screen, setupUser } from "@tests/setup/test-utils";
+import {
+  makeProvider,
+  render,
+  screen,
+  setupUser,
+} from "@tests/setup/test-utils";
 import LanguageModelsPage from "@/views/admin/LanguageModelsPage";
-import type { LLMProviderView } from "@/lib/languageModels/types";
+import type {
+  LLMProviderFormProps,
+  LLMProviderView,
+} from "@/lib/languageModels/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 jest.mock("next/navigation", () => ({
@@ -47,9 +55,9 @@ const providers: LLMProviderView[] = [
     model_configurations: [
       {
         id: 11,
-        name: "gpt-4o",
-        display_name: "GPT-4o",
-        effectiveDisplayName: "GPT-4o",
+        name: "gpt-6-sol",
+        display_name: "GPT-6 Sol",
+        effectiveDisplayName: "GPT-6 Sol",
         is_visible: true,
         max_input_tokens: null,
         supports_image_input: true,
@@ -57,9 +65,9 @@ const providers: LLMProviderView[] = [
       },
       {
         id: 12,
-        name: "gpt-4o-mini",
-        display_name: "GPT-4o Mini",
-        effectiveDisplayName: "GPT-4o Mini",
+        name: "gpt-6-luna",
+        display_name: "GPT-6 Luna",
+        effectiveDisplayName: "GPT-6 Luna",
         is_visible: false,
         max_input_tokens: null,
         supports_image_input: false,
@@ -68,6 +76,31 @@ const providers: LLMProviderView[] = [
     ],
   },
 ];
+
+jest.mock("@/sections/modals/languageModels/OpenAIModal", () => ({
+  __esModule: true,
+  default: ({ shouldMarkAsDefault }: LLMProviderFormProps) => (
+    <div
+      data-testid="chat-provider-setup"
+      data-default={String(shouldMarkAsDefault)}
+    />
+  ),
+}));
+
+let currentProviders = providers;
+
+const typesafeProvider: LLMProviderView = {
+  ...makeProvider({ id: 22, provider: "typesafe", model_configurations: [] }),
+  api_key: null,
+  api_base: null,
+  api_version: null,
+  custom_config: null,
+  is_public: true,
+  is_auto_mode: false,
+  groups: [],
+  personas: [],
+  deployment_name: null,
+};
 
 providers.push({
   id: 8,
@@ -98,14 +131,15 @@ providers.push({
 
 describe("LanguageModelsPage", () => {
   beforeEach(() => {
+    currentProviders = providers;
     jest.spyOn(global, "fetch").mockImplementation(async (input) => {
       if (input === SWR_KEYS.adminLlmProvidersPaged) {
         return new Response(
           JSON.stringify({
-            providers,
-            default_text: { provider_id: 7, model_name: "gpt-4o" },
+            providers: currentProviders,
+            default_text: { provider_id: 7, model_name: "gpt-6-sol" },
             default_vision: null,
-            default_chat_naming: { provider_id: 7, model_name: "gpt-4o-mini" },
+            default_chat_naming: { provider_id: 7, model_name: "gpt-6-luna" },
             default_search_selection: {
               provider_id: 8,
               model_name: "search-mini",
@@ -121,23 +155,47 @@ describe("LanguageModelsPage", () => {
   });
   afterEach(() => jest.restoreAllMocks());
 
+  test("TypeSafe does not prevent the first chat provider becoming default", async () => {
+    currentProviders = [typesafeProvider];
+    const user = setupUser();
+    render(<LanguageModelsPage />);
+    await user.click(await screen.findByLabelText("Add OpenAI GPT"));
+    expect(screen.getByTestId("chat-provider-setup")).toHaveAttribute(
+      "data-default",
+      "true"
+    );
+  });
+
+  test("TypeSafe does not prevent deleting the last chat provider", async () => {
+    const chatProvider = providers[0];
+    if (!chatProvider) throw new Error("Missing chat provider fixture");
+    currentProviders = [chatProvider, typesafeProvider];
+    const user = setupUser();
+    render(<LanguageModelsPage />);
+    await user.click(await screen.findByRole("button", { name: "Delete GPT" }));
+    expect(screen.getByRole("button", { name: "Delete" })).toBeEnabled();
+    expect(
+      screen.getByText("Connect another provider to continue using chats.")
+    ).toBeInTheDocument();
+  });
+
   test("keeps task model settings out of Language Models and hidden models out of chat defaults", async () => {
     const user = setupUser();
     render(<LanguageModelsPage />);
-    await screen.findByDisplayValue("GPT-4o");
+    await screen.findByDisplayValue("GPT-6 Sol");
     expect(screen.queryByText("Task-specific models")).not.toBeInTheDocument();
     expect(screen.queryByText("Optional task models")).not.toBeInTheDocument();
-    expect(screen.queryByText("Chat naming model")).not.toBeInTheDocument();
+    expect(screen.queryByText("Chat Naming Model")).not.toBeInTheDocument();
     expect(
-      screen.queryByText("Search selection model")
+      screen.queryByText("Search Selection Model")
     ).not.toBeInTheDocument();
     expect(screen.queryByText("Fast background model")).not.toBeInTheDocument();
-    await user.click(screen.getByDisplayValue("GPT-4o"));
+    await user.click(screen.getByDisplayValue("GPT-6 Sol"));
     expect(
-      screen.getByRole("option", { name: /^GPT-4o$/ })
+      screen.getByRole("option", { name: /^GPT-6 Sol$/ })
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("option", { name: /GPT-4o Mini/ })
+      screen.queryByRole("option", { name: /GPT-6 Luna/ })
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("option", { name: /Search Mini/ })

@@ -35,7 +35,7 @@ describe("InputSingleSelect", () => {
         title: "OpenAI",
         foldable: true,
         options: [
-          { value: "gpt-4o", title: "GPT-4o" },
+          { value: "gpt-6-sol", title: "GPT-6 Sol" },
           { value: "gpt-4.1", title: "GPT-4.1" },
         ],
       },
@@ -221,7 +221,7 @@ describe("InputSingleSelect", () => {
         screen.getByRole("option", { name: /Claude/ })
       ).toBeInTheDocument();
       expect(
-        screen.queryByRole("option", { name: /GPT-4o/ })
+        screen.queryByRole("option", { name: /GPT-6 Sol/ })
       ).not.toBeInTheDocument();
       expect(screen.getByText("OpenAI")).toBeInTheDocument();
     });

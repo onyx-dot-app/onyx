@@ -11,7 +11,8 @@
      "primary"  — standard bordered input (default)
      "internal" — no border, transparent background (inside popovers/panels)
      "error"    — red border, error state
-     "disabled" — muted background, not-allowed cursor
+     "disabled" — muted background, not-allowed cursor; an invalid field
+                  inside (aria-invalid) adds the error border
      "readOnly" — transparent background, light border
    ========================================================================== */
 
@@ -60,6 +61,12 @@
   background-color: var(--background-neutral-03);
   border: 1px solid transparent;
   cursor: not-allowed;
+}
+
+/* Disabled and invalid at once (a select whose options failed to load):
+   the disabled fill with the error border. */
+.opal-input[data-variant="disabled"]:has([aria-invalid="true"]) {
+  border-color: var(--status-error-05);
 }
 
 .opal-input[data-variant="readOnly"] {

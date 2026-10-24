@@ -1,6 +1,5 @@
 import {
   legacyMcpListHref,
-  mcpOAuthReturnHref,
   parsePluginId,
   pluginDetailHref,
   withPluginSearchParams,
@@ -14,17 +13,6 @@ describe("plugin routes", () => {
     );
     expect(pluginDetailHref({ kind: "openapi", id: 7 })).toBe(
       "/admin/plugins/openapi/7"
-    );
-  });
-
-  test("returns from OAuth to the saved MCP detail with a one-time fetch", () => {
-    expect(mcpOAuthReturnHref(7)).toBe(
-      "/admin/plugins/mcp/7?trigger_fetch=true"
-    );
-  });
-  test("preserves explicit chat enablement through OAuth", () => {
-    expect(mcpOAuthReturnHref(7, true)).toBe(
-      "/admin/plugins/mcp/7?trigger_fetch=true&enable_chat=true"
     );
   });
 });

@@ -18,7 +18,6 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
-    InsufficientPermissionsError,
     UnexpectedValidationError,
 )
 from onyx.connectors.interfaces import (
@@ -29,10 +28,14 @@ from onyx.connectors.interfaces import (
     SlimConnector,
 )
 from onyx.connectors.models import Document, HierarchyNode, SlimDocument, TextSection
-from onyx.connectors.web.config import WEB_CONNECTOR_VALID_SETTINGS, UrlRewriteRule
+from onyx.connectors.web.config import (
+    UPLOAD_MODE_REMOVED_MESSAGE,
+    WEB_CONNECTOR_VALID_SETTINGS,
+    UrlRewriteRule,
+)
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
-from onyx.server.security.models import SSRFProtectionLevel, web_connector_ssrf_enforced
+from onyx.server.security.models import SSRFProtectionLevel, connector_ssrf_enforced
 from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
 from onyx.utils.os_reaper import reap_zombie_children
@@ -50,7 +53,6 @@ from onyx.utils.playwright_fetch import (
 from onyx.utils.sitemap import list_pages_for_site
 from onyx.utils.url import ssrf_safe_get
 from onyx.utils.web_content import extract_pdf_text, is_pdf_resource
-from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -158,7 +160,7 @@ def protected_url_check(url: str) -> None:
     """
     # The web connector is only guarded at the most restrictive SSRF level; at
     # VALIDATE_LLM / DISABLED admin-configured connectors may reach private IPs.
-    if not web_connector_ssrf_enforced(get_security_settings().ssrf_protection_level):
+    if not connector_ssrf_enforced(get_security_settings().ssrf_protection_level):
         return
 
     parse = urlparse(url)
@@ -182,6 +184,14 @@ def protected_url_check(url: str) -> None:
                 f"Non-global IP address detected: {ip}, skipping page {url}. "
                 f"The Web Connector is not allowed to read loopback, link-local, or private ranges"
             )
+
+
+class WebPageHTTPError(Exception):
+    """An HTTP error status from the connectivity probe."""
+
+    def __init__(self, message: str, status_code: int) -> None:
+        super().__init__(message)
+        self.status_code = status_code
 
 
 def check_internet_connection(url: str) -> None:
@@ -220,7 +230,9 @@ def check_internet_connection(url: str) -> None:
             503: "Service Unavailable",
             504: "Gateway Timeout",
         }.get(status_code, "HTTP Error")
-        raise Exception(f"{error_msg} ({status_code}) for {url} - {e}")
+        raise WebPageHTTPError(
+            f"{error_msg} ({status_code}) for {url} - {e}", status_code
+        ) from e
     except requests.exceptions.SSLError as e:
         cause = (
             e.args[0].reason
@@ -290,7 +302,7 @@ def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
     # rather than a wrapped sitemap-parse failure.
     protected_url_check(sitemap_url)
     level = get_security_settings().ssrf_protection_level
-    allow_private_network = not web_connector_ssrf_enforced(level)
+    allow_private_network = not connector_ssrf_enforced(level)
     allow_loopback = level == SSRFProtectionLevel.DISABLED
 
     # Note: brotli compression is handled automatically by the requests library
@@ -343,12 +355,6 @@ def _ensure_valid_url(url: str) -> str:
     if "://" not in url:
         return "https://" + url
     return url
-
-
-def _read_urls_file(location: str) -> list[str]:
-    with open(location, "r") as f:
-        urls = [_ensure_valid_url(line.strip()) for line in f if line.strip()]
-    return urls
 
 
 def _handle_cookies(context: BrowserContext, url: str) -> None:
@@ -412,11 +418,9 @@ class WebConnector(LoadConnector, SlimConnector):
         self.recursive = False
         self.scroll_before_scraping = scroll_before_scraping
         self.web_connector_type = web_connector_type
-        self.authorization_url: str | None = (
-            None
-            if web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.UPLOAD
-            else _ensure_valid_url(base_url)
-        )
+        if web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.UPLOAD:
+            raise ConnectorValidationError(UPLOAD_MODE_REMOVED_MESSAGE)
+        self.authorization_url: str = _ensure_valid_url(base_url)
         # Config arrives as raw JSON (list[dict]); validate into rule models.
         rules = _URL_REWRITES_ADAPTER.validate_python(url_rewrites or [])
         self.url_rewrites = _parse_url_rewrites(rules)
@@ -430,18 +434,6 @@ class WebConnector(LoadConnector, SlimConnector):
 
         elif web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.SITEMAP:
             self.to_visit_list = extract_urls_from_sitemap(_ensure_valid_url(base_url))
-
-        elif web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.UPLOAD:
-            # Explicitly check if running in multi-tenant mode to prevent potential security risks
-            if MULTI_TENANT:
-                raise ValueError(
-                    "Upload input for web connector is not supported in cloud environments"
-                )
-
-            logger.warning(
-                "This is not a UI supported Web Connector flow, are you sure you want to do this?"
-            )
-            self.to_visit_list = _read_urls_file(base_url)
 
         else:
             raise ValueError(
@@ -490,7 +482,7 @@ class WebConnector(LoadConnector, SlimConnector):
             initial_url,
             headers=DEFAULT_HEADERS,
             timeout=REQUEST_TIMEOUT_SECONDS,
-            allow_private_network=not web_connector_ssrf_enforced(level),
+            allow_private_network=not connector_ssrf_enforced(level),
             block_loopback_and_link_local=level != SSRFProtectionLevel.DISABLED,
             block_link_local_only=True,
             stream=True,
@@ -521,7 +513,7 @@ class WebConnector(LoadConnector, SlimConnector):
         page = session_ctx.playwright_context.new_page()
         install_ssrf_guard(
             page,
-            allow_private_network=not web_connector_ssrf_enforced(level),
+            allow_private_network=not connector_ssrf_enforced(level),
             allow_loopback=level == SSRFProtectionLevel.DISABLED,
             authorization_header=session_ctx.authorization_header,
             authorization_url=self.authorization_url,
@@ -845,30 +837,33 @@ class WebConnector(LoadConnector, SlimConnector):
             return None
 
         # Make a quick request to see if we get a valid response. This re-runs the
-        # SSRF check internally (intentional, cheap defense-in-depth).
+        # SSRF check internally (intentional, cheap defense-in-depth). Classify by
+        # status code, not message text: the message holds the URL, whose digits
+        # can look like a status code (e.g. port 33403).
         try:
             check_internet_connection(test_url)
-        except Exception as e:
-            err_str = str(e)
-            if "401" in err_str:
+        except WebPageHTTPError as e:
+            if e.status_code == 401:
                 raise CredentialExpiredError(
                     f"Unauthorized access to '{test_url}': {e}"
-                )
-            elif "403" in err_str:
-                raise InsufficientPermissionsError(
-                    f"Forbidden access to '{test_url}': {e}"
-                )
-            elif "404" in err_str:
-                raise ConnectorValidationError(f"Page not found for '{test_url}': {e}")
-            elif "Max retries exceeded" in err_str and "NameResolutionError" in err_str:
+                ) from e
+            if e.status_code == 404:
+                raise ConnectorValidationError(
+                    f"Page not found for '{test_url}': {e}"
+                ) from e
+            # Could be a 5xx or another error, treat as unexpected
+            raise UnexpectedValidationError(
+                f"Unexpected error validating '{test_url}': {e}"
+            ) from e
+        except Exception as e:
+            err_str = str(e)
+            if "Max retries exceeded" in err_str and "NameResolutionError" in err_str:
                 raise ConnectorValidationError(
                     f"Unable to resolve hostname for '{test_url}'. Please check the URL and your internet connection."
-                )
-            else:
-                # Could be a 5xx or another error, treat as unexpected
-                raise UnexpectedValidationError(
-                    f"Unexpected error validating '{test_url}': {e}"
-                )
+                ) from e
+            raise UnexpectedValidationError(
+                f"Unexpected error validating '{test_url}': {e}"
+            ) from e
 
 
 if __name__ == "__main__":

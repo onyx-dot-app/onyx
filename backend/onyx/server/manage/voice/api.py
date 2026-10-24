@@ -2,6 +2,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
@@ -21,6 +22,13 @@ from onyx.db.voice import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.decisions.client import DecisionClient
+from onyx.llm.decisions.models import (
+    DecisionProvider,
+    DecisionRequest,
+    PredicateQuestion,
+)
+from onyx.server.manage.llm.provider_cache import invalidate_provider_listing_cache
 from onyx.server.manage.voice.models import (
     VoiceOption,
     VoiceProviderTestRequest,
@@ -28,11 +36,13 @@ from onyx.server.manage.voice.models import (
     VoiceProviderUpsertRequest,
     VoiceProviderView,
 )
+from onyx.tracing.flows import LLMFlow
 from onyx.utils.encryption import mask_string
 from onyx.utils.logger import setup_logger
 from onyx.utils.url import SSRFException, validate_outbound_http_url
 from onyx.voice.factory import get_voice_provider
 from onyx.voice.interface import VoiceProviderInterface, normalize_provider_type
+from onyx.voice.providers.zoom import build_zoom_scribe_jwt
 
 logger = setup_logger()
 
@@ -43,6 +53,38 @@ VOICE_PROVIDER_VALIDATION_FAILURE_MESSAGE = (
 )
 STORED_API_SECRET_PLACEHOLDER = "********"
 _CUSTOM_CONFIG_CREDENTIAL_KEYS = {"api_key", "api_secret"}
+
+
+async def _validate_decision_credentials(provider: VoiceProvider) -> None:
+    if provider.provider_type != "zoom":
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Decision validation is only supported for Zoom.",
+        )
+    if not provider.api_key or not provider.api_secret:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR, "Zoom requires an API key and secret."
+        )
+    client = DecisionClient(
+        provider=DecisionProvider.ZOOM_AI,
+        model="zoom-decisions",
+        api_key=build_zoom_scribe_jwt(
+            provider.api_key.get_value(apply_mask=False),
+            provider.api_secret.get_value(apply_mask=False),
+        ),
+    )
+    await run_in_threadpool(
+        client.decide,
+        DecisionRequest(
+            input="The sky is blue.",
+            questions=[
+                PredicateQuestion(
+                    name="check", instructions="Does the input mention the sky?"
+                )
+            ],
+        ),
+        flow=LLMFlow.MODEL_VALIDATION,
+    )
 
 
 def _contains_custom_config_credential_key(
@@ -213,6 +255,13 @@ async def upsert_voice_provider_endpoint(
     api_key_changed = request.api_key_changed
     api_secret = request.api_secret
     api_secret_changed = request.api_secret_changed
+    if request.validation_mode == "decision" and (
+        request.provider_type != "zoom" or request.activate_stt or request.activate_tts
+    ):
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Decision setup supports Zoom without activating voice defaults.",
+        )
 
     # If llm_provider_id is specified, copy the API key from that LLM provider
     if request.llm_provider_id is not None:
@@ -236,31 +285,33 @@ async def upsert_voice_provider_endpoint(
     )
     custom_config = _reject_custom_config_credentials(request.custom_config)
 
-    provider = upsert_voice_provider(
-        db_session=db_session,
-        provider_id=request.id,
-        name=request.name,
-        provider_type=request.provider_type,
-        api_key=api_key,
-        api_key_changed=api_key_changed,
-        api_secret=api_secret,
-        api_secret_changed=api_secret_changed,
-        api_base=api_base,
-        custom_config=custom_config,
-        stt_model=request.stt_model,
-        tts_model=request.tts_model,
-        default_voice=request.default_voice,
-        activate_stt=request.activate_stt,
-        activate_tts=request.activate_tts,
-    )
-
-    # Validate credentials before committing - rollback on failure
     try:
+        provider = upsert_voice_provider(
+            db_session=db_session,
+            provider_id=request.id,
+            name=request.name,
+            provider_type=request.provider_type,
+            api_key=api_key,
+            api_key_changed=api_key_changed,
+            api_secret=api_secret,
+            api_secret_changed=api_secret_changed,
+            api_base=api_base,
+            custom_config=custom_config,
+            stt_model=request.stt_model,
+            tts_model=request.tts_model,
+            default_voice=request.default_voice,
+            activate_stt=request.activate_stt,
+            activate_tts=request.activate_tts,
+            link_decision_provider=request.validation_mode == "decision",
+        )
         voice_provider = get_voice_provider(provider)
         _validate_target_uri_supported(voice_provider, api_base)
         if request.activate_tts or provider.is_default_tts:
             _validate_tts_activation_supported(voice_provider)
-        await voice_provider.validate_credentials()
+        if request.validation_mode == "decision":
+            await _validate_decision_credentials(provider)
+        else:
+            await voice_provider.validate_credentials()
     except OnyxError:
         db_session.rollback()
         raise
@@ -270,7 +321,7 @@ async def upsert_voice_provider_endpoint(
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e)) from e
     except Exception as e:
         db_session.rollback()
-        logger.error("Voice provider credential validation failed on save: %s", e)
+        logger.warning("Voice provider credential validation failed on save")
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
             VOICE_PROVIDER_VALIDATION_FAILURE_MESSAGE,
@@ -278,6 +329,8 @@ async def upsert_voice_provider_endpoint(
 
     db_session.commit()
 
+    if request.provider_type == "zoom":
+        invalidate_provider_listing_cache()
     return _provider_to_view(provider)
 
 
@@ -292,6 +345,7 @@ def delete_voice_provider_endpoint(
     """Delete a voice provider."""
     delete_voice_provider(db_session, provider_id)
     db_session.commit()
+    invalidate_provider_listing_cache()
     return Response(status_code=204)
 
 
@@ -377,8 +431,12 @@ async def test_voice_provider(
             db_session, request.id, request.provider_type
         )
     elif request.use_stored_key:
-        existing_provider = fetch_voice_provider_by_type(
-            db_session, request.provider_type
+        existing_provider = (
+            _fetch_provider_for_stored_secret(
+                db_session, request.id, request.provider_type
+            )
+            if request.id is not None
+            else fetch_voice_provider_by_type(db_session, request.provider_type)
         )
 
     if request.use_stored_key:
@@ -426,11 +484,14 @@ async def test_voice_provider(
 
     # Validate credentials with a real API call
     try:
-        await provider.validate_credentials()
+        if request.validation_mode == "decision":
+            await _validate_decision_credentials(temp_provider)
+        else:
+            await provider.validate_credentials()
     except OnyxError:
         raise
     except Exception as e:
-        logger.error("Voice provider connection test failed: %s", e)
+        logger.warning("Voice provider connection test failed")
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
             VOICE_PROVIDER_VALIDATION_FAILURE_MESSAGE,

@@ -38,32 +38,20 @@ func NewStackCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "stack",
 		Short: "Run the local dev stack of this worktree",
-		Long: `Run the local Onyx dev stack from a source checkout: Compose infrastructure,
-migrations, and the application services from .vscode/launch.json as
-background processes.
+		Long: `Run the local Onyx dev stack of a source checkout: Compose infrastructure,
+migrations, and the application services from .vscode/launch.json.
 
-Every worktree gets its own Compose project, its own host ports, and its own
-state under its git metadata (git rev-parse --git-path ods-stack). Port leases
-are shared across worktrees in ` + filepath.Join(paths.DataDir(), "stack") + `
-so a worktree keeps its ports across restarts. A lifecycle command takes the
-worktree's lock, so two agents running "up" at once converge on one stack.
-
-Profiles:
-  minimal  Web Server and API Server
-  default  minimal plus the primary, light, beat, docfetching, docprocessing
-           and user_file_processing Celery workers
-  full     every service in the "Run All Onyx Services" compound
-
-The model server comes from Compose; --local-model-server runs it from the
-checkout instead, for model server changes.
-
-Examples:
-  ods stack up
-  ods stack up --profile full --json
-  ods stack status --json
-  ods stack logs api --follow
-  ods stack stop
-  ods stack down`,
+Start with "ods stack status" for this worktree, or "ods stack ls" for every
+stack on this machine. Each command prints the next command to run.
+Worktrees share infrastructure by default; add --isolated for separate data.
+See tools/ods/README.md for profiles, ports and ownership.`,
+		Example: `  ods stack status
+  ods stack ls
+  ods stack up --profile minimal
+  ods stack down --project NAME`,
+	}
+	for _, group := range []struct{ id, title string }{{"find", "Find stacks:"}, {"run", "Run this worktree's stack:"}, {"clean", "Clean up:"}} {
+		cmd.AddGroup(&cobra.Group{ID: group.id, Title: group.title})
 	}
 
 	cmd.AddCommand(newStackLifecycleCommand("up", "Set up the worktree, start infrastructure, migrate and start the services"))
@@ -72,8 +60,20 @@ Examples:
 	cmd.AddCommand(newStackStopCommand("stop", "Stop the services, keep the infrastructure"))
 	cmd.AddCommand(newStackStopCommand("down", "Stop the services and the infrastructure (volumes are kept)"))
 	cmd.AddCommand(newStackStatusCommand())
+	cmd.AddCommand(newStackLsCommand())
+	cmd.AddCommand(newStackPruneCommand())
 	cmd.AddCommand(newStackLogsCommand())
 	cmd.AddCommand(newStackPlanCommand())
+	groups := map[string]string{
+		"status": "find", "ls": "find", "logs": "find", "plan": "find",
+		"up": "run", "start": "run", "restart": "run", "stop": "run", "down": "run",
+		"prune": "clean",
+	}
+	for _, child := range cmd.Commands() {
+		child.GroupID = groups[child.Name()]
+	}
+	cmd.SetHelpCommandGroupID("find")
+	cmd.SetCompletionCommandGroupID("find")
 	return cmd
 }
 
@@ -89,7 +89,7 @@ func newStackLifecycleCommand(name, short string) *cobra.Command {
 		Short: short,
 		Args:  cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			stack, provider := openStack()
+			stack, provider := openStack(cmd)
 			ctx := context.Background()
 			var status *devstack.Status
 			var err error
@@ -136,12 +136,23 @@ func newStackLifecycleCommand(name, short string) *cobra.Command {
 
 func newStackStopCommand(name, short string) *cobra.Command {
 	opts := &stackOptions{}
+	var force bool
 	cmd := &cobra.Command{
 		Use:   name,
 		Short: short,
-		Args:  cobra.NoArgs,
+		Long: short + `.
+
+With --project NAME, the command resolves the project from its owner record,
+its saved state, or its Docker labels, so it works from any directory and
+when the checkout is gone. It refuses a stack that still runs in an existing
+worktree unless --force is set.`,
+		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			stack, provider := openStack()
+			if project := flagProjectName(); project != "" && !projectInCheckout(project) {
+				runProjectLifecycle(name, project, devstack.ProjectOptions{StopTimeout: opts.StopTimeout, LockWait: opts.LockWait, Force: force})
+				return
+			}
+			stack, provider := openStack(cmd)
 			var err error
 			if name == "down" {
 				err = stack.Down(context.Background(), provider, opts.Options)
@@ -156,6 +167,7 @@ func newStackStopCommand(name, short string) *cobra.Command {
 	}
 	cmd.Flags().DurationVar(&opts.StopTimeout, "timeout", 20*time.Second, "Grace period before a service is killed")
 	cmd.Flags().DurationVar(&opts.LockWait, "lock-wait", 10*time.Minute, "How long to wait for another lifecycle command on this worktree")
+	cmd.Flags().BoolVar(&force, "force", false, "With --project, also stop a stack that runs in an existing worktree")
 	return cmd
 }
 
@@ -166,7 +178,7 @@ func newStackStatusCommand() *cobra.Command {
 		Short: "Show the services, ports, URLs and health (exit 0 ready, 2 not ready, 1 no stack)",
 		Args:  cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			stack, _ := openStack()
+			stack, _ := openStack(cmd)
 			status, err := stack.Status()
 			if err != nil {
 				log.Fatal(err)
@@ -175,7 +187,7 @@ func newStackStatusCommand() *cobra.Command {
 				if asJSON {
 					fmt.Println("null")
 				} else {
-					log.Infof("No dev stack has been started in %s", stack.Root)
+					log.Infof("No dev stack has been started in %s; run 'ods stack up' to start one, or 'ods stack ls' to find stacks on this machine", stack.Root)
 				}
 				os.Exit(1)
 			}
@@ -197,7 +209,7 @@ func newStackLogsCommand() *cobra.Command {
 		Short: "Show service logs (names as in `ods stack status`)",
 		Args:  cobra.ArbitraryArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			stack, _ := openStack()
+			stack, _ := openStack(cmd)
 			if err := runStackLogs(stack, args, lines, follow); err != nil {
 				log.Fatal(err)
 			}
@@ -215,7 +227,7 @@ func newStackPlanCommand() *cobra.Command {
 		Short: "Print the services a profile would run, without starting them",
 		Args:  cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			stack, provider := openStack()
+			stack, provider := openStack(cmd)
 			st, err := stack.ReadState()
 			if err != nil {
 				log.Fatal(err)
@@ -238,18 +250,21 @@ func newStackPlanCommand() *cobra.Command {
 }
 
 // openStack resolves the stack of the current worktree and its provider.
-// The Compose project is unique per worktree unless --project overrides it.
-func openStack() (*devstack.Stack, *stackProvider) {
+// Shared mode is the default; flags select isolated or frontend state.
+func openStack(cmd *cobra.Command) (*devstack.Stack, *stackProvider) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		log.Fatal(err)
 	}
-	stack, err := devstack.Open(cwd, flagProjectName())
+	mode := devstack.Shared
+	if rootIsolated {
+		mode = devstack.Isolated
+	}
+	stack, err := devstack.Open(cwd, flagProjectName(), mode)
 	if err != nil {
 		log.Fatal(err)
 	}
 	stack.Registry = &devstack.Registry{Dir: filepath.Join(paths.DataDir(), "stack")}
-	docker.SetProjectFlags(stack.Project)
 	return stack, &stackProvider{stack: stack}
 }
 
@@ -263,6 +278,7 @@ func printStackStatus(status *devstack.Status, asJSON bool) {
 		return
 	}
 	fmt.Printf("project: %s\nprofile: %s\nphase:   %s\nready:   %t\n", status.Project, status.Profile, status.Phase, status.Ready)
+	fmt.Printf("checkout: %s\n", status.Root)
 	names := make([]string, 0, len(status.URLs))
 	for name := range status.URLs {
 		names = append(names, name)
@@ -413,7 +429,7 @@ func (p *stackProvider) ComposeUp(ctx context.Context, ports map[string]int, opt
 			}
 		}
 	}
-	if err := runCompose("dev", composeOpts); err != nil {
+	if err := runComposeTarget("dev", composeOpts, devstack.Target{Root: p.stack.Root, Project: p.stack.Project}); err != nil {
 		return err
 	}
 	// The dev stack runs the object store only.
@@ -421,7 +437,15 @@ func (p *stackProvider) ComposeUp(ctx context.Context, ports map[string]int, opt
 }
 
 func (p *stackProvider) ComposeDown(context.Context) error {
-	return runCompose("dev", &ComposeOptions{Down: true})
+	return runComposeTarget("dev", &ComposeOptions{Down: true}, devstack.Target{Root: p.stack.Root, Project: p.stack.Project})
+}
+
+func (p *stackProvider) PrepareService(ctx context.Context, sp devstack.Spec) error {
+	return prepareAPIService(ctx, sp)
+}
+
+func (p *stackProvider) MigrationsPending(ctx context.Context, env []string) (bool, error) {
+	return alembic.MigrationsPending(ctx, p.stack.Root, env)
 }
 
 // Migrate runs alembic with the stack's explicit database host and port.

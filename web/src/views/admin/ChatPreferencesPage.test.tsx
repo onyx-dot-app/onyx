@@ -38,6 +38,12 @@ const mockUseAdminLanguageModels = jest.fn();
 
 jest.mock("@/lib/languageModels/hooks", () => ({
   useAdminLanguageModels: () => mockUseAdminLanguageModels(),
+  useDecisionModel: () => ({
+    model: null,
+    providers: [],
+    error: undefined,
+    refetch: jest.fn(),
+  }),
 }));
 
 const settings: AppSettings = {
@@ -109,28 +115,28 @@ describe("ChatPreferencesPage", () => {
     jest.restoreAllMocks();
   });
 
-  test("shows model selection after chat behavior without a disclosure", async () => {
+  test("groups chat settings before search settings and team context", async () => {
     render(<ChatPreferencesPage />);
 
-    expect(screen.getByText("Reasoning Control")).toBeInTheDocument();
-    expect(screen.getByText("Team Name")).toBeInTheDocument();
     expect(screen.getByDisplayValue("Example team")).toBeInTheDocument();
-    const heading = screen.getByText("Model selection");
-    expect(
-      screen.getByText("Reasoning Control").compareDocumentPosition(heading) &
-        Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
-    expect(
-      heading.compareDocumentPosition(screen.getByText("Team Name")) &
-        Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
+    const ordered = [
+      "Default Language",
+      "Chat Naming Model",
+      "Multi-Model Generation",
+      "Search Selection Model",
+      "Search Mode",
+      "Team Name",
+    ].map((text) => screen.getByText(text));
+    ordered.slice(1).forEach((node, i) => {
+      expect(
+        ordered[i]!.compareDocumentPosition(node) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+    });
+    expect(screen.queryByText("Reasoning Control")).not.toBeInTheDocument();
+    expect(screen.queryByText("Temperature Control")).not.toBeInTheDocument();
     expect(mockUseAdminLanguageModels).toHaveBeenCalled();
-    expect(screen.getByText("Chat naming model")).toBeInTheDocument();
-    expect(screen.getByText("Search selection model")).toBeInTheDocument();
-    expect(screen.getAllByPlaceholderText("Use Default model")).toHaveLength(2);
-    expect(
-      screen.queryByRole("button", { name: /^(Expand|Fold) Model selection$/ })
-    ).not.toBeInTheDocument();
+    expect(screen.getAllByDisplayValue("Chat Default")).toHaveLength(2);
     expect(screen.queryByText("Fast Model")).not.toBeInTheDocument();
     await waitFor(() =>
       expect(global.fetch).toHaveBeenCalledWith(SWR_KEYS.defaultAssistantConfig)
@@ -138,6 +144,34 @@ describe("ChatPreferencesPage", () => {
     expect(global.fetch).not.toHaveBeenCalledWith(
       SWR_KEYS.adminLlmProvidersPaged
     );
+  });
+
+  test("lists every connector source and explains the section", async () => {
+    const fetchMock = jest.mocked(global.fetch);
+    const baseFetch = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation(async (input, init) => {
+      if (input === SWR_KEYS.connectorStatus) {
+        const ccPairs = ["web", "github", "slack", "confluence", "notion"].map(
+          (source) => ({ has_successful_run: true, source, status: "ACTIVE" })
+        );
+        return new Response(JSON.stringify(ccPairs), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return baseFetch!(input, init);
+    });
+
+    render(<ChatPreferencesPage />);
+
+    for (const name of ["Web", "GitHub", "Slack", "Confluence", "Notion"]) {
+      expect(await screen.findByText(name)).toBeInTheDocument();
+    }
+    expect(
+      screen.getByText(/Sources that Internal Search uses in chat/)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Manage connectors/ })
+    ).toHaveAttribute("href", "/admin/indexing-status");
   });
 
   test("still saves a changed team name on blur", async () => {

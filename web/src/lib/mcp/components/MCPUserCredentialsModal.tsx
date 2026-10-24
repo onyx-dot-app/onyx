@@ -219,6 +219,7 @@ export function MCPUserCredentialsContent({
                             })
                           : t("apiKeyField.placeholder")
                       }
+                      existingValue={initialCredentials.current[field]}
                       disabled={isSubmitting}
                       required
                     />

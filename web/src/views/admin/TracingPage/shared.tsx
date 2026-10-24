@@ -1,6 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { useField } from "formik";
 import { markdown } from "@opal/utils";
 import { InputVertical } from "@opal/layouts";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
@@ -14,6 +15,8 @@ interface SecretFieldProps {
 export function SecretField({ field }: SecretFieldProps) {
   const t = useTranslations("admin.tracing");
   const label = t(field.labelKey);
+  // On edit, the initial value is the stored masked key.
+  const [, meta] = useField<string>(field.name);
 
   return (
     <InputVertical
@@ -27,6 +30,7 @@ export function SecretField({ field }: SecretFieldProps) {
       <PasswordInputTypeInField
         name={field.name}
         placeholder={field.placeholderKey ? t(field.placeholderKey) : label}
+        existingValue={meta.initialValue}
       />
     </InputVertical>
   );

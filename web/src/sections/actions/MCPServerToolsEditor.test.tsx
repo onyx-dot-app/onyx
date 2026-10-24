@@ -30,7 +30,8 @@ const server: MCPServer = {
   groups: [],
   users: [],
   tool_count: 2,
-  tool_policies: { disabled_tool: "DENY" },
+  users_can_manage_policies: true,
+  action_policies: { disabled_tool: "DENY" },
   permissions: { edit: true, manage_status: true },
 };
 const tool: ToolSnapshot = {
@@ -90,20 +91,18 @@ beforeEach(() => {
   jest.mocked(refreshMCPServerTools).mockResolvedValue(snapshots);
   saved.mockResolvedValue();
 });
-it("shares compact descriptions without expanding when an admin switch changes", async () => {
+it("keeps descriptions visible when an admin changes tool availability", async () => {
   const user = setupUser();
   render(<Harness />);
   const toggle = await screen.findByRole("switch", {
     name: "tool-toggle-Display tool",
   });
-  expect(screen.queryAllByText("Reads records")).toHaveLength(0);
+  expect(screen.getAllByText("Reads records")[0]).toBeVisible();
   await user.click(toggle);
-  expect(screen.queryAllByText("Reads records")).toHaveLength(0);
-  await user.click(screen.getByRole("button", { name: "Expand Display tool" }));
-  expect(screen.getByText("Reads records").tagName).toBe("CODE");
+  expect(screen.getAllByText("Reads records")[0]).toBeVisible();
   expect(
-    screen.getByRole("button", { name: "Fold Display tool" })
-  ).toHaveAttribute("aria-expanded", "true");
+    screen.queryByRole("button", { name: /Expand/ })
+  ).not.toBeInTheDocument();
 });
 
 it("keeps enablement as a draft, then saves and resets dirty state", async () => {
@@ -132,7 +131,11 @@ it("uses raw names for Craft policies and preserves disabled-tool overrides", as
   await user.click(
     screen.getByRole("tab", { name: messages.actions.mcpTools.policiesTab })
   );
-  await user.click(screen.getByRole("combobox"));
+  await user.click(
+    screen.getByRole("combobox", {
+      name: messages.craft.apps.policyEditor.permissions.title,
+    })
+  );
   await user.click(
     await screen.findByRole("option", {
       name: messages.craft.apps.policyEditor.permissions.autoApproveOption,
@@ -145,7 +148,7 @@ it("uses raw names for Craft policies and preserves disabled-tool overrides", as
   );
   await waitFor(() =>
     expect(updateMCPServer).toHaveBeenCalledWith(7, {
-      tool_policies: { raw_tool: "ALWAYS", disabled_tool: "DENY" },
+      action_policies: { raw_tool: "ALWAYS", disabled_tool: "DENY" },
     })
   );
 });
@@ -248,7 +251,7 @@ it("treats mixed permissions as valid and excludes removed tools from saves", as
     <Harness
       value={{
         ...server,
-        tool_policies: { raw_tool: "DENY", removed_tool: "ALWAYS" },
+        action_policies: { raw_tool: "DENY", removed_tool: "ALWAYS" },
       }}
     />
   );
@@ -259,7 +262,11 @@ it("treats mixed permissions as valid and excludes removed tools from saves", as
   expect(
     screen.queryByText("Please select a valid option from the list")
   ).not.toBeInTheDocument();
-  await user.click(screen.getByRole("combobox"));
+  await user.click(
+    screen.getByRole("combobox", {
+      name: messages.craft.apps.policyEditor.permissions.title,
+    })
+  );
   await user.click(
     await screen.findByRole("option", {
       name: messages.craft.apps.policyEditor.permissions.autoApproveOption,
@@ -272,7 +279,7 @@ it("treats mixed permissions as valid and excludes removed tools from saves", as
   );
   await waitFor(() =>
     expect(updateMCPServer).toHaveBeenCalledWith(7, {
-      tool_policies: { raw_tool: "ALWAYS" },
+      action_policies: { raw_tool: "ALWAYS" },
     })
   );
 });
@@ -333,17 +340,18 @@ it("disables duplicate tool discovery while the server is fetching", async () =>
   ).toBeDisabled();
 });
 
-it("filters enabled tools and applies explicit bulk actions only to the draft", async () => {
+it("shows disabled tools and applies explicit bulk actions only to the draft", async () => {
   const user = setupUser();
   render(<Harness />);
   await screen.findByRole("switch", { name: "tool-toggle-Display tool" });
-  const filter = screen.getByRole("switch", {
-    name: messages.actions.toolsList.showEnabledButton.ariaLabel,
-  });
-  await user.click(filter);
   expect(
-    screen.queryByRole("switch", { name: "tool-toggle-Disabled tool" })
+    screen.queryByRole("switch", {
+      name: messages.actions.toolsList.showEnabledButton.ariaLabel,
+    })
   ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("switch", { name: "tool-toggle-Disabled tool" })
+  ).not.toBeChecked();
   await user.click(
     screen.getByRole("button", {
       name: messages.actions.toolsList.enableAllButton.label,
@@ -363,7 +371,6 @@ it("filters enabled tools and applies explicit bulk actions only to the draft", 
   await user.clear(
     screen.getByRole("textbox", { name: messages.actions.mcpTools.search })
   );
-  await user.click(filter);
   await user.click(
     screen.getByRole("button", {
       name: messages.actions.toolsList.disableAllButton.ariaLabel,
@@ -397,7 +404,11 @@ it("searches policy rows while bulk policy changes include hidden enabled tools"
     "Display"
   );
   expect(screen.getAllByRole("listitem")).toHaveLength(1);
-  await user.click(screen.getByRole("combobox"));
+  await user.click(
+    screen.getByRole("combobox", {
+      name: messages.craft.apps.policyEditor.permissions.title,
+    })
+  );
   await user.click(
     await screen.findByRole("option", {
       name: messages.craft.apps.policyEditor.permissions.autoApproveOption,
@@ -410,7 +421,7 @@ it("searches policy rows while bulk policy changes include hidden enabled tools"
   );
   await waitFor(() =>
     expect(updateMCPServer).toHaveBeenCalledWith(7, {
-      tool_policies: {
+      action_policies: {
         raw_tool: "ALWAYS",
         hidden_tool: "ALWAYS",
         disabled_tool: "DENY",
@@ -426,14 +437,17 @@ it("disables both bulk and per-tool policies without edit permission", async () 
   await user.click(
     screen.getByRole("tab", { name: messages.actions.mcpTools.policiesTab })
   );
-  expect(screen.getByRole("combobox")).toBeDisabled();
-  for (const button of within(
-    screen.getByRole("group", { name: "Display tool" })
-  ).getAllByRole("button"))
-    expect(button).toBeDisabled();
   expect(
-    screen.getByRole("button", { name: "Expand Display tool" })
-  ).toBeEnabled();
+    screen.getByRole("combobox", {
+      name: messages.craft.apps.policyEditor.permissions.title,
+    })
+  ).toBeDisabled();
+  for (const button of screen.getAllByRole("button", {
+    name: /^(Auto-approve|Ask|Disabled)$/,
+  })) {
+    expect(button).toBeDisabled();
+  }
+  expect(screen.getAllByText("Reads records")[0]).toBeVisible();
   expect(updateMCPServer).not.toHaveBeenCalled();
 });
 
@@ -457,8 +471,16 @@ it("locks per-tool and bulk policies while saving a policy draft", async () => {
       name: messages.actions.policyToggle.deny.label,
     })
   );
-  expect(screen.getByRole("combobox")).toHaveValue("");
-  expect(screen.getByRole("combobox")).toHaveAttribute(
+  expect(
+    screen.getByRole("combobox", {
+      name: messages.craft.apps.policyEditor.permissions.title,
+    })
+  ).toHaveValue("");
+  expect(
+    screen.getByRole("combobox", {
+      name: messages.craft.apps.policyEditor.permissions.title,
+    })
+  ).toHaveAttribute(
     "placeholder",
     messages.craft.apps.policyEditor.permissions.customOption
   );
@@ -468,9 +490,25 @@ it("locks per-tool and bulk policies while saving a policy draft", async () => {
     })
   );
   await waitFor(() => expect(busy).toHaveBeenLastCalledWith(true));
-  expect(screen.getByRole("combobox")).toBeDisabled();
+  expect(
+    screen.getByRole("combobox", {
+      name: messages.craft.apps.policyEditor.permissions.title,
+    })
+  ).toBeDisabled();
   for (const button of within(row).getAllByRole("button"))
     expect(button).toBeDisabled();
   completeSave?.();
   await waitFor(() => expect(busy).toHaveBeenLastCalledWith(false));
+});
+
+it("keeps user management out of the tool permissions tab", async () => {
+  render(<Harness />);
+  await setupUser().click(
+    await screen.findByRole("tab", {
+      name: messages.actions.mcpTools.policiesTab,
+    })
+  );
+  expect(
+    screen.queryByRole("switch", { name: "Let users manage approval settings" })
+  ).not.toBeInTheDocument();
 });

@@ -1,6 +1,6 @@
 from collections.abc import Collection, Sequence
 from datetime import datetime, timedelta, timezone
-from typing import TypeVarTuple
+from typing import NamedTuple, TypeVarTuple
 
 from sqlalchemy import (
     ColumnElement,
@@ -19,8 +19,10 @@ from sqlalchemy.orm import Session, joinedload
 from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.models import ConnectorFailure
 from onyx.db.backfill_models import BackfillSpec
+from onyx.db.cc_pair_run_resolution import run_is_resolved
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
+    CCPairRunKind,
     ConnectorCredentialPairStatus,
     IndexingStatus,
     IndexModelStatus,
@@ -503,13 +505,20 @@ def mark_attempt_canceled(
     index_attempt_id: int,
     db_session: Session,
     reason: str = "Unknown",
+    unless_terminal: bool = False,
 ) -> None:
+    """``unless_terminal`` keeps a status another writer set first, checked under the lock."""
     try:
         attempt = db_session.execute(
             select(IndexAttempt)
             .where(IndexAttempt.id == index_attempt_id)
             .with_for_update()
+            .execution_options(populate_existing=True)
         ).scalar_one()
+
+        if unless_terminal and attempt.status.is_terminal():
+            db_session.rollback()
+            return
 
         if not attempt.time_started:
             attempt.time_started = datetime.now(timezone.utc)
@@ -538,13 +547,20 @@ def mark_attempt_failed(
     db_session: Session,
     failure_reason: str = "Unknown",
     full_exception_trace: str | None = None,
+    unless_terminal: bool = False,
 ) -> None:
+    """``unless_terminal`` keeps a status another writer set first, checked under the lock."""
     try:
         attempt = db_session.execute(
             select(IndexAttempt)
             .where(IndexAttempt.id == index_attempt_id)
             .with_for_update()
+            .execution_options(populate_existing=True)
         ).scalar_one()
+
+        if unless_terminal and attempt.status.is_terminal():
+            db_session.rollback()
+            return
 
         if not attempt.time_started:
             attempt.time_started = datetime.now(timezone.utc)
@@ -943,25 +959,42 @@ def get_error_counts_for_index_attempts(
     return {attempt_id: count for attempt_id, count in db_session.execute(stmt).all()}  # noqa: C416  # unpacking types the SQLAlchemy Row
 
 
-def get_open_doc_error_counts_for_index_attempts(
+class OpenErrorCounts(NamedTuple):
+    # Whole entities (a drive, a channel) included.
+    total: int = 0
+    # Only these can be re-fetched by a targeted reindex.
+    docs: int = 0
+
+
+def get_open_error_counts_for_index_attempts(
     db_session: Session,
     index_attempt_ids: list[int],
-) -> dict[int, int]:
-    """Per-attempt counts of unresolved document-level errors, the ones a
-    targeted reindex can retry. Attempt ids with none are absent."""
+) -> dict[int, OpenErrorCounts]:
+    """Per-attempt counts of open errors. An error is open while unresolved on
+    an attempt no admin resolved. The run resolution leaves ``is_resolved``
+    alone for the poll cursor and Retry. Attempt ids with none are absent."""
     if not index_attempt_ids:
         return {}
 
     stmt = (
-        select(IndexAttemptError.index_attempt_id, func.count())
+        select(
+            IndexAttemptError.index_attempt_id,
+            func.count(),
+            func.count().filter(IndexAttemptError.document_id.isnot(None)),
+        )
         .where(
             IndexAttemptError.index_attempt_id.in_(index_attempt_ids),
             IndexAttemptError.is_resolved.is_(False),
-            IndexAttemptError.document_id.isnot(None),
+            ~run_is_resolved(
+                CCPairRunKind.INDEXING, IndexAttemptError.index_attempt_id
+            ),
         )
         .group_by(IndexAttemptError.index_attempt_id)
     )
-    return {attempt_id: count for attempt_id, count in db_session.execute(stmt).all()}  # noqa: C416  # unpacking types the SQLAlchemy Row
+    return {
+        attempt_id: OpenErrorCounts(total=total, docs=docs)
+        for attempt_id, total, docs in db_session.execute(stmt).all()
+    }
 
 
 def get_paginated_index_attempts_for_cc_pair_id(

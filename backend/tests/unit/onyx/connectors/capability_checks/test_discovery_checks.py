@@ -6,11 +6,7 @@ import pytest
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
 from onyx.connectors.capability_checks import findings_setting
-from onyx.connectors.capability_checks.draft_runs import (
-    DraftCheckState,
-    DraftCheckStateKind,
-    decide_draft_check_state,
-)
+from onyx.connectors.capability_checks.draft_runs import decide_draft_check_state
 from onyx.connectors.capability_checks.findings import bounded_count, bounded_options
 from onyx.connectors.capability_checks.models import (
     MAX_FINDING_OPTIONS,
@@ -21,8 +17,11 @@ from onyx.connectors.capability_checks.models import (
     CapabilityVerdict,
     CheckFinding,
     CheckFindingKey,
+    CheckNotRunReason,
     CheckOutput,
     CountFinding,
+    DraftCheckState,
+    DraftCheckStateKind,
     OptionsFinding,
     aggregate_capability_verdict,
 )
@@ -31,6 +30,7 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     UnexpectedValidationError,
 )
+from onyx.db.enums import AccessType
 
 _FOUND = CountFinding(key=CheckFindingKey.VISIBLE_SPACES, count=3)
 
@@ -44,6 +44,7 @@ class _Check(CapabilityCheck):
         discovery: bool = False,
         required: bool = True,
         order: list[str] | None = None,
+        access_types: frozenset[AccessType] | None = None,
     ) -> None:
         super().__init__(
             capability=CredentialCapability.INDEXING,
@@ -52,6 +53,7 @@ class _Check(CapabilityCheck):
             required=required,
             requires_connector_instance=False,
             discovery=discovery,
+            access_types=access_types,
         )
         self._run = run
         self._order = order
@@ -66,8 +68,10 @@ class _Check(CapabilityCheck):
         return CheckOutput(findings=findings) if findings is not None else None
 
 
-def _context() -> CapabilityCheckContext:
-    return CapabilityCheckContext(source=DocumentSource.CONFLUENCE, credential_json={})
+def _context(access_type: AccessType | None = None) -> CapabilityCheckContext:
+    return CapabilityCheckContext(
+        source=DocumentSource.CONFLUENCE, credential_json={}, access_type=access_type
+    )
 
 
 def _found() -> list[CheckFinding]:
@@ -119,8 +123,34 @@ def test_discovery_does_not_run_after_a_required_failure() -> None:
     results: list[CapabilityCheckResult] = run_capability_checks(checks, _context())
 
     assert order == ["token"]
+    # Shown as "Not run" naming the failed check, not as a check that does
+    # not apply.
+    assert results[1].status == CapabilityCheckStatus.SKIPPED
+    assert results[1].applicable is True
+    assert results[1].not_run_reason == CheckNotRunReason.DEPENDENCY_FAILED
+    assert results[1].blocked_by == "token"
+    assert results[1].summary == "Not run: token failed"
+    assert results[1].message == "Not run: token failed"
+
+
+def test_a_discovery_check_that_does_not_apply_drops_out_after_a_failure() -> None:
+    checks: list[CapabilityCheck] = [
+        _Check("token", _denied),
+        _Check(
+            "spaces",
+            _found,
+            discovery=True,
+            access_types=frozenset({AccessType.PUBLIC}),
+        ),
+    ]
+
+    results: list[CapabilityCheckResult] = run_capability_checks(
+        checks, _context(AccessType.PRIVATE)
+    )
+
     assert results[1].status == CapabilityCheckStatus.SKIPPED
     assert results[1].applicable is False
+    assert results[1].not_run_reason is None
 
 
 def test_discovery_does_not_run_with_findings_off(

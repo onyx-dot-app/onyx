@@ -201,6 +201,19 @@ autoscaling:
 
 inferenceCapability:
   extraEnv: []
+  # Optional Hugging Face cache volume. Without one, a model that the image
+  # does not bundle (only the default model is bundled; nomic is not) downloads
+  # again on every pod start. At startup, the model server copies the bundled
+  # model into the volume. The chart does not create the claim. With a
+  # ReadWriteOnce claim, keep replicaCount at 1 and set strategy.type: Recreate.
+  # Give indexCapability its own claim.
+  # volumes:
+  #   - name: hf-cache
+  #     persistentVolumeClaim:
+  #       claimName: onyx-inference-model-hf-cache
+  # volumeMounts:
+  #   - name: hf-cache
+  #     mountPath: /app/.cache/huggingface
   volumes: []
   volumeMounts: []
   service:
@@ -278,6 +291,7 @@ inferenceCapability:
 
 indexCapability:
   extraEnv: []
+  # Optional Hugging Face cache volume: see inferenceCapability.volumes.
   volumes: []
   volumeMounts: []
   service:
@@ -624,10 +638,21 @@ api:
   # every replica at once, and a lone not-ready pod leaves the Service empty.
   # Do NOT put /health/ready on the liveness probe.
   #
-  # Liveness and startup probes stay opt-in. Size a startupProbe for the longest
-  # migration you expect, or it kills the pod mid-migration.
+  # Liveness and startup probes stay opt-in. /health answers only after startup:
+  # the migrations, then the wait for the model server to load a self-hosted
+  # embedding model, with a download if it is not cached (up to
+  # LOCAL_EMBEDDING_MODEL_STARTUP_TIMEOUT, 1800 s by default). A livenessProbe
+  # with no startupProbe therefore restarts the pod during a download. Size the
+  # startupProbe (periodSeconds x failureThreshold) for the longest migration
+  # you expect plus that timeout.
   #
   # Example:
+  # startupProbe:
+  #   httpGet:
+  #     path: /health
+  #     port: api-server-port
+  #   periodSeconds: 10
+  #   failureThreshold: 200  # 2000 s
   # readinessProbe:
   #   httpGet:
   #     path: /health/ready
@@ -1755,6 +1780,10 @@ configMap:
   ASYM_PASSAGE_PREFIX: ""
   DISABLE_RERANK_FOR_STREAMING: ""
   MODEL_SERVER_PORT: ""
+  # Seconds the API server waits on startup for the model server to load a
+  # self-hosted embedding model, including a download if it is not cached;
+  # "" = 1800. Startup fails when the wait runs out. "0" disables the wait.
+  LOCAL_EMBEDDING_MODEL_STARTUP_TIMEOUT: ""
   MIN_THREADS_ML_MODELS: ""
   # Indexing Configs
   NUM_INDEXING_WORKERS: ""
@@ -1766,6 +1795,10 @@ configMap:
   # Index spreadsheets and other tabular files (xlsx, Google Sheets, CSV, TSV)
   # by title only, with "<content-skipped>" as their content; "" = false
   SKIP_SPREADSHEET_CONTENT: ""
+  # Re-chunk tabular documents indexed by an older chunking strategy, in place
+  # and without re-crawling the source; "" = false. Only arms the migration: a
+  # stored record stops it once done, so it is safe to leave set.
+  TABULAR_RECHUNK_ENABLED: ""
   # OpenSearch Point-In-Time keep-alive for the reindex/port scan (default 5m)
   PIT_KEEP_ALIVE: ""
   CONTINUE_ON_CONNECTOR_FAILURE: ""
@@ -1808,8 +1841,9 @@ configMap:
   CELERY_WORKER_LIGHT_CONCURRENCY: ""
   CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER: ""
   CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY: ""
-  # Time limit in seconds for one doc permission sync or group sync (default:
-  # JOB_TIMEOUT_SECONDS, 6h); raise it for a source whose full sync takes longer.
+  # Time limit in seconds for one group sync (default: JOB_TIMEOUT_SECONDS, 6h);
+  # raise it for a source whose group sync takes longer. A doc permission sync
+  # has no time limit. It stops after an hour without progress.
   PERMISSION_SYNC_TIMEOUT_SECONDS: ""
   # Document-index sync beat lock TTL in seconds (default 120); raise it if the
   # sync pass aborts with "no longer owned" or "Lock not owned on completion".
@@ -1844,10 +1878,9 @@ configMap:
   SANDBOX_BACKEND: "kubernetes"
   SANDBOX_NAMESPACE: "onyx-sandboxes"
   SANDBOX_SERVICE_ACCOUNT_NAME: "sandbox"
-  # ONYX_SERVER_URL must be the full API base URL, path prefix included — e.g.
-  # "https://onyx.example/api" through the public proxy, or
-  # "http://<release>-api-service.<ns>.svc.cluster.local:8080" directly at the
-  # API service (no prefix). It is required when ENABLE_CRAFT=true.
+  # ONYX_SERVER_URL defaults to the chart's internal API Service when Craft is enabled.
+  # Set an explicit full API base URL, including any path prefix, to override it:
+  # ONYX_SERVER_URL: "https://onyx.example/api"
   SANDBOX_PROXY_CA_SECRET: "sandbox-proxy-ca"
   SANDBOX_PROXY_CA_CONFIGMAP: "sandbox-proxy-ca-bundle"
 # -- Craft sandbox RBAC (rendered when configMap.ENABLE_CRAFT=true).

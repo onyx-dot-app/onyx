@@ -31,7 +31,7 @@ from onyx.connectors.models import (
     HierarchyNode,
     TextSection,
 )
-from onyx.server.security.models import web_connector_ssrf_enforced
+from onyx.server.security.models import connector_ssrf_enforced
 from onyx.server.security.store import get_security_settings
 from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
@@ -157,7 +157,7 @@ def _should_exclude(path: str) -> bool:
 
 
 def _validate_credential_url(gitlab_url: str) -> None:
-    enforced: bool = web_connector_ssrf_enforced(
+    enforced: bool = connector_ssrf_enforced(
         get_security_settings().ssrf_protection_level
     )
     try:

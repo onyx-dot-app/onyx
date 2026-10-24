@@ -88,7 +88,7 @@ const providerOptions: SelectOptions = [
     title: "OpenAI",
     foldable: true,
     options: [
-      { value: "gpt-4o", title: "GPT-4o" },
+      { value: "gpt-6-sol", title: "GPT-6 Sol" },
       { value: "gpt-4.1", title: "GPT-4.1" },
       { value: "o3", title: "o3" },
     ],

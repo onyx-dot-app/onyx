@@ -84,6 +84,8 @@ interface ModalContentProps extends WithoutStyles<
 
   width?: ModalWidth;
   height?: ModalHeight;
+  /** CSS length limiting the modal height, within the available viewport. */
+  maxHeight?: string;
 
   /**
    * Vertical placement. `"center"` (default) centers in the viewport.
@@ -114,6 +116,7 @@ function ModalContent({
   children,
   width = "xl",
   height = "fit",
+  maxHeight,
   position = "center",
   preventAccidentalClose = true,
   skipOverlay = false,
@@ -230,6 +233,13 @@ function ModalContent({
           } as React.CSSProperties)
         : undefined;
 
+  const positionerStyle = maxHeight
+    ? {
+        ...containerStyle,
+        maxHeight: `min(${maxHeight}, var(--opal-modal-available-height))`,
+      }
+    : containerStyle;
+
   const positionerData = {
     "data-position": position,
     "data-width": width,
@@ -283,7 +293,7 @@ function ModalContent({
             {...dialogEventHandlers}
           >
             <div
-              style={containerStyle}
+              style={positionerStyle}
               className="opal-modal-positioner opal-modal-stack"
               {...positionerData}
             >
@@ -300,7 +310,7 @@ function ModalContent({
         ) : (
           <DialogPrimitive.Content
             ref={handleRef}
-            style={containerStyle}
+            style={positionerStyle}
             className="opal-modal-positioner opal-modal-card"
             data-height={height}
             data-background={background}

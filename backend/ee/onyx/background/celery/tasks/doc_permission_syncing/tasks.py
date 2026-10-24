@@ -2,7 +2,7 @@ import time
 import traceback
 from datetime import datetime, timedelta, timezone
 from functools import partial
-from typing import NamedTuple
+from typing import NamedTuple, cast
 from uuid import uuid4
 
 from celery import Celery, Task, shared_task
@@ -16,6 +16,9 @@ from tenacity import (
     wait_random_exponential,
 )
 
+from ee.onyx.background.celery.tasks.doc_permission_syncing.checkpointer import (
+    FileStoreDocSyncCheckpointer,
+)
 from ee.onyx.db.connector_credential_pair import (
     clear_perm_sync_pending__no_commit,
     get_all_auto_sync_cc_pairs,
@@ -31,14 +34,14 @@ from onyx.background.celery.celery_redis import (
     celery_get_unacked_task_ids,
 )
 from onyx.background.celery.tasks.shared.lease_heartbeat import LeaseHeartbeat
-from onyx.configs.app_configs import JOB_TIMEOUT, PERMISSION_SYNC_TIMEOUT
+from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.constants import (
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
     PERMISSION_SYNC_HEARTBEAT_INTERVAL,
-    PERMISSION_SYNC_LEASE_OVERRUN,
     PERMISSION_SYNC_LEASE_SELF_EXPIRY,
     PERMISSION_SYNC_LEASE_TIMEOUT,
     PERMISSION_SYNC_LOST_TASK_GRACE,
+    PERMISSION_SYNC_STALL_TIMEOUT,
     PERMISSION_SYNC_TASK_EXPIRES,
     DocumentSource,
     OnyxCeleryPriority,
@@ -46,6 +49,7 @@ from onyx.configs.constants import (
     OnyxCeleryTask,
     OnyxRedisLocks,
 )
+from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.db.connector import mark_cc_pair_as_permissions_synced
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
@@ -101,6 +105,7 @@ from onyx.utils.logger import (
     format_error_for_logging,
     setup_logger,
 )
+from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 logger = setup_logger()
 
@@ -108,6 +113,9 @@ logger = setup_logger()
 DOCUMENT_PERMISSIONS_UPDATE_MAX_RETRIES = 3
 DOCUMENT_PERMISSIONS_UPDATE_STOP_AFTER = 10 * 60
 DOCUMENT_PERMISSIONS_UPDATE_MAX_WAIT = 60
+# Elements are written in parallel batches. Checkpoints only cover flushed batches.
+PERMISSION_WRITE_BATCH_SIZE = 64
+PERMISSION_WRITE_WORKERS = 8
 
 
 DOC_PERMISSION_SYNC_TASK_ID_PREFIX = "docpermissionsync"
@@ -154,10 +162,11 @@ def fail_expired_doc_permission_sync_attempts_for_tenant() -> None:
             # Celery has dropped the task by then, so it can never start
             not_started_timeout=timedelta(seconds=PERMISSION_SYNC_TASK_EXPIRES)
             + lease_timeout,
+            stall_timeout=timedelta(seconds=PERMISSION_SYNC_STALL_TIMEOUT),
         )
     if failed_ids:
         task_logger.warning(
-            f"Failed doc permission sync attempts with expired leases: {failed_ids}"
+            f"Failed doc permission sync attempts with expired leases or stalled progress: {failed_ids}"
         )
 
 
@@ -417,7 +426,7 @@ def try_creating_permissions_sync_task(
 @shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK,
     acks_late=False,
-    soft_time_limit=JOB_TIMEOUT,
+    # No time limit by design: a crawl that keeps yielding may run for days
     track_started=True,
     trail=False,
     bind=True,
@@ -465,17 +474,17 @@ def connector_permission_sync_generator_task(
     tasks_generated = 0
     docs_with_errors = 0
     progress = DocPermissionSyncProgress()
+    checkpointer: FileStoreDocSyncCheckpointer | None = None
     heartbeat = LeaseHeartbeat(
         f"doc_permission_sync_attempt={attempt_id}",
         renew=partial(_renew_doc_permission_sync_lease, attempt_id, progress),
         interval=PERMISSION_SYNC_HEARTBEAT_INTERVAL,
         max_silence=PERMISSION_SYNC_LEASE_SELF_EXPIRY,
-        max_duration=PERMISSION_SYNC_TIMEOUT + PERMISSION_SYNC_LEASE_OVERRUN,
+        max_duration=None,
     )
     heartbeat.start()
     callback = PermissionSyncCallback(
         redis_connector,
-        timeout_seconds=PERMISSION_SYNC_TIMEOUT,
         lease=heartbeat,
         sync_progress=progress,
     )
@@ -573,38 +582,80 @@ def connector_permission_sync_generator_task(
 
         # cc_pair is detached: connectors may read eager-loaded connector/credential
         # columns off it, never a lazy relationship.
-        doc_sync_func = sync_config.doc_sync_config.doc_sync_func
-        document_external_accesses = doc_sync_func(
-            cc_pair,
-            fetch_all_existing_docs_fn,
-            fetch_all_existing_docs_ids_fn,
-            callback,
+        checkpointed_doc_sync_func = (
+            sync_config.doc_sync_config.checkpointed_doc_sync_func
         )
+        pending_writes: list[ElementExternalAccess] = []
 
-        task_logger.info(f"Permission sync crawl starting. cc_pair={cc_pair_id}")
-
-        for doc_external_access in document_external_accesses:
-            stop_reason = callback.stop_reason()
-            if stop_reason is not None:
-                raise RuntimeError(
-                    f"Permission sync stopped: {stop_reason}: "
-                    f"cc_pair={cc_pair_id} "
-                    f"tasks_generated={tasks_generated}"
-                )
-
+        def flush_pending_writes() -> None:
+            nonlocal tasks_generated, docs_with_errors
+            if not pending_writes:
+                return
             result = update_element_permissions_batch(
                 tenant_id=tenant_id,
                 attempt_id=attempt_id,
-                new_permissions=[doc_external_access],
+                new_permissions=pending_writes,
                 source_string=connector_type,
                 connector_id=connector_id,
                 credential_id=credential_id,
             )
+            pending_writes.clear()
             tasks_generated += result.num_updated
             docs_with_errors += result.num_errors
+            if result.num_errors and checkpointer:
+                checkpointer.freeze()
             progress.total_docs_synced = tasks_generated
             progress.docs_with_permission_errors = docs_with_errors
-            progress.last_progress_at = datetime.now(timezone.utc)
+
+        if checkpointed_doc_sync_func is not None:
+            checkpointer = FileStoreDocSyncCheckpointer(
+                cc_pair_id,
+                attempt_id,
+                compute_connector_config_hash(
+                    cc_pair.connector.connector_specific_config
+                ),
+                flush_pending_writes,
+            )
+            document_external_accesses = checkpointed_doc_sync_func(
+                cc_pair,
+                fetch_all_existing_docs_fn,
+                fetch_all_existing_docs_ids_fn,
+                callback,
+                checkpointer,
+            )
+        else:
+            doc_sync_func = sync_config.doc_sync_config.doc_sync_func
+            if doc_sync_func is None:
+                raise ValueError(f"No doc sync func registered for {source_type}")
+            document_external_accesses = doc_sync_func(
+                cc_pair,
+                fetch_all_existing_docs_fn,
+                fetch_all_existing_docs_ids_fn,
+                callback,
+            )
+
+        task_logger.info(f"Permission sync crawl starting. cc_pair={cc_pair_id}")
+
+        # A crawl that dies still writes what it yielded, so the failed attempt
+        # reports those documents
+        try:
+            for doc_external_access in document_external_accesses:
+                stop_reason = callback.stop_reason()
+                if stop_reason is not None:
+                    raise RuntimeError(
+                        f"Permission sync stopped: {stop_reason}: "
+                        f"cc_pair={cc_pair_id} "
+                        f"tasks_generated={tasks_generated}"
+                    )
+
+                pending_writes.append(doc_external_access)
+                # Every yielded element is progress, even from a source that
+                # never reports it
+                callback.progress("element_yielded", 1)
+                if len(pending_writes) >= PERMISSION_WRITE_BATCH_SIZE:
+                    flush_pending_writes()
+        finally:
+            flush_pending_writes()
 
         task_logger.info(
             f"Permission sync crawl finished. "
@@ -622,7 +673,18 @@ def connector_permission_sync_generator_task(
                 total_docs_synced=tasks_generated,
                 docs_with_permission_errors=docs_with_errors,
             )
-            mark_cc_pair_as_permissions_synced(db_session, cc_pair_id, sync_started_at)
+            # A resumed crawl only covered changes up to the window its chain began with
+            mark_cc_pair_as_permissions_synced(
+                db_session,
+                cc_pair_id,
+                (
+                    checkpointer.resume.poll_range_end
+                    if checkpointer and checkpointer.resume
+                    else sync_started_at
+                ),
+            )
+        if checkpointer:
+            checkpointer.discard()
         task_logger.info(
             f"Completed doc permission sync attempt {attempt_id}: {tasks_generated} docs, {docs_with_errors} errors"
         )
@@ -671,6 +733,55 @@ class PermissionSyncResult(NamedTuple):
     num_errors: int
 
 
+def _write_element_permissions(
+    tenant_id: str,
+    attempt_id: int,
+    permissions: ElementExternalAccess,
+    source_string: str,
+    connector_id: int,
+    credential_id: int,
+) -> bool:
+    """One element's write within a parallel batch. An ordinary failure is
+    logged and returns False, so the batch continues. A lost attempt raises."""
+    element_id = (
+        permissions.doc_id
+        if isinstance(permissions, DocExternalAccess)
+        else permissions.raw_node_id
+    )
+    if (
+        permissions.external_access.num_entries
+        > permissions.external_access.MAX_NUM_ENTRIES
+    ):
+        task_logger.warning(
+            "Permissions length exceeded, skipping...: "
+            "%s "
+            "num_users=%s num_groups=%s "
+            "permissions.external_access.MAX_NUM_ENTRIES=%s",
+            element_id,
+            len(permissions.external_access.external_user_emails),
+            len(permissions.external_access.external_user_group_ids),
+            permissions.external_access.MAX_NUM_ENTRIES,
+        )
+        return False
+
+    # Written here rather than through a task: permissions can be too large for the wire
+    try:
+        element_update_permissions(
+            tenant_id,
+            attempt_id,
+            permissions,
+            source_string,
+            connector_id,
+            credential_id,
+        )
+    except PermissionSyncAttemptLostError:
+        raise
+    except Exception:
+        task_logger.exception("Failed to update permissions for element %s", element_id)
+        return False
+    return True
+
+
 def update_element_permissions_batch(
     tenant_id: str,
     attempt_id: int,
@@ -679,7 +790,7 @@ def update_element_permissions_batch(
     connector_id: int,
     credential_id: int,
 ) -> PermissionSyncResult:
-    """Update permissions for documents and hierarchy nodes, while
+    """Update permissions for documents and hierarchy nodes in parallel, while
     `attempt_id` is still IN_PROGRESS.
 
     Raises PermissionSyncAttemptLostError when the attempt was closed: a
@@ -688,63 +799,32 @@ def update_element_permissions_batch(
     Returns:
         PermissionSyncResult containing counts of successful updates and errors
     """
-    num_permissions = 0
-    num_errors = 0
-    cumulative_db_update_time = 0.0
-    for permissions in new_permissions:
-        element_id = (
-            permissions.doc_id
-            if isinstance(permissions, DocExternalAccess)
-            else permissions.raw_node_id
-        )
-        if (
-            permissions.external_access.num_entries
-            > permissions.external_access.MAX_NUM_ENTRIES
-        ):
-            num_errors += 1
-            task_logger.warning(
-                "Permissions length exceeded, skipping...: "
-                "%s "
-                "num_users=%s num_groups=%s "
-                "permissions.external_access.MAX_NUM_ENTRIES=%s",
-                element_id,
-                len(permissions.external_access.external_user_emails),
-                len(permissions.external_access.external_user_group_ids),
-                permissions.external_access.MAX_NUM_ENTRIES,
-            )
-            continue
-
-        # NOTE(rkuo): this used to fire a task instead of directly writing to the DB,
-        # but the permissions can be excessively large if sent over the wire.
-        # On the other hand, the downside of doing db updates here is that we can
-        # block and fail if we can't make the calls to the DB ... but that's probably
-        # a rare enough case to be acceptable.
-
-        # This can internally exception due to db issues but still continue
-        # Catch exceptions per-element to avoid breaking the entire sync
-        db_start = time.monotonic()
-        try:
-            element_update_permissions(
-                tenant_id,
-                attempt_id,
-                permissions,
-                source_string,
-                connector_id,
-                credential_id,
-            )
-            num_permissions += 1
-        except PermissionSyncAttemptLostError:
-            raise
-        except Exception:
-            num_errors += 1
-            task_logger.exception(
-                "Failed to update permissions for element %s", element_id
-            )
-        finally:
-            cumulative_db_update_time += time.monotonic() - db_start
-
-    observe_doc_perm_sync_db_update_duration(cumulative_db_update_time, source_string)
-    return PermissionSyncResult(num_updated=num_permissions, num_errors=num_errors)
+    db_start = time.monotonic()
+    outcomes = cast(
+        list[bool],
+        run_functions_tuples_in_parallel(
+            [
+                (
+                    _write_element_permissions,
+                    (
+                        tenant_id,
+                        attempt_id,
+                        permissions,
+                        source_string,
+                        connector_id,
+                        credential_id,
+                    ),
+                )
+                for permissions in new_permissions
+            ],
+            max_workers=PERMISSION_WRITE_WORKERS,
+        ),
+    )
+    observe_doc_perm_sync_db_update_duration(time.monotonic() - db_start, source_string)
+    num_permissions = sum(outcomes)
+    return PermissionSyncResult(
+        num_updated=num_permissions, num_errors=len(outcomes) - num_permissions
+    )
 
 
 # NOTE(rkuo): this should probably move to the db layer
@@ -844,41 +924,23 @@ class PermissionSyncCallback(IndexingHeartbeatInterface):
     def __init__(
         self,
         redis_connector: RedisConnector,
-        timeout_seconds: int | None = None,
         lease: LeaseHeartbeat | None = None,
         sync_progress: DocPermissionSyncProgress | None = None,
     ):
         super().__init__()
         self.redis_connector: RedisConnector = redis_connector
-        self.start_monotonic = time.monotonic()
-        self.timeout_seconds = timeout_seconds
         self.lease = lease
         self.sync_progress = sync_progress
 
     def stop_reason(self) -> str | None:
-        """Why the sync must stop, or None when it may continue."""
+        """Why the sync must stop, or None when it may continue. There is no
+        time limit: a stalled crawl loses its lease once the reaper fails the
+        attempt on its stale progress."""
         if self.redis_connector.stop.fenced:
             return "stop signal set (the connector is being deleted or paused)"
 
         if self.lease is not None and self.lease.is_lost():
             return "attempt lost its lease (the reaper or a cancel closed it)"
-
-        # Check if the task has exceeded its timeout
-        # NOTE: Celery's soft_time_limit does not work with thread pools,
-        # so we must enforce timeouts internally.
-        if self.timeout_seconds is not None:
-            elapsed = time.monotonic() - self.start_monotonic
-            if elapsed > self.timeout_seconds:
-                logger.warning(
-                    "PermissionSyncCallback - task timeout exceeded: elapsed=%ss timeout=%ss cc_pair=%s",
-                    format(elapsed, ".0f"),
-                    self.timeout_seconds,
-                    self.redis_connector.cc_pair_id,
-                )
-                return (
-                    f"timed out after {elapsed:.0f}s "
-                    f"(PERMISSION_SYNC_TIMEOUT_SECONDS={self.timeout_seconds})"
-                )
 
         return None
 

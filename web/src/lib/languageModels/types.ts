@@ -21,6 +21,8 @@ export interface ModelConfiguration {
   max_input_tokens: number | null;
   supports_image_input: boolean;
   supports_reasoning: boolean;
+  supports_chat?: boolean;
+  supports_decisions?: boolean;
   /**
    * Effort levels this model tells apart, ascending, as resolved by the
    * backend that builds the request. Absent from an older backend, in which
@@ -59,6 +61,8 @@ export interface ModelConfiguration {
 }
 
 export enum LLMProviderName {
+  TYPESAFE = "typesafe",
+  ZOOM_AI = "zoom_ai",
   OPENAI = "openai",
   ANTHROPIC = "anthropic",
   OLLAMA_CHAT = "ollama_chat",
@@ -100,6 +104,7 @@ export interface LLMModelDescriptor {
 
 export interface LLMProviderView {
   id: number;
+  zoom_voice_provider_id?: number | null;
   name: string | null;
   provider: string;
   api_key: string | null;
@@ -166,6 +171,8 @@ export interface OllamaModelResponse {
 }
 
 export interface OpenRouterModelResponse {
+  supports_chat?: boolean;
+  supports_decisions?: boolean;
   name: string;
   display_name: string;
   max_input_tokens: number | null;
@@ -223,6 +230,8 @@ export interface BedrockFetchParams {
   aws_access_key_id?: string;
   aws_secret_access_key?: string;
   aws_bearer_token_bedrock?: string;
+  aws_role_name?: string;
+  aws_external_id?: string;
   provider_id?: number;
 }
 
@@ -326,6 +335,8 @@ export interface VercelAIGatewayFetchParams {
 }
 
 export interface VercelAIGatewayModelResponse {
+  supports_chat?: boolean;
+  supports_decisions?: boolean;
   name: string;
   display_name: string;
   max_input_tokens: number | null;
@@ -400,8 +411,7 @@ export interface LLMOptionGroup {
 }
 
 export interface FilterModelConfigurationsOptions {
-  /** Drop models an admin hid from users. Defaults to true. */
-  visibleOnly?: boolean;
+  includeDecisionOnly?: boolean;
   /** Keep only models that accept image input. */
   imageInput?: boolean;
   /** A configuration id kept regardless: the current value stays listed. */
@@ -475,6 +485,7 @@ export interface CostOverrideUpsert {
 export type ProviderCopyKey = "custom" | "openAICompatible";
 
 export interface ProviderEntry {
+  decisionOnly?: boolean;
   icon: IconFunctionComponent;
   /** A brand name, or the provider key when `copyKey` holds its names. */
   productName: string;

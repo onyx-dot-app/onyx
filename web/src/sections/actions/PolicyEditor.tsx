@@ -1,91 +1,144 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Text, InputSingleSelect } from "@opal/components";
+import { useState } from "react";
+import type { RichStr } from "@opal/types";
+import { toPlainString } from "@opal/components/text/InlineMarkdown";
+import {
+  Text,
+  InputSingleSelect,
+  InputTypeIn,
+  InputSwitch,
+  Tooltip,
+} from "@opal/components";
+import { ContentAction } from "@opal/layouts";
 import PolicyToggle from "@/sections/actions/PolicyToggle";
-import type { EndpointPolicy } from "@/app/craft/v1/apps/registry";
+import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
 
 export interface PolicyEditorItem {
   id: string;
   name: string;
   description: string;
-  defaultPolicy: EndpointPolicy;
-}
-
-type BulkPolicy = "DEFAULT" | "ALWAYS" | "ASK" | "CUSTOM";
-
-function bulkPolicyOf(
-  items: PolicyEditorItem[],
-  policies: Record<string, EndpointPolicy>
-): BulkPolicy {
-  if (
-    items.every(
-      (item) => (policies[item.id] ?? item.defaultPolicy) === item.defaultPolicy
-    )
-  )
-    return "DEFAULT";
-  const values = items.map((item) => policies[item.id] ?? item.defaultPolicy);
-  if (values.every((value) => value === "ALWAYS")) return "ALWAYS";
-  if (values.every((value) => value === "ASK")) return "ASK";
-  return "CUSTOM";
+  defaultPolicy: ActionPolicy;
+  editable?: boolean;
+  lockReason?: "workspace_disabled" | "workspace_managed" | null;
 }
 
 interface PolicyEditorProps {
   showTitle?: boolean;
+  disabled?: boolean;
+  onReset?: () => void;
+  resetLabel?: string | RichStr;
   items: PolicyEditorItem[];
-  policies: Record<string, EndpointPolicy>;
-  onChange: (policies: Record<string, EndpointPolicy>) => void;
+  policies: Record<string, ActionPolicy>;
+  onChange?: (policies: Record<string, ActionPolicy>) => void;
 }
 
 export default function PolicyEditor({
   showTitle = true,
+  disabled = false,
+  onReset,
+  resetLabel,
   items,
   policies,
   onChange,
 }: PolicyEditorProps) {
   const t = useTranslations("craft.apps.policyEditor");
-  const bulkValue = bulkPolicyOf(items, policies);
-
-  function applyBulk(policy: "DEFAULT" | "ALWAYS" | "ASK") {
-    onChange({
-      ...policies,
-      ...Object.fromEntries(
-        items.map((item) => [
-          item.id,
-          policy === "DEFAULT" ? item.defaultPolicy : policy,
-        ])
-      ),
-    });
+  const copy = useTranslations("craft.actionPolicies");
+  const policyCopy = useTranslations("actions.policyToggle");
+  const toolCopy = useTranslations("actions.mcpTools");
+  const detailCopy = useTranslations("actions.memberPlugins.detail");
+  const [query, setQuery] = useState("");
+  const search = query.trim().toLocaleLowerCase();
+  const shownItems = items.filter((item) =>
+    `${item.name} ${item.description}`.toLocaleLowerCase().includes(search)
+  );
+  const editableItems = shownItems.filter((item) => item.editable !== false);
+  const options: { value: ActionPolicy; label: string }[] = [
+    { value: "ALWAYS", label: policyCopy("always.label") },
+    { value: "ASK", label: policyCopy("ask.label") },
+    { value: "DENY", label: policyCopy("deny.label") },
+  ];
+  function reset() {
+    if (onReset) onReset();
+    else
+      onChange?.({
+        ...policies,
+        ...Object.fromEntries(
+          items
+            .filter((item) => item.editable !== false)
+            .map((item) => [item.id, item.defaultPolicy])
+        ),
+      });
   }
 
   return (
-    <div className="flex flex-col gap-2 pt-2">
+    <div className="flex flex-col gap-4">
       {showTitle && <Text font="main-ui-action">{t("permissions.title")}</Text>}
-      <Text font="secondary-body" color="text-03">
-        {t("permissions.description")}
-      </Text>
-
-      <InputSingleSelect
-        aria-label={t("permissions.title")}
-        value={bulkValue}
-        onValueChange={(value) => {
-          if (value === "DEFAULT" || value === "ALWAYS" || value === "ASK")
-            applyBulk(value);
-        }}
-        defaultOption="DEFAULT"
-        placeholder={t("permissions.title")}
-        options={[
-          { value: "DEFAULT", title: t("permissions.defaultOption") },
-          ...(bulkValue === "CUSTOM"
-            ? [{ value: "CUSTOM", title: t("permissions.customOption") }]
-            : []),
-          { value: "ALWAYS", title: t("permissions.autoApproveOption") },
-          { value: "ASK", title: t("permissions.askOption") },
-        ]}
+      <InputTypeIn
+        searchIcon
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        placeholder={toolCopy("search")}
+        aria-label={toolCopy("search")}
       />
+      {onChange && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Text font="secondary-body" color="text-03">
+            {detailCopy("toolCount", { count: shownItems.length })}
+          </Text>
+          <div className="ms-auto w-44">
+            <InputSingleSelect
+              aria-label={copy("setPermissions")}
+              placeholder={copy("setPermissions")}
+              value=""
+              disabled={
+                disabled || !items.some((item) => item.editable !== false)
+              }
+              options={[
+                ...options.map((option) => ({
+                  value: option.value,
+                  title: option.label,
+                  disabled: editableItems.length === 0,
+                })),
+                {
+                  options: [
+                    {
+                      value: "reset",
+                      title: toPlainString(
+                        resetLabel ?? t("permissions.defaultOption")
+                      ),
+                    },
+                  ],
+                },
+              ]}
+              onValueChange={(value) => {
+                if (value === "reset") reset();
+                else if (
+                  value === "ALWAYS" ||
+                  value === "ASK" ||
+                  value === "DENY"
+                ) {
+                  onChange({
+                    ...policies,
+                    ...Object.fromEntries(
+                      editableItems.map((item) => [item.id, value])
+                    ),
+                  });
+                }
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-col gap-2">
-        {items.map((item) => (
+        {shownItems.length === 0 && (
+          <Text font="secondary-body" color="text-03">
+            {copy(items.length ? "noMatchingActions" : "emptyActions")}
+          </Text>
+        )}
+        {shownItems.map((item) => (
           <div
             key={item.id}
             className="flex items-center justify-between gap-3"
@@ -102,13 +155,63 @@ export default function PolicyEditor({
                 {item.description}
               </Text>
             </div>
-            <PolicyToggle
-              value={policies[item.id] ?? item.defaultPolicy}
-              onChange={(value) => onChange({ ...policies, [item.id]: value })}
-            />
+            <Tooltip
+              tooltip={
+                item.lockReason === "workspace_disabled"
+                  ? copy("workspaceDisabledTooltip")
+                  : item.lockReason
+                    ? copy(item.lockReason)
+                    : undefined
+              }
+            >
+              <div>
+                <PolicyToggle
+                  label={item.name}
+                  disabled={disabled || !onChange || item.editable === false}
+                  value={
+                    item.editable === false
+                      ? item.defaultPolicy
+                      : (policies[item.id] ?? item.defaultPolicy)
+                  }
+                  onChange={(value) =>
+                    onChange?.({ ...policies, [item.id]: value })
+                  }
+                />
+              </div>
+            </Tooltip>
           </div>
         ))}
       </div>
     </div>
+  );
+}
+
+interface UserManagementSwitchProps {
+  value: boolean;
+  disabled?: boolean;
+  onChange: (value: boolean) => void;
+}
+export function UserManagementSwitch({
+  value,
+  onChange,
+  disabled = false,
+}: UserManagementSwitchProps) {
+  const t = useTranslations("craft.actionPolicies");
+  return (
+    <ContentAction
+      title={t("userManagement")}
+      description={t("userManagementDescription")}
+      sizePreset="main-ui"
+      variant="section"
+      padding={0}
+      rightChildren={
+        <InputSwitch
+          disabled={disabled}
+          checked={value}
+          onCheckedChange={onChange}
+          aria-label={t("userManagement")}
+        />
+      }
+    />
   );
 }

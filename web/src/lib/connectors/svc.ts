@@ -18,37 +18,39 @@ import type {
 // Indexing
 // ---------------------------------------------------------------------------
 
-/** Cancels one running or queued index attempt. Resolves to `null` once the
- * server takes it, else to its error detail or `fallback`. */
-export async function cancelIndexAttempt(
-  indexAttemptId: number,
+/** POSTs `url`. Resolves to `null` once the server takes it, else to its error detail or `fallback`. */
+async function postForError(
+  url: string,
   fallback: string
 ): Promise<string | null> {
   try {
-    const response = await fetch(
-      `/api/manage/admin/index-attempt/${indexAttemptId}/cancel`,
-      { method: "POST" }
-    );
+    const response = await fetch(url, { method: "POST" });
     return response.ok ? null : await parseErrorDetail(response, fallback);
   } catch {
     return fallback;
   }
 }
 
-/** Starts a pair's first index attempt despite its failed checks. Resolves to the error message, or `null` on success. */
-export async function releaseIndexingHold(
+/** Cancels one running or queued index attempt. Resolves to `null` or the error message. */
+export function cancelIndexAttempt(
+  indexAttemptId: number,
+  fallback: string
+): Promise<string | null> {
+  return postForError(
+    `/api/manage/admin/index-attempt/${indexAttemptId}/cancel`,
+    fallback
+  );
+}
+
+/** Starts a pair's first index attempt despite its failed checks. Resolves to `null` or the error message. */
+export function releaseIndexingHold(
   ccPairId: number,
   fallback: string
 ): Promise<string | null> {
-  try {
-    const response = await fetch(
-      `/api/manage/admin/cc-pair/${ccPairId}/release-indexing-hold`,
-      { method: "POST" }
-    );
-    return response.ok ? null : await parseErrorDetail(response, fallback);
-  } catch {
-    return fallback;
-  }
+  return postForError(
+    `/api/manage/admin/cc-pair/${ccPairId}/release-indexing-hold`,
+    fallback
+  );
 }
 
 export async function triggerIndexing(
@@ -78,9 +80,37 @@ export async function triggerIndexing(
   }
 }
 
+/** Starts a permission sync on a perm-synced pair. Resolves to `null` or the error message. */
+export function triggerPermissionSync(
+  ccPairId: number,
+  fallback: string
+): Promise<string | null> {
+  return postForError(
+    `/api/manage/admin/cc-pair/${ccPairId}/sync-permissions`,
+    fallback
+  );
+}
+
 // ---------------------------------------------------------------------------
 // File and Google Sites connectors: upload, create, link, run
 // ---------------------------------------------------------------------------
+
+/** A created connector's pair, `null` on a failed create. */
+export type CreatedConnector = { ccPairId: number | null } | null;
+
+/**
+ * The id of the cc-pair a pairing or create call made: the backend answers
+ * with a `StatusResponse` whose `data` is that id. `null` when it is missing.
+ */
+export async function readCreatedCCPairId(
+  response: Response
+): Promise<number | null> {
+  const body: unknown = await response.json();
+  if (typeof body !== "object" || body === null || !("data" in body)) {
+    return null;
+  }
+  return typeof body.data === "number" ? body.data : null;
+}
 
 export const submitFiles = async (
   selectedFiles: File[],
@@ -91,7 +121,7 @@ export const submitFiles = async (
   dataAccess?: number[],
   /** The manage groups with their roles; given, it replaces `groups`. */
   manageAccess?: ManageAccessEntry[]
-) => {
+): Promise<CreatedConnector> => {
   const formData = new FormData();
 
   selectedFiles.forEach((file) => {
@@ -106,7 +136,7 @@ export const submitFiles = async (
     await response.json();
   if (!response.ok) {
     toast.error(`Unable to upload files - ${responseJson.detail}`);
-    return;
+    return null;
   }
 
   const filePaths = responseJson.file_paths as string[];
@@ -130,7 +160,7 @@ export const submitFiles = async (
   });
   if (connectorErrorMsg || !connector) {
     toast.error(`Unable to create connector - ${connectorErrorMsg}`);
-    return;
+    return null;
   }
 
   // Since there is no "real" credential associated with a file connector
@@ -148,7 +178,7 @@ export const submitFiles = async (
   if (!createCredentialResponse.ok) {
     const errorMsg = await createCredentialResponse.text();
     toast.error(`Error creating credential for CC Pair - ${errorMsg}`);
-    return false;
+    return null;
   }
   const credentialId = (await createCredentialResponse.json()).id;
 
@@ -169,17 +199,18 @@ export const submitFiles = async (
     toast.error(
       `Unable to link connector to credential - ${credentialResponseJson.detail}`
     );
-    return false;
+    return null;
   }
+  const ccPairId = await readCreatedCCPairId(credentialResponse);
 
   const runConnectorErrorMsg = await runConnector(connector.id, [0]);
   if (runConnectorErrorMsg) {
     toast.error(`Unable to run connector - ${runConnectorErrorMsg}`);
-    return false;
+    return null;
   }
 
   toast.success("Successfully uploaded files!");
-  return true;
+  return { ccPairId };
 };
 
 export const submitGoogleSite = async (
@@ -195,7 +226,7 @@ export const submitGoogleSite = async (
   dataAccess?: number[],
   /** The manage groups with their roles; given, it replaces `groups`. */
   manageAccess?: ManageAccessEntry[]
-) => {
+): Promise<CreatedConnector> => {
   const uploadCreateAndTriggerConnector = async () => {
     const formData = new FormData();
 
@@ -214,7 +245,7 @@ export const submitGoogleSite = async (
       await response.json();
     if (!response.ok) {
       toast.error(`Unable to upload files - ${responseJson.detail}`);
-      return false;
+      return null;
     }
 
     const filePaths = responseJson.file_paths;
@@ -222,7 +253,7 @@ export const submitGoogleSite = async (
       toast.error(
         "File upload was successful, but no file path was returned. Cannot create connector."
       );
-      return false;
+      return null;
     }
 
     const filePath = filePaths[0];
@@ -230,7 +261,7 @@ export const submitGoogleSite = async (
       toast.error(
         "File upload was successful, but file path is undefined. Cannot create connector."
       );
-      return false;
+      return null;
     }
 
     const [connectorErrorMsg, connector] =
@@ -249,7 +280,7 @@ export const submitGoogleSite = async (
       });
     if (connectorErrorMsg || !connector) {
       toast.error(`Unable to create connector - ${connectorErrorMsg}`);
-      return false;
+      return null;
     }
 
     const credentialResponse = await linkCredential(
@@ -269,23 +300,24 @@ export const submitGoogleSite = async (
       toast.error(
         `Unable to link connector to credential - ${credentialResponseJson.detail}`
       );
-      return false;
+      return null;
     }
+    const ccPairId = await readCreatedCCPairId(credentialResponse);
 
     const runConnectorErrorMsg = await runConnector(connector.id, [0]);
     if (runConnectorErrorMsg) {
       toast.error(`Unable to run connector - ${runConnectorErrorMsg}`);
-      return false;
+      return null;
     }
     toast.success("Successfully created Google Site connector!");
-    return true;
+    return { ccPairId };
   };
 
   try {
     const response = await uploadCreateAndTriggerConnector();
     return response;
   } catch (e) {
-    return false;
+    return null;
   }
 };
 

@@ -66,7 +66,7 @@ function SourceIconStack({ sources }: SourceIconStackProps) {
       width="auto"
       height="auto"
       gap={0}
-      className="shrink-0 p-0.5"
+      className="shrink-0"
     >
       {unique.map((s, i) => {
         const Icon = getSourceMetadata(s.source).icon;

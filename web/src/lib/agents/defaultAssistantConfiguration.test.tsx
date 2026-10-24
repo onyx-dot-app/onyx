@@ -30,6 +30,19 @@ beforeEach(() => {
 });
 afterEach(() => jest.restoreAllMocks());
 
+/** Apply a targeted tool change the way the server does. */
+function applyToolChange(
+  current: number[],
+  body: BodyInit | null | undefined
+): number[] {
+  const {
+    tool_ids: changed,
+    enabled,
+  }: { tool_ids: number[]; enabled: boolean } = JSON.parse(String(body));
+  const others = current.filter((id) => !changed.includes(id));
+  return enabled ? [...others, ...changed] : others;
+}
+
 function configurationResponse(toolIds: number[]) {
   return new Response(
     JSON.stringify({
@@ -46,9 +59,7 @@ test("concurrent surfaces preserve both changes to default Chat tools", async ()
   const firstPatch = deferred<void>();
   jest.spyOn(global, "fetch").mockImplementation(async (_url, init) => {
     if (init?.method === "PATCH") {
-      const { tool_ids: nextIds }: { tool_ids: number[] } = JSON.parse(
-        String(init.body)
-      );
+      const nextIds = applyToolChange(ids, init.body);
       patches.push(nextIds);
       if (patches.length === 1) await firstPatch.promise;
       ids = nextIds;
@@ -99,9 +110,7 @@ test("a rejected save rolls back before another surface saves", async () => {
   const firstPatch = deferred<Response>();
   jest.spyOn(global, "fetch").mockImplementation(async (_url, init) => {
     if (init?.method === "PATCH") {
-      const { tool_ids: nextIds }: { tool_ids: number[] } = JSON.parse(
-        String(init.body)
-      );
+      const nextIds = applyToolChange(ids, init.body);
       patches.push(nextIds);
       if (patches.length === 1) return firstPatch.promise;
       ids = nextIds;
@@ -152,9 +161,7 @@ test("separate SWR providers save without waiting for one another", async () => 
   const firstPatch = deferred<void>();
   jest.spyOn(global, "fetch").mockImplementation(async (_url, init) => {
     if (init?.method !== "PATCH") return configurationResponse([1, 2, 99]);
-    const { tool_ids: nextIds }: { tool_ids: number[] } = JSON.parse(
-      String(init.body)
-    );
+    const nextIds = applyToolChange([1, 2, 99], init.body);
     patches.push(nextIds);
     if (patches.length === 1) await firstPatch.promise;
     return configurationResponse(nextIds);
@@ -208,9 +215,7 @@ test("accepted saves finish after their caller unmounts", async () => {
   const firstPatch = deferred<void>();
   jest.spyOn(global, "fetch").mockImplementation(async (_url, init) => {
     if (init?.method === "PATCH") {
-      const { tool_ids: nextIds }: { tool_ids: number[] } = JSON.parse(
-        String(init.body)
-      );
+      const nextIds = applyToolChange(ids, init.body);
       patches.push(nextIds);
       if (patches.length === 1) await firstPatch.promise;
       ids = nextIds;
@@ -247,8 +252,7 @@ test("both surfaces share selections and preserve other tools", async () => {
   const fetchSpy = jest
     .spyOn(global, "fetch")
     .mockImplementation(async (_url, init) => {
-      if (init?.method === "PATCH")
-        ids = JSON.parse(String(init.body)).tool_ids;
+      if (init?.method === "PATCH") ids = applyToolChange(ids, init.body);
       return new Response(
         JSON.stringify({
           tool_ids: ids,
@@ -272,10 +276,10 @@ test("both surfaces share selections and preserve other tools", async () => {
   await act(() => result.current.preferences.updateTools([2], true));
   expect(result.current.mcp.data?.tool_ids).toEqual([99, 2]);
   expect(fetchSpy).toHaveBeenCalledWith(
-    "/api/admin/default-assistant",
+    "/api/admin/default-assistant/tools",
     expect.objectContaining({
       method: "PATCH",
-      body: JSON.stringify({ tool_ids: [99, 2] }),
+      body: JSON.stringify({ tool_ids: [2], enabled: true }),
     })
   );
 });
@@ -325,7 +329,7 @@ test("scoped managers do not fetch or change global default Chat settings", asyn
 test("rapid toggles preserve each completed selection", async () => {
   let ids = [99];
   jest.spyOn(global, "fetch").mockImplementation(async (_url, init) => {
-    if (init?.method === "PATCH") ids = JSON.parse(String(init.body)).tool_ids;
+    if (init?.method === "PATCH") ids = applyToolChange(ids, init.body);
     return new Response(
       JSON.stringify({
         tool_ids: ids,

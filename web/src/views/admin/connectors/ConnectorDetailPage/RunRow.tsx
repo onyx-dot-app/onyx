@@ -4,6 +4,7 @@ import { useFormatter, useTranslations } from "next-intl";
 import { Button, Card, Popover, Tag, Text, Tooltip } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
 import {
+  SvgAlertCircle,
   SvgAlertTriangle,
   SvgCheckCircle,
   SvgFileMinus,
@@ -25,10 +26,19 @@ import type {
   CCPairRunKind,
   CheckRunSnapshot,
 } from "@/lib/connectors/types";
+import type {
+  CapabilityCheckResult,
+  CapabilityCheckStatus,
+} from "@/lib/connectors/checks/types";
+import { applicableResults } from "@/lib/connectors/checks/results";
 import type { IndexAttemptSnapshot } from "@/lib/types";
 import { getDocsProcessedPerMinute } from "@/lib/indexAttempt";
 import { formatDateTimeLog } from "@/lib/dateUtils";
-import { runStatusTag } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
+import {
+  runKindLabelKey,
+  runStatusTag,
+} from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
+import StatusTagPill from "@/views/admin/connectors/ConnectorDetailPage/StatusTagPill";
 import CheckRunPopoverContent, {
   CheckRunTrigger,
 } from "@/views/admin/connectors/ConnectorDetailPage/CheckRunPopover";
@@ -45,12 +55,20 @@ export const RUN_KIND_ICONS = {
   checks: SvgListCheck,
 } satisfies Record<CCPairRunKind, IconFunctionComponent>;
 
-/** How many of a check run's checks ended in `status`. */
+/** The run's results that have a row: checks that apply to the pair. */
+export function shownCheckResults(
+  run: CheckRunSnapshot
+): CapabilityCheckResult[] {
+  return applicableResults(run.check_results);
+}
+
+/** How many of a check run's shown checks ended in `status`. */
 export function checkCount(
   run: CheckRunSnapshot,
-  status: CheckRunSnapshot["check_results"][number]["status"]
+  status: CapabilityCheckStatus
 ): number {
-  return run.check_results.filter((result) => result.status === status).length;
+  return shownCheckResults(run).filter((result) => result.status === status)
+    .length;
 }
 
 /** The run's own error message, without its trace. */
@@ -107,7 +125,7 @@ export function runMoved(run: CCPairRun): number {
     case "pruning":
       return run.attempt.docs_removed;
     case "checks":
-      return run.attempt.check_results.length;
+      return shownCheckResults(run.attempt).length;
   }
 }
 
@@ -133,28 +151,68 @@ export function finishedAt(run: CCPairRun): string | null {
   return run.attempt.time_finished;
 }
 
-/** Minutes from the run's start to its end, fractional, or `null` before either. */
-function runDurationMinutes(run: CCPairRun): number | null {
+/** Milliseconds from the run's start to its end, or `null` before either. */
+function runDurationMs(run: CCPairRun): number | null {
   const finished = finishedAt(run);
   const started = run.attempt.time_started;
   if (finished === null || started === null) return null;
-  return (new Date(finished).getTime() - new Date(started).getTime()) / 60_000;
+  return new Date(finished).getTime() - new Date(started).getTime();
 }
 
 /** Whole minutes from the run's start to its end, or `null` before either. */
 export function runMinutes(run: CCPairRun): number | null {
-  const minutes = runDurationMinutes(run);
-  return minutes === null ? null : Math.max(0, Math.round(minutes));
+  const ms = runDurationMs(run);
+  return ms === null ? null : Math.max(0, Math.round(ms / 60_000));
 }
 
-/** Documents a finished index run indexed per minute of its run, or `null` while it goes on or when it indexed none. */
-function finishedIndexRate(run: CCPairRun): number | null {
-  if (run.kind !== "indexing" || run.attempt.total_docs_indexed === 0) {
-    return null;
+/** A run's length in its two largest units, such as "16s", "4m 12s" or "1h 5m", narrow so the row's detail keeps to one line. */
+function formatRunLength(
+  format: ReturnType<typeof useFormatter>,
+  ms: number
+): string {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const units = [
+    { unit: "hour", value: Math.floor(total / 3600) },
+    { unit: "minute", value: Math.floor(total / 60) % 60 },
+    { unit: "second", value: total % 60 },
+  ];
+  // From the largest nonzero unit, or seconds for an instant run. A zero trailing unit is dropped, as in "2m" or "1h".
+  const first = units.findIndex((part) => part.value > 0);
+  const from = first === -1 ? units.length - 1 : first;
+  return format.list(
+    units
+      .slice(from, from + 2)
+      .filter((part, index) => index === 0 || part.value > 0)
+      .map(({ unit, value }) =>
+        format.number(value, { style: "unit", unit, unitDisplay: "narrow" })
+      ),
+    { type: "unit", style: "narrow" }
+  );
+}
+
+/** What a run's rate counts: documents indexed or synced, or memberships synced. `null` for a kind with no rate. */
+function rateCount(run: CCPairRun): number | null {
+  switch (run.kind) {
+    case "indexing":
+      return run.attempt.total_docs_indexed;
+    case "doc_permission_sync":
+      return run.attempt.total_docs_synced;
+    // Memberships, not groups, measure a group sync's work.
+    case "group_sync":
+      return run.attempt.total_group_memberships_synced;
+    case "pruning":
+    case "checks":
+      return null;
   }
-  const minutes = runDurationMinutes(run);
-  if (minutes === null || minutes <= 0) return null;
-  return run.attempt.total_docs_indexed / minutes;
+}
+
+/** What a finished index or sync run moved per minute of its run, or `null` while it goes on or when it moved nothing. */
+function finishedRunRate(run: CCPairRun): number | null {
+  const count = rateCount(run);
+  if (count === null || count === 0) return null;
+  const ms = runDurationMs(run);
+  if (ms === null || ms <= 0) return null;
+  return count / (ms / 60_000);
 }
 
 /** What a running permission or group sync moves per minute since it started, or `null` before it starts. */
@@ -163,22 +221,58 @@ function syncRate(run: CCPairRun, now: number): number | null {
     return null;
   }
   const started = run.attempt.time_started;
-  if (started === null) return null;
+  const count = rateCount(run);
+  if (started === null || count === null) return null;
   const minutes = (now - new Date(started).getTime()) / 60_000;
   if (minutes <= 0) return null;
-  // The rate counts memberships, the work done, while the card counts groups.
-  const moved =
-    run.kind === "group_sync"
-      ? run.attempt.total_group_memberships_synced
-      : runMoved(run);
-  return moved / minutes;
+  return count / minutes;
 }
 
 /** Rates print with two decimals, such as 24.23 docs/min. */
-const RATE_FORMAT = {
+export const RATE_FORMAT = {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 } as const;
+
+/** Labels a running permission or group sync with its live rate, such as "24.23 memberships/min", or `null` for any other run. */
+export function useSyncRateLabel(): (run: CCPairRun) => string | null {
+  const t = useTranslations("admin.connector.runs.detail");
+  const format = useFormatter();
+  return (run) => {
+    if (!isActive(run)) return null;
+    const rate = syncRate(run, Date.now());
+    if (rate === null) return null;
+    return t(run.kind === "group_sync" ? "membershipRate" : "rate", {
+      rate: format.number(rate, RATE_FORMAT),
+    });
+  };
+}
+
+interface RunWarningsTagProps {
+  run: CCPairRun;
+}
+/** The orange count of what the run could not handle, or nothing when it handled everything. */
+export function RunWarningsTag({ run }: RunWarningsTagProps) {
+  const t = useTranslations("admin.connector.runs.warnings");
+  const format = useFormatter();
+  const warnings = runWarnings(run);
+  if (warnings === 0) return null;
+  return (
+    <Tooltip
+      tooltip={t(run.kind === "checks" ? "checks" : "tooltip", {
+        count: warnings,
+      })}
+      side="top"
+    >
+      <Tag
+        icon={SvgAlertTriangle}
+        title={format.number(warnings)}
+        color="orange"
+        variant="count"
+      />
+    </Tooltip>
+  );
+}
 
 interface FigureProps {
   value: number;
@@ -219,12 +313,9 @@ function Count({ icon: Icon, value, tooltip, look }: CountProps) {
   const format = useFormatter();
   if (look === "tag") {
     return (
-      <Tag
-        icon={Icon}
-        title={format.number(value)}
-        tooltip={tooltip}
-        color="gray"
-      />
+      <Tooltip tooltip={tooltip} side="top">
+        <Tag icon={Icon} title={format.number(value)} color="gray" />
+      </Tooltip>
     );
   }
   return (
@@ -270,6 +361,10 @@ export interface DocCountsProps {
 /** An index attempt's new, updated and removed documents. */
 export function DocCounts({ attempt, look = "tag" }: DocCountsProps) {
   const t = useTranslations("admin.connector.runs");
+  const updated = Math.max(
+    0,
+    attempt.total_docs_indexed - attempt.new_docs_indexed
+  );
   return (
     <CountsRow>
       <Count
@@ -283,11 +378,8 @@ export function DocCounts({ attempt, look = "tag" }: DocCountsProps) {
       <Count
         icon={SvgFileRefresh}
         look={look}
-        value={Math.max(
-          0,
-          attempt.total_docs_indexed - attempt.new_docs_indexed
-        )}
-        tooltip={t("counts.updatedDocs")}
+        value={updated}
+        tooltip={t("counts.updatedDocs", { count: updated })}
       />
       {attempt.docs_removed_from_index > 0 && (
         <Count
@@ -317,14 +409,18 @@ function RunFigures({ run }: RunFiguresProps) {
       );
     case "checks": {
       const attempt = run.attempt;
+      const shown: number = shownCheckResults(attempt).length;
       const failed = checkCount(attempt, "failed");
+      const incomplete =
+        checkCount(attempt, "incomplete") +
+        checkCount(attempt, "indeterminate");
       const skipped = checkCount(attempt, "skipped");
       return (
         <>
           <Text font="secondary-body" color="text-03">
-            {t("figures.checksRun", { count: attempt.check_results.length })}
+            {t("figures.checksRun", { count: shown })}
           </Text>
-          {attempt.check_results.length > 0 && (
+          {shown > 0 && (
             <CountsRow>
               <Count
                 icon={SvgCheckCircle}
@@ -334,6 +430,14 @@ function RunFigures({ run }: RunFiguresProps) {
                   count: checkCount(attempt, "passed"),
                 })}
               />
+              {incomplete > 0 && (
+                <Count
+                  icon={SvgAlertCircle}
+                  look="plain"
+                  value={incomplete}
+                  tooltip={t("counts.incompleteChecks", { count: incomplete })}
+                />
+              )}
               {skipped > 0 && (
                 <Count
                   icon={SvgXCircle}
@@ -440,16 +544,15 @@ export default function RunRow({
   dimmed,
 }: RunRowProps) {
   const t = useTranslations("admin.connector.runs");
-  const tBadges = useTranslations("admin.status.badges");
   const format = useFormatter();
+  const syncRateLabel = useSyncRateLabel();
   const tag = runStatusTag(run);
   const active = isActive(run);
   const failed = run.attempt.status === "failed";
-  const canceled = run.attempt.status === "canceled";
 
   const finished = finishedAt(run);
-  // A finished index run shows its rate and keeps its finish time in the tooltip.
-  const finishedRate = finishedIndexRate(run);
+  // A finished index or sync run shows its rate and keeps its finish time in the tooltip.
+  const finishedRate = finishedRunRate(run);
   const finishedTime =
     finishedRate === null || finished === null
       ? undefined
@@ -464,27 +567,23 @@ export default function RunRow({
         return t("detail.rate", { rate: format.number(rate, RATE_FORMAT) });
       }
     }
-    if (active) {
-      const rate = syncRate(run, Date.now());
-      if (rate !== null) {
-        return t(
-          run.kind === "group_sync" ? "detail.membershipRate" : "detail.rate",
-          { rate: format.number(rate, RATE_FORMAT) }
-        );
-      }
-    }
+    const liveSyncRate = syncRateLabel(run);
+    if (liveSyncRate !== null) return liveSyncRate;
     if (finished === null) return t("detail.running");
-    const minutes = runMinutes(run);
-    if (minutes === null) return formatDateTimeLog(finished);
+    const ms = runDurationMs(run);
+    if (ms === null) return formatDateTimeLog(finished);
+    const duration = formatRunLength(format, ms);
     if (finishedRate !== null) {
-      return t("detail.rateFinished", {
-        rate: format.number(finishedRate, RATE_FORMAT),
-        minutes,
-      });
+      return t(
+        run.kind === "group_sync"
+          ? "detail.membershipRateFinished"
+          : "detail.rateFinished",
+        { rate: format.number(finishedRate, RATE_FORMAT), duration }
+      );
     }
     return t("detail.finished", {
       time: formatDateTimeLog(finished),
-      minutes,
+      duration,
     });
   }
 
@@ -523,12 +622,8 @@ export default function RunRow({
                 className="min-w-0 flex-1"
               >
                 <Content
-                  icon={
-                    active || canceled
-                      ? SvgSlowMotion
-                      : RUN_KIND_ICONS[run.kind]
-                  }
-                  title={t(`kinds.${run.kind}`)}
+                  icon={active ? SvgSlowMotion : RUN_KIND_ICONS[run.kind]}
+                  title={t(`kinds.${runKindLabelKey(run)}`)}
                   sizePreset="secondary"
                   variant="body"
                   color="muted"
@@ -557,42 +652,20 @@ export default function RunRow({
                   width="fit"
                   height="fit"
                 >
-                  <Tag
-                    icon={tag.icon}
-                    title={tBadges(tag.labelKey)}
-                    color={tag.color}
-                    variant="status"
-                    font="secondary-body"
-                  />
+                  <StatusTagPill tag={tag} />
                   {run.kind === "indexing" && run.attempt.is_new_model && (
-                    <Tag
-                      title={t("newModel.label")}
-                      tooltip={t("newModel.tooltip")}
-                      color="purple"
-                    />
+                    <Tooltip tooltip={t("newModel.tooltip")} side="top">
+                      <Tag title={t("newModel.label")} color="purple" />
+                    </Tooltip>
                   )}
                   {run.kind === "indexing" && (
                     <StageDetailsTrigger open={open} />
                   )}
                   {run.kind === "checks" &&
-                    run.attempt.check_results.length > 0 && (
+                    shownCheckResults(run.attempt).length > 0 && (
                       <CheckRunTrigger open={open} />
                     )}
-                  {warnings > 0 && (
-                    <Tag
-                      icon={SvgAlertTriangle}
-                      title={format.number(warnings)}
-                      tooltip={t(
-                        run.kind === "checks"
-                          ? "warnings.checks"
-                          : "warnings.tooltip",
-                        { count: warnings }
-                      )}
-                      color="orange"
-                      variant="count"
-                      font="secondary-body"
-                    />
-                  )}
+                  <RunWarningsTag run={run} />
                 </Section>
                 <Tooltip tooltip={finishedTime} side="top">
                   <Text font="secondary-body" color="text-03">
@@ -647,7 +720,7 @@ export default function RunRow({
         {run.kind === "indexing" && (
           <StageDetailsPopoverContent indexAttemptId={run.attempt.id} />
         )}
-        {run.kind === "checks" && run.attempt.check_results.length > 0 && (
+        {run.kind === "checks" && shownCheckResults(run.attempt).length > 0 && (
           <CheckRunPopoverContent run={run.attempt} />
         )}
       </Popover>

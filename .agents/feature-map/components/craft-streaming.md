@@ -37,9 +37,32 @@ background and continues rendering it live; it does not lose the turn, but it
 also does not replay, byte-for-byte, whatever the client missed while
 disconnected (see §5, §9).
 
+Connected app setup cards link to **App permissions**. This opens Tools > Approval settings in plugin details, without delaying authentication.
+New attachments restore pending connection cards from the session's cache index.
+The pending record includes the card data and expires with the permission wait.
+The index lasts at least as long as its longest-lived pending request.
+Turn cleanup removes only that turn's requests, including when the user stops it.
+Resolved and expired requests are excluded. Request IDs deduplicate restored and live announcements.
+The editor covers external apps and MCP servers. Workspace-disabled actions
+remain visible and locked. Task editors use the same action rows with
+independent saved choices.
+
+Approval cards keep **Approve once**, **Approve for session**, and **Reject**.
+All three call the approval decision endpoint. The session polls lightweight
+approval status every ten seconds. Status changes refresh the history. The history
+contains live requests and recent outcomes. Completed requests become compact,
+neutral tool rows with details collapsed. Expired requests state that the action
+did not run; only pending requests keep the attention border and decision buttons.
+Approval cards use the server live status to show expiry. Device clock differences cannot block decisions.
+The displayed approval deadline comes from the server; a browser does not own the wait.
+
 The Working group shows the tool-call count without a failed-count badge.
 Its tool details start collapsed, including failures; users can expand each call
 to read its output.
+An active turn keeps the existing flashing cursor visible, including after refresh during a quiet tool call.
+Streaming text owns its cursor; the message list adds one only when no text cursor is active.
+Failed active-turn reads use session-load recovery instead of treating the turn as idle.
+Typing and submission remain disabled until recovery succeeds.
 
 A sub-agent ("task" tool) has a separate sub-agent view (`SubagentView.tsx`).
 That view shows the sub-agent's own thinking and tool calls live while the
@@ -286,8 +309,10 @@ Recovery settlement checks run every 250ms for the first second, then every seco
 Each card belongs to the latest indexed producing turn and opens the current resource.
 Three cards appear inline; the overflow action opens Outputs filtered to that turn.
 Unread dots compare artifact version with the owner’s saved viewed revision.
-An explicit output open acknowledges the captured card revision, even if its preview cannot render.
-This records user acknowledgement, not successful content delivery. Newer revisions retain their unread state.
+The open output panel acknowledges the active file revision, even if its preview cannot render.
+Updates to that active file are acknowledged while the runtime is ready. Hidden file tabs do not acknowledge updates.
+App card clicks acknowledge the captured revision. This records user acknowledgement, not successful content delivery.
+Mark all viewed applies to the current Outputs scope, including folder descendants, and preserves newer revisions.
 Opening the overview or loading a thumbnail does not mark an output viewed.
 Live inventory determines file availability when a saved card still records a prior deletion.
 Turn collections retain saved cards when a complete live inventory confirms that their files are missing.
@@ -333,6 +358,8 @@ App readiness requests coalesce per runtime and reject retired session, task, or
 Existing local app tabs are reused. The first automatic opening also retains an Outputs overview tab.
 Explicit file clicks open a file tab and use medium when the panel was closed.
 Explicit opening preserves an existing medium or full layout.
+Uploaded attachment Expand actions also open file tabs, including files without preview support.
+Expand never starts a download. The output panel provides the Download action.
 Outputs, All Files, file previews, and Browser share one ordered, closeable tab collection per session.
 File identity uses a normalized session-relative path. Browser identity remains separate from its selected app.
 Resource tabs and their active ID are the only tab-selection model.
@@ -399,11 +426,12 @@ It does not delay stream attachment. See [[craft-sessions]] for name persistence
    [[streaming-protocol]]'s `stream_buffer.py`, nothing compresses and stores
    every SSE line Craft emits. A client that attaches after missing events
    gets an empty per-subscriber queue (bounded, `maxsize=500`, per
-   `_Subscription`). It receives only events the turn emits after the attach. What it lost is recoverable only
+   `_Subscription`). It receives only events the turn emits after the attach. Missing conversation content is recovered
    through the **persisted** `BuildMessage` rows via
    `GET /sessions/{id}/messages`, which is a different, coarser shape (no
    `ToolCallStart`, no `CurrentModeUpdate`, no live deltas), not a replay of
-   the wire format. Owned terminal turns replay only `turn_completed`, not earlier content. See §9.
+   the wire format. Pending Connect app requests are restored separately from their cache records.
+   Owned terminal turns replay only `turn_completed`, not earlier content. See §9.
 10. **There is no terminal channel.** There is no `/build/sessions/{id}/terminal` websocket, no PTY
     bridge, and no `xterm.js` integration anywhere under `web/src/app/craft/`
     (verified by grep; the only websocket route in `webapp_proxy.py` is the

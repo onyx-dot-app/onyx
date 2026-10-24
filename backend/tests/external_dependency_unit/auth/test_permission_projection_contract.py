@@ -960,6 +960,7 @@ def _make_skill(
     skill = Skill(
         id=uuid4(),
         name=f"contract skill {uuid4().hex[:8]}",
+        author_user_id=create_test_user(db_session, f"skill-owner-{uuid4().hex}").id,
         description="contract",
         # custom skills need a bundle source (ck_skill_definition_source)
         bundle_file_id=f"proj-bundle-{uuid4().hex}",

@@ -400,31 +400,13 @@ test.describe("Default Agent Tests", () => {
         }
       });
 
-      // Get current config
-      const currentConfigResp = await page.request.get(
-        "http://localhost:3000/api/admin/default-assistant/configuration"
-      );
-      const currentConfig = await currentConfigResp.json();
-
-      // Add Web Search and Image Generation tool IDs
       const toolIdsToEnable = [
-        ...(currentConfig.tool_ids || []),
         toolIdsByCodeId["WebSearchTool"],
         toolIdsByCodeId["ImageGenerationTool"],
       ].filter((id) => id !== undefined);
+      await apiClient.addToolsToDefaultAssistant(toolIdsToEnable);
 
-      // Deduplicate
-      const uniqueToolIds = Array.from(new Set(toolIdsToEnable));
-
-      // Update config via API
-      await page.request.patch(
-        "http://localhost:3000/api/admin/default-assistant",
-        {
-          data: { tool_ids: uniqueToolIds },
-        }
-      );
-
-      console.log(`[test] Enabled tools via API: ${uniqueToolIds}`);
+      console.log(`[test] Enabled tools via API: ${toolIdsToEnable}`);
 
       // Go back to chat
       await page.goto("/app");

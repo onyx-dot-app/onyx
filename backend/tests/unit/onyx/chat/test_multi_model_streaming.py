@@ -25,6 +25,7 @@ from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
+    AgentResponseDelta,
     ChatHeartbeat,
     OverallStop,
     Packet,
@@ -1147,11 +1148,15 @@ def test_writer_reports_tool_usage_once_after_reader_disconnect(
     fails: bool,
 ) -> None:
     from onyx.chat.process_message import _run_models
-    from onyx.utils.fleet_query_telemetry import QueryObservation, observe_chat_packets
+    from onyx.utils.fleet_query_telemetry import (
+        QueryMode,
+        QueryObservation,
+        observe_chat_packets,
+    )
 
     released = threading.Event()
     finished = threading.Event()
-    observation = QueryObservation(channel="api", mode="chat")
+    observation = QueryObservation(channel="api", mode=QueryMode.CHAT)
     setup = _make_setup(n_models=n_models)
 
     def run_until_released(**kwargs: Any) -> None:
@@ -1193,4 +1198,72 @@ def test_writer_reports_tool_usage_once_after_reader_disconnect(
         data = sink.call_args.args[1]
         assert data["tool_usage"] == "search_and_other"
         assert data["outcome"] == ("failure" if fails else "success")
+        assert "private" not in str(data)
+
+
+@pytest.mark.parametrize("n_models", [1, 2])
+def test_lagging_writer_reports_the_cycle_of_the_first_answer(n_models: int) -> None:
+    from onyx.chat.process_message import _run_models
+    from onyx.utils.fleet_query_telemetry import (
+        QueryMode,
+        QueryObservation,
+        observe_chat_packets,
+    )
+
+    finished = threading.Event()
+    next_cycle_started = threading.Event()
+    observation = QueryObservation(channel="api", mode=QueryMode.CHAT)
+    setup = _make_setup(n_models=n_models)
+    observe_packet = observation.observe_packet
+
+    def lagging_observe(packet: Any) -> None:
+        # Hold the writer on the answer until its model starts another cycle.
+        if isinstance(packet, Packet) and isinstance(packet.obj, AgentResponseDelta):
+            assert next_cycle_started.wait(timeout=5)
+        observe_packet(packet)
+
+    def answer_then_keep_working(**kwargs: Any) -> None:
+        emitter = kwargs["emitter"]
+        emitter.llm_step_started()
+        emitter.llm_step_started()
+        emitter.emit(
+            Packet(
+                placement=Placement(turn_index=1),
+                obj=AgentResponseDelta(content="private answer"),
+            )
+        )
+        emitter.llm_step_started()
+        next_cycle_started.set()
+
+    with (
+        patch("onyx.chat.process_message.load_settings"),
+        patch("onyx.chat.process_message.get_session_with_current_tenant"),
+        patch(
+            "onyx.chat.process_message.run_llm_loop",
+            side_effect=answer_then_keep_working,
+        ),
+        patch("onyx.chat.process_message.construct_tools", return_value={}),
+        patch("onyx.chat.process_message.llm_loop_completion_handle"),
+        patch(
+            "onyx.chat.process_message.get_llm_token_counter", return_value=lambda _: 0
+        ),
+        patch(
+            "onyx.chat.process_message.set_processing_status",
+            side_effect=lambda **_: finished.set(),
+        ),
+        patch.object(observation, "observe_packet", side_effect=lagging_observe),
+        patch("onyx.utils.fleet_query_telemetry.emit_telemetry") as sink,
+    ):
+        list(
+            observe_chat_packets(
+                _run_models(setup, MagicMock(), query_observation=observation),
+                channel="api",
+                observation=observation,
+            )
+        )
+        assert finished.wait(timeout=5)
+        sink.assert_called_once()
+        data = sink.call_args.args[1]
+        assert (data["outcome"], data["llm_cycles"]) == ("success", 2)
+        assert data["first_answer_ms"] is not None
         assert "private" not in str(data)

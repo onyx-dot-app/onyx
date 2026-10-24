@@ -59,7 +59,10 @@ from onyx.connectors.factory import (
     validate_connector_config,
     validate_connector_credential_bindings,
 )
-from onyx.connectors.google_utils.google_auth import get_google_oauth_creds
+from onyx.connectors.google_utils.google_auth import (
+    GoogleUnreachableError,
+    get_google_oauth_creds,
+)
 from onyx.connectors.google_utils.google_kv import (
     build_service_account_creds,
     get_auth_url,
@@ -152,6 +155,9 @@ from onyx.file_store.file_store import (
 )
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
+from onyx.server.documents.capability_check_runs import (
+    start_capability_checks_for_new_credential,
+)
 from onyx.server.documents.cc_pair import authorize_pairing
 from onyx.server.documents.credential import (
     assert_credential_sharing_allowed,
@@ -300,10 +306,14 @@ def check_drive_tokens(
     if DB_CREDENTIALS_DICT_TOKEN_KEY not in credential_json:
         return AuthStatus(authenticated=False)
     token_json_str = str(credential_json[DB_CREDENTIALS_DICT_TOKEN_KEY])
-    google_drive_creds = get_google_oauth_creds(
-        token_json_str=token_json_str,
-        source=DocumentSource.GOOGLE_DRIVE,
-    )
+    try:
+        google_drive_creds = get_google_oauth_creds(
+            token_json_str=token_json_str,
+            source=DocumentSource.GOOGLE_DRIVE,
+        )
+    except GoogleUnreachableError as e:
+        # No answer from Google says nothing about the token.
+        raise OnyxError(OnyxErrorCode.BAD_GATEWAY, str(e)) from e
     if google_drive_creds is None:
         return AuthStatus(authenticated=False)
     return AuthStatus(authenticated=True)
@@ -1898,6 +1908,10 @@ def create_connector_with_credential(
             db_session, connector_id, None, promoted_draft_id=promoted_draft_id
         )
         raise
+
+    if promoted_draft_id is not None:
+        # Draft runs write no reports, so the new account gets its own run.
+        start_capability_checks_for_new_credential(db_session, credential)
 
     maybe_mark_tenant_active(tenant_id, caller="cc_pair_lifecycle")
     client_app.send_task(

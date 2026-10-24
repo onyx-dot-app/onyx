@@ -146,6 +146,7 @@ _FIELDS: dict[str, frozenset[str]] = {
         {
             "query_id",
             "tool_usage",
+            "llm_cycles",
             "channel",
             "mode",
             "outcome",

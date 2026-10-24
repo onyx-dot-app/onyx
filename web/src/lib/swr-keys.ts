@@ -68,6 +68,8 @@ export const SWR_KEYS = {
   adminSecurityPinnedFields: "/api/admin/security/pinned-fields",
   incognitoAvailability: "/api/chat/incognito-availability",
   adminSsoProviders: "/api/admin/sso/provider",
+  adminSsoProviderHandoff: (providerId: number) =>
+    `/api/admin/sso/provider/${providerId}/handoff`,
   adminSsoProviderTypes: "/api/admin/sso/provider-type",
   adminSsoDomains: "/api/admin/sso/domain",
   // Cache key for the POST /records lookup, keyed by the domains being configured.
@@ -92,6 +94,7 @@ export const SWR_KEYS = {
   llmProviderModels: (providerId: number) =>
     `/api/llm/provider/${providerId}/models`,
   adminLlmProviders: "/api/admin/llm/provider",
+  decisionModel: "/api/admin/llm/decision-model",
   adminLlmProvidersPaged: "/api/admin/llm/provider?page_models=true",
   adminLlmProvider: (providerId: number) =>
     `/api/admin/llm/provider/${providerId}`,
@@ -226,6 +229,7 @@ export const SWR_KEYS = {
   // ── Skills ────────────────────────────────────────────────────────────────
   userSkills: "/api/skills",
   userSkillPreview: (skillId: string) => `/api/skills/${skillId}/preview`,
+  skillSharing: (skillId: string) => `/api/skills/custom/${skillId}/share`,
   editableSkill: (skillId: string) => `/api/skills/custom/${skillId}/edit`,
 
   // ── Tools ─────────────────────────────────────────────────────────────────
@@ -263,8 +267,10 @@ export const SWR_KEYS = {
   buildExternalAppsAdmin: "/api/build/admin/apps",
   buildExternalAppsBuiltInOptions: "/api/build/admin/apps/built-in/options",
   buildBaseInstructions: "/api/build/admin/base-instructions",
-  buildSessionLiveApprovals: (sessionId: string) =>
-    `/api/build/approvals/sessions/${sessionId}/live`,
+  buildSessionApprovalStatus: (sessionId: string) =>
+    `/api/build/approvals/sessions/${sessionId}/status`,
+  buildSessionApprovals: (sessionId: string) =>
+    `/api/build/approvals/sessions/${sessionId}`,
 
   // ── Token Rate Limits ─────────────────────────────────────────────────────
   globalTokenRateLimits: "/api/admin/token-rate-limits/global",
@@ -432,6 +438,14 @@ export const SWR_KEYS = {
   // `scheduledTaskRuns` is a base URL — the run-history table appends
   // `?limit=…` / `?cursor=…` for pagination. Invalidate from elsewhere with
   // a prefix predicate so every paginated variant gets refreshed at once.
+  personalActionPolicies: "/api/build/action-policies",
+  appActionPolicies: (
+    kind: "external_app" | "mcp_server",
+    targetId: number,
+    admin = false
+  ) => `/api/build/${admin ? "admin/" : ""}action-policies/${kind}/${targetId}`,
+  taskActionPolicies: (taskId: string) =>
+    `/api/build/scheduled-tasks/${taskId}/action-policies`,
   scheduledTasks: "/api/build/scheduled-tasks",
   scheduledTask: (taskId: string) => `/api/build/scheduled-tasks/${taskId}`,
   scheduledTaskRuns: (taskId: string) =>

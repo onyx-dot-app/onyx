@@ -14,7 +14,7 @@ _FACTORY = "onyx.llm.factory"
 
 def _make_mock_model(
     *,
-    name: str = "gpt-4o",
+    name: str = "gpt-6-sol",
     provider: str = "openai",
     provider_id: int = 1,
 ) -> MagicMock:
@@ -39,7 +39,9 @@ def test_uses_the_default_vision_model(
     mock_fetch_default: MagicMock,
     mock_session: MagicMock,  # noqa: ARG001
 ) -> None:
-    mock_fetch_default.return_value = _make_mock_model(name="gpt-4o", provider="azure")
+    mock_fetch_default.return_value = _make_mock_model(
+        name="gpt-6-sol", provider="azure"
+    )
 
     result = get_default_llm_with_vision()
 

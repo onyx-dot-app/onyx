@@ -67,7 +67,7 @@ is already local.
 | `CHECK_FOR_CHECKPOINT_CLEANUP` / `CLEANUP_CHECKPOINT` | `celery` / `checkpoint_cleanup` | beat, 1h | Deletes checkpoint blobs older than `NUM_DAYS_TO_KEEP_CHECKPOINTS`. |
 | `CHECK_FOR_INDEX_ATTEMPT_CLEANUP` / `CLEANUP_INDEX_ATTEMPT` | `celery` / `index_attempt_cleanup` | beat, 30m | Deletes `IndexAttempt` rows older than `NUM_DAYS_TO_KEEP_INDEX_ATTEMPTS`, keeping the last `NUM_RECENT_INDEX_ATTEMPTS_TO_KEEP` per cc-pair/search-settings pair. |
 | `CHECK_FOR_PRUNING` / `CONNECTOR_PRUNING_GENERATOR_TASK` (`pruning/tasks.py`) | `celery` / `connector_pruning` | beat, 20s | Diffs the source's live doc-ID list against Postgres and queues per-doc cleanup for the difference. |
-| `CHECK_FOR_CONNECTOR_DELETION` (`connector_deletion/tasks.py`) | `celery` / `connector_deletion` | beat, 20s | Fans out `DOCUMENT_BY_CC_PAIR_CLEANUP_TASK` for every document tied to a cc-pair marked `DELETING`. Blocks while indexing, pruning, or a port attempt is active on that cc-pair. |
+| `CHECK_FOR_CONNECTOR_DELETION` (`connector_deletion/tasks.py`) | `celery` / `connector_deletion` | beat, 20s | Fans out `DOCUMENT_BY_CC_PAIR_CLEANUP_TASK` over the documents tied to a cc-pair marked `DELETING`, one batch of `DOCUMENT_INDEX_SYNC_MAX_TASKS` at a time. The monitor queues the next batch when the taskset drains. Blocks while indexing, pruning, or a port attempt is active on that cc-pair. |
 | `CHECK_FOR_OLD_INDEX_RECLAIM` / `RUN_OLD_INDEX_RECLAIM` (`index_reclaim/tasks.py`) | `celery` | beat, 30m | Advances the `IndexReclaimStatus` state machine on PAST search-settings rows. Owned in detail by [[document-index]] §4.4; this component only writes the FUTURE-index docs the reclaim eventually deletes. |
 | `CHECK_FOR_PORT` / `RUN_PORT_ATTEMPT` (`port/tasks.py`) | `celery` / `port` | beat, 30s | Backfills a secondary index by re-embedding stored PRESENT chunks (`port_reembed.py`), without re-fetching the source. See §4.6. |
 
@@ -208,7 +208,9 @@ That function computes the poll window (`window_start`/`window_end`), decides
 whether to resume from a checkpoint or start clean
 (`get_latest_valid_checkpoint`, §4.6), and drives the connector's generator
 (`ConnectorRunner.run(checkpoint)`, [[connectors]]) inside `_timed_connector_runs`,
-which records one `CONNECTOR_FETCH` timing event per yielded batch. For every
+which records one `CONNECTOR_FETCH` timing event per document or hierarchy
+batch. Failure and checkpoint-only yields do not count as batches: their wait
+time goes into the next batch of the same checkpoint step. For every
 yielded `(document_batch, hierarchy_node_batch, failure, next_checkpoint)`:
 
 - a connector-level `failure` becomes an `IndexAttemptError`
@@ -280,7 +282,16 @@ calls `index_doc_batch`, which:
    write (`index_to_secondary=True`) so the FUTURE build doesn't cross-suppress
    against the PRESENT-only hash. Docprocessing always passes
    `ignore_time_skip=True` (the connector already filtered by recency at fetch
-   time), so only gate 2 applies here in practice.
+   time), so only gate 2 applies here in practice. A caller can also bypass both
+   gates with `force_update=True`, which `run_indexing_pipeline` exposes: the
+   per-document retry in `index_doc_batch_with_handler` uses it, and so does the
+   tabular re-chunk migration (`background/indexing/run_tabular_rechunk.py`),
+   which re-indexes documents nobody changed. That migration has no alternative
+   - `content_hash()` walks Text and Image sections only, so a tabular
+   document's hash never moves however much the workbook changed. With both
+   gates off, the migration's own adapter re-reads `file_id` and `chunk_count`
+   under the document lock and raises rather than replace the chunks a crawl
+   wrote while the batch embedded.
 4. Documents that pass the gate are upserted (`upsert_documents`, `upsert_document_tags`),
    linked to the cc-pair (`upsert_document_by_connector_credential_pair`), and
    linked to their hierarchy node.
@@ -438,6 +449,13 @@ writer of the attempt's aggregate counters:
   (`targeted_reindex_job_id` set) is explicitly excluded from this check and may run
   concurrently with a full crawl, relying instead on the per-document row locks in
   §4.4.
+- The creators in `docfetching/task_creation_utils.py` (new attempt, pending
+  backfill, dispatch of a waiting attempt) take the tenant-wide Redis creation
+  lock, then the cc-pair's row lock (`lock_connector_credential_pair_row`), check
+  the pair's status under it, and hold it until the attempt commits. The pause
+  and deletion routes take the same row lock before they read the attempts to
+  cancel, so a pause or delete never misses an attempt created at the same time.
+  Lock order: Redis creation lock, then the cc-pair row, then its attempt rows.
 - `update_batch_completion_and_docs` increments `completed_batches`,
   `total_docs_indexed`, `new_docs_indexed`, `total_chunks` under a
   `SELECT ... FOR UPDATE` on the `IndexAttempt` row. Each `docprocessing_task` also
@@ -449,7 +467,7 @@ writer of the attempt's aggregate counters:
   mid-section. A failed acquire raises and fails the task. Celery does not
   redeliver a failed task: the batch file stays in storage, the heartbeat check
   fails the attempt, and the next attempt re-issues the batch.
-- `check_cancellation_requested` / `request_cancellation` implement admin-triggered
+- `check_cancellation_requested` / `request_cancellation__no_commit` implement admin-triggered
   cancellation without Redis fencing: a boolean column on `IndexAttempt`, polled by
   both docfetching (`_check_connector_and_attempt_status`) and
   `check_for_indexing`'s monitor loop.
@@ -480,6 +498,19 @@ is handled separately, by `reissue_old_batches`: on resume, every batch still
 sitting in `DocumentBatchStorage` for the cc-pair is re-issued as a fresh
 `docprocessing` task under the new attempt's ID, and the new attempt's batch
 numbering picks up after the reissued + already-completed count.
+
+The failed attempt's `docprocessing` tasks can still run during the reissue. Each
+task increments `completed_batches` and then deletes its batch. So
+`reissue_old_batches` moves the batches first and then reads the old attempt's
+`completed_batches` again from the database. Every old batch is then moved,
+counted, or both (both only leaves an unused batch number). The sum is the next
+batch number. The count can come from a later attempt that failed before it
+fetched anything, so the next number is also kept above every moved batch. The
+new attempt starts with `completed_batches` = next batch number - moved batches,
+set before the reissued tasks go out, so completion still fires at
+`completed_batches >= total_batches`. A batch that a task deleted before the
+move is skipped (`change_file_id` returns `False`), and `store_batch` refuses
+to overwrite an existing batch.
 
 `check_checkpoint_size` enforces a 200MB cap on the serialized checkpoint
 (`deep_getsizeof`), raising rather than silently truncating a runaway checkpoint
@@ -531,7 +562,17 @@ connector's listing filters by the same date as indexing
 starts at `indexing_start`. The prune then also removes documents that still
 exist at the source but were last updated before the start. A dated listing
 omits unchanged folders, so `pruning/tasks.py:_get_live_hierarchy_node_ids`
-keeps the hierarchy nodes above each kept document.
+keeps the hierarchy nodes above each kept document. A generator that starts for a
+pair that is gone, `PAUSED` or `DELETING` does not enumerate. Like the other paths
+that abandon a prune on purpose (the deletion beat's stop timeout, a pause), it
+calls `reset_prune_and_cancel_sync_record`: the `PRUNING` sync record ends
+`CANCELED` and the fence is reset. Fence validation and startup reset a lost
+prune's fence through `fail_orphaned_prune_records`, which ends its record `FAILED`. The generator checks the status and marks
+its start under the pair's row lock, and a pause drops a queued prune under the
+same lock. A generator whose fence now holds a different prune, or whose fence
+names another Celery task, exits without a reset. A manual prune of a `PAUSED`
+pair is refused with `CONFLICT`, and `try_creating_prune_generator_task` does not
+dispatch one.
 
 **`document_by_cc_pair_cleanup_task`** (`background/celery/tasks/shared/tasks.py`) is
 the actual removal path, shared by both pruning and connector deletion. It reads
@@ -550,7 +591,11 @@ by leaving the cc-pair fenced for the next beat tick rather than racing with an
 in-flight write); an active port attempt is additionally asked to cancel
 (`request_port_cancel`) so it stops writing to the index it would otherwise
 resurrect documents into. Once clear, it fans out the same
-`DOCUMENT_BY_CC_PAIR_CLEANUP_TASK` over every document tied to the cc-pair.
+`DOCUMENT_BY_CC_PAIR_CLEANUP_TASK` over the cc-pair's documents in batches of
+`DOCUMENT_INDEX_SYNC_MAX_TASKS`, so the broker holds at most one batch per cc-pair.
+`monitor_connector_deletion_taskset` queues the next batch each time the taskset
+drains with documents still linked, and fails the deletion when a batch does not
+lower the linked count.
 
 ### 4.9 User files: the other adapter
 
@@ -687,7 +732,7 @@ that block, so it calls `stop_telemetry` itself first.
 | changes the checkpoint format (`ConnectorCheckpoint` subclass fields) | `checkpointing_utils.py:load_checkpoint`/`get_latest_valid_checkpoint`, and every in-flight `IndexAttempt.checkpoint_pointer` written by the old format: a rolling deploy must tolerate reading both |
 | changes `IndexAttempt` states (`IndexingStatus`) | `should_reuse_checkpoint()`, `is_terminal()`, `is_successful()`, every `mark_attempt_*` function in `db/index_attempt.py`, `validate_active_indexing_attempts`, and the admin connector-status UI that renders the enum |
 | changes `IndexingCoordination` locking or the cross-batch Redis lock | every concurrent `docprocessing_task` for the same connector pair and search settings; verify the bounded-timeout behavior still fails a task cleanly rather than wedging on a fossil lock |
-| changes dedup gating in `get_docs_to_update` | both the connector-triggered path (`ignore_time_skip=False`) and the docprocessing path (always `ignore_time_skip=True`), plus the FUTURE-write path (`ignore_content_hash_gate=True`) |
+| changes dedup gating in `get_docs_to_update` | both the connector-triggered path (`ignore_time_skip=False`) and the docprocessing path (always `ignore_time_skip=True`), the FUTURE-write path (`ignore_content_hash_gate=True`), and the forced path (`force_update=True`: the per-document retry and the tabular re-chunk migration) |
 | changes pruning or deletion's document-removal task | both callers (`pruning/tasks.py` and `connector_deletion/tasks.py`) share `document_by_cc_pair_cleanup_task`; a change there affects both flows even though they trigger differently |
 | changes the reindex-port re-embed logic | `port_reembed.py`'s two strategies must still match what the chunker/embedder currently produce for a fresh index, or the ported chunks will diverge from a true reindex |
 | renames or drops an `IndexAttempt`, `IndexAttemptError`, or `IndexAttemptStageMetric` column | the fleet queries (`db/fleet_telemetry.py:attempt_rows`, `stage_rows`) and [[observability]] §7; only the collection pass fails, so no indexing test catches it |

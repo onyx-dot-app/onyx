@@ -205,6 +205,9 @@ func configuredStack(t *testing.T, variable string) liveStack {
 }
 
 func (s liveStack) command(args ...string) ([]byte, error) {
+	if len(args) > 0 && args[0] == "stack" {
+		args = append([]string{"stack", "--isolated"}, args[1:]...)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Minute)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, s.binary, args...)

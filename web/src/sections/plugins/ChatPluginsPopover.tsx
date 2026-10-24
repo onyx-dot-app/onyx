@@ -11,7 +11,8 @@ import {
   Popover,
   Text,
 } from "@opal/components";
-import { SvgChevronRight, SvgFileBraces, SvgPlug } from "@opal/icons";
+import { SvgChevronRight, SvgCodeFile, SvgPlug } from "@opal/icons";
+import { Section } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
 import { useFocusOnMount } from "@opal/hooks";
 import type { MinimalAgent } from "@/lib/agents/types";
@@ -27,6 +28,7 @@ import {
   useMemberPlugins,
   type MemberPlugin,
 } from "@/lib/plugins/member";
+import useScreenSize from "@/hooks/useScreenSize";
 import { useAppPosition } from "@/lib/position/hooks";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { getActionIcon } from "@/lib/tools/utils";
@@ -53,6 +55,7 @@ export default function ChatPluginsPopover({
   const appPosition = useAppPosition();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { isMobile } = useScreenSize();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const trigger = useRef<HTMLElement | null>(null);
@@ -121,11 +124,20 @@ export default function ChatPluginsPopover({
             icon={SvgPlug}
             title={t("chat.trigger.label")}
             sizePreset="main-ui"
-            padding={0}
+            variant="section"
             rounding={2}
             interaction={open ? "hover" : "rest"}
             aria-label={t("chat.trigger.label")}
-            rightChildren={<SvgChevronRight size={16} />}
+            rightChildren={
+              <Section
+                width={1.5}
+                height={1.5}
+                justifyContent="center"
+                alignItems="center"
+              >
+                <SvgChevronRight size={16} />
+              </Section>
+            }
             onPointerEnter={(event) => {
               if (event.pointerType === "mouse") hover(true);
             }}
@@ -146,9 +158,10 @@ export default function ChatPluginsPopover({
           />
         </Popover.Trigger>
         <Popover.Content
-          side="right"
-          align="end"
-          alignOffset={-5}
+          // No room beside the parent menu on phones, so open over it.
+          side={isMobile ? "top" : "right"}
+          align={isMobile ? "start" : "end"}
+          alignOffset={isMobile ? 0 : -5}
           width={60}
           aria-label={t("chat.trigger.label")}
           onPointerEnter={cancelHover}
@@ -259,7 +272,7 @@ export default function ChatPluginsPopover({
                             plugin.server.server_url,
                             plugin.server.name
                           )
-                        : SvgFileBraces
+                        : SvgCodeFile
                     }
                     sizePreset="main-ui"
                     padding={0}

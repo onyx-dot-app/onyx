@@ -131,7 +131,7 @@ def test_embedding_detection_uses_mode() -> None:
     """Embedding detection must use the catalog's mode field, not just the
     name heuristic — a missing mode silently misclassifies."""
     assert model_catalog.resolve_model_mode("text-embedding-3-large") == "embedding"
-    assert model_catalog.resolve_model_mode("gpt-5") == "chat"
+    assert model_catalog.resolve_model_mode("gpt-6-sol") == "chat"
 
 
 def test_uncataloged_name_falls_back_to_chat(

@@ -473,7 +473,7 @@ The terminator `message.updated` payload carries everything needed for cost obse
 ```json
 "cost": 0.00107985,
 "tokens": {"total": ..., "input": ..., "output": ..., "reasoning": ..., "cache": {"read": ..., "write": ...}},
-"modelID": "gpt-4o-mini",
+"modelID": "gpt-6-luna",
 "providerID": "openai"
 ```
 

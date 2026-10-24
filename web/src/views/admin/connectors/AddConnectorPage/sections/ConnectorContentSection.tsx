@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { Card, Collapsible } from "@opal/components";
+import { Card, Collapsible, Divider } from "@opal/components";
 import { Section } from "@opal/layouts";
 import ConnectorConfigFields from "@/views/admin/connectors/AddConnectorPage/form/ConnectorConfigFields";
+import { IndexingStartField } from "@/views/admin/connectors/AddConnectorPage/sections/ScheduleSection";
 import type { ConnectionConfiguration } from "@/lib/connectors/types";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import type { CredentialValues } from "@/lib/credentials/types";
@@ -20,9 +21,14 @@ interface ConnectorContentSectionProps {
   disabled?: boolean;
   /** Extra content below the fields, such as an edit's file list. */
   children?: ReactNode;
+  /** Whether fields or `children` come before the start date. */
+  hasFields: boolean;
+  /** Shows the start date at the bottom. */
+  indexingStart: boolean;
 }
 
-/** What the connector indexes: the source-specific configuration fields. */
+/** What the connector indexes: the source-specific configuration fields,
+ * then the date to index from. */
 export default function ConnectorContentSection({
   config,
   values,
@@ -31,6 +37,8 @@ export default function ConnectorContentSection({
   reportScope,
   disabled,
   children,
+  hasFields,
+  indexingStart,
 }: ConnectorContentSectionProps) {
   const t = useTranslations("admin.connectorsList.content");
 
@@ -50,6 +58,14 @@ export default function ConnectorContentSection({
             reportScope={reportScope}
           />
           {children}
+          {indexingStart && (
+            <Section alignItems="stretch" gap={4} width="full">
+              {hasFields && (
+                <Divider paddingParallel={0} paddingPerpendicular={0} />
+              )}
+              <IndexingStartField disabled={disabled} />
+            </Section>
+          )}
         </Section>
       </Card>
     </Collapsible>

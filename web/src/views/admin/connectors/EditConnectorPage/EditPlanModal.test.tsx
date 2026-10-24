@@ -95,6 +95,9 @@ const PASSED_CHECK = {
   required: true,
   status: "passed",
   message: "",
+  summary: null,
+  description: null,
+  applicable: true,
   remediation: null,
   docs_link: null,
 } as const;
@@ -116,7 +119,35 @@ test("lists every validation check when an access type change passes", () => {
 
   expect(screen.getByText("Validation passed")).toBeVisible();
   expect(screen.getByText("List file permissions")).toBeVisible();
-  expect(screen.getByText("Passed")).toBeVisible();
+  expect(screen.getByText("Successful")).toBeVisible();
+});
+
+test("shows warnings when a check could not finish", () => {
+  renderPlan({
+    ...PLAN,
+    plan: {
+      ...PLAN.plan,
+      changed_settings: ["access_type"],
+      validation: {
+        validation_error: null,
+        check_results: [
+          PASSED_CHECK,
+          {
+            ...PASSED_CHECK,
+            check_id: "list_groups",
+            display_name: "List groups",
+            status: "incomplete",
+            message: "The source limited the request rate.",
+          },
+        ],
+        unfinished_check_ids: [],
+        unfinished_checks: [],
+      },
+    },
+  });
+
+  expect(screen.getByText("Validation passed with warnings")).toBeVisible();
+  expect(screen.queryByText("Validation passed")).not.toBeInTheDocument();
 });
 
 test("shows failed checks and unfinished ones as pending with the still-running note", () => {

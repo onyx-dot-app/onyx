@@ -85,6 +85,9 @@ from onyx.server.documents.targeted_reindex import router as targeted_reindex_ro
 from onyx.server.features.admin_banner.api import admin_router as admin_banner_router
 from onyx.server.features.build.api import admin_router as build_admin_router
 from onyx.server.features.build.api import router as build_router
+from onyx.server.features.build.static_preview import (
+    public_router as static_preview_router,
+)
 from onyx.server.features.build.webapp_proxy import public_build_router
 from onyx.server.features.default_assistant.api import (
     router as default_assistant_router,
@@ -147,7 +150,7 @@ from onyx.server.metrics.postgres_connection_pool import (
     setup_postgres_connection_pool_metrics,
 )
 from onyx.server.metrics.prometheus_setup import setup_prometheus_metrics
-from onyx.server.middleware.latency_logging import add_latency_logging_middleware
+from onyx.server.middleware.latency_logging import latency_logging_middleware
 from onyx.server.middleware.rate_limiting import (
     RATE_LIMITING_ENABLED,
     close_auth_limiter,
@@ -174,7 +177,7 @@ from onyx.utils.fleet_telemetry import start_telemetry
 from onyx.utils.logger import setup_logger, setup_uvicorn_logger
 from onyx.utils.middleware import (
     add_endpoint_context_middleware,
-    add_onyx_request_id_middleware,
+    request_id_middleware,
 )
 from onyx.utils.variable_functionality import (
     fetch_ee_implementation_or_noop,
@@ -420,7 +423,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
             setup_onyx(db_session, POSTGRES_DEFAULT_SCHEMA)
             # Import a legacy single-config SAML_CONF_DIR into a provider row. The
             # api_server has the mount the migration job lacks, so this is where it
-            # runs. No-op unless AUTH_TYPE=saml with no SAML row yet.
+            # runs once, so deleting the imported row is final.
             seed_saml_provider_from_conf_dir(db_session)
             # No-op when env is unset or the row already matches.
             seed_jwt_settings_from_env()
@@ -584,6 +587,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, targeted_reindex_router)
     include_router_with_global_prefix_prepended(application, projects_router)
     include_router_with_global_prefix_prepended(application, public_build_router)
+    include_router_with_global_prefix_prepended(application, static_preview_router)
     include_router_with_global_prefix_prepended(application, build_router)
     include_router_with_global_prefix_prepended(application, build_admin_router)
     include_router_with_global_prefix_prepended(application, image_generation_router)
@@ -789,16 +793,14 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     application.add_middleware(CaptchaCookieMiddleware)
     application.add_middleware(LoginCaptchaMiddleware)
 
-    # Registered last so it is the outermost middleware and the client-IP
-    # contextvar is set before any downstream middleware, handler, or telemetry
-    # call runs. Added in place once — downstream capture sites read it via
-    # ``current_client_ip()`` rather than threading the request through.
+    # Set client-IP context before the captcha checks and route handlers.
+    # Downstream telemetry reads it through current_client_ip().
     application.add_middleware(ClientIPMiddleware)
 
     if LOG_ENDPOINT_LATENCY:
-        add_latency_logging_middleware(application, logger)
+        application.add_middleware(latency_logging_middleware, logger=logger)
 
-    add_onyx_request_id_middleware(application, "API", logger)
+    application.add_middleware(request_id_middleware, prefix="API")
 
     # Set endpoint context for per-endpoint DB pool attribution metrics.
     # Must be registered after all routes are added.

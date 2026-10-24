@@ -97,8 +97,8 @@ func (r *connectorResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 			"prune_freq": schema.Int64Attribute{
 				Optional: true,
 				Computed: true,
-				MarkdownDescription: "Seconds between pruning runs. Onyx rewrites an unset value to its " +
-					"default of 604800 (7 days) on the first update, and Terraform then keeps that value.",
+				MarkdownDescription: "Seconds between pruning runs. Unset, Onyx uses its default of 604800 " +
+					"(7 days) on create and keeps the stored value on update.",
 				PlanModifiers: []planmodifier.Int64{
 					ServerDefaultedInt64(),
 				},

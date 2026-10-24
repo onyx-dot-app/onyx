@@ -61,6 +61,18 @@ Once signed in, the session persists across page loads via a cookie, and
 "log out" invalidates Redis-backed sessions immediately. Stateless JWTs
 (`AUTH_BACKEND=jwt`) stay valid until expiry, because
 `SingleTenantJWTStrategy.destroy_token` does nothing.
+An admin password reset (`POST /password/reset_password`) signs out all of the
+target user's sessions, and an admin cannot reset their own password there. A
+password change (`POST /password/change-password`) signs out the user's other
+sessions and keeps the current one (`UserManager.revoke_sessions`). Redis keeps
+a per-user set of session tokens for this; Postgres deletes `AccessToken` rows.
+A refresh never extends or replaces a revoked session. JWT sessions stay valid
+until expiry. Every password reset or change (admin reset, self-service change,
+and the forgot-password token flow) also revokes all of the user's PATs, Craft
+sandbox PATs included, in the same commit as the new password hash
+(`UserManager._update`, `db/pat.py:revoke_all_pats_for_user__no_commit`). A
+running Craft sandbox gets a new PAT at its next reservation
+(`reserve_sandbox__no_commit`). API keys are not affected.
 Native mobile clients get the same session in a header instead of a cookie
 (`bearer_transport`, `backend/onyx/auth/users.py`). A signed-out
 anonymous visitor can still use chat if an admin turned that on, with public
@@ -93,7 +105,7 @@ the coding-agent sandbox).
 | POST | `/auth/logout` | same router | Writes a tombstone value instead of deleting the Redis key (`session_tokens.py:build_session_tombstone_value`). |
 | POST | `/auth/forgot-password`, `/auth/reset-password` | fastapi-users | Public, signed with `USER_AUTH_SECRET`. |
 | POST | `/auth/request-verify-token`, `/auth/verify` | fastapi-users | Public. |
-| GET | `/auth/type` | | Public. Tells the frontend which login flow to render before any session exists. |
+| GET | `/auth/type` | | Public. Tells the frontend which login flow to render before any session exists, and the workspace `default_language` (single-tenant) that `web/src/i18n/request.ts` falls back to when `GET /settings` is denied. |
 | POST | `/auth/mobile/login`, `/auth/mobile/refresh`, `/auth/mobile/logout` | `server/auth/mobile.py` | Bearer-token mirror of the cookie flow for native clients. Refresh authenticates only by the Bearer header, never the web cookie. |
 | POST | `/auth/mobile/sso/exchange` | `mobile_sso/sso_completion.py` via `server/auth/mobile.py` | Exchanges a one-time PKCE-bound code (minted after an OAuth/SAML callback) for the session token; declared public because the code itself is the credential. |
 | GET | `/auth/oauth/authorize`, `/auth/oauth/callback` | fastapi-users OAuth router (`create_onyx_oauth_router`, `auth/users.py`) | Legacy single-provider Google OAuth. Still active; multi-provider is the newer path (below). |
@@ -111,10 +123,10 @@ the coding-agent sandbox).
 | CRUD | `/admin/api-key*` | `server/api_key/api.py` | `Permission.MANAGE_SERVICE_ACCOUNT_API_KEYS`. Creating or updating a key is **admin-equivalent by design**: `group_ids` is uncapped, so a holder can add a key to the Admin group (`api.py:create_api_key` comment). |
 | GET | `/user/pats/scopes` | `server/pat/api.py:list_selectable_scopes` | `Permission.BASIC_ACCESS`. Drops scopes whose `min_tier` is above the current tier (`use:llm_gateway` is Business+), and drops `use:llm_gateway` while the workspace `llm_gateway_enabled` setting is off. |
 | GET/POST/DELETE | `/user/pats` | `server/pat/api.py` | Create needs `CREATE_USER_API_KEYS`. The seeded Basic group grants it by default, and a full admin can switch it off or on from the Basic group's page (`auth/permissions.py:DEFAULT_GROUP_TOGGLEABLE_PERMISSIONS`). The same permission gates MCP OAuth consent (`server/oauth_provider/api.py`), so the toggle covers both. List and delete need `BASIC_ACCESS`, and a user only ever sees or revokes their own. Minting a PAT with a scope above the current tier is rejected with `FEATURE_NOT_AVAILABLE`, and minting one with `use:llm_gateway` while the setting is off is rejected with `INVALID_INPUT` (`server/pat/api.py:_validate_assignable_scopes`). |
-| GET/PUT | `/admin/security`, GET `/admin/security/pinned-fields` | `server/security/api.py` | `FULL_ADMIN_PANEL_ACCESS`. Workspace security overrides: password policy, `password_auth_enabled`, `valid_email_domains`, JWT validation fields, SSRF level, incognito availability, `allow_connector_group_restrictions`, and `allow_connector_check_findings` (on by default; off, capability checks store and return no findings). Env-pinned fields win over stored values. Turning on `allow_connector_group_restrictions` needs the Business tier. |
+| GET/PUT | `/admin/security`, GET `/admin/security/pinned-fields` | `server/security/api.py` | `FULL_ADMIN_PANEL_ACCESS`. Workspace security overrides: password policy, `password_auth_enabled`, `valid_email_domains`, the two admin-gated claim windows (`allow_same_provider_subject_relink`, `allow_renamed_account_claim`, both KV-backed and off by default), JWT validation fields, SSRF level, incognito availability, `allow_connector_group_restrictions`, and `allow_connector_check_findings` (on by default; off, capability checks store and return no findings). Env-pinned fields win over stored values. Turning on `allow_connector_group_restrictions` needs the Business tier. |
 | CRUD | `/admin/user-group*` | `ee/onyx/server/user_group/api.py` | See [[access-control]] §2; this is where group membership, and thus `PermissionGrant`-derived capability, is actually assigned. |
-| GET/POST/PATCH | `/admin/sso-providers*`, `/admin/sso-providers/{id}/domains` | `server/manage/sso/api.py` | `FULL_ADMIN_PANEL_ACCESS` (exact gating per route). Domain-routing SSO providers beyond the first require business tier (`_require_business_tier_for_additional_enabled_provider`). |
-| POST | `/admin/sso-providers/{id}/domains/{domain}/verify` | same file | Triggers `ee/onyx/auth/sso_domain_verification.py:verify_domain_via_dns`. |
+| GET/POST/PATCH/DELETE | `/admin/sso/provider*`, `/admin/sso/domain/*` | `server/manage/sso/api.py` | `FULL_ADMIN_PANEL_ACCESS` (exact gating per route). Domain-routing SSO providers beyond the first require business tier (`_require_business_tier_for_additional_enabled_provider`). Disable keeps the provider's `OAuthAccount` links. Delete removes them and, on cloud, their catalog copies (`forget_oauth_identities`), so a sign-in through another provider can claim an unlinked account by email; a renamed one only while `allow_renamed_account_claim` is on. An OIDC or Google login share-locks its provider row in the transaction of each link and catalog write (`UserManager._hold_sso_provider`), so a delete waits for those in-flight logins and removes their links and catalog copies too, and such a login whose provider is gone fails before writing. SAML logins write no links, so they take no lock. GET `/admin/sso/provider/{id}/handoff` counts the users a delete would unlink and how many were renamed. Disable and delete both refuse to remove the last enabled provider while password login is off. |
+| POST | `/admin/sso/domain/verify-dns` | same file | Triggers `ee/onyx/auth/sso_domain_verification.py:verify_domain_via_dns`. |
 | GET/PATCH/DELETE | `/users/me`, `/users/{id}` | fastapi-users users router | Declared public in `auth_check.py`'s spec list because the route's *own* dependency enforces identity (self, or admin for `{id}`); see §5. |
 | SCIM | `/scim/v2/*` | `ee/onyx/server/scim/api.py` | Bearer-token auth via `verify_scim_token` (`ee/onyx/server/scim/auth.py`), not user auth. Provisions/deprovisions users and groups from an IdP. |
 
@@ -256,6 +268,13 @@ POST /auth/login     → fastapi-users login router
      | SingleTenantJWTStrategy, keyed by AUTH_BACKEND
 ```
 
+The captcha middleware in `server/auth/captcha_api.py` uses pure ASGI calls.
+`LoginCaptchaMiddleware` checks guarded login requests before the handler runs.
+`CaptchaCookieMiddleware` checks guarded OAuth callbacks and appends cookie deletion
+at response start. Other cookies remain intact. Unguarded requests pass through
+without a body relay. `utils/client_ip.py:ClientIPMiddleware` keeps client IP context
+through stream completion and restores the caller's context in `finally`.
+
 ### 4.2 OAuth / OIDC (single- and multi-provider)
 
 ```
@@ -339,6 +358,9 @@ Request → classify_session_token_value: EXPIRED / TERMINATED / NOT_FOUND /
           MALFORMED, stashed in a ContextVar, turned into a reasoned
           OnyxError (SESSION_EXPIRED / SESSION_TERMINATED /
           SESSION_UNRECOGNIZED) only once auth has conclusively failed
+Web    → useSessionWatcher (web/src/lib/auth/hooks.ts) shows the session-ended
+         modal on a 403 from /api/me; chat create/send refetch /api/me when
+         they get a session 403 (isSessionEndedResponse, lib/auth/utils.ts)
 ```
 
 ### 4.7 Non-human auth: API key, PAT, SCIM
@@ -423,8 +445,11 @@ consent (GET, POST) | grants | grants/{id} | introspect   server/oauth_provider/
 `OnyxOAuthProvider` (`server/oauth_provider/provider.py`) subclasses fastmcp's
 `OAuthProvider`; the MCP SDK handlers do request validation and PKCE checks.
 Grants and tokens live in each tenant's schema (`OAuthProviderGrant`,
-`OAuthProviderToken`); registered clients live in the catalog
-(`OAuthProviderClient`). Short-lived state lives in `CacheBackend`
+`OAuthProviderToken`); registered clients (`OAuthProviderClient`) live in the
+shared `public` catalog on cloud and in `POSTGRES_DEFAULT_SCHEMA` on self-hosted
+installations. Revision `e38f8193dd32` moves existing self-hosted registrations
+from `public` to the configured schema, preserving their IDs and metadata.
+Short-lived state lives in `CacheBackend`
 (`oauth_provider/attempts.py`), so the flow works on Redis and on the PostgreSQL
 cache. Only the pre-sign-in state is shared (`get_shared_cache_backend`): the
 pending request, which holds client-supplied fields only, and a claim naming the
@@ -505,6 +530,12 @@ That route consumes the test attempt, exchanges the code, and discards the token
 It returns success and the PKCE setting used, without saving configuration or user tokens.
 Both test endpoints require action-management permission; the popup marker grants no access.
 Provider consent can still create a grant, even though Onyx discards the tokens.
+
+### Proxy request authority
+
+The deployment nginx templates forward the incoming Host header, including its port, to upstream services.
+They overwrite X-Forwarded-Host with that same value. This preserves public origins for generated URLs and preview policies.
+The CLI embeds generated copies of these templates. Run `ods generate-compose --write` after changing them.
 
 ## 5. Contracts and invariants
 
@@ -775,3 +806,17 @@ secrets/env.
   assumes "no session = no `User` object" will not notice an
   `AccountType.ANONYMOUS` or `AccountType.BOT` user flowing through the same
   code paths as a standard interactive user.
+
+### Private skill ownership on user deletion
+
+`db/users.py:delete_user_from_db__no_commit` rejects deletion while the user owns
+private custom skills. Transfer or delete those skills first. The
+`ck_private_skill_has_owner` database check also protects concurrent and direct writes.
+Public skills retain admin recovery after owner deletion; built-ins may remain ownerless.
+`UserManager.delete` uses the same database cleanup through its async session.
+No sandbox networking or worker thread runs during deletion.
+The last-admin leave flow flushes local cleanup before the control-plane call and
+rolls it back if the remote deletion fails.
+
+Constraint failures during private-skill owner deletion return the same conflict
+message for psycopg2 and asyncpg sessions, including assignments after the precheck.

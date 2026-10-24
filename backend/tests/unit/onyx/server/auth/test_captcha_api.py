@@ -207,3 +207,80 @@ def test_middleware_skips_options_preflight() -> None:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+@pytest.mark.asyncio
+async def test_callback_preserves_cookies_and_stream_messages() -> None:
+    from starlette.types import Message, Receive, Scope, Send
+
+    from onyx.auth.captcha import CAPTCHA_COOKIE_NAME
+
+    scope: Scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/auth/oauth/callback",
+        "headers": [],
+    }
+    bodies: list[Message] = [
+        {"type": "http.response.body", "body": b"first", "more_body": True},
+        {"type": "http.response.body", "body": b"last", "more_body": False},
+    ]
+    messages: list[Message] = []
+
+    async def receive() -> Message:
+        raise AssertionError("The middleware must not read the request body")
+
+    async def send(message: Message) -> None:
+        messages.append(message)
+
+    async def app(_scope: Scope, _receive: Receive, send: Send) -> None:
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [
+                    (b"set-cookie", b"session=one"),
+                    (b"set-cookie", b"other=two"),
+                ],
+            }
+        )
+        for body in bodies:
+            await send(body)
+            assert messages[-1] is body
+
+    with (
+        patch.object(captcha_api_module, "is_captcha_enabled", return_value=True),
+        patch.object(
+            captcha_api_module, "validate_captcha_cookie_value", return_value=True
+        ),
+    ):
+        await CaptchaCookieMiddleware(app)(scope, receive, send)
+
+    cookies = [value for name, value in messages[0]["headers"] if name == b"set-cookie"]
+    assert cookies[:2] == [b"session=one", b"other=two"]
+    assert len(cookies) == 3
+    assert CAPTCHA_COOKIE_NAME.encode() in cookies[2]
+    assert b"Max-Age=0" in cookies[2]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scope_type", ["websocket", "lifespan"])
+async def test_captcha_middleware_passes_non_http_scopes(scope_type: str) -> None:
+    from starlette.types import Message, Scope
+
+    from onyx.server.auth.captcha_api import LoginCaptchaMiddleware
+
+    scope: Scope = {"type": scope_type}
+
+    async def receive() -> Message:
+        raise AssertionError("The middleware must not receive on non-HTTP scopes")
+
+    async def send(_message: Message) -> None:
+        raise AssertionError("The middleware must not send on non-HTTP scopes")
+
+    for middleware in (CaptchaCookieMiddleware, LoginCaptchaMiddleware):
+        app = AsyncMock()
+        with patch.object(captcha_api_module, "is_captcha_enabled") as enabled:
+            await middleware(app)(scope, receive, send)
+        app.assert_awaited_once_with(scope, receive, send)
+        enabled.assert_not_called()

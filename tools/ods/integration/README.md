@@ -21,13 +21,13 @@ cd "$(git rev-parse --show-toplevel)/tools/ods"
 go test -tags integration ./integration -run TestStackLiveLifecycle -count=1 -timeout 90m -v
 ```
 
-The test checks distinct projects and ports, database isolation, concurrent startup, process reuse,
+The harness explicitly uses the global `--isolated` option. The test checks distinct projects and ports, database isolation, concurrent startup, process reuse,
 stop and start, occupied-port recovery, and data preservation after container recreation.
 Unset configuration skips the test, so the normal unit suite does not start Docker.
 
 The test runs `stack down` during cleanup. Docker volumes and durable port leases remain.
 Set `ODS_STACK_KEEP_RUNNING=1` to leave the stacks available for browser tests.
-Get the current frontend URL with `ods stack status --json` in each worktree.
+Get the current frontend URL with `"$ODS_STACK_LIVE_BINARY" --isolated stack status --json` in each worktree.
 Never assume port 3000 after the occupied-port test.
 
 Run browser tests only after the lifecycle test finishes.
@@ -46,6 +46,18 @@ When `MOCK_LLM_SERVER_URL` is set, setup also makes the scripted mock LLM the de
 Use the mock provider for an enabled chat input and the real backend chat-persistence check.
 Do not run two browser commands with this configuration concurrently; they share an output directory.
 
+Validate orphaned stack discovery and cleanup with one disposable worktree:
+
+```sh
+cd "$(git rev-parse --show-toplevel)/tools/ods"
+go test -tags integration ./integration -run TestStackLiveOrphanedWorktree -count=1 -timeout 45m -v
+```
+
+The test needs `ODS_STACK_LIVE_BINARY` and `ODS_STACK_LIVE_ROOT_A`. It adds a temporary
+worktree of `ODS_STACK_LIVE_ROOT_A`, starts an isolated minimal stack there, and deletes the
+worktree directory. Then it checks that `stack ls --orphaned` lists the stack, and that
+`stack down --project` stops its processes and containers and releases its port leases.
+
 After browser tests, validate real Celery processing with the default profile:
 
 ```sh
@@ -58,6 +70,6 @@ The worker test uploads a small text file and waits for indexed chunks without m
 The first embedding request can download model weights and take several minutes.
 Cleanup requests file deletion. The test does not assert that asynchronous deletion finishes.
 
-After browser tests, run `ods stack down` in both worktrees.
+After browser tests, run `"$ODS_STACK_LIVE_BINARY" --isolated stack down` in both worktrees.
 Stop only the mock LLM server that you started for this run.
 Do not prune shared Docker volumes or stop other worktrees.

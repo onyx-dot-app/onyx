@@ -5,6 +5,7 @@ import {
 } from "@/lib/searchSettings/constants";
 import {
   EmbeddingModel,
+  EmbeddingModelRef,
   EmbeddingProvider,
   EmbeddingProviderName,
   IndexSettingsTranslator,
@@ -35,10 +36,25 @@ export function findProvider(
  * provider — i.e. credentials are managed via API keys, the row should
  * have an editable creds modal, and the backend should route through a
  * cloud SDK rather than the local model server. Returns `false` for
- * self-hosted buckets (`NOMIC`, `MICROSOFT`) and `CUSTOM`.
+ * self-hosted buckets (e.g. `IBM`, `VOYAGE_SELF_HOSTED`, `NOMIC`) and `CUSTOM`.
  */
 export function isCloudBased(providerName: EmbeddingProviderName): boolean {
   return CLOUD_BASED_PROVIDERS.some((p) => p.providerName === providerName);
+}
+
+/**
+ * `true` for the cloud providers that have no registry models (LiteLLM,
+ * Azure, Bifrost). The admin enters the model spec in the connect modal. The
+ * picker shows them in the "bring your own" section, not in the main list.
+ */
+export function isBringYourOwnProvider(
+  providerName: EmbeddingProviderName
+): boolean {
+  return (
+    providerName === EmbeddingProviderName.LITELLM ||
+    providerName === EmbeddingProviderName.AZURE ||
+    providerName === EmbeddingProviderName.BIFROST
+  );
 }
 
 /**
@@ -57,6 +73,65 @@ export function findRegistryModel(modelName: string): EmbeddingModel | null {
     if (m) return m;
   }
   return null;
+}
+
+/**
+ * Find the registry model of one provider group. Unlike `findRegistryModel`,
+ * a LiteLLM or Azure deployment whose label equals a registry name (e.g.
+ * `text-embedding-3-large`) does not match the OpenAI entry.
+ */
+export function findProviderModel(
+  providerName: EmbeddingProviderName,
+  modelName: string
+): EmbeddingModel | null {
+  return (
+    findProvider(providerName).embeddingModels.find(
+      (m) => m.modelName === modelName
+    ) ?? null
+  );
+}
+
+/**
+ * The provider groups and models the picker lists and searches. A legacy model
+ * shows only while it is the current model, matched on provider and name. A
+ * group that this empties drops out, unless `keepProviders` has it (saved
+ * credentials: its header holds the Edit and Disconnect buttons).
+ */
+export function visibleEmbeddingProviders(
+  providers: EmbeddingProvider[],
+  current: EmbeddingModelRef | null,
+  keepProviders: {
+    has(providerName: EmbeddingProviderName): boolean;
+  } = new Set()
+): EmbeddingProvider[] {
+  return providers.flatMap((provider) => {
+    const models = provider.embeddingModels.filter(
+      (m) =>
+        !m.legacy ||
+        (current?.providerName === provider.providerName &&
+          current.modelName === m.modelName)
+    );
+    const emptied = models.length === 0 && provider.embeddingModels.length > 0;
+    return emptied && !keepProviders.has(provider.providerName)
+      ? []
+      : [{ ...provider, embeddingModels: models }];
+  });
+}
+
+/**
+ * The model a credential test embeds with when no model is being connected or
+ * edited: the provider's first selectable registry model.
+ */
+export function defaultTestModelName(
+  providerName: EmbeddingProviderName
+): string {
+  const model = findProvider(providerName).embeddingModels.find(
+    (m) => !m.legacy
+  );
+  if (!model) {
+    throw new Error(`No selectable ${providerName} model to test with`);
+  }
+  return model.modelName;
 }
 
 /** Translated registry description, undefined without a key. */
@@ -98,8 +173,8 @@ export function embeddingModelDescription(
  *
  *   2. Which logical bucket does this model belong to for UI purposes —
  *      icon, modal selection, displayName? (Currently UNREPRESENTED in the
- *      schema for self-hosted models: Nomic vs Microsoft vs custom must
- *      be inferred from `model_name` by walking a frontend registry.)
+ *      schema for self-hosted models: IBM vs Nomic vs Microsoft vs custom
+ *      must be inferred from `model_name` by walking a frontend registry.)
  *
  * Because (2) is unrepresented in the schema, the frontend has historically
  * resorted to one of two hacks:
@@ -139,7 +214,7 @@ export function embeddingModelDescription(
  * backend already filled it in), this resolver SIMULATES the proper schema
  * by deriving the canonical `EmbeddingProviderName`, including the
  * synthetic self-hosted bucket values that the backend cannot currently
- * persist (`NOMIC`, `MICROSOFT`, `CUSTOM`).
+ * persist (e.g. `IBM`, `NVIDIA`, `NOMIC`, `CUSTOM`).
  *
  * Resolution rules, in order:
  *
@@ -156,7 +231,7 @@ export function embeddingModelDescription(
  *      is yet available.
  *
  *   3. Otherwise, walk `SELF_HOSTED_PROVIDERS` for a `modelName` match and
- *      return that bucket's `providerName` (e.g. `NOMIC`, `MICROSOFT`).
+ *      return that bucket's `providerName` (e.g. `IBM`, `MICROSOFT`).
  *
  *   4. Otherwise — the model isn't in any registry — fall through to
  *      `EmbeddingProviderName.CUSTOM`. This is the "user added a custom

@@ -3,7 +3,8 @@
 Every tool invocation is a JSON-RPC ``tools/call`` carrying the exact tool
 name, so the gate parses the body (precedent:
 ``external_apps/matching/graphql_parsing.py``) rather than guessing from the
-URL. Protocol plumbing passes ungated; anything else on a matched MCP host is
+URL. Protocol plumbing requires app access without action approval. Anything
+else on a matched MCP host is
 UNCLASSIFIABLE and fails closed — credential injection covers the whole host,
 so an unrecognized request must never forward with credentials.
 """

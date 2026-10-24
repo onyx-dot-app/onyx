@@ -64,13 +64,13 @@ describe("getPreferredLlmSelection", () => {
       providerId: 2,
       providerName: "openai",
       provider: "openai",
-      modelName: "gpt-4o",
+      modelName: "gpt-6-sol",
     });
     const result = getPreferredLlmSelection(USER, [
       provider("anthropic", [model("claude-opus-5", { craft: true })], 1),
-      provider("openai", [model("gpt-4o")], 2),
+      provider("openai", [model("gpt-6-sol")], 2),
     ]);
-    expect(result?.modelName).toBe("gpt-4o");
+    expect(result?.modelName).toBe("gpt-6-sol");
   });
 
   it("does not leak one user's pick to another", () => {
@@ -78,11 +78,11 @@ describe("getPreferredLlmSelection", () => {
       providerId: 2,
       providerName: "openai",
       provider: "openai",
-      modelName: "gpt-4o",
+      modelName: "gpt-6-sol",
     });
     const result = getPreferredLlmSelection("user-2", [
       provider("anthropic", [model("claude-opus-5", { craft: true })], 1),
-      provider("openai", [model("gpt-4o")], 2),
+      provider("openai", [model("gpt-6-sol")], 2),
     ]);
     expect(result?.modelName).toBe("claude-opus-5");
   });
@@ -104,7 +104,7 @@ describe("getPreferredLlmSelection", () => {
     const providers = [
       provider("anthropic", [model("claude-opus-5", { craft: true })], 1),
     ];
-    for (const raw of ["not json", "null", '"gpt-4o"', "42"]) {
+    for (const raw of ["not json", "null", '"gpt-6-sol"', "42"]) {
       window.localStorage.setItem(`onyx:craftLlmSelection:${USER}`, raw);
       expect(getPreferredLlmSelection(USER, providers)?.modelName).toBe(
         "claude-opus-5"

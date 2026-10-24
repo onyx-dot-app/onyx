@@ -41,7 +41,7 @@ def test_cancelled_generation_never_calls_provider(streaming: bool) -> None:
     client = LitellmLLM(
         api_key="test",
         model_provider="openai",
-        model_name="gpt-5-mini",
+        model_name="gpt-6-luna",
         max_input_tokens=1000,
     )
     with patch("onyx.llm.litellm_singleton.litellm.completion") as completion:
@@ -74,7 +74,7 @@ def test_cancelled_provider_failure_does_not_retry(rejection: bool) -> None:
     client = LitellmLLM(
         api_key="test",
         model_provider="openai",
-        model_name="gpt-5-mini",
+        model_name="gpt-6-luna",
         max_input_tokens=1000,
     )
 
@@ -82,7 +82,7 @@ def test_cancelled_provider_failure_does_not_retry(rejection: bool) -> None:
         signal.cancel()
         error = BadRequestError if rejection else Timeout
         raise error(
-            message="provider failure", model="gpt-5-mini", llm_provider="openai"
+            message="provider failure", model="gpt-6-luna", llm_provider="openai"
         )
 
     errors: list[GenerationErrorEvent] = []
@@ -121,7 +121,7 @@ def test_stream_cancellation_preserves_partial_text_and_closes_client() -> None:
     client = LitellmLLM(
         api_key="test",
         model_provider="openai",
-        model_name="gpt-5-mini",
+        model_name="gpt-6-luna",
         max_input_tokens=1000,
     )
     chunks = [

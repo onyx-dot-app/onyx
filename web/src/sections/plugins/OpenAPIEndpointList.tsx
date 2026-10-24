@@ -1,56 +1,26 @@
 "use client";
 
-import { useTranslations } from "next-intl";
-import { Tag, Text } from "@opal/components";
+import MCPToolRow from "@/sections/plugins/MCPToolRow";
 import type { MethodSpec } from "@/lib/tools/types";
 
-interface OpenAPIEndpointListProps {
-  methods: readonly Pick<MethodSpec, "method" | "path" | "name" | "summary">[];
-}
+type OpenAPIMethod = Pick<MethodSpec, "method" | "path" | "name" | "summary">;
 
 export default function OpenAPIEndpointList({
   methods,
-}: OpenAPIEndpointListProps) {
-  const t = useTranslations("actions.addOpenApiModal.method");
+}: {
+  methods: readonly OpenAPIMethod[];
+}) {
   return (
-    <ul className="m-0 list-none divide-y divide-border-01 p-0">
+    <ul className="m-0 flex list-none flex-col gap-2 p-0">
       {methods.map((method) => (
-        <li
+        <MCPToolRow
           key={`${method.method}-${method.path}-${method.name}`}
-          className="flex min-w-0 flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
-        >
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <Text
-              font="main-ui-action"
-              color="text-05"
-              wordWrap="wrap-anywhere"
-            >
-              {method.name}
-            </Text>
-            <Text
-              font="secondary-body"
-              color="text-03"
-              wordWrap="wrap-anywhere"
-            >
-              {method.summary || t("noSummary")}
-            </Text>
-          </div>
-          <div className="flex min-w-0 items-start gap-2 sm:max-w-[50%]">
-            <Tag
-              title={method.method.toUpperCase()}
-              color={
-                method.method.toUpperCase() === "GET"
-                  ? "green"
-                  : method.method.toUpperCase() === "DELETE"
-                    ? "red"
-                    : "blue"
-              }
-            />
-            <Text font="main-ui-mono" color="text-03" wordWrap="wrap-anywhere">
-              {method.path}
-            </Text>
-          </div>
-        </li>
+          tool={{
+            name: method.name,
+            display_name: method.name,
+            description: method.summary,
+          }}
+        />
       ))}
     </ul>
   );

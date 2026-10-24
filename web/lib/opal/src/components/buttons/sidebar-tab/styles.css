@@ -60,7 +60,17 @@
 /* `rightChildren` — absolutely positioned above the `Link` overlay. Hidden
    outright when folded: there is no room for them beside the icon. */
 .opal-sidebar-tab__actions {
-  @apply absolute z-100 end-1.5 top-0 bottom-0 flex-col justify-center items-center pointer-events-auto;
+  @apply absolute z-100 end-1.5 top-0 bottom-0 flex-col justify-center items-center pointer-events-none;
 
   display: var(--sidebar-tab-actions-display);
+}
+
+.opal-sidebar-tab__actions > * {
+  @apply pointer-events-auto;
+}
+
+/* A passive tag lets clicks fall through to the row's click target. */
+.opal-sidebar-tab__actions
+  > .opal-auxiliary-tag:not([data-clickable]):not([data-type="editable"]) {
+  @apply pointer-events-none;
 }

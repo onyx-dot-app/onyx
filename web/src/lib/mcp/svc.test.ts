@@ -1,17 +1,46 @@
 import {
   discoverMCPOAuth,
+  completeMCPUserOAuth,
   MCPOAuthError,
   getMCPUserOAuthNavigationUrl,
   MCPUserOAuthStartResponse,
   refreshMCPServerTools,
   streamMCPServerProbe,
-  startMCPAdminOAuth,
+  setupMCPServer,
+  type MCPSetupRequest,
   startMCPUserOAuth,
 } from "@/lib/mcp/svc";
+
+import {
+  MCPAuthenticationType,
+  MCPAuthenticationPerformer,
+  MCPTransportType,
+} from "@/lib/mcp/types";
+const setupRequest: MCPSetupRequest = {
+  name: "Test MCP",
+  server_url: "https://mcp.example/mcp",
+  transport: MCPTransportType.SSE,
+  auth_type: MCPAuthenticationType.OAUTH,
+  auth_performer: MCPAuthenticationPerformer.PER_USER,
+  existing_server_id: 42,
+};
 
 describe("MCP OAuth start", () => {
   afterEach(() => {
     jest.restoreAllMocks();
+  });
+
+  test("OAuth startup keeps its OAuth fallback for proxy errors", async () => {
+    jest
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce(
+        new Response("<html>Bad gateway</html>", { status: 502 })
+      );
+    await expect(startMCPUserOAuth(42, "/app")).rejects.toMatchObject({
+      reason: "oauth_failed",
+      message:
+        "Could not start OAuth sign-in. Check the server settings and try again.",
+    });
   });
 
   test.each<{
@@ -121,39 +150,38 @@ describe("MCP setup requests", () => {
     ).rejects.toThrow();
   });
 
-  test("admin authorization preserves credential change flags", async () => {
-    const fetchSpy = jest.spyOn(global, "fetch").mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          status: "already_authenticated",
-          server_id: 42,
-          authorization_url: null,
-          redirect_url: "/admin/mcp-actions",
-        })
-      )
-    );
-
-    const result = await startMCPAdminOAuth(42, "/admin/mcp-actions", {
+  test("staged authorization preserves credential change flags", async () => {
+    const response = {
+      status: "authorization_required",
+      authorization_url: "https://identity.example/authorize",
+    };
+    const fetchSpy = jest
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify(response)));
+    const payload = {
+      ...setupRequest,
       oauth_client_id: "saved-client",
       oauth_client_secret: "********",
       oauth_client_id_changed: false,
       oauth_client_secret_changed: false,
-    });
-
-    expect(fetchSpy).toHaveBeenCalledWith("/api/admin/mcp/oauth/connect", {
+    };
+    await expect(setupMCPServer(payload)).resolves.toEqual(response);
+    expect(fetchSpy).toHaveBeenCalledWith("/api/admin/mcp/setup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        server_id: 42,
-        return_path: "/admin/mcp-actions",
-        include_resource_param: true,
-        oauth_client_id: "saved-client",
-        oauth_client_secret: "********",
-        oauth_client_id_changed: false,
-        oauth_client_secret_changed: false,
-      }),
+      body: JSON.stringify(payload),
     });
-    expect(getMCPUserOAuthNavigationUrl(result)).toBe("/admin/mcp-actions");
+  });
+
+  test("setup preserves a safe server detail without replacing it with the fallback", async () => {
+    jest.spyOn(global, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ detail: "This URL is blocked" }), {
+        status: 400,
+      })
+    );
+    const request = setupMCPServer(setupRequest);
+    await expect(request).rejects.toThrow("This URL is blocked");
+    await expect(request).rejects.not.toBeInstanceOf(MCPOAuthError);
   });
 
   test("tool discovery exposes the server error without a JSON wrapper", async () => {
@@ -169,16 +197,23 @@ describe("MCP setup requests", () => {
     await expect(refreshMCPServerTools(42)).rejects.toThrow("Sign in again");
   });
 
-  test("OAuth startup handles non-JSON proxy errors", async () => {
-    jest
-      .spyOn(global, "fetch")
-      .mockResolvedValueOnce(
-        new Response("<html>Bad gateway</html>", { status: 502 })
-      );
-    await expect(startMCPAdminOAuth(42, "/admin/mcp-actions")).rejects.toThrow(
-      "Could not start OAuth sign-in. Check the server settings and try again."
-    );
-  });
+  test.each(Object.values(MCPAuthenticationType))(
+    "setup %s handles non-JSON proxy errors",
+    async (auth_type) => {
+      jest
+        .spyOn(global, "fetch")
+        .mockResolvedValueOnce(
+          new Response("<html>Bad gateway</html>", { status: 502 })
+        );
+      await expect(
+        setupMCPServer({ ...setupRequest, auth_type })
+      ).rejects.toMatchObject({
+        reason: "connection_failed",
+        message:
+          "Could not connect to the MCP server. Check the server settings and try again.",
+      });
+    }
+  );
 });
 
 describe("MCP OAuth capability discovery", () => {
@@ -223,12 +258,31 @@ describe("MCP OAuth capability discovery", () => {
         { status: 400 }
       )
     );
-    const request = startMCPAdminOAuth(42, "/admin/mcp-actions");
+    const request = setupMCPServer(setupRequest);
     await expect(request).rejects.toBeInstanceOf(MCPOAuthError);
     await expect(request).rejects.toMatchObject({
       reason: "client_registration_failed",
       message:
-        "Could not start OAuth sign-in. Check the server settings and try again.",
+        "Could not connect to the MCP server. Check the server settings and try again.",
     });
+  });
+});
+
+describe("MCP OAuth callback cancellation", () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  test("reports provider denial with the correlated attempt and no authorization code", async () => {
+    const fetchSpy = jest.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ detail: "Authorization cancelled" }), {
+        status: 400,
+      })
+    );
+    await expect(
+      completeMCPUserOAuth(null, "mcp-setup_attempt", "access_denied")
+    ).rejects.toThrow("Authorization cancelled");
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "/api/mcp/oauth/callback?state=mcp-setup_attempt&error=access_denied",
+      { method: "POST" }
+    );
   });
 });

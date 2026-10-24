@@ -57,7 +57,7 @@ export const useCaseDomains: UseCaseDomain[] = [
         summary:
           "Build a one-page account brief before every call from Salesforce, Slack, and Gong",
         fullText:
-          "Build a one-page account brief before every call — from Salesforce, Slack, and Gong.",
+          "Build a one-page account brief before every call, from Salesforce, Slack, and Gong.",
       },
       {
         id: "sales-winloss",
@@ -118,7 +118,7 @@ export const useCaseDomains: UseCaseDomain[] = [
         summary:
           "Brief me on everything that happened across my projects today",
         fullText:
-          "Brief me for the day — tell me everything that happened for every project I was working on.",
+          "Brief me for the day. Tell me everything that happened for every project I was working on.",
       },
       {
         id: "product-prototype",

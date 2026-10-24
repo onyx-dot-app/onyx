@@ -46,11 +46,11 @@ def test_manage_llms_permission_can_set_and_clear_chat_naming(
     ):
         response = client.post(
             "/admin/llm/default-chat-naming",
-            json={"provider_id": 7, "model_name": "gpt-5-nano"},
+            json={"provider_id": 7, "model_name": "gpt-6-luna"},
         )
         assert (response.status_code, response.json()) == (200, None)
         assert set_default.call_args.kwargs["provider_id"] == 7
-        assert set_default.call_args.kwargs["model_name"] == "gpt-5-nano"
+        assert set_default.call_args.kwargs["model_name"] == "gpt-6-luna"
         assert set_default.call_args.kwargs["flow_type"] == LLMModelFlowType.CHAT_NAMING
         assert isinstance(set_default.call_args.kwargs["db_session"], MagicMock)
 
@@ -67,7 +67,7 @@ def test_retired_fast_endpoints_are_not_available(
     response = client.request(
         method,
         "/admin/llm/default-fast",
-        json={"provider_id": 7, "model_name": "gpt-5-nano"},
+        json={"provider_id": 7, "model_name": "gpt-6-luna"},
     )
     assert response.status_code == 404
 
@@ -87,7 +87,7 @@ def test_chat_naming_mutation_rejects_users_without_manage_llms(
         response = client.request(
             method,
             "/admin/llm/default-chat-naming",
-            json={"provider_id": 7, "model_name": "gpt-5-nano"},
+            json={"provider_id": 7, "model_name": "gpt-6-luna"},
         )
     assert response.status_code == 403
     assert response.json()["error_code"] == "INSUFFICIENT_PERMISSIONS"
@@ -140,7 +140,7 @@ def _provider_with_chat_naming() -> tuple[
         id=70,
         llm_provider=provider,
         llm_provider_id=provider.id,
-        name="gpt-5-mini",
+        name="gpt-6-sol",
         display_name="Chat model",
         is_visible=True,
         is_router=False,
@@ -151,7 +151,7 @@ def _provider_with_chat_naming() -> tuple[
         id=71,
         llm_provider=provider,
         llm_provider_id=provider.id,
-        name="gpt-5-nano",
+        name="gpt-6-luna",
         display_name="Utility model",
         is_visible=False,
         is_router=False,
@@ -216,13 +216,13 @@ def test_admin_listing_pins_hidden_chat_naming_and_masks_credentials() -> None:
         )
 
     assert response.default_chat_naming == DefaultModel(
-        provider_id=7, model_name="gpt-5-nano"
+        provider_id=7, model_name="gpt-6-luna"
     )
     assert "default_fast" not in response.model_dump()
     assert [
         (model.name, model.is_visible)
         for model in response.providers[0].model_configurations
-    ] == [("gpt-5-mini", True), ("gpt-5-nano", False)]
+    ] == [("gpt-6-sol", True), ("gpt-6-luna", False)]
     assert response.providers[0].next_model_configuration_offset == 1
     payload = response.model_dump_json()
     assert "sk-test-workspace-key-123456789" not in payload
@@ -265,12 +265,12 @@ def test_user_listings_do_not_publish_or_pin_chat_naming(
             )
 
     assert response.default_chat_naming is None
-    assert "gpt-5-nano" not in response.model_dump_json()
+    assert "gpt-6-luna" not in response.model_dump_json()
     assert [item.id for item in response.providers] == (
         [7] if provider_is_public else []
     )
     if provider_is_public:
         assert [model.name for model in response.providers[0].model_configurations] == [
-            "gpt-5-mini"
+            "gpt-6-sol"
         ]
         assert response.providers[0].next_model_configuration_offset == 1

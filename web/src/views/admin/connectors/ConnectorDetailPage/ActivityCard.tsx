@@ -5,9 +5,12 @@ import { useTranslations } from "next-intl";
 import {
   Button,
   Card,
+  OverflowText,
   Popover,
   SelectButton,
+  Chip,
   Tag,
+  Tooltip,
   Text,
 } from "@opal/components";
 import { Section } from "@opal/layouts";
@@ -17,7 +20,10 @@ import {
   SvgCheckAll,
   SvgCheckCircle,
   SvgCheckSquare,
+  SvgClock,
   SvgFiles,
+  SvgHistory,
+  SvgRefreshCw,
   SvgTextLines,
   SvgUserShield,
   SvgUsers,
@@ -34,9 +40,11 @@ import type { ActivityGroup } from "@/lib/connectors/ccPair/hooks";
 import { getSourceMetadata } from "@/lib/connectors/utils";
 import { formatDateTimeLog } from "@/lib/dateUtils";
 import CheckRunPopoverContent from "@/views/admin/connectors/ConnectorDetailPage/CheckRunPopover";
+import { closedBySupersede } from "@/views/admin/connectors/ConnectorDetailPage/closedRun";
 import FailedDocsPopoverContent from "@/views/admin/connectors/ConnectorDetailPage/FailedDocsPopover";
 import StackTracePopoverContent from "@/views/admin/connectors/ConnectorDetailPage/StackTracePopover";
 import type { PopoverPlacement } from "@/views/admin/connectors/ConnectorDetailPage/popoverPlacement";
+import { runKindLabelKey } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
 import {
   RUN_KIND_ICONS,
   isActive,
@@ -99,15 +107,16 @@ type CardState =
   | "stopped"
   | "errors"
   | "resolved"
+  | "queued"
   | "inProgress"
   | "canceled"
   | "succeeded";
 
-/** The title's state key: how the run stands in its group. A closed card reads as it did when open, except a run whose document errors were all resolved, which says so. */
+/** The title's state key: how the run stands in its group. A closed card reads as it did when open, except a run with errors that Retry or an admin resolved, which says so. */
 function cardState(
   run: CCPairRun,
   group: ActivityGroup,
-  closed: boolean
+  resolved: boolean
 ): CardState {
   const stopped =
     run.attempt.status === "canceled" || run.attempt.status === "interrupted";
@@ -115,13 +124,37 @@ function cardState(
     case "failures":
       return "failed";
     case "errors":
-      if (closed && run.resolved_at === null) return "resolved";
+      if (resolved) return "resolved";
       if (isActive(run)) return "running";
       return stopped ? "stopped" : "errors";
     case "other":
+      if (run.attempt.status === "not_started") return "queued";
       if (isActive(run)) return "inProgress";
       return stopped ? "canceled" : "succeeded";
   }
+}
+
+interface StatusIcon {
+  icon: IconFunctionComponent;
+  stroke: string;
+}
+
+/** A queued run waits on the Scheduled tag's clock, a live one spins, any other shows its group's icon. */
+function statusIcon(
+  state: CardState,
+  active: boolean,
+  group: ActivityGroup,
+  closed: boolean
+): StatusIcon {
+  if (state === "queued") {
+    return { icon: SvgClock, stroke: "stroke-theme-purple-05" };
+  }
+  if (active) return { icon: IconLoader, stroke: "stroke-status-info-05" };
+  const style = GROUP_STYLE[group];
+  return {
+    icon: style.icon,
+    stroke: closed ? style.closedStroke : style.stroke,
+  };
 }
 
 interface FailureReason {
@@ -150,7 +183,7 @@ export interface ActivityCardProps {
   closed: boolean;
   /** Names the pair in place of the run's kind, for a feed across pairs. */
   connector?: CCPairRef;
-  /** Whether the viewer may re-fetch single documents of this pair. Hides the resolve actions otherwise. */
+  /** Whether the viewer may re-fetch single documents of this pair. Otherwise the retry actions hide, except a disabled Retry when `canResolveRuns` holds. */
   canResolve: boolean;
   /** Whether the viewer may mark the run resolved. */
   canResolveRuns: boolean;
@@ -164,7 +197,7 @@ export interface ActivityCardProps {
   popoverPlacement?: PopoverPlacement;
 }
 
-/** One run in an activity list: when, which kind, how it stands in its group, its trace and failed documents. */
+/** One run in an activity list: when, which kind, how it stands in its group, its trace and failed items. */
 export default function ActivityCard({
   ccPairId,
   run,
@@ -199,25 +232,37 @@ export default function ActivityCard({
     );
   const tRuns = useTranslations("admin.connector.runs");
   const active = isActive(run);
+  const superseded = closed && closedBySupersede(run);
+  const resolved = closed && !superseded;
+  const state = cardState(run, group, resolved);
   const style = GROUP_STYLE[group];
-  const StatusIcon = active ? IconLoader : style.icon;
+  const { icon: StatusIcon, stroke: statusStroke } = statusIcon(
+    state,
+    active,
+    group,
+    closed
+  );
   const IdentityIcon =
     connector === undefined
       ? RUN_KIND_ICONS[run.kind]
       : getSourceMetadata(connector.source).icon;
   const identity =
-    connector === undefined ? tRuns(`kinds.${run.kind}`) : connector.name;
+    connector === undefined
+      ? tRuns(`kinds.${runKindLabelKey(run)}`)
+      : connector.name;
   const minutes = runMinutes(run);
   const warnings = runWarnings(run);
   const trace = runTrace(run);
-  // The list holds open document errors, so only an index attempt with some lists its documents.
-  const openDocs =
-    run.kind === "indexing" ? run.attempt.open_doc_error_count : 0;
-  const listsDocs = openDocs > 0;
-  const resolvable = canResolve && listsDocs;
+  // The list holds every open error of an index attempt. Only its documents can be retried.
+  const indexing = run.kind === "indexing";
+  const openErrors = indexing ? run.attempt.open_error_count : 0;
+  const openDocs = indexing ? run.attempt.open_doc_error_count : 0;
+  const listsErrors = openErrors > 0;
+  const resolvable = canResolve && openDocs > 0;
+  // The viewer could resolve, but the connector cannot re-fetch single documents. The button stays, disabled, to say so.
+  const resolveUnsupported = openDocs > 0 && canResolveRuns && !canResolve;
   // A failed check run lists what failed instead of a stack trace.
   const listsChecks = run.kind === "checks" && warnings > 0;
-  const state = cardState(run, group, closed);
   // A run still going can fail again, so it is resolved once it ends.
   const resolvesRun = canResolveRuns && !closed && !active && group !== "other";
   const mutedColor = closed ? "text-02" : "text-03";
@@ -242,10 +287,15 @@ export default function ActivityCard({
       minutes,
     });
   }
-  // A closed card keeps the pill it had when open, only faded.
-  const docsLabel = t(`tags.${run.kind}`, {
-    count: listsDocs ? openDocs : warnings,
-  });
+  // A resolved card counts the items it resolved, whole entities included. A superseded one keeps the pill it had when open, only faded.
+  const docsLabel =
+    resolved && run.kind !== "checks"
+      ? t("tags.resolvedDocs", { count: warnings })
+      : !listsErrors
+        ? t(`tags.${run.kind}`, { count: warnings })
+        : openErrors > openDocs
+          ? t("tags.indexingItems", { count: openErrors })
+          : t("tags.indexing", { count: openDocs });
 
   const pillIconColor = closed ? undefined : "orange";
 
@@ -296,16 +346,7 @@ export default function ActivityCard({
               width="fit"
               height="fit"
             >
-              <StatusIcon
-                size={16}
-                className={
-                  active
-                    ? "stroke-status-info-05"
-                    : closed
-                      ? style.closedStroke
-                      : style.stroke
-                }
-              />
+              <StatusIcon size={16} className={statusStroke} />
             </Section>
             <Section
               alignItems="stretch"
@@ -327,25 +368,25 @@ export default function ActivityCard({
                 >
                   {formatDateTimeLog(run.time_created)}
                 </Text>
+                {/* The identity shrinks before the timestamp, so a long connector name truncates with its tooltip. */}
                 <Section
                   flexDirection="row"
+                  justifyContent="end"
                   alignItems="center"
                   gap={0.5}
                   padding={0.5}
-                  width="fit"
                   height="fit"
+                  className="min-w-0"
                 >
                   {run.kind === "indexing" && run.attempt.is_new_model && (
-                    <Tag
-                      title={tRuns("newModel.label")}
-                      tooltip={tRuns("newModel.tooltip")}
-                      color="purple"
-                    />
+                    <Tooltip tooltip={tRuns("newModel.tooltip")} side="top">
+                      <Tag title={tRuns("newModel.label")} color="purple" />
+                    </Tooltip>
                   )}
-                  <Text font="secondary-body" color={mutedColor} maxLines={1}>
+                  <OverflowText font="secondary-body" color={mutedColor}>
                     {identity}
-                  </Text>
-                  <IdentityIcon size={12} className="stroke-text-02" />
+                  </OverflowText>
+                  <IdentityIcon size={12} className="shrink-0 stroke-text-02" />
                 </Section>
               </Section>
               <Section alignItems="stretch" gap={0} padding={0.5} height="fit">
@@ -388,10 +429,9 @@ export default function ActivityCard({
                 {trace !== null && (
                   <Popover onOpenChange={togglePopover("trace")}>
                     <Popover.Trigger asChild>
-                      <Tag
+                      <Chip
                         icon={SvgTextLines}
                         title={t("tags.stackTrace")}
-                        size="md"
                         onClick={NOOP}
                       />
                     </Popover.Trigger>
@@ -403,15 +443,14 @@ export default function ActivityCard({
                     />
                   </Popover>
                 )}
-                {listsDocs ? (
+                {listsErrors ? (
                   <>
                     <Popover onOpenChange={togglePopover("items")}>
                       <Popover.Trigger asChild>
-                        <Tag
+                        <Chip
                           icon={WARNING_ICONS.indexing}
                           iconColor={pillIconColor}
                           title={docsLabel}
-                          size="md"
                           onClick={NOOP}
                         />
                       </Popover.Trigger>
@@ -426,27 +465,30 @@ export default function ActivityCard({
                       />
                     </Popover>
                     {/* One click re-indexes every open failed document, without opening the list. */}
-                    {resolvable && !closed && (
+                    {(resolvable || resolveUnsupported) && !closed && (
                       <Button
-                        rightIcon={SvgCheckAll}
+                        rightIcon={SvgRefreshCw}
                         prominence="tertiary"
                         size="xs"
-                        disabled={resolving}
-                        tooltip={t("docs.resolveAllTooltip")}
+                        disabled={resolving || resolveUnsupported}
+                        tooltip={t(
+                          resolveUnsupported
+                            ? "docs.resolveAllUnsupported"
+                            : "docs.resolveAllTooltip"
+                        )}
                         onClick={() => onResolve(null)}
                       >
-                        {t("docs.resolveAll")}
+                        {t("docs.retry", { count: openDocs })}
                       </Button>
                     )}
                   </>
                 ) : run.kind === "checks" && listsChecks ? (
                   <Popover onOpenChange={togglePopover("items")}>
                     <Popover.Trigger asChild>
-                      <Tag
+                      <Chip
                         icon={WARNING_ICONS.checks}
                         iconColor={pillIconColor}
                         title={docsLabel}
-                        size="md"
                         onClick={NOOP}
                       />
                     </Popover.Trigger>
@@ -458,11 +500,10 @@ export default function ActivityCard({
                   </Popover>
                 ) : (
                   warnings > 0 && (
-                    <Tag
+                    <Chip
                       icon={WARNING_ICONS[run.kind]}
                       iconColor={pillIconColor}
                       title={docsLabel}
-                      size="md"
                     />
                   )
                 )}
@@ -471,10 +512,10 @@ export default function ActivityCard({
                 <SelectButton
                   variant="select-heavy"
                   state="selected"
-                  rightIcon={SvgCheckSquare}
+                  rightIcon={superseded ? SvgHistory : SvgCheckSquare}
                   size="xs"
                 >
-                  {t("tags.resolved")}
+                  {t(superseded ? "tags.superseded" : "tags.resolved")}
                 </SelectButton>
               ) : (
                 resolvesRun && (

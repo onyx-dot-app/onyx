@@ -575,8 +575,7 @@ class TestHubSpotConnector:
 
         with (
             patch.object(connector, "_list_all_records", return_value=iter([ticket])),
-            patch.object(connector, "_get_associated_objects", return_value=[]),
-            patch.object(connector, "_get_associated_notes", return_value=[]),
+            patch.object(connector, "_linked_records", return_value={}),
         ):
             # This should not raise a validation error
             document_batches = connector.load_from_state()

@@ -1,7 +1,5 @@
-"""Coverage for the indexing status page's connector list: a pair's bucket
-follows its own state before its latest attempt, the list sorts by bucket then
-name, the search narrows the list and the counts while the status filter
-narrows only the list, and a queued attempt knows its place in line."""
+"""Coverage for the indexing status page's connector list: buckets, sort, search,
+filter and queue place, and the row's open error count, whole entities included."""
 
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
@@ -10,12 +8,20 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
+from onyx.db.cc_pair_run_resolution import resolve_runs__no_commit
 from onyx.db.enums import (
     AccessType,
+    CCPairRunKind,
     ConnectorCredentialPairStatus,
     IndexingStatus,
 )
-from onyx.db.models import Connector, ConnectorCredentialPair, Credential, IndexAttempt
+from onyx.db.models import (
+    Connector,
+    ConnectorCredentialPair,
+    Credential,
+    IndexAttempt,
+    IndexAttemptError,
+)
 from onyx.db.search_settings import get_current_search_settings
 from onyx.server.documents.index_monitoring import get_indexing_connectors
 from onyx.server.documents.models import (
@@ -159,6 +165,7 @@ def test_pairs_sort_by_bucket_then_source_then_name_and_the_filter_keeps_the_cou
         IndexingConnectorStatus.INDEXING: 1,
         IndexingConnectorStatus.FAILED: 1,
         IndexingConnectorStatus.PAUSED: 1,
+        IndexingConnectorStatus.DELETING: 0,
         IndexingConnectorStatus.SCHEDULED: 2,
         IndexingConnectorStatus.INDEXED: 3,
     }
@@ -178,6 +185,36 @@ def test_pairs_sort_by_bucket_then_source_then_name_and_the_filter_keeps_the_cou
         indexed_b.name,
     ]
     assert filtered.total_items == 3
+    assert filtered.status_counts == response.status_counts
+
+
+def test_a_deleting_pair_has_its_own_bucket_and_an_invalid_one_reads_failed(
+    db_session: Session,
+) -> None:
+    now = datetime.now(timezone.utc)
+    prefix = _prefix()
+    deleting = _create_cc_pair(
+        db_session, prefix, "deleting", ConnectorCredentialPairStatus.DELETING
+    )
+    invalid = _create_cc_pair(
+        db_session, prefix, "invalid", ConnectorCredentialPairStatus.INVALID
+    )
+    # A failed last run does not pull a deleting pair into the failed bucket.
+    _index_attempt(db_session, deleting, IndexingStatus.FAILED, now)
+
+    response = _connectors(db_session, prefix)
+
+    statuses = {row.name: row.status for row in response.items}
+    assert statuses == {
+        deleting.name: IndexingConnectorStatus.DELETING,
+        invalid.name: IndexingConnectorStatus.FAILED,
+    }
+    assert response.status_counts[IndexingConnectorStatus.DELETING] == 1
+    assert response.status_counts[IndexingConnectorStatus.FAILED] == 1
+
+    filtered = _connectors(db_session, prefix, status=IndexingConnectorStatus.DELETING)
+
+    assert [row.name for row in filtered.items] == [deleting.name]
     assert filtered.status_counts == response.status_counts
 
 
@@ -247,3 +284,39 @@ def test_a_queued_attempt_knows_its_place_in_line(db_session: Session) -> None:
     assert second_position is not None
     # Other pairs may be queued ahead, so only the order between these two holds.
     assert first_position < second_position
+
+
+def test_a_rows_open_error_count_includes_whole_entity_failures(
+    db_session: Session,
+) -> None:
+    now = datetime.now(timezone.utc)
+    prefix = _prefix()
+    entity_only = _create_cc_pair(db_session, prefix, "a entity only")
+    resolved = _create_cc_pair(db_session, prefix, "b resolved")
+    for cc_pair in (entity_only, resolved):
+        attempt = _index_attempt(
+            db_session, cc_pair, IndexingStatus.COMPLETED_WITH_ERRORS, now
+        )
+        # A whole mailbox failed, so the error names no document.
+        db_session.add(
+            IndexAttemptError(
+                index_attempt_id=attempt.id,
+                connector_credential_pair_id=cc_pair.id,
+                entity_id="mailbox-1",
+                failure_message="mailbox unreadable",
+                is_resolved=False,
+            )
+        )
+        db_session.commit()
+    resolve_runs__no_commit(
+        db_session, {(CCPairRunKind.INDEXING, attempt.id): resolved.id}, None
+    )
+    db_session.commit()
+
+    rows = {row.name: row for row in _connectors(db_session, prefix).items}
+
+    assert rows[entity_only.name].open_error_count == 1
+    latest = rows[entity_only.name].latest_index_attempt
+    assert latest is not None
+    assert latest.open_doc_error_count == 0
+    assert rows[resolved.name].open_error_count == 0

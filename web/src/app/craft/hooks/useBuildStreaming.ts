@@ -836,7 +836,7 @@ export function useBuildStreaming({
           }
 
           case "approval_requested": {
-            void globalMutate(SWR_KEYS.buildSessionLiveApprovals(sessionId));
+            void globalMutate(SWR_KEYS.buildSessionApprovals(sessionId));
             break;
           }
 
@@ -844,6 +844,13 @@ export function useBuildStreaming({
             // The `connect_app` tool is parked server-side; render the card
             // inline so resolving it can unblock the tool.
             if (!parsed.requestId) break;
+            if (
+              useBuildSessionStore
+                .getState()
+                .sessions.get(sessionId)
+                ?.streamItems.some((item) => item.id === parsed.requestId)
+            )
+              break;
             appendStreamItem(sessionId, {
               type: "connect_app_request",
               id: parsed.requestId,

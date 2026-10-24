@@ -3,6 +3,7 @@
 import { useMemo, type ReactNode } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { OpalStringsProvider, type OpalStrings } from "@opal/strings";
+import { getCurrencyParts } from "@opal/components";
 import { createLocaleIntegerParser } from "@/i18n/numbers";
 
 interface OpalStringsBridgeProps {
@@ -54,6 +55,7 @@ export default function OpalStringsBridge({
       remove: t("common.remove"),
       removeItem: (title) => t("common.removeItem", { title }),
       showFullMessage: t("common.showFullMessage"),
+      toastMoreCount: (count) => t("toast.moreCount", { count }),
       selectAnOption: t("common.selectAnOption"),
       openCalendar: t("common.openCalendar"),
       month: t("input.month"),
@@ -73,6 +75,8 @@ export default function OpalStringsBridge({
         t("collapsible.foldSection", { title }),
       collapsibleExpandSection: (title) =>
         t("collapsible.expandSection", { title }),
+      sidebarOpen: t("sidebar.open"),
+      sidebarClose: t("sidebar.close"),
       dividerViewAll: t("divider.viewAll"),
       contentOptional: t("common.optional"),
       previousPage: t("pagination.previousPage"),
@@ -126,11 +130,21 @@ export default function OpalStringsBridge({
       keyValueGroup: (keyTitle, valueTitle) =>
         t("keyValue.group", { keyTitle, valueTitle }),
       keyValueInput: (label, index) => t("keyValue.input", { label, index }),
+      inputNumberOutOfRange: (min, max) =>
+        min !== undefined && max !== undefined
+          ? t("inputNumber.outOfRange", { min, max })
+          : min !== undefined
+            ? t("inputNumber.belowMin", { min })
+            : t("inputNumber.aboveMax", { max: max ?? 0 }),
       keyValuePairFallback: t("keyValue.pairFallback"),
       keyValueRemovePair: (label, index) =>
         t("keyValue.removePair", { label, index }),
       formatNumber: (value) => digits.format(value),
       parseNumber: createLocaleIntegerParser(digits),
+      inputCurrencyAmount: t("inputCurrency.amount"),
+      inputCurrencyWhole: t("inputCurrency.whole"),
+      inputCurrencyFraction: t("inputCurrency.fraction"),
+      inputCurrencyParts: (currency) => getCurrencyParts(locale, currency),
       showing: (range, total) =>
         t.rich("table.showing", { range: () => range, total: () => total }),
       rangeOfTotal: (range, total) =>

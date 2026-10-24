@@ -1,4 +1,6 @@
-import type { ScheduledRunContextResponse } from "@/app/craft/v1/tasks/interfaces";
+import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
+import { parseErrorDetail } from "@/lib/fetcher";
+import type { ScheduledRunContextResponse } from "@/app/craft/v1/tasks/types";
 import { downloadFile } from "@/lib/download";
 import { FetchError } from "@/lib/fetcher";
 import {
@@ -21,9 +23,8 @@ import {
   type OutputCard,
 } from "@/app/craft/types/streamingTypes";
 import {
-  ApprovalListResponse,
-  ApprovalSubmitDecision,
   ApprovalView,
+  ApprovalSubmitDecision,
 } from "@/app/craft/types/approvals";
 import {
   RATE_LIMITED_ERROR_CODE,
@@ -1010,20 +1011,6 @@ export async function fetchPptxPreview(
 // Approvals API
 // =============================================================================
 
-export async function fetchLiveApprovals(
-  sessionId: string
-): Promise<ApprovalListResponse> {
-  const res = await fetch(
-    `${BUILD_API_BASE}/approvals/sessions/${sessionId}/live`
-  );
-
-  if (!res.ok) {
-    throw new Error(`Failed to fetch live approvals: ${res.status}`);
-  }
-
-  return res.json();
-}
-
 // Lets the approval card distinguish "already resolved" from a generic
 // network error so both can flow through the same SWR revalidation
 // while keeping logs clean.
@@ -1057,29 +1044,6 @@ export async function postApprovalDecision(
     const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
     throw new Error(
       errorData.detail || `Failed to post approval decision: ${res.status}`
-    );
-  }
-  return res.json();
-}
-
-export async function postApprovalSessionGrant(
-  approvalId: string
-): Promise<ApprovalView> {
-  const res = await fetch(
-    `${BUILD_API_BASE}/approvals/${approvalId}/session-grant`,
-    {
-      method: "POST",
-    }
-  );
-
-  if (res.status === 409) {
-    const body: ErrorResponseBody = await res.json().catch(() => ({}));
-    throw new ApprovalConflictError(body.detail ?? "decision conflict");
-  }
-  if (!res.ok) {
-    const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
-    throw new Error(
-      errorData.detail || `Failed to approve for session: ${res.status}`
     );
   }
   return res.json();
@@ -1203,4 +1167,57 @@ export async function deleteLibraryFile(documentId: string): Promise<void> {
       errorData
     );
   }
+}
+
+export async function saveAppActionPolicies(
+  appId: number,
+  actionPolicies: Record<string, ActionPolicy>,
+  errorMessage: string
+): Promise<void> {
+  const response = await fetch(`/api/build/action-policies/${appId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action_policies: actionPolicies,
+    }),
+  });
+  if (!response.ok)
+    throw new Error(await parseErrorDetail(response, errorMessage));
+}
+
+/** Mint a folder-scoped URL; the isolated frame never receives login credentials. */
+export async function createStaticPreview(
+  sessionId: string,
+  path: string,
+  renewToken?: string
+): Promise<{ url: string; expiresAt: number; token: string }> {
+  const encodedPath = path.split("/").map(encodeURIComponent).join("/");
+  const response = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/static-preview/${encodedPath}${renewToken ? `?renew_token=${encodeURIComponent(renewToken)}` : ""}`,
+    {
+      method: "POST",
+      cache: "no-store",
+    }
+  );
+  if (!response.ok)
+    throw new FetchError("Failed to load HTML preview", response.status, null);
+  const result: unknown = await response.json();
+  if (
+    !result ||
+    typeof result !== "object" ||
+    !("path" in result) ||
+    typeof result.path !== "string" ||
+    !/^[\w-]{43}\/[^/]+$/.test(result.path) ||
+    !("expires_in" in result) ||
+    typeof result.expires_in !== "number" ||
+    !Number.isFinite(result.expires_in) ||
+    result.expires_in <= 60
+  ) {
+    throw new Error("Invalid HTML preview response");
+  }
+  return {
+    url: `${BUILD_API_BASE}/static-preview/${result.path}`,
+    expiresAt: Date.now() + result.expires_in * 1000,
+    token: result.path.split("/")[0]!,
+  };
 }

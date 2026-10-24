@@ -64,7 +64,7 @@ func (r *llmProviderDefaultResource) Schema(_ context.Context, _ resource.Schema
 			},
 			"model_name": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "Model name within that provider, e.g. `gpt-5-mini`. Must be one of its visible `model_configurations`.",
+				MarkdownDescription: "Model name within that provider, e.g. `gpt-6-luna`. Must be one of its visible `model_configurations`.",
 			},
 			"vision_provider_id": schema.StringAttribute{
 				Optional:            true,

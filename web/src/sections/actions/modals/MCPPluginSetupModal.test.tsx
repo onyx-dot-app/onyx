@@ -200,29 +200,36 @@ beforeEach(() => {
         body: init.body ? JSON.parse(String(init.body)) : undefined,
       });
     if (
-      path === "/api/admin/default-assistant" ||
+      path === "/api/admin/default-assistant/tools" ||
       path === "/api/admin/default-assistant/configuration"
     )
       return defaultChatFails
         ? json({ detail: "Chat configuration unavailable" }, 503)
         : json({ tool_ids: [], available_tools: [] });
-    if (path === "/api/admin/mcp/server" || path === "/api/admin/mcp/server/7")
+    if (path === "/api/admin/mcp/setup") {
+      if (oauthResponse) return oauthResponse;
+      if (defaultChatFails)
+        return json({ detail: "Chat configuration unavailable" }, 503);
+      if (toolsResponse) {
+        const response = await toolsResponse;
+        if (!response.ok) return response;
+      }
+      if (toolsFail) return json({ detail: "Tool listing failed" }, 502);
       return json({
-        id: 7,
-        name: "Analytics MCP",
-        server_url: "https://example.com/mcp",
-        owner: "admin@example.com",
-        status: MCPServerStatus.CREATED,
-        is_public: true,
-        groups: [],
-        users: [],
-        tool_count: 0,
+        status: "connected",
+        server: {
+          id: 7,
+          name: "Analytics MCP",
+          server_url: "https://example.com/mcp",
+          owner: "admin@example.com",
+          status: MCPServerStatus.CONNECTED,
+          is_public: true,
+          groups: [],
+          users: [],
+          tool_count: 1,
+        },
       });
-    if (path === "/api/admin/mcp/servers/create") return json({ server_id: 7 });
-    if (path === "/api/admin/mcp/oauth/connect")
-      return (
-        oauthResponse ?? json({ status: "already_authenticated", server_id: 7 })
-      );
+    }
     if (path === "/api/admin/mcp/servers") return json({ mcp_servers: [] });
     if (
       path === SWR_KEYS.mcpServers ||
@@ -230,16 +237,15 @@ beforeEach(() => {
       path === SWR_KEYS.agentMcpServers(1)
     )
       return json({ mcp_servers: [] });
-    if (path.includes("/status?")) return json({});
-    if (path.includes("/tools/snapshots?source=mcp"))
-      return (
-        toolsResponse ??
-        (toolsFail ? json({ detail: "Tool listing failed" }, 502) : json([]))
-      );
     throw new Error(`Unexpected request ${path}`);
   });
 });
-afterEach(() => jest.restoreAllMocks());
+afterEach(() => {
+  expect(writes.every((write) => write.path === "/api/admin/mcp/setup")).toBe(
+    true
+  );
+  jest.restoreAllMocks();
+});
 
 async function enterUrl(url = "https://example.com/mcp") {
   const input = await screen.findByRole("textbox", { name: /^MCP Server URL/ });
@@ -269,16 +275,52 @@ test.each([true, false])(
     await setupUser().click(screen.getByRole("button", { name: copy.connect }));
     await waitFor(() => expect(mockCompleted).toHaveBeenCalled());
     expect(
-      writes.find((write) => write.path === "/api/admin/default-assistant")
-        ?.body
-    ).toEqual({ tool_ids: [81] });
+      writes.find((write) => write.path === "/api/admin/mcp/setup")?.body
+    ).toEqual(expect.objectContaining({ enable_chat: true }));
     expect(
-      writes.find((write) => write.path === "/api/admin/mcp/server")?.body
+      writes.find((write) => write.path === "/api/admin/mcp/setup")?.body
     ).toEqual(expect.objectContaining({ available_in_craft: available }));
   }
 );
 
-test("first OAuth setup carries the Chat enable intent and enables after already-authenticated discovery", async () => {
+test.each([false, true])(
+  "setup preserves opted-out surfaces through OAuth=%s",
+  async (oauth) => {
+    craftAvailable = true;
+    if (oauth) probeResponse = async () => oauthResult;
+    toolsResponse = Promise.resolve(new Response(JSON.stringify([{ id: 81 }])));
+    render(<SetupModal />);
+    const user = setupUser();
+    await user.click(
+      await screen.findByRole("switch", { name: "Enable in default Chat" })
+    );
+    await user.click(screen.getByRole("switch", { name: "Enable for Craft" }));
+    await openConnection();
+    expect(
+      screen.queryByRole("switch", { name: "Enable for Craft" })
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: copy.connect }));
+    await waitFor(() => expect(mockCompleted).toHaveBeenCalled());
+    expect(
+      writes.find(
+        (write) => write.path === "/api/admin/default-assistant/tools"
+      )
+    ).toBeUndefined();
+    expect(
+      writes.find((write) => write.path === "/api/admin/mcp/setup")?.body
+    ).toEqual(expect.objectContaining({ available_in_craft: false }));
+    if (oauth)
+      expect(
+        writes.find((write) => write.path === "/api/admin/mcp/setup")?.body
+      ).toEqual(
+        expect.objectContaining({
+          enable_chat: false,
+        })
+      );
+  }
+);
+
+test("first OAuth setup sends Chat availability with the staged request", async () => {
   probeResponse = async () => oauthResult;
   toolsResponse = Promise.resolve(new Response(JSON.stringify([{ id: 81 }])));
   render(<SetupModal />);
@@ -286,18 +328,16 @@ test("first OAuth setup carries the Chat enable intent and enables after already
   await setupUser().click(screen.getByRole("button", { name: copy.connect }));
   await waitFor(() => expect(mockCompleted).toHaveBeenCalled());
   expect(
-    writes.find((write) => write.path === "/api/admin/mcp/oauth/connect")?.body
+    writes.find((write) => write.path === "/api/admin/mcp/setup")?.body
   ).toEqual(
     expect.objectContaining({
-      server_id: 7,
-      return_path: expect.stringMatching(
-        /^\/admin\/plugins\/mcp\/7\?trigger_fetch=true&enable_chat=true&enable_chat_intent=[0-9a-f-]+$/
-      ),
+      enable_chat: true,
+      auth_type: "OAUTH",
     })
   );
   expect(
-    writes.find((write) => write.path === "/api/admin/default-assistant")?.body
-  ).toEqual({ tool_ids: [81] });
+    writes.find((write) => write.path === "/api/admin/mcp/setup")?.body
+  ).toEqual(expect.objectContaining({ enable_chat: true }));
 });
 
 test("personal API-key setup keeps the admin's credential personal while enabling Chat", async () => {
@@ -318,7 +358,7 @@ test("personal API-key setup keeps the admin's credential personal while enablin
   await user.click(screen.getByRole("button", { name: copy.connect }));
   await waitFor(() => expect(mockCompleted).toHaveBeenCalled());
   expect(
-    writes.find((write) => write.path === "/api/admin/mcp/servers/create")?.body
+    writes.find((write) => write.path === "/api/admin/mcp/setup")?.body
   ).toEqual(
     expect.objectContaining({
       auth_performer: "PER_USER",
@@ -326,8 +366,8 @@ test("personal API-key setup keeps the admin's credential personal while enablin
     })
   );
   expect(
-    writes.find((write) => write.path === "/api/admin/default-assistant")?.body
-  ).toEqual({ tool_ids: [81] });
+    writes.find((write) => write.path === "/api/admin/mcp/setup")?.body
+  ).toEqual(expect.objectContaining({ enable_chat: true }));
 });
 
 test("a rejected Chat enable remains an actionable setup error, not success", async () => {
@@ -335,10 +375,7 @@ test("a rejected Chat enable remains an actionable setup error, not success", as
   jest.spyOn(console, "error").mockImplementation(() => undefined);
   const fetchSetup = jest.mocked(global.fetch).getMockImplementation();
   jest.mocked(global.fetch).mockImplementation(async (input, init) => {
-    if (
-      String(input) === "/api/admin/default-assistant" &&
-      init?.method === "PATCH"
-    )
+    if (String(input) === "/api/admin/mcp/setup" && init?.method === "POST")
       return new Response(JSON.stringify({ detail: "Enable failed" }), {
         status: 503,
       });
@@ -362,7 +399,7 @@ test("failed discovery never enables Chat or completes setup", async () => {
     "Tool listing failed"
   );
   expect(
-    writes.some((write) => write.path === "/api/admin/default-assistant")
+    writes.some((write) => write.path === "/api/admin/default-assistant/tools")
   ).toBe(false);
   expect(mockCompleted).not.toHaveBeenCalled();
 });
@@ -453,7 +490,7 @@ test("missing Chat configuration cannot silently complete first setup", async ()
   expect(await screen.findByRole("alert")).toBeVisible();
   expect(mockCompleted).not.toHaveBeenCalled();
   expect(
-    writes.some((write) => write.path === "/api/admin/default-assistant")
+    writes.some((write) => write.path === "/api/admin/default-assistant/tools")
   ).toBe(false);
 });
 
@@ -461,19 +498,41 @@ test("starts with name and URL fields and shows detection before Continue withou
   const pending = deferred<MCPSetupProbeResult>();
   probeResponse = () => pending.promise;
   render(<SetupModal />);
+  await waitFor(() =>
+    expect(screen.getByRole("textbox", { name: "Server Name" })).toHaveFocus()
+  );
+  for (const label of [
+    messages.actions.mcpAuthModal.authType.label,
+    messages.actions.mcpAuthModal.transport.label,
+  ]) {
+    const row = (await screen.findByText(label)).closest("[data-stage]");
+    expect(row).toBeVisible();
+    expect(row).toHaveAttribute("data-state", "idle");
+  }
+  expect(probeUrls).toEqual([]);
   await enterUrl();
   expect(screen.getAllByRole("textbox")).toHaveLength(2);
-  expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("combobox", {
+      name: messages.actions.mcpAuthModal.authType.label,
+    })
+  ).not.toBeInTheDocument();
   expect(screen.queryByRole("tab")).not.toBeInTheDocument();
-  await screen.findByRole("status", {}, { timeout: 3000 });
-  expect(screen.getByText(copy.contactingServer)).toBeVisible();
+  await waitFor(() => expect(probeUrls).toHaveLength(1), { timeout: 3000 });
+  expect(
+    screen.getByText(messages.actions.mcpAuthModal.transport.label)
+  ).toBeVisible();
   expect(screen.getByRole("button", { name: copy.continue })).toBeDisabled();
   expect(
-    screen.getByText(copy.contactingServer).closest("[data-stage]")
+    screen
+      .getByText(messages.actions.mcpAuthModal.transport.label)
+      .closest("[data-stage]")
   ).toHaveAttribute("data-state", "pending");
   expect(
-    screen.getByText(copy.detectingAuthentication).closest("[data-stage]")
-  ).toHaveAttribute("data-state", "waiting");
+    screen
+      .getByText(messages.actions.mcpAuthModal.authType.label)
+      .closest("[data-stage]")
+  ).toHaveAttribute("data-state", "pending");
   await act(async () => pending.resolve(publicResult));
   expect(await screen.findByText(copy.publicDetected)).toBeVisible();
   expect(
@@ -587,8 +646,7 @@ test("closing the session aborts its pending probe", async () => {
   probeResponse = () => pending.promise;
   const view = render(<SetupModal />);
   await enterUrl();
-  await screen.findByRole("status", {}, { timeout: 3000 });
-  expect(probeSignals).toHaveLength(1);
+  await waitFor(() => expect(probeSignals).toHaveLength(1), { timeout: 3000 });
   view.rerender(
     <MCPPluginSetupModal
       open={false}
@@ -656,7 +714,7 @@ test("OAuth saves and failures never add an unload guard", async () => {
   await user.click(screen.getByRole("button", { name: copy.connect }));
   await waitFor(() =>
     expect(writes).toContainEqual(
-      expect.objectContaining({ path: "/api/admin/mcp/oauth/connect" })
+      expect.objectContaining({ path: "/api/admin/mcp/setup" })
     )
   );
   const savedUnload = new Event("beforeunload", { cancelable: true });
@@ -684,8 +742,31 @@ test("debounces URL edits and discards a stale probe", async () => {
   probeResponse = (url) =>
     url.includes("first") ? stale.promise : Promise.resolve(oauthResult);
   render(<SetupModal />);
-  const input = await enterUrl("https://first.example.com/mcp");
-  await screen.findByRole("status", {}, { timeout: 3000 });
+  const input = await enterUrl("https://discarded.example.com/mcp");
+  expect(probeUrls).toEqual([]);
+  expect(
+    screen
+      .getByText(messages.actions.mcpAuthModal.authType.label)
+      .closest("[data-stage]")
+  ).toHaveAttribute("data-state", "idle");
+  fireEvent.change(input, {
+    target: { value: "https://first.example.com/mcp" },
+  });
+  await waitFor(
+    () => expect(probeUrls).toEqual(["https://first.example.com/mcp"]),
+    { timeout: 3000 }
+  );
+  fireEvent.change(input, { target: { value: "" } });
+  for (const label of [
+    messages.actions.mcpAuthModal.authType.label,
+    messages.actions.mcpAuthModal.transport.label,
+  ]) {
+    expect(screen.getByText(label).closest("[data-stage]")).toHaveAttribute(
+      "data-state",
+      "idle"
+    );
+  }
+  expect(probeSignals[0]?.aborted).toBe(true);
   fireEvent.change(input, {
     target: { value: "https://second.example.com/mcp" },
   });
@@ -737,6 +818,31 @@ test("Back preserves connection credentials and final details without saving", a
   expect(writes).toEqual([]);
 });
 
+test("Back does not move focus after the user starts editing the URL", async () => {
+  probeResponse = async () => oauthResult;
+  render(<SetupModal />);
+  await openConnection();
+  const frames: FrameRequestCallback[] = [];
+  const requestFrame = jest
+    .spyOn(window, "requestAnimationFrame")
+    .mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+  try {
+    fireEvent.click(screen.getByRole("button", { name: copy.back }));
+    const input = screen.getByRole("textbox", { name: /^MCP Server URL/ });
+    input.focus();
+    act(() => frames.forEach((callback) => callback(0)));
+    expect(input).toHaveFocus();
+    expect(
+      screen.getByRole("textbox", { name: /^MCP Server URL/ })
+    ).toHaveValue("https://example.com/mcp");
+  } finally {
+    requestFrame.mockRestore();
+  }
+});
+
 test("returning to the URL preserves credentials until the endpoint changes", async () => {
   probeResponse = async () => oauthResult;
   render(<SetupModal />);
@@ -750,9 +856,7 @@ test("returning to the URL preserves credentials until the endpoint changes", as
   });
   await user.click(screen.getByRole("button", { name: copy.back }));
   await waitFor(() =>
-    expect(
-      screen.getByRole("textbox", { name: /^MCP Server URL/ })
-    ).toHaveFocus()
+    expect(screen.getByRole("textbox", { name: "Server Name" })).toHaveFocus()
   );
   await user.click(screen.getByRole("button", { name: copy.continue }));
   expect(screen.getByRole("textbox", { name: /^Client ID/ })).toHaveValue(
@@ -810,30 +914,32 @@ test("Back retains an explicit OAuth setup choice and a changed endpoint resets 
   expect(writes).toEqual([]);
 });
 
-test("Connect creates a scoped server once and a failed tool retry updates the same server", async () => {
+test("failed scoped setup retries with the edited draft without creating a partial server", async () => {
   authority(true);
   toolsFail = true;
   jest.spyOn(console, "error").mockImplementation(() => undefined);
   render(<SetupModal />);
-  await openDetails();
+  await enterUrl();
+  await screen.findByText(copy.publicDetected, {}, { timeout: 3000 });
   const user = setupUser();
   expect(
     screen.queryByRole("option", { name: /^Public/ })
   ).not.toBeInTheDocument();
-  const connect = screen.getByRole("button", { name: copy.connect });
-  expect(connect).toBeDisabled();
+  expect(screen.getByRole("button", { name: copy.continue })).toBeDisabled();
   const groups = screen.getByPlaceholderText("Add user groups");
   await user.click(groups);
   expect(groups).toHaveFocus();
   await screen.findByRole("option", { name: /^Engineering/ });
   await user.keyboard("{ArrowDown}{Enter}");
+  await openConnection();
+  const connect = screen.getByRole("button", { name: copy.connect });
   await waitFor(() => expect(connect).toBeEnabled());
   await user.click(connect);
   expect(await screen.findByRole("alert")).toHaveTextContent(
     "Tool listing failed"
   );
   expect(
-    writes.find((write) => write.path === "/api/admin/mcp/server")?.body
+    writes.find((write) => write.path === "/api/admin/mcp/setup")?.body
   ).toEqual(
     expect.objectContaining({ is_public: false, groups: [1], users: [] })
   );
@@ -849,10 +955,10 @@ test("Connect creates a scoped server once and a failed tool retry updates the s
     )
   );
   expect(
-    writes.filter((write) => write.path === "/api/admin/mcp/server")
-  ).toHaveLength(1);
+    writes.filter((write) => write.path === "/api/admin/mcp/setup")
+  ).toHaveLength(2);
   expect(
-    writes.find((write) => write.path === "/api/admin/mcp/server/7")?.body
+    writes.filter((write) => write.path === "/api/admin/mcp/setup")[1]?.body
   ).toEqual(
     expect.objectContaining({
       name: "Updated analytics",
@@ -869,6 +975,15 @@ test.each(["blocked", "connection_failed"] as const)(
     render(<SetupModal />);
     await enterUrl();
     await screen.findByRole("alert", {}, { timeout: 3000 });
+    for (const label of [
+      messages.actions.mcpAuthModal.authType.label,
+      messages.actions.mcpAuthModal.transport.label,
+    ]) {
+      expect(screen.getByText(label).closest("[data-stage]")).toHaveAttribute(
+        "data-state",
+        "error"
+      );
+    }
     expect(screen.getByRole("button", { name: copy.continue })).toBeDisabled();
     if (reason === "blocked")
       expect(
@@ -891,6 +1006,34 @@ test.each(["blocked", "connection_failed"] as const)(
     expect(writes).toEqual([]);
   }
 );
+
+test("manual setup waits for a scoped manager to select access groups", async () => {
+  authority(true);
+  probeResponse = async () => ({
+    kind: "unreachable",
+    reason: "connection_failed",
+  });
+  render(<SetupModal />);
+  await enterUrl();
+  const manual = await screen.findByRole(
+    "button",
+    { name: copy.configureManually },
+    { timeout: 3000 }
+  );
+  expect(manual).toBeDisabled();
+  const user = setupUser();
+  await user.click(screen.getByPlaceholderText("Add user groups"));
+  await screen.findByRole("option", { name: /^Engineering/ });
+  await user.keyboard("{ArrowDown}{Enter}");
+  expect(manual).toBeEnabled();
+  await user.click(manual);
+  expect(
+    screen.getByRole("combobox", {
+      name: messages.actions.mcpAuthModal.authType.label,
+    })
+  ).toBeVisible();
+  expect(writes).toEqual([]);
+});
 
 test("denied users cannot probe or configure a server", async () => {
   authority(false, true);
@@ -955,7 +1098,7 @@ test("unknown authentication needs an explicit choice before Connect can save", 
     )
   );
   expect(
-    writes.find((write) => write.path === "/api/admin/mcp/servers/create")?.body
+    writes.find((write) => write.path === "/api/admin/mcp/setup")?.body
   ).toEqual(expect.objectContaining({ auth_type: "NONE" }));
 });
 
@@ -1071,16 +1214,15 @@ test("invalid manual OAuth JSON causes no writes and a corrected retry creates o
     )
   );
   expect(
-    writes.filter((write) => write.path === "/api/admin/mcp/server")
+    writes.filter((write) => write.path === "/api/admin/mcp/setup")
   ).toHaveLength(1);
   expect(
-    writes.filter((write) => write.path === "/api/admin/mcp/servers/create")
+    writes.filter((write) => write.path === "/api/admin/mcp/setup")
   ).toEqual([
     {
-      path: "/api/admin/mcp/servers/create",
+      path: "/api/admin/mcp/setup",
       method: "POST",
       body: expect.objectContaining({
-        existing_server_id: 7,
         oauth_client_id: "manual-client",
         oauth_additional_auth_params: { prompt: "consent" },
       }),

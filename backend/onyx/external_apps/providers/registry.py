@@ -1,4 +1,4 @@
-from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.enums import ActionPolicy, ExternalAppType
 from onyx.db.models import ExternalApp
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -140,67 +140,22 @@ def withheld_on_cloud(app_type: ExternalAppType) -> list[EndpointSpec]:
     return [e for e in catalog if e.requires_self_hosted_scope]
 
 
-def effective_policy(
-    endpoint: EndpointSpec,
-    stored: dict[str, EndpointPolicy],
-) -> EndpointPolicy:
-    """Policy in force for ``endpoint``: the admin's stored override, else the
-    catalog's curated default. Shared by the runtime gate (``recognize_actions``) and
-    the FE view (``action_policy_views``) so they never diverge — notably during
-    catalog drift, when a newly-shipped endpoint has no stored row yet."""
-    return stored.get(endpoint.id, endpoint.default_policy)
-
-
-def validate_action_policies(
-    app_type: ExternalAppType,
-    policies: dict[str, EndpointPolicy],
-) -> dict[str, EndpointPolicy]:
-    """Validate admin-submitted ``{action_id: policy}`` against the provider
-    catalog: reject any id that doesn't exist for this ``app_type``. Returns the
-    validated map unchanged."""
-    valid_ids = {endpoint.id for endpoint in get_endpoint_catalog(app_type)}
-    for action_id in policies:
-        if action_id not in valid_ids:
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                f"Unknown action '{action_id}' for app type {app_type.value}.",
-            )
-    return policies
-
-
-def resolve_action_overrides(
-    app_type: ExternalAppType,
-    requested: dict[str, EndpointPolicy] | None,
-    existing: dict[str, EndpointPolicy],
-) -> dict[str, EndpointPolicy]:
-    """The per-action overrides to persist: the admin's validated picks merged
-    over existing overrides, with any entry equal to the catalog default — or
-    naming an endpoint no longer in the catalog — pruned out.
-
-    Catalog defaults are never materialized into rows: an action with no row
-    resolves to its ``default_policy`` at read time (``effective_policy``), so
-    new or re-defaulted catalog endpoints propagate to every tenant with no
-    migration. ``requested is None`` leaves existing overrides untouched (still
-    re-pruned against the current catalog, so materialized rows self-heal on the
-    next write). Raises if ``requested`` names an action id outside the catalog.
-    """
-    catalog_defaults: dict[str, EndpointPolicy] = {
-        endpoint.id: endpoint.default_policy
-        for endpoint in get_endpoint_catalog(app_type)
-    }
-    merged = dict(existing)
-    if requested is not None:
-        merged.update(validate_action_policies(app_type, requested))
+def normalize_action_policies(
+    policies: dict[str, ActionPolicy], catalog_defaults: dict[str, ActionPolicy]
+) -> dict[str, ActionPolicy]:
+    """Validate action identities and store only deviations from catalog defaults."""
+    if policies.keys() - catalog_defaults.keys():
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Unknown app action")
     return {
         action_id: policy
-        for action_id, policy in merged.items()
-        if action_id in catalog_defaults and policy != catalog_defaults[action_id]
+        for action_id, policy in policies.items()
+        if policy != catalog_defaults[action_id]
     }
 
 
 def action_policy_views(
     app_type: ExternalAppType,
-    stored: dict[str, EndpointPolicy],
+    stored: dict[str, ActionPolicy],
 ) -> list[ActionPolicyView]:
     """Merge the catalog with the admin's stored overrides: each action's
     effective ``state`` is the override if present, else the action's
@@ -211,7 +166,7 @@ def action_policy_views(
             action_id=endpoint.id,
             normalised_name=endpoint.normalised_name,
             description=endpoint.description,
-            state=effective_policy(endpoint, stored),
+            state=stored.get(endpoint.id, endpoint.default_policy),
         )
         for endpoint in get_endpoint_catalog(app_type)
     ]

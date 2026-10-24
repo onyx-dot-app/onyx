@@ -6,6 +6,7 @@ import { useFocusOnMount } from "@opal/hooks";
 import isEqual from "lodash/isEqual";
 import {
   Button,
+  Divider,
   InputTypeIn,
   Modal,
   InputPasswordTypeIn,
@@ -15,11 +16,13 @@ import { InputVertical } from "@opal/layouts";
 import PluginModalContent from "@/sections/plugins/PluginModalContent";
 import PolicyEditor, {
   type PolicyEditorItem,
+  UserManagementSwitch,
 } from "@/sections/actions/PolicyEditor";
 export type { PolicyEditorItem } from "@/sections/actions/PolicyEditor";
-import type { EndpointPolicy } from "@/app/craft/v1/apps/registry";
+import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
 import { UnsavedChangesModalContent } from "@/sections/modals/UnsavedChangesModal";
 import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
+import PluginAvailabilitySwitch from "@/sections/plugins/PluginAvailabilitySwitch";
 import CraftAppEditorTabs from "@/sections/plugins/CraftAppEditorTabs";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 
@@ -31,6 +34,7 @@ export interface EditorField {
   description: string;
   placeholder: string;
   secret: boolean;
+  section: "configuration" | "authentication";
 }
 
 interface ActionPolicyEditorModalProps {
@@ -43,9 +47,13 @@ interface ActionPolicyEditorModalProps {
   }) => React.ReactNode;
   alternateContentConfirmationOpen?: boolean;
   isAdditionalContentDirty?: boolean;
+  enabled?: boolean;
+  onEnabledChange?: (enabled: boolean) => void;
+  usersCanManagePolicies?: boolean;
+  onUsersCanManagePoliciesChange?: (value: boolean) => void;
   onClose: () => void;
   title: string;
-  displayUrl?: string;
+  description?: string | RichStr;
   icon?: IconFunctionComponent;
   authenticationInstructions?: string | RichStr;
   /** Shown in place of field inputs when there is nothing to type in. */
@@ -54,14 +62,14 @@ interface ActionPolicyEditorModalProps {
   initialFieldValues: Record<string, string>;
   /** Undefined while the capability list is still loading. */
   policyItems: PolicyEditorItem[] | undefined;
-  initialPolicies: Record<string, EndpointPolicy>;
+  initialPolicies: Record<string, ActionPolicy>;
   /** Shown when the capability list resolves to empty. */
   emptyPoliciesMessage: string;
   saveLabel: string;
   /** Persist the edit; throw to surface the failure inside the modal. */
   onSave: (
     fieldValues: Record<string, string>,
-    policies: Record<string, EndpointPolicy>
+    policies: Record<string, ActionPolicy>
   ) => Promise<void>;
   skillsContent?: (
     requestLeave: (navigate: () => void) => void
@@ -74,17 +82,18 @@ interface ActionPolicyEditorModalProps {
   discardOnClose?: boolean;
 }
 
-/** The one edit dialog for everything the Craft agent can be granted.
- * Callers (external apps, MCP servers) normalize their data into fields +
- * policy items and supply the save call; the UI is identical for both.
- * Mount it only while open — initial values are read once. */
+/** Built-in app editor. Mount only while open; initial values are read once. */
 export default function ActionPolicyEditorModal({
   alternateContent,
   alternateContentConfirmationOpen = false,
   isAdditionalContentDirty = false,
+  enabled,
+  onEnabledChange,
+  usersCanManagePolicies,
+  onUsersCanManagePoliciesChange,
   onClose,
   title,
-  displayUrl,
+  description,
   icon,
   authenticationInstructions,
   note,
@@ -108,7 +117,7 @@ export default function ActionPolicyEditorModal({
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({
     ...initialFieldValues,
   });
-  const [policies, setPolicies] = useState<Record<string, EndpointPolicy>>({
+  const [policies, setPolicies] = useState<Record<string, ActionPolicy>>({
     ...initialPolicies,
   });
   const [isSaving, setIsSaving] = useState(false);
@@ -168,6 +177,37 @@ export default function ActionPolicyEditorModal({
     />
   ) : null;
 
+  function renderFields(section: EditorField["section"]) {
+    return fields
+      .filter((field) => field.section === section)
+      .map((field) => {
+        const Input = field.secret ? InputPasswordTypeIn : InputTypeIn;
+        return (
+          <InputVertical
+            key={field.key}
+            title={field.label}
+            description={field.description}
+            withLabel={`${fieldId}-${field.key}`}
+          >
+            <Input
+              id={`${fieldId}-${field.key}`}
+              aria-label={field.label}
+              ref={field === fields[0] ? focusFirstField : undefined}
+              value={fieldValues[field.key] ?? ""}
+              disabled={isSaving}
+              onChange={(event) =>
+                setFieldValues((previous) => ({
+                  ...previous,
+                  [field.key]: event.target.value,
+                }))
+              }
+              placeholder={field.placeholder}
+            />
+          </InputVertical>
+        );
+      });
+  }
+
   return (
     <Modal open>
       <PluginModalContent
@@ -191,7 +231,7 @@ export default function ActionPolicyEditorModal({
           <>
             <Modal.Header
               title={title}
-              description={displayUrl || undefined}
+              description={description}
               icon={icon}
               onClose={requestClose}
             />
@@ -203,6 +243,37 @@ export default function ActionPolicyEditorModal({
                   busy={isSaving}
                   configuration={
                     <>
+                      {fields.some(
+                        (field) => field.section === "configuration"
+                      ) ? (
+                        renderFields("configuration")
+                      ) : (
+                        <Text font="main-ui-action">{title}</Text>
+                      )}
+                      {((enabled !== undefined && onEnabledChange) ||
+                        (usersCanManagePolicies !== undefined &&
+                          onUsersCanManagePoliciesChange)) && (
+                        <Divider paddingParallel={0} paddingPerpendicular={0} />
+                      )}
+                      {enabled !== undefined && onEnabledChange && (
+                        <PluginAvailabilitySwitch
+                          enabled={enabled}
+                          onChange={onEnabledChange}
+                          disabled={isSaving}
+                        />
+                      )}
+                      {usersCanManagePolicies !== undefined &&
+                        onUsersCanManagePoliciesChange && (
+                          <UserManagementSwitch
+                            value={usersCanManagePolicies}
+                            onChange={onUsersCanManagePoliciesChange}
+                            disabled={isSaving}
+                          />
+                        )}
+                    </>
+                  }
+                  authentication={
+                    <>
                       {note && (
                         <Text font="secondary-body" color="text-03">
                           {note}
@@ -213,57 +284,29 @@ export default function ActionPolicyEditorModal({
                           {authenticationInstructions}
                         </Text>
                       )}
-                      {fields.map((field) => {
-                        const Input = field.secret
-                          ? InputPasswordTypeIn
-                          : InputTypeIn;
-                        return (
-                          <InputVertical
-                            key={field.key}
-                            title={field.label}
-                            subDescription={field.description}
-                            withLabel={`${fieldId}-${field.key}`}
-                          >
-                            <Input
-                              id={`${fieldId}-${field.key}`}
-                              aria-label={field.label}
-                              ref={
-                                field === fields[0]
-                                  ? focusFirstField
-                                  : undefined
-                              }
-                              value={fieldValues[field.key] ?? ""}
-                              disabled={isSaving}
-                              onChange={(event) =>
-                                setFieldValues((previous) => ({
-                                  ...previous,
-                                  [field.key]: event.target.value,
-                                }))
-                              }
-                              placeholder={field.placeholder}
-                            />
-                          </InputVertical>
-                        );
-                      })}
+                      {renderFields("authentication")}
                     </>
                   }
-                  permissions={
-                    policyItems === undefined ? (
-                      <Text font="main-content-body" color="text-03">
-                        {t("loading.label")}
-                      </Text>
-                    ) : policyItems.length === 0 ? (
-                      <Text font="secondary-body" color="text-03">
-                        {emptyPoliciesMessage}
-                      </Text>
-                    ) : (
-                      <PolicyEditor
-                        showTitle={false}
-                        items={policyItems}
-                        policies={policies}
-                        onChange={setPolicies}
-                      />
-                    )
+                  tools={
+                    <>
+                      {policyItems === undefined ? (
+                        <Text font="main-content-body" color="text-03">
+                          {t("loading.label")}
+                        </Text>
+                      ) : policyItems.length === 0 ? (
+                        <Text font="secondary-body" color="text-03">
+                          {emptyPoliciesMessage}
+                        </Text>
+                      ) : (
+                        <PolicyEditor
+                          showTitle={false}
+                          disabled={isSaving}
+                          items={policyItems}
+                          policies={policies}
+                          onChange={setPolicies}
+                        />
+                      )}
+                    </>
                   }
                   skills={skillsContent?.(unsavedChanges.requestLeave)}
                 />

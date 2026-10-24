@@ -83,7 +83,7 @@ function CredentialField({
   fileValues = "typedFile",
 }: CredentialFieldProps) {
   const t = useTranslations("admin");
-  const copy = useCredentialFieldCopy(source)(fieldKey);
+  const copy = useCredentialFieldCopy(source)(fieldKey, field);
   const label = copy.title;
   // The Formik path; the spec key stays the copy and test id.
   const name: string = namePrefix ? `${namePrefix}.${fieldKey}` : fieldKey;
@@ -169,7 +169,9 @@ function CredentialField({
   const placeholder =
     field.kind === "email"
       ? t("credentials.create.emailField.placeholder")
-      : undefined;
+      : field.displayName === "personalAccessToken"
+        ? t("credentials.create.personalAccessTokenField.placeholder")
+        : undefined;
   // The account email pairs with an API token, so it says which account,
   // under the input.
   const subDescription =

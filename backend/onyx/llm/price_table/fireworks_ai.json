@@ -43,6 +43,36 @@
       "temperature": true,
       "tool_call": true
     },
+    "accounts/fireworks/models/deepseek-v4p1-flash-1017": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.006,
+        "input": 0.3,
+        "output": 1.2
+      },
+      "family": "deepseek-flash",
+      "limit": {
+        "context": 1000000,
+        "output": 384000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "DeepSeek V4.1 Flash 1017",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-17",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "accounts/fireworks/models/ember-1": {
       "attachment": true,
       "cost": {
@@ -325,6 +355,36 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-06-12",
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/models/muse-spark-open": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.15,
+        "input": 1.25,
+        "output": 4.25
+      },
+      "family": "muse",
+      "limit": {
+        "context": 1048576,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Muse Spark Open",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-15",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -835,6 +895,18 @@
       "release_date": "2026-08-03",
       "temperature": true,
       "tool_call": true
+    },
+    "accounts/fireworks/routers/rune": {
+      "cost": {
+        "cache_read": 0.008400000000000001,
+        "input": 0.041999999999999996,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 262144
+      },
+      "mode": "evaluation",
+      "name": "accounts/fireworks/routers/rune"
     }
   },
   "models_dev_providers": [

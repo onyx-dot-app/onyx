@@ -46,6 +46,7 @@ function approval(overrides: Partial<ApprovalView>): ApprovalView {
     actions: [SLACK_POST_MESSAGE],
     app_name: "Slack",
     payload: {},
+    expires_at: null,
     created_at: "2026-05-28T15:42:11Z",
     decision: null,
     decided_at: null,
@@ -61,7 +62,7 @@ export const Collapsed: Story = {
     approval: approval({
       payload: {
         channel: "#eng-craft",
-        text: "Heads up — the docfetching worker is restarting in 5min for the new tracing flag rollout.",
+        text: "Heads up: the docfetching worker is restarting in 5min for the new tracing flag rollout.",
       },
     }),
   },
@@ -73,7 +74,7 @@ export const SlackShortMessage: Story = {
     approval: approval({
       payload: {
         channel: "#eng-craft",
-        text: "Heads up — the docfetching worker is restarting in 5min for the new tracing flag rollout.",
+        text: "Heads up: the docfetching worker is restarting in 5min for the new tracing flag rollout.",
       },
     }),
   },
@@ -86,7 +87,7 @@ export const SlackLongMessageTruncated: Story = {
       payload: {
         channel: "#customer-acme-corp",
         text:
-          "Hi team — wanted to flag that the connector backfill we kicked off last night completed " +
+          "Hi team, wanted to flag that the connector backfill we kicked off last night completed " +
           "successfully across all 3 spaces. We re-indexed ~412k documents and ran a sample audit " +
           "against the previous index to confirm chunk parity (99.7% overlap, the gap is from the " +
           "new sentence-splitter heuristic that handles inline code blocks differently). The next " +
@@ -122,5 +123,11 @@ export const BatchedGraphQLMultiAction: Story = {
           "query { viewer { id } }\nmutation { issueCreate(input: $i) { issue { id } } }",
       },
     }),
+  },
+};
+
+export const Expired: Story = {
+  args: {
+    approval: approval({ decision: "EXPIRED", is_live: false }),
   },
 };

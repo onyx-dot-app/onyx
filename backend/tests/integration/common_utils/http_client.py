@@ -41,6 +41,11 @@ class RetryingTransport(httpx.HTTPTransport):
     504, for out-of-process suites whose api_server is reached over a
     port-forward or proxy. Only retries idempotent (safe) methods on 5xx."""
 
+    def __init__(self) -> None:
+        # uvicorn closes the connection after an unhandled 500, but a port-forward
+        # keeps the local socket open, so a pooled socket fails the next POST.
+        super().__init__(limits=httpx.Limits(max_keepalive_connections=0))
+
     def handle_request(self, request: httpx.Request) -> httpx.Response:
         backoff = 0.5
         for attempt in range(_MAX_ATTEMPTS):

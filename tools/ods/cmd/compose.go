@@ -12,6 +12,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/devstack"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/docker"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 )
@@ -135,8 +136,8 @@ func composeProfiles(profile string) []string {
 
 // baseArgs builds the common "docker compose -p <project> -f ... -f ...
 // --profile ..." argument prefix.
-func baseArgs(profile string) []string {
-	args := []string{"compose", "-p", docker.ProjectName()}
+func baseArgs(profile, project string) []string {
+	args := []string{"compose", "-p", project}
 	for _, f := range composeFiles(profile) {
 		args = append(args, "-f", f)
 	}
@@ -186,12 +187,16 @@ func execDockerComposeOutput(args []string, extraEnv []string, output io.Writer)
 // compose project by running "docker compose -p onyx ps --services".
 // On any error it returns nil (completions will just be empty).
 func runningServiceNames() []string {
+	target, err := resolveRuntimeTarget()
+	if err != nil {
+		return nil
+	}
 	gitRoot, err := paths.GitRoot()
 	if err != nil {
 		return nil
 	}
 
-	args := []string{"compose", "-p", docker.ProjectName(), "ps", "--services"}
+	args := []string{"compose", "-p", target.Project, "ps", "--services"}
 
 	cmd := exec.Command("docker", args...)
 	cmd.Dir = filepath.Join(gitRoot, "deployment", "docker_compose")
@@ -286,6 +291,31 @@ func runCompose(profile string, opts *ComposeOptions) error {
 	if err := validateProfile(profile); err != nil {
 		return err
 	}
+	target, err := resolveRuntimeTarget()
+	if err != nil {
+		return err
+	}
+	release, err := lockRuntimeTarget(target, true)
+	if err != nil {
+		return err
+	}
+	defer release()
+	if target.Managed {
+		st, err := stackForTarget(target).ReadState()
+		if err != nil {
+			return err
+		}
+		if st != nil && len(st.Services) > 0 {
+			return fmt.Errorf("project %s has managed application services; use 'ods stack stop' before changing containers", target.Project)
+		}
+	}
+	return runComposeTarget(profile, opts, target)
+}
+
+func runComposeTarget(profile string, opts *ComposeOptions, target devstack.Target) error {
+	if err := validateProfile(profile); err != nil {
+		return err
+	}
 
 	if !opts.Down {
 		if profile == "dev" || profile == "multitenant" {
@@ -299,7 +329,7 @@ func runCompose(profile string, opts *ComposeOptions) error {
 			}
 			composeEnv := opts.Ports
 			if composeEnv == nil {
-				ports, err := docker.FindAvailablePorts()
+				ports, err := docker.FindAvailablePorts(target.Project)
 				if err != nil {
 					return fatalErrorf("Failed to find available ports: %w", err)
 				}
@@ -313,7 +343,7 @@ func runCompose(profile string, opts *ComposeOptions) error {
 		}
 	}
 
-	args := baseArgs(profile)
+	args := baseArgs(profile, target.Project)
 
 	if opts.Down {
 		args = append(args, "down")
@@ -338,7 +368,7 @@ func runCompose(profile string, opts *ComposeOptions) error {
 		}
 	}
 
-	projName := docker.ProjectName()
+	projName := target.Project
 	action := "Starting"
 	if opts.Down {
 		action = "Stopping"
@@ -357,13 +387,13 @@ func runCompose(profile string, opts *ComposeOptions) error {
 		return nil
 	}
 	log.Info("Containers started successfully")
-	return seedComposeDevLicense(profile, opts)
+	return seedComposeDevLicense(profile, opts, target.Project)
 }
 
 // seedComposeDevLicense installs the dev license in the running api_server so
 // paid features unlock. The seed needs the migrations a healthy api_server has
 // run, and multi-tenant mode takes its tier from the control plane instead.
-func seedComposeDevLicense(profile string, opts *ComposeOptions) error {
+func seedComposeDevLicense(profile string, opts *ComposeOptions, project string) error {
 	if os.Getenv(devLicenseEnv) == "" {
 		return nil
 	}
@@ -374,7 +404,7 @@ func seedComposeDevLicense(profile string, opts *ComposeOptions) error {
 
 	log.Infof("Seeding the dev license from %s...", devLicenseEnv)
 	// A bare -e passes the value through from this process, off the argv.
-	args := append(baseArgs(profile), "exec", "-T", "-e", devLicenseEnv, "api_server",
+	args := append(baseArgs(profile, project), "exec", "-T", "-e", devLicenseEnv, "api_server",
 		"python", "-m", "scripts.seed_dev_license")
 	if err := execDockerCompose(args, nil); err != nil {
 		return fatalErrorf("Failed to seed the dev license: %v", err)

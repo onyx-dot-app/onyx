@@ -51,6 +51,6 @@ Visual states are driven by a `variant` prop; all border, background, and focus 
 <InputTypeIn
   value={password}
   onChange={...}
-  rightChildren={<Button icon={SvgEye} onClick={toggle} prominence="internal" />}
+  rightChildren={<Button icon={SvgEye} onClick={toggle} prominence="tertiary" />}
 />
 ```

@@ -3,6 +3,7 @@
 from sqlalchemy.exc import SQLAlchemyError
 
 from ee.onyx.db.license import get_cached_license_metadata, refresh_license_cache
+from ee.onyx.server.license.models import LicenseMetadata
 from ee.onyx.utils.tier import get_tier, tier_from_license_metadata
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.db.connector_credential_pair import has_perm_synced_cc_pairs
@@ -28,11 +29,20 @@ def _has_perm_synced_cc_pairs() -> bool:
         return True
 
 
+def is_access_gated(metadata: LicenseMetadata | None) -> bool:
+    """Whether a self-hosted deployment is locked: its license is past the
+    grace period, or it has none while a perm-synced connector needs one. With
+    no license, a failed connector check counts as locked."""
+    if metadata is not None:
+        return metadata.status == _BLOCKING_STATUS
+    return _has_perm_synced_cc_pairs()
+
+
 def apply_license_status_to_settings(settings: Settings) -> Settings:
     """EE version: checks license status for self-hosted deployments.
 
-    For self-hosted, looks up license metadata and overrides application_status
-    if the license indicates GATED_ACCESS (fully expired).
+    For self-hosted, looks up license metadata and sets application_status to
+    GATED_ACCESS when is_access_gated says the deployment is locked.
 
     Also sets ee_features_enabled based on license status to control
     visibility of EE features in the UI.
@@ -62,26 +72,21 @@ def apply_license_status_to_settings(settings: Settings) -> Settings:
                     "Failed to load license from DB for settings: %s", db_error
                 )
 
-        if metadata:
-            if metadata.status == _BLOCKING_STATUS:
-                settings.application_status = metadata.status
-                settings.ee_features_enabled = False
-            elif metadata.used_seats > metadata.seats:
-                # License is valid but seat limit exceeded
-                settings.application_status = ApplicationStatus.SEAT_LIMIT_EXCEEDED
-                settings.seat_count = metadata.seats
-                settings.used_seats = metadata.used_seats
-                settings.ee_features_enabled = True
-            else:
-                # Has a valid license (GRACE_PERIOD/PAYMENT_REMINDER still allow EE features)
-                settings.ee_features_enabled = True
-        else:
-            # No license found in cache or DB.
-            if _has_perm_synced_cc_pairs():
-                # A perm-synced connector with no license: the UI stays
-                # locked until a license or a downgrade.
-                settings.application_status = _BLOCKING_STATUS
+        if is_access_gated(metadata):
+            # The UI stays locked until a license or a downgrade.
+            settings.application_status = _BLOCKING_STATUS
             settings.ee_features_enabled = False
+        elif metadata is None:
+            settings.ee_features_enabled = False
+        elif metadata.used_seats > metadata.seats:
+            # License is valid but seat limit exceeded
+            settings.application_status = ApplicationStatus.SEAT_LIMIT_EXCEEDED
+            settings.seat_count = metadata.seats
+            settings.used_seats = metadata.used_seats
+            settings.ee_features_enabled = True
+        else:
+            # Has a valid license (GRACE_PERIOD/PAYMENT_REMINDER still allow EE features)
+            settings.ee_features_enabled = True
         settings.tier = tier_from_license_metadata(metadata)
     except CACHE_TRANSIENT_ERRORS as e:
         logger.warning("Failed to check license metadata for settings: %s", e)

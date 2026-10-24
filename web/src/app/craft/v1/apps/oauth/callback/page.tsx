@@ -7,7 +7,7 @@ import { mutate as globalMutate } from "swr";
 import { SettingsLayouts } from "@opal/layouts";
 import { Button, Card, Text } from "@opal/components";
 import { SvgPlug } from "@opal/icons";
-import { CRAFT_APPS_PATH } from "@/app/craft/v1/constants";
+import { CRAFT_PLUGINS_PATH } from "@/app/craft/v1/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { completeExternalAppOAuthCallback } from "@/app/craft/services/externalAppsService";
 import { OAUTH_POPUP_MESSAGE_SOURCE } from "@/app/craft/types/setupRequests";
@@ -75,7 +75,13 @@ export default function ExternalAppsOAuthCallbackPage() {
           return;
         }
         await globalMutate(SWR_KEYS.buildExternalApps);
-        setTimeout(() => router.push(CRAFT_APPS_PATH), 800);
+        setTimeout(
+          () =>
+            router.push(
+              `${CRAFT_PLUGINS_PATH}?actionPolicies=app-${external_app_id}`
+            ),
+          800
+        );
       } catch (e) {
         setStatus("error");
         setErrorMessage(e instanceof Error ? e.message : String(e));
@@ -110,7 +116,7 @@ export default function ExternalAppsOAuthCallbackPage() {
                   </Text>
                 )}
                 <div className="pt-2">
-                  <Button onClick={() => router.push(CRAFT_APPS_PATH)}>
+                  <Button onClick={() => router.push(CRAFT_PLUGINS_PATH)}>
                     {t("backButton")}
                   </Button>
                 </div>

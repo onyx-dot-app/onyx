@@ -74,6 +74,10 @@ export interface CredentialUsage {
  */
 export interface SimilarCredential extends AnyCredential {
   usages: CredentialUsage[];
+  /** The current user may use it with no specific connector settings. */
+  usable: boolean;
+  /** Why it is not `usable`, for the user; `null` when it is. */
+  refusal_reason: string | null;
 }
 
 /**
@@ -212,7 +216,7 @@ export interface CredentialSharing {
  */
 export interface DraftCredential {
   source: ValidSources;
-  /** The values as typed. */
+  /** The values as typed, with text trimmed. */
   credential_json: Record<string, unknown>;
   sharing: CredentialSharing;
 }

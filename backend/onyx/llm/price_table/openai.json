@@ -1843,6 +1843,24 @@
       "name": "gpt-5.5-cyber",
       "reasoning": true
     },
+    "gpt-5.5-cyber-preview": {
+      "cost": {
+        "cache_read": 1.25,
+        "input": 12.5,
+        "output": 75.0
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-5.5-cyber-preview",
+      "reasoning": true
+    },
     "gpt-5.5-pro": {
       "attachment": true,
       "cost": {

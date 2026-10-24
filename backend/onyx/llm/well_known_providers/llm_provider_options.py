@@ -13,6 +13,11 @@ from onyx.llm.model_capabilities import (
     get_max_input_tokens,
     supported_reasoning_efforts,
 )
+from onyx.llm.model_catalog import (
+    iter_models,
+    model_supports_chat,
+    model_supports_decisions,
+)
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.llm.well_known_providers.auto_update_service import (
@@ -54,6 +59,8 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
     more up-to-date than a static catalog.
     """
     return {
+        LlmProviderNames.TYPESAFE: iter_models(LlmProviderNames.TYPESAFE),
+        LlmProviderNames.ZOOM_AI: iter_models(LlmProviderNames.ZOOM_AI),
         OPENAI_PROVIDER_NAME: get_openai_model_names(),
         BEDROCK_PROVIDER_NAME: [],  # Dynamic - fetched from AWS API
         ANTHROPIC_PROVIDER_NAME: get_anthropic_model_names(),
@@ -131,7 +138,7 @@ def get_openai_model_names() -> list[str]:
 
     # NOTE: We are explicitly excluding all "timestamped" models
     # because they are mostly just noise in the admin configuration panel
-    # e.g. gpt-4o-2025-07-16, gpt-3.5-turbo-0613, etc.
+    # e.g. gpt-6-sol-2025-07-16, gpt-3.5-turbo-0613, etc.
     date_pattern = re.compile(r"-\d{4}")
 
     def is_valid_model(model: str) -> bool:
@@ -223,6 +230,8 @@ def model_configurations_for_provider(
             is_recommended_default=model_name == default_model_name,
             max_input_tokens=get_max_input_tokens(model_name, provider_name),
             supports_image_input=model_supports_image_input(model_name, provider_name),
+            supports_chat=model_supports_chat(provider_name, model_name),
+            supports_decisions=model_supports_decisions(provider_name, model_name),
             # No provider row exists yet, so the surface is the provider default.
             supported_reasoning_efforts=supported_reasoning_efforts(
                 provider_name,

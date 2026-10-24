@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import useSWR, { useSWRConfig } from "swr";
@@ -20,7 +21,12 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { useDefaultAssistantConfiguration } from "@/lib/agents/hooks";
 import { refreshMemberPluginCaches } from "@/lib/plugins/member";
 import { can } from "@/lib/permissions/resource-actions";
-import { MCPServerStatus, type MCPServer } from "@/lib/mcp/types";
+import {
+  MCPConnectionStatus,
+  MCPServerStatus,
+  type MCPServer,
+  type MCPServerUpdateRequest,
+} from "@/lib/mcp/types";
 import { refreshMCPServerTools, updateMCPServerStatus } from "@/lib/mcp/svc";
 import { getActionIcon } from "@/lib/tools/utils";
 import MCPServerDetailsPage from "@/sections/actions/modals/MCPServerDetailsPage";
@@ -80,6 +86,10 @@ export default function MCPServerDetailPage({
       : parseDetailTab(searchParams.get("tab"))
   );
   const [visited, setVisited] = useState<Set<DetailTab>>(() => new Set([tab]));
+  const [configurationDraft, setConfigurationDraft] = useState<
+    (MCPServerUpdateRequest & { enable_chat?: boolean }) | undefined
+  >();
+  const [authorizing, setAuthorizing] = useState(false);
   const [detailsDirty, setDetailsDirty] = useState(false);
   const [authDirty, setAuthDirty] = useState(false);
   const [toolsDirty, setToolsDirty] = useState(false);
@@ -87,13 +97,17 @@ export default function MCPServerDetailPage({
   const [authBusy, setAuthBusy] = useState(false);
   const [toolsBusy, setToolsBusy] = useState(false);
   const [discoveringTools, setDiscoveringTools] = useState(false);
+  const [configurationRevision, setConfigurationRevision] = useState(0);
   const [revision, setRevision] = useState(0);
   const [footerTarget, setFooterTarget] = useState<HTMLDivElement | null>(null);
   const handledOAuthReturn = useRef(false);
   const busy = detailsBusy || authBusy || toolsBusy || discoveringTools;
   const guard = useUnsavedChangesGuard({
-    isDirty: detailsDirty || authDirty || toolsDirty,
+    isDirty:
+      !authorizing &&
+      (!!configurationDraft || detailsDirty || authDirty || toolsDirty),
     onDiscard: () => {
+      setConfigurationDraft(undefined);
       setDetailsDirty(false);
       setAuthDirty(false);
       setToolsDirty(false);
@@ -228,9 +242,13 @@ export default function MCPServerDetailPage({
     userResolution,
   ]);
   const saveDetails = async (saved: MCPServer) => {
+    if (configurationDraft) {
+      setConfigurationDraft(undefined);
+      setAuthDirty(false);
+    }
     await mutateServer(
       (current) =>
-        current
+        current && current.server_url === saved.server_url
           ? {
               ...current,
               name: saved.name,
@@ -238,6 +256,8 @@ export default function MCPServerDetailPage({
               is_public: saved.is_public,
               groups: saved.groups,
               users: saved.users,
+              users_can_manage_policies: saved.users_can_manage_policies,
+              available_in_craft: saved.available_in_craft,
             }
           : saved,
       { revalidate: false }
@@ -254,6 +274,60 @@ export default function MCPServerDetailPage({
       console.error("Failed to refresh MCP overview after saving", cause);
     });
   };
+  const authorize = (url: string) => {
+    // Remove the unload warning before continuing the submitted OAuth flow.
+    flushSync(() => setAuthorizing(true));
+    try {
+      window.location.href = url;
+    } catch (error) {
+      setAuthorizing(false);
+      throw error;
+    }
+  };
+  const saveAuthentication = async (saved: MCPServer) => {
+    await mutateServer(saved, { revalidate: false });
+    if (configurationDraft) {
+      setConfigurationDraft(undefined);
+      setDetailsDirty(false);
+      setConfigurationRevision((value) => value + 1);
+    }
+    setAuthDirty(false);
+    enableChatCompleted.current = true;
+    clearMcpChatEnableIntent(enableChatIntent);
+    await Promise.all([
+      mutate(SWR_KEYS.adminMcpServers),
+      mutate(SWR_KEYS.adminMcpServerToolSnapshots(saved.id)),
+      mutate(SWR_KEYS.defaultAssistantConfig),
+      refreshMemberPluginCaches(mutate),
+    ]).catch((cause: unknown) => {
+      console.error("Failed to refresh MCP caches after authentication", cause);
+    });
+  };
+  const invalidateConfigurationDraft = useCallback(() => {
+    setConfigurationDraft(undefined);
+  }, []);
+  const authenticationServer: MCPServer | undefined =
+    server && configurationDraft
+      ? {
+          ...server,
+          ...configurationDraft,
+          status: MCPServerStatus.AWAITING_AUTH,
+          connection_status: MCPConnectionStatus.NOT_CONNECTED,
+          admin_credentials: undefined,
+          user_credentials: undefined,
+          auth_template: server.auth_template
+            ? {
+                ...server.auth_template,
+                headers: Object.fromEntries(
+                  Object.keys(server.auth_template.headers).map((name) => [
+                    name,
+                    "",
+                  ])
+                ),
+              }
+            : server.auth_template,
+        }
+      : server;
   const canEdit = !!server && can(server, "edit");
 
   const body = (
@@ -304,15 +378,23 @@ export default function MCPServerDetailPage({
                 className="w-full min-w-0"
               >
                 <MCPServerDetailsPage
-                  key={`${server.id}:${revision}`}
+                  key={`${server.id}:${revision}:${configurationRevision}`}
                   variant="page"
                   readOnly={!canEdit}
                   active={tab === "server"}
                   footerTarget={footerTarget}
                   server={server}
+                  onAuthenticate={(draft) => {
+                    if (draft) setConfigurationDraft(draft);
+                    setVisited(
+                      (current) => new Set([...current, "authentication"])
+                    );
+                    setTab("authentication");
+                  }}
                   onSaved={saveDetails}
                   onBusyChange={setDetailsBusy}
                   onDirtyChange={setDetailsDirty}
+                  onValuesChange={invalidateConfigurationDraft}
                 />
               </fieldset>
             )}
@@ -328,12 +410,13 @@ export default function MCPServerDetailPage({
                 className="w-full min-w-0"
               >
                 <MCPAuthenticationPage
-                  key={`${server.id}:${server.server_url}:${revision}`}
+                  key={`${server.id}:${authenticationServer?.server_url}:${revision}`}
                   variant="page"
                   readOnly={!canEdit}
                   active={tab === "authentication"}
                   footerTarget={footerTarget}
-                  mcpServer={server}
+                  mcpServer={authenticationServer ?? server}
+                  configurationDraft={configurationDraft}
                   chatEnableIntent={
                     defaultChat.canEdit ? enableChatIntent : null
                   }
@@ -342,10 +425,10 @@ export default function MCPServerDetailPage({
                     !defaultChat.canEdit ||
                     !!defaultChat.data
                   }
-                  onTriggerFetchTools={fetchTools}
                   onBusyChange={setAuthBusy}
                   onDirtyChange={setAuthDirty}
-                  onSaved={refresh}
+                  onSaved={saveAuthentication}
+                  onAuthorize={authorize}
                   onComplete={() => selectTab("tools")}
                 />
               </fieldset>
@@ -398,7 +481,7 @@ export default function MCPServerDetailPage({
           <Modal.Header
             icon={icon}
             title={title}
-            description={server?.server_url}
+            description={server?.description}
             onClose={close}
           />
           <Modal.Body twoTone={false} alignItems="stretch">
