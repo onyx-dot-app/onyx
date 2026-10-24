@@ -168,6 +168,10 @@ publishes browser packets, and writes the replay buffer. `Emitter` stamps each
 response's model index. Closing the browser reader does not stop execution.
 Pending replay lines flush at 32 KiB or on the periodic flush. Their backlog limit
 is 4 MiB of UTF-8 data. Exceeding it disables replay without failing live delivery.
+Normal completion stops new events and retains listeners until accepted events drain.
+Closing is nonblocking. Live delivery can finish before the final cache write.
+Session-owner renewal retries one transient cache failure using the same token.
+Each attempt checks the lease deadline; ownership mismatch fails immediately.
 
 Each worker passes a lazy SEARCH_SELECTION client factory into `construct_tools`.
 Search keeps the answer client for rewrites and filters, resolving the separate
