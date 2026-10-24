@@ -25,6 +25,8 @@ import { VoiceProviderView } from "@/lib/voice/types";
 
 // Message keys, not copy — the literal union keeps `t()` statically checked.
 type ModelSubtitleKey =
+  | "models.inworldStt.subtitle"
+  | "models.inworldTts.subtitle"
   | "models.whisper.subtitle"
   | "models.azureSpeechStt.subtitle"
   | "models.elevenlabsStt.subtitle"
@@ -51,6 +53,12 @@ interface ProviderGroup {
 
 // STT Models - individual cards
 const STT_MODELS: ModelDetails[] = [
+  {
+    id: "inworld/inworld-stt-1",
+    label: "Inworld STT",
+    subtitleKey: "models.inworldStt.subtitle",
+    providerType: "inworld",
+  },
   {
     id: "whisper",
     label: "Whisper",
@@ -79,6 +87,24 @@ const STT_MODELS: ModelDetails[] = [
 
 // TTS Models - grouped by provider
 const TTS_PROVIDER_GROUPS: ProviderGroup[] = [
+  {
+    providerType: "inworld",
+    providerLabel: "Inworld",
+    models: [
+      {
+        id: "inworld-tts-2",
+        label: "Realtime TTS-2",
+        subtitleKey: "models.inworldTts.subtitle",
+        providerType: "inworld",
+      },
+      {
+        id: "inworld-tts-2-flash",
+        label: "Realtime TTS-2 Flash",
+        subtitleKey: "models.inworldTts.subtitle",
+        providerType: "inworld",
+      },
+    ],
+  },
   {
     providerType: "openai",
     providerLabel: "OpenAI",

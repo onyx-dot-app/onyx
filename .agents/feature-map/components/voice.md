@@ -78,7 +78,7 @@ streaming session, so provider-specific error detail never reaches the client.
 ## 3. Data model
 
 - `VoiceProvider` (`db/models.py`, owned via `db/voice.py`): `provider_type`
-  (`"openai"`, `"azure"`, `"elevenlabs"`, or `"zoom"`), encrypted `api_key` and
+  (`"openai"`, `"azure"`, `"elevenlabs"`, `"inworld"`, or `"zoom"`), encrypted `api_key` and
   `api_secret` (`SensitiveValue`/`EncryptedString`), `api_base`,
   `custom_config` (JSONB), `stt_model`, `tts_model`, `default_voice`, and two
   independent booleans `is_default_stt` / `is_default_tts`.
@@ -115,19 +115,31 @@ capabilities default to unsupported: `supports_streaming_stt()`,
 unconstrained), and `create_streaming_transcriber` /
 `create_streaming_synthesizer` (raise `NotImplementedError` unless overridden).
 `voice/factory.py:get_voice_provider` dispatches on `normalize_provider_type`
-to one of four implementations in `voice/providers/`:
+to one of five implementations in `voice/providers/`:
 
 | `provider_type` | Class | Notes |
 |---|---|---|
 | `openai` | `providers/openai.py:OpenAIVoiceProvider` | STT + TTS |
 | `azure` | `providers/azure.py:AzureVoiceProvider` | STT + TTS |
 | `elevenlabs` | `providers/elevenlabs.py:ElevenLabsVoiceProvider` | STT + TTS |
+| `inworld` | `providers/inworld.py:InworldVoiceProvider` | File STT and HTTP-streamed MP3; uses chunked WS fallbacks |
 | `zoom` | `providers/zoom.py:ZoomVoiceProvider` | STT only (constructed with no `tts_model`) |
 
 Every provider's STT and TTS call is wrapped in `traced_llm_call` with
-`LLMFlow.STT` or `LLMFlow.TTS` (`onyx/tracing/flows.py`); confirmed in all four
+`LLMFlow.STT` or `LLMFlow.TTS` (`onyx/tracing/flows.py`); confirmed in all five
 provider files (e.g. `providers/openai.py`,
 `providers/zoom.py` for STT only). See [[observability]].
+
+Inworld accepts a Standard Basic/Base64 key, validated through the voice catalog.
+It supports `inworld/inworld-stt-1`, `inworld-tts-2`, and `inworld-tts-2-flash`.
+File uploads are capped at 10 MiB to leave room for Base64 encoding. HTTP TTS
+decodes NDJSON into MP3 and splits text at the 4,000 UTF-16-unit limit. Native
+WebSocket capabilities remain disabled; existing chunked fallbacks are required.
+`/voice/status` includes `tts_max_speed`; Settings uses it to bound the speed
+control. Inworld rejects speeds outside 0.5–1.5 instead of silently capping them.
+Previously saved higher speeds remain visible and must be changed by the user.
+Inworld HTTP TTS records a detached tracing span because the REST route prefetches
+its first chunk before Starlette consumes the rest in another task.
 
 ### Audio format handling
 

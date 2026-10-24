@@ -10563,6 +10563,12 @@
         "azureSpeechTts": {
           "subtitle": "تحويل النص إلى كلام في Microsoft Foundry Tools."
         },
+        "inworldStt": {
+          "subtitle": "واجهة Inworld لتحويل الكلام إلى نص."
+        },
+        "inworldTts": {
+          "subtitle": "Inworld TTS-2 وTTS-2 Flash."
+        },
         "elevenlabsStt": {
           "subtitle": "واجهة ElevenLabs لتحويل الكلام إلى نص."
         },
@@ -16558,7 +16564,7 @@
         "title": "الإرسال التلقائي عند التوقف"
       },
       "playbackSpeed": {
-        "description": "اضبط سرعة تشغيل الصوت.",
+        "description": "اضبط سرعة تشغيل الصوت (0.5–{max} ضعف). اختر سرعة مدعومة إذا كان الإعداد المحفوظ يتجاوز هذا النطاق.",
         "title": "سرعة التشغيل"
       },
       "title": "الصوت"

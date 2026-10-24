@@ -101,6 +101,21 @@ const DEFAULT_VOICE_PROVIDER_DETAIL: VoiceProviderDetail = {
 
 /** Per-provider static details, keyed by provider_type. */
 export const VOICE_PROVIDER_DETAILS: Record<string, VoiceProviderDetail> = {
+  inworld: {
+    label: "Inworld",
+    icon: SvgMicrophone,
+    apiKeyUrl: "https://platform.inworld.ai/",
+    docsUrl: "https://docs.inworld.ai/voice/introduction",
+    voiceDocsUrl: {
+      url: "https://docs.inworld.ai/api-reference/voiceAPI/voiceservice/list-voices",
+      label: "Inworld",
+    },
+    sttModels: [{ id: "inworld/inworld-stt-1", name: "Inworld STT" }],
+    ttsModels: [
+      { id: "inworld-tts-2", name: "Realtime TTS-2" },
+      { id: "inworld-tts-2-flash", name: "Realtime TTS-2 Flash" },
+    ],
+  },
   openai: {
     label: "OpenAI",
     icon: SvgOpenAI,

@@ -10563,6 +10563,12 @@
         "azureSpeechTts": {
           "subtitle": "Conversão de texto em fala no Microsoft Foundry Tools."
         },
+        "inworldStt": {
+          "subtitle": "API de conversão de fala em texto da Inworld."
+        },
+        "inworldTts": {
+          "subtitle": "Inworld TTS-2 e TTS-2 Flash."
+        },
         "elevenlabsStt": {
           "subtitle": "API de conversão de fala em texto da ElevenLabs."
         },
@@ -16558,7 +16564,7 @@
         "title": "Envio automático ao pausar"
       },
       "playbackSpeed": {
-        "description": "Ajuste a velocidade da reprodução de voz.",
+        "description": "Ajuste a velocidade de reprodução de voz (0,5–{max}x). Escolha uma velocidade compatível se a configuração salva exceder esse intervalo.",
         "title": "Velocidade de reprodução"
       },
       "title": "Voz"

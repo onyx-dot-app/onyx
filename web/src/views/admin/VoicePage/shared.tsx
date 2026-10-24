@@ -127,9 +127,8 @@ export function VoiceProviderSetupModal({
         setVoiceOptions(options);
         setInitialDefaultVoice((prev) => {
           if (!prev) return options[0]?.value ?? "";
-          return options.some((o) => o.value === prev)
-            ? prev
-            : (options[0]?.value ?? "");
+          // Custom voice IDs need not appear in the provider's static list.
+          return prev;
         });
       })
       .catch(() => setVoiceOptions([]))

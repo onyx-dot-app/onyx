@@ -10563,6 +10563,12 @@
         "azureSpeechTts": {
           "subtitle": "Microsoft Foundry Tools 中的文字转语音。"
         },
+        "inworldStt": {
+          "subtitle": "Inworld 语音转文字 API。"
+        },
+        "inworldTts": {
+          "subtitle": "Inworld TTS-2 和 TTS-2 Flash。"
+        },
         "elevenlabsStt": {
           "subtitle": "ElevenLabs 语音转文字 API。"
         },
@@ -16558,7 +16564,7 @@
         "title": "停顿时自动发送"
       },
       "playbackSpeed": {
-        "description": "调整语音播放速度。",
+        "description": "调整语音播放速度（0.5–{max} 倍）。如果已保存的设置超出此范围，请选择支持的速度。",
         "title": "播放速度"
       },
       "title": "语音"

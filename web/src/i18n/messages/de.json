@@ -10563,6 +10563,12 @@
         "azureSpeechTts": {
           "subtitle": "Text zu Sprache in Microsoft Foundry Tools."
         },
+        "inworldStt": {
+          "subtitle": "Inworld Speech-to-Text-API."
+        },
+        "inworldTts": {
+          "subtitle": "Inworld TTS-2 und TTS-2 Flash."
+        },
         "elevenlabsStt": {
           "subtitle": "ElevenLabs Speech to Text API."
         },
@@ -16558,7 +16564,7 @@
         "title": "Automatisches Senden bei Pause"
       },
       "playbackSpeed": {
-        "description": "Passen Sie die Geschwindigkeit der Sprachwiedergabe an.",
+        "description": "Sprachwiedergabe anpassen (0,5–{max}x). Wählen Sie eine unterstützte Geschwindigkeit, falls Ihre gespeicherte Einstellung außerhalb dieses Bereichs liegt.",
         "title": "Wiedergabegeschwindigkeit"
       },
       "title": "Sprachfunktionen"

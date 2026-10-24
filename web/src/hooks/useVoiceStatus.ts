@@ -5,6 +5,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 interface VoiceStatus {
   stt_enabled: boolean;
   tts_enabled: boolean;
+  tts_max_speed?: number;
 }
 
 export function useVoiceStatus() {
@@ -21,6 +22,7 @@ export function useVoiceStatus() {
   return {
     sttEnabled: data?.stt_enabled ?? false,
     ttsEnabled: data?.tts_enabled ?? false,
+    ttsMaxSpeed: data?.tts_max_speed ?? 2,
     isLoading,
     error,
   };

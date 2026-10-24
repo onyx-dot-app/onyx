@@ -10563,6 +10563,12 @@
         "azureSpeechTts": {
           "subtitle": "Microsoft Foundry Tools のテキスト読み上げ。"
         },
+        "inworldStt": {
+          "subtitle": "Inworld の音声テキスト変換 API。"
+        },
+        "inworldTts": {
+          "subtitle": "Inworld TTS-2 と TTS-2 Flash。"
+        },
         "elevenlabsStt": {
           "subtitle": "ElevenLabs の音声テキスト変換 API。"
         },
@@ -16558,7 +16564,7 @@
         "title": "停止時に自動送信"
       },
       "playbackSpeed": {
-        "description": "音声再生の速度を調整します。",
+        "description": "音声の再生速度を調整します（0.5～{max}倍）。保存済みの設定が範囲外の場合は、対応する速度を選択してください。",
         "title": "再生速度"
       },
       "title": "音声"
