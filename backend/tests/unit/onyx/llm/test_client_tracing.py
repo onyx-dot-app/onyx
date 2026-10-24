@@ -340,7 +340,7 @@ def test_cancelled_invoke_records_error_and_available_usage(
 
     client = LitellmLLM(
         model_provider="openai",
-        model_name="gpt-5-mini",
+        model_name="gpt-6-luna",
         api_key="test",
         max_input_tokens=1000,
     )
@@ -399,7 +399,7 @@ def test_cancellation_when_span_opens_is_recorded(streaming: bool) -> None:
 
     client = LitellmLLM(
         model_provider="openai",
-        model_name="gpt-5-mini",
+        model_name="gpt-6-luna",
         api_key="test",
         max_input_tokens=1000,
     )

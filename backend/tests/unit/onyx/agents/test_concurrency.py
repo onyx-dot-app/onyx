@@ -448,6 +448,7 @@ def test_paused_delivery_drains_late_child_events_without_retaining_worker() -> 
     finally:
         release.set()
         delivery.close()
+    assert delivery.tracker.wait_idle(2)
     assert received == ["parent", "child", "resumed"]
 
 
@@ -486,6 +487,7 @@ def test_shared_dispatcher_keeps_channel_context_and_independent_completion() ->
         second.publish(AgentStartEvent(run_id="last"))
         release.set()
         second.close()
+        assert second.tracker.wait_idle(2)
         assert [(run, context) for run, context, _ in received] == [
             ("first", "first"),
             ("blocked", "second"),
@@ -497,6 +499,41 @@ def test_shared_dispatcher_keeps_channel_context_and_independent_completion() ->
         release.set()
         first.close()
         second.close()
+        dispatcher.close()
+
+
+def test_closed_child_drains_accepted_events_without_forwarding_new_events() -> None:
+    dispatcher = concurrency.EventDispatcher()
+    parent = concurrency.EventDelivery(dispatcher)
+    child = concurrency.EventDelivery(parent=parent)
+    entered = threading.Event()
+    release = threading.Event()
+    local: list[str] = []
+    ancestors: list[str] = []
+
+    def receive(event: AgentEvent) -> None:
+        entered.set()
+        assert release.wait(5)
+        local.append(event.run_id)
+
+    child.subscribe(receive)
+    parent.subscribe(lambda event: ancestors.append(event.run_id))
+    try:
+        child.publish(AgentStartEvent(run_id="first"))
+        assert entered.wait(2)
+        child.publish(AgentStartEvent(run_id="second"))
+        child.close()
+        child.publish(AgentStartEvent(run_id="after-close"))
+        assert dispatcher.has_pending_events
+        assert not child.failed.is_set()
+        release.set()
+        assert child.tracker.wait_idle(2)
+        assert parent.tracker.wait_idle(2)
+        assert local == ancestors == ["first", "second"]
+    finally:
+        release.set()
+        child.close()
+        parent.close()
         dispatcher.close()
 
 
@@ -529,6 +566,8 @@ def test_shared_dispatcher_drains_combined_burst_in_order() -> None:
         release.set()
         first.close()
         second.close()
+        assert first.tracker.wait_idle(2)
+        assert second.tracker.wait_idle(2)
         assert received == ["blocked", *expected]
         assert not first.failed.is_set()
         assert not second.failed.is_set()
@@ -619,6 +658,7 @@ def test_progress_delivery_isolates_producer_and_listeners() -> None:
         details.queries.append("producer mutation")
         release.set()
         delivery.close()
+        assert delivery.tracker.wait_idle(2)
         assert received == [["first"]]
         assert details.queries == ["first", "producer mutation"]
     finally:

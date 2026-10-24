@@ -20,7 +20,6 @@ from onyx.utils.threadpool_concurrency import (
 
 logger = setup_logger()
 OPERATION_TIMEOUT_SECONDS = 1800.0
-CLEANUP_SECONDS = 2.0
 EVENT_FLUSH_INTERVAL_SECONDS = 0.05
 
 
@@ -144,6 +143,8 @@ class EventDispatcher:
                 current: EventDelivery | None = delivery
                 while current is not None:
                     with current._lock:
+                        if current is delivery and current._closing:
+                            return
                         if not current._closing and not current.failed.is_set():
                             current.tracker.started()
                             channels.append(current)
@@ -246,17 +247,12 @@ class EventDispatcher:
             self._release_when_idle = False
 
     def close(self) -> None:
-        """Reject new events and drain accepted events within the cleanup bound."""
+        """Reject new events and let the worker exit after accepted work drains."""
         with self._condition:
             if self._flush is not None:
                 self.start()
             self._closed = True
             self._condition.notify_all()
-            worker = self._worker
-        if worker is not None and worker.ident != threading.get_ident():
-            worker.join(timeout=CLEANUP_SECONDS)
-            if worker.is_alive():
-                logger.warning("Agent event dispatcher exceeded its cleanup bound")
 
 
 class EventDelivery:
@@ -333,12 +329,13 @@ class EventDelivery:
             self.dispatcher.pause()
 
     def close(self) -> None:
+        """Stop accepting events and release listeners after accepted work drains."""
         with self._lock:
             self._closing = True
-        if not self.tracker.wait_idle(CLEANUP_SECONDS):
-            self.failed.set()
-            logger.warning("Agent event delivery exceeded its cleanup bound")
-        with self._lock:
-            self._listeners.clear()
+        self.tracker.on_idle(self._clear_listeners)
         if self._owns_dispatcher:
             self.dispatcher.close()
+
+    def _clear_listeners(self) -> None:
+        with self._lock:
+            self._listeners.clear()
