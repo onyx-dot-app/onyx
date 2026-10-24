@@ -1,5 +1,6 @@
 """Tests for llm_step.py, specifically sanitization and argument parsing."""
 
+import json
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -10,6 +11,7 @@ from onyx.chat.llm_step import (
     _extract_tool_call_kickoffs,
     _increment_turns,
     _parse_tool_args_to_dict,
+    _tool_definitions_by_name,
     extract_tool_calls_from_response_text,
     translate_history_to_llm_format,
 )
@@ -165,6 +167,62 @@ class TestParseToolArgsToDict:
         json_str = '{"query": "hello 👋 世界"}'
         result = _parse_tool_args_to_dict(json_str)
         assert result == {"query": "hello 👋 世界"}
+
+    # The content of a JSON file, as a model sends it for a string parameter.
+    _JSON_FILE_CONTENT = '{\n  "semi": true,\n  "printWidth": 120\n}\n'
+
+    @pytest.mark.parametrize(
+        "content_schema",
+        [
+            {"type": "string"},
+            {"type": ["string", "null"]},
+            {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        ],
+    )
+    def test_string_property_keeps_json_looking_text(
+        self, content_schema: dict[str, Any]
+    ) -> None:
+        parameters: dict[str, Any] = {
+            "type": "object",
+            "properties": {"content": content_schema, "queries": {"type": "array"}},
+        }
+        raw_args = json.dumps(
+            {"content": self._JSON_FILE_CONTENT, "queries": '["q1", "q2"]'}
+        )
+
+        result = _parse_tool_args_to_dict(raw_args, parameters)
+
+        assert result == {"content": self._JSON_FILE_CONTENT, "queries": ["q1", "q2"]}
+
+    def test_string_property_kept_for_dict_and_double_encoded_input(self) -> None:
+        parameters: dict[str, Any] = {
+            "type": "object",
+            "properties": {"content": {"type": "string"}},
+        }
+        args = {"content": "[1, 2, 3]"}
+
+        assert _parse_tool_args_to_dict(args, parameters) == args
+        assert (
+            _parse_tool_args_to_dict(json.dumps(json.dumps(args)), parameters) == args
+        )
+
+    @pytest.mark.parametrize(
+        "properties",
+        [
+            {"payload": {"type": "object"}},
+            {"payload": {}},
+            {},
+        ],
+        ids=["object-type", "no-type", "not-in-schema"],
+    )
+    def test_rescue_still_parses_when_no_string_type(
+        self, properties: dict[str, Any]
+    ) -> None:
+        parameters: dict[str, Any] = {"type": "object", "properties": properties}
+
+        result = _parse_tool_args_to_dict({"payload": '{"a": 1}'}, parameters)
+
+        assert result == {"payload": {"a": 1}}
 
 
 class TestExtractToolCallsFromResponseText:
@@ -343,6 +401,62 @@ class TestExtractToolCallKickoffs:
         result = _extract_tool_call_kickoffs(tool_call_map, turn_index=0, tab_index=5)
         assert result[0].placement.tab_index == 5
         assert result[1].placement.tab_index == 5
+
+    def test_arguments_follow_each_tool_schema(self) -> None:
+        """A string parameter keeps JSON-looking text (onyx-dot-app/onyx#16441),
+        while another tool's array parameter still gets the JSON rescue."""
+        tool_definitions: list[dict[str, Any]] = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "create_or_update_file",
+                    "description": "Write a file",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "path": {"type": "string"},
+                            "content": {"type": "string"},
+                        },
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "internal_search",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "queries": {"type": "array", "items": {"type": "string"}}
+                        },
+                    },
+                },
+            },
+        ]
+        content = '{\n  "semi": true\n}\n'
+        tool_call_map = {
+            0: {
+                "id": "call_file",
+                "name": "create_or_update_file",
+                "arguments": json.dumps(
+                    {"path": ".prettierrc.json", "content": content}
+                ),
+            },
+            1: {
+                "id": "call_search",
+                "name": "internal_search",
+                "arguments": json.dumps({"queries": '["q1"]'}),
+            },
+        }
+
+        result = _extract_tool_call_kickoffs(
+            tool_call_map,
+            turn_index=0,
+            tool_definitions_by_name=_tool_definitions_by_name(tool_definitions),
+        )
+
+        assert result[0].tool_args == {"path": ".prettierrc.json", "content": content}
+        assert result[1].tool_args == {"queries": ["q1"]}
 
 
 class TestXmlToolCallContentFilter:

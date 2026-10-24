@@ -4,6 +4,8 @@ import uuid
 from collections.abc import Callable, Generator, Mapping, Sequence
 from typing import Any, cast
 
+from pydantic import JsonValue
+
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_utils import count_message_replay_tokens
 from onyx.chat.citation_processor import DynamicCitationProcessor
@@ -37,7 +39,7 @@ from onyx.llm.model_request import (
     ToolMessage,
     UserMessage,
 )
-from onyx.llm.model_response import Delta
+from onyx.llm.model_response import Delta, json_schema_types
 from onyx.llm.models import (
     ImageContentPart,
     ImageUrlDetail,
@@ -77,7 +79,7 @@ from onyx.utils.postgres_sanitization import sanitize_string
 logger = setup_logger()
 
 
-def _try_parse_json_string(value: Any) -> Any:
+def _try_parse_json_string(value: Any, property_schema: JsonValue = None) -> Any:
     """Attempt to parse a JSON string value into its Python equivalent.
 
     If value is a string that looks like a JSON array or object, parse it.
@@ -85,8 +87,15 @@ def _try_parse_json_string(value: Any) -> Any:
 
     This handles the case where the LLM returns arguments like:
     - queries: '["query1", "query2"]' instead of ["query1", "query2"]
+
+    A property whose schema accepts a string keeps its text as sent, even when
+    it looks like JSON (e.g. the content of a JSON file).
     """
     if not isinstance(value, str):
+        return value
+    if isinstance(property_schema, dict) and "string" in json_schema_types(
+        property_schema
+    ):
         return value
 
     stripped = value.strip()
@@ -103,7 +112,20 @@ def _try_parse_json_string(value: Any) -> Any:
         return value
 
 
-def _parse_tool_args_to_dict(raw_args: Any) -> dict[str, Any]:
+def _parse_arg_values(
+    args: Mapping[str, Any], parameters: Mapping[str, JsonValue] | None
+) -> dict[str, Any]:
+    """Parse any string values that look like JSON arrays/objects, except for
+    properties that `parameters` (the tool's JSON schema) types as strings."""
+    properties = parameters.get("properties") if parameters else None
+    if not isinstance(properties, dict):
+        properties = {}
+    return {k: _try_parse_json_string(v, properties.get(k)) for k, v in args.items()}
+
+
+def _parse_tool_args_to_dict(
+    raw_args: Any, parameters: Mapping[str, JsonValue] | None = None
+) -> dict[str, Any]:
     """Parse tool arguments into a dict.
 
     Normal case:
@@ -115,6 +137,9 @@ def _parse_tool_args_to_dict(raw_args: Any) -> dict[str, Any]:
     Also handles the case where argument values are JSON strings that need parsing:
     - {"queries": '["q1", "q2"]'} -> {"queries": ["q1", "q2"]}
 
+    `parameters` is the tool's parameter schema. A value whose property the
+    schema types as a string is never parsed.
+
     Anything else returns {}.
     """
 
@@ -122,11 +147,13 @@ def _parse_tool_args_to_dict(raw_args: Any) -> dict[str, Any]:
         return {}
 
     if isinstance(raw_args, dict):
-        # Parse any string values that look like JSON arrays/objects
-        return {
-            k: _try_parse_json_string(sanitize_string(v) if isinstance(v, str) else v)
-            for k, v in raw_args.items()
-        }
+        return _parse_arg_values(
+            {
+                k: sanitize_string(v) if isinstance(v, str) else v
+                for k, v in raw_args.items()
+            },
+            parameters,
+        )
 
     if not isinstance(raw_args, str):
         return {}
@@ -140,8 +167,7 @@ def _parse_tool_args_to_dict(raw_args: Any) -> dict[str, Any]:
         return {}
 
     if isinstance(parsed1, dict):
-        # Parse any string values that look like JSON arrays/objects
-        return {k: _try_parse_json_string(v) for k, v in parsed1.items()}
+        return _parse_arg_values(parsed1, parameters)
 
     if isinstance(parsed1, str):
         try:
@@ -149,8 +175,7 @@ def _parse_tool_args_to_dict(raw_args: Any) -> dict[str, Any]:
         except json.JSONDecodeError:
             return {}
         if isinstance(parsed2, dict):
-            # Parse any string values that look like JSON arrays/objects
-            return {k: _try_parse_json_string(v) for k, v in parsed2.items()}
+            return _parse_arg_values(parsed2, parameters)
         return {}
 
     return {}
@@ -260,12 +285,30 @@ def _update_tool_call_with_delta(
             )
 
 
+def _tool_definitions_by_name(
+    tool_definitions: Sequence[Mapping[str, Any]],
+) -> dict[str, ToolDefinition]:
+    """The chat loop's function-tool dicts as ToolDefinitions, by tool name."""
+    return {
+        function["name"]: ToolDefinition(
+            name=function["name"],
+            description=function.get("description") or "",
+            parameters=function.get("parameters") or {},
+        )
+        for tool_def in tool_definitions
+        if tool_def.get("type") == "function"
+        and isinstance(function := tool_def.get("function"), dict)
+        and function.get("name")
+    }
+
+
 def _extract_tool_call_kickoffs(
     id_to_tool_call_map: dict[int, dict[str, Any]],
     turn_index: int,
     tab_index: int | None = None,
     sub_turn_index: int | None = None,
     tab_index_start: int = 0,
+    tool_definitions_by_name: Mapping[str, ToolDefinition] | None = None,
 ) -> list[ToolCallKickoff]:
     """Extract ToolCallKickoff objects from the tool call map.
 
@@ -278,12 +321,18 @@ def _extract_tool_call_kickoffs(
         tab_index: If provided, use this tab_index for all tool calls (otherwise auto-increment)
         sub_turn_index: The sub-turn index for nested tool calls
         tab_index_start: First auto-assigned tab_index (default 0).
+        tool_definitions_by_name: The tools offered to the LLM, so each call's
+            arguments are parsed against its tool's parameter schema.
     """
     tool_calls: list[ToolCallKickoff] = []
     tab_index_calculated = tab_index_start
     for tool_call_data in id_to_tool_call_map.values():
         if tool_call_data.get("id") and tool_call_data.get("name"):
-            tool_args = _parse_tool_args_to_dict(tool_call_data.get("arguments"))
+            definition = (tool_definitions_by_name or {}).get(tool_call_data["name"])
+            tool_args = _parse_tool_args_to_dict(
+                tool_call_data.get("arguments"),
+                definition.parameters if definition else None,
+            )
 
             tool_calls.append(
                 ToolCallKickoff(
@@ -313,17 +362,7 @@ def extract_tool_calls_from_response_text(
     Adapts the chat loop's function-tool dicts and placement to the shared
     parser in ``onyx.llm.tool_parsing``.
     """
-    definitions = [
-        ToolDefinition(
-            name=function["name"],
-            description=function.get("description") or "",
-            parameters=function.get("parameters") or {},
-        )
-        for tool_def in tool_definitions
-        if tool_def.get("type") == "function"
-        and isinstance(function := tool_def.get("function"), dict)
-        and function.get("name")
-    ]
+    definitions = list(_tool_definitions_by_name(tool_definitions).values())
     if not response_text or not definitions:
         return []
 
@@ -1175,6 +1214,7 @@ def run_llm_step_pkt_generator(
             tab_index=tab_index if use_existing_tab_index else None,
             sub_turn_index=sub_turn_index,
             tab_index_start=tab_index_start,
+            tool_definitions_by_name=_tool_definitions_by_name(tool_definitions),
         )
         # Run the flush + recovery below while the span is still open, so the
         # span output recorded afterward reflects the answer the user received.

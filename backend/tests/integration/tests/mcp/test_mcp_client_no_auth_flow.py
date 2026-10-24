@@ -167,17 +167,13 @@ def test_mcp_client_no_auth_flow(
     assert tool_id in persona_tool_ids
 
 
-def test_mcp_json_tool_result_reaches_llm_encoded_once(
-    mcp_no_auth_server: None,  # noqa: ARG001
-    admin_user: DATestUser,
-    mock_llm: MockLLMScript,
-) -> None:
-    """A tool result that the MCP server sends as JSON text reaches the LLM as
-    JSON inside `tool_result`, not as an escaped string."""
+def _connected_tool_id(admin_user: DATestUser, tool_name: str) -> int:
+    """Registers the no-auth test server, loads its tools and returns the id
+    of `tool_name`."""
     create_response = client.post(
         f"{API_SERVER_URL}/admin/mcp/servers/create",
         json={
-            "name": f"integration-mcp-json-{uuid4().hex[:8]}",
+            "name": f"integration-mcp-{tool_name}-{uuid4().hex[:8]}",
             "description": "Integration test MCP server",
             "server_url": MCP_SERVER_URL,
             "transport": MCPTransport.STREAMABLE_HTTP.value,
@@ -206,11 +202,21 @@ def test_mcp_json_tool_result_reaches_llm_encoded_once(
         cookies=admin_user.cookies,
     )
     db_tools_response.raise_for_status()
-    tool_id = next(
+    return next(
         tool["id"]
         for tool in db_tools_response.json()["tools"]
-        if tool["name"] == "get_ticket"
+        if tool["name"] == tool_name
     )
+
+
+def test_mcp_json_tool_result_reaches_llm_encoded_once(
+    mcp_no_auth_server: None,  # noqa: ARG001
+    admin_user: DATestUser,
+    mock_llm: MockLLMScript,
+) -> None:
+    """A tool result that the MCP server sends as JSON text reaches the LLM as
+    JSON inside `tool_result`, not as an escaped string."""
+    tool_id = _connected_tool_id(admin_user, "get_ticket")
 
     mock_llm.conversation(
         "chat",
@@ -249,3 +255,48 @@ def test_mcp_json_tool_result_reaches_llm_encoded_once(
             "labels": ["bug"],
         }
     }
+
+
+def test_mcp_string_argument_keeps_json_looking_text(
+    mcp_no_auth_server: None,  # noqa: ARG001
+    admin_user: DATestUser,
+    mock_llm: MockLLMScript,
+) -> None:
+    """A string argument whose text looks like JSON reaches the MCP tool as
+    that text, not as a parsed object the tool's schema rejects."""
+    tool_id = _connected_tool_id(admin_user, "hello")
+    json_looking_name = '{"semi": true}'
+
+    mock_llm.conversation(
+        "chat",
+        Reply(
+            tool_calls=[
+                ToolCall(
+                    id="call_hello",
+                    name="hello",
+                    arguments={"name": json_looking_name},
+                )
+            ],
+            conditions=RequestConditions(offers=["hello"]),
+        ),
+        Reply(
+            text="Done.",
+            conditions=RequestConditions(has_results_for=["call_hello"]),
+        ),
+    )
+    persona = PersonaManager.create(
+        tool_ids=[tool_id], user_performing_action=admin_user
+    )
+    chat_session = ChatSessionManager.create(
+        persona_id=persona.id, user_performing_action=admin_user
+    )
+    ChatSessionManager.send_message(
+        chat_session_id=chat_session.id,
+        message="Say hello.",
+        user_performing_action=admin_user,
+        forced_tool_ids=[tool_id],
+    )
+
+    tool_result = mock_llm.requests_in("chat")[-1].tool_result("call_hello")
+    assert tool_result is not None
+    assert json.loads(tool_result) == {"tool_result": f"Hello, {json_looking_name}!"}
