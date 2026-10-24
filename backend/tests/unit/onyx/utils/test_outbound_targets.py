@@ -301,7 +301,7 @@ def test_disabled_sitemap_policy_allows_loopback_but_not_metadata() -> None:
     response.text = ""
     with (
         patch("onyx.connectors.web.connector.get_security_settings") as settings,
-        patch("requests.Session.get", return_value=response),
+        patch("requests.Session.request", return_value=response),
     ):
         settings.return_value.ssrf_protection_level = SSRFProtectionLevel.DISABLED
         assert extract_urls_from_sitemap("http://127.0.0.1/sitemap.xml") == [

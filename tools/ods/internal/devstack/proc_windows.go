@@ -2,11 +2,20 @@
 
 package devstack
 
-import "time"
+import (
+	"os"
+	"time"
+)
 
 func rememberGroup(*ServiceRecord) {}
 
 func startService(Spec, string) (ServiceRecord, error) { return ServiceRecord{}, errUnsupported }
+
+func launchService(Spec, string, ServiceIO) (ServiceRecord, <-chan error, error) {
+	return ServiceRecord{}, nil, errUnsupported
+}
+
+func signalService(ServiceRecord, os.Signal) error { return errUnsupported }
 
 func isCurrent(ServiceRecord) bool { return false }
 

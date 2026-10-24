@@ -50,15 +50,15 @@ describe("buildTargetUri", () => {
   it("round-trips a provider that has an explicit deployment_name", () => {
     const provider: LLMProviderView = {
       ...baseProvider,
-      deployment_name: "gpt-4o",
+      deployment_name: "gpt-6-sol",
     };
     const uri = buildTargetUri(provider);
 
-    expect(uri).toContain("/openai/deployments/gpt-4o/chat/completions");
+    expect(uri).toContain("/openai/deployments/gpt-6-sol/chat/completions");
     expect(isValidAzureTargetUri(uri)).toBe(true);
 
     const parsed = parseAzureTargetUri(uri);
-    expect(parsed.deploymentName).toBe("gpt-4o");
+    expect(parsed.deploymentName).toBe("gpt-6-sol");
     expect(parsed.apiVersion).toBe("2025-01-01-preview");
     expect(parsed.url.origin).toBe("https://my-resource.openai.azure.com");
   });

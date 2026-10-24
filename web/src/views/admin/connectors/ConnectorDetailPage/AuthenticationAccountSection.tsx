@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { mutate } from "swr";
 import { Button, Card, Modal } from "@opal/components";
 import { Content, ContentAction, Section, toast } from "@opal/layouts";
@@ -9,6 +9,7 @@ import { SvgEdit, SvgUserEdit } from "@opal/icons";
 import type { CCPairFullInfo } from "@/lib/connectors/types";
 import { TypedFile } from "@/lib/connectors/fileTypes";
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
+import { formatDateLog } from "@/lib/dateUtils";
 import { isEditableSource } from "@/lib/connectors/edit/editable";
 import {
   useCredentialCheckReports,
@@ -46,8 +47,8 @@ export default function AuthenticationAccountSection({
   const t = useTranslations("admin.connector.account");
   const tAccount = useTranslations("admin.connectorsList.add.account");
   const tAdd = useTranslations("admin.connectorsList.add");
-  const format = useFormatter();
   const source = ccPair.connector.source;
+  const connectorId: number = ccPair.connector.id;
   const sourceName = getSourceDisplayName(source) ?? source;
   const tCredentials = useTranslations("admin.credentials");
   const { credentials, remove, saveSharing, refresh } =
@@ -149,8 +150,12 @@ export default function AuthenticationAccountSection({
           }}
           detailsOpen={detailsOpen}
           onDetailsOpenChange={setDetailsOpen}
-          checkReport={checkReports.reportFor(credential.id)}
-          onRerunChecks={() => checkReports.rerun(credential.id)}
+          // The pair's checks: without the connector, every check that
+          // needs its settings is skipped.
+          checkReport={
+            checkReports.reportFor(credential.id, connectorId) ??
+            checkReports.reportFor(credential.id)
+          }
           groupsLocked={!businessTier}
           onSaveAccount={(update) => saveSharing(credential.id, update)}
           onUpdateCredentials={
@@ -168,11 +173,7 @@ export default function AuthenticationAccountSection({
             }
             suffix={tAccount("sourceSuffix", { source: sourceName })}
             description={tAccount("addedOn.label", {
-              date: format.dateTime(new Date(ccPair.credential.time_created), {
-                year: "numeric",
-                month: "2-digit",
-                day: "2-digit",
-              }),
+              date: formatDateLog(ccPair.credential.time_created),
             })}
             sizePreset="main-ui"
             variant="section"

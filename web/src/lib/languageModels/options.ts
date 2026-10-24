@@ -80,7 +80,8 @@ export function buildLlmOptions(
   llmProviders: ModelOptionProvider[] | undefined,
   currentModelName?: string,
   includeHiddenModels = false,
-  providerNames?: ProviderNamesResolver
+  providerNames?: ProviderNamesResolver,
+  includeDecisionOnly = false
 ): LLMOption[] {
   if (!llmProviders) return [];
 
@@ -99,7 +100,8 @@ export function buildLlmOptions(
     llmProvider.model_configurations
       .filter(
         (mc) =>
-          includeHiddenModels || mc.is_visible || mc.name === currentModelName
+          (includeDecisionOnly || mc.supports_chat !== false) &&
+          (includeHiddenModels || mc.is_visible || mc.name === currentModelName)
       )
       .forEach((mc) => {
         const key =
@@ -222,7 +224,7 @@ export function groupLlmOptions(
  * tracked as a descriptor rather than a stable ID.
  */
 export function findModelConfigId(
-  llmProviders: LLMProviderDescriptor[] | undefined,
+  llmProviders: ModelOptionProvider[] | undefined,
   provider: string,
   modelName: string
 ): number | null {
@@ -246,7 +248,7 @@ export function findLlmOptionById(
 ): LLMOption | null {
   if (modelConfigurationId === null) return null;
   return (
-    buildLlmOptions(llmProviders, undefined, true).find(
+    buildLlmOptions(llmProviders, undefined, true, undefined, true).find(
       (option) => option.modelConfigurationId === modelConfigurationId
     ) ?? null
   );
@@ -276,15 +278,15 @@ export function findDefaultModelDisplayName(
 
 /**
  * Trims each provider's model list for a picker, dropping providers left
- * empty. The pure counterpart of the chat picker's own filtering, for a
+ * empty. Models an admin hid never show, except the current value (`keep`). The pure counterpart of the chat picker's own filtering, for a
  * dumb select that renders whatever it is given.
  */
 export function filterModelConfigurations<T extends ModelOptionProvider>(
   providers: T[],
   {
-    visibleOnly = true,
     imageInput = false,
     keep = null,
+    includeDecisionOnly = false,
   }: FilterModelConfigurationsOptions = {}
 ): T[] {
   return providers
@@ -292,9 +294,9 @@ export function filterModelConfigurations<T extends ModelOptionProvider>(
       ...provider,
       model_configurations: provider.model_configurations.filter(
         (mc) =>
-          (keep !== null && mc.id === keep) ||
-          ((!visibleOnly || mc.is_visible) &&
-            (!imageInput || mc.supports_image_input))
+          (includeDecisionOnly || mc.supports_chat !== false) &&
+          ((keep !== null && mc.id === keep) ||
+            (mc.is_visible && (!imageInput || mc.supports_image_input)))
       ),
     }))
     .filter((provider) => provider.model_configurations.length > 0);
@@ -317,6 +319,7 @@ export function fromSelectValue(value: string): number | null {
 }
 
 export interface BuildModelSelectOptionsOptions {
+  includeDecisionOnly?: boolean;
   /**
    * Group models under a foldable divider per provider (aggregators split
    * per vendor, as the chat picker does). Off, or with a single group,
@@ -335,10 +338,20 @@ export interface BuildModelSelectOptionsOptions {
  */
 export function buildModelSelectOptions(
   providers: ModelOptionProvider[],
-  { grouped = true, providerNames }: BuildModelSelectOptionsOptions = {}
+  {
+    grouped = true,
+    providerNames,
+    includeDecisionOnly = false,
+  }: BuildModelSelectOptionsOptions = {}
 ): SelectOptions {
   const dividers: SelectDivider[] = groupLlmOptions(
-    buildLlmOptions(providers, undefined, true, providerNames)
+    buildLlmOptions(
+      providers,
+      undefined,
+      true,
+      providerNames,
+      includeDecisionOnly
+    )
   )
     .map((group) => ({
       title: group.displayName,

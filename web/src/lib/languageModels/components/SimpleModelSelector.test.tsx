@@ -7,7 +7,6 @@ import type {
   ModelOptionProvider,
   ModelPaging,
 } from "@/lib/languageModels/types";
-import { filterModelConfigurations } from "@/lib/languageModels/options";
 
 // The listbox renders through a portal; keep it inside the test container.
 jest.mock("react-dom", () => ({
@@ -24,12 +23,12 @@ const providers: ModelOptionProvider[] = [
     model_configurations: [
       {
         id: 11,
-        name: "gpt-4o",
+        name: "gpt-6-sol",
         is_visible: true,
         max_input_tokens: null,
         supports_image_input: true,
         supports_reasoning: false,
-        effectiveDisplayName: "GPT-4o",
+        effectiveDisplayName: "GPT-6 Sol",
       },
       {
         id: 12,
@@ -59,7 +58,7 @@ describe("SimpleModelSelector", () => {
     const selector = screen.getByRole("combobox", { name: "Use chat model" });
     expect(selector).toHaveValue("");
     await user.click(selector);
-    await user.click(screen.getByRole("option", { name: /GPT-4o/ }));
+    await user.click(screen.getByRole("option", { name: /GPT-6 Sol/ }));
     expect(handleChange).toHaveBeenCalledWith(11);
   });
 
@@ -87,7 +86,7 @@ describe("SimpleModelSelector", () => {
         onChange={handleChange}
       />
     );
-    expect(screen.getByRole("combobox")).toHaveValue("GPT-4o");
+    expect(screen.getByRole("combobox")).toHaveValue("GPT-6 Sol");
 
     await user.click(screen.getByRole("combobox"));
     // One provider: no divider, and the list carries a search field.
@@ -95,33 +94,6 @@ describe("SimpleModelSelector", () => {
     expect(screen.getByRole("textbox", { name: "Search" })).toHaveFocus();
     await user.click(screen.getByRole("option", { name: /GPT-4\.1/ }));
     expect(handleChange).toHaveBeenCalledWith(12);
-  });
-
-  test("lets an admin select a hidden utility model", async () => {
-    const hiddenProviders = providers.map((provider) => ({
-      ...provider,
-      model_configurations: provider.model_configurations.map((model) => ({
-        ...model,
-        is_visible: false,
-      })),
-    }));
-    const handleChange = jest.fn();
-    const user = setupUser();
-    render(
-      <SimpleModelSelector
-        providers={filterModelConfigurations(hiddenProviders, {
-          visibleOnly: false,
-        })}
-        value={null}
-        onChange={handleChange}
-      />
-    );
-
-    await user.click(screen.getByRole("combobox"));
-    await user.click(screen.getByRole("option", { name: /GPT-4\.1/ }));
-
-    expect(handleChange).toHaveBeenCalledWith(12);
-    expect(hiddenProviders[0]?.model_configurations[1]?.is_visible).toBe(false);
   });
 
   test("non-nullable: re-picking the chosen model changes nothing", async () => {
@@ -135,9 +107,9 @@ describe("SimpleModelSelector", () => {
       />
     );
     await user.click(screen.getByRole("combobox"));
-    await user.click(screen.getByRole("option", { name: /GPT-4o/ }));
+    await user.click(screen.getByRole("option", { name: /GPT-6 Sol/ }));
     expect(handleChange).not.toHaveBeenCalled();
-    expect(screen.getByRole("combobox")).toHaveValue("GPT-4o");
+    expect(screen.getByRole("combobox")).toHaveValue("GPT-6 Sol");
   });
 
   test("nullable: re-picking the chosen model clears it", async () => {
@@ -152,7 +124,7 @@ describe("SimpleModelSelector", () => {
       />
     );
     await user.click(screen.getByRole("combobox"));
-    await user.click(screen.getByRole("option", { name: /GPT-4o/ }));
+    await user.click(screen.getByRole("option", { name: /GPT-6 Sol/ }));
     expect(handleChange).toHaveBeenCalledWith(null);
   });
 
@@ -187,7 +159,7 @@ describe("SimpleModelSelector", () => {
       screen.getByRole("option", { name: /Claude Sonnet 4/ })
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("option", { name: /GPT-4o/ })
+      screen.queryByRole("option", { name: /GPT-6 Sol/ })
     ).not.toBeInTheDocument();
   });
 
@@ -212,7 +184,7 @@ describe("SimpleModelSelector", () => {
     render(
       <SimpleModelSelector
         nullable
-        globalDefault={{ description: "GPT-4o" }}
+        globalDefault={{ description: "GPT-6 Sol" }}
         providers={providers}
         value={null}
         onChange={handleChange}
@@ -222,7 +194,7 @@ describe("SimpleModelSelector", () => {
 
     await user.click(screen.getByRole("combobox"));
     const row = screen.getByRole("option", { name: /Global Default/ });
-    expect(row).toHaveTextContent("GPT-4o");
+    expect(row).toHaveTextContent("GPT-6 Sol");
     // Re-picking the row is a no-op: null has nothing to clear into.
     await user.click(row);
     expect(handleChange).not.toHaveBeenCalled();

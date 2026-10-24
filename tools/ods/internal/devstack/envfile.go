@@ -121,6 +121,9 @@ func UpsertEnvFile(path string, values map[string]string) error {
 	if len(values) == 0 {
 		return nil
 	}
+	if _, err := localizeSymlink(path); err != nil {
+		return err
+	}
 	return dotenv.Upsert(path, values)
 }
 
@@ -171,8 +174,4 @@ func mapToEnv(m map[string]string) []string {
 		env = append(env, k+"="+m[k])
 	}
 	return env
-}
-
-func environ() []string {
-	return os.Environ()
 }

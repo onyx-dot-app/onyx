@@ -85,7 +85,7 @@ def test_viewer_outside_provider_group_keeps_agent_model_pin(
             api_key_changed=True,
             is_public=False,
             model_configurations=[
-                ModelConfigurationUpsertRequest(name="gpt-4o-mini", is_visible=True)
+                ModelConfigurationUpsertRequest(name="gpt-6-luna", is_visible=True)
             ],
         ),
         db_session=db_session,

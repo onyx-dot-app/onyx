@@ -25,6 +25,7 @@ from onyx.db.enums import (
 from onyx.db.mcp import (
     get_craft_enabled_mcp_servers,
     get_mcp_server_by_id,
+    get_mcp_server_user_preferences,
     user_can_access_mcp_server,
 )
 from onyx.db.models import MCPServer
@@ -172,6 +173,13 @@ class MCPServerResolver(CredentialResolver):
             if user is None:
                 raise CredentialUnavailableError(
                     f"sandbox user {short_log_id(user_id)} not found"
+                )
+            preference = get_mcp_server_user_preferences([server.id], user.id, db).get(
+                server.id
+            )
+            if preference is not None and not preference.enabled_in_craft:
+                raise CredentialUnavailableError(
+                    f"user {short_log_id(user_id)} disabled MCP server {server.id} in Craft"
                 )
             if not user_can_access_mcp_server(user, server.id, db):
                 # Not shared with this user — never inject admin creds for them.

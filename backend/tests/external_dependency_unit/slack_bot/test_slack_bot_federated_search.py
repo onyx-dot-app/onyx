@@ -454,10 +454,10 @@ class TestSlackBotFederatedSearch:
                 is_public=True,
                 model_configurations=[
                     ModelConfigurationUpsertRequest(
-                        name="gpt-4o",
+                        name="gpt-6-luna",
                         is_visible=True,
                         max_input_tokens=None,
-                        display_name="gpt-4o",
+                        display_name="gpt-6-luna",
                     ),
                 ],
             ),
@@ -466,7 +466,7 @@ class TestSlackBotFederatedSearch:
 
         update_default_model(
             provider_id=provider_view.id,
-            model="gpt-4o",
+            model="gpt-6-luna",
             db_session=db_session,
             flow_type=LLMModelFlowType.CHAT,
         )

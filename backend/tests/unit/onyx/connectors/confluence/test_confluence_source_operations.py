@@ -1,4 +1,5 @@
 import json
+import threading
 from types import SimpleNamespace
 from typing import Any
 from unittest import mock
@@ -227,6 +228,38 @@ def test_probe_site_rejects_a_mismatched_variant() -> None:
 
     with pytest.raises(ValueError):
         gateway.probe_site(variant=ConfluenceProbeVariant.SCOPED)
+
+
+def test_probe_site_leaves_the_client_in_use_alone() -> None:
+    """The probe swaps its client's connection settings, so it runs on a new
+    client while other threads keep calling the cached one."""
+    gateway = gateway_with_client(mock.Mock())
+    in_use: Any = gateway._cached_client
+    probing = mock.Mock()
+    probe_started = threading.Barrier(2, timeout=10)
+    other_thread_done = threading.Barrier(2, timeout=10)
+
+    def probe(**_: Any) -> None:
+        probe_started.wait()
+        other_thread_done.wait()
+
+    probing._probe_connection.side_effect = probe
+    clients_seen: list[Any] = []
+
+    def call_during_probe() -> None:
+        probe_started.wait()
+        clients_seen.append(gateway._client())
+        other_thread_done.wait()
+
+    other = threading.Thread(target=call_during_probe)
+    other.start()
+    with mock.patch.object(gateway, "_build_client", return_value=probing):
+        gateway.probe_site(variant=ConfluenceProbeVariant.UNSCOPED)
+    other.join()
+
+    assert clients_seen == [in_use]
+    in_use._probe_connection.assert_not_called()
+    assert gateway._cached_client is probing
 
 
 def test_get_space_translates_the_sdk_error() -> None:

@@ -1,4 +1,4 @@
-// Package devstack runs the local Onyx dev stack for one worktree: it leases
+// Package devstack runs local Onyx shared, isolated, and frontend stacks: it leases
 // host ports, starts the application services as managed process groups,
 // keeps their state in the worktree's git metadata, and reconciles a partial
 // start on the next run.
@@ -15,6 +15,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/docker"
 )
 
 const (
@@ -38,22 +40,34 @@ const (
 	PhaseFailed    = "failed"
 )
 
-// Stack identifies one worktree's dev stack.
+// Mode selects infrastructure and process ownership.
+type Mode string
+
+const (
+	Shared   Mode = "shared"
+	Isolated Mode = "isolated"
+	Frontend Mode = "frontend"
+)
+
+// Stack identifies a checkout and its selected lifecycle state.
 type Stack struct {
 	// Root is the worktree root with symlinks resolved.
 	Root string
-	// StateDir holds the state file, lock and logs. It lives in the
-	// worktree's git metadata so every agent in the worktree shares it.
+	// StateDir holds state, locks, and logs in shared or worktree Git metadata.
 	StateDir string
 	// Project is the Docker Compose project name.
-	Project string
+	Project         string
+	Mode            Mode
+	ProjectExplicit bool
 	// Registry holds the host-wide port leases.
 	Registry *Registry
 }
 
-// Open resolves the stack for the worktree that contains dir. project
-// overrides the derived Compose project name when not empty.
-func Open(dir, project string) (*Stack, error) {
+// Open resolves the selected mode and retains its saved project unless overridden.
+func Open(dir, project string, mode Mode) (*Stack, error) {
+	if mode != Shared && mode != Isolated && mode != Frontend {
+		return nil, fmt.Errorf("unknown stack mode %q", mode)
+	}
 	root, err := gitOutput(dir, "rev-parse", "--show-toplevel")
 	if err != nil {
 		return nil, fmt.Errorf("%s is not inside a git worktree: %w", dir, err)
@@ -61,17 +75,40 @@ func Open(dir, project string) (*Stack, error) {
 	if root, err = filepath.EvalSymlinks(root); err != nil {
 		return nil, err
 	}
-	stateDir, err := gitOutput(root, "rev-parse", "--git-path", "ods-stack")
+	commonDir, err := gitOutput(root, "rev-parse", "--path-format=absolute", "--git-common-dir")
 	if err != nil {
 		return nil, err
 	}
-	if !filepath.IsAbs(stateDir) {
-		stateDir = filepath.Join(root, stateDir)
+	commonDir, err = filepath.EvalSymlinks(commonDir)
+	if err != nil {
+		return nil, err
+	}
+	stateDir := filepath.Join(commonDir, "ods-stack-shared")
+	projectRoot := filepath.Dir(commonDir)
+	if mode != Shared {
+		stateDir, err = gitOutput(root, "rev-parse", "--path-format=absolute", "--git-path", "ods-stack")
+		if err != nil {
+			return nil, err
+		}
+		projectRoot = root
+		if mode == Frontend {
+			stateDir += "-frontend"
+		}
+	}
+	s := &Stack{Root: root, StateDir: stateDir, Mode: mode, ProjectExplicit: project != ""}
+	st, err := s.ReadState()
+	if err != nil {
+		return nil, err
 	}
 	if project == "" {
-		project = ProjectName(root)
+		if st != nil && st.Project != "" {
+			project = st.Project
+		} else {
+			project = ProjectName(projectRoot)
+		}
 	}
-	return &Stack{Root: root, StateDir: stateDir, Project: project}, nil
+	s.Project = docker.NormalizeProjectName(project)
+	return s, nil
 }
 
 // ProjectName derives a Compose project name that is unique per worktree
@@ -133,13 +170,18 @@ func (s *Stack) ReadState() (*State, error) {
 	if err := json.Unmarshal(data, &st); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", filepath.Join(s.StateDir, stateFileName), err)
 	}
+	if st.Project != "" {
+		st.Project = docker.NormalizeProjectName(st.Project)
+	}
 	return &st, nil
 }
 
 // WriteState persists st atomically.
 func (s *Stack) WriteState(st *State) error {
 	st.SchemaVersion = SchemaVersion
-	st.Root = s.Root
+	if st.Root == "" {
+		st.Root = s.Root
+	}
 	st.Project = s.Project
 	st.UpdatedAt = time.Now().UTC()
 	if st.Ports == nil {

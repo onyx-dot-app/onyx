@@ -2,22 +2,49 @@
 
 from __future__ import annotations
 
+from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
 
 import pytest
+from fastapi_users.password import PasswordHelper
+from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from sqlalchemy.orm import Session
 
+import onyx.db.engine.async_sql_engine as async_sql_engine
 from onyx.auth.pat import hash_pat
+from onyx.auth.users import UserManager
+from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.enums import PatType, Permission, SandboxStatus
-from onyx.db.models import PersonalAccessToken, Sandbox, User
+from onyx.db.models import OAuthAccount, PersonalAccessToken, Sandbox, User
 from onyx.db.pat import create_pat, list_user_pats
-from onyx.server.features.build.db.sandbox import ensure_sandbox_pat
+from onyx.server.features.build.db.sandbox import (
+    ensure_sandbox_pat,
+    has_active_craft_pat,
+)
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
+from onyx.server.features.build.session.sandbox_lifecycle import (
+    ProvisioningPolicy,
+    SandboxReadyOutcome,
+    ensure_sandbox_ready,
+)
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+from tests.common.craft.stubs import StubSandboxManager
+
+
+@pytest.fixture()
+def null_pool_async_engine(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Generator[None, None, None]:
+    # Pooled asyncpg connections bind to the creating loop. A pooled connection
+    # left from this test's per-test loop breaks later async tests in the worker.
+    monkeypatch.setattr(async_sql_engine, "POSTGRES_USE_NULL_POOL", True)
+    async_sql_engine._ASYNC_ENGINES = {}
+    yield
+    async_sql_engine._ASYNC_ENGINES = {}
 
 
 @pytest.fixture()
@@ -342,3 +369,49 @@ class TestEnsureSandboxPat:
             "Sandbox.encrypted_pat should reference a non-expired PAT even "
             "without an explicit reprovision call."
         )
+
+
+@pytest.mark.asyncio
+async def test_password_change_gives_running_sandbox_new_pat(
+    db_session: Session,
+    test_user: User,
+    sandbox: Sandbox,
+    stub_sandbox_manager: StubSandboxManager,
+    tenant_context: None,  # noqa: ARG001
+    null_pool_async_engine: None,  # noqa: ARG001
+) -> None:
+    """A password change revokes the sandbox PAT; the next reservation of the
+    still-RUNNING sandbox mints a new one for the proxy to inject."""
+    old_password = "Old-Passw0rd-For-Tests!"
+    test_user.hashed_password = PasswordHelper().hash(old_password)
+    old_token = ensure_sandbox_pat(db_session, sandbox, test_user)
+    db_session.commit()
+
+    async with get_async_session_context_manager() as async_session:
+        manager = UserManager(SQLAlchemyUserDatabase(async_session, User, OAuthAccount))
+        db_user = await manager.get(test_user.id)
+        await manager.change_password_if_old_matches(
+            db_user, old_password, "New-Passw0rd-For-Tests!"
+        )
+    assert not has_active_craft_pat(db_session, test_user.id)
+
+    stub_sandbox_manager.health_check_returns = True
+    ready_sandbox, outcome = ensure_sandbox_ready(
+        db_session,
+        stub_sandbox_manager,
+        test_user.id,
+        policy=ProvisioningPolicy.FAIL,
+    )
+
+    assert outcome == SandboxReadyOutcome.ALREADY_RUNNING
+    assert ready_sandbox.encrypted_pat is not None
+    new_token = ready_sandbox.encrypted_pat.get_value(apply_mask=False)
+    assert new_token != old_token
+    new_pat = (
+        db_session.query(PersonalAccessToken)
+        .filter_by(hashed_token=hash_pat(new_token))
+        .one()
+    )
+    assert not new_pat.is_revoked
+    assert new_pat.expires_at is not None
+    assert new_pat.expires_at > datetime.now(timezone.utc)

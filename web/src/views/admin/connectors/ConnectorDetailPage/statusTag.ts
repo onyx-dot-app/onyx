@@ -5,11 +5,13 @@ import {
   SvgAlertTriangle,
   SvgCheckCircle,
   SvgClock,
-  SvgPauseCircle,
+  SvgPause,
+  SvgXCircle,
   SvgXOctagon,
 } from "@opal/icons";
 import {
   type CCPairRun,
+  type CCPairRunKind,
   type CheckRunStatus,
   ConnectorCredentialPairStatus,
   type IndexingConnectorStatus,
@@ -25,7 +27,6 @@ export interface StatusTag {
   labelKey:
     | "deleting"
     | "paused"
-    | "error"
     | "scheduled"
     | "initialIndexing"
     | "invalid"
@@ -33,8 +34,9 @@ export interface StatusTag {
     | "canceled"
     | "interrupted"
     | "indexed"
+    | "backfilling"
+    | "backfilled"
     | "failed"
-    | "completedWithErrors"
     | "syncing"
     | "synced"
     | "pruning"
@@ -46,9 +48,8 @@ export interface StatusTag {
 
 const TAGS = {
   deleting: { icon: SvgAlertTriangle, color: "red", labelKey: "deleting" },
-  paused: { icon: SvgPauseCircle, color: "gray", labelKey: "paused" },
-  error: { icon: SvgAlertTriangle, color: "red", labelKey: "error" },
-  scheduled: { icon: SvgClock, color: "gray", labelKey: "scheduled" },
+  paused: { icon: SvgPause, color: "amber", labelKey: "paused" },
+  scheduled: { icon: SvgClock, color: "purple", labelKey: "scheduled" },
   initialIndexing: {
     icon: IconLoader,
     color: "blue",
@@ -56,16 +57,13 @@ const TAGS = {
   },
   invalid: { icon: SvgXOctagon, color: "red", labelKey: "invalid" },
   indexing: { icon: IconLoader, color: "blue", labelKey: "indexing" },
-  canceled: { icon: SvgClock, color: "gray", labelKey: "canceled" },
+  canceled: { icon: SvgXCircle, color: "gray", labelKey: "canceled" },
   // Resumes on its own, so it reads neutral rather than as indexed.
-  interrupted: { icon: SvgClock, color: "gray", labelKey: "interrupted" },
+  interrupted: { icon: SvgXCircle, color: "gray", labelKey: "interrupted" },
   indexed: { icon: SvgCheckCircle, color: "green", labelKey: "indexed" },
+  backfilling: { icon: IconLoader, color: "blue", labelKey: "backfilling" },
+  backfilled: { icon: SvgCheckCircle, color: "green", labelKey: "backfilled" },
   failed: { icon: SvgXOctagon, color: "red", labelKey: "failed" },
-  completedWithErrors: {
-    icon: SvgAlertTriangle,
-    color: "amber",
-    labelKey: "completedWithErrors",
-  },
   syncing: { icon: IconLoader, color: "blue", labelKey: "syncing" },
   synced: { icon: SvgCheckCircle, color: "green", labelKey: "synced" },
   pruning: { icon: IconLoader, color: "blue", labelKey: "pruning" },
@@ -75,7 +73,7 @@ const TAGS = {
   failedToRun: { icon: SvgXOctagon, color: "red", labelKey: "failedToRun" },
 } satisfies Record<StatusTag["labelKey"], StatusTag>;
 
-/** The tag for the pair's own state, else the latest attempt's. A live attempt outranks the sticky error. */
+/** The tag for the pair's own state, else the latest attempt's. A live attempt outranks repeated failures. */
 export function ccPairStatusTag(
   status: ConnectorCredentialPairStatus,
   inRepeatedErrorState: boolean,
@@ -83,14 +81,17 @@ export function ccPairStatusTag(
 ): StatusTag {
   if (status === ConnectorCredentialPairStatus.DELETING) return TAGS.deleting;
   if (status === ConnectorCredentialPairStatus.PAUSED) return TAGS.paused;
+  // Repeated failures read "Failed", the same tag as the pair's row on the status page.
   if (inRepeatedErrorState && lastAttemptStatus !== "in_progress") {
-    return TAGS.error;
+    return TAGS.failed;
   }
+  if (status === ConnectorCredentialPairStatus.INVALID) return TAGS.invalid;
+  // A pair stays scheduled or initial indexing after its first run fails, and the status page reads it failed.
+  if (lastAttemptStatus === "failed") return TAGS.failed;
   if (status === ConnectorCredentialPairStatus.SCHEDULED) return TAGS.scheduled;
   if (status === ConnectorCredentialPairStatus.INITIAL_INDEXING) {
     return TAGS.initialIndexing;
   }
-  if (status === ConnectorCredentialPairStatus.INVALID) return TAGS.invalid;
   switch (lastAttemptStatus) {
     case "in_progress":
       return TAGS.indexing;
@@ -135,15 +136,23 @@ function checkRunStatusTag(status: CheckRunStatus): StatusTag {
 export function runStatusTag(run: CCPairRun): StatusTag {
   switch (run.kind) {
     case "indexing":
-      return attemptStatusTag(run.attempt.status, false);
+      return attemptStatusTag(
+        run.attempt.status,
+        run.attempt.is_backfill ? "backfill" : "indexing"
+      );
     case "doc_permission_sync":
     case "group_sync":
-      return attemptStatusTag(run.attempt.status, true);
+      return attemptStatusTag(run.attempt.status, "sync");
     case "pruning":
       return pruneStatusTag(run.attempt.status);
     case "checks":
       return checkRunStatusTag(run.attempt.status);
   }
+}
+
+/** A status page bucket's tag, as its row and its header count show it. */
+export function bucketStatusTag(status: IndexingConnectorStatus): StatusTag {
+  return TAGS[status];
 }
 
 /** The tag for a row of the status page: its bucket, unless the pair's own state or a stopped latest run says more. */
@@ -152,9 +161,6 @@ export function connectorRowStatusTag(
   status: IndexingConnectorStatus,
   lastAttemptStatus: ValidStatuses | null | undefined
 ): StatusTag {
-  if (ccPairStatus === ConnectorCredentialPairStatus.DELETING) {
-    return TAGS.deleting;
-  }
   if (ccPairStatus === ConnectorCredentialPairStatus.INVALID) {
     return TAGS.invalid;
   }
@@ -170,24 +176,39 @@ export function connectorRowStatusTag(
   if (status === "scheduled" && lastAttemptStatus === "interrupted") {
     return TAGS.interrupted;
   }
-  return TAGS[status];
+  return bucketStatusTag(status);
 }
 
-/** One attempt's tag. A sync reads "Syncing" and "Synced" where indexing reads "Indexing" and "Indexed". */
+/** What an attempt does, which names its live and finished tags. */
+export type AttemptWork = "indexing" | "backfill" | "sync";
+
+const LIVE_TAGS = {
+  indexing: TAGS.indexing,
+  backfill: TAGS.backfilling,
+  sync: TAGS.syncing,
+} satisfies Record<AttemptWork, StatusTag>;
+
+const DONE_TAGS = {
+  indexing: TAGS.indexed,
+  backfill: TAGS.backfilled,
+  sync: TAGS.synced,
+} satisfies Record<AttemptWork, StatusTag>;
+
+/** One attempt's tag. A sync reads "Syncing" and "Synced" and a backfill "Backfilling" and "Backfilled" where indexing reads "Indexing" and "Indexed". */
 export function attemptStatusTag(
   status: ValidStatuses | null,
-  isSync: boolean
+  work: AttemptWork
 ): StatusTag {
   switch (status) {
     case null:
     case "not_started":
       return TAGS.scheduled;
     case "in_progress":
-      return isSync ? TAGS.syncing : TAGS.indexing;
+      return LIVE_TAGS[work];
     case "success":
-      return isSync ? TAGS.synced : TAGS.indexed;
+    // Shares the success tag: the warning count beside it carries the document errors.
     case "completed_with_errors":
-      return TAGS.completedWithErrors;
+      return DONE_TAGS[work];
     case "failed":
       return TAGS.failed;
     case "interrupted":
@@ -197,4 +218,11 @@ export function attemptStatusTag(
     case "invalid":
       return TAGS.invalid;
   }
+}
+
+/** Key under `admin.connector.runs.kinds`. A backfill reads apart from the pair's regular indexing. */
+export function runKindLabelKey(run: CCPairRun): CCPairRunKind | "backfill" {
+  return run.kind === "indexing" && run.attempt.is_backfill
+    ? "backfill"
+    : run.kind;
 }

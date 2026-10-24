@@ -16,8 +16,9 @@ import type {
 export interface IndexingOverviewResponse {
   indexing_connectors: number;
   active_connectors: number;
-  /** Documents indexed inside the window. */
+  /** An estimate of the documents the window's runs processed, each time a run processed one. */
   recent_docs_indexed: number;
+  /** The sum of each pair's documents, so a document two pairs hold counts twice. */
   total_docs_indexed: number;
   throughput: CCPairThroughputResponse;
 }
@@ -27,6 +28,7 @@ export const INDEXING_CONNECTOR_STATUSES = [
   "indexing",
   "failed",
   "paused",
+  "deleting",
   "scheduled",
   "indexed",
 ] as const;
@@ -39,13 +41,17 @@ export interface IndexingConnectorRow {
   name: string;
   source: ValidSources;
   access_type: AccessType;
-  /** The pair's own state, which names the tag for a pair that is deleting, invalid or on its first index. */
+  /** The pair's own state, which names the tag for a pair that is invalid or on its first index. */
   cc_pair_status: ConnectorCredentialPairStatus;
   status: IndexingConnectorStatus;
   creator_email: string | null;
+  /** The owner's display name, unset when the owner has none. */
+  creator_name: string | null;
   docs_indexed: number;
   last_success: string | null;
   latest_index_attempt: IndexAttemptSnapshot | null;
+  /** The latest attempt's open errors, whole entities included. */
+  open_error_count: number;
   /** Place in the line of queued index attempts, from 1, while the latest waits. */
   queue_position: number | null;
   permissions: PermissionsOf<"CCPair">;
@@ -76,6 +82,8 @@ export interface CCPairRef {
   source: ValidSources;
   /** The viewer may re-fetch single documents of this pair. */
   can_resolve: boolean;
+  /** The viewer may mark this pair's runs resolved. */
+  can_resolve_runs: boolean;
 }
 
 /** Mirrors `IndexingRun`: one run in the fleet-wide feed, with the pair it ran on. */

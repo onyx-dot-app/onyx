@@ -7,6 +7,7 @@
  * For dynamic keys (e.g. per-ID endpoints), use the builder functions.
  */
 import type {
+  CCPairRunLevel,
   CCPairRunsQuery,
   CCPairThroughputWindow,
   IndexingConnectorsQuery,
@@ -19,12 +20,33 @@ function runsQueryParams(query: CCPairRunsQuery): string {
     page_size: String(query.pageSize),
   });
   if (query.since !== null) params.set("since", query.since);
+  if (query.until !== null) params.set("until", query.until);
   for (const kind of query.kinds ?? []) params.append("kinds", kind);
   for (const group of query.statusGroups ?? []) {
     params.append("status_groups", group);
   }
   if (query.q) params.set("q", query.q);
   if (query.errors !== null) params.set("errors", query.errors);
+  if (query.superseded !== null) {
+    params.set("superseded", String(query.superseded));
+  }
+  if (query.resolved !== null) {
+    params.set("resolved", String(query.resolved));
+  }
+  return params.toString();
+}
+
+function resolvableCountParams(
+  level: CCPairRunLevel | null,
+  q: string,
+  since: string | null,
+  until: string | null
+): string {
+  const params = new URLSearchParams();
+  if (level !== null) params.set("level", level);
+  if (q) params.set("q", q);
+  if (since) params.set("since", since);
+  if (until) params.set("until", until);
   return params.toString();
 }
 
@@ -46,6 +68,8 @@ export const SWR_KEYS = {
   adminSecurityPinnedFields: "/api/admin/security/pinned-fields",
   incognitoAvailability: "/api/chat/incognito-availability",
   adminSsoProviders: "/api/admin/sso/provider",
+  adminSsoProviderHandoff: (providerId: number) =>
+    `/api/admin/sso/provider/${providerId}/handoff`,
   adminSsoProviderTypes: "/api/admin/sso/provider-type",
   adminSsoDomains: "/api/admin/sso/domain",
   // Cache key for the POST /records lookup, keyed by the domains being configured.
@@ -70,6 +94,7 @@ export const SWR_KEYS = {
   llmProviderModels: (providerId: number) =>
     `/api/llm/provider/${providerId}/models`,
   adminLlmProviders: "/api/admin/llm/provider",
+  decisionModel: "/api/admin/llm/decision-model",
   adminLlmProvidersPaged: "/api/admin/llm/provider?page_models=true",
   adminLlmProvider: (providerId: number) =>
     `/api/admin/llm/provider/${providerId}`,
@@ -204,6 +229,7 @@ export const SWR_KEYS = {
   // ── Skills ────────────────────────────────────────────────────────────────
   userSkills: "/api/skills",
   userSkillPreview: (skillId: string) => `/api/skills/${skillId}/preview`,
+  skillSharing: (skillId: string) => `/api/skills/custom/${skillId}/share`,
   editableSkill: (skillId: string) => `/api/skills/custom/${skillId}/edit`,
 
   // ── Tools ─────────────────────────────────────────────────────────────────
@@ -241,8 +267,10 @@ export const SWR_KEYS = {
   buildExternalAppsAdmin: "/api/build/admin/apps",
   buildExternalAppsBuiltInOptions: "/api/build/admin/apps/built-in/options",
   buildBaseInstructions: "/api/build/admin/base-instructions",
-  buildSessionLiveApprovals: (sessionId: string) =>
-    `/api/build/approvals/sessions/${sessionId}/live`,
+  buildSessionApprovalStatus: (sessionId: string) =>
+    `/api/build/approvals/sessions/${sessionId}/status`,
+  buildSessionApprovals: (sessionId: string) =>
+    `/api/build/approvals/sessions/${sessionId}`,
 
   // ── Token Rate Limits ─────────────────────────────────────────────────────
   globalTokenRateLimits: "/api/admin/token-rate-limits/global",
@@ -294,6 +322,8 @@ export const SWR_KEYS = {
 
   // ── MCP Server (per-ID) ───────────────────────────────────────────────────
   adminMcpServer: (id: number) => `/api/admin/mcp/servers/${id}`,
+  adminMcpOAuthDiscovery: (id: number) =>
+    ["admin-mcp-oauth-discovery", id] as const,
 
   // ── Document Processing ───────────────────────────────────────────────────
   unstructuredApiKeySet: "/api/search-settings/unstructured-api-key-set",
@@ -326,6 +356,16 @@ export const SWR_KEYS = {
     `/api/manage/admin/cc-pair/${ccPairId}/runs?`,
   ccPairRuns: (ccPairId: number, query: CCPairRunsQuery) =>
     `${SWR_KEYS.ccPairRunsPrefix(ccPairId)}${runsQueryParams(query)}`,
+  ccPairResolvableRunsCountPrefix: (ccPairId: number) =>
+    `/api/manage/admin/cc-pair/${ccPairId}/runs/resolvable-count?`,
+  ccPairResolvableRunsCount: (
+    ccPairId: number,
+    level: CCPairRunLevel | null,
+    q: string,
+    since: string | null,
+    until: string | null
+  ) =>
+    `${SWR_KEYS.ccPairResolvableRunsCountPrefix(ccPairId)}${resolvableCountParams(level, q, since, until)}`,
   ccPairThroughput: (ccPairId: number, window: CCPairThroughputWindow) =>
     `/api/manage/admin/cc-pair/${ccPairId}/throughput?window=${window}`,
 
@@ -347,6 +387,15 @@ export const SWR_KEYS = {
   },
   // Every fleet runs feed query starts with this, so `mutate` can match them all.
   indexMonitoringRunsPrefix: "/api/manage/admin/index-monitoring/runs?",
+  indexMonitoringResolvableRunsCountPrefix:
+    "/api/manage/admin/index-monitoring/runs/resolvable-count?",
+  indexMonitoringResolvableRunsCount: (
+    level: CCPairRunLevel | null,
+    q: string,
+    since: string | null,
+    until: string | null
+  ) =>
+    `${SWR_KEYS.indexMonitoringResolvableRunsCountPrefix}${resolvableCountParams(level, q, since, until)}`,
   indexMonitoringRuns: (query: CCPairRunsQuery) =>
     `${SWR_KEYS.indexMonitoringRunsPrefix}${runsQueryParams(query)}`,
   indexAttemptStageMetrics: (indexAttemptId: number) =>
@@ -389,6 +438,14 @@ export const SWR_KEYS = {
   // `scheduledTaskRuns` is a base URL — the run-history table appends
   // `?limit=…` / `?cursor=…` for pagination. Invalidate from elsewhere with
   // a prefix predicate so every paginated variant gets refreshed at once.
+  personalActionPolicies: "/api/build/action-policies",
+  appActionPolicies: (
+    kind: "external_app" | "mcp_server",
+    targetId: number,
+    admin = false
+  ) => `/api/build/${admin ? "admin/" : ""}action-policies/${kind}/${targetId}`,
+  taskActionPolicies: (taskId: string) =>
+    `/api/build/scheduled-tasks/${taskId}/action-policies`,
   scheduledTasks: "/api/build/scheduled-tasks",
   scheduledTask: (taskId: string) => `/api/build/scheduled-tasks/${taskId}`,
   scheduledTaskRuns: (taskId: string) =>

@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 import requests
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, TypeAdapter
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
@@ -27,7 +27,11 @@ from onyx.oauth.authorization_attempt import (
     canonical_json_fingerprint,
     generate_authorization_state,
 )
-from onyx.oauth.models import OAuthConfigurationFingerprint, PKCECodeVerifier
+from onyx.oauth.models import (
+    OAuthConfigurationFingerprint,
+    PKCECodeVerifier,
+    SafeOAuthReturnPath,
+)
 from onyx.oauth.protocol import build_authorization_url
 from onyx.server.features.build.external_apps.models import (
     OAuthCallbackRequest,
@@ -52,6 +56,7 @@ class _ExternalAppOAuthAttemptPayload(BaseModel):
     external_app_id: int
     configuration_fingerprint: OAuthConfigurationFingerprint
     code_verifier: PKCECodeVerifier | None = None
+    return_path: SafeOAuthReturnPath | None = None
 
 
 _AUTHORIZATION_ATTEMPTS = AuthorizationAttemptStore(
@@ -108,7 +113,16 @@ def start_external_app_oauth(
     external_app_id: int,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
+    return_path: str | None = None,
 ) -> OAuthStartResponse:
+    try:
+        return_path = TypeAdapter(SafeOAuthReturnPath | None).validate_python(
+            return_path
+        )
+    except ValueError:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, "return_path must be a safe internal path"
+        )
     app = get_external_app_by_id(db_session, external_app_id)
     if app is None:
         raise OnyxError(
@@ -155,6 +169,7 @@ def start_external_app_oauth(
                 app, oauth, client_id, client_secret
             ),
             code_verifier=code_verifier,
+            return_path=return_path,
         ),
     )
     return OAuthStartResponse(authorize_url=authorize_url)
@@ -293,4 +308,6 @@ def handle_external_app_oauth_callback(
     push_skills_for_users({user.id}, db_session)
     db_session.commit()
 
-    return OAuthCallbackResponse(success=True, external_app_id=app.id)
+    return OAuthCallbackResponse(
+        success=True, external_app_id=app.id, return_path=payload.return_path
+    )

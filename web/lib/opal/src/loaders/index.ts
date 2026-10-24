@@ -4,6 +4,9 @@ export {
   type CardLoaderProps,
 } from "@opal/loaders/card-loader/components";
 
+/* DropdownLoader */
+export { DropdownLoader } from "@opal/loaders/dropdown-loader/components";
+
 /* IconLoader */
 export {
   IconLoader,

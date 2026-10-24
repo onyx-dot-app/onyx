@@ -1,4 +1,5 @@
 import type { CCPairFullInfo } from "@/lib/connectors/types";
+import type { CredentialCapability } from "@/lib/connectors/checks/types";
 import type { AccessType } from "@/lib/types";
 
 /** The pair that the connector form edits, as the page loaded it. */
@@ -25,6 +26,7 @@ export interface ConnectorEditProposal {
   name: string;
   refresh_freq: number | null;
   prune_freq: number | null;
+  check_freq: number | null;
 }
 
 /** Mirrors `EditStepKind` in `backend/onyx/connectors/edit_plan/models.py`. */
@@ -105,21 +107,43 @@ export interface CredentialChoice {
   options: CredentialPath[];
 }
 
-export type EditCheckStatus = "passed" | "failed" | "indeterminate" | "skipped";
+export type EditCheckStatus =
+  | "passed"
+  | "failed"
+  | "incomplete"
+  | "indeterminate"
+  | "skipped";
 
 export interface EditCheckResult {
+  capability: CredentialCapability;
   check_id: string;
   display_name: string;
   required: boolean;
   status: EditCheckStatus;
   message: string;
+  /** The row's short line: what the check found or what is wrong. */
+  summary: string | null;
+  /** Up to three lines of what happened and what is needed. */
+  description: string | null;
+  /** False for a skipped check that does not apply to the access type or config. */
+  applicable: boolean;
   remediation: string | null;
+  docs_link: string | null;
+}
+
+/** A check still running at the end of the blocking budget, by definition. */
+export interface PendingCheck {
+  capability: CredentialCapability;
+  check_id: string;
+  display_name: string;
+  required: boolean;
 }
 
 export interface ProposedPairingValidation {
   validation_error: string | null;
   check_results: EditCheckResult[];
   unfinished_check_ids: string[];
+  unfinished_checks: PendingCheck[];
 }
 
 export interface ConfigFieldChange {

@@ -24,7 +24,7 @@ import { IndexingStatusPage } from "@tests/e2e/admin/connector/IndexingStatusPag
  */
 const CONNECTOR_NAME = "Visual Regression File Connector";
 
-test.describe("Connector status page — visual @exclusive", () => {
+test.describe("Connector status page: visual @exclusive", () => {
   let ccPairId: number | null = null;
 
   test.beforeEach(async ({ page }) => {

@@ -9,11 +9,11 @@ import React, {
 } from "react";
 import { Packet, StopReason } from "@/app/app/services/streamingModels";
 import CustomToolAuthCard from "@/app/app/message/messageComponents/CustomToolAuthCard";
-import { FullChatState } from "@/app/app/message/messageComponents/interfaces";
+import { FullChatState } from "@/app/app/message/messageComponents/types";
 import { FeedbackType } from "@/app/app/interfaces";
 import { handleCopy } from "@/app/app/message/copyingUtils";
 import { useAuthErrors } from "@/app/app/message/messageComponents/hooks/useAuthErrors";
-import { useMessageSwitching } from "@/app/app/message/messageComponents/hooks/useMessageSwitching";
+import { getMessageSwitching } from "@/app/app/message/messageComponents/messageSwitching";
 import { RendererComponent } from "@/app/app/message/messageComponents/renderMessageComponent";
 import { usePacketProcessor } from "@/app/app/message/messageComponents/timeline/hooks/usePacketProcessor";
 import { usePacedTurnGroups } from "@/app/app/message/messageComponents/timeline/hooks/usePacedTurnGroups";
@@ -152,7 +152,6 @@ const AgentMessage = React.memo(function AgentMessage({
       ...chatState.citations,
       ...citationMap,
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [chatState.citations, citationMap, citations.length]
   );
 
@@ -166,7 +165,6 @@ const AgentMessage = React.memo(function AgentMessage({
       (d) => !seen.has(d.document_id)
     );
     return extras.length > 0 ? [...propDocs, ...extras] : propDocs;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatState.docs, documentMap, documentMap.size]);
 
   // Create a chatState that uses streaming citations and documents for immediate rendering.
@@ -191,13 +189,12 @@ const AgentMessage = React.memo(function AgentMessage({
 
   const authErrors = useAuthErrors(rawPackets);
 
-  // Message switching logic
   const {
     currentMessageInd,
     includeMessageSwitcher,
     getPreviousMessage,
     getNextMessage,
-  } = useMessageSwitching({
+  } = getMessageSwitching({
     nodeId,
     otherMessagesCanSwitchTo,
     onMessageSelection,

@@ -5,6 +5,10 @@ import SkillCard, {
 } from "@/sections/cards/SkillCard";
 import type { CustomSkill } from "@/lib/skills/types";
 
+jest.mock("@/providers/UserProvider", () => ({
+  useUser: () => ({ isAdmin: false }),
+}));
+
 jest.mock("@/lib/settings/hooks", () => ({
   useSettings: () => ({ appName: "Onyx" }),
 }));
@@ -37,6 +41,7 @@ function custom(overrides: Partial<CustomSkill> = {}): CustomSkillCardItem {
     is_personal: true,
     enabled: true,
     can_toggle: true,
+    installation_policy: "AVAILABLE",
     author_user_id: "user-id",
     author_email: "owner@example.com",
     owner: { id: "user-id", email: "owner@example.com" },
@@ -72,10 +77,126 @@ function invalidCustom(): CustomSkillCardItem {
     is_valid: false,
     enabled: false,
     can_toggle: false,
+    installation_policy: "AVAILABLE",
   });
 }
 
 describe("SkillCard", () => {
+  it("opens a required skill preview for a viewer by click or keyboard", async () => {
+    const user = setupUser();
+    const item = custom({
+      installation_policy: "REQUIRED",
+      can_toggle: false,
+      user_permission: "VIEWER",
+    });
+    const onClick = jest.fn();
+    render(<SkillCard item={item} onClick={onClick} />);
+
+    await user.click(screen.getByText(item.name));
+    expect(onClick).toHaveBeenCalledWith(item);
+
+    onClick.mockClear();
+    screen.getByRole("button", { name: item.name }).focus();
+    await user.keyboard("{Enter}");
+    expect(onClick).toHaveBeenCalledWith(item);
+  });
+
+  it("keeps management controls outside the preview button", async () => {
+    const user = setupUser();
+    const item = custom();
+    const onClick = jest.fn();
+    const onEdit = jest.fn();
+    const onDelete = jest.fn();
+    const onEnabledChange = jest.fn();
+    render(
+      <SkillCard
+        item={item}
+        onClick={onClick}
+        onShare={jest.fn()}
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onEnabledChange={onEnabledChange}
+      />
+    );
+
+    const preview = screen.getByRole("button", { name: item.name });
+    for (const control of [
+      ...screen.getAllByRole("button"),
+      screen.getByRole("switch"),
+    ]) {
+      if (control !== preview) {
+        expect(preview).not.toContainElement(control);
+      }
+    }
+
+    preview.focus();
+    await user.keyboard(" ");
+    expect(onClick).toHaveBeenCalledTimes(1);
+    onClick.mockClear();
+
+    await user.click(screen.getByRole("button", { name: /edit skill/i }));
+    expect(onEdit).toHaveBeenCalledWith(item);
+    await user.click(screen.getByRole("button", { name: /delete/i }));
+    expect(onDelete).toHaveBeenCalledWith(item);
+    await user.click(screen.getByRole("switch"));
+    expect(onEnabledChange).toHaveBeenCalledWith(item, false);
+    expect(onClick).not.toHaveBeenCalled();
+
+    await user.click(screen.getByText(item.description));
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("explains the admin requirement when hovering over the Required tag", async () => {
+    const user = setupUser();
+    render(
+      <SkillCard
+        item={custom({ installation_policy: "REQUIRED", can_toggle: false })}
+      />
+    );
+
+    await user.hover(screen.getByText("Required"));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Your organization admin requires you to have this skill."
+    );
+  });
+
+  it("shows required skills without a switch or delete action", () => {
+    render(
+      <SkillCard
+        item={custom({ installation_policy: "REQUIRED", can_toggle: false })}
+        onDelete={jest.fn()}
+      />
+    );
+    expect(screen.getByText("Required")).toBeInTheDocument();
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /delete/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens sharing without opening the skill preview", async () => {
+    const user = setupUser();
+    const item = custom();
+    const onShare = jest.fn();
+    const onClick = jest.fn();
+    render(<SkillCard item={item} onShare={onShare} onClick={onClick} />);
+    await user.click(screen.getByRole("button", { name: "Edit sharing" }));
+    expect(onShare).toHaveBeenCalledWith(item);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it("hides sharing controls from viewers", () => {
+    render(
+      <SkillCard
+        item={custom({ user_permission: "VIEWER" })}
+        onShare={jest.fn()}
+      />
+    );
+    expect(
+      screen.queryByRole("button", { name: "Edit sharing" })
+    ).not.toBeInTheDocument();
+  });
+
   it("does not render a preference switch for native built-ins", () => {
     render(<SkillCard item={builtIn()} />);
 
@@ -149,7 +270,7 @@ describe("SkillCard", () => {
     expect(preferenceSwitch).toBeChecked();
     expect(preferenceSwitch).not.toHaveAttribute("aria-disabled");
     expect(
-      container.querySelector(".card[data-variant='secondary']")
+      container.querySelector(".opal-card[data-color='transparent']")
     ).toBeInTheDocument();
   });
 
@@ -159,6 +280,7 @@ describe("SkillCard", () => {
         item={custom({
           enabled: false,
           can_toggle: false,
+          installation_policy: "AVAILABLE",
           external_app: {
             external_app_id: 42,
             name: "Acme CRM",
@@ -174,7 +296,7 @@ describe("SkillCard", () => {
     ).toBeInTheDocument();
     expect(screen.queryByRole("switch")).not.toBeInTheDocument();
     expect(
-      container.querySelector(".card[data-variant='disabled']")
+      container.querySelector(".opal-card[data-disabled='true']")
     ).toBeInTheDocument();
   });
 
@@ -224,7 +346,7 @@ describe("SkillCard", () => {
       })
     ).toBeChecked();
     expect(
-      container.querySelector(".card[data-variant='primary']")
+      container.querySelector(".opal-card[data-color='background-tint-00']")
     ).toBeInTheDocument();
   });
 
@@ -253,4 +375,36 @@ describe("SkillCard", () => {
     expect(preferenceSwitch).not.toBeChecked();
     expect(preferenceSwitch).not.toHaveAttribute("aria-disabled");
   });
+});
+
+test("invalid editable skills can be deleted without opening their preview", async () => {
+  const item = invalidCustom();
+  const onDelete = jest.fn();
+  const onClick = jest.fn();
+  render(<SkillCard item={item} onDelete={onDelete} onClick={onClick} />);
+  await setupUser().click(screen.getByRole("button", { name: "Delete skill" }));
+  expect(onDelete).toHaveBeenCalledWith(item);
+  expect(onClick).not.toHaveBeenCalled();
+});
+
+test.each(["OWNER", "EDITOR", "VIEWER"] as const)(
+  "delete follows %s permissions even when the skill is invalid",
+  (user_permission) => {
+    render(
+      <SkillCard
+        item={custom({ user_permission, is_valid: false })}
+        onDelete={jest.fn()}
+      />
+    );
+    const button = screen.queryByRole("button", { name: "Delete skill" });
+    if (user_permission === "VIEWER") expect(button).not.toBeInTheDocument();
+    else expect(button).toBeInTheDocument();
+  }
+);
+
+test("built-in skills never expose Delete", () => {
+  render(<SkillCard item={builtIn()} onDelete={jest.fn()} />);
+  expect(
+    screen.queryByRole("button", { name: "Delete skill" })
+  ).not.toBeInTheDocument();
 });

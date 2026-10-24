@@ -2,17 +2,24 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { mutate } from "swr";
+import useSWR, { mutate } from "swr";
 import { toast } from "@opal/layouts";
 import useSWRInfinite from "swr/infinite";
-import { setCCPairStatus } from "@/lib/ccPair";
+import {
+  resolveCCPairRuns,
+  resolveMatchingRuns,
+  setCCPairStatus,
+} from "@/lib/ccPair";
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
 import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
 import type {
   CCPairFullInfo,
   CCPairRun,
   CCPairRunErrors,
+  CCPairRunKind,
+  CCPairRunsResponse,
   CCPairRef,
+  CCPairRunLevel,
   CCPairRunsQuery,
   CCPairRunStatusGroup,
   IndexingRun,
@@ -22,6 +29,11 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   resolveAllErrorsForCCPair,
   resolveErrors,
+  waitForTargetedReindexJobs,
+} from "@/lib/targeted_reindex";
+import type {
+  ResolveAllSubmitted,
+  TargetedReindexOutcome,
 } from "@/lib/targeted_reindex";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 
@@ -30,7 +42,9 @@ import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 // ---------------------------------------------------------------------------
 
 /** Pauses, resumes, or re-enables a cc-pair, confirming first when it is invalid. */
-export function useStatusChange(ccPair: CCPairFullInfo | null) {
+export function useStatusChange(
+  ccPair: Pick<CCPairFullInfo, "id" | "name" | "status"> | null
+) {
   const t = useTranslations("admin.connector");
   const [isUpdating, setIsUpdating] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -44,8 +58,15 @@ export function useStatusChange(ccPair: CCPairFullInfo | null) {
       // Call the backend to update the status
       await setCCPairStatus(ccPair.id, newStatus);
 
-      // Use mutate to revalidate the status on the backend
-      await mutate(buildCCPairInfoUrl(ccPair.id));
+      // The status page lists the pair's state too.
+      await Promise.all([
+        mutate(buildCCPairInfoUrl(ccPair.id)),
+        mutate(
+          (cached) =>
+            typeof cached === "string" &&
+            cached.startsWith(SWR_KEYS.indexMonitoringConnectorsPrefix)
+        ),
+      ]);
     } catch (error) {
       console.error("Failed to update status", error);
     } finally {
@@ -98,30 +119,69 @@ export function useStatusChange(ccPair: CCPairFullInfo | null) {
 // useActivityItems
 // ---------------------------------------------------------------------------
 
-/** Which list of an activity panel a run sits in. "other" is every run that neither failed nor has document errors. */
-export type ActivityGroup = "failures" | "errors" | "other" | "resolved";
+/** Which level of an activity panel a run sits in. "other" is every run that neither failed nor has document errors. */
+export type ActivityGroup = "failures" | "errors" | "other";
 
-/** How each group narrows the runs feed. Resolved errors can sit on a run of any status. */
+interface ActivityGroupQuery {
+  statusGroups: CCPairRunStatusGroup[] | null;
+  errors: CCPairRunErrors | null;
+  superseded: boolean | null;
+  resolved: boolean | null;
+}
+
+const NOT_FAILED: CCPairRunStatusGroup[] = ["running", "succeeded", "canceled"];
+
+/** How each level narrows the runs feed, for its open runs and its closed ones: a closed failure was resolved or a newer succeeded or failed run of its kind followed it,
+ * a closed error run was resolved, had all its document errors resolved, or a newer succeeded or failed run followed it on a kind other than indexing, and nothing in "other" is open, so it has no closed runs. */
 const ACTIVITY_GROUP_QUERY = {
-  failures: { statusGroups: ["failed"], errors: null },
-  errors: {
-    statusGroups: ["running", "succeeded", "canceled"],
-    errors: "unresolved",
+  failures: {
+    open: {
+      statusGroups: ["failed"],
+      errors: null,
+      superseded: false,
+      resolved: false,
+    },
+    closed: {
+      statusGroups: ["failed"],
+      errors: null,
+      superseded: true,
+      resolved: true,
+    },
   },
-  other: { statusGroups: ["running", "succeeded", "canceled"], errors: "none" },
-  resolved: { statusGroups: null, errors: "resolved" },
+  errors: {
+    open: {
+      statusGroups: NOT_FAILED,
+      errors: "unresolved",
+      superseded: false,
+      resolved: false,
+    },
+    closed: {
+      statusGroups: NOT_FAILED,
+      errors: "resolved",
+      superseded: true,
+      resolved: true,
+    },
+  },
+  other: {
+    open: {
+      statusGroups: NOT_FAILED,
+      errors: "none",
+      superseded: null,
+      resolved: null,
+    },
+    closed: null,
+  },
 } satisfies Record<
   ActivityGroup,
-  {
-    statusGroups: CCPairRunStatusGroup[] | null;
-    errors: CCPairRunErrors | null;
-  }
+  { open: ActivityGroupQuery; closed: ActivityGroupQuery | null }
 >;
 
 const ACTIVITY_PAGE_SIZE = 20;
 
-/** Which pairs an activity feed reads: one pair, with whether the viewer may resolve its runs' document errors, or every readable one. */
-export type ActivityScope = { ccPairId: number; canResolve: boolean } | "fleet";
+/** Which pairs an activity feed reads: one pair, with what the viewer may resolve on it, or every readable one. */
+export type ActivityScope =
+  | { ccPairId: number; canResolve: boolean; canResolveRuns: boolean }
+  | "fleet";
 
 /** One run in an activity panel, with the pair it ran on and what the viewer may do to it. */
 export interface ActivityItem {
@@ -131,10 +191,14 @@ export interface ActivityItem {
   connector: CCPairRef | undefined;
   /** The viewer may re-fetch single documents of the run's pair. */
   canResolve: boolean;
+  /** The viewer may mark the run resolved. */
+  canResolveRuns: boolean;
 }
 
 export interface ActivityGroupState {
   group: ActivityGroup;
+  /** Lists the level's resolved and superseded runs rather than its open ones. */
+  closed: boolean;
   runs: ActivityItem[];
   /** Runs in the group, loaded or not. */
   total: number;
@@ -162,6 +226,7 @@ function itemOf(
       run: run.run,
       connector: run.cc_pair,
       canResolve: run.cc_pair.can_resolve,
+      canResolveRuns: run.cc_pair.can_resolve_runs,
     };
   }
   // A bare run only comes from a pair's own feed.
@@ -173,49 +238,89 @@ function itemOf(
     run,
     connector: undefined,
     canResolve: pair.canResolve,
+    canResolveRuns: pair.canResolveRuns,
   };
 }
 
-/** One activity group of the scope, polled while `enabled`. `more` loads the next page and a new search starts over. */
+interface ActivityFeed {
+  ccPairId: number | null;
+  revalidate: () => Promise<void>;
+}
+
+// SWR's key-filter mutate skips useSWRInfinite keys, so each mounted feed registers its own revalidate.
+const activityFeeds = new Set<ActivityFeed>();
+
+/** The creation times an activity feed keeps, as ISO times. `until` is exclusive. */
+export interface ActivityTimeRange {
+  since: string | null;
+  until: string | null;
+}
+
+const ALL_TIME: ActivityTimeRange = { since: null, until: null };
+
+/** One activity level of the scope, its open runs or its `closed` ones, polled while `enabled`. `more` loads the next page and a new search starts over. */
 export function useActivityItems(
   scope: ActivityScope,
   group: ActivityGroup,
+  closed: boolean,
   q: string,
   enabled: boolean,
-  pollMs: number
+  pollMs: number,
+  range: ActivityTimeRange = ALL_TIME
 ): ActivityGroupState {
+  const { since, until } = range;
   const ccPairId = scope === "fleet" ? null : scope.ccPairId;
-  const canResolve = scope === "fleet" ? null : scope.canResolve;
-  const { data, error, isLoading, size, setSize } = useSWRInfinite<FeedPage>(
-    (pageIndex, previous: FeedPage | null) => {
-      if (!enabled) return null;
-      if (previous !== null && previous.items.length < ACTIVITY_PAGE_SIZE) {
-        return null;
-      }
-      const query: CCPairRunsQuery = {
-        pageNum: pageIndex,
-        pageSize: ACTIVITY_PAGE_SIZE,
-        since: null,
-        kinds: null,
-        q,
-        ...ACTIVITY_GROUP_QUERY[group],
-      };
-      return ccPairId === null
-        ? SWR_KEYS.indexMonitoringRuns(query)
-        : SWR_KEYS.ccPairRuns(ccPairId, query);
-    },
-    errorHandlingFetcher,
-    { refreshInterval: pollMs, keepPreviousData: true }
-  );
+  const pair = scope === "fleet" ? null : scope;
+  // Primitives, so a scope rebuilt every render does not remap the runs.
+  const canResolve = pair?.canResolve ?? null;
+  const canResolveRuns = pair?.canResolveRuns ?? null;
+  const groupQuery = ACTIVITY_GROUP_QUERY[group][closed ? "closed" : "open"];
+  const { data, error, isLoading, size, setSize, mutate } =
+    useSWRInfinite<FeedPage>(
+      (pageIndex, previous: FeedPage | null) => {
+        if (!enabled || groupQuery === null) return null;
+        if (previous !== null && previous.items.length < ACTIVITY_PAGE_SIZE) {
+          return null;
+        }
+        const query: CCPairRunsQuery = {
+          pageNum: pageIndex,
+          pageSize: ACTIVITY_PAGE_SIZE,
+          since,
+          until,
+          kinds: null,
+          q,
+          ...groupQuery,
+          // A search finds superseded runs too, under their open level. The closed feed keeps its superseded ones.
+          superseded: q && !closed ? null : groupQuery.superseded,
+        };
+        return ccPairId === null
+          ? SWR_KEYS.indexMonitoringRuns(query)
+          : SWR_KEYS.ccPairRuns(ccPairId, query);
+      },
+      errorHandlingFetcher,
+      { refreshInterval: pollMs, keepPreviousData: true }
+    );
   useEffect(() => {
     void setSize(1);
-  }, [q, setSize]);
+  }, [q, since, until, setSize]);
+  useEffect(() => {
+    const feed: ActivityFeed = {
+      ccPairId,
+      revalidate: async () => {
+        await mutate();
+      },
+    };
+    activityFeeds.add(feed);
+    return () => {
+      activityFeeds.delete(feed);
+    };
+  }, [ccPairId, mutate]);
   // Polling shifts the offsets, so a run can land on two pages.
   const runs = useMemo(() => {
     const itemScope: ActivityScope =
-      ccPairId === null || canResolve === null
+      ccPairId === null || canResolve === null || canResolveRuns === null
         ? "fleet"
-        : { ccPairId, canResolve };
+        : { ccPairId, canResolve, canResolveRuns };
     const seen = new Set<string>();
     return (data ?? []).flatMap((page) =>
       page.items
@@ -227,11 +332,12 @@ export function useActivityItems(
           return true;
         })
     );
-  }, [data, ccPairId, canResolve]);
+  }, [data, ccPairId, canResolve, canResolveRuns]);
   const first = data?.[0];
   const last = data?.[data.length - 1];
   return {
     group,
+    closed,
     runs,
     total: first?.total_items ?? 0,
     loaded: first !== undefined,
@@ -246,45 +352,234 @@ export function useActivityItems(
   };
 }
 
+/** Refetches the fleet feed and the given pairs' feeds. */
+function refreshFeeds(ccPairIds: number[]) {
+  const prefixes = [
+    SWR_KEYS.indexMonitoringRunsPrefix,
+    SWR_KEYS.indexMonitoringResolvableRunsCountPrefix,
+    ...ccPairIds.flatMap((ccPairId) => [
+      SWR_KEYS.ccPairIndexingErrors(ccPairId),
+      SWR_KEYS.ccPairRunsPrefix(ccPairId),
+      SWR_KEYS.ccPairResolvableRunsCountPrefix(ccPairId),
+    ]),
+  ];
+  return Promise.all([
+    mutate(
+      (key) =>
+        typeof key === "string" &&
+        prefixes.some((prefix) => key.startsWith(prefix))
+    ),
+    ...Array.from(activityFeeds)
+      .filter(
+        (feed) => feed.ccPairId === null || ccPairIds.includes(feed.ccPairId)
+      )
+      .map((feed) => feed.revalidate()),
+  ]);
+}
+
+/** How many open runs of the level, or of every level when `level` is null, the batch resolve would mark for the search, on the pair or the pairs the caller operates. Disabled, it fetches nothing. */
+export function useResolvableRunsCount(
+  scope: ActivityScope,
+  enabled: boolean,
+  level: CCPairRunLevel | null,
+  q: string,
+  timeRange: ActivityTimeRange,
+  pollMs: number
+): { count: number; isLoading: boolean } {
+  const ccPairId = scope === "fleet" ? null : scope.ccPairId;
+  const { data, isLoading } = useSWR<{ count: number }>(
+    !enabled
+      ? null
+      : ccPairId === null
+        ? SWR_KEYS.indexMonitoringResolvableRunsCount(
+            level,
+            q,
+            timeRange.since,
+            timeRange.until
+          )
+        : SWR_KEYS.ccPairResolvableRunsCount(
+            ccPairId,
+            level,
+            q,
+            timeRange.since,
+            timeRange.until
+          ),
+    errorHandlingFetcher,
+    { refreshInterval: pollMs, keepPreviousData: true }
+  );
+  return { count: data?.count ?? 0, isLoading };
+}
+
 // ---------------------------------------------------------------------------
 // useResolveRunErrors
 // ---------------------------------------------------------------------------
 
-/** Resolves a run's document errors and refreshes every feed they appear in, one submit at a time. */
+// Error ids with a retry in flight per run, or "all" for a run-wide retry.
+// Module-level, so a remounted panel still sees them.
+const retryingByRun = new Map<number, Set<number> | "all">();
+
+function isRetrying(runId: number, errorIds: number[] | null): boolean {
+  const held = retryingByRun.get(runId);
+  if (held === undefined) return false;
+  if (held === "all" || errorIds === null) return true;
+  return errorIds.some((id) => held.has(id));
+}
+
+function holdRetry(runId: number, errorIds: number[] | null): void {
+  const held = retryingByRun.get(runId);
+  if (errorIds === null) retryingByRun.set(runId, "all");
+  else if (held instanceof Set) errorIds.forEach((id) => held.add(id));
+  else retryingByRun.set(runId, new Set(errorIds));
+}
+
+function releaseRetry(runId: number, errorIds: number[] | null): void {
+  const held = retryingByRun.get(runId);
+  if (errorIds === null || !(held instanceof Set)) {
+    retryingByRun.delete(runId);
+    return;
+  }
+  errorIds.forEach((id) => held.delete(id));
+  if (held.size === 0) retryingByRun.delete(runId);
+}
+
+/** Resolves a run's document errors by a targeted reindex, or marks the run resolved, and refreshes every feed it appears in, one submit at a time. */
 export function useResolveRunErrors() {
   const tToasts = useTranslations("admin.connector.toasts");
   const [resolving, setResolving] = useState(false);
 
-  // Awaits only the submit. The feeds poll, so rows clear as documents land.
+  // Holds the buttons only for the submit. A progress toast follows the jobs
+  // and is replaced by their outcome, so other runs can be retried meanwhile.
   async function resolve(item: ActivityItem, errorIds: number[] | null) {
-    if (resolving) return;
+    const runId = item.run.attempt.id;
+    // Retrying errors already in flight would only resolve nothing.
+    if (resolving || isRetrying(runId, errorIds)) return;
     setResolving(true);
+    let submitted: ResolveAllSubmitted;
     try {
-      const result =
+      submitted =
         errorIds === null
           ? await resolveAllErrorsForCCPair(item.ccPairId, item.run.attempt.id)
           : await resolveErrors(errorIds);
-      if (result.total_error_ids === 0) {
-        toast.success(tToasts("noUnresolvedErrors"));
-      } else {
-        toast.success(
-          tToasts("targetedReindexSubmitted", { count: result.total_error_ids })
-        );
-      }
-      await mutate(
-        (key) =>
-          typeof key === "string" &&
-          (key.startsWith(SWR_KEYS.ccPairIndexingErrors(item.ccPairId)) ||
-            key.startsWith(SWR_KEYS.ccPairRunsPrefix(item.ccPairId)) ||
-            key.startsWith(SWR_KEYS.indexMonitoringRunsPrefix))
-      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       toast.error(tToasts("targetedReindexFailed", { message }));
+      return;
+    } finally {
+      setResolving(false);
+    }
+    void refreshFeeds([item.ccPairId]);
+    if (submitted.total_error_ids === 0) {
+      toast.success(tToasts("noUnresolvedErrors"));
+      return;
+    }
+
+    const toastId = `targeted-reindex-${submitted.job_ids[0]}`;
+    toast.info(
+      tToasts("targetedReindexRunning", { count: submitted.total_error_ids }),
+      { id: toastId, duration: Infinity }
+    );
+    holdRetry(runId, errorIds);
+    let outcome: TargetedReindexOutcome;
+    try {
+      outcome = await waitForTargetedReindexJobs(submitted.job_ids);
+    } finally {
+      releaseRetry(runId, errorIds);
+    }
+    if (!outcome.finished) {
+      toast.error(tToasts("targetedReindexIncomplete"), { id: toastId });
+    } else if (outcome.still_failing > 0) {
+      toast.warning(
+        tToasts("targetedReindexPartial", {
+          resolved: outcome.resolved,
+          failing: outcome.still_failing,
+        }),
+        { id: toastId }
+      );
+    } else {
+      toast.success(
+        tToasts("targetedReindexDone", { resolved: outcome.resolved }),
+        { id: toastId }
+      );
+    }
+    await refreshFeeds([item.ccPairId]);
+  }
+
+  // Marks the run resolved without a targeted reindex: it keeps its status.
+  async function resolveRun(item: ActivityItem) {
+    if (resolving) return;
+    setResolving(true);
+    try {
+      await resolveCCPairRuns(item.ccPairId, [
+        { kind: item.run.kind, attempt_id: item.run.attempt.id },
+      ]);
+      toast.success(tToasts("runResolved"));
+      await refreshFeeds([item.ccPairId]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(tToasts("runResolveFailed", { message }));
     } finally {
       setResolving(false);
     }
   }
 
-  return { resolving, resolve };
+  // Marks every open run of the level, or of every level, the panel lists for the search resolved.
+  async function resolveMatching(
+    scope: ActivityScope,
+    level: CCPairRunLevel | null,
+    q: string,
+    timeRange: ActivityTimeRange
+  ) {
+    if (resolving) return;
+    setResolving(true);
+    const ccPairId = scope === "fleet" ? null : scope.ccPairId;
+    try {
+      const result = await resolveMatchingRuns(ccPairId, {
+        level,
+        q: q || null,
+        since: timeRange.since,
+        until: timeRange.until,
+        kinds: null,
+      });
+      toast.success(tToasts("runsResolved", { count: result.resolved_count }));
+      await refreshFeeds(ccPairId === null ? result.cc_pair_ids : [ccPairId]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(tToasts("runResolveFailed", { message }));
+    } finally {
+      setResolving(false);
+    }
+  }
+
+  return { resolving, resolve, resolveRun, resolveMatching };
+}
+
+// ---------------------------------------------------------------------------
+// useLatestCCPairRun
+// ---------------------------------------------------------------------------
+
+/** The pair's newest run of one kind. The response's `kinds` lists every kind the pair runs. */
+export function useLatestCCPairRun(
+  ccPairId: number,
+  kind: CCPairRunKind,
+  enabled: boolean,
+  pollMs: number
+) {
+  return useSWR<CCPairRunsResponse>(
+    enabled
+      ? SWR_KEYS.ccPairRuns(ccPairId, {
+          pageNum: 0,
+          pageSize: 1,
+          since: null,
+          until: null,
+          kinds: [kind],
+          statusGroups: null,
+          q: "",
+          errors: null,
+          superseded: null,
+          resolved: null,
+        })
+      : null,
+    errorHandlingFetcher,
+    { refreshInterval: pollMs }
+  );
 }

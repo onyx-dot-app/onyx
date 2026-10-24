@@ -47,6 +47,7 @@ def _server() -> MCPServer:
             auth_performer=MCPAuthenticationPerformer.PER_USER,
             transport=MCPTransport.STREAMABLE_HTTP,
             oauth_provider_mode=MCPOAuthProviderMode.KNOWN_PROVIDER,
+            oauth_cimd_enabled=True,
             oauth_authorization_endpoint=_AUTHORIZATION_URL,
             oauth_token_endpoint=_TOKEN_URL,
             oauth_scopes_override=["files:read"],

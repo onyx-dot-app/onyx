@@ -1,7 +1,10 @@
-"""The plain data SharePoint permission sync works on: principals and role
-assignments from SharePoint REST, and the members of an Entra group from
-Graph. The office365 objects never leave ``sharepoint_rest``."""
+"""Plain data the Microsoft connectors share: what an app-only sign-in tells,
+the account's field labels for error text, and what
+SharePoint permission sync works on (principals and role assignments from
+SharePoint REST, the members of an Entra group from Graph). The office365
+objects never leave ``sharepoint_rest``."""
 
+from datetime import datetime
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict
@@ -61,3 +64,51 @@ class EntraMember(BaseModel):
     display_name: str | None = None
     user_principal_name: str | None = None
     mail: str | None = None
+
+
+class MicrosoftTokenInfo(BaseModel):
+    """What an app-only sign-in tells about the app: the token's lifetime,
+    the app's name and id from the token's claims, and, for a certificate
+    account, the certificate's end date."""
+
+    model_config = ConfigDict(frozen=True)
+
+    expires_in: int | None = None
+    app_name: str | None = None
+    app_id: str | None = None
+    certificate_not_after: datetime | None = None
+
+
+class MicrosoftAccountLabels(BaseModel):
+    """The names the connector form gives the account's fields, for lines
+    that tell the admin which field to fix."""
+
+    model_config = ConfigDict(frozen=True)
+
+    client_id: str
+    directory_id: str
+    client_secret: str
+    private_key: str
+    certificate_password: str
+
+    @classmethod
+    def with_prefix(
+        cls, prefix: str, *, private_key: str | None = None
+    ) -> "MicrosoftAccountLabels":
+        return cls(
+            client_id=f"{prefix} Client ID",
+            directory_id=f"{prefix} Directory ID",
+            client_secret=f"{prefix} Client Secret",
+            private_key=private_key or f"{prefix} Private Key",
+            certificate_password=f"{prefix} Certificate Password",
+        )
+
+
+class AccessTokenClaims(BaseModel):
+    """The claims of an app-only access token that name the app."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    app_displayname: str | None = None
+    appid: str | None = None
+    azp: str | None = None

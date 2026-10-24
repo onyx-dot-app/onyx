@@ -14,7 +14,7 @@ import {
 import type {
   ScheduledTaskRunStatus,
   ScheduledTaskStatus,
-} from "@/app/craft/v1/tasks/interfaces";
+} from "@/app/craft/v1/tasks/types";
 
 // ---------------------------------------------------------------------------
 // Task status (active / paused)

@@ -65,7 +65,7 @@ interface DropdownProps {
   /** Controlled open state. */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  /** A disabled dropdown never opens and renders no list. */
+  /** A disabled dropdown never opens; disabling an open one closes it. */
   disabled?: boolean;
   /**
    * Prefix for the list's and the rows' element ids, so a form field can

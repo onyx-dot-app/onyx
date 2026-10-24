@@ -4,12 +4,14 @@ import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
-import { Button, Card, MessageCard, InputSwitch } from "@opal/components";
-import { SvgCopy, SvgPlus, SvgSettings } from "@opal/icons";
+import { Button, Card, MessageCard, InputSwitch, Text } from "@opal/components";
+import { SvgCopy, SvgPlus, SvgSettings, SvgTrash } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
 import {
+  ConfirmationModalLayout,
   ContentAction,
   IllustrationContent,
+  Section,
   SettingsLayouts,
   toast,
 } from "@opal/layouts";
@@ -18,9 +20,12 @@ import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
 import { useSettings } from "@/lib/settings/hooks";
 import { Tier } from "@/lib/tiers/types";
-import type { SSOProviderResponse } from "@/lib/sso/interfaces";
+import type {
+  SSOProviderHandoffResponse,
+  SSOProviderResponse,
+} from "@/lib/sso/types";
 import { tierAtLeast } from "@/lib/tiers/utils";
-import { setSSOProviderEnabled } from "@/lib/sso/svc";
+import { deleteSSOProvider, setSSOProviderEnabled } from "@/lib/sso/svc";
 import { copyRedirectUri, SSO_PROVIDER_DETAILS } from "@/lib/sso/utils";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { PageLoader } from "@opal/loaders";
@@ -71,7 +76,11 @@ export default function SSOProvidersPage() {
   const [pendingProviderId, setPendingProviderId] = useState<number | null>(
     null
   );
+  const [deleteTarget, setDeleteTarget] = useState<SSOProviderResponse | null>(
+    null
+  );
   const setupModal = useCreateModal();
+  const deleteModal = useCreateModal();
   const settings = useSettings();
   const {
     data: providers,
@@ -80,6 +89,15 @@ export default function SSOProvidersPage() {
     mutate,
   } = useSWR<SSOProviderResponse[]>(
     SWR_KEYS.adminSsoProviders,
+    errorHandlingFetcher
+  );
+  // Counts for the delete confirmation, fetched only while a target is picked.
+  const {
+    data: handoff,
+    error: handoffError,
+    isLoading: handoffLoading,
+  } = useSWR<SSOProviderHandoffResponse>(
+    deleteTarget ? SWR_KEYS.adminSsoProviderHandoff(deleteTarget.id) : null,
     errorHandlingFetcher
   );
 
@@ -108,6 +126,30 @@ export default function SSOProvidersPage() {
     try {
       await setSSOProviderEnabled(provider.id, enabled);
       await mutate();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t("toasts.unexpectedError")
+      );
+    } finally {
+      setPendingProviderId(null);
+    }
+  }
+
+  function openDeleteModal(provider: SSOProviderResponse) {
+    setDeleteTarget(provider);
+    deleteModal.toggle(true);
+  }
+
+  async function handleDelete(provider: SSOProviderResponse): Promise<void> {
+    setPendingProviderId(provider.id);
+
+    try {
+      await deleteSSOProvider(provider.id);
+      await mutate();
+      deleteModal.toggle(false);
+      toast.success(
+        t("toasts.providerDeleted", { name: provider.display_name })
+      );
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : t("toasts.unexpectedError")
@@ -199,6 +241,16 @@ export default function SSOProvidersPage() {
                             openEditModal(provider);
                           }}
                         />
+                        <Button
+                          icon={SvgTrash}
+                          prominence="tertiary"
+                          size="sm"
+                          tooltip={t("deleteProvider.tooltip")}
+                          disabled={isPending}
+                          onClick={() => {
+                            openDeleteModal(provider);
+                          }}
+                        />
                       </div>
                     }
                   />
@@ -217,6 +269,61 @@ export default function SSOProvidersPage() {
           }}
         />
       </setupModal.Provider>
+
+      {deleteTarget && (
+        <deleteModal.Provider>
+          <ConfirmationModalLayout
+            icon={SvgTrash}
+            title={t("modals.deleteProvider.title", {
+              name: deleteTarget.display_name,
+            })}
+            submit={
+              <Button
+                variant="danger"
+                disabled={pendingProviderId === deleteTarget.id || !handoff}
+                onClick={() => {
+                  void handleDelete(deleteTarget);
+                }}
+              >
+                {t("modals.deleteProvider.submit.label")}
+              </Button>
+            }
+          >
+            <Section gap={2} alignItems="start">
+              <Text as="p" color="text-03">
+                {t("modals.deleteProvider.description", {
+                  name: deleteTarget.display_name,
+                })}
+              </Text>
+              {handoffLoading && (
+                <Text as="p" color="text-03">
+                  {t("modals.deleteProvider.countsLoading")}
+                </Text>
+              )}
+              {handoffError && (
+                <Text as="p" color="text-03">
+                  {t("modals.deleteProvider.countsError")}
+                </Text>
+              )}
+              {handoff && (
+                <Text as="p" color="text-03">
+                  {t("modals.deleteProvider.linkedUsers", {
+                    count: handoff.linked_users,
+                    name: deleteTarget.display_name,
+                  })}
+                </Text>
+              )}
+              {handoff && handoff.renamed_users > 0 && (
+                <Text as="p" color="text-03">
+                  {t("modals.deleteProvider.renamedUsers", {
+                    count: handoff.renamed_users,
+                  })}
+                </Text>
+              )}
+            </Section>
+          </ConfirmationModalLayout>
+        </deleteModal.Provider>
+      )}
     </>
   );
 }

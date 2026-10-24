@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -14,6 +14,7 @@ from onyx.server.manage.voice.models import (
     VoiceProviderTestRequest,
     VoiceProviderUpsertRequest,
 )
+from onyx.tracing.flows import LLMFlow
 from onyx.voice.factory import get_voice_provider
 from onyx.voice.providers.openai import OpenAIVoiceProvider
 
@@ -92,7 +93,98 @@ async def test_upsert_rejects_tts_activation_without_tts_models(
 
     assert mock_voice_provider.validate_credentials_called is False
     db_session.rollback.assert_called_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["voice", "decision"])
+async def test_zoom_save_validates_requested_service(mode: str) -> None:
+    from onyx.server.manage.voice.api import upsert_voice_provider_endpoint
+
+    provider = _make_provider("zoom")
+    db_session = MagicMock()
+    voice = MockVoiceProvider(tts_models=[])
+    with (
+        patch(
+            "onyx.server.manage.voice.api.upsert_voice_provider", return_value=provider
+        ) as save,
+        patch("onyx.server.manage.voice.api.get_voice_provider", return_value=voice),
+        patch(
+            "onyx.server.manage.voice.api._validate_decision_credentials",
+            new_callable=AsyncMock,
+        ) as decide,
+        patch("onyx.server.manage.voice.api.invalidate_provider_listing_cache"),
+    ):
+        request = VoiceProviderUpsertRequest.model_validate(
+            {
+                "name": "Zoom",
+                "provider_type": "zoom",
+                "validation_mode": mode,
+                "api_key": "key",
+                "api_secret": "secret",
+            }
+        )
+        result = await upsert_voice_provider_endpoint(request, MagicMock(), db_session)
+    assert result.id == provider.id
+    assert voice.validate_credentials_called is (mode == "voice")
+    assert decide.await_count == int(mode == "decision")
+    assert save.call_args.kwargs["activate_stt"] is False
+    assert save.call_args.kwargs["activate_tts"] is False
+    db_session.commit.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_zoom_decision_validation_rolls_back_save() -> None:
+    provider = _make_provider("zoom")
+    db_session = MagicMock()
+    with (
+        patch(
+            "onyx.server.manage.voice.api.upsert_voice_provider", return_value=provider
+        ),
+        patch(
+            "onyx.server.manage.voice.api.get_voice_provider",
+            return_value=MockVoiceProvider([]),
+        ),
+        patch(
+            "onyx.server.manage.voice.api._validate_decision_credentials",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("credential must not leak"),
+        ),
+    ):
+        with pytest.raises(OnyxError, match="Connection test failed"):
+            await upsert_voice_provider_endpoint(
+                VoiceProviderUpsertRequest(
+                    name="Zoom",
+                    provider_type="zoom",
+                    validation_mode="decision",
+                ),
+                MagicMock(),
+                db_session,
+            )
+    db_session.rollback.assert_called_once()
     db_session.commit.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_zoom_decision_validation_uses_signed_fixed_endpoint() -> None:
+    from onyx.server.manage.voice.api import _validate_decision_credentials
+
+    provider = _make_provider("zoom")
+    provider.api_key = "key"  # ty: ignore[invalid-assignment]
+    provider.api_secret = "secret"  # ty: ignore[invalid-assignment]
+    with (
+        patch(
+            "onyx.server.manage.voice.api.build_zoom_scribe_jwt",
+            return_value="signed-token",
+        ) as signer,
+        patch("onyx.server.manage.voice.api.DecisionClient") as client,
+    ):
+        await _validate_decision_credentials(provider)
+    signer.assert_called_once_with("key", "secret")
+    assert client.call_args.kwargs["api_key"] == "signed-token"
+    assert "api_base" not in client.call_args.kwargs
+    assert (
+        client.return_value.decide.call_args.kwargs["flow"] == LLMFlow.MODEL_VALIDATION
+    )
 
 
 @pytest.mark.asyncio

@@ -44,6 +44,15 @@ def _error_code_for_status(status_code: int) -> OnyxErrorCode:
     return OnyxErrorCode.BAD_GATEWAY
 
 
+class CanvasUnsafeUrlError(OnyxError):
+    """A URL Canvas returned points off the configured host or scheme.
+
+    Callers must stop the run: following it could leak the bearer token."""
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(OnyxErrorCode.BAD_GATEWAY, detail)
+
+
 class CanvasApiClient:
     def __init__(
         self,
@@ -165,28 +174,20 @@ class CanvasApiClient:
             parsed_url = urlparse(url)
             port = parsed_url.port if parsed_url.port is not None else 443
         except ValueError as exc:
-            raise OnyxError(
-                OnyxErrorCode.BAD_GATEWAY, "Invalid Canvas pagination URL"
-            ) from exc
+            raise CanvasUnsafeUrlError("Invalid Canvas pagination URL") from exc
         if (
             parsed_url.hostname != expected_host
             or port != self._expected_port
             or parsed_url.username is not None
             or parsed_url.password is not None
         ):
-            raise OnyxError(
-                OnyxErrorCode.BAD_GATEWAY,
-                detail=(
-                    "Canvas pagination returned an unexpected host "
-                    f"({parsed_url.hostname}); expected {expected_host}"
-                ),
+            raise CanvasUnsafeUrlError(
+                "Canvas pagination returned an unexpected host "
+                f"({parsed_url.hostname}); expected {expected_host}"
             )
         if parsed_url.scheme != "https":
-            raise OnyxError(
-                OnyxErrorCode.BAD_GATEWAY,
-                detail=(
-                    f"Canvas pagination link must use https, got {parsed_url.scheme!r}"
-                ),
+            raise CanvasUnsafeUrlError(
+                f"Canvas pagination link must use https, got {parsed_url.scheme!r}"
             )
 
     def _parse_next_link(self, link_header: str) -> str | None:

@@ -133,6 +133,7 @@ def update_sync_record_status(
     sync_type: SyncType,
     sync_status: SyncStatus,
     num_docs_synced: int | None = None,
+    num_docs_failed: int | None = None,
 ) -> None:
     """Update the status of a sync record.
 
@@ -142,6 +143,7 @@ def update_sync_record_status(
         sync_type: The type of sync operation
         sync_status: The new status to set
         num_docs_synced: Optional number of documents synced to update
+        num_docs_failed: Optional number of documents that failed to sync
     """
     sync_record = fetch_latest_sync_record(db_session, entity_id, sync_type)
     if sync_record is None:
@@ -155,6 +157,8 @@ def update_sync_record_status(
     sync_record.sync_status = sync_status
     if num_docs_synced is not None:
         sync_record.num_docs_synced = num_docs_synced
+    if num_docs_failed is not None:
+        sync_record.num_docs_failed = num_docs_failed
 
     if sync_status.is_terminal():
         sync_record.sync_end_time = func.now()
@@ -175,3 +179,30 @@ def cleanup_sync_records(
     )
     db_session.execute(stmt)
     db_session.commit()
+
+
+def fail_in_progress_sync_records(
+    db_session: Session,
+    sync_type: SyncType,
+    error_message: str,
+    *,
+    entity_id: int | None = None,
+) -> list[int]:
+    """Ends every running sync record of the type (one entity, or all when
+    ``entity_id`` is None) as FAILED with the reason. Returns the ids it ended."""
+    stmt = (
+        update(SyncRecord)
+        .where(SyncRecord.sync_type == sync_type)
+        .where(SyncRecord.sync_status == SyncStatus.IN_PROGRESS)
+        .values(
+            sync_status=SyncStatus.FAILED,
+            sync_end_time=func.now(),
+            error_message=error_message,
+        )
+        .returning(SyncRecord.id)
+    )
+    if entity_id is not None:
+        stmt = stmt.where(SyncRecord.entity_id == entity_id)
+    failed_ids = list(db_session.execute(stmt).scalars())
+    db_session.commit()
+    return failed_ids

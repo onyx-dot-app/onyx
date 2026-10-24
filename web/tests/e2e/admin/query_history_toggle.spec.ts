@@ -63,11 +63,13 @@ async function setQueryHistoryType(
 
   const option = page.locator('[role="option"]').filter({ hasText: value });
   await expect(option).toBeVisible({ timeout: 3000 });
+  const saved = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === "/api/admin/settings" &&
+      response.request().method() === "PATCH"
+  );
   await option.click();
-
-  await expect(page.getByText("Settings updated")).toBeVisible({
-    timeout: 5000,
-  });
+  expect((await saved).ok()).toBeTruthy();
 }
 
 test.describe("Query History Toggle @exclusive", () => {

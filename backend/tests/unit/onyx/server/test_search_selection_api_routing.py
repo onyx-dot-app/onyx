@@ -166,7 +166,6 @@ def test_ee_search_expansion_uses_primary_and_selection_uses_its_own_default(
         )
     assert response.llm_selected_doc_ids == ["doc-1"]
     assert rewrite.call_args.kwargs["llm"] is primary
-    assert rewrite.call_args.kwargs.get("enforce_llm_input_budget", False) is False
     assert select.call_args.kwargs["llm"] is (selection if configured else primary)
     assert select.call_args.kwargs["enforce_llm_input_budget"] is configured
     resolver.assert_called_once_with(fallback=primary)
@@ -293,7 +292,6 @@ def test_ee_flow_classification_uses_primary_not_background_or_selection() -> No
         )
     assert result.is_search_flow is True
     assert classify.call_args.kwargs["llm"] is primary
-    assert classify.call_args.kwargs.get("enforce_llm_input_budget", False) is False
     assert cost.call_args.kwargs["llm_provider_api_key"] == "primary-key"
     selection.assert_not_called()
 

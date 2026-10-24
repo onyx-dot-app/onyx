@@ -16,7 +16,12 @@ type AppPositionType =
   | { location: "chat"; id: string }
   | { location: "agent" | "project"; id: number }
   | {
-      location: "more-agents" | "new-session" | "user-settings" | "shared-chat";
+      location:
+        | "more-agents"
+        | "new-session"
+        | "user-settings"
+        | "shared-chat"
+        | "plugins";
     };
 
 interface NavigationOptions {
@@ -56,6 +61,8 @@ function hrefFor(value: AppPositionType): Route {
       });
     case "more-agents":
       return "/app/agents";
+    case "plugins":
+      return "/app/plugins";
     case "user-settings":
       return "/app/settings";
     case "shared-chat":
@@ -155,6 +162,10 @@ class AppPosition {
     return this.value.location === "more-agents";
   }
 
+  isPlugins(): boolean {
+    return this.value.location === "plugins";
+  }
+
   isUserSettings(): boolean {
     return this.value.location === "user-settings";
   }
@@ -186,7 +197,7 @@ class AppPosition {
    *
    * - You are in a chat that started with `Agent XYZ`. The chat tab *and* the
    *   `Agent XYZ` tab both highlight.
-   * - "Disable Default Chat" is on (Admin -> Chat Preferences -> Advanced
+   * - "Always Start with an Agent" is on (Admin -> Chat Preferences -> Advanced
    *   Options). You open "New Session" (`/app`), which resolves to an agent
    *   because no default chat exists. The new-session tab *and* that agent's
    *   tab both highlight.
@@ -220,6 +231,9 @@ export function useAppPosition(): AppPosition {
     }
     if (pathname.startsWith("/app/settings")) {
       return new AppPosition({ location: "user-settings" }, router);
+    }
+    if (pathname === "/app/plugins" || pathname.startsWith("/app/plugins/")) {
+      return new AppPosition({ location: "plugins" }, router);
     }
     if (pathname.startsWith("/app/agents")) {
       return new AppPosition({ location: "more-agents" }, router);

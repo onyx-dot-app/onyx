@@ -11,7 +11,6 @@ import (
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/docker"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
-	"github.com/onyx-dot-app/onyx/tools/ods/internal/postgres"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/prompt"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/s3"
 )
@@ -105,6 +104,9 @@ func completeSnapshotFiles(cmd *cobra.Command, args []string, toComplete string)
 }
 
 func runDBRestoreSeeded(opts *DBRestoreOptions) error {
+	if _, _, _, err := resolveDBContainerTarget(); err != nil {
+		return err
+	}
 	// Download seeded snapshot to snapshots directory.
 	destPath := filepath.Join(paths.SnapshotsDir(), "seeded.dump")
 
@@ -138,18 +140,21 @@ func runDBRestore(input string, opts *DBRestoreOptions) error {
 	}
 
 	// Find PostgreSQL container.
-	container, err := docker.FindPostgresContainer(docker.ProjectName())
+	target, container, config, err := resolveDBContainerTarget()
 	if err != nil {
-		return fatalErrorf("Failed to find PostgreSQL container: %w", err)
+		return err
 	}
-	log.Infof("Found PostgreSQL container: %s", container)
-
-	config := postgres.NewConfigFromEnv()
+	log.Infof("Selected project %s, PostgreSQL container %s", target.Project, container)
+	release, err := lockRuntimeTarget(target, true)
+	if err != nil {
+		return err
+	}
+	defer release()
 
 	// Confirmation prompt
 	if !opts.Yes {
-		msg := fmt.Sprintf("This will restore '%s' to database '%s'. Existing data may be overwritten. Continue? (yes/no): ",
-			filepath.Base(inputPath), config.Database)
+		msg := fmt.Sprintf("This will restore '%s' to database '%s' on project '%s', container '%s'. Existing data may be overwritten. Continue? (yes/no): ",
+			filepath.Base(inputPath), config.Database, target.Project, container)
 		if !prompt.Confirm(msg) {
 			log.Info("Aborted.")
 			return nil
@@ -163,6 +168,7 @@ func runDBRestore(input string, opts *DBRestoreOptions) error {
 
 	// Copy file to container.
 	containerTmpFile := "/tmp/onyx_restore_tmp"
+	defer func() { _ = docker.Exec(container, "rm", "-f", containerTmpFile) }()
 	if err := docker.CopyToContainer(container, inputPath, containerTmpFile); err != nil {
 		return fatalErrorf("Failed to copy file to container: %w", err)
 	}
@@ -179,22 +185,18 @@ func runDBRestore(input string, opts *DBRestoreOptions) error {
 
 		restoreArgs := append([]string{"pg_restore"}, args...)
 		if err := docker.ExecWithEnv(container, env, restoreArgs...); err != nil {
-			// pg_restore may return non-zero for warnings, check if it's fatal.
-			log.Warnf("pg_restore completed with warnings or errors: %v", err)
+			return fatalErrorf("Failed to run pg_restore: %w", err)
 		}
 	} else {
 		// Use psql for SQL format.
 		args := config.PsqlArgs()
-		args = append(args, "-f", containerTmpFile)
+		args = append(args, "-v", "ON_ERROR_STOP=1", "-f", containerTmpFile)
 
 		psqlArgs := append([]string{"psql"}, args...)
 		if err := docker.ExecWithEnv(container, env, psqlArgs...); err != nil {
 			return fatalErrorf("Failed to restore from SQL file: %w", err)
 		}
 	}
-
-	// Clean up temporary file in container.
-	_ = docker.Exec(container, "rm", "-f", containerTmpFile)
 
 	log.Info("Restore completed successfully")
 	return nil

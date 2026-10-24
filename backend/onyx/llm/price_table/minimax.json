@@ -1,6 +1,22 @@
 {
   "aliases": {},
   "models": {
+    "MiniMax-H3": {
+      "cost": {
+        "image_input": 0.04,
+        "second": 0.08
+      },
+      "mode": "video_generation",
+      "name": "MiniMax-H3"
+    },
+    "MiniMax-H3-Max": {
+      "cost": {
+        "image_input": 0.074,
+        "second": 0.08
+      },
+      "mode": "video_generation",
+      "name": "MiniMax-H3-Max"
+    },
     "MiniMax-M2": {
       "attachment": false,
       "cost": {
@@ -264,6 +280,35 @@
       "reasoning": true,
       "release_date": "2026-06-01",
       "temperature": true,
+      "tool_call": true
+    },
+    "MiniMax-M3.1-Flash": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.015,
+        "input": 0.15,
+        "output": 0.6
+      },
+      "family": "minimax",
+      "limit": {
+        "context": 1000000,
+        "output": 512000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "MiniMax-M3.1-Flash",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-19",
+      "temperature": false,
       "tool_call": true
     },
     "speech-02-hd": {

@@ -12,7 +12,7 @@ import {
 } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
 import { CardLoader } from "@opal/loaders";
-import { SvgActivity, SvgChevronDown, SvgTextLines } from "@opal/icons";
+import { SvgActivity, SvgFileText } from "@opal/icons";
 import {
   useActivityItems,
   useResolveRunErrors,
@@ -32,15 +32,23 @@ export interface ActivitiesCardProps {
 export default function ActivitiesCard({ onOpenHistory }: ActivitiesCardProps) {
   const t = useTranslations("admin.indexing.activities");
   const tActivity = useTranslations("admin.connector.activity");
-  const { resolving, resolve } = useResolveRunErrors();
+  const { resolving, resolve, resolveRun } = useResolveRunErrors();
   const failures = useActivityItems(
     "fleet",
     "failures",
+    false,
     "",
     true,
     RUNS_POLL_MS
   );
-  const errors = useActivityItems("fleet", "errors", "", true, RUNS_POLL_MS);
+  const errors = useActivityItems(
+    "fleet",
+    "errors",
+    false,
+    "",
+    true,
+    RUNS_POLL_MS
+  );
   const groups = [failures, errors];
   // Each feed is newest first, so one sort interleaves them.
   const items = useMemo(
@@ -60,10 +68,12 @@ export default function ActivitiesCard({ onOpenHistory }: ActivitiesCardProps) {
   );
 
   return (
+    // Fills the row beside the overview, so the two cards share one height and the list scrolls inside.
     <Card
       border="solid"
       rounding={4}
       padding={2}
+      height="full"
       data-testid="indexing-activities"
     >
       <Section alignItems="stretch" gap={1} height="full">
@@ -92,9 +102,10 @@ export default function ActivitiesCard({ onOpenHistory }: ActivitiesCardProps) {
             <ActivityCountTags
               failures={failures.total}
               errors={errors.total}
+              variant="count"
             />
             <Button
-              icon={SvgTextLines}
+              icon={SvgFileText}
               prominence="tertiary"
               tooltip={t("viewLogs")}
               aria-label={t("viewLogs")}
@@ -128,7 +139,12 @@ export default function ActivitiesCard({ onOpenHistory }: ActivitiesCardProps) {
             </Text>
           </Section>
         ) : (
-          <ShadowDiv variant="mask" className="max-h-44 min-h-0">
+          <ShadowDiv
+            variant="mask"
+            containerClassName="flex-1"
+            // Stacked under the overview the feed keeps a cap. Beside it the card's height is the cap.
+            className="max-h-44 @[38.5rem]/overview:max-h-none"
+          >
             <Section alignItems="stretch" gap={1} height="fit">
               {items.map(({ group, item }) => (
                 <ActivityCard
@@ -136,36 +152,28 @@ export default function ActivitiesCard({ onOpenHistory }: ActivitiesCardProps) {
                   ccPairId={item.ccPairId}
                   run={item.run}
                   group={group}
+                  closed={false}
                   connector={item.connector}
                   canResolve={item.canResolve}
+                  canResolveRuns={item.canResolveRuns}
                   resolving={resolving}
                   onResolve={(errorIds) => void resolve(item, errorIds)}
+                  onResolveRun={() => void resolveRun(item)}
+                  popoverPlacement="below"
                 />
               ))}
             </Section>
           </ShadowDiv>
         )}
-        {/* The toggle sits inside the divider as its label. */}
-        <Section
-          flexDirection="row"
-          alignItems="center"
-          gap={0}
-          height="fit"
-          className="shrink-0"
-        >
-          <Divider paddingParallel={0} paddingPerpendicular={0} />
-          <Button
-            icon={SvgChevronDown}
-            prominence="tertiary"
-            size="xs"
-            onClick={onOpenHistory}
-          >
-            {t("history")}
-          </Button>
-          <Section height="fit" className="min-w-0 flex-1">
-            <Divider paddingParallel={0} paddingPerpendicular={0} />
-          </Section>
-        </Section>
+        {/* Never unfolds in place: the history opens beside the page instead. */}
+        <Divider
+          title={t("history")}
+          foldable
+          chevronPosition="start"
+          foldedChevron="down"
+          open={false}
+          onOpenChange={onOpenHistory}
+        />
       </Section>
     </Card>
   );

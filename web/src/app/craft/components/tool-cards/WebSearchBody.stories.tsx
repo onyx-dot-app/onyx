@@ -46,7 +46,7 @@ The v4 release renamed several utilities including break-words to wrap-break-wor
 
 ## Discussion: break-words removed in v4
 https://github.com/tailwindlabs/tailwindcss/discussions/13456
-Several projects hit this on upgrade. Replace break-words with wrap-break-word — same CSS, new utility name.`,
+Several projects hit this on upgrade. Replace break-words with wrap-break-word. Same CSS, new utility name.`,
     }),
   },
 };
@@ -58,7 +58,7 @@ export const TitlesOnly: Story = {
       rawOutput: `## React 19 is now stable
 https://react.dev/blog/2024/12/05/react-19
 
-## React Server Components — production guide
+## React Server Components: production guide
 https://react.dev/reference/rsc/server-components
 
 ## Migrating from React 18 to 19

@@ -54,14 +54,14 @@ def _clear_override_cache() -> Generator[None, None, None]:
 
 class TestComputeCostCents:
     def test_known_model_splits_input_and_output(self) -> None:
-        # gpt-4o: $2.50/Mtok in, $10.00/Mtok out → 1000 tok each.
+        # gpt-6-sol: $2.00/Mtok in, $10.00/Mtok out → 1000 tok each.
         in_cents, out_cents = compute_cost_cents(
-            model="gpt-4o",
+            model="gpt-6-sol",
             provider="openai",
             prompt_tokens=1000,
             completion_tokens=1000,
         )
-        assert in_cents == pytest.approx(0.25)
+        assert in_cents == pytest.approx(0.2)
         assert out_cents == pytest.approx(1.0)
 
     def test_unknown_model_returns_zero_no_raise(self) -> None:
@@ -89,16 +89,16 @@ class TestComputeCostCents:
         assert out_cents == pytest.approx(600.0)  # 1M * $6/Mtok = $6.00 = 600c
 
     def test_cache_read_tokens_priced_as_input(self) -> None:
-        # gpt-4o $2.50/Mtok in, $1.25/Mtok cache-read:
-        # 1000*2.5e-6 + 2000*1.25e-6 = $0.005 = 0.5c
+        # gpt-6-sol $2.00/Mtok in, $0.20/Mtok cache-read:
+        # 1000*2e-6 + 2000*0.2e-6 = $0.0024 = 0.24c
         cache_in, cache_out = compute_cost_cents(
-            "gpt-4o",
+            "gpt-6-sol",
             "openai",
             prompt_tokens=3000,
             completion_tokens=500,
             cache_read_tokens=2000,
         )
-        assert cache_in == pytest.approx(0.5)
+        assert cache_in == pytest.approx(0.24)
         # Output (500 tok @ $10/Mtok) is unaffected by cache reads.
         assert cache_out == pytest.approx(0.5)
 
@@ -487,7 +487,7 @@ class TestOverride:
     def test_override_wins_over_litellm(self, db_session: Session) -> None:
         db_session.add(
             ModelCostOverride(
-                model="gpt-4o",
+                model="gpt-6-sol",
                 input_cost_per_mtok=1.0,  # $1.00/Mtok in
                 output_cost_per_mtok=2.0,  # $2.00/Mtok out
             )
@@ -495,7 +495,7 @@ class TestOverride:
         db_session.commit()
 
         in_cents, out_cents = compute_cost_cents(
-            model="gpt-4o",
+            model="gpt-6-sol",
             provider="openai",
             prompt_tokens=1_000_000,
             completion_tokens=1_000_000,
@@ -555,7 +555,7 @@ class TestOverride:
     def test_override_counts_cache_reads_as_input(self, db_session: Session) -> None:
         db_session.add(
             ModelCostOverride(
-                model="gpt-4o",
+                model="gpt-6-sol",
                 input_cost_per_mtok=1.0,
                 output_cost_per_mtok=2.0,
             )
@@ -563,7 +563,7 @@ class TestOverride:
         db_session.commit()
 
         in_cents, _ = compute_cost_cents(
-            model="gpt-4o",
+            model="gpt-6-sol",
             provider="openai",
             prompt_tokens=1_000_000,
             completion_tokens=0,
@@ -577,7 +577,7 @@ class TestOverride:
     ) -> None:
         db_session.add(
             ModelCostOverride(
-                model="gpt-4o",
+                model="gpt-6-sol",
                 input_cost_per_mtok=1.0,
                 output_cost_per_mtok=2.0,
                 cache_read_cost_per_mtok=0.1,
@@ -586,7 +586,7 @@ class TestOverride:
         db_session.commit()
 
         in_cents, _ = compute_cost_cents(
-            model="gpt-4o",
+            model="gpt-6-sol",
             provider="openai",
             prompt_tokens=2_000_000,
             completion_tokens=0,
@@ -598,7 +598,7 @@ class TestOverride:
     def test_override_cache_rate_applied_when_set(self, db_session: Session) -> None:
         db_session.add(
             ModelCostOverride(
-                model="gpt-4o",
+                model="gpt-6-sol",
                 input_cost_per_mtok=1.0,
                 output_cost_per_mtok=2.0,
                 cache_read_cost_per_mtok=0.1,  # cache reads 10x cheaper than input
@@ -607,7 +607,7 @@ class TestOverride:
         db_session.commit()
 
         in_cents, _ = compute_cost_cents(
-            model="gpt-4o",
+            model="gpt-6-sol",
             provider="openai",
             prompt_tokens=2_000_000,
             completion_tokens=0,
@@ -627,7 +627,7 @@ class TestOverride:
         tenant_a, tenant_b = _session(), _session()
         tenant_a.add(
             ModelCostOverride(
-                model="gpt-4o", input_cost_per_mtok=1.0, output_cost_per_mtok=2.0
+                model="gpt-6-sol", input_cost_per_mtok=1.0, output_cost_per_mtok=2.0
             )
         )
         tenant_a.commit()
@@ -635,7 +635,7 @@ class TestOverride:
         token = CURRENT_TENANT_ID_CONTEXTVAR.set("tenant_a")
         try:
             a_in, a_out = compute_cost_cents(
-                "gpt-4o",
+                "gpt-6-sol",
                 "openai",
                 prompt_tokens=1_000_000,
                 completion_tokens=1_000_000,
@@ -648,7 +648,7 @@ class TestOverride:
         token = CURRENT_TENANT_ID_CONTEXTVAR.set("tenant_b")
         try:
             b_in, b_out = compute_cost_cents(
-                "gpt-4o",
+                "gpt-6-sol",
                 "openai",
                 prompt_tokens=1_000_000,
                 completion_tokens=1_000_000,
@@ -656,8 +656,8 @@ class TestOverride:
             )
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
-        # litellm gpt-4o: $2.50/Mtok in, $10.00/Mtok out.
-        assert (b_in, b_out) == pytest.approx((250.0, 1000.0))
+        # Catalog gpt-6-sol above 272k context: $4.00/Mtok in, $15.00/Mtok out.
+        assert (b_in, b_out) == pytest.approx((400.0, 1500.0))
 
 
 class TestGetOverride:

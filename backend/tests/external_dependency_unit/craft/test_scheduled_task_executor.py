@@ -561,6 +561,7 @@ def test_run_fails_when_wake_fails(
         "approval",
         "lost_lease",
         "lost_final_lease",
+        "lost_running_lease",
         "timeout",
         "exception",
     ],
@@ -616,6 +617,11 @@ def test_output_cards_follow_producer_close_and_precede_terminal_status(
         *_args: object, **_kwargs: object
     ) -> Generator[SandboxEvent | RequestPermissionRequest, None, None]:
         lifecycle.append("producer_started")
+        if outcome == "lost_running_lease":
+            assert stub_sandbox_manager.last_prompt_slot is not None
+            stub_sandbox_manager.last_prompt_slot.lost = True
+            # Scheduled turns have no successor; teardown must still abort.
+            assert _kwargs.get("should_abort_on_teardown") is None
         try:
             if outcome in {"exception", "timeout"}:
                 yield AgentMessageChunk.model_validate(
@@ -651,7 +657,11 @@ def test_output_cards_follow_producer_close_and_precede_terminal_status(
     db_session.expire_all()
     assert run.session_id is not None
     cards = get_output_cards(run.session_id, test_user, db_session).cards
-    if outcome == "lost_lease":
+    if outcome == "lost_running_lease":
+        assert lifecycle == ["baseline", "producer_started", "producer_closed"]
+        assert cards == []
+        assert run.status == ScheduledTaskRunStatus.FAILED
+    elif outcome == "lost_lease":
         assert lifecycle == ["baseline"]
         assert cards == []
         assert run.status == ScheduledTaskRunStatus.FAILED
@@ -675,10 +685,14 @@ def test_output_cards_follow_producer_close_and_precede_terminal_status(
                 "exception": ScheduledTaskRunStatus.FAILED,
                 "timeout": ScheduledTaskRunStatus.FAILED,
                 "lost_final_lease": ScheduledTaskRunStatus.FAILED,
-                "approval": ScheduledTaskRunStatus.AWAITING_APPROVAL,
+                "approval": ScheduledTaskRunStatus.FAILED,
             }[outcome]
         )
 
+    if outcome == "approval":
+        assert (
+            run.error_class == ScheduledTaskErrorClass.AGENT_PERMISSION_REQUIRED.value
+        )
     if outcome == "timeout":
         assert run.error_class == ScheduledTaskErrorClass.TIMEOUT.value
     if outcome == "lost_final_lease":

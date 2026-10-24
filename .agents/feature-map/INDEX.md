@@ -159,7 +159,7 @@ Two traps when auditing this yourself:
 
 - Some `/admin/*` paths are served from a second tree, `web/src/app/ee/admin/`, via a
   rewrite in `web/src/proxy.ts:EE_ROUTES`. Listing `web/src/app/admin/` alone misses
-  theme, standard-answer, export-logs, performance, and groups.
+  theme, standard-answer, export-logs, performance, groups, scim, and service-accounts.
 - A directory under `ee/admin/` that is **not** in `EE_ROUTES` is unreachable.
   The billing page is `web/src/app/admin/billing/`.
 

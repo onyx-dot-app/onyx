@@ -1,7 +1,7 @@
 import datetime
 import re
 from enum import Enum
-from typing import Any, List, Literal, NotRequired, Optional, TypedDict
+from typing import Annotated, Any, List, Literal, NotRequired, Optional, TypedDict
 from uuid import UUID
 
 from mcp.shared.auth import (
@@ -12,7 +12,7 @@ from mcp.types import Tool as MCPLibTool
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field, model_validator
 
 from onyx.db.enums import (
-    EndpointPolicy,
+    ActionPolicy,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
     MCPOAuthProviderMode,
@@ -131,6 +131,7 @@ class MCPConnectionData(TypedDict):
     # Note: Update MCPOAuthKeys if necessary when modifying these
     # Unfortunately we can't use the actual models here because basemodels aren't compatible
     # with SQLAlchemy
+    oauth_setup_mode: NotRequired[Literal["automatic", "own_client"]]
     client_info: NotRequired[dict[str, Any]]  # OAuthClientInformationFull
     tokens: NotRequired[dict[str, Any]]  # OAuthToken
     metadata: NotRequired[dict[str, Any]]  # OAuthClientMetadata
@@ -228,6 +229,7 @@ class MCPToolCreateRequest(BaseModel):
             "the stored token is reused instead of the masked request value."
         ),
     )
+    oauth_setup_mode: Literal["automatic", "own_client"] | None = None
     oauth_client_id: Optional[str] = Field(None, description="OAuth client ID")
     oauth_client_secret: Optional[str] = Field(None, description="OAuth client secret")
     oauth_provider_mode: MCPOAuthProviderMode = Field(
@@ -235,6 +237,14 @@ class MCPToolCreateRequest(BaseModel):
         description=(
             "OAuth provider bootstrap mode. AUTO_DISCOVERY uses SDK challenge/"
             "metadata discovery; KNOWN_PROVIDER uses admin-configured endpoints."
+        ),
+    )
+    oauth_cimd_enabled: bool = Field(
+        default=True,
+        description=(
+            "Let auto-discovery identify Onyx by its Client ID Metadata Document. "
+            "False registers through Dynamic Client Registration instead, for "
+            "deployments the authorization server cannot reach."
         ),
     )
     oauth_authorization_endpoint: Optional[str] = Field(
@@ -379,6 +389,7 @@ class MCPToolCreateRequest(BaseModel):
         # attempts CIMD before falling back to dynamic client registration.
         if self.auth_type != MCPAuthenticationType.OAUTH:
             self.oauth_provider_mode = MCPOAuthProviderMode.AUTO_DISCOVERY
+            self.oauth_cimd_enabled = True
             self.oauth_authorization_endpoint = None
             self.oauth_token_endpoint = None
             self.oauth_scopes_override = None
@@ -409,6 +420,15 @@ class MCPToolCreateRequest(BaseModel):
         return self
 
 
+class MCPSetupRequest(MCPToolCreateRequest):
+    """Connection settings validated before a new or edited server is saved."""
+
+    available_in_craft: bool | None = None
+    enable_chat: bool | None = None
+    users_can_manage_policies: bool | None = None
+    action_policies: dict[str, ActionPolicy] | None = None
+
+
 class MCPToolUpdateRequest(BaseModel):
     server_id: int = Field(..., description="ID of the MCP server")
     name: Optional[str] = Field(None, description="Updated name of the MCP server")
@@ -421,6 +441,9 @@ class MCPToolUpdateRequest(BaseModel):
 
 
 class MCPServerSimpleCreateRequest(BaseModel):
+    available_in_craft: bool = Field(
+        default=False, description="Whether the Craft agent may use this server"
+    )
     name: str = Field(..., description="Name of the MCP server")
     description: Optional[str] = Field(
         None, description="Description of the MCP server"
@@ -444,12 +467,16 @@ class MCPServerSimpleCreateRequest(BaseModel):
 
 
 class MCPServerSimpleUpdateRequest(BaseModel):
+    users_can_manage_policies: bool | None = Field(
+        default=None,
+        description="Whether users may manage Craft action policies. None leaves this unchanged.",
+    )
     name: Optional[str] = Field(None, description="Name of the MCP server")
     description: Optional[str] = Field(
         None, description="Description of the MCP server"
     )
     server_url: Optional[str] = Field(None, description="URL of the MCP server")
-    tool_policies: Optional[dict[str, EndpointPolicy]] = Field(
+    action_policies: Optional[dict[str, ActionPolicy]] = Field(
         default=None,
         description=(
             "Sparse per-tool Craft approval overrides keyed by tool name; "
@@ -511,6 +538,53 @@ class MCPOAuthConnectResponse(BaseModel):
     oauth_url: str = Field(..., description="OAuth URL to redirect user to")
     state: str = Field(..., description="OAuth state parameter")
     pending_tool: dict = Field(..., description="Pending tool configuration")
+
+
+class MCPOAuthDiscoveryRequest(BaseModel):
+    server_id: int
+
+
+class MCPOAuthDiscoveryResponse(BaseModel):
+    status: Literal["metadata_found", "metadata_missing", "unreachable"]
+    supports_automatic_registration: bool | None = None
+    authorization_endpoint: str | None = None
+    token_endpoint: str | None = None
+
+
+class MCPSetupProbeRequest(BaseModel):
+    server_url: str
+
+
+class MCPPublicProbeResult(BaseModel):
+    kind: Literal["public"] = "public"
+    transport: Literal[MCPTransport.STREAMABLE_HTTP, MCPTransport.SSE]
+    tool_count: int
+    server_name: str
+
+
+class MCPOAuthProbeResult(BaseModel):
+    kind: Literal["oauth"] = "oauth"
+    transport: Literal[MCPTransport.STREAMABLE_HTTP, MCPTransport.SSE] | None = None
+    discovery: MCPOAuthDiscoveryResponse
+
+
+class MCPUnknownAuthProbeResult(BaseModel):
+    kind: Literal["auth_unknown"] = "auth_unknown"
+    transport: Literal[MCPTransport.STREAMABLE_HTTP, MCPTransport.SSE] | None = None
+
+
+class MCPUnreachableProbeResult(BaseModel):
+    kind: Literal["unreachable"] = "unreachable"
+    reason: Literal["blocked", "connection_failed"] = "connection_failed"
+
+
+MCPSetupProbeResult = Annotated[
+    MCPPublicProbeResult
+    | MCPOAuthProbeResult
+    | MCPUnknownAuthProbeResult
+    | MCPUnreachableProbeResult,
+    Field(discriminator="kind"),
+]
 
 
 class MCPUserOAuthConnectRequest(BaseModel):
@@ -583,6 +657,7 @@ class MCPServerConnection(BaseModel):
     auth_type: MCPAuthenticationType | None
     transport: MCPTransport | None
     oauth_provider_mode: MCPOAuthProviderMode
+    oauth_cimd_enabled: bool
     oauth_authorization_endpoint: str | None
     oauth_token_endpoint: str | None
 
@@ -592,6 +667,8 @@ class MCPOAuthServerSnapshot(BaseModel):
     auth_type: MCPAuthenticationType
     auth_performer: MCPAuthenticationPerformer
     provider_mode: MCPOAuthProviderMode
+    # Defaulted so attempts persisted before this field existed still complete.
+    cimd_enabled: bool = True
     transport: MCPTransport | None
     authorization_endpoint: str | None
     token_endpoint: str | None
@@ -694,6 +771,24 @@ class MCPApiKeyResponse(BaseModel):
     )
 
 
+class MCPUserPreferencesUpdateRequest(BaseModel):
+    enabled_in_chat: bool | None = None
+    enabled_in_craft: bool | None = None
+
+    @model_validator(mode="after")
+    def validate_preferences(self) -> "MCPUserPreferencesUpdateRequest":
+        if self.enabled_in_chat is None and self.enabled_in_craft is None:
+            raise ValueError("At least one preference is required")
+        if any(value is None for value in self.model_dump(exclude_unset=True).values()):
+            raise ValueError("Preferences must be booleans")
+        return self
+
+
+class MCPUserPreferencesResponse(BaseModel):
+    enabled_in_chat: bool
+    enabled_in_craft: bool
+
+
 class MCPServer(BaseModel):
     id: int
     name: str
@@ -704,6 +799,8 @@ class MCPServer(BaseModel):
     auth_type: Optional[MCPAuthenticationType] = None
     auth_performer: Optional[MCPAuthenticationPerformer] = None
     oauth_provider_mode: MCPOAuthProviderMode = MCPOAuthProviderMode.AUTO_DISCOVERY
+    oauth_setup_mode: Literal["automatic", "own_client"] | None = None
+    oauth_cimd_enabled: bool = True
     oauth_authorization_endpoint: Optional[str] = None
     oauth_token_endpoint: Optional[str] = None
     oauth_scopes_override: Optional[list[str]] = None
@@ -715,7 +812,17 @@ class MCPServer(BaseModel):
     groups: list[int] = Field(default_factory=list)
     users: list[UUID] = Field(default_factory=list)
     available_in_craft: bool = False
-    tool_policies: Optional[dict[str, EndpointPolicy]] = Field(
+    users_can_manage_policies: bool = True
+    user_enabled_in_chat: bool = True
+    user_enabled_in_craft: bool = True
+    default_chat_enabled: bool | None = Field(
+        None,
+        description=(
+            "Whether any server tool is selected for the default assistant. "
+            "Computed by member and admin listings, independently of credentials and tool enablement."
+        ),
+    )
+    action_policies: Optional[dict[str, ActionPolicy]] = Field(
         None,
         description=(
             "Stored per-tool Craft approval overrides (sparse; unlisted tools "
@@ -761,6 +868,7 @@ class MCPServerCreateResponse(BaseModel):
     auth_type: str
     auth_performer: Optional[str]
     oauth_provider_mode: MCPOAuthProviderMode = MCPOAuthProviderMode.AUTO_DISCOVERY
+    oauth_cimd_enabled: bool = True
     oauth_authorization_endpoint: Optional[str] = None
     oauth_token_endpoint: Optional[str] = None
     oauth_scopes_override: Optional[list[str]] = None
@@ -783,3 +891,13 @@ class MCPToolListResponse(BaseModel):
     server_name: str
     server_url: str
     tools: list[MCPLibTool]
+
+
+class MCPSetupConnectedResponse(BaseModel):
+    status: Literal["connected"] = "connected"
+    server: MCPServer
+
+
+class MCPSetupAuthorizationResponse(BaseModel):
+    status: Literal["authorization_required"] = "authorization_required"
+    authorization_url: str

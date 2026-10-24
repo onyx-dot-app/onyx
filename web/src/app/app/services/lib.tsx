@@ -23,6 +23,8 @@ import { ReadonlyURLSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "./searchParams";
 import { Packet } from "./streamingModels";
 import type { ErrorResponseBody } from "@/lib/fetcher";
+import { isSessionEndedResponse } from "@/lib/auth/utils";
+import { revalidateCurrentUser } from "@/lib/users/svc";
 
 export async function updateLlmOverrideForChatSession(
   chatSessionId: string,
@@ -105,6 +107,12 @@ export async function createChatSession(
     }
   );
   if (!createChatSessionResponse.ok) {
+    const errorBody: ErrorResponseBody = await createChatSessionResponse
+      .json()
+      .catch(() => ({}));
+    if (isSessionEndedResponse(createChatSessionResponse.status, errorBody)) {
+      void revalidateCurrentUser();
+    }
     console.error(
       `Failed to create chat session - ${createChatSessionResponse.status}`
     );
@@ -268,6 +276,10 @@ export async function* sendMessage({
       };
       yield streamingError;
       return;
+    }
+
+    if (isSessionEndedResponse(response.status, data)) {
+      void revalidateCurrentUser();
     }
 
     throw new Error(data.detail ?? `HTTP error! status: ${response.status}`);

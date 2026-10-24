@@ -1,6 +1,7 @@
 /** The run list and the activity panel: a file connector shows no run-type
- * filter and no activity, and a perm-synced pair's failed syncs open their
- * error and the doc sync's shows in the panel. */
+ * filter and no activity, a perm-synced pair's failed syncs open their
+ * error and the doc sync's shows in the panel, and the status card and the
+ * run list share one time window. */
 
 import { test, expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
@@ -75,6 +76,7 @@ function syncCCPairFixture() {
     latest_checkpoint_description: null,
     last_permission_sync_attempt_status: null,
     permission_syncing: false,
+    supports_doc_permission_sync: false,
     last_permission_sync_attempt_finished: null,
     last_permission_sync_attempt_error_message: null,
     pending_backfills: [],
@@ -138,6 +140,16 @@ async function mockSyncConnector(page: Page): Promise<void> {
   await page.route(`${base}/index-attempts*`, async (route) => {
     await route.fulfill(jsonResponse({ items: [], total_items: 0 }));
   });
+  await page.route(`${base}/throughput*`, async (route) => {
+    await route.fulfill(
+      jsonResponse({
+        window_start: new Date(Date.now() - 3_600_000).toISOString(),
+        window_end: new Date().toISOString(),
+        docs_indexed: [0, 0, 0],
+        runs: [],
+      })
+    );
+  });
   await page.route(`${base}/errors*`, async (route) => {
     await route.fulfill(jsonResponse({ items: [], total_items: 0 }));
   });
@@ -196,5 +208,51 @@ test.describe("Connector runs", () => {
       "Group Membership Sync Error"
     );
     await expect(groupModal).toContainText(MOCK_GROUP_ERROR_MESSAGE);
+  });
+
+  test("the status card and the run list share one time window", async ({
+    page,
+  }) => {
+    await mockSyncConnector(page);
+    const runsSince: (string | null)[] = [];
+    const chartWindows: string[] = [];
+    page.on("request", (request) => {
+      const url = new URL(request.url());
+      // The run list reads pages of 10. The activity panel reads the same route 20 at a time, with no window.
+      if (
+        url.pathname.endsWith(`/cc-pair/${MOCK_SYNC_CC_PAIR_ID}/runs`) &&
+        url.searchParams.get("page_size") === "10"
+      ) {
+        runsSince.push(url.searchParams.get("since"));
+      }
+      if (
+        url.pathname.endsWith(`/cc-pair/${MOCK_SYNC_CC_PAIR_ID}/throughput`)
+      ) {
+        chartWindows.push(url.searchParams.get("window") ?? "");
+      }
+    });
+    const detail = new AdminConnectorDetailPage(page);
+    await detail.goto(MOCK_SYNC_CC_PAIR_ID);
+    await detail.expectRunsVisible();
+
+    // Both cards open on the last 24 hours.
+    await expect(detail.timeWindowPicker).toHaveText("Last 24 hours");
+    await expect(detail.runsTimeFilter).toContainText("Last 24 hours");
+    await expect.poll(() => chartWindows.at(-1)).toBe("24h");
+    const lastSince = () => runsSince.at(-1);
+    await expect.poll(lastSince).toBeTruthy();
+    const daySince = lastSince();
+
+    // The run list's filter moves the chart.
+    await detail.pickTimeWindow(detail.runsTimeFilter, "Last 7 days");
+    await expect(detail.timeWindowPicker).toHaveText("Last 7 days");
+    await expect.poll(() => chartWindows.at(-1)).toBe("7d");
+    await expect.poll(lastSince).not.toBe(daySince);
+
+    // The chart's picker moves the run list, and all time drops its start.
+    await detail.pickTimeWindow(detail.timeWindowPicker, "All time");
+    await expect(detail.runsTimeFilter).toContainText("All time");
+    await expect.poll(() => chartWindows.at(-1)).toBe("all");
+    await expect.poll(lastSince).toBeNull();
   });
 });

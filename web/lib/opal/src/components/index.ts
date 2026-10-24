@@ -85,11 +85,21 @@ export {
   type InputImageProps,
 } from "@opal/components/inputs/input-image/components";
 
+/* InputCurrency */
+export {
+  InputCurrency,
+  type InputCurrencyProps,
+} from "@opal/components/inputs/numbers/input-currency/components";
+export {
+  getCurrencyParts,
+  type CurrencyParts,
+} from "@opal/components/inputs/numbers/input-currency/currency";
+
 /* InputNumber */
 export {
   default as InputNumber,
   type InputNumberProps,
-} from "@opal/components/inputs/input-number/components";
+} from "@opal/components/inputs/numbers/input-number/components";
 
 /* InputSingleUpload */
 export {
@@ -127,10 +137,17 @@ export {
 export {
   Tag,
   TAG_COLORS,
-  TAG_REMOVE_CLASS,
   type TagProps,
+  type TagVariant,
   type TagColor,
 } from "@opal/components/tag/components";
+
+/* Chip */
+export {
+  Chip,
+  CHIP_REMOVE_ATTR,
+  type ChipProps,
+} from "@opal/components/chip/components";
 
 /* Fold */
 export { Fold, type FoldProps } from "@opal/components/fold/components";

@@ -2,7 +2,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from onyx.db.models import OAuthConfig, OAuthUserToken, Tool
 from onyx.utils.logger import setup_logger
@@ -143,7 +143,11 @@ def get_all_user_oauth_tokens(
     """
     Get all user OAuth tokens.
     """
-    stmt = select(OAuthUserToken).where(OAuthUserToken.user_id == user_id)
+    stmt = (
+        select(OAuthUserToken)
+        .where(OAuthUserToken.user_id == user_id)
+        .options(selectinload(OAuthUserToken.oauth_config))
+    )
 
     return list(db_session.scalars(stmt).all())
 

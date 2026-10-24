@@ -18,6 +18,20 @@ here. Read the component that documents the setting in its env table.
 
 ---
 
+## Deployment proxy
+
+| Path | Component(s) |
+|---|---|
+| `deployment/data/nginx/`, `cli/internal/deploy/deployfiles/embedded/data/nginx/` | auth-and-identity |
+
+## Terraform: custom tools
+
+| Path | Component(s) |
+|---|---|
+| `terraform-provider-onyx/internal/client/custom_tool.go`, `terraform-provider-onyx/internal/client/custom_tool_test.go` | tools-framework, mcp-and-custom-tools |
+| `terraform-provider-onyx/internal/provider/custom_tool_resource.go`, `terraform-provider-onyx/internal/provider/custom_tool_resource_test.go`, `terraform-provider-onyx/internal/provider/custom_tool_availability_test.go` | tools-framework, mcp-and-custom-tools |
+| `terraform-provider-onyx/docs/resources/custom_tool.md` | tools-framework, mcp-and-custom-tools |
+
 ## Backend: core loop
 
 | Path | Component(s) |
@@ -58,6 +72,7 @@ here. Read the component that documents the setting in its env table.
 | `backend/onyx/natural_language_processing/` | document-index, internal-search |
 | `backend/onyx/db/search_settings.py`, `db/swap_index.py` | document-index |
 | `backend/onyx/server/manage/search_settings.py`, `server/manage/embedding/` | document-index |
+| `backend/shared_configs/embedding_models.py`, `backend/model_server/embedding_model_loader.py`, `backend/model_server/voyage_nano.py` | document-index |
 | `backend/onyx/server/features/search/`, `server/query_and_chat/query_backend.py`, `backend/ee/onyx/server/query_and_chat/search_backend.py`, `backend/ee/onyx/search/` | internal-search |
 | `backend/ee/onyx/server/query_and_chat/token_limit.py` | rate-and-usage-limits |
 | `backend/onyx/access/`, `backend/ee/onyx/access/`, `backend/onyx/db/document_access.py`, `db/permissions.py`, `db/scoped_permissions.py` | access-control |
@@ -107,7 +122,7 @@ here. Read the component that documents the setting in its env table.
 | `backend/onyx/server/middleware/rate_limiting.py` | rate-and-usage-limits |
 | `backend/onyx/server/middleware/latency_logging.py` | observability |
 | `backend/onyx/background/celery/`, `background/periodic_poller.py`, `background/task_utils.py`, `backend/ee/onyx/background/`, `backend/onyx/db/tasks.py`, `db/scheduled_task.py`, `db/sync_record.py` | background-jobs |
-| `backend/onyx/feature_flags/`, `backend/ee/onyx/feature_flags/`, `backend/onyx/db/gated_app.py`, `backend/onyx/configs/app_configs.py` | editions-and-gating |
+| `backend/onyx/feature_flags/`, `backend/ee/onyx/feature_flags/`, `backend/onyx/configs/app_configs.py` | editions-and-gating |
 | `backend/onyx/configs/chat_configs.py` | chat-persistence, context-assembly, llm-providers |
 | `backend/onyx/configs/llm_configs.py`, `backend/onyx/configs/model_configs.py` | llm-providers |
 | `backend/onyx/configs/onyxbot_configs.py` | slack-bot |
@@ -122,6 +137,8 @@ here. Read the component that documents the setting in its env table.
 | `backend/ee/onyx/server/enterprise_settings/` | whitelabelling-and-theme |
 | `backend/ee/onyx/db/standard_answer.py`, `backend/ee/onyx/server/manage/standard_answer.py`, `*/onyxbot/slack/handlers/handle_standard_answers.py` | standard-answers |
 | `backend/onyx/db/notification.py`, `db/release_notes.py`, `db/admin_banner.py`, `server/features/notifications/`, `features/release_notes/`, `features/admin_banner/` | notifications |
+| `backend/onyx/server/features/build/db/action_approval.py` | craft-external-apps, craft-streaming |
+| `backend/onyx/db/action_policy.py`, `backend/onyx/server/features/build/action_policies.py`, `web/src/sections/actions/PolicyEditor.tsx`, `web/src/lib/plugins/types.ts` | craft-external-apps, craft-scheduled-tasks, craft-admin, editions-and-gating |
 | `backend/onyx/db/models.py` | **any**. Check which tables the diff touches, then map those. |
 | `backend/alembic/`, `backend/alembic_tenants/` | the component that owns the table being migrated |
 | `backend/onyx/server/settings/`, `server/security/`, `db/security_settings.py` | editions-and-gating, auth-and-identity |
@@ -161,6 +178,10 @@ so verify the callers rather than a single component.
 | Path | Component(s) |
 |---|---|
 | `backend/onyx/server/features/build/` | craft-sessions |
+| `backend/onyx/server/features/build/sandbox/` | craft-sandboxes |
+| `backend/onyx/server/features/build/session/resource_cleanup.py` | craft-sandboxes |
+| `backend/onyx/background/celery/tasks/build/tasks.py` | craft-sandboxes |
+| `backend/onyx/server/features/build/static_preview.py` | craft-webapp-proxy |
 | `backend/onyx/server/features/build/session/output_cards.py` | craft-sessions, craft-scheduled-tasks |
 | `backend/onyx/server/features/build/sandbox/image/sandbox_daemon/models.py` | craft-sandboxes, craft-sessions |
 | `backend/onyx/sandbox_proxy/` | craft-external-apps |
@@ -173,29 +194,42 @@ so verify the callers rather than a single component.
 | Path | Component(s) |
 |---|---|
 | `web/src/app/app/` | chat-frontend |
-| `web/src/lib/mcp/` | mcp-and-custom-tools |
 | `web/src/lib/tools/components/ToolsPopover.tsx` | mcp-and-custom-tools, chat-frontend |
 | `web/src/sections/input/AppInputBar.tsx` | chat-frontend |
+| `web/src/app/app/plugins/` | mcp-and-custom-tools, chat-frontend |
+| `web/src/app/craft/v1/plugins/` | craft-external-apps, mcp-and-custom-tools |
+| `web/src/app/admin/plugins/external-app/` | craft-admin, craft-external-apps |
 | `web/src/app/app/agents/` | chat-frontend, agents-personas |
 | `web/tools/prepare-pdf-assets.cjs` | craft-webapp-proxy |
 | `web/src/app/craft/` | craft-sessions, craft-streaming |
+| `web/src/app/craft/v1/tasks/` | craft-scheduled-tasks |
+| `web/src/lib/readSpreadsheetPreview.ts`, `web/src/lib/spreadsheetPreview.worker.ts` | craft-webapp-proxy |
 | `web/src/app/craft/components/output-panel/`, `web/src/app/craft/components/OutputPanel.tsx` | craft-webapp-proxy |
+| `web/src/lib/docx/` | chat-frontend, craft-webapp-proxy |
+| `web/src/lib/spreadsheetPreview.ts`, `web/src/app/craft/services/filePreview.ts` | craft-webapp-proxy |
 | `web/src/lib/csv.ts` | craft-streaming, chat-frontend |
 | `web/src/lib/build/hooks.ts`, `web/src/lib/build/types.ts` | craft-webapp-proxy |
 | `web/src/app/craft/services/workspaceDirectorySnapshots.ts` | craft-webapp-proxy |
 | `web/src/app/craft/services/outputInventorySnapshots.ts` | craft-webapp-proxy |
 | `web/src/app/craft/services/outputThumbnailCache.ts`, `web/src/app/craft/services/workspaceFiles.ts`, `web/src/app/craft/services/outputPanelPreferences.ts` | craft-webapp-proxy |
 | `web/src/app/admin/connector*/`, `admin/indexing-status/`, `admin/index-settings/`, `admin/document-processing/` | connectors, cc-pairs-and-credentials, indexing-pipeline |
-| `web/src/app/admin/documents/`, `admin/groups*/`, `admin/scim/`, `admin/users/`, `admin/service-accounts/` | access-control, auth-and-identity |
-| `web/src/app/admin/agents/` | agents-personas |
+| `web/src/app/admin/documents/`, `admin/groups*/`, `admin/scim/`, `admin/users/`, `admin/service-accounts/`, `web/src/views/admin/ScimPage/`, `web/src/views/admin/ServiceAccountsPage/` | access-control, auth-and-identity |
+| `web/src/app/admin/agents/`, `web/src/lib/agents/` | agents-personas |
+| `web/src/views/admin/ChatPreferencesPage.tsx` | chat-preferences |
 | `web/src/app/admin/language-models/` | llm-providers |
 | `web/src/views/admin/LanguageModelsPage.tsx` | llm-providers |
+| `web/src/views/admin/VoicePage/`, `web/src/lib/voice/` | voice |
+| `web/src/app/admin/decision-models/`, `web/src/views/admin/DecisionModelsPage.tsx`, `web/src/sections/modals/languageModels/ZoomDecisionModal.tsx` | llm-providers |
 | `web/src/views/admin/ChatPreferencesPage.tsx`, `web/src/views/admin/ChatTaskModelSettings.tsx` | chat-preferences, llm-providers |
-| `web/src/app/admin/mcp-actions/`, `admin/openapi-actions/` | mcp-and-custom-tools |
+| `web/src/views/admin/DecisionModelSetting.tsx`, `backend/onyx/llm/decisions/` | llm-providers |
+| `web/src/sections/modals/languageModels/DecisionProviderModal.tsx` | llm-providers |
+| `web/src/app/admin/plugins/`, `web/src/app/admin/mcp-actions/`, `admin/openapi-actions/` | mcp-and-custom-tools |
+| `web/src/sections/plugins/`, `web/src/lib/plugins/`, `web/src/sections/actions/modals/MCPPluginSetupModal.tsx` | mcp-and-custom-tools |
+| `web/src/sections/actions/`, `web/src/lib/mcp/`, `web/src/app/mcp/oauth/` | mcp-and-custom-tools |
 | `web/src/app/admin/bots/`, `admin/discord-bot/` | slack-bot, discord-bot |
 | `web/src/app/admin/sso-providers/`, `admin/security/`, `admin/oauth-test/` | auth-and-identity |
 | `web/src/app/admin/token-rate-limits/` | rate-and-usage-limits |
-| `web/src/app/ee/admin/` | **a second admin route tree**, reached by a rewrite. `web/src/proxy.ts:EE_ROUTES` lists the paths that get rewritten to `/ee/...`: the `/admin/*` paths groups, performance/usage, performance/analytics, performance/query-history, performance/custom-analytics, theme, standard-answer, and export-logs, plus `/agents/stats`. A page under `ee/admin/` can also load directly at `/ee/admin/...`. Only the `/admin/...` alias needs an `EE_ROUTES` entry. Check `EE_ROUTES` before assuming which copy handles an `/admin/...` path. |
+| `web/src/app/ee/admin/` | **a second admin route tree**, reached by a rewrite. `web/src/proxy.ts:EE_ROUTES` lists the paths that get rewritten to `/ee/...`: the `/admin/*` paths groups, performance/usage, performance/analytics, performance/query-history, performance/custom-analytics, theme, standard-answer, export-logs, scim, and service-accounts, plus `/agents/stats`. A page under `ee/admin/` can also load directly at `/ee/admin/...`. Only the `/admin/...` alias needs an `EE_ROUTES` entry. Check `EE_ROUTES` before assuming which copy handles an `/admin/...` path. |
 | `web/src/lib/admin-routes.ts` | the authoritative list of admin routes. Changing it changes the admin panel's surface, so re-check coverage against this map. |
 | `web/src/app/admin/craft/` | craft-admin |
 | `web/src/app/admin/tracing/`, `admin/systeminfo/` | observability |
@@ -216,7 +250,10 @@ so verify the callers rather than a single component.
 | `deployment/` | the deployed component. For Craft, also `docs/craft/infra/`. |
 | `deployment/fleet-telemetry.md` | observability |
 | `.github/workflows/` | CI. Not a product component; verify by reading the workflow. |
+| `deployment/helm/dev/` | craft-sandboxes (local Kubernetes configuration, launch, and readiness) |
+| `.zed/run-all-k8s.sh`, `.zed/process-compose.k8s.yaml` | craft-sandboxes |
 | `cli/`, `tools/`, `scripts/` | developer tooling. Not a product component. |
+| `tools/loadtest/mock_llm/` | internal-search (synthetic load-test helper responses) |
 
 ---
 

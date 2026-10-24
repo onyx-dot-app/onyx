@@ -12,7 +12,6 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.prompts.filter_extration import SOURCE_SCOPE_DECISION_PROMPT
-from onyx.secondary_llm_flows.search_prompt_budget import SearchPromptBudget
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tracing.flows import LLMFlow
 from onyx.utils.logger import setup_logger
@@ -64,7 +63,6 @@ def decide_search_scope(
     connected_sources: list[DocumentSource],
     previous_cycles: list[SearchCycle],
     current_queries: list[str],
-    enforce_llm_input_budget: bool = False,
 ) -> list[DocumentSource] | None:
     """Decide, in one LLM call, which connected source(s) this internal search
     cycle should cover, from the conversation and the prior cycles this turn.
@@ -103,6 +101,11 @@ def decide_search_scope(
         if previous_cycles
         else "N/A This is the first search"
     )
+    searched_sources = ", ".join(
+        dict.fromkeys(
+            src for cycle in previous_cycles for src in cycle.searched_sources
+        )
+    )
     current_cycle_queries = "\n".join(current_queries) or "N/A"
     valid_sources = "\n".join(source.value for source in connected_sources)
 
@@ -112,24 +115,16 @@ def decide_search_scope(
         previous_cycles=previous_cycles_str,
         valid_sources=valid_sources,
         last_user_query=last_user_query,
+        searched_sources=searched_sources or "none",
     )
     messages: list[Message] = [UserMessage(content=prompt)]
-    budget = SearchPromptBudget(llm) if enforce_llm_input_budget else None
-    request = GenerationRequest(
-        messages=messages,
-        options=(
-            budget.options()
-            if budget
-            else GenerationOptions(reasoning_effort=ReasoningEffort.OFF)
-        ),
-    )
-    if budget and not budget.fits(request):
-        logger.warning("Search source-scope prompt exceeds its input budget")
-        return None
 
     try:
         response = llm.invoke(
-            request,
+            GenerationRequest(
+                messages=messages,
+                options=GenerationOptions(reasoning_effort=ReasoningEffort.OFF),
+            ),
             context=GenerationContext(flow=LLMFlow.SOURCE_FILTER_EXTRACTION),
         )
         content = response.text

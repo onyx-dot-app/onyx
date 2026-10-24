@@ -36,6 +36,7 @@ from onyx.db.connector_credential_pair import get_cc_pairs_with_check_schedule
 from onyx.db.credential_capability import (
     STALE_RUN_ERROR,
     delete_capability_check_runs_older_than,
+    get_capability_report_row,
     mark_capability_report_running,
     mark_capability_run_failed,
     mark_stale_capability_runs_failed,
@@ -65,10 +66,12 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents import cc_pair as cc_pair_routes
 from onyx.server.documents.cc_pair import get_cc_pair_runs, release_indexing_hold
+from onyx.server.documents.credential_capabilities import CapabilityReportSnapshot
 from onyx.server.documents.models import (
     CCPairRunsResponse,
     ConnectorSnapshot,
     ConnectorUpdateRequest,
+    PruneRunSnapshot,
 )
 from tests.external_dependency_unit.conftest import create_test_user
 
@@ -119,12 +122,14 @@ def _prune(
     status: SyncStatus,
     docs_removed: int = 0,
     error_message: str | None = None,
+    docs_failed: int = 0,
 ) -> SyncRecord:
     record = SyncRecord(
         entity_id=cc_pair.id,
         sync_type=SyncType.PRUNING,
         sync_status=status,
         num_docs_synced=docs_removed,
+        num_docs_failed=docs_failed,
         sync_start_time=_T0 + timedelta(minutes=minutes),
         sync_end_time=(
             None
@@ -204,16 +209,20 @@ def _runs(
     kinds: list[CCPairRunKind] | None = None,
     q: str | None = None,
     errors: CCPairRunErrors | None = None,
+    superseded: bool | None = None,
 ) -> CCPairRunsResponse:
     return get_cc_pair_runs(
         cc_pair_id=cc_pair.id,
         page_num=0,
         page_size=10,
         since=None,
+        until=None,
         kinds=kinds,
         status_groups=None,
         q=q,
         errors=errors,
+        superseded=superseded,
+        resolved=None,
         user=user,
         db_session=db_session,
     )
@@ -311,6 +320,72 @@ def test_prunes_and_check_runs_join_the_feed(db_session: Session) -> None:
     assert _order(with_doc_errors) == []
 
 
+def test_checks_that_do_not_apply_are_left_out_of_the_responses(
+    db_session: Session,
+) -> None:
+    admin = create_test_user(db_session, "history_na_admin", is_admin=True)
+    cc_pair = _create_cc_pair(db_session)
+    report = _report(cc_pair, required_failed=False)
+    # A required perm-sync check on a public pair.
+    report.check_results.append(
+        CapabilityCheckResult(
+            capability=CredentialCapability.DOC_PERMISSION_SYNC,
+            check_id="perm_sync_scopes",
+            display_name="Read page permissions",
+            required=True,
+            status=CapabilityCheckStatus.SKIPPED,
+            message="Not applicable to a public connector",
+            applicable=False,
+        )
+    )
+    _check_run(db_session, cc_pair, 1, CapabilityCheckRunStatus.PASSED, report)
+    upsert_completed_capability_report(
+        db_session,
+        credential_id=cc_pair.credential_id,
+        connector_id=cc_pair.connector_id,
+        source=_SOURCE,
+        trigger=CapabilityCheckTrigger.MANUAL,
+        report=report,
+        connector_config_hash=compute_connector_config_hash(_CONFIG),
+    )
+    db_session.commit()
+
+    (listed,) = _runs(db_session, admin, cc_pair, kinds=[CCPairRunKind.CHECKS]).items
+    by_hidden_name = _runs(db_session, admin, cc_pair, q="page permissions")
+    row = get_capability_report_row(
+        db_session, cc_pair.credential_id, cc_pair.connector_id
+    )
+    assert row is not None
+    snapshot = CapabilityReportSnapshot.from_row(row)
+
+    assert listed.kind == CCPairRunKind.CHECKS
+    assert [result.check_id for result in listed.attempt.check_results] == ["scopes"]
+    assert _order(by_hidden_name) == []
+    assert snapshot.report is not None
+    assert [result.check_id for result in snapshot.report.check_results] == ["scopes"]
+    # The stored report keeps every result.
+    assert row.report is not None
+    assert len(row.report["check_results"]) == 2
+
+
+def test_a_prune_with_failed_docs_lists_with_the_errors(db_session: Session) -> None:
+    admin = create_test_user(db_session, "history_admin", is_admin=True)
+    cc_pair = _create_cc_pair(db_session)
+    _prune(db_session, cc_pair, 0, SyncStatus.SUCCESS, docs_removed=5)
+    failed_docs = _prune(
+        db_session, cc_pair, 1, SyncStatus.SUCCESS, docs_removed=3, docs_failed=2
+    )
+
+    with_errors = _runs(db_session, admin, cc_pair, errors=CCPairRunErrors.UNRESOLVED)
+    resolved = _runs(db_session, admin, cc_pair, errors=CCPairRunErrors.RESOLVED)
+
+    assert _order(with_errors) == [(CCPairRunKind.PRUNING, failed_docs.id)]
+    attempt = with_errors.items[0].attempt
+    assert isinstance(attempt, PruneRunSnapshot)
+    assert attempt.docs_failed == 2
+    assert _order(resolved) == []
+
+
 def test_check_run_lifecycle_writes_one_history_row_per_run(
     db_session: Session,
 ) -> None:
@@ -323,6 +398,7 @@ def test_check_run_lifecycle_writes_one_history_row_per_run(
         connector_id=cc_pair.connector_id,
         source=_SOURCE,
         trigger=CapabilityCheckTrigger.MANUAL,
+        lease=timedelta(hours=1),
         active_within=timedelta(hours=1),
     )
     db_session.commit()
@@ -355,6 +431,7 @@ def test_check_run_lifecycle_writes_one_history_row_per_run(
         connector_id=cc_pair.connector_id,
         source=_SOURCE,
         trigger=CapabilityCheckTrigger.SCHEDULED,
+        lease=timedelta(hours=1),
         active_within=timedelta(hours=1),
     )
     db_session.commit()
@@ -372,19 +449,19 @@ def test_check_run_lifecycle_writes_one_history_row_per_run(
     assert broken.status == CapabilityCheckRunStatus.FAILED_TO_RUN
     assert broken.error_message == "broker down"
 
+    # Expired as soon as it is marked.
     third = mark_capability_report_running(
         db_session,
         credential_id=cc_pair.credential_id,
         connector_id=cc_pair.connector_id,
         source=_SOURCE,
         trigger=CapabilityCheckTrigger.MANUAL,
+        lease=timedelta(0),
         active_within=timedelta(hours=1),
     )
     db_session.commit()
     assert third is not None
-    retired = mark_stale_capability_runs_failed(
-        db_session, source=_SOURCE, stale_after=timedelta(seconds=0)
-    )
+    retired = mark_stale_capability_runs_failed(db_session, source=_SOURCE)
     db_session.commit()
     # The shared database can hold other stale runs of the source.
     assert retired >= 1
@@ -450,6 +527,7 @@ def test_release_lets_the_first_attempt_start_until_a_later_run(
         connector_id=cc_pair.connector_id,
         source=_SOURCE,
         trigger=CapabilityCheckTrigger.MANUAL,
+        lease=timedelta(hours=1),
         active_within=timedelta(hours=1),
     )
     db_session.commit()

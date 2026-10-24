@@ -37,8 +37,8 @@ REQUIRE_EMAIL_VERIFICATION=False
 # every time.
 GEN_AI_API_KEY=<REPLACE THIS>
 OPENAI_API_KEY=<REPLACE THIS>
-# If answer quality isn't important for dev, use gpt-4o-mini since it's cheaper.
-GEN_AI_MODEL_VERSION=gpt-4o
+# Default dev model; set another OpenAI model here if needed.
+GEN_AI_MODEL_VERSION=gpt-6-luna
 
 
 # Python stuff

@@ -4,7 +4,8 @@ from enum import Enum
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import Select, func, not_, or_, select, update
+from sqlalchemy import Select, delete, func, not_, or_, select, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, aliased, selectinload
 
 from onyx.access.hierarchy_access import get_user_external_group_ids
@@ -58,7 +59,10 @@ from onyx.server.features.persona.models import (
     PersonaSnapshot,
     PersonaUpsertRequest,
 )
-from onyx.server.features.tool.tool_visibility import should_expose_tool_to_fe
+from onyx.server.features.tool.tool_visibility import (
+    is_openapi_tool,
+    should_expose_tool_to_fe,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
@@ -2110,6 +2114,95 @@ def get_default_assistant(db_session: Session) -> Persona | None:
     )
 
 
+def lock_default_assistant__no_commit(db_session: Session) -> Persona:
+    """Row-lock the default assistant so writers of its tool list serialize."""
+    persona = db_session.scalar(
+        select(Persona)
+        .where(
+            Persona.id == DEFAULT_PERSONA_ID,
+            Persona.builtin_persona.is_(True),
+            Persona.deleted.is_(False),
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if persona is None:
+        raise ValueError("Default assistant not found")
+    return persona
+
+
+def _get_selectable_tools(db_session: Session, tool_ids: Sequence[int]) -> list[Tool]:
+    unique_ids = list(dict.fromkeys(tool_ids))
+    tools_by_id = {
+        tool.id: tool
+        for tool in db_session.scalars(select(Tool).where(Tool.id.in_(unique_ids)))
+    }
+    tools: list[Tool] = []
+    for tool_id in unique_ids:
+        tool = tools_by_id.get(tool_id)
+        if tool is None:
+            raise ValueError(f"Tool with ID {tool_id} not found")
+        if not should_expose_tool_to_fe(tool):
+            raise ValueError(f"Tool with ID {tool_id} cannot be assigned")
+        tools.append(tool)
+    return tools
+
+
+def _attach_default_chat_tools__no_commit(
+    db_session: Session, persona: Persona, tools: Sequence[Tool]
+) -> None:
+    if not tools:
+        return
+    db_session.execute(
+        insert(Persona__Tool)
+        .values([{"persona_id": persona.id, "tool_id": tool.id} for tool in tools])
+        .on_conflict_do_nothing()
+    )
+    for tool in tools:
+        # Inclusion explicitly enables default Chat for a legacy disabled plugin.
+        # Disabled MCP and built-in tools stay attached; tool construction
+        # still excludes them.
+        if is_openapi_tool(tool):
+            tool.enabled = True
+
+
+def set_default_chat_tools__no_commit(
+    db_session: Session, tool_ids: Sequence[int], enabled: bool
+) -> Persona:
+    """Add or remove only the given tools, keeping the rest of the selection."""
+    persona = lock_default_assistant__no_commit(db_session)
+    if enabled:
+        _attach_default_chat_tools__no_commit(
+            db_session, persona, _get_selectable_tools(db_session, tool_ids)
+        )
+    elif tool_ids:
+        db_session.execute(
+            delete(Persona__Tool).where(
+                Persona__Tool.persona_id == persona.id,
+                Persona__Tool.tool_id.in_(tool_ids),
+            )
+        )
+    db_session.expire(persona, ["tools"])
+    return persona
+
+
+def set_default_chat_tool__no_commit(
+    db_session: Session, tool: Tool, enabled: bool
+) -> None:
+    """Change one selection without replacing other plugins' default settings."""
+    persona = lock_default_assistant__no_commit(db_session)
+    if enabled:
+        _attach_default_chat_tools__no_commit(db_session, persona, [tool])
+    else:
+        db_session.execute(
+            delete(Persona__Tool).where(
+                Persona__Tool.persona_id == persona.id,
+                Persona__Tool.tool_id == tool.id,
+            )
+        )
+    db_session.expire(persona, ["tools"])
+
+
 def update_default_assistant_configuration(
     db_session: Session,
     tool_ids: list[int] | None = None,
@@ -2120,7 +2213,7 @@ def update_default_assistant_configuration(
 
     Args:
         db_session: Database session
-        tool_ids: List of tool IDs to enable (if None, tools are not updated)
+        tool_ids: Full list of tool IDs to enable (if None, tools are not updated)
         system_prompt: New system prompt value (None means use default)
         update_system_prompt: If True, update the system_prompt field (allows setting to None)
 
@@ -2130,34 +2223,23 @@ def update_default_assistant_configuration(
     Raises:
         ValueError: If default assistant not found or invalid tool IDs provided
     """
-    # Get the default assistant
-    persona = get_default_assistant(db_session)
-    if not persona:
-        raise ValueError("Default assistant not found")
+    persona = lock_default_assistant__no_commit(db_session)
 
-    # Update system prompt if explicitly requested
     if update_system_prompt:
         persona.system_prompt = system_prompt
 
-    # Update tools if provided
     if tool_ids is not None:
-        # Clear existing tool associations
-        persona.tools = []
-
-        # Add new tool associations
-        for tool_id in tool_ids:
-            tool = db_session.query(Tool).filter(Tool.id == tool_id).one_or_none()
-            if not tool:
-                raise ValueError(f"Tool with ID {tool_id} not found")
-
-            if not should_expose_tool_to_fe(tool):
-                raise ValueError(f"Tool with ID {tool_id} cannot be assigned")
-
-            # A disabled tool stays attached, because disabling one does not detach
-            # it. Callers resend the whole list, so rejecting a disabled id here
-            # failed every update rather than just the tool being toggled.
-            # construct_tools keeps a disabled tool out of chat.
-            persona.tools.append(tool)
+        tools = _get_selectable_tools(db_session, tool_ids)
+        # Core statements: an ORM collection replace fails with StaleDataError
+        # when another transaction removed one of the loaded rows first.
+        db_session.execute(
+            delete(Persona__Tool).where(
+                Persona__Tool.persona_id == persona.id,
+                Persona__Tool.tool_id.not_in([tool.id for tool in tools]),
+            )
+        )
+        _attach_default_chat_tools__no_commit(db_session, persona, tools)
+        db_session.expire(persona, ["tools"])
 
     db_session.commit()
     return persona

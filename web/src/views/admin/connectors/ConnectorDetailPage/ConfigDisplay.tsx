@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, OverflowText, Text } from "@opal/components";
+import { richNodes } from "@opal/utils";
 import { Section } from "@opal/layouts";
 import { SvgChevronDown, SvgChevronUp } from "@opal/icons";
 import { ValidSources } from "@/lib/connectors/types/source";
@@ -41,14 +42,30 @@ export interface ConfigRow {
   key: string;
   label: string | RichStr;
   value: ConfigValue;
+  /** A boolean shown by the form's tab labels, e.g. "Confluence Cloud". */
+  booleanLabels?: { true: string; false: string };
 }
 
-interface ConfigItemProps {
-  label: string | RichStr;
-  value: ConfigValue;
+type ConfigItemProps = Omit<ConfigRow, "key">;
+
+/** An http(s) URL split for display, or null for any other value. */
+export function splitUrl(
+  value: string
+): { scheme: string; host: string; path: string } | null {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    return {
+      scheme: `${url.protocol}//`,
+      host: url.host,
+      path: `${url.pathname}${url.search}${url.hash}`,
+    };
+  } catch {
+    return null;
+  }
 }
 
-function ConfigItem({ label, value }: ConfigItemProps) {
+function ConfigItem({ label, value, booleanLabels }: ConfigItemProps) {
   const t = useTranslations("admin.connector");
   const [isExpanded, setIsExpanded] = useState(false);
   const isExpandable =
@@ -82,9 +99,35 @@ function ConfigItem({ label, value }: ConfigItemProps) {
       );
     }
     if (typeof value === "boolean") {
+      const labels = booleanLabels ?? {
+        true: t("configItem.booleanTrue"),
+        false: t("configItem.booleanFalse"),
+      };
       return (
         <Text font="main-ui-body" color="text-04">
-          {value ? t("configItem.booleanTrue") : t("configItem.booleanFalse")}
+          {value ? labels.true : labels.false}
+        </Text>
+      );
+    }
+    // As the section summary shows a host: the host bold, the rest muted.
+    const url = typeof value === "string" ? splitUrl(value) : null;
+    if (url !== null) {
+      return (
+        <Text
+          as="p"
+          font="main-ui-body"
+          color="text-03"
+          wordWrap="wrap-anywhere"
+        >
+          {richNodes(
+            <>
+              {url.scheme}
+              <Text font="main-ui-action" color="text-04">
+                {url.host}
+              </Text>
+              {url.path}
+            </>
+          )}
         </Text>
       );
     }
@@ -149,7 +192,12 @@ export function ConfigDisplay({ rows }: ConfigDisplayProps) {
   return (
     <Section gap={3} height="fit" alignItems="stretch">
       {rows.map((row) => (
-        <ConfigItem key={row.key} label={row.label} value={row.value} />
+        <ConfigItem
+          key={row.key}
+          label={row.label}
+          value={row.value}
+          booleanLabels={row.booleanLabels}
+        />
       ))}
     </Section>
   );

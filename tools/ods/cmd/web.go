@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -31,7 +33,7 @@ type webPackageJSON struct {
 func NewWebCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "web <script> [args...]",
-		Short: "Run web/package.json bun scripts",
+		Short: "Run the frontend or web/package.json scripts",
 		Long:  webHelpDescription(),
 		Args:  cobra.MinimumNArgs(1),
 		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -41,6 +43,10 @@ func NewWebCommand() *cobra.Command {
 			return webScriptNames(), cobra.ShellCompDirectiveNoFileComp
 		},
 		Run: func(cmd *cobra.Command, args []string) {
+			if args[0] == "dev" && (slices.Contains(args[1:], "--help") || slices.Contains(args[1:], "-h")) {
+				_ = cmd.Help()
+				return
+			}
 			runWebScript(args)
 		},
 	}
@@ -50,6 +56,12 @@ func NewWebCommand() *cobra.Command {
 }
 
 func runWebScript(args []string) {
+	if args[0] == "dev" {
+		if err := runWebDev(args[1:]); err != nil {
+			exitBackendService(err)
+		}
+		return
+	}
 	webDir, err := webDir()
 	if err != nil {
 		log.Fatalf("Failed to find web directory: %v", err)
@@ -101,9 +113,16 @@ func prepareWebDir(webDir string) {
 // prepareWebDirOutput is prepareWebDir with the tool output on output. It
 // returns the failure instead of exiting, so a caller can record it.
 func prepareWebDirOutput(webDir string, output io.Writer) error {
+	return prepareWebDirOutputContext(context.Background(), webDir, output)
+}
+
+func prepareWebDirOutputContext(ctx context.Context, webDir string, output io.Writer) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if needsInstall, reason := nodeModulesNeedsInstall(webDir); needsInstall {
 		log.Infof("%s, running bun install --frozen-lockfile...", reason)
-		installCmd := exec.Command("bun", "install", "--frozen-lockfile")
+		installCmd := exec.CommandContext(ctx, "bun", "install", "--frozen-lockfile")
 		installCmd.Dir = webDir
 		installCmd.Stdout = output
 		installCmd.Stderr = os.Stderr
@@ -114,7 +133,7 @@ func prepareWebDirOutput(webDir string, output io.Writer) error {
 		writeLockStamp(webDir)
 	}
 
-	return ensureWorkspaceLibsBuilt(webDir, output)
+	return ensureWorkspaceLibsBuilt(ctx, webDir, output)
 }
 
 // lockStampName is the file inside node_modules recording the sha256 of the
@@ -207,15 +226,18 @@ var webLibPackages = []string{"lib/shared", "lib/opal"}
 
 // ensureWorkspaceLibsBuilt builds each workspace library whose dist/ is
 // missing or older than its sources. Build output goes to output.
-func ensureWorkspaceLibsBuilt(webDir string, output io.Writer) error {
+func ensureWorkspaceLibsBuilt(ctx context.Context, webDir string, output io.Writer) error {
 	for _, rel := range webLibPackages {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		pkgDir := filepath.Join(webDir, rel)
 		needsBuild, reason := libNeedsBuild(pkgDir)
 		if !needsBuild {
 			continue
 		}
 		log.Infof("web/%s %s, running bun run build...", rel, reason)
-		buildCmd := exec.Command("bun", "run", "build")
+		buildCmd := exec.CommandContext(ctx, "bun", "run", "build")
 		buildCmd.Dir = pkgDir
 		buildCmd.Stdout = output
 		buildCmd.Stderr = os.Stderr
@@ -223,7 +245,7 @@ func ensureWorkspaceLibsBuilt(webDir string, output io.Writer) error {
 			return fmt.Errorf("build web/%s: %w", rel, err)
 		}
 	}
-	return nil
+	return ctx.Err()
 }
 
 // libNeedsBuild reports whether a workspace library's dist/ is missing or
@@ -299,7 +321,14 @@ func webScriptNames() []string {
 }
 
 func webHelpDescription() string {
-	description := `Run bun scripts from web/package.json.
+	description := `Run the frontend with "ods web dev".
+On macOS/Linux, development startup requires a healthy managed API. Ctrl-C stops
+a new frontend, or only detaches from an existing matching frontend.
+Windows runs it directly in the foreground using the configured API environment.
+Development startup does not start infrastructure or run migrations.
+Use --project or --isolated before "web" to select infrastructure.
+
+Other scripts run through bun from web/package.json.
 
 Examples:
   ods web dev

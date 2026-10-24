@@ -402,7 +402,6 @@ export default function HookFormModal({
                       justifyContent="start"
                       height="fit"
                       gap={4}
-                      className="px-0.5"
                     >
                       <div className="p-0.5 shrink-0">
                         {isConnected ? (

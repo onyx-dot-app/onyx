@@ -22,7 +22,7 @@ from onyx.server.gateway.models import (
 )
 
 
-def _gateway(*, default: str = "7/gpt-5.5") -> CraftLLMProviderConfig:
+def _gateway(*, default: str = "7/gpt-6.1-sol") -> CraftLLMProviderConfig:
     return CraftLLMProviderConfig(
         provider="onyx",
         model_name=default,
@@ -31,8 +31,8 @@ def _gateway(*, default: str = "7/gpt-5.5") -> CraftLLMProviderConfig:
         display_name="Onyx",
         models=[
             GatewayModelDescriptor(
-                id="7/gpt-5.5",
-                display_name="GPT-5.5",
+                id="7/gpt-6.1-sol",
+                display_name="GPT-6.1 Sol",
                 provider="openai",
             ),
             GatewayModelDescriptor(
@@ -62,7 +62,7 @@ def _mcp(
 
 def test_gateway_is_the_only_enabled_provider() -> None:
     config = build_provider_opencode_config(_gateway())
-    assert config["model"] == "onyx/7/gpt-5.5"
+    assert config["model"] == "onyx/7/gpt-6.1-sol"
     assert config["enabled_providers"] == ["onyx"]
     provider = config["provider"]["onyx"]
     assert provider["npm"] == "@ai-sdk/openai-compatible"
@@ -70,14 +70,14 @@ def test_gateway_is_the_only_enabled_provider() -> None:
         "apiKey": "proxy-placeholder",
         "baseURL": "https://onyx.test/api/gateway/v1",
     }
-    assert set(provider["models"]) == {"7/gpt-5.5", "9/claude-opus-4-8"}
+    assert set(provider["models"]) == {"7/gpt-6.1-sol", "9/claude-opus-4-8"}
     assert provider["models"]["9/claude-opus-4-8"]["limit"] == {
         "context": 200_000,
         "input": 200_000,
         "output": 128_000,
     }
-    assert provider["models"]["7/gpt-5.5"] == {
-        "name": "GPT-5.5",
+    assert provider["models"]["7/gpt-6.1-sol"] == {
+        "name": "GPT-6.1 Sol",
         "attachment": False,
         "reasoning": False,
         "temperature": False,

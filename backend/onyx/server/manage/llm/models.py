@@ -3,13 +3,13 @@ from __future__ import annotations
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from onyx.db.enums import LLMModelFlowType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.api_surfaces import resolve_api_surface
-from onyx.llm.constants import DYNAMIC_LLM_PROVIDERS
+from onyx.llm.constants import DYNAMIC_LLM_PROVIDERS, LlmProviderNames
 from onyx.llm.model_capabilities import (
     anthropic_supports_thinking,
     catalog_model_supports_image_input,
@@ -69,6 +69,7 @@ class TestLLMRequest(BaseModel):
     provider: str
     model: str
     api_key: str | None = None
+    zoom_voice_provider_id: int | None = None
     api_base: str | None = None
     api_version: str | None = None
     custom_config: dict[str, str] | None = None
@@ -155,6 +156,7 @@ class LLMProvider(BaseModel):
     name: str | None = None
     provider: str
     api_key: str | None = None
+    zoom_voice_provider_id: int | None = None
     api_base: str | None = None
     api_version: str | None = None
     custom_config: dict[str, str] | None = None
@@ -163,6 +165,28 @@ class LLMProvider(BaseModel):
     groups: list[int] = Field(default_factory=list)
     personas: list[int] = Field(default_factory=list)
     deployment_name: str | None = None
+
+
+class DecisionProviderConnection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: int | None = None
+    name: str | None = None
+    provider: str
+    api_key: str | None = None
+    zoom_voice_provider_id: int | None = None
+    api_key_changed: bool = False
+    api_base: str | None = None
+    api_version: str | None = None
+    custom_config: dict[str, str] | None = None
+    custom_config_changed: bool = False
+
+
+class DecisionProviderUpsertRequest(DecisionProviderConnection):
+    selected_model_names: list[str]
+
+
+class TestDecisionProviderRequest(DecisionProviderConnection):
+    model: str
 
 
 class LLMProviderUpsertRequest(LLMProvider):
@@ -177,6 +201,18 @@ class LLMProviderUpsertRequest(LLMProvider):
     # only adds or updates.
     keep_existing_models: bool = False
     model_configurations: list["ModelConfigurationUpsertRequest"] = []
+
+    @model_validator(mode="after")
+    def validate_typesafe_configuration(self) -> LLMProviderUpsertRequest:
+        if self.provider == LlmProviderNames.TYPESAFE:
+            if any(model.supports_chat is True for model in self.model_configurations):
+                raise ValueError(
+                    "TypeSafe AI does not support chat model configuration"
+                )
+            if self.api_base or self.custom_config:
+                raise ValueError("TypeSafe AI uses its hosted System One API")
+            self.is_auto_mode = False
+        return self
 
     @field_validator("provider", mode="before")
     @classmethod
@@ -243,6 +279,7 @@ class LLMProviderView(LLMProvider):
             name=llm_provider_model.name,
             provider=provider,
             api_key=api_key,
+            zoom_voice_provider_id=llm_provider_model.zoom_voice_provider_id,
             api_base=llm_provider_model.api_base,
             api_version=llm_provider_model.api_version,
             custom_config=llm_provider_model.custom_config,
@@ -269,6 +306,8 @@ class LLMProviderView(LLMProvider):
 class ModelConfigurationUpsertRequest(BaseModel):
     name: str
     is_visible: bool
+    supports_decisions: bool | None = None
+    supports_chat: bool | None = None
     max_input_tokens: int | None = None
     supports_image_input: bool | None = None
     supports_reasoning: bool | None = None
@@ -349,6 +388,8 @@ class ModelConfigurationView(BaseModel):
     id: int | None = None
     name: str
     is_visible: bool
+    supports_decisions: bool = False
+    supports_chat: bool = True
     max_input_tokens: int | None = None
     # The persisted override/source value, before static-provider capability
     # enrichment. Internal consumers use this to distinguish an intentional
@@ -409,6 +450,10 @@ class ModelConfigurationView(BaseModel):
             return cls(
                 id=model_configuration_model.id,
                 name=model_configuration_model.name,
+                supports_decisions=LLMModelFlowType.DECISION
+                in model_configuration_model.llm_model_flow_types,
+                supports_chat=LLMModelFlowType.CHAT
+                in model_configuration_model.llm_model_flow_types,
                 is_visible=model_configuration_model.is_visible,
                 max_input_tokens=model_configuration_model.max_input_tokens,
                 configured_max_input_tokens=model_configuration_model.max_input_tokens,
@@ -476,6 +521,10 @@ class ModelConfigurationView(BaseModel):
         return cls(
             id=model_configuration_model.id,
             name=model_configuration_model.name,
+            supports_decisions=LLMModelFlowType.DECISION
+            in model_configuration_model.llm_model_flow_types,
+            supports_chat=LLMModelFlowType.CHAT
+            in model_configuration_model.llm_model_flow_types,
             is_visible=model_configuration_model.is_visible,
             max_input_tokens=(
                 model_configuration_model.max_input_tokens
@@ -540,6 +589,9 @@ class BedrockModelsRequest(BaseModel):
     aws_access_key_id: str | None = None
     aws_secret_access_key: str | None = None
     aws_bearer_token_bedrock: str | None = None
+    # Cross-account: role to assume (via the credentials above) before listing
+    aws_role_name: str | None = None
+    aws_external_id: str | None = None
     # Existing provider id; resolves the stored key and syncs fetched models on edit
     provider_id: int | None = None
 
@@ -602,6 +654,11 @@ class OllamaModelDetails(BaseModel):
 
 
 # OpenRouter dynamic models fetch
+class TypeSafeModelsRequest(BaseModel):
+    api_key: str | None = None
+    provider_id: int | None = None
+
+
 class OpenRouterModelsRequest(BaseModel):
     api_base: str
     api_key: str
@@ -625,6 +682,18 @@ class OpenRouterModelDetails(BaseModel):
     pricing: dict[str, Any] | None = None
 
     @property
+    def supports_decisions(self) -> bool:
+        output_modalities = self.architecture.get("output_modalities", [])
+        return isinstance(output_modalities, list) and "decisions" in output_modalities
+
+    @property
+    def supports_chat(self) -> bool:
+        output_modalities = self.architecture.get("output_modalities")
+        if output_modalities is None:
+            return True
+        return isinstance(output_modalities, list) and "text" in output_modalities
+
+    @property
     def supports_image_input(self) -> bool:
         input_modalities = self.architecture.get("input_modalities", [])
         return isinstance(input_modalities, list) and "image" in input_modalities
@@ -645,12 +714,14 @@ class OpenRouterModelDetails(BaseModel):
 
 
 class OpenRouterFinalModelResponse(BaseModel):
-    name: str  # Model ID (e.g., "openai/gpt-5-pro")
+    name: str  # Model ID (e.g., "openai/gpt-6-astra")
     display_name: str  # Human-readable name from OpenRouter API
     max_input_tokens: (
         int | None
     )  # From OpenRouter API context_length (may be missing for some models)
     supports_image_input: bool
+    supports_decisions: bool = False
+    supports_chat: bool = True
     is_router: bool = False
 
 
@@ -738,10 +809,18 @@ class ModelConfigurationPage(BaseModel):
         )
 
 
+class DecisionModelResponse(BaseModel):
+    model: DefaultModel | None
+    providers: list[LLMProviderView]
+    supported_providers: list[str]
+
+
 class SyncModelEntry(BaseModel):
     """Typed model for syncing fetched models to the DB."""
 
     name: str
+    supports_decisions: bool = False
+    supports_chat: bool = True
     display_name: str
     max_input_tokens: int | None = None
     supports_image_input: bool = False
@@ -900,6 +979,8 @@ class VercelAIGatewayFinalModelResponse(BaseModel):
     max_input_tokens: int | None
     supports_image_input: bool
     supports_reasoning: bool
+    supports_chat: bool = True
+    supports_decisions: bool = False
 
 
 # Portkey dynamic models fetch
@@ -911,7 +992,7 @@ class PortkeyModelsRequest(BaseModel):
 
 
 class PortkeyFinalModelResponse(BaseModel):
-    name: str  # Model ID (e.g. "gpt-4o", "claude-sonnet-5")
+    name: str  # Model ID (e.g. "gpt-6-sol", "claude-sonnet-5")
     display_name: str  # Human-readable name from API
     max_input_tokens: int | None
     supports_image_input: bool

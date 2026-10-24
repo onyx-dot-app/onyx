@@ -11,47 +11,39 @@ import {
   InputTypeIn,
   MessageCard,
   Pagination,
-  Tag,
+  Chip,
 } from "@opal/components";
 import { useDebouncedValue } from "@opal/hooks";
 import { Content, IllustrationContent, Section } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
-import { CardLoader, IconLoader } from "@opal/loaders";
-import {
-  SvgActivity,
-  SvgCheckCircle,
-  SvgPauseCircle,
-  SvgSettings,
-  SvgXOctagon,
-} from "@opal/icons";
+import { CardLoader } from "@opal/loaders";
+import { SvgActivity, SvgSettings } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   INDEXING_CONNECTOR_STATUSES,
   type IndexingConnectorStatus,
+  type IndexingConnectorRow,
   type IndexingConnectorsResponse,
 } from "@/lib/connectors/types";
 import { getSourceMetadata } from "@/lib/connectors/utils";
 import type { FederatedConnectorStatus } from "@/lib/types";
 import {
+  focusDimClass,
+  useFocusedRow,
+} from "@/views/admin/connectors/ConnectorDetailPage/focusMode";
+import {
   SEARCH_DELAY_MS,
   SEARCH_MAX_LENGTH,
 } from "@/views/admin/connectors/ConnectorDetailPage/RunsCard";
+import { bucketStatusTag } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
 import ConnectorRow from "@/views/admin/connectors/IndexingStatusPage/ConnectorRow";
 
 const PAGE_SIZE = 20;
 const POLL_MS = 30_000;
 const LOADER_ROWS = 4;
 const ALL = "all";
-
-// The header counts. Scheduled pairs get none.
-const COUNT_TAGS = [
-  { status: "indexed", icon: SvgCheckCircle, color: "green" },
-  { status: "indexing", icon: IconLoader, color: "blue" },
-  { status: "failed", icon: SvgXOctagon, color: "red" },
-  { status: "paused", icon: SvgPauseCircle, color: "amber" },
-] as const;
 
 interface FederatedRowProps {
   connector: FederatedConnectorStatus;
@@ -69,13 +61,17 @@ function FederatedRow({ connector }: FederatedRowProps) {
         padding={2}
         height="fit"
       >
-        <Content
-          icon={getSourceMetadata(connector.source).icon}
-          title={connector.name}
-          sizePreset="main-ui"
-          variant="section"
-          tag={{ title: t("federated.tag"), color: "gray" }}
-        />
+        {/* The name column shrinks before the button, so the clamp has an edge. */}
+        <Section alignItems="start" height="fit" className="min-w-0 flex-1">
+          <Content
+            icon={getSourceMetadata(connector.source).icon}
+            title={connector.name}
+            titleMaxLines={1}
+            sizePreset="main-ui"
+            variant="section"
+            tag={{ title: t("federated.tag"), color: "gray" }}
+          />
+        </Section>
         <Button
           icon={SvgSettings}
           prominence="tertiary"
@@ -90,7 +86,17 @@ function FederatedRow({ connector }: FederatedRowProps) {
 }
 
 /** Every readable connector, searched and filtered by status, with its latest run at a glance. */
-export default function ConnectorList() {
+export interface ConnectorListProps {
+  /** Opens the activity history on one connector's runs. */
+  onViewLogs: (row: IndexingConnectorRow) => void;
+  /** Called when a connector's popover opens or closes, so the page can step back around the list. */
+  onFocusChange?: (focused: boolean) => void;
+}
+
+export default function ConnectorList({
+  onViewLogs,
+  onFocusChange,
+}: ConnectorListProps) {
   const t = useTranslations("admin.indexing.list");
   const tBadges = useTranslations("admin.status.badges");
   const format = useFormatter();
@@ -98,6 +104,8 @@ export default function ConnectorList() {
   const [status, setStatus] = useState<IndexingConnectorStatus | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const search = useDebouncedValue(searchInput.trim(), SEARCH_DELAY_MS);
+  // A connector's open popover steps the other connectors back.
+  const focus = useFocusedRow<number>(onFocusChange);
   const [expandedIds, setExpandedIds] = useState<ReadonlySet<number>>(
     () => new Set()
   );
@@ -211,17 +219,27 @@ export default function ConnectorList() {
             width="fit"
             height="fit"
           >
-            {COUNT_TAGS.map(({ status: counted, icon, color }) => (
-              <Tag
-                key={counted}
-                icon={icon}
-                title={format.number(data?.status_counts[counted] ?? 0)}
-                tooltip={t(`counts.${counted}`, {
-                  count: data?.status_counts[counted] ?? 0,
-                })}
-                color={color}
-              />
-            ))}
+            {/* A count per bucket that holds a pair under the search, whatever the status filter. A click filters to it, and again clears it. */}
+            {INDEXING_CONNECTOR_STATUSES.map((counted) => ({
+              counted,
+              count: data?.status_counts[counted] ?? 0,
+              tag: bucketStatusTag(counted),
+            }))
+              .filter(({ count }) => count > 0)
+              .map(({ counted, count, tag }) => (
+                <Chip
+                  key={counted}
+                  icon={tag.icon}
+                  title={format.number(count)}
+                  tooltip={t(`counts.${counted}`, { count })}
+                  iconColor={tag.color}
+                  aria-label={t(`counts.${counted}`, { count })}
+                  aria-pressed={status === counted}
+                  onClick={() =>
+                    pickStatus(status === counted ? null : counted)
+                  }
+                />
+              ))}
           </Section>
         </Section>
       </Section>
@@ -248,10 +266,20 @@ export default function ConnectorList() {
               row={row}
               expanded={expandedIds.has(row.cc_pair_id)}
               onToggle={() => toggleExpanded(row.cc_pair_id)}
+              onViewLogs={() => onViewLogs(row)}
+              dimmed={focus.isDimmed(row.cc_pair_id)}
+              onFocusChange={focus.setOpen}
             />
           ))}
           {data?.federated_connectors.map((connector) => (
-            <FederatedRow key={connector.id} connector={connector} />
+            <Section
+              key={connector.id}
+              alignItems="stretch"
+              height="fit"
+              className={focusDimClass(focus.focused)}
+            >
+              <FederatedRow connector={connector} />
+            </Section>
           ))}
         </Section>
       )}

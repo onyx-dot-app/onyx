@@ -540,12 +540,16 @@ def get_connector_credential_pairs_for_user_parallel(
 
 
 def get_connector_credential_pairs(
-    db_session: Session, ids: list[int] | None = None
+    db_session: Session,
+    ids: list[int] | None = None,
+    eager_load_connector: bool = False,
 ) -> list[ConnectorCredentialPair]:
     stmt = select(ConnectorCredentialPair).distinct()
 
     if ids:
         stmt = stmt.where(ConnectorCredentialPair.id.in_(ids))
+    if eager_load_connector:
+        stmt = stmt.options(selectinload(ConnectorCredentialPair.connector))
 
     return list(db_session.scalars(stmt).all())
 
@@ -761,6 +765,19 @@ def verify_user_can_edit_connector(
     )
 
 
+def get_cc_pairs_in_repeated_error_state(
+    db_session: Session,
+) -> list[ConnectorCredentialPair]:
+    """Every pair flagged in repeated error state, whatever its status."""
+    return list(
+        db_session.scalars(
+            select(ConnectorCredentialPair)
+            .where(ConnectorCredentialPair.in_repeated_error_state.is_(True))
+            .options(selectinload(ConnectorCredentialPair.connector))
+        ).all()
+    )
+
+
 def get_connector_credential_pair_from_id(
     db_session: Session,
     cc_pair_id: int,
@@ -777,6 +794,25 @@ def get_connector_credential_pair_from_id(
 
     result = db_session.execute(stmt)
     return result.scalar_one_or_none()
+
+
+def lock_connector_credential_pair_row(
+    db_session: Session, cc_pair_id: int
+) -> ConnectorCredentialPair | None:
+    """Row-locks the pair (FOR UPDATE) and reloads it. The lock holds until the
+    caller commits or rolls back.
+
+    Lock order: the Redis attempt-creation lock (when taken), then this row,
+    then the pair's index attempt rows. Attempt creation and status changes
+    that stop indexing (pause, delete) take this lock, so they run one after
+    the other."""
+    return db_session.execute(
+        select(ConnectorCredentialPair)
+        .where(ConnectorCredentialPair.id == cc_pair_id)
+        .with_for_update()
+        # Read the locked row, not a stale copy from the identity map.
+        .execution_options(populate_existing=True)
+    ).scalar_one_or_none()
 
 
 def get_connector_credential_pairs_for_source(

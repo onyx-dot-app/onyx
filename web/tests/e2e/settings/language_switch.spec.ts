@@ -11,9 +11,9 @@ const LOCALES = [
   { endonym: "日本語", lang: "ja", marker: "外観" },
 ] as const;
 
-// A fresh user has no stored language, so the picker shows the workspace
-// default option (settings.language.workspaceDefault with the English endonym).
-const WORKSPACE_DEFAULT_OPTION = "Default (English)";
+// A fresh user has no language override, so the picker shows the Global
+// Default row.
+const WORKSPACE_DEFAULT_OPTION = "Global Default";
 
 for (const { endonym, lang, marker } of LOCALES) {
   // Uses a fresh random user: changing the language mutates the user row, and

@@ -15,6 +15,10 @@ export class AdminConnectorDetailPage {
   readonly runsSection: Locator;
   /** The run-type filter, shown only when the pair runs more than indexing. */
   readonly runKindFilter: Locator;
+  /** The status card's time window, shared with the run list's time filter. */
+  readonly timeWindowPicker: Locator;
+  /** The run list's time filter, shared with the status card's window. */
+  readonly runsTimeFilter: Locator;
   /** The logs action of every run that has logs, newest first. */
   readonly runLogsButtons: Locator;
   /** The run list's empty state, shown once the feed has loaded with no runs. */
@@ -30,14 +34,25 @@ export class AdminConnectorDetailPage {
   readonly editConnectorButton: Locator;
   /** Unfolds the section listing the connector's settings. */
   readonly indexConfigurationsToggle: Locator;
+  /** The pair's credential section, absent for a source without a credential. */
+  readonly authenticationAccountTitle: Locator;
+  readonly rerunChecksButton: Locator;
 
   constructor(page: Page) {
     this.page = page;
     this.indexingSection = page.getByTestId("connector-indexing-status");
     this.runsSection = page.getByTestId("connector-runs");
     this.runKindFilter = page.getByRole("button", { name: "All Types" });
+    this.timeWindowPicker = this.indexingSection.getByRole("button", {
+      name: /^(Last \d+ (hours|days)|All time)$/,
+    });
+    this.runsTimeFilter = this.runsSection
+      .getByRole("button", { name: /Last \d+ (hours|days)|All time/ })
+      .first();
     this.runLogsButtons = page.getByRole("button", { name: "View Logs" });
-    this.noRunsMessage = page.getByText("No runs yet", { exact: true });
+    this.noRunsMessage = page.getByText("No recent indexing runs", {
+      exact: true,
+    });
     this.activityPanel = page.getByTestId("connector-activity");
     // without exact, a "managed-*" connector's title button also matches
     this.manageButton = page.getByRole("button", {
@@ -47,12 +62,19 @@ export class AdminConnectorDetailPage {
     this.deleteMenuItem = page.getByRole("menuitem", { name: /Delete/i });
     // By id: the header's title pencil is also a button named "Edit".
     this.filesEditButton = page.getByTestId("file-manager-edit");
-    this.editConnectorButton = page.getByRole("button", {
-      name: "Edit connector",
-      exact: true,
-    });
+    // The header button comes first; an open Index Configurations section
+    // shows a second "Edit Configs" button.
+    this.editConnectorButton = page
+      .getByRole("button", { name: "Edit Configs", exact: true })
+      .first();
     this.indexConfigurationsToggle = page.getByRole("button", {
       name: "Expand Index Configurations",
+    });
+    this.authenticationAccountTitle = page.getByText("Authentication Account", {
+      exact: true,
+    });
+    this.rerunChecksButton = page.getByRole("button", {
+      name: "Re-run Checks",
     });
   }
 
@@ -84,6 +106,12 @@ export class AdminConnectorDetailPage {
     await expect(this.runsSection).toBeVisible({ timeout: 30000 });
   }
 
+  /** Picks a time window by its label, such as "Last 24 hours", from either card's control. */
+  async pickTimeWindow(control: Locator, label: string): Promise<void> {
+    await control.click();
+    await this.page.getByRole("option", { name: label }).click();
+  }
+
   /** Waits for the feed to load and show no runs. */
   async expectNoRuns(): Promise<void> {
     await expect(this.noRunsMessage).toBeVisible({ timeout: 30000 });
@@ -103,7 +131,7 @@ export class AdminConnectorDetailPage {
 
   /** The activity panel has loaded with nothing to show. */
   async expectNoActivity(): Promise<void> {
-    await expect(this.activityPanel).toContainText("No failures or errors", {
+    await expect(this.activityPanel).toContainText("No recent activity", {
       timeout: 30000,
     });
   }

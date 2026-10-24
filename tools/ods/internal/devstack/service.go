@@ -60,7 +60,7 @@ func (sp Spec) Hash() string {
 
 func transientEnvironment(key string) bool {
 	switch key {
-	case "PWD", "OLDPWD", "SHLVL", "_", "TERM", "TERM_PROGRAM", "TERM_PROGRAM_VERSION", "TERM_SESSION_ID", "SESSION_ID":
+	case "PWD", "OLDPWD", "SHLVL", "_", "TERM", "TERM_PROGRAM", "TERM_PROGRAM_VERSION", "TERM_SESSION_ID", "SESSION_ID", "TMUX_PANE":
 		return true
 	}
 	for _, prefix := range []string{"CODEX_", "CLAUDE_", "OMX_", "SC_", "SUPERCONDUCTOR_", "VSCODE_", "SSH_"} {

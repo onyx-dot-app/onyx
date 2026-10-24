@@ -2,7 +2,6 @@ import json
 import time
 from typing import Any
 
-from httpx import HTTPStatusError
 from mcp.client.auth import OAuthClientProvider
 from pydantic import JsonValue
 
@@ -15,7 +14,7 @@ from onyx.db.enums import (
 from onyx.db.mcp import mark_connection_config_reauth_required
 from onyx.db.models import MCPConnectionConfig, MCPServer
 from onyx.llm.models import ToolDefinition
-from onyx.server.features.mcp.client import call_mcp_tool
+from onyx.server.features.mcp.client import call_mcp_tool, has_unauthorized_response
 from onyx.server.features.mcp.credentials import (
     ResolvedMCPCredentials,
     uses_user_managed_headers,
@@ -79,26 +78,6 @@ def _tool_result_value(text: str) -> JsonValue:
     except (ValueError, RecursionError):
         return text
     return parsed if isinstance(parsed, dict | list) else text
-
-
-def _has_unauthorized_response(error: BaseException) -> bool:
-    """Inspect transport exceptions without treating error messages as auth evidence."""
-    pending = [error]
-    seen: set[int] = set()
-    while pending:
-        current = pending.pop()
-        if id(current) in seen:
-            continue
-        seen.add(id(current))
-        if isinstance(current, HTTPStatusError) and current.response.status_code == 401:
-            return True
-        if isinstance(current, BaseExceptionGroup):
-            pending.extend(current.exceptions)
-        if current.__cause__ is not None:
-            pending.append(current.__cause__)
-        elif current.__context__ is not None and not current.__suppress_context__:
-            pending.append(current.__context__)
-    return False
 
 
 def _normalize_parameters_schema(schema: dict[str, Any] | None) -> dict[str, Any]:
@@ -331,7 +310,7 @@ class MCPTool(Tool[None]):
 
         except Exception as e:
             credentials = self._resolved_credentials
-            unauthorized_response = _has_unauthorized_response(e)
+            unauthorized_response = has_unauthorized_response(e)
             if (
                 unauthorized_response
                 and credentials.connection_config_id is not None

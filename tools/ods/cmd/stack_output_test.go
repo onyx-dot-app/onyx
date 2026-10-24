@@ -20,7 +20,7 @@ func TestStackSetupKeepsStdoutClean(t *testing.T) {
 	}
 	devtoolFakeTool(t, filepath.Dir(bun), "bun", "echo bun-progress\n")
 	devtoolFakeTool(t, filepath.Dir(bun), "docker", "echo compose-progress\n")
-	_, provider := openStack()
+	_, provider := openStack(nil)
 	output, err := os.CreateTemp(t.TempDir(), "stdout")
 	if err != nil {
 		t.Fatal(err)

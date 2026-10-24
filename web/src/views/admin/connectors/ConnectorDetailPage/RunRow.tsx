@@ -1,9 +1,10 @@
 "use client";
 
 import { useFormatter, useTranslations } from "next-intl";
-import { Button, Card, Popover, Tag, Text } from "@opal/components";
+import { Button, Card, Popover, Tag, Text, Tooltip } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
 import {
+  SvgAlertCircle,
   SvgAlertTriangle,
   SvgCheckCircle,
   SvgFileMinus,
@@ -12,6 +13,7 @@ import {
   SvgFiles,
   SvgListCheck,
   SvgScissors,
+  SvgSlowMotion,
   SvgUser,
   SvgUserShield,
   SvgUsers,
@@ -24,15 +26,26 @@ import type {
   CCPairRunKind,
   CheckRunSnapshot,
 } from "@/lib/connectors/types";
+import type {
+  CapabilityCheckResult,
+  CapabilityCheckStatus,
+} from "@/lib/connectors/checks/types";
+import { applicableResults } from "@/lib/connectors/checks/results";
 import type { IndexAttemptSnapshot } from "@/lib/types";
 import { getDocsProcessedPerMinute } from "@/lib/indexAttempt";
-import { runStatusTag } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
+import { formatDateTimeLog } from "@/lib/dateUtils";
+import {
+  runKindLabelKey,
+  runStatusTag,
+} from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
+import StatusTagPill from "@/views/admin/connectors/ConnectorDetailPage/StatusTagPill";
 import CheckRunPopoverContent, {
   CheckRunTrigger,
 } from "@/views/admin/connectors/ConnectorDetailPage/CheckRunPopover";
 import StageDetailsPopoverContent, {
   StageDetailsTrigger,
 } from "@/views/admin/connectors/ConnectorDetailPage/StageDetailsPopover";
+import { focusDimClass } from "@/views/admin/connectors/ConnectorDetailPage/focusMode";
 
 export const RUN_KIND_ICONS = {
   indexing: SvgFiles,
@@ -42,24 +55,21 @@ export const RUN_KIND_ICONS = {
   checks: SvgListCheck,
 } satisfies Record<CCPairRunKind, IconFunctionComponent>;
 
-/** How many of a check run's checks ended in `status`. */
-export function checkCount(
-  run: CheckRunSnapshot,
-  status: CheckRunSnapshot["check_results"][number]["status"]
-): number {
-  return run.check_results.filter((result) => result.status === status).length;
+/** The run's results that have a row: checks that apply to the pair. */
+export function shownCheckResults(
+  run: CheckRunSnapshot
+): CapabilityCheckResult[] {
+  return applicableResults(run.check_results);
 }
 
-/** How run times print: a full date and 24-hour time, as `useFormatter().dateTime` takes it. */
-export const RUN_TIME_FORMAT = {
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-  hourCycle: "h23",
-} as const;
+/** How many of a check run's shown checks ended in `status`. */
+export function checkCount(
+  run: CheckRunSnapshot,
+  status: CapabilityCheckStatus
+): number {
+  return shownCheckResults(run).filter((result) => result.status === status)
+    .length;
+}
 
 /** The run's own error message, without its trace. */
 export function runErrorMessage(run: CCPairRun): string | null {
@@ -93,9 +103,11 @@ export function runWarnings(run: CCPairRun): number {
       return run.attempt.error_count;
     case "doc_permission_sync":
       return run.attempt.docs_with_permission_errors;
+    // A group sync has no per-group failure signal, so it either fails or succeeds.
     case "group_sync":
-    case "pruning":
       return 0;
+    case "pruning":
+      return run.attempt.docs_failed;
     case "checks":
       return checkCount(run.attempt, "failed");
   }
@@ -109,11 +121,11 @@ export function runMoved(run: CCPairRun): number {
     case "doc_permission_sync":
       return run.attempt.total_docs_synced;
     case "group_sync":
-      return run.attempt.total_group_memberships_synced;
+      return run.attempt.total_groups_processed;
     case "pruning":
       return run.attempt.docs_removed;
     case "checks":
-      return run.attempt.check_results.length;
+      return shownCheckResults(run.attempt).length;
   }
 }
 
@@ -139,16 +151,126 @@ export function finishedAt(run: CCPairRun): string | null {
   return run.attempt.time_finished;
 }
 
-/** Whole minutes from the run's start to its end, or `null` before either. */
-export function runMinutes(run: CCPairRun): number | null {
+/** Milliseconds from the run's start to its end, or `null` before either. */
+function runDurationMs(run: CCPairRun): number | null {
   const finished = finishedAt(run);
   const started = run.attempt.time_started;
   if (finished === null || started === null) return null;
-  return Math.max(
-    0,
-    Math.round(
-      (new Date(finished).getTime() - new Date(started).getTime()) / 60_000
-    )
+  return new Date(finished).getTime() - new Date(started).getTime();
+}
+
+/** Whole minutes from the run's start to its end, or `null` before either. */
+export function runMinutes(run: CCPairRun): number | null {
+  const ms = runDurationMs(run);
+  return ms === null ? null : Math.max(0, Math.round(ms / 60_000));
+}
+
+/** A run's length in its two largest units, such as "16s", "4m 12s" or "1h 5m", narrow so the row's detail keeps to one line. */
+function formatRunLength(
+  format: ReturnType<typeof useFormatter>,
+  ms: number
+): string {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const units = [
+    { unit: "hour", value: Math.floor(total / 3600) },
+    { unit: "minute", value: Math.floor(total / 60) % 60 },
+    { unit: "second", value: total % 60 },
+  ];
+  // From the largest nonzero unit, or seconds for an instant run. A zero trailing unit is dropped, as in "2m" or "1h".
+  const first = units.findIndex((part) => part.value > 0);
+  const from = first === -1 ? units.length - 1 : first;
+  return format.list(
+    units
+      .slice(from, from + 2)
+      .filter((part, index) => index === 0 || part.value > 0)
+      .map(({ unit, value }) =>
+        format.number(value, { style: "unit", unit, unitDisplay: "narrow" })
+      ),
+    { type: "unit", style: "narrow" }
+  );
+}
+
+/** What a run's rate counts: documents indexed or synced, or memberships synced. `null` for a kind with no rate. */
+function rateCount(run: CCPairRun): number | null {
+  switch (run.kind) {
+    case "indexing":
+      return run.attempt.total_docs_indexed;
+    case "doc_permission_sync":
+      return run.attempt.total_docs_synced;
+    // Memberships, not groups, measure a group sync's work.
+    case "group_sync":
+      return run.attempt.total_group_memberships_synced;
+    case "pruning":
+    case "checks":
+      return null;
+  }
+}
+
+/** What a finished index or sync run moved per minute of its run, or `null` while it goes on or when it moved nothing. */
+function finishedRunRate(run: CCPairRun): number | null {
+  const count = rateCount(run);
+  if (count === null || count === 0) return null;
+  const ms = runDurationMs(run);
+  if (ms === null || ms <= 0) return null;
+  return count / (ms / 60_000);
+}
+
+/** What a running permission or group sync moves per minute since it started, or `null` before it starts. */
+function syncRate(run: CCPairRun, now: number): number | null {
+  if (run.kind !== "doc_permission_sync" && run.kind !== "group_sync") {
+    return null;
+  }
+  const started = run.attempt.time_started;
+  const count = rateCount(run);
+  if (started === null || count === null) return null;
+  const minutes = (now - new Date(started).getTime()) / 60_000;
+  if (minutes <= 0) return null;
+  return count / minutes;
+}
+
+/** Rates print with two decimals, such as 24.23 docs/min. */
+export const RATE_FORMAT = {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+} as const;
+
+/** Labels a running permission or group sync with its live rate, such as "24.23 memberships/min", or `null` for any other run. */
+export function useSyncRateLabel(): (run: CCPairRun) => string | null {
+  const t = useTranslations("admin.connector.runs.detail");
+  const format = useFormatter();
+  return (run) => {
+    if (!isActive(run)) return null;
+    const rate = syncRate(run, Date.now());
+    if (rate === null) return null;
+    return t(run.kind === "group_sync" ? "membershipRate" : "rate", {
+      rate: format.number(rate, RATE_FORMAT),
+    });
+  };
+}
+
+interface RunWarningsTagProps {
+  run: CCPairRun;
+}
+/** The orange count of what the run could not handle, or nothing when it handled everything. */
+export function RunWarningsTag({ run }: RunWarningsTagProps) {
+  const t = useTranslations("admin.connector.runs.warnings");
+  const format = useFormatter();
+  const warnings = runWarnings(run);
+  if (warnings === 0) return null;
+  return (
+    <Tooltip
+      tooltip={t(run.kind === "checks" ? "checks" : "tooltip", {
+        count: warnings,
+      })}
+      side="top"
+    >
+      <Tag
+        icon={SvgAlertTriangle}
+        title={format.number(warnings)}
+        color="orange"
+        variant="count"
+      />
+    </Tooltip>
   );
 }
 
@@ -177,21 +299,40 @@ function Figure({ value, label }: FigureProps) {
   );
 }
 
+/** How a count shows: a gray tag, or a plain number with its icon after it as run rows show it. */
+export type CountLook = "tag" | "plain";
+
 interface CountProps {
   icon: IconFunctionComponent;
   value: number;
   tooltip: string;
+  look: CountLook;
 }
 /** A small count with its icon, such as new or removed documents. */
-function Count({ icon, value, tooltip }: CountProps) {
+function Count({ icon: Icon, value, tooltip, look }: CountProps) {
   const format = useFormatter();
+  if (look === "tag") {
+    return (
+      <Tooltip tooltip={tooltip} side="top">
+        <Tag icon={Icon} title={format.number(value)} color="gray" />
+      </Tooltip>
+    );
+  }
   return (
-    <Tag
-      icon={icon}
-      title={format.number(value)}
-      tooltip={tooltip}
-      color="gray"
-    />
+    <Tooltip tooltip={tooltip} side="top">
+      <Section
+        flexDirection="row"
+        alignItems="center"
+        gap={0.25}
+        width="fit"
+        height="fit"
+      >
+        <Text font="secondary-body" color="text-03">
+          {format.number(value)}
+        </Text>
+        <Icon size={12} className="shrink-0 stroke-text-02" />
+      </Section>
+    </Tooltip>
   );
 }
 
@@ -214,14 +355,21 @@ function CountsRow({ children }: CountsRowProps) {
 
 export interface DocCountsProps {
   attempt: IndexAttemptSnapshot;
+  /** @default "tag" */
+  look?: CountLook;
 }
 /** An index attempt's new, updated and removed documents. */
-export function DocCounts({ attempt }: DocCountsProps) {
+export function DocCounts({ attempt, look = "tag" }: DocCountsProps) {
   const t = useTranslations("admin.connector.runs");
+  const updated = Math.max(
+    0,
+    attempt.total_docs_indexed - attempt.new_docs_indexed
+  );
   return (
     <CountsRow>
       <Count
         icon={SvgFilePlus}
+        look={look}
         value={attempt.new_docs_indexed}
         tooltip={t("counts.newDocs", {
           count: attempt.new_docs_indexed,
@@ -229,15 +377,14 @@ export function DocCounts({ attempt }: DocCountsProps) {
       />
       <Count
         icon={SvgFileRefresh}
-        value={Math.max(
-          0,
-          attempt.total_docs_indexed - attempt.new_docs_indexed
-        )}
-        tooltip={t("counts.updatedDocs")}
+        look={look}
+        value={updated}
+        tooltip={t("counts.updatedDocs", { count: updated })}
       />
       {attempt.docs_removed_from_index > 0 && (
         <Count
           icon={SvgFileMinus}
+          look={look}
           value={attempt.docs_removed_from_index}
           tooltip={t("counts.removedDocs", {
             count: attempt.docs_removed_from_index,
@@ -255,41 +402,56 @@ interface RunFiguresProps {
 function RunFigures({ run }: RunFiguresProps) {
   const t = useTranslations("admin.connector.runs");
   switch (run.kind) {
+    // The figure already says how many were removed, and the warning pill carries the failures.
     case "pruning":
       return (
         <Figure value={run.attempt.docs_removed} label={t("figures.removed")} />
       );
     case "checks": {
       const attempt = run.attempt;
+      const shown: number = shownCheckResults(attempt).length;
       const failed = checkCount(attempt, "failed");
+      const incomplete =
+        checkCount(attempt, "incomplete") +
+        checkCount(attempt, "indeterminate");
       const skipped = checkCount(attempt, "skipped");
       return (
         <>
-          <Figure
-            value={attempt.check_results.length}
-            label={t("figures.checks")}
-          />
-          {attempt.check_results.length > 0 && (
+          <Text font="secondary-body" color="text-03">
+            {t("figures.checksRun", { count: shown })}
+          </Text>
+          {shown > 0 && (
             <CountsRow>
               <Count
                 icon={SvgCheckCircle}
+                look="plain"
                 value={checkCount(attempt, "passed")}
                 tooltip={t("counts.passedChecks", {
                   count: checkCount(attempt, "passed"),
                 })}
               />
-              {failed > 0 && (
+              {incomplete > 0 && (
                 <Count
-                  icon={SvgXOctagon}
-                  value={failed}
-                  tooltip={t("counts.failedChecks", { count: failed })}
+                  icon={SvgAlertCircle}
+                  look="plain"
+                  value={incomplete}
+                  tooltip={t("counts.incompleteChecks", { count: incomplete })}
                 />
               )}
               {skipped > 0 && (
                 <Count
                   icon={SvgXCircle}
+                  look="plain"
                   value={skipped}
                   tooltip={t("counts.skippedChecks", { count: skipped })}
+                />
+              )}
+              {failed > 0 && (
+                <Count
+                  icon={SvgXOctagon}
+                  look="plain"
+                  value={failed}
+                  tooltip={t("counts.failedChecks", { count: failed })}
                 />
               )}
             </CountsRow>
@@ -304,15 +466,27 @@ function RunFigures({ run }: RunFiguresProps) {
             value={run.attempt.total_docs_indexed}
             label={t("figures.indexed")}
           />
-          <DocCounts attempt={run.attempt} />
+          <DocCounts attempt={run.attempt} look="plain" />
         </>
       );
     case "doc_permission_sync":
       return (
-        <Figure
-          value={run.attempt.total_docs_synced}
-          label={t("figures.synced")}
-        />
+        <>
+          <Figure
+            value={run.attempt.total_docs_synced}
+            label={t("figures.synced")}
+          />
+          <CountsRow>
+            <Count
+              icon={SvgFileRefresh}
+              look="plain"
+              value={run.attempt.total_docs_synced}
+              tooltip={t("counts.syncedDocs", {
+                count: run.attempt.total_docs_synced,
+              })}
+            />
+          </CountsRow>
+        </>
       );
     case "group_sync": {
       const attempt = run.attempt;
@@ -320,11 +494,12 @@ function RunFigures({ run }: RunFiguresProps) {
         <>
           <Figure
             value={attempt.total_group_memberships_synced}
-            label={t("figures.memberships")}
+            label={t("figures.synced")}
           />
           <CountsRow>
             <Count
               icon={SvgUser}
+              look="plain"
               value={attempt.total_users_processed}
               tooltip={t("counts.users", {
                 count: attempt.total_users_processed,
@@ -332,6 +507,7 @@ function RunFigures({ run }: RunFiguresProps) {
             />
             <Count
               icon={SvgUsers}
+              look="plain"
               value={attempt.total_groups_processed}
               tooltip={t("counts.groups", {
                 count: attempt.total_groups_processed,
@@ -350,6 +526,11 @@ export interface RunRowProps {
   canCancel: boolean;
   onCancel: () => void;
   onViewLogs: () => void;
+  /** Whether the row's stage or checks popover is open. The open row is raised. */
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** Another row's popover is open, so this row steps back. */
+  dimmed: boolean;
 }
 
 /** One run in the pair's run list: what ran and when, how it ended, and what it moved. */
@@ -358,170 +539,191 @@ export default function RunRow({
   canCancel,
   onCancel,
   onViewLogs,
+  open,
+  onOpenChange,
+  dimmed,
 }: RunRowProps) {
   const t = useTranslations("admin.connector.runs");
-  const tBadges = useTranslations("admin.status.badges");
   const format = useFormatter();
+  const syncRateLabel = useSyncRateLabel();
   const tag = runStatusTag(run);
   const active = isActive(run);
   const failed = run.attempt.status === "failed";
-  const stamp = (value: string) =>
-    format.dateTime(new Date(value), RUN_TIME_FORMAT);
 
-  // Queued, then the live rate, then when it finished and how long it took.
+  const finished = finishedAt(run);
+  // A finished index or sync run shows its rate and keeps its finish time in the tooltip.
+  const finishedRate = finishedRunRate(run);
+  const finishedTime =
+    finishedRate === null || finished === null
+      ? undefined
+      : formatDateTimeLog(finished);
+
+  // Queued, then the live rate, then the rate or the time it finished at, and how long it took.
   function detail(): string {
     if (run.attempt.status === "not_started") return t("detail.queued");
     if (run.kind === "indexing" && active) {
       const rate = getDocsProcessedPerMinute(run.attempt);
       if (rate !== null) {
-        return t("detail.rate", {
-          rate: format.number(rate, { maximumFractionDigits: 2 }),
-        });
+        return t("detail.rate", { rate: format.number(rate, RATE_FORMAT) });
       }
     }
-    const finished = finishedAt(run);
+    const liveSyncRate = syncRateLabel(run);
+    if (liveSyncRate !== null) return liveSyncRate;
     if (finished === null) return t("detail.running");
-    const minutes = runMinutes(run);
-    if (minutes === null) return stamp(finished);
-    return t("detail.finished", { time: stamp(finished), minutes });
+    const ms = runDurationMs(run);
+    if (ms === null) return formatDateTimeLog(finished);
+    const duration = formatRunLength(format, ms);
+    if (finishedRate !== null) {
+      return t(
+        run.kind === "group_sync"
+          ? "detail.membershipRateFinished"
+          : "detail.rateFinished",
+        { rate: format.number(finishedRate, RATE_FORMAT), duration }
+      );
+    }
+    return t("detail.finished", {
+      time: formatDateTimeLog(finished),
+      duration,
+    });
   }
 
   const warnings = runWarnings(run);
+  const emphasized = active || failed || warnings > 0;
   const hasLogs = runErrorText(run) !== null;
 
   // The stage details popover spans the row, so the row is its anchor.
   return (
-    <Popover>
-      <Popover.Anchor asChild>
-        <Card color="background-tint-00" border="none" rounding={2} padding={1}>
-          <Section
-            flexDirection="row"
-            justifyContent="start"
-            alignItems="center"
-            gap={1}
-            height="fit"
+    <Section
+      alignItems="stretch"
+      height="fit"
+      className={focusDimClass(dimmed)}
+    >
+      <Popover open={open} onOpenChange={onOpenChange}>
+        <Popover.Anchor asChild>
+          <Card
+            color="background-tint-00"
+            border="none"
+            rounding={2}
+            padding={1}
+            shadow={open ? "md" : "none"}
           >
             <Section
-              alignItems="start"
+              flexDirection="row"
+              justifyContent="start"
+              alignItems="center"
               gap={1}
-              padding={1}
               height="fit"
-              className="min-w-0 flex-1"
-            >
-              <Content
-                icon={RUN_KIND_ICONS[run.kind]}
-                title={t(`kinds.${run.kind}`)}
-                sizePreset="secondary"
-                variant="body"
-                color="muted"
-                width="fit"
-              />
-              <Text
-                font={active || failed ? "secondary-action" : "secondary-body"}
-                color={active || failed ? "text-04" : "text-03"}
-              >
-                {stamp(run.time_created)}
-              </Text>
-            </Section>
-
-            <Section
-              alignItems="start"
-              gap={1}
-              padding={1}
-              width={12}
-              height="fit"
-              className="shrink-0"
             >
               <Section
-                flexDirection="row"
-                justifyContent="start"
+                alignItems="start"
                 gap={1}
-                width="fit"
+                padding={1}
                 height="fit"
+                className="min-w-0 flex-1"
               >
-                <Tag
-                  icon={tag.icon}
-                  title={tBadges(tag.labelKey)}
-                  color={tag.color}
+                <Content
+                  icon={active ? SvgSlowMotion : RUN_KIND_ICONS[run.kind]}
+                  title={t(`kinds.${runKindLabelKey(run)}`)}
+                  sizePreset="secondary"
+                  variant="body"
+                  color="muted"
+                  width="fit"
                 />
-                {run.kind === "indexing" && run.attempt.is_new_model && (
-                  <Tag
-                    title={t("newModel.label")}
-                    tooltip={t("newModel.tooltip")}
-                    color="purple"
+                <Text
+                  font={emphasized ? "secondary-action" : "secondary-body"}
+                  color={emphasized ? "text-04" : "text-03"}
+                >
+                  {formatDateTimeLog(run.time_created)}
+                </Text>
+              </Section>
+
+              <Section
+                alignItems="start"
+                gap={1}
+                padding={1}
+                width={12}
+                height="fit"
+                className="shrink-0"
+              >
+                <Section
+                  flexDirection="row"
+                  justifyContent="start"
+                  gap={1}
+                  width="fit"
+                  height="fit"
+                >
+                  <StatusTagPill tag={tag} />
+                  {run.kind === "indexing" && run.attempt.is_new_model && (
+                    <Tooltip tooltip={t("newModel.tooltip")} side="top">
+                      <Tag title={t("newModel.label")} color="purple" />
+                    </Tooltip>
+                  )}
+                  {run.kind === "indexing" && (
+                    <StageDetailsTrigger open={open} />
+                  )}
+                  {run.kind === "checks" &&
+                    shownCheckResults(run.attempt).length > 0 && (
+                      <CheckRunTrigger open={open} />
+                    )}
+                  <RunWarningsTag run={run} />
+                </Section>
+                <Tooltip tooltip={finishedTime} side="top">
+                  <Text font="secondary-body" color="text-03">
+                    {detail()}
+                  </Text>
+                </Tooltip>
+              </Section>
+
+              <Section
+                alignItems="end"
+                gap={1}
+                padding={1}
+                width={9}
+                height="fit"
+                className="shrink-0"
+              >
+                <RunFigures run={run} />
+              </Section>
+
+              <Section
+                flexDirection="row"
+                justifyContent="end"
+                gap={1}
+                width={3.5}
+                height="fit"
+                className="shrink-0"
+              >
+                {canCancel && run.kind === "indexing" && active && (
+                  <Button
+                    icon={SvgXCircle}
+                    prominence="tertiary"
+                    size="sm"
+                    tooltip={t("actions.cancel")}
+                    aria-label={t("actions.cancel")}
+                    onClick={onCancel}
                   />
                 )}
-                {run.kind === "indexing" && <StageDetailsTrigger />}
-                {run.kind === "checks" &&
-                  run.attempt.check_results.length > 0 && <CheckRunTrigger />}
-                {warnings > 0 && (
-                  <Tag
+                {hasLogs && (
+                  <Button
                     icon={SvgAlertTriangle}
-                    title={format.number(warnings)}
-                    tooltip={t(
-                      run.kind === "checks"
-                        ? "warnings.checks"
-                        : "warnings.tooltip",
-                      { count: warnings }
-                    )}
-                    color="amber"
+                    prominence="tertiary"
+                    size="sm"
+                    tooltip={t("actions.logs")}
+                    aria-label={t("actions.logs")}
+                    onClick={onViewLogs}
                   />
                 )}
               </Section>
-              <Text font="secondary-body" color="text-03">
-                {detail()}
-              </Text>
             </Section>
-
-            <Section
-              alignItems="end"
-              gap={1}
-              padding={1}
-              width={9}
-              height="fit"
-              className="shrink-0"
-            >
-              <RunFigures run={run} />
-            </Section>
-
-            <Section
-              flexDirection="row"
-              justifyContent="end"
-              gap={1}
-              width={3.5}
-              height="fit"
-              className="shrink-0"
-            >
-              {canCancel && run.kind === "indexing" && active && (
-                <Button
-                  icon={SvgXCircle}
-                  prominence="tertiary"
-                  size="sm"
-                  tooltip={t("actions.cancel")}
-                  aria-label={t("actions.cancel")}
-                  onClick={onCancel}
-                />
-              )}
-              {hasLogs && (
-                <Button
-                  icon={SvgAlertTriangle}
-                  prominence="tertiary"
-                  size="sm"
-                  tooltip={t("actions.logs")}
-                  aria-label={t("actions.logs")}
-                  onClick={onViewLogs}
-                />
-              )}
-            </Section>
-          </Section>
-        </Card>
-      </Popover.Anchor>
-      {run.kind === "indexing" && (
-        <StageDetailsPopoverContent indexAttemptId={run.attempt.id} />
-      )}
-      {run.kind === "checks" && run.attempt.check_results.length > 0 && (
-        <CheckRunPopoverContent run={run.attempt} />
-      )}
-    </Popover>
+          </Card>
+        </Popover.Anchor>
+        {run.kind === "indexing" && (
+          <StageDetailsPopoverContent indexAttemptId={run.attempt.id} />
+        )}
+        {run.kind === "checks" && shownCheckResults(run.attempt).length > 0 && (
+          <CheckRunPopoverContent run={run.attempt} />
+        )}
+      </Popover>
+    </Section>
   );
 }

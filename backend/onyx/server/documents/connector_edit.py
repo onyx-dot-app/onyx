@@ -194,6 +194,13 @@ def _proposed_state(
         name=proposal.name,
         refresh_freq=proposal.refresh_freq,
         prune_freq=proposal.prune_freq,
+        # Omitted keeps the schedule (an older client); an explicit null
+        # clears it.
+        check_freq=(
+            proposal.check_freq
+            if "check_freq" in proposal.model_fields_set
+            else current.check_freq
+        ),
     )
 
 
@@ -338,6 +345,7 @@ def start_cc_pair_edit_checks(
             access_type=request.access_type,
             connector_specific_config=request.connector_specific_config,
             rerun=request.rerun,
+            actions=request,
         )
     except CapabilityRunEnqueueError as e:
         raise OnyxError(

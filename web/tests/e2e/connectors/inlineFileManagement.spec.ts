@@ -79,6 +79,18 @@ test.describe("InlineFileManagement", () => {
     await expect(detailPage.filesEditButton).toBeVisible();
   });
 
+  test("should not show an account or checks for a credential-less source", async ({
+    page,
+  }) => {
+    await page.goto(`/admin/connector/${testCcPairId}`);
+
+    const detailPage = new AdminConnectorDetailPage(page);
+    await detailPage.expectLoaded();
+    await expect(detailPage.indexConfigurationsToggle).toBeVisible();
+    await expect(detailPage.authenticationAccountTitle).toHaveCount(0);
+    await expect(detailPage.rerunChecksButton).toHaveCount(0);
+  });
+
   test("should enter and exit edit mode", async ({ page }) => {
     await page.goto(`/admin/connector/${testCcPairId}`);
     await page.waitForLoadState("networkidle");

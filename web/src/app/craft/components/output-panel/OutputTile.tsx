@@ -82,7 +82,7 @@ export function OutputTile({
               fallback={
                 <FileIcon
                   size={32}
-                  className="size-8 stroke-text-03 @[40rem]:size-10"
+                  className="size-8 stroke-text-03 @[40rem]:size-10 [&_*]:stroke-1"
                 />
               }
             />
@@ -116,7 +116,7 @@ export function OutputTile({
           ) : (
             <FileIcon
               size={32}
-              className="size-8 stroke-text-03 @[40rem]:size-10"
+              className="size-8 stroke-text-03 @[40rem]:size-10 [&_*]:stroke-1"
             />
           )}
         </>
@@ -136,7 +136,6 @@ function OutputImageThumbnail({
   if (failed) return fallback;
   return (
     // Sandbox images are authenticated data URLs, not public Next.js assets.
-    // eslint-disable-next-line @next/next/no-img-element
     <img
       src={src}
       alt=""
@@ -201,7 +200,7 @@ export function OutputAppTile({
       preview={
         <SvgGlobe
           size={32}
-          className="size-8 stroke-text-03 @[40rem]:size-10"
+          className="size-8 stroke-text-03 @[40rem]:size-10 [&_*]:stroke-1"
         />
       }
     />
@@ -229,7 +228,14 @@ export function OutputUnavailableTile({
       name={name}
       preview={
         <div className="flex flex-col items-center gap-2 p-2 text-center">
-          <Icon size={32} className="stroke-text-03" aria-hidden />
+          <Icon
+            size={32}
+            className={cn(
+              "stroke-text-03",
+              card.kind === "file" && "[&_*]:stroke-1"
+            )}
+            aria-hidden
+          />
           <Text font="secondary-body" color="text-03">
             {t("unavailable")}
           </Text>

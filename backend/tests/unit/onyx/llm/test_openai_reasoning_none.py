@@ -308,13 +308,19 @@ def _search_llm() -> LitellmLLM:
 
 
 def test_semantic_query_rephrase_sends_none() -> None:
-    with patch(_COMPLETION, return_value=_text_stream_chunks("onyx")) as completion:
+    with patch(
+        _COMPLETION,
+        return_value=litellm.stream_chunk_builder(_text_stream_chunks("onyx")),
+    ) as completion:
         semantic_query_rephrase(_HISTORY, _search_llm())
     assert completion.call_args.kwargs["reasoning"] == {"effort": "none"}
 
 
 def test_keyword_query_expansion_sends_none() -> None:
-    with patch(_COMPLETION, return_value=_text_stream_chunks("onyx")) as completion:
+    with patch(
+        _COMPLETION,
+        return_value=litellm.stream_chunk_builder(_text_stream_chunks("onyx")),
+    ) as completion:
         keyword_query_expansion(_HISTORY, _search_llm())
     assert completion.call_args.kwargs["reasoning"] == {"effort": "none"}
 

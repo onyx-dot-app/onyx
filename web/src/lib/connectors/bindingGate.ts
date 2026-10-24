@@ -26,12 +26,14 @@ export interface CredentialBindingFieldError {
 }
 
 /**
- * Why the credential cannot be used with valid bound fields. The form shows a
- * catalog message for `code`, with the English `detail` (for example, the
- * site the credential is for) inside it.
+ * Why the credential cannot be used with valid bound fields. For
+ * `binding_rejected` the form shows a catalog message with the English
+ * `detail` (for example, the site the credential is for) inside it. For
+ * `shared_credential_settings` (a shared account used with settings no
+ * connector uses it with) `detail` is the whole message.
  */
 export interface CredentialBindingRejection {
-  code: "binding_rejected";
+  code: "binding_rejected" | "shared_credential_settings";
   detail: string;
 }
 

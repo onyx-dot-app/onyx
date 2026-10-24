@@ -13,6 +13,8 @@ ONYX_EMAILABLE_LOGO_MAX_DIM = 512
 
 # The mask_string() function in encryption.py uses "•" (U+2022 BULLET) to mask secrets.
 MASK_CREDENTIAL_CHAR = "\u2022"
+# What mask_string returns for strings < 14 chars: twelve bullets.
+MASK_CREDENTIAL_SHORT = MASK_CREDENTIAL_CHAR * 12
 # Pattern produced by mask_string for strings >= 14 chars: "abcd...wxyz" (exactly 11 chars)
 MASK_CREDENTIAL_LONG_RE = re.compile(r"^.{4}\.{3}.{4}$")
 
@@ -105,6 +107,8 @@ KV_PASSWORD_AUTH_ENABLED_KEY = "password_auth_enabled_override"
 KV_ALLOW_SAME_PROVIDER_SUBJECT_RELINK_KEY = (
     "allow_same_provider_subject_relink_override"
 )
+KV_ALLOW_RENAMED_ACCOUNT_CLAIM_KEY = "allow_renamed_account_claim_override"
+KV_LEGACY_SAML_IMPORTED_KEY = "legacy_saml_conf_imported"
 KV_REINDEX_KEY = "needs_reindexing"
 KV_UNSTRUCTURED_API_KEY = "unstructured_api_key"
 KV_USER_STORE_KEY = "INVITED_USERS"
@@ -119,6 +123,7 @@ KV_ENTERPRISE_SETTINGS_KEY = "onyx_enterprise_settings"
 KV_CUSTOM_ANALYTICS_SCRIPT_KEY = "__custom_analytics_script__"
 KV_KG_CONFIG_KEY = "kg_config"
 KV_CC_PAIR_IDS_BACKFILL_PROGRESS_KEY = "opensearch_cc_pair_ids_backfill_progress"
+KV_TABULAR_RECHUNK_PROGRESS_KEY = "tabular_rechunk_progress"
 
 # NOTE: we use this timeout / 4 in various places to refresh a lock
 # might be worth separating this timeout into separate timeouts for each situation
@@ -194,14 +199,19 @@ INDEXING_WORKER_HEARTBEAT_INTERVAL = 30  # seconds
 # is older than the timeout.
 PERMISSION_SYNC_HEARTBEAT_INTERVAL = 60  # seconds
 PERMISSION_SYNC_LEASE_TIMEOUT = 15 * 60  # seconds
+# A group sync still running this long past PERMISSION_SYNC_TIMEOUT is hung (its
+# own timeout check never ran), so its lease stops renewing and the reaper
+# frees its row.
+PERMISSION_SYNC_LEASE_OVERRUN = 10 * 60  # seconds
 # A worker that could not renew for this long stops writing, before the reaper
 # can fail its attempt and let a replacement start.
-# A sync still running this long past its time limit is hung (its own timeout
-# check never ran), so its lease stops renewing and the reaper frees its row.
-PERMISSION_SYNC_LEASE_OVERRUN = 10 * 60  # seconds
 PERMISSION_SYNC_LEASE_SELF_EXPIRY = (
     PERMISSION_SYNC_LEASE_TIMEOUT - 2 * PERMISSION_SYNC_HEARTBEAT_INTERVAL
 )
+# A doc permission sync has no time limit: a crawl that keeps yielding may run
+# for days. One with no progress for this long is stuck, so the reaper fails
+# its attempt, which stops the worker and lets a replacement start.
+PERMISSION_SYNC_STALL_TIMEOUT = 60 * 60  # seconds
 # Celery drops a doc permission sync task that waited longer than this in the
 # queue. The reaper fails its NOT_STARTED attempt once the task can no longer run.
 PERMISSION_SYNC_TASK_EXPIRES = 6 * 60 * 60  # seconds
@@ -440,6 +450,7 @@ class FileOrigin(str, Enum):
     INDEXING_CHECKPOINT = "indexing_checkpoint"
     INDEXING_STAGING = "indexing_staging"
     LOG_EXPORT = "log_export"
+    PERM_SYNC_CHECKPOINT = "perm_sync_checkpoint"
     PLAINTEXT_CACHE = "plaintext_cache"
     OTHER = "other"
     QUERY_HISTORY_CSV = "query_history_csv"
@@ -545,6 +556,7 @@ class OnyxRedisLocks:
         "da_lock:check_connector_external_group_sync_beat"
     )
     CC_PAIR_IDS_BACKFILL_LOCK = "da_lock:cc_pair_ids_backfill"
+    TABULAR_RECHUNK_LOCK = "da_lock:tabular_rechunk"
     OPENSEARCH_VERIFY_INDEX_LOCK_PREFIX = "da_lock:opensearch_verify_index"
 
     SECURITY_SETTINGS = "da_lock:security_settings"
@@ -757,6 +769,8 @@ class OnyxCeleryTask:
     SCHEDULED_TASKS_CLEANUP_STUCK = "scheduled_tasks_cleanup_stuck"
 
     BACKFILL_CC_PAIR_IDS_TASK = "backfill_cc_pair_ids_task"
+
+    TABULAR_RECHUNK_TASK = "tabular_rechunk_task"
 
 
 # this needs to correspond to the matching entry in supervisord

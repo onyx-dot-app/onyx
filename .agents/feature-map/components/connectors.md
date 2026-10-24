@@ -79,7 +79,7 @@ frontend changes a new connector requires.
 | Method | Path | Notes |
 |---|---|---|
 | POST | `/admin/connector` | Create a `Connector` row (`create_connector_from_model`). |
-| POST | `/admin/connector-with-credential` | Create a connector and pair it with a saved credential or the user's draft (`create_connector_with_credential`). The request names the credential by `credential_id`, `credential_json` or both, as for draft runs. A draft is promoted to a saved credential with `credential_sharing`. The pairing validation applies the credential use rule (§4.9) before it builds the connector. A failure removes the connector and makes a promoted draft a draft again. The add-connector page uses it. |
+| POST | `/admin/connector-with-credential` | Create a connector and pair it with a saved credential or the user's draft (`create_connector_with_credential`). The request names the credential by `credential_id`, `credential_json` or both, as for draft runs. A draft is promoted to a saved credential with `credential_sharing`, and its credential-scoped checks start, because draft runs write no reports. The pairing validation applies the credential use rule (§4.9) before it builds the connector. A failure removes the connector and makes a promoted draft a draft again. The add-connector page uses it. |
 | POST | `/admin/draft-credential/binding-check` | Check a form's bound fields against a new account's `credential_json`, which is saved as (or updates) the user's draft first; the response returns the draft's `credential_id` (`server/documents/draft_credentials.py`). |
 | PATCH | `/admin/connector/{connector_id}` | Update config, schedule, etc. Applies the credential use rule (§4.9) to every credential the connector is paired with. |
 | DELETE | `/admin/connector/{connector_id}` | |
@@ -324,7 +324,7 @@ range:
 |---|---|---|---|
 | Confluence (`confluence/connector.py:ConfluenceConnector`) | `CheckpointedConnector`, `SlimConnector`, `SlimConnectorWithPermSync`, `CredentialsConnector`, `Resolver` | `ConfluenceCheckpoint` (`next_page_url`) | No `LoadConnector`/`PollConnector`; checkpointing is mandatory, not optional. `load_credentials` deliberately raises `NotImplementedError("Use set_credentials_provider with this connector.")`. Has a `source_operations.py` gateway (`ConfluenceSourceOperations`) and registers named capability checks. |
 | Google Drive (`google_drive/connector.py:GoogleDriveConnector`) | `SlimConnector`, `SlimConnectorWithPermSync`, `CheckpointedConnectorWithPermSync`, `Resolver` | `GoogleDriveCheckpoint` (`google_drive/models.py`): a multi-stage state machine (`DriveRetrievalStage`: `START → OAUTH_FILES → USER_EMAILS → MY_DRIVE_FILES → DRIVE_IDS → SHARED_DRIVE_FILES → DONE`) plus a per-impersonated-user completion map. Not a simple cursor. | Splits source-API logic across `file_retrieval.py`, `doc_conversion.py`, `section_extraction.py` rather than a single `source_operations.py`. |
-| Slack (`slack/connector.py:SlackConnector`) | `SlimConnectorWithPermSync`, `CredentialsConnector`, `CheckpointedConnectorWithPermSync` | `SlackCheckpoint`: `channel_ids`, per-channel completion map, `current_channel_access` (carries an in-flight channel's `ExternalAccess` across a checkpoint boundary) | Has a real `source_operations.py` (`SlackSourceOperations`), the enforced single import site for `slack_sdk`. An exact `channels` or `exclude_channels` entry is a channel id or a name (`filter_channels`); the readable-channel listing check offers ids as values with names as labels, so a picked channel survives a rename. `external_access` is assigned inline on yielded documents, not in a separate pass. |
+| Slack (`slack/connector.py:SlackConnector`) | `SlimConnectorWithPermSync`, `CredentialsConnector`, `CheckpointedConnectorWithPermSync`, `Resolver` | `SlackCheckpoint`: `channel_ids`, per-channel completion map, `current_channel_access` (carries an in-flight channel's `ExternalAccess` across a checkpoint boundary) | Has a real `source_operations.py` (`SlackSourceOperations`), the enforced single import site for `slack_sdk`. An exact `channels` or `exclude_channels` entry is a channel id or a name (`filter_channels`); the readable-channel listing check offers ids as values with names as labels, so a picked channel survives a rename. The checks chain a `SlackApiError` to a `SourceApiError` (`slack_api_error_detail`) that carries the request and Slack's response body, so a check's Error Details show them. `external_access` is assigned inline on yielded documents, not in a separate pass. `reindex` parses `<channel_id>__<thread_ts>` ids, applies the crawl's channel scope (`channel_in_scope`; archived and DM conversations fail), and reads each thread again with `conversations.replies`. |
 
 ### 4.6.1 Outlook: one document per mail thread
 
@@ -340,11 +340,13 @@ shape the table above does not cover:
 - **Decided per mailbox, from headers.** Each mailbox is walked on its own,
   eight side by side. Its folders are read through delta pages of metadata
   with the sender and recipients (`CHANGE_SELECT`), one page per checkpoint
-  step, and the rows are held in the connector process (`_MailboxListing`)
-  until the last folder is done. The checkpoint (`OutlookCheckpoint`) holds
-  cursors only; a process that resumes an attempt has no listing for the
-  mailboxes in flight and walks them again from the start (`_resumable`).
-  Nothing is written outside the process: no file store, no database.
+  step, and the rows are kept by the connector process in a
+  `GroupedRowStore` (`cross_connector_utils/grouped_row_store.py`, an
+  anonymous SQLite temp file) until the mailbox is built. The
+  checkpoint (`OutlookCheckpoint`) holds cursors only; a process that resumes
+  an attempt has no listing for the mailboxes in flight and walks them again
+  from the start (`_resumable`). Nothing shared is written: no file store, no
+  Postgres, and the kernel drops the temp file with the process.
 - **Builder, readers, copies.** `threads.py:plan_documents` turns one
   mailbox's copy of a thread into documents. The first message names the
   builder (`designated_builder`: its sender when the run walks that mailbox,
@@ -363,13 +365,15 @@ shape the table above does not cover:
   holders assume a message naming the builder is the builder's to write. A
   thread whose builder mailbox no longer holds its first message is not
   built at all; the other holders keep only their own documents of the
-  replies that left the builder out. The
-  builder's first message sits in its Sent Items, so excluding that folder
-  has the same effect on every thread the mailbox started. The listing in
-  memory is bounded by one mailbox per worker, eight at once, and by
-  `MAX_LISTING_ROWS_PER_MAILBOX` (250k): a larger mailbox is a recorded
-  failure for indexing and aborts a slim walk. A checkpoint from the earlier
-  table-based walk starts the attempt over.
+  replies that left the builder out. The builder's first message sits in
+  its Sent Items, so excluding that folder has the same effect on every
+  thread the mailbox started. Each listing lives in its own
+  `GroupedRowStore`, one mailbox per worker, eight at once. A read folds
+  each conversation through `threads.py:rows_to_plan` as it loads, keeping
+  its root and newest `MAX_MESSAGES_PER_CONVERSATION` messages, so memory
+  holds a slice of trimmed conversations however large the mailbox or a
+  conversation. A checkpoint from the earlier table-based walk starts the
+  attempt over.
 - **Polls.** Only messages in the window are listed, so each conversation
   with new mail is read whole through its outline (`_conversation_outline`),
   the oldest message fetched separately when the outline stops short of it,
@@ -377,9 +381,29 @@ shape the table above does not cover:
   messages, so the daily permission sync can widen a document's readers
   before the next poll rebuilds its text.
 - **Prune and permission sync.** `_slim_docs` lists each mailbox the same way,
-  in memory one mailbox per worker, and yields the ids and readers
+  on disk one mailbox per worker, and yields the ids and readers
   `plan_documents` gives, so the slim diff (§4.5) and the doc sync see the
   documents indexing built.
+- **Targeted reindex.** `OutlookConnector` is a `Resolver`. `reindex` finds
+  the mailbox that writes each failed document and builds that mailbox's copy
+  with `_build_conversation`, so ids, text and readers match the walk. An own
+  document names its writer. A thread or copy document goes to the builder,
+  found from the first message in the copy document's mailbox, else in the
+  walked mailboxes, a few at a time. Graph cannot filter on
+  `conversationIndex`, so a thread is found by its start time: the key's
+  header holds the time its conversation index was made
+  (`threads.py:thread_started_at`, [MS-OXOMSG] 2.2.1.3). `_conversation_ids`
+  reads the mailbox oldest first from that time (`fetch_received_page`) and
+  takes the `conversationId` of the first message with that key. To find a
+  builder, it reads only `FIRST_MESSAGE_ARRIVAL_WINDOW` (7 days) after the
+  start; a writer's copy is read for at most `RECEIVED_SCAN_LIMIT` messages
+  per thread. Each mailbox is looked up once for all the threads it writes.
+  Only messages in the walked folder tree are read
+  (`_OutsideFolders`). An event is read by id through
+  `get_default_calendar_event`, which refuses events outside the default
+  calendar. Occurrences, cancelled, private and confidential events fail, as
+  do events while Include Calendar is off. The calendar window is not applied.
+  Entity failures are skipped.
 
 ### 4.6.2 Teams: channels side by side, then organizers
 
@@ -440,8 +464,33 @@ a gateway today (`<source>/source_operations.py`); most connectors still call th
 SharePoint's gateway is also the only importer of `msal`, `requests` and `office365`
 under `connectors/sharepoint/` and `ee/.../external_permissions/sharepoint/`. Its
 permission reads are shared with Teams through `microsoft_utils/sharepoint_rest.py`.
+The SharePoint, OneDrive and Outlook checks share their sign-in probe
+(`capability_checks/microsoft_check_text.py:sign_in`), and every probe after
+sign-in depends on it. They also share the row text of the errors that
+`microsoft_utils/graph_errors.py` maps (`microsoft_utils/check_text.py`).
+`MicrosoftGraphError` is a
+`SourceApiError` that carries the request and the response body, so a check's
+Error Details show them.
 The GitHub gateway calls the REST API through PyGithub's requester and parses the
 JSON into the models in `github/models.py`, so no PyGithub object leaves it.
+Its `GitHubApiError` is a `SourceApiError` that carries the request and the
+response body, so a check's Error Details show them.
+
+A gateway instance must be safe to call from several threads at once: the
+capability check runner calls one instance from parallel checks. The
+implementer makes this hold, as the `SourceOperations` docstring states. A lazy
+build of a shared client, rate limiter or token takes a lock (Jira, Confluence,
+Slack, Google Drive auth, HubSpot). An SDK that is not thread safe gets one
+client per thread (`threading.local`): PyGithub in GitHub, the Drive clients in
+Google Drive, the office365 REST context in SharePoint. A token refresh takes a
+lock, so one thread redeems it (Linear, Google Drive). Confluence's
+`probe_site` probes on a new client, since the probe swaps the client's
+connection settings. `cross_connector_utils/rate_limit_wrapper.py:rate_limit_builder`
+locks its call history, so HubSpot's shared limiter holds across threads.
+Notion, YouTrack, OneDrive and Outlook keep no state that a race can break: a
+duplicate build of a stateless client is harmless. With a DB-backed provider,
+Confluence holds the credential's rotation lock for each call, so its parallel
+calls run one at a time.
 
 ### 4.8 Capabilities and capability checks
 
@@ -451,13 +500,68 @@ decides which capabilities apply to a source on this build (CE: `INDEXING`
 only; EE adds the perm-sync ones). `capability_checks/registry.py` maps a
 source to named `CapabilityCheck`s (only Slack, Confluence, OneDrive, Outlook, Jira, Linear, HubSpot, Google Drive, Notion, SharePoint, GitHub, and YouTrack
 register real ones today; every other source gets a synthesized fallback wrapping
-`validate_connector_settings`). A source with named checks must have a
+`validate_connector_settings`, the generic "Test connection" row of
+`capability_checks/generic_row.py`. A source whose connector keeps the no-op
+`validate_connector_settings` (`factory.py:source_has_settings_probe`) gets no
+INDEXING check, so its plan and runs hold no row). A source with named checks must have a
 `SourceOperations` gateway; `get_capability_checks` asserts this. `capability_checks/runner.py:generate_capability_report`
 instantiates the connector in isolation with a timeout guard, builds the
 source's `SourceOperations` gateway if one is registered, and runs checks
-sequentially (source APIs rate-limit) via `run_capability_checks`, mapping
+via `run_capability_checks`: a check starts once every check it depends on has
+a result, at most `MAX_PARALLEL_CHECKS` (4) at a time because source APIs
+rate-limit. Results come back in `run_order`; `on_result` gets them on the
+calling thread in the order they finish. The runner maps
 `ConnectorValidationError` to `FAILED` and anything else ambiguous to
-`INDETERMINATE`, never to `FAILED`. `CapabilityCheckTrigger`
+`INCOMPLETE`. Each result carries an `error_kind` (`models.py:CheckErrorKind`:
+rejected, permission, invalid, rate limited, timeout, unreachable, unexpected).
+It also carries an `error_detail` (`models.py:check_error_detail`): the HTTP
+status, request and a bounded response excerpt of the first `SourceApiError`
+or `requests.HTTPError` in the exception chain, and a stack trace for a
+timeout, an unreachable source or an unexpected error. URL query strings and
+the run's credential values are removed from the excerpt and the trace.
+A source gateway's API error subclasses `exceptions.py:SourceApiError`.
+A result's row text is `summary` (a short line) and `description` (up to three
+lines); `connectors/models.py:fit_summary` cuts a name to fit the line. A
+check's `ValidationError` can carry both, and the runner falls back to
+a default for a timeout, a rate limit, an unreachable source or an unexpected
+error, and to the "Not run: …" line for a stopped check. A request that the
+source does not answer in time raises `exceptions.py:TimedOutValidationError`
+(kind `timeout`). When the hang guard stops a check, the row shows the check's
+`timeout_text` (`connectors/models.py:CheckRowText`; sign-in checks use
+`sign_in_timeout_text`), else the default. `message` stays the
+full text. A passing check gives its line in `CheckOutput.summary`. Checks that
+share a `row_id` are one row on the form: the variants of a probe (token types,
+deployments) and a probe's discovery step.
+A two-step row links its second check to the parent with `CheckStep`
+(`step_of`, the running line, the caveat when the step does not finish).
+`two_step.py:two_step_row` decides how the row shows, and draft snapshots,
+stored reports and run history return it as `two_step_rows`. While a stored
+run is in flight, its rows come from its progress, so a step counts. The registry
+validates the links (`validate_step_links`).
+One exception: on a form run (a draft run or a pair dry run) a sign-in check
+that sets `fails_when_unreachable` is `FAILED` on a timeout or an unreachable
+source. Stored reports may still hold the legacy `INDETERMINATE`, which reads
+as `INCOMPLETE`. A check lists the checks it runs after in `depends_on`;
+`run_order` runs dependencies first. A dependency that `FAILED`, is
+`INCOMPLETE` or did not run stops the check: it is `SKIPPED` with a
+`not_run_reason` and `blocked_by`. A check can also list alternatives in
+`depends_on_any`: it runs when one of them passed (or is partial), and stops
+only when every one that ran did not pass; the first one names the cause. An
+alternative that does not apply, or that lacked its own config or instance, is
+left out (HubSpot's sample checks after the read checks, Notion's page content
+after shared pages or the root page). After a rate limit, no other check
+starts: the checks not started are `SKIPPED`, and checks already running
+finish. Discovery checks start after every required validation check has a
+result; an optional check does not hold them back. A probe whose sample cannot decide raises
+`InconclusiveValidationError` (`INCOMPLETE`, kind `inconclusive`); one that
+proves the scope has nothing to test raises `NothingToCheckError` (`SKIPPED`,
+`not_run_reason: nothing_in_scope`, still a row). An empty scope fails the
+first check that reads it. A Find that found only some selected items returns
+`CheckOutput(partial=True)`: `INCOMPLETE`, and the checks after it still run. Creation runs its checks side by side, then applies the same rule
+(`stop_blocked_results`). `merge_capability_results` applies it again when a
+background run adds results to earlier ones. In a draft run, a check waits while a dependency
+waits, or while every alternative that applies waits
+(`draft_runs.py:wait_for_dependencies`). `CapabilityCheckTrigger`
 (`backend/onyx/db/enums.py`): `MANUAL`, `CREDENTIAL_CREATED`,
 `CC_PAIR_VALIDATION`, `INDEXING_ATTEMPT`, `PERM_SYNC_ATTEMPT`. The simpler,
 existing blocking-validation path in `factory.py:validate_ccpair_for_user`
@@ -472,10 +576,16 @@ For a source with named checks, a pairing at creation or credential swap
 `validate_connector_settings`/`validate_perm_sync` calls.
 `capability_checks/creation.py:validate_pairing_with_named_checks` runs the named
 checks instead and stores the full report. Only a required check that `FAILED`
-within the blocking budget blocks the pairing. Indexing and perm-sync attempts keep
+within the blocking budget blocks the pairing. A check whose dependency did not
+finish in the budget counts as unfinished too, whatever its own result. Indexing and perm-sync attempts keep
 the legacy validation. Full runs execute as the `RUN_CAPABILITY_CHECKS` Celery task
-on the `capability_checks` queue. A beat task, `CHECK_FOR_STALE_CAPABILITY_RUNS`,
-retires dead runs. Draft runs on an unsaved form (`/admin/connector-checks/runs`)
+on the `capability_checks` queue. The RUNNING mark has a deadline
+(`run_deadline_at`): the task renews it before the checks and after every
+result (`runner.py:capability_check_run_lease`), and stops when a newer run took
+the row. A read past the deadline shows `failed_to_run`. A beat task,
+`CHECK_FOR_STALE_CAPABILITY_RUNS`, retires dead runs. A manual trigger is a
+no-op while a live run started less than five minutes ago; it replaces an older
+or dead run. Draft runs on an unsaved form (`/admin/connector-checks/runs`)
 reuse their result at creation when the form is unchanged. A check the draft
 run is still running is not started again: the draft task marks its pending
 results in flight, creation waits for them within its blocking budget, and the
@@ -484,6 +594,40 @@ same draft key supersedes an older one, and the cancel endpoint does the same
 without a successor: the task stops before its next check. The plan endpoint
 (`/admin/connector-checks/plan`) lists the same checks without a credential or a
 run, so the form can tell which checks exist and which are required first.
+A draft run or a pair dry run (`/admin/cc-pair/{cc_pair_id}/edit/checks`) also
+takes per-check actions (`capability_checks/models.py:DraftCheckActions`). `check_ids` runs
+only those checks, without their cached results. Every other check keeps its
+cached result or its result in the latest run of the draft key, and runs only
+when it has none, for example after a dependency that now runs. A discovery
+check skipped in the latest run runs again. A check that declares
+`config_fields` keys its cached result on those fields and on the config
+fields that the source's gateway reads (`config_keys`). A change to another
+field reuses it, unless the gateway reads every key (`config_keys = None`)
+(`draft_runs.py:draft_result_cache_key`). GitHub's checks declare them. A
+kept or cached result whose
+dependency now stops it is "Not run" too, once all its dependencies have a
+result (`draft_runs.py:stop_blocked_draft_checks`).
+`skip_check_ids` do not run: an optional check is `SKIPPED`
+(`not_run_reason: skipped_by_user`), and a required one is `STOPPED`
+(`stopped_by_user`), which is no pass and holds Create. Their dependents are
+"Not run" (`dependency_skipped`). A skip or stop is cached for its user only,
+apart from the shared results (`draft_runs.py:cache_user_skip`). Creation by
+the same user reuses an optional skip and always runs a stopped required
+check. A later run that does not skip the check clears the skip.
+On the create form's checks card, Skip Check on a running check or an
+optional expected one adds it to the session's skips
+(`useConnectorChecks().skipCheck`), and every
+later run sends them as `skip_check_ids`. Run Check runs a skipped check
+(`check_ids`) or a queued one next (`start_check_id`) and drops its skip.
+Re-run Check runs a finished check again (`check_ids`), whatever its outcome. A
+finished check with a fix or a docs link opens to show them. A row's click
+does what its right-most button does. A skipped required check is `stopped`: it stays
+listed among the skipped checks, blocks Create and offers Run Check. Row
+actions wait while a start request is in flight.
+A result of an older run does not replace a skip or stop of the latest run
+(`draft_runs.py:cache_run_result`). `start_check_id` runs that check and the
+checks it needs first, also through a dependency that keeps a cached result. An unknown check id, or a check to run and to skip, is
+`INVALID_INPUT`. Stored runs take no actions.
 
 A passing check may return *findings* (`capability_checks/models.py:CheckFinding`):
 structured information about what the credential and config reach, such as a
@@ -503,8 +647,12 @@ edit-plan responses hide findings stored earlier.
 A *discovery check* (`CapabilityCheck(discovery=True)`) gathers findings that take
 much longer than validation, such as a listing of every space. It is never
 required and never counts toward a verdict. The runner runs it after the
-validation checks of the same run, and skips it (`applicable=False`) when a
-required check failed or findings are off. Creation does not run it: a cached
+required validation checks of the same run. When findings are off, it skips it
+(`applicable=False`). When a required check failed, it does not run it and
+shows "Not run" (`dependency_failed`), naming its own stopped dependency or else
+the first failed required check. A discovery check that does not apply to the
+scope or access type is `applicable=False` first, so a failed check does not
+show it as "Not run". Creation does not run it: a cached
 draft result is reused, else it is recorded as not run, so neither creation nor
 the first index attempt waits on it. `findings.py:bounded_options` and
 `bounded_count` read a listing lazily up to a cap.
@@ -513,10 +661,26 @@ With `CONNECTOR_CHECKS_ENABLED`, a pair's first index attempt waits while a chec
 run is in flight or fails to run, or while a required check has `FAILED`
 (`capability_checks/indexing_hold.py:get_first_indexing_hold`). See
 [[indexing-pipeline]] §4.2. A check that is not required never blocks Create.
-When one has `FAILED` in the form's latest run, Create first opens an advisory
+The create form locks its configuration only while no account is selected
+(`AddConnectorWrapper.tsx`). Create stays disabled, with the reason as its
+tooltip, until the bound fields pass the binding check and a run passes every
+check with `validates_binding` (`formUnlocked` in
+`web/src/lib/connectors/checks/hooks.ts`).
+The checks card shows the server's reason when it refuses a start (e.g. the
+credential use rule's 403). It stops polling a run when a fetch fails, does not
+settle within `DRAFT_RUN_POLL_TIMEOUT_MS`, or reads the run as still running after
+`DRAFT_RUN_CLIENT_DEADLINE_MS`, and shows the run as failed to run. Cancel, shown while a run runs, stops it and returns the card to Start Checks.
+Each source with named checks sets it on its sign-in check, and some sources also
+on a listing that runs after it (e.g. Jira's "List projects").
+When a check that is not required has `FAILED` in the form's latest run, Create first opens an advisory
 (`web/src/views/admin/connectors/AddConnectorPage/components/FailedChecksAdvisoryModal.tsx`)
 that states the count and offers to show the checks card or to create the
 connector anyway. Edit mode skips the advisory: its plan lists failed checks itself.
+When an edit changes the config, the credential or the access type, the plan modal
+(`web/src/views/admin/connectors/EditConnectorPage/EditPlanModal.tsx`) lists every
+check of the blocking validation with the checks card's rows, titled with the outcome;
+a check that did not finish in time shows as pending. Apply records the validation as
+a check run with trigger `CONNECTOR_CONFIG_UPDATE`, which the pair's run feed lists.
 
 An admin can start the held attempt from the connector page's status card
 (`POST /admin/cc-pair/{id}/release-indexing-hold`), which stamps
@@ -534,7 +698,9 @@ trigger `SCHEDULED` once that long has passed since its last run. The connector
 page's run feed (`GET /admin/cc-pair/{id}/runs`, `db/cc_pair_runs.py`) lists
 these runs as kind `checks`, with a popover of the results, and the pair's
 prunes as kind `pruning` from its `sync_record` rows, which now carry the
-`error_message` a failed prune generator recorded.
+`error_message` a failed prune generator recorded. The run feed and the report
+reads leave out results that do not apply to the pair
+(`findings_setting.py:shown_check_results`); the stored report keeps them.
 
 ### 4.9 Typed configs and credential families
 
@@ -550,18 +716,30 @@ credential with a config. Every pairing, credential swap, edit and check run
 applies it before it builds a connector. A user may use the credential when:
 
 - they own it, or it has no owner and they hold `MANAGE_CONNECTORS` globally;
-- it is visible to them ([[cc-pairs-and-credentials]] §4.7) and the config's
-  bound values, as the binding model validates them, equal those of a pair of
-  the same source that uses the credential. A credential with no pair is for
-  its owner only. A config-less run still needs such a pair;
+- it is visible to them ([[cc-pairs-and-credentials]] §4.7) and its source has
+  no credential-bound fields (no binding model, or only
+  `credential_derived_fields`), so no setting can send the secret elsewhere;
+- it is visible to them and the config's bound values, as the binding model
+  validates them, equal those of a pair of the same source that uses the
+  credential. A credential of a bound source with no pair is for its owner
+  only. A config-less run still needs such a pair;
 - the caller passes the pair the user edits or operates, and that pair already
   uses the credential with the same bound values; or
 - the credential is visible and its source has no real secret
   (`CREDENTIAL_PERMISSIONS_TO_IGNORE`).
 
-The comparison skips a binding's `credential_derived_fields`: values the form
-takes from the credential and `validate_credential` pins to it, such as Google
-Drive's `credential_kind`.
+The comparison uses `CredentialBinding.comparison_values`. It skips a binding's
+`credential_derived_fields`: values the form takes from the credential and
+`validate_credential` pins to it, such as Google Drive's `credential_kind`. It
+compares `site_url_fields` by `connector_config.py:site_url_key` (scheme and
+host in lower case, and a bare host's trailing slash ignored). A slash after a
+path stays significant, because `urljoin` resolves against `/foo/` and `/foo`
+differently; another path on the same host is another site. Confluence ignores
+the trailing slash, because its connector strips it, and Confluence Cloud also
+drops a trailing `/wiki`. A URL with no scheme does not match a URL with one, because
+the connector gets the value as entered. The stored config keeps the value as
+entered. A site URL that does not parse fails binding validation, so it is a
+field error and matches no pair.
 
 The pairs are the record of the bound values; the credential stores none. The
 rule runs in `validate_ccpair_for_user` (its `user` is None only for system
@@ -571,6 +749,11 @@ work), `validate_connector_credential_bindings`,
 runs), and `edit_plan/state.py:fetch_proposed_credential` (edit plan and
 apply). A refusal is `CREDENTIAL_NOT_FOUND` when the credential is not visible
 and `INSUFFICIENT_PERMISSIONS` when the bound values match no pair.
+`factory.py:credential_use_refusal` returns the refusal without raising. The
+binding-check endpoints report an `INSUFFICIENT_PERMISSIONS` refusal as a
+`shared_credential_settings` rejection with the same detail, and
+`/manage/admin/similar-credentials/{source}` sets each credential's `usable`
+and `refusal_reason` from the rule with no config.
 
 A realm (where an account works: its site, host or subdomain) lives in the
 credential only, and the connector reads it from there. The connector config does
@@ -578,7 +761,10 @@ not hold it. On the add-connector form the realm is a form-only field
 (`formOnlyFieldNames` in `web/src/lib/connectors/utils.ts`, from the credential
 spec's `realm` fields). The form shows it above the account section, copies it into
 a new account's values, and disables saved accounts whose stored realm differs
-(`credentialMatchesBoundFields`). `withoutFormOnlyFields` removes it from every
+(`credentialMatchesBoundFields`). It also disables a saved account that the
+similar-credentials listing marks not `usable` (the credential use rule, §4.9) and
+shows its `refusal_reason`. Only the picked account offers Re-run Checks; on the
+connector page, Re-run Checks runs the pair's checks (`connector_id`). `withoutFormOnlyFields` removes it from every
 request that sends form values as connector config: Create, check runs and plans,
 and binding checks.
 
@@ -664,7 +850,9 @@ family keep the source's shape and stay usable by that source only.
    first time anyone tries to run it, not when the enum value is added.
 8. **A `SourceOperations` subclass may not override `__init__`** and every
    public method on it must carry `@source_operation`; `__init_subclass__`
-   enforces both at import time.
+   enforces both at import time. A gateway instance must also be safe to
+   call from several threads at once (section 4.7). Nothing enforces this, so
+   check it in review.
 9. **`CredentialsConnector` and `load_credentials` are mutually exclusive in
    practice.** `factory.py:instantiate_connector` picks one path via
    `isinstance`. A connector that implements `CredentialsConnector` should make
