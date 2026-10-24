@@ -13,7 +13,6 @@ from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     ModelConfigurationUpsertRequest,
 )
-
 from tests.common.models import CI_OPENAI_MODEL
 
 
@@ -37,7 +36,9 @@ def ensure_default_llm_provider(db_session: Session) -> None:
         llm_provider_upsert_request=llm_provider_request,
         db_session=db_session,
     )
-    update_default_model(db_session, provider.id, CI_OPENAI_MODEL, LLMModelFlowType.CHAT)
+    update_default_model(
+        db_session, provider.id, CI_OPENAI_MODEL, LLMModelFlowType.CHAT
+    )
 
 
 @pytest.fixture

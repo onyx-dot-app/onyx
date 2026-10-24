@@ -305,7 +305,7 @@ Events describe run boundaries, steps, model output, and tool activity.
 Execution and parent IDs connect child events to the root stream; readable labels belong to coordination metadata.
 
 Unsubscription excludes future dispatches. A callback already selected for dispatch may still run.
-Subscriptions end when delivery drains or is discarded.
+Closing delivery stops new events and releases listeners after accepted events drain.
 Observers must not wait for their own run to become idle.
 
 Delivery is best-effort. Chat shares one dispatcher across a turn. Each event enters its queue once.
@@ -319,7 +319,8 @@ Producers may change their local data after publishing it.
 The event queue is unbounded. Slow listeners or replay writes can increase retained memory.
 Pending-event tracking includes queued events and events still being delivered.
 
-A slow listener does not block execution. If a listener throws or delivery does not drain within the two-second cleanup wait, the runtime sets the run's
+A slow listener does not block execution. Closing is nonblocking; idle tracking includes the remaining event delivery.
+If a listener throws, the runtime sets the run's
 `delivery_failed` flag; the recorded state stays correct, and the consumer rebuilds its view
 from the snapshot. Already queued callbacks may still drain.
 

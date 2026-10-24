@@ -13,7 +13,6 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel
 
 from onyx.agents.concurrency import (
-    CLEANUP_SECONDS,
     OPERATION_TIMEOUT_SECONDS,
     ExecutionWork,
     wait_operation,
@@ -43,8 +42,7 @@ logger = setup_logger()
 MAX_LOADED_AGENTS = 64
 MAX_CHILD_DEPTH = 8
 REMOTE_POLL_SECONDS = 1.0
-# Each nested execution can use its cleanup bound before publishing terminal output.
-CHILD_TERMINAL_TIMEOUT_SECONDS = CLEANUP_SECONDS * (MAX_CHILD_DEPTH + 1)
+CHILD_TERMINAL_TIMEOUT_SECONDS = 18.0
 
 
 class RunStore(Protocol):
