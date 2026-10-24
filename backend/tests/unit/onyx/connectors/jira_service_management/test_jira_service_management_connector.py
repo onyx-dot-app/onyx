@@ -168,7 +168,7 @@ def test_validate_maps_jira_errors_when_auto_scoping(
     connector = _connector()
     mock_ops = MagicMock()
     mock_ops.list_projects.side_effect = JiraApiError(
-        "err", status_code=status_code, text="err"
+        "err", status_code=status_code, body="err"
     )
     connector._source_operations = mock_ops
 
