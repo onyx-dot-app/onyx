@@ -22,7 +22,7 @@ in ``onyx.db.mcp``. It must not import ``onyx.server.features.mcp.oauth``.
 import time
 from collections.abc import Mapping
 from copy import deepcopy
-from typing import cast
+from typing import Literal, cast
 
 from mcp.shared.auth import OAuthClientInformationFull
 from pydantic import BaseModel, ConfigDict, JsonValue, SkipValidation
@@ -32,6 +32,7 @@ from onyx.db.enums import MCPAuthenticationPerformer, MCPAuthenticationType
 from onyx.db.mcp import get_user_connection_config
 from onyx.db.models import MCPConnectionConfig, MCPServer, User
 from onyx.oauth.authorization_attempt import canonical_json_fingerprint
+from onyx.server.features.mcp.client_metadata import is_mcp_oauth_cimd_client_id
 from onyx.server.features.mcp.models import (
     DENYLISTED_MCP_HEADERS,
     MCPAuthTemplate,
@@ -48,6 +49,24 @@ logger = setup_logger()
 
 class MCPCredentialsError(Exception):
     """Credentials for an MCP server cannot be resolved for this user."""
+
+
+def mcp_oauth_setup_mode(
+    config: MCPConnectionData,
+) -> Literal["automatic", "own_client"]:
+    """Read the setup choice, with registration metadata fallback for older records."""
+    if mode := config.get("oauth_setup_mode"):
+        return mode
+    client = config.get("client_info") or {}
+    if (
+        not client.get("client_id")
+        or is_mcp_oauth_cimd_client_id(client.get("client_id"))
+        or client.get("registration_access_token")
+        or client.get("registration_client_uri")
+        or client.get("client_id_issued_at") is not None
+    ):
+        return "automatic"
+    return "own_client"
 
 
 def extract_connection_data(

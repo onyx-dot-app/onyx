@@ -3,13 +3,13 @@ import { loginAsWorkerUser } from "@tests/e2e/utils/auth";
 import { ScheduledTasksPage } from "@tests/e2e/pages/ScheduledTasksPage";
 
 test.describe("Scheduled Tasks", () => {
-  test("pre-approval groups fill the form on desktop and mobile", async ({
+  test("app policy cards fill the form on desktop and mobile", async ({
     page,
   }, testInfo) => {
     await loginAsWorkerUser(page, testInfo.workerIndex);
 
     const scheduledTasks = new ScheduledTasksPage(page);
-    await scheduledTasks.mockPreApprovalOptions();
+    await scheduledTasks.mockActionPolicyOptions();
     await scheduledTasks.gotoList();
     test.skip(
       !scheduledTasks.isCraftEnabled(),
@@ -17,7 +17,7 @@ test.describe("Scheduled Tasks", () => {
     );
 
     await scheduledTasks.openCreateForm();
-    await scheduledTasks.expectResponsivePreApprovalLayout();
+    await scheduledTasks.expectResponsiveActionPolicyLayout();
   });
 
   test("create, run, and verify a run row exists", async ({

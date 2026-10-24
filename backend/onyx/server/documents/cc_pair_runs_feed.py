@@ -11,12 +11,14 @@ from onyx.db.cc_pair_run_resolution import get_resolution_times
 from onyx.db.cc_pair_runs import (
     count_cc_pair_runs_by_status_group,
     get_cc_pair_run_page,
+    get_superseded_runs,
 )
 from onyx.db.cc_pair_runs_models import CCPairRunFilter, CCPairRunPage
 from onyx.db.enums import CCPairRunErrors, CCPairRunKind, CCPairRunStatusGroup
 from onyx.db.index_attempt import (
+    OpenErrorCounts,
     get_error_counts_for_index_attempts,
-    get_open_doc_error_counts_for_index_attempts,
+    get_open_error_counts_for_index_attempts,
 )
 from onyx.server.documents.models import (
     CCPairChecksRun,
@@ -50,17 +52,19 @@ def run_item(
     run_id: int,
     page: CCPairRunPage,
     error_counts: dict[int, int],
-    open_counts: dict[int, int],
+    open_counts: dict[int, OpenErrorCounts],
 ) -> CCPairRun:
     match kind:
         case CCPairRunKind.INDEXING:
             attempt = page.index_attempts[run_id]
+            open_errors = open_counts.get(run_id, OpenErrorCounts())
             return CCPairIndexRun(
                 time_created=attempt.time_created,
                 attempt=IndexAttemptSnapshot.from_index_attempt_db_model(
                     attempt,
                     error_count=error_counts.get(run_id, 0),
-                    open_doc_error_count=open_counts.get(run_id, 0),
+                    open_error_count=open_errors.total,
+                    open_doc_error_count=open_errors.docs,
                 ),
             )
         case CCPairRunKind.DOC_PERMISSION_SYNC:
@@ -111,17 +115,21 @@ def fetch_run_feed(
     error_counts = get_error_counts_for_index_attempts(
         db_session, list(page.index_attempts)
     )
-    open_counts = get_open_doc_error_counts_for_index_attempts(
+    open_counts = get_open_error_counts_for_index_attempts(
         db_session, list(page.index_attempts)
     )
     resolved_at = get_resolution_times(db_session, page.order)
+    superseded = get_superseded_runs(db_session, run_filter, page.order)
     status_counts = count_cc_pair_runs_by_status_group(db_session, kinds, run_filter)
     groups = run_filter.status_groups
     return RunFeed(
         page=page,
         items=[
             run_item(kind, run_id, page, error_counts, open_counts).model_copy(
-                update={"resolved_at": resolved_at.get((kind, run_id))}
+                update={
+                    "resolved_at": resolved_at.get((kind, run_id)),
+                    "superseded": (kind, run_id) in superseded,
+                }
             )
             for kind, run_id in page.order
         ],
@@ -161,8 +169,6 @@ def _open_level_filter(
     if level is CCPairRunLevel.FAILURES:
         status_groups = {CCPairRunStatusGroup.FAILED}
         errors = None
-        # A search lists superseded failures too, so they resolve with the rest.
-        superseded = None if query else False
     else:
         status_groups = {
             CCPairRunStatusGroup.RUNNING,
@@ -170,7 +176,8 @@ def _open_level_filter(
             CCPairRunStatusGroup.CANCELED,
         }
         errors = CCPairRunErrors.UNRESOLVED
-        superseded = None
+    # A search lists superseded runs too, so they resolve with the rest.
+    superseded = None if query else False
     return CCPairRunFilter(
         cc_pair_ids=cc_pair_ids,
         source=source,

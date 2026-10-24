@@ -69,6 +69,11 @@ import {
 } from "@/lib/searchFilters/utils";
 import { toast } from "@opal/layouts";
 import {
+  isStillOnLocation,
+  locationKey,
+} from "@/app/app/services/submitLocation";
+import { useTranslations } from "next-intl";
+import {
   ReadonlyURLSearchParams,
   usePathname,
   useRouter,
@@ -137,6 +142,8 @@ interface UseChatControllerProps {
   selectedDocuments: OnyxDocument[];
   searchParams: ReadonlyURLSearchParams;
   resetInputBar: () => void;
+  /** Puts a message and its files back after a send fails before it starts. */
+  restoreInputBar: (message: string, files: ProjectFile[]) => void;
 }
 
 async function stopChatSession(
@@ -168,7 +175,9 @@ export default function useChatController({
   existingChatSessionId,
   selectedDocuments,
   resetInputBar,
+  restoreInputBar,
 }: UseChatControllerProps) {
+  const t = useTranslations("chat.app");
   // The chat's search filters ride the tool configuration, resolved against
   // the sources the active agent can reach. An explicit selection resolves
   // only against a complete roster — `settled` allows stale data (a failed
@@ -440,16 +449,13 @@ export default function useChatController({
       const isMultiModel =
         !regenerationRequest && (selectedModels?.length ?? 0) >= 2;
       const projectId = searchParams.get(SEARCH_PARAM_NAMES.PROJECT_ID);
-      {
-        const params = new URLSearchParams(searchParams?.toString() || "");
-        if (params.has(SEARCH_PARAM_NAMES.PROJECT_ID)) {
-          params.delete(SEARCH_PARAM_NAMES.PROJECT_ID);
-          const newUrl = params.toString()
-            ? `${pathname}?${params.toString()}`
-            : pathname;
-          // SAFETY: built from the current pathname, which is a route of this app.
-          router.replace(newUrl as Route, { scroll: false });
-        }
+      const paramsWithoutProject = new URLSearchParams(searchParams.toString());
+      paramsWithoutProject.delete(SEARCH_PARAM_NAMES.PROJECT_ID);
+      const startUrl = locationKey(pathname, searchParams.toString());
+      const urlWithoutProject = locationKey(pathname, paramsWithoutProject);
+      if (searchParams.has(SEARCH_PARAM_NAMES.PROJECT_ID)) {
+        // SAFETY: built from the current pathname, which is a route of this app.
+        router.replace(urlWithoutProject as Route, { scroll: false });
       }
 
       updateSubmittedMessage(getCurrentSessionId(), message);
@@ -573,13 +579,34 @@ export default function useChatController({
       if (isNewSession) {
         // There is no incognito agent chat, so incognito pins the default
         // assistant regardless of any selected agent.
-        currChatSessionId = await createChatSession(
-          incognito ? 0 : activeAgent?.id || 0,
-          searchParamBasedChatSessionName,
-          projectId ? parseInt(projectId) : null,
-          incognito,
-          incognito ? incognitoSessionId : null
-        );
+        // The caller already cleared the input bar, so a failure here must
+        // give the message back instead of dropping it.
+        try {
+          currChatSessionId = await createChatSession(
+            incognito ? 0 : activeAgent?.id || 0,
+            searchParamBasedChatSessionName,
+            projectId ? parseInt(projectId) : null,
+            incognito,
+            incognito ? incognitoSessionId : null
+          );
+        } catch (error) {
+          console.error("Failed to create chat session:", error);
+          toast.error(t("createSessionFailed.toast"));
+          // The user moved to a different page while the request was pending.
+          // Do not take them back or put the message into that page.
+          if (
+            !isStillOnLocation([startUrl, urlWithoutProject], window.location)
+          ) {
+            return;
+          }
+          // Put the project back in the URL so a retry stays in the project.
+          if (projectId) {
+            // SAFETY: built from the current pathname, which is a route of this app.
+            router.replace(startUrl as Route, { scroll: false });
+          }
+          restoreInputBar(message, currentMessageFiles);
+          return;
+        }
 
         // This send is what created the chat, so the configuration chosen for
         // it moves onto the session before the id reaches the composer.
@@ -1547,6 +1574,8 @@ export default function useChatController({
       selectedDocuments,
       searchParams,
       resetInputBar,
+      restoreInputBar,
+      t,
       updateSelectedNodeForDocDisplay,
       currentMessageTree,
       currentChatState,

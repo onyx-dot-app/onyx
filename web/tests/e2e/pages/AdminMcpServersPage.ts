@@ -1,4 +1,4 @@
-import { type Page, type Locator, expect } from "@playwright/test";
+import { type Page, type Locator, type Route, expect } from "@playwright/test";
 import * as yup from "yup";
 import { AdminPluginsPage } from "@tests/e2e/pages/AdminPluginsPage";
 
@@ -54,13 +54,55 @@ export class AdminMcpServersPage {
   // ---------------------------------------------------------------------------
   // ---------------------------------------------------------------------------
 
+  async openConfiguration(serverName: string): Promise<void> {
+    await this.goto();
+    await this.plugins.openPlugin(serverName);
+    await this.page
+      .getByRole("tab", { name: "Configuration", exact: true })
+      .click();
+    await expect(this.defaultChatToggle).toBeEnabled();
+  }
+
+  get defaultChatToggle(): Locator {
+    return this.page.getByRole("switch", {
+      name: "Enable in default Chat",
+      exact: true,
+    });
+  }
+
+  async setDefaultChatEnabled(enabled: boolean): Promise<void> {
+    const toggle = this.defaultChatToggle;
+    await expect(toggle).toBeEnabled();
+    if ((await toggle.isChecked()) === enabled) return;
+    await toggle.setChecked(enabled);
+    const save = this.page.getByRole("button", {
+      name: "Save Changes",
+      exact: true,
+    });
+    await expect(save).toBeEnabled();
+    const responsePromise = this.page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname ===
+          "/api/admin/default-assistant/tools" &&
+        response.request().method() === "PATCH"
+    );
+    await save.click();
+    expect((await responsePromise).ok()).toBeTruthy();
+    await expect(save).toBeDisabled();
+    await expect(toggle).toBeEnabled();
+    await expect(toggle).toBeChecked({ checked: enabled });
+  }
+
   async openAddServerModal(): Promise<void> {
     await this.plugins.openAddMcp();
     await expect(this.serverUrlInput).toBeVisible();
   }
 
-  async enterServerUrlAndContinue(url: string): Promise<void> {
+  async enterServerUrlAndContinue(url: string, group?: string): Promise<void> {
     await this.serverUrlInput.fill(url);
+    if (group) {
+      await this.restrictToGroup(group);
+    }
     const next = this.page.getByRole("button", {
       name: "Continue",
       exact: true,
@@ -81,20 +123,12 @@ export class AdminMcpServersPage {
     await expect(this.accessControlSelector).toBeVisible();
   }
 
-  async fillServerDetails(details: {
-    name: string;
-    /** Restrict to this group. Required for a scoped manager: the backend
-     *  refuses a public server outside the groups they manage. */
-    group?: string;
-  }): Promise<void> {
+  async fillServerDetails(details: { name: string }): Promise<void> {
     await this.page.getByRole("button", { name: "Back", exact: true }).click();
     await this.nameInput.fill(details.name);
     await this.page
       .getByRole("button", { name: "Continue", exact: true })
       .click();
-    if (details.group) {
-      await this.restrictToGroup(details.group);
-    }
   }
 
   async restrictToGroup(group: string): Promise<void> {
@@ -106,6 +140,10 @@ export class AdminMcpServersPage {
         name: new RegExp(`^${group.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
       })
       .click();
+    // The group list stays open for more picks and can cover the modal's
+    // buttons; Escape closes the list alone, not the modal.
+    await this.page.keyboard.press("Escape");
+    await expect(this.page.getByRole("listbox")).toBeHidden();
   }
 
   async selectGroupAccess(): Promise<void> {
@@ -116,19 +154,68 @@ export class AdminMcpServersPage {
     await expect(search).toBeEnabled();
   }
 
+  async connectAndWaitForSetup(): Promise<void> {
+    const setupRoute = "**/api/admin/mcp/setup";
+    let responseText = "";
+    const captureResponse = async (route: Route): Promise<void> => {
+      if (route.request().method() !== "POST") {
+        await route.continue();
+        return;
+      }
+      const response = await route.fetch();
+      responseText = await response.text();
+      await route.fulfill({ response, body: responseText });
+    };
+    await this.page.route(setupRoute, captureResponse);
+    try {
+      const responsePromise = this.page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === "/api/admin/mcp/setup" &&
+          response.request().method() === "POST"
+      );
+      await this.clickConnect();
+      const response = await responsePromise;
+      expect(response.ok(), responseText).toBeTruthy();
+    } finally {
+      await this.page.unroute(setupRoute, captureResponse);
+    }
+    const body: unknown = JSON.parse(responseText);
+    const { status } = yup
+      .object({
+        status: yup
+          .string()
+          .oneOf(["connected", "authorization_required"])
+          .required(),
+      })
+      .validateSync(body);
+    if (status === "connected") {
+      yup
+        .object({
+          server: yup
+            .object({ id: yup.number().integer().positive().required() })
+            .required(),
+        })
+        .validateSync(body);
+    } else {
+      yup
+        .object({ authorization_url: yup.string().url().required() })
+        .validateSync(body);
+    }
+  }
+
+  async connectedServerId(): Promise<number> {
+    await expect(this.page).toHaveURL(/\/admin\/plugins\/mcp\/\d+(?:\?.*)?$/);
+    return yup
+      .number()
+      .integer()
+      .positive()
+      .required()
+      .validateSync(new URL(this.page.url()).pathname.split("/").pop());
+  }
+
   async connectAndWaitForCreation(): Promise<number> {
-    const responsePromise = this.page.waitForResponse(
-      (resp) =>
-        new URL(resp.url()).pathname === "/api/admin/mcp/server" &&
-        resp.request().method() === "POST"
-    );
-    await this.clickConnect();
-    const response = await responsePromise;
-    expect(response.ok(), await response.text()).toBeTruthy();
-    const created = yup
-      .object({ id: yup.number().integer().positive().required() })
-      .validateSync(await response.json());
-    return created.id;
+    await this.connectAndWaitForSetup();
+    return this.connectedServerId();
   }
 
   // ---------------------------------------------------------------------------

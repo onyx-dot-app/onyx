@@ -57,7 +57,7 @@ export const CraftPermissions: Story = {
       craftEnabled: true,
       server: {
         ...storyServer,
-        tool_policies: { query_records: "DENY", list_datasets: "ALWAYS" },
+        action_policies: { query_records: "DENY", list_datasets: "ALWAYS" },
       },
     },
   },

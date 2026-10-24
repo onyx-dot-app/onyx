@@ -89,7 +89,7 @@ Left to itself the list sizes from its anchor: the anchor's width plus 6px on ea
 | --------------- | ------------------------------------------------------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `open`          | `boolean`                                              | —          | Controlled open state. Uncontrolled when left out.                                                                                                     |
 | `onOpenChange`  | `(open: boolean) => void`                              | —          | Called with the next state                                                                                                                             |
-| `disabled`      | `boolean`                                              | `false`    | Never opens and renders no list                                                                                                                        |
+| `disabled`      | `boolean`                                              | `false`    | Never opens; disabling an open one closes it                                                                                                           |
 | `id`            | `string`                                               | auto       | Prefix for the list's and the rows' element ids, so a field can tie into it                                                                            |
 | `virtualAnchor` | `{ getBoundingClientRect, contextElement? }`           | —          | A rectangle to position against instead of an element, like a text caret                                                                               |
 | `container`     | `HTMLElement \| null`                                  | body       | Where the list portals to, for a dropdown inside a modal                                                                                               |
@@ -133,6 +133,8 @@ The element the list positions against and matches in width, when that is not th
 | `noMatchText`         | `string`                                                 | Opal's      | What the list says when a search matches nothing                                                                                                                                      |
 | `onReachEnd`          | `(shown: DropdownOption[]) => void`                      | —           | The rows scrolled near their end, with the options on show                                                                                                                            |
 | `views`               | `Record<string, DropdownView>`                           | —           | Secondary views by key, rebuilt every render, so a view on the stack shows its latest rows                                                                                            |
+
+The floating card also caps its height to the available space inside clipping ancestors and the viewport. The search field stays visible while the rows scroll.
 
 ## Items
 

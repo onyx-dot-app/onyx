@@ -349,7 +349,6 @@ export function ImportSkillsFromGitHubModalView({
                 <InputTypeIn
                   value={repository}
                   variant={loading ? "disabled" : "primary"}
-                  // oxlint-disable-next-line i18n/no-raw-jsx-text -- URL/format example, not copy
                   placeholder={t("placeholders.githubRepository")}
                   onChange={(event) => onRepositoryChange(event.target.value)}
                   onKeyDown={(event) => {

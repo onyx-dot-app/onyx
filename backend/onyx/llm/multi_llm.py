@@ -1336,16 +1336,18 @@ class LitellmLLM(LLM):
                 return min(read_timeout_s, remaining)
 
             def _call_litellm(opts: dict[str, Any]) -> Any:
-                timeout = _attempt_timeout()
                 # Injection disabled means no env writer exists anywhere in
                 # the process, so skip the rwlock entirely. Built per attempt
                 # because the context manager is single-use.
                 env_ctx: AbstractContextManager[None] = (
-                    temporary_env_and_lock(self._env_only_custom_config)
+                    temporary_env_and_lock(
+                        self._env_only_custom_config, deadline=deadline
+                    )
                     if env_injection_enabled
                     else nullcontext()
                 )
                 with env_ctx:
+                    timeout = _attempt_timeout()
                     check_cancelled()
                     return litellm.completion(
                         model=model,
@@ -1486,10 +1488,10 @@ class LitellmLLM(LLM):
         The caller owns the generation span. Use ``invoke`` for shared messages.
 
         Sends one plain request, so the socket read timeout is the whole budget.
-        The only exception is env injection of custom_config (self-hosted
-        default): the process-wide env lock must cover connection setup only,
-        not a whole inference, so we stream and reassemble. The deadline then
-        applies between chunks.
+        Calls that inject custom_config into the environment stream and reassemble
+        to release the write lock after connection setup. Other calls use a plain
+        request and hold a shared read lock when injection is enabled. The deadline
+        includes lock acquisition and applies between chunks for streamed calls.
         """
         from litellm import HTTPHandler
         from litellm import ModelResponse as LiteLLMModelResponse
@@ -1537,7 +1539,7 @@ class LitellmLLM(LLM):
         # they will realize that their OpenAI handling is not threadsafe. Hope they will just fix it.
         deadline = time.monotonic() + total_timeout_s
         env_injection_enabled = _env_injection_enabled()
-        use_stream = env_injection_enabled
+        use_stream = env_injection_enabled and bool(self._env_only_custom_config)
         read_timeout = max(1, math.ceil(total_timeout_s))
 
         client = None
@@ -1932,7 +1934,9 @@ class LitellmLLM(LLM):
 
 
 @contextmanager
-def temporary_env_and_lock(env_variables: dict[str, str]) -> Iterator[None]:
+def temporary_env_and_lock(
+    env_variables: dict[str, str], *, deadline: float | None = None
+) -> Iterator[None]:
     """
     Temporarily sets the environment variables to the given values while holding
     the exclusive write side of _env_rwlock, so no concurrent LLM call can
@@ -1942,21 +1946,24 @@ def temporary_env_and_lock(env_variables: dict[str, str]) -> Iterator[None]:
     concurrently with each other and only block while a writer has env vars
     injected.
     """
-    if not env_variables:
-        with _env_rwlock.gen_rlock():
+    lock = _env_rwlock.gen_wlock() if env_variables else _env_rwlock.gen_rlock()
+    timeout = -1 if deadline is None else max(0, deadline - time.monotonic())
+    if not lock.acquire(timeout=timeout):
+        raise LLMTimeoutError("LLM call timed out waiting for the environment lock")
+    try:
+        if not env_variables:
             yield
-        return
+            return
 
-    masked_env = {
-        key: mask_env_value_for_logging(key, value)
-        for key, value in env_variables.items()
-    }
-    logger.info(
-        "temporary_env_and_lock setting custom_config env var(s): %s",
-        masked_env,
-    )
-    start_time = time.monotonic()
-    with _env_rwlock.gen_wlock():
+        masked_env = {
+            key: mask_env_value_for_logging(key, value)
+            for key, value in env_variables.items()
+        }
+        logger.info(
+            "temporary_env_and_lock setting custom_config env var(s): %s",
+            masked_env,
+        )
+        start_time = time.monotonic()
         logger.debug("Acquired env write lock in temporary_env_and_lock")
         # Store original values (None if key didn't exist)
         original_values: dict[str, str | None] = {
@@ -1972,7 +1979,9 @@ def temporary_env_and_lock(env_variables: dict[str, str]) -> Iterator[None]:
                 else:
                     os.environ[key] = original_value  # Restore original value
 
-    logger.info(
-        "temporary_env_and_lock write section took %.3f seconds",
-        time.monotonic() - start_time,
-    )
+        logger.info(
+            "temporary_env_and_lock write section took %.3f seconds",
+            time.monotonic() - start_time,
+        )
+    finally:
+        lock.release()

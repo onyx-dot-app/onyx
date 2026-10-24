@@ -4,10 +4,7 @@ import pytest
 from sqlalchemy import Boolean, Column, Integer, MetaData, Table, create_engine
 from sqlalchemy.orm import Session
 
-from onyx.db import persona as persona_db
 from onyx.db.models import MCPServer, Persona, Tool, User
-from onyx.server.features.default_assistant import api as default_api
-from onyx.server.features.default_assistant.models import DefaultAssistantUpdateRequest
 from onyx.server.features.mcp.models import MCPConnectionStatus
 
 
@@ -131,8 +128,10 @@ def test_scoped_manager_server_summary_reports_only_visible_servers(
     ]
 
 
+@pytest.mark.parametrize("craft", [False, True])
 def test_member_server_summary_reports_only_accessible_servers(
     monkeypatch: pytest.MonkeyPatch,
+    craft: bool,
 ) -> None:
     from onyx.db.enums import MCPServerStatus
     from onyx.server.features.mcp import api
@@ -143,6 +142,8 @@ def test_member_server_summary_reports_only_accessible_servers(
     servers = [MCPServer(id=42), MCPServer(id=43)]
     selected_servers = MagicMock(return_value={43})
     monkeypatch.setattr(api, "get_mcp_servers_accessible_to_user", lambda *_: servers)
+    monkeypatch.setattr(api, "get_craft_enabled_mcp_servers", lambda *_, **__: servers)
+    monkeypatch.setattr(api, "get_user_connection_configs", lambda *_: {})
     monkeypatch.setattr(api, "get_default_chat_mcp_server_ids", selected_servers)
     monkeypatch.setattr(
         api,
@@ -157,7 +158,11 @@ def test_member_server_summary_reports_only_accessible_servers(
         ),
     )
 
-    response = api.get_mcp_servers_for_user(db, user)
+    response = (
+        api.get_craft_mcp_servers_for_user(db, user)
+        if craft
+        else api.get_mcp_servers_for_user(db, user)
+    )
 
     selected_servers.assert_called_once_with([42, 43], db)
     assert [
@@ -167,42 +172,6 @@ def test_member_server_summary_reports_only_accessible_servers(
 
 def tool(tool_id: int, server_id: int | None, name: str) -> Tool:
     return Tool(id=tool_id, name=name, mcp_server_id=server_id, enabled=True)
-
-
-def test_default_chat_views_share_existing_tool_attachments(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    selected = tool(1, 42, "selected")
-    other_mcp = tool(2, 43, "other_server")
-    built_in = tool(3, None, "search")
-    unselected = tool(4, 42, "unselected")
-    default = Persona(id=0, tools=[selected, other_mcp, built_in])
-    custom = Persona(id=5, tools=[selected, unselected])
-    db = MagicMock(spec=Session)
-    user = User()
-    monkeypatch.setattr(persona_db, "get_default_assistant", lambda _: default)
-    monkeypatch.setattr(default_api, "get_default_assistant", lambda _: default)
-    monkeypatch.setattr(persona_db, "should_expose_tool_to_fe", lambda _: True)
-
-    def save_selection(tools: list[Tool]) -> None:
-        db.query.return_value.filter.return_value.one_or_none.side_effect = tools
-        response = default_api.update_default_assistant(
-            DefaultAssistantUpdateRequest(tool_ids=[item.id for item in tools]),
-            user,
-            db,
-        )
-        assert response.tool_ids == [item.id for item in tools]
-        assert (
-            default_api.get_default_assistant_configuration(user, db).tool_ids
-            == response.tool_ids
-        )
-        assert custom.tools == [selected, unselected]
-
-    save_selection([other_mcp, built_in])
-    save_selection([selected, other_mcp, built_in])
-    save_selection([selected, unselected, other_mcp, built_in])
-    assert default.system_prompt is None
-    assert db.commit.call_count == 3
 
 
 def test_default_chat_availability_has_no_separate_server_field() -> None:

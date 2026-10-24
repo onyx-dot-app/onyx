@@ -5,8 +5,6 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-
-	"github.com/onyx-dot-app/onyx/tools/ods/internal/docker"
 )
 
 var (
@@ -15,15 +13,17 @@ var (
 
 	// rootProject is the --project flag, read by commands that derive their
 	// own project name when it is empty.
-	rootProject string
+	rootProject  string
+	rootIsolated bool
 )
 
 func flagProjectName() string { return rootProject }
 
 // RootOptions holds options for the root command.
 type RootOptions struct {
-	Debug   bool
-	Project string
+	Debug    bool
+	Project  string
+	Isolated bool
 }
 
 // NewRootCommand creates the root command.
@@ -44,13 +44,14 @@ func NewRootCommand() *cobra.Command {
 				DisableTimestamp: true,
 			})
 			rootProject = opts.Project
-			docker.SetProjectFlags(opts.Project)
+			rootIsolated = opts.Isolated
 		},
 		Version: fmt.Sprintf("%s\ncommit %s", Version, Commit),
 	}
 
 	cmd.PersistentFlags().BoolVar(&opts.Debug, "debug", false, "run in debug mode")
-	cmd.PersistentFlags().StringVar(&opts.Project, "project", "", "Docker Compose project name (default: basename of git root)")
+	cmd.PersistentFlags().StringVar(&opts.Project, "project", "", "Infrastructure project (default: saved shared or isolated target)")
+	cmd.PersistentFlags().BoolVar(&opts.Isolated, "isolated", false, "Use this worktree's separate infrastructure and data")
 
 	// Add subcommands
 	cmd.AddCommand(NewAuditCommand())
@@ -83,6 +84,28 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(NewUpdateBaseDigestsCommand())
 	cmd.AddCommand(NewInstallSkillCommand())
 	cmd.AddCommand(NewReleaseCommand())
+	groups := map[string][]string{
+		"local":       {"stack", "backend", "web", "desktop", "dev"},
+		"infra":       {"compose", "env", "logs", "pull", "db", "object-store"},
+		"quality":     {"test", "coverage", "type-coverage", "fmt", "lint", "check-getattr", "check-lazy-imports", "audit"},
+		"ci":          {"run-ci", "trace", "screenshot-diff"},
+		"maintenance": {"generate-compose", "openapi", "update-base-digests", "install-skill"},
+		"operations":  {"deploy", "release", "cherry-pick", "whois"},
+	}
+	for _, group := range []struct{ id, title string }{{"local", "Local development:"}, {"infra", "Infrastructure and data:"}, {"quality", "Checks and tests:"}, {"ci", "CI diagnostics:"}, {"maintenance", "Generation and setup:"}, {"operations", "Release and operations:"}} {
+		cmd.AddGroup(&cobra.Group{ID: group.id, Title: group.title})
+	}
+	for _, child := range cmd.Commands() {
+		for group, names := range groups {
+			for _, name := range names {
+				if child.Name() == name {
+					child.GroupID = group
+				}
+			}
+		}
+	}
+	cmd.SetHelpCommandGroupID("maintenance")
+	cmd.SetCompletionCommandGroupID("maintenance")
 
 	return cmd
 }

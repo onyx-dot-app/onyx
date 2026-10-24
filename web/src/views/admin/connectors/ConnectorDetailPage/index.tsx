@@ -33,13 +33,23 @@ import {
   SvgSettings,
   SvgSlowMotion,
   SvgTrash,
+  SvgUserSync,
 } from "@opal/icons";
+import { isPermSynced } from "@/lib/connectors/accessType";
 import { isEditableSource } from "@/lib/connectors/edit/editable";
+import { getCredentialSpec } from "@/lib/credentials/utils";
 import { updateConnectorCredentialPairName } from "@/lib/connector";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
-import { releaseIndexingHold, triggerIndexing } from "@/lib/connectors/svc";
-import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
+import {
+  releaseIndexingHold,
+  triggerIndexing,
+  triggerPermissionSync,
+} from "@/lib/connectors/svc";
+import {
+  ConnectorCredentialPairStatus,
+  PermissionSyncStatusEnum,
+} from "@/lib/connectors/types";
 import type { CCPairFullInfo } from "@/lib/connectors/types";
 import { statusIsNotCurrentlyActive } from "@/lib/connectors/utils";
 import { deleteCCPair } from "@/lib/documentDeletion";
@@ -69,6 +79,7 @@ const CC_PAIR_POLL_MS = 5000;
 
 function Main({ ccPairId }: { ccPairId: number }) {
   const t = useTranslations("admin.connector");
+  const tActivities = useTranslations("admin.indexing.activities");
   const router = useRouter();
 
   const {
@@ -88,7 +99,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   } = useStatusChange(ccPair || null);
 
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
-  // A re-index or error resolve in flight: the Manage button spins meanwhile.
+  // A Manage menu action in flight: the Manage button spins meanwhile.
   const [busy, setBusy] = useState(false);
   const [showDeleteConnectorConfirmModal, setShowDeleteConnectorConfirmModal] =
     useState(false);
@@ -97,7 +108,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const [runFocus, setRunFocus] = useState(false);
   // One window drives the status card's chart and the runs card's list.
   const [timeWindow, setTimeWindow] = useState<PickedWindow>(() =>
-    pickWindow("12h")
+    pickWindow("24h")
   );
   // A picked span of the chart zooms it and narrows the runs and activity to it.
   const [sliceRange, setSliceRange] = useState<SliceRange | null>(null);
@@ -169,6 +180,22 @@ function Main({ ccPairId }: { ccPairId: number }) {
       return;
     }
     toast.success(t("statusCard.hold.released"));
+    refresh();
+  };
+
+  const syncPermissions = async () => {
+    if (!ccPair) return;
+    setBusy(true);
+    const failure = await triggerPermissionSync(
+      ccPair.id,
+      t("toasts.permissionSyncFailed")
+    );
+    setBusy(false);
+    if (failure !== null) {
+      toast.error(failure);
+      return;
+    }
+    toast.success(t("toasts.permissionSyncStarted"));
     refresh();
   };
 
@@ -244,6 +271,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
     router.push(`/admin/connectors/${source}/edit/${ccPair.id}`);
   const onEdit = canOpenEditForm ? openEditForm : null;
   const canManageInlineFiles = source === "file" && can(ccPair, "edit");
+  // A credential-less source's pair holds a placeholder credential with no account or checks.
+  const takesCredential = getCredentialSpec(source) !== null;
 
   // Unlike `paused`, this excludes INVALID, whose menu still offers the re-index rows disabled with a reason.
   const strictlyPaused = ccPair.status === ConnectorCredentialPairStatus.PAUSED;
@@ -294,6 +323,31 @@ function Main({ ccPairId }: { ccPairId: number }) {
             onSelect: () => void triggerReIndex(true),
           },
         ];
+  // The route refuses a second sync while one is queued or running.
+  const syncOpen =
+    ccPair.permission_syncing ||
+    ccPair.last_permission_sync_attempt_status ===
+      PermissionSyncStatusEnum.NOT_STARTED;
+  // Only a source with document permission sync gets the row, and a deleting pair's sync is refused.
+  const syncItems: DropdownMenuItem[] =
+    isPermSynced(ccPair.access_type) &&
+    ccPair.supports_doc_permission_sync &&
+    !isDeleting
+      ? [
+          {
+            kind: "action",
+            id: "sync-permissions",
+            icon: SvgUserSync,
+            title: t("manageMenu.syncPermissions.label"),
+            description: t("manageMenu.syncPermissions.description"),
+            tooltip: syncOpen
+              ? t("manageMenu.syncPermissions.tooltip.syncing")
+              : undefined,
+            disabled: busy || syncOpen,
+            onSelect: () => void syncPermissions(),
+          },
+        ]
+      : [];
   const toggleItems: DropdownMenuItem[] = isDeleting
     ? []
     : [
@@ -332,10 +386,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
                 icon: SvgTrash,
                 danger: true,
                 title: t("manageMenu.delete.label"),
-                tooltip: paused
-                  ? undefined
-                  : t("manageMenu.delete.tooltip.active"),
-                disabled: !paused,
                 onSelect: () => setShowDeleteConnectorConfirmModal(true),
               },
             ],
@@ -344,7 +394,13 @@ function Main({ ccPairId }: { ccPairId: number }) {
       : [];
   const manageItems: DropdownMenuItem[] = strictlyPaused
     ? [...toggleItems, ...dangerItems]
-    : [...startItems, ...reIndexItems, ...toggleItems, ...dangerItems];
+    : [
+        ...startItems,
+        ...reIndexItems,
+        ...syncItems,
+        ...toggleItems,
+        ...dangerItems,
+      ];
 
   return (
     <SettingsLayouts.Root width="xl">
@@ -452,13 +508,15 @@ function Main({ ccPairId }: { ccPairId: number }) {
               range={sliceRange}
               onRangeChange={setSliceRange}
             />
-            <PairChecksCard
-              source={source}
-              credentialId={ccPair.credential.id}
-              connectorId={ccPair.connector.id}
-              held={ccPair.indexing_hold !== null}
-              expandRequest={checksExpandRequest}
-            />
+            {takesCredential && (
+              <PairChecksCard
+                source={source}
+                credentialId={ccPair.credential.id}
+                connectorId={ccPair.connector.id}
+                held={ccPair.indexing_hold !== null}
+                expandRequest={checksExpandRequest}
+              />
+            )}
             {/* While a run row's popover is open, the sections step back; the status card stays full. */}
             <Section
               alignItems="stretch"
@@ -466,7 +524,9 @@ function Main({ ccPairId }: { ccPairId: number }) {
               height="fit"
               className={focusDimClass(runFocus)}
             >
-              <AuthenticationAccountSection ccPair={ccPair} onEdit={onEdit} />
+              {takesCredential && (
+                <AuthenticationAccountSection ccPair={ccPair} onEdit={onEdit} />
+              )}
               <IndexConfigurationsSection
                 ccPair={ccPair}
                 onEdit={onEdit}
@@ -494,6 +554,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
               canResolve: canOperate && ccPair.supports_targeted_reindex,
               canResolveRuns: canOperate,
             }}
+            title={tActivities("title")}
+            foldFilters
             range={sliceRange}
           />
         </Section>

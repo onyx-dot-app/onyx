@@ -298,6 +298,13 @@ export class UsersAdminPage {
       .click();
   }
 
+  async expectJoinedGroup(groupName: string) {
+    // Role-scoped: Truncated renders an aria-hidden copy of the name.
+    await expect(
+      this.editGroupsDialog.getByRole("button", { name: groupName })
+    ).toBeVisible();
+  }
+
   async saveGroupsModal() {
     await this.editGroupsDialog
       .getByRole("button", { name: "Save Changes" })

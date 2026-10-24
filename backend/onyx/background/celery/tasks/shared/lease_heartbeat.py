@@ -24,7 +24,8 @@ class LeaseHeartbeat:
     After `max_duration` seconds the heartbeat stops renewing and sets `lost`.
     A job whose thread hangs (e.g. in a source call that never returns) then
     loses its lease and the reaper frees its row, instead of the lease living
-    as long as the process.
+    as long as the process. `None` disables the cap, for a job whose reaper
+    fails it on stale progress instead.
     """
 
     def __init__(
@@ -33,7 +34,7 @@ class LeaseHeartbeat:
         renew: Callable[[], bool],
         interval: float,
         max_silence: float,
-        max_duration: float,
+        max_duration: float | None,
     ):
         self.name = name
         self.lost = threading.Event()
@@ -48,7 +49,10 @@ class LeaseHeartbeat:
 
     def _loop(self) -> None:
         while not self._stop.wait(self._interval):
-            if time.monotonic() - self._started > self._max_duration:
+            if (
+                self._max_duration is not None
+                and time.monotonic() - self._started > self._max_duration
+            ):
                 logger.warning(
                     "Lease not renewed past its maximum duration of %ss: %s",
                     self._max_duration,

@@ -17,11 +17,10 @@ import {
   MCPAuthValidationError,
   validateMCPAuthCredentials,
 } from "@/sections/actions/modals/mcpAuthForm";
-import { mcpOAuthReturnHref } from "@/lib/plugins/routes";
 import { useUser } from "@/providers/UserProvider";
 import {
+  verifyMcpChatEnableIntent,
   clearMcpChatEnableIntent,
-  mintMcpChatEnableIntent,
 } from "@/sections/actions/mcpChatEnableIntent";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -39,22 +38,21 @@ import * as Yup from "yup";
 import { useSettings } from "@/lib/settings/hooks";
 import {
   MCPAuthenticationPerformer,
+  MCPConnectionStatus,
   MCPAuthenticationType,
   MCPOAuthProviderMode,
   MCPTransportType,
   MCPServerStatus,
   MCPServer,
   type MCPSetupRecommendation,
+  type MCPServerUpdateRequest,
 } from "@/lib/mcp/types";
 import { PerUserAuthConfig } from "@/sections/actions/PerUserAuthConfig";
 import {
   discoverMCPOAuth,
   MCPOAuthError,
   type MCPOAuthFailureReason,
-  getMCPUserOAuthNavigationUrl,
-  updateMCPServerStatus,
-  startMCPAdminOAuth,
-  upsertMCPServer,
+  setupMCPServer,
 } from "@/lib/mcp/svc";
 import { MCPOAuthFields } from "@/sections/actions/modals/MCPOAuthFields";
 import { MCPApiTokenFields } from "@/sections/actions/modals/MCPApiTokenFields";
@@ -72,26 +70,33 @@ interface MCPAuthenticationPageBaseProps {
   beforeFields?: ReactNode;
   canSubmit?: boolean;
   recommendation?: MCPSetupRecommendation;
-  onTriggerFetchTools: (
-    serverId: number,
-    chatEnableIntent?: string | null
-  ) => Promise<void> | void;
   onBusyChange: (busy: boolean) => void;
   onDirtyChange?: (dirty: boolean) => void;
   onCancel?: () => void;
-  onSaved: () => Promise<void>;
   onBack?: () => void;
-  onComplete: () => Promise<void> | void;
-  enableChatOnConnect?: boolean;
-  chatEnableIntent?: string | null;
 }
 
 type MCPAuthenticationPageProps = MCPAuthenticationPageBaseProps &
   (
-    | { mcpServer: MCPServer; resolveServer?: never }
+    | {
+        mcpServer: MCPServer;
+        onCreate?: never;
+        onSaved: (server: MCPServer) => Promise<void>;
+        onAuthorize?: (url: string) => void;
+        configurationDraft?: MCPServerUpdateRequest & { enable_chat?: boolean };
+        onComplete: () => Promise<void> | void;
+        chatEnableIntent?: string | null;
+      }
     | {
         mcpServer: Pick<MCPServer, "name" | "description" | "server_url">;
-        resolveServer: () => Promise<MCPServer>;
+        onCreate: (
+          auth: ReturnType<typeof prepareMCPAuthPayload>
+        ) => Promise<void>;
+        onSaved?: never;
+        onAuthorize?: never;
+        onComplete?: never;
+        configurationDraft?: never;
+        chatEnableIntent?: never;
       }
   );
 
@@ -101,18 +106,18 @@ export default function MCPAuthenticationPage({
   readOnly = false,
   footerTarget = null,
   mcpServer,
-  resolveServer,
+  onCreate,
   beforeFields,
   canSubmit = true,
   recommendation,
-  onTriggerFetchTools,
+  configurationDraft,
   onBusyChange,
   onDirtyChange,
   onCancel,
   onSaved,
+  onAuthorize,
   onBack,
   onComplete,
-  enableChatOnConnect = false,
   chatEnableIntent = null,
 }: MCPAuthenticationPageProps) {
   const formId = useId();
@@ -143,15 +148,22 @@ export default function MCPAuthenticationPage({
       recommendation?.kind === "auth_unknown" ? null : initialValues.auth_type
     );
   const persistedValues = useRef(initialValues);
-  const [hasChosenSetup, setHasChosenSetup] = useState(false);
+  const [hasChosenSetup, setHasChosenSetup] = useState(
+    "oauth_setup_mode" in mcpServer && mcpServer.oauth_setup_mode != null
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   useEffect(() => onBusyChange(isSubmitting), [isSubmitting, onBusyChange]);
   const [connectionSettingsOpen, setConnectionSettingsOpen] = useState(false);
   const [connectionError, setConnectionError] = useState<{
-    stage: "saveStage" | "oauthStage" | "discoveryStage";
     message: string;
     reason?: MCPOAuthFailureReason;
   } | null>(null);
+
+  const savedConnectionReady =
+    "status" in mcpServer &&
+    mcpServer.status === MCPServerStatus.CONNECTED &&
+    mcpServer.connection_status !== MCPConnectionStatus.NOT_CONNECTED &&
+    mcpServer.connection_status !== MCPConnectionStatus.REAUTH_REQUIRED;
 
   const isOAuthEnabled = useOAuthPassThroughEnabled();
   const recommendedAuthentication =
@@ -264,6 +276,7 @@ export default function MCPAuthenticationPage({
     mutate: retryOAuthDiscovery,
   } = useSWR(
     !("id" in mcpServer) ||
+      !!configurationDraft?.server_url ||
       recommendation?.kind === "oauth" ||
       (recommendation && selectedAuthentication !== MCPAuthenticationType.OAUTH)
       ? null
@@ -288,79 +301,41 @@ export default function MCPAuthenticationPage({
     if (readOnly || selectedAuthentication === null) return;
     setIsSubmitting(true);
     setConnectionError(null);
-    let stage: "saveStage" | "oauthStage" | "discoveryStage" = "saveStage";
-    let enableIntent = chatEnableIntent;
 
     try {
       const comparisonValues = persistedValues.current ?? initialValues;
       const authData = prepareMCPAuthPayload(values, comparisonValues, t);
-      const savedServer = resolveServer ? await resolveServer() : mcpServer;
-      if (resolveServer && enableChatOnConnect) {
-        enableIntent = mintMcpChatEnableIntent({
-          userId: user?.id,
-          serverId: savedServer.id,
-        });
-        if (!enableIntent)
-          throw new Error(t("addMcpModal.toasts.updateFailed"));
+      if (onCreate) {
+        await onCreate(authData);
+        return;
       }
-      const serverData = {
+      const enableChat = verifyMcpChatEnableIntent(chatEnableIntent, {
+        userId: user?.id,
+        serverId: mcpServer.id,
+      });
+      const result = await setupMCPServer({
         ...authData,
-        name: savedServer.name,
-        description: savedServer.description || undefined,
-        server_url: savedServer.server_url,
-        existing_server_id: savedServer.id,
-      };
-
-      const authType = values.auth_type;
-      const { data: serverResult, error: serverError } =
-        await upsertMCPServer(serverData);
-
-      if (serverError || !serverResult) {
-        throw new Error(
-          serverError || t("mcpAuthModal.errors.saveConfigFailed")
-        );
+        name: mcpServer.name,
+        description: mcpServer.description || undefined,
+        server_url: mcpServer.server_url,
+        ...configurationDraft,
+        existing_server_id: mcpServer.id,
+        enable_chat:
+          configurationDraft?.enable_chat ?? (enableChat ? true : undefined),
+      });
+      clearMcpChatEnableIntent(chatEnableIntent);
+      if (result.status === "authorization_required") {
+        if (onAuthorize) onAuthorize(result.authorization_url);
+        else window.location.href = result.authorization_url;
+        return;
       }
-
       persistedValues.current = values;
       helpers.resetForm({ values });
-      await onSaved().catch((error: unknown) => {
+      await onSaved(result.server).catch((error: unknown) => {
         console.error("Error refreshing MCP servers:", error);
       });
-
-      if (authType === MCPAuthenticationType.OAUTH) {
-        await updateMCPServerStatus(
-          savedServer.id,
-          MCPServerStatus.AWAITING_AUTH
-        );
-      }
-
-      if (authType === MCPAuthenticationType.OAUTH) {
-        stage = "oauthStage";
-        const oauthStart = await startMCPAdminOAuth(
-          savedServer.id,
-          enableIntent
-            ? `${mcpOAuthReturnHref(savedServer.id, true)}&enable_chat_intent=${encodeURIComponent(enableIntent)}`
-            : mcpOAuthReturnHref(savedServer.id),
-          {
-            oauth_client_id: values.oauth_client_id,
-            oauth_client_secret: values.oauth_client_secret,
-            oauth_client_id_changed: serverData.oauth_client_id_changed,
-            oauth_client_secret_changed: serverData.oauth_client_secret_changed,
-          }
-        );
-        if (oauthStart.status !== "already_authenticated") {
-          window.location.href = getMCPUserOAuthNavigationUrl(oauthStart);
-          return;
-        }
-      }
-      stage = "discoveryStage";
-      if (enableIntent) await onTriggerFetchTools(savedServer.id, enableIntent);
-      else await onTriggerFetchTools(savedServer.id);
       await onComplete();
     } catch (error) {
-      // The caller's intent must survive for retries; it clears it on cancel.
-      if (enableIntent !== chatEnableIntent)
-        clearMcpChatEnableIntent(enableIntent);
       if (error instanceof MCPAuthValidationError) {
         helpers.setFieldError("oauth_additional_auth_params", error.message);
       }
@@ -369,12 +344,14 @@ export default function MCPAuthenticationPage({
         client_registration_failed: t(
           "mcpAuthModal.errors.clientRegistrationFailed"
         ),
+        client_metadata_rejected: t(
+          "mcpAuthModal.errors.clientMetadataRejected"
+        ),
         discovery_failed: t("mcpAuthModal.errors.discoveryFailed"),
         connection_failed: t("mcpAuthModal.errors.connectionFailed"),
         oauth_failed: t("mcpAuthModal.errors.oauthFailed"),
       } satisfies Record<MCPOAuthFailureReason, string>;
       setConnectionError({
-        stage,
         reason: error instanceof MCPOAuthError ? error.reason : undefined,
         message:
           error instanceof MCPOAuthError
@@ -396,7 +373,7 @@ export default function MCPAuthenticationPage({
       validate={(values) => validateMCPAuthCredentials(values, t)}
       onSubmit={handleSubmit}
     >
-      {({ values, setFieldValue, setValues, isValid }) => {
+      {({ values, setFieldValue, setValues, isValid, dirty }) => {
         return (
           <Form
             id={formId}
@@ -411,11 +388,11 @@ export default function MCPAuthenticationPage({
             >
               <Section
                 padding={variant === "page" ? 0 : 6}
-                gap={resolveServer ? 4 : 6}
+                gap={onCreate ? 4 : 6}
                 alignItems="stretch"
               >
                 {beforeFields}
-                {recommendation && !resolveServer && (
+                {recommendation && !onCreate && (
                   <Section alignItems="stretch" height="auto" gap={2}>
                     <Text font="main-content-emphasis">{mcpServer.name}</Text>
                     <Text font="secondary-body" color="text-03">
@@ -466,11 +443,7 @@ export default function MCPAuthenticationPage({
                         .filter(
                           (type) =>
                             type !== MCPAuthenticationType.PT_OAUTH ||
-                            (isOAuthEnabled &&
-                              (!recommendation ||
-                                connectionSettingsOpen ||
-                                selectedAuthentication ===
-                                  MCPAuthenticationType.PT_OAUTH))
+                            isOAuthEnabled
                         )
                         .map((type) => ({
                           value: type,
@@ -518,7 +491,7 @@ export default function MCPAuthenticationPage({
                     <Section
                       alignItems="stretch"
                       height="auto"
-                      gap={resolveServer ? 4 : 6}
+                      gap={onCreate ? 4 : 6}
                     >
                       {!(
                         recommendation?.kind === "public" &&
@@ -565,43 +538,58 @@ export default function MCPAuthenticationPage({
                 </Section>
                 {connectionError && (
                   <div role="alert">
-                    <MessageCard
-                      variant="error"
-                      outerPadding={1}
-                      innerPadding={1}
-                      title={t(`mcpAuthModal.errors.${connectionError.stage}`)}
-                      description={connectionError.message}
-                    />
-                    {connectionError.reason ===
-                      "client_registration_failed" && (
-                      <Button
-                        type="button"
-                        prominence="secondary"
-                        onClick={() => {
-                          setFieldValue("oauth_setup_mode", "own_client");
-                          setConnectionError(null);
-                        }}
-                      >
-                        {t("mcpAuthModal.discovery.useOwnClient")}
-                      </Button>
-                    )}
-                    {connectionError.reason === "discovery_failed" && (
-                      <Button
-                        type="button"
-                        prominence="secondary"
-                        onClick={() => {
-                          setValues({
-                            ...values,
-                            oauth_setup_mode: "own_client",
-                            oauth_provider_mode:
-                              MCPOAuthProviderMode.KNOWN_PROVIDER,
-                          });
-                          setConnectionError(null);
-                        }}
-                      >
-                        {t("mcpAuthModal.discovery.manual")}
-                      </Button>
-                    )}
+                    <Section alignItems="start" height="auto" gap={2}>
+                      <MessageCard
+                        variant="error"
+                        outerPadding={1}
+                        innerPadding={1}
+                        title={t("mcpAuthModal.errors.saveStage")}
+                        description={connectionError.message}
+                      />
+                      {connectionError.reason ===
+                        "client_registration_failed" && (
+                        <Button
+                          type="button"
+                          prominence="secondary"
+                          onClick={() => {
+                            setFieldValue("oauth_setup_mode", "own_client");
+                            setConnectionError(null);
+                          }}
+                        >
+                          {t("mcpAuthModal.discovery.useOwnClient")}
+                        </Button>
+                      )}
+                      {connectionError.reason ===
+                        "client_metadata_rejected" && (
+                        <Button
+                          type="button"
+                          prominence="secondary"
+                          onClick={() => {
+                            setFieldValue("oauth_cimd_enabled", false);
+                            setConnectionError(null);
+                          }}
+                        >
+                          {t("mcpAuthModal.cimd.turnOff")}
+                        </Button>
+                      )}
+                      {connectionError.reason === "discovery_failed" && (
+                        <Button
+                          type="button"
+                          prominence="secondary"
+                          onClick={() => {
+                            setValues({
+                              ...values,
+                              oauth_setup_mode: "own_client",
+                              oauth_provider_mode:
+                                MCPOAuthProviderMode.KNOWN_PROVIDER,
+                            });
+                            setConnectionError(null);
+                          }}
+                        >
+                          {t("mcpAuthModal.discovery.manual")}
+                        </Button>
+                      )}
+                    </Section>
                   </div>
                 )}
               </Section>
@@ -641,6 +629,11 @@ export default function MCPAuthenticationPage({
                   <Button
                     disabled={
                       !canSubmit ||
+                      (!dirty &&
+                        savedConnectionReady &&
+                        !chatEnableIntent &&
+                        !recommendation &&
+                        !connectionError) ||
                       !isValid ||
                       selectedAuthentication === null ||
                       isSubmitting ||

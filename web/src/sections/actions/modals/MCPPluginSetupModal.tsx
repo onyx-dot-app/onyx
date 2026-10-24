@@ -1,10 +1,11 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { Formik, FormikProvider } from "formik";
+import { Formik } from "formik";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 import {
   Button,
+  Divider,
   InputTypeIn,
   LinkButton,
   MessageCard,
@@ -12,7 +13,7 @@ import {
   Text,
 } from "@opal/components";
 import { InputVertical, Section } from "@opal/layouts";
-import { SvgCheck, SvgX } from "@opal/icons";
+import { SvgCheck, SvgMinus, SvgX } from "@opal/icons";
 import { IconLoader } from "@opal/loaders";
 import { cn } from "@opal/utils";
 import type { RichStr } from "@opal/types";
@@ -20,31 +21,24 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { useDefaultAssistantConfiguration } from "@/lib/agents/hooks";
 import { refreshMemberPluginCaches } from "@/lib/plugins/member";
 import { useUser } from "@/providers/UserProvider";
-import { consumeMcpChatEnableIntent } from "@/sections/actions/mcpChatEnableIntent";
+import type { prepareMCPAuthPayload } from "@/sections/actions/modals/mcpAuthForm";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import { useSettings } from "@/lib/settings/hooks";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
 import { useUserGroups } from "@/lib/hooks";
+import { setupMCPServer, streamMCPServerProbe } from "@/lib/mcp/svc";
 import {
-  createMCPServer,
-  streamMCPServerProbe,
-  refreshMCPServerTools,
-  updateMCPServer,
-  updateMCPServerStatus,
-} from "@/lib/mcp/svc";
-import {
-  MCPServerStatus,
   MCPTransportType,
   type MCPServer,
-  type MCPServerCreateRequest,
   type MCPServerConfigurationValues,
   type MCPSetupProbeResult,
   type MCPSetupRecommendation,
   type MCPProbeProgress,
 } from "@/lib/mcp/types";
 import MCPAuthenticationPage from "@/sections/actions/modals/MCPAuthenticationPage";
+import PluginAvailabilitySwitch from "@/sections/plugins/PluginAvailabilitySwitch";
 import PluginModalContent from "@/sections/plugins/PluginModalContent";
 import {
   MCPAccessControl,
@@ -108,11 +102,8 @@ function MCPSetupSession({
   const t = useTranslations("actions");
   const { mutate } = useSWRConfig();
   const defaultChat = useDefaultAssistantConfiguration();
-  const { user, userResolution } = useUser();
-  const actor = useRef(user?.id);
-  useEffect(() => {
-    actor.current = user?.id;
-  }, [user?.id]);
+  const [enableChat, setEnableChat] = useState(true);
+  const { userResolution } = useUser();
   const { isGlobalHolder, isScopedManager } = usePermissionAuthority(
     Permission.MANAGE_ACTIONS
   );
@@ -135,13 +126,13 @@ function MCPSetupSession({
     recommendation: MCPSetupRecommendation;
   } | null>(null);
   const [busy, setBusy] = useState(false);
-  const savedServer = useRef<MCPServer | null>(null);
   const closeRequested = useRef(false);
   const lastProbe = useRef<Extract<ProbeState, { kind: "checked" }> | null>(
     null
   );
-  const urlInput = useRef<HTMLInputElement>(null);
+  const nameInput = useRef<HTMLInputElement>(null);
   const connectionPanel = useRef<HTMLDivElement>(null);
+  const serverPanel = useRef<HTMLDivElement>(null);
   const [footerTarget, setFooterTarget] = useState<HTMLDivElement | null>(null);
   const normalizedUrl = endpoint(url);
   const leave = () => {
@@ -204,8 +195,15 @@ function MCPSetupSession({
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
-      if (step === "server") urlInput.current?.focus();
-      else if (step === "connection")
+      if (
+        step === "server" &&
+        !serverPanel.current?.contains(document.activeElement)
+      )
+        nameInput.current?.focus();
+      else if (
+        step === "connection" &&
+        !connectionPanel.current?.contains(document.activeElement)
+      )
         connectionPanel.current
           ?.querySelector<HTMLElement>('[role="combobox"]')
           ?.focus();
@@ -217,7 +215,6 @@ function MCPSetupSession({
     probe.kind === "checked" && probe.url === normalizedUrl
       ? probe.result
       : null;
-  const checking = probe.kind === "checking" && probe.url === normalizedUrl;
   const initialValues: MCPServerConfigurationValues = {
     name: initialName,
     description: "",
@@ -277,10 +274,23 @@ function MCPSetupSession({
                 onSubmit={() => undefined}
               >
                 {(details) => {
+                  const accessReady =
+                    Object.keys(
+                      validateMCPAccess(
+                        details.values,
+                        isScopedManager,
+                        t("addMcpModal.access.groups.required")
+                      )
+                    ).length === 0 &&
+                    (details.values.is_public || canRestrict) &&
+                    !(
+                      details.values.access_mode === "groups" &&
+                      (groupsLoading || groupsError)
+                    );
                   const continueToConnection = (
                     recommendation: MCPSetupRecommendation
                   ) => {
-                    if (!normalizedUrl) return;
+                    if (!normalizedUrl || !accessReady) return;
                     const name =
                       details.values.name.trim() ||
                       initialName.trim() ||
@@ -293,7 +303,9 @@ function MCPSetupSession({
                     setConnection({ url: normalizedUrl, recommendation, name });
                     setStep("connection");
                   };
-                  const resolveServer = async () => {
+                  const createServer = async (
+                    auth: ReturnType<typeof prepareMCPAuthPayload>
+                  ) => {
                     const errors = await details.validateForm();
                     if (
                       Object.keys(errors).length ||
@@ -306,7 +318,9 @@ function MCPSetupSession({
                     }
                     if (!connection)
                       throw new Error(t("mcpSetup.reviewSettings"));
-                    const payload: MCPServerCreateRequest = {
+                    const result = await setupMCPServer({
+                      ...auth,
+                      enable_chat: defaultChat.canEdit && enableChat,
                       name: details.values.name.trim(),
                       description: details.values.description,
                       server_url: connection.url,
@@ -318,18 +332,27 @@ function MCPSetupSession({
                       users: details.values.is_public
                         ? []
                         : details.values.users,
-                    };
-                    const server = savedServer.current
-                      ? await updateMCPServer(savedServer.current.id, payload)
-                      : await createMCPServer(payload);
-                    savedServer.current = server;
-                    details.resetForm({ values: details.values });
-                    return server;
+                    });
+                    if (result.status === "authorization_required") {
+                      window.location.href = result.authorization_url;
+                      return;
+                    }
+                    await Promise.all([
+                      mutate(SWR_KEYS.adminMcpServers),
+                      ...(defaultChat.canEdit
+                        ? [mutate(SWR_KEYS.defaultAssistantConfig)]
+                        : []),
+                      refreshMemberPluginCaches(mutate),
+                    ]).catch((error: unknown) =>
+                      console.error("Error refreshing MCP servers:", error)
+                    );
+                    onCompleted(result.server);
                   };
                   return (
                     <>
                       <div
                         hidden={step !== "server"}
+                        ref={serverPanel}
                         className={connection ? styles.panel : undefined}
                         data-direction="back"
                       >
@@ -346,6 +369,7 @@ function MCPSetupSession({
                             <InputTypeIn
                               id="mcp-setup-initial-name"
                               name="name"
+                              ref={nameInput}
                               value={details.values.name}
                               onChange={details.handleChange}
                               placeholder={t("addMcpModal.name.title")}
@@ -360,7 +384,6 @@ function MCPSetupSession({
                               id="mcp-setup-url"
                               name="server_url"
                               type="url"
-                              ref={urlInput}
                               value={url}
                               placeholder={t("placeholders.mcpServerUrl")}
                               variant={
@@ -411,150 +434,162 @@ function MCPSetupSession({
                             </div>
                           )}
                           <div
-                            className={styles.detection}
-                            data-open={!!(checking || checked)}
-                            inert={!(checking || checked)}
-                            aria-hidden={!(checking || checked)}
+                            role={
+                              checked?.kind === "unreachable"
+                                ? "alert"
+                                : "status"
+                            }
+                            className="flex flex-col gap-3"
                           >
-                            <div className={styles.detectionContent}>
-                              <div
-                                role={
-                                  checking || checked
-                                    ? checked?.kind === "unreachable"
-                                      ? "alert"
-                                      : "status"
-                                    : undefined
-                                }
-                                className="flex flex-col gap-3"
-                              >
-                                {(
-                                  [
-                                    "contacting_server",
-                                    "authentication",
-                                  ] as const
-                                ).map((stage) => {
-                                  const state =
-                                    checked?.kind === "oauth" ||
-                                    checked?.kind === "public"
-                                      ? "success"
-                                      : progress[stage];
-                                  return (
-                                    <div
-                                      key={stage}
-                                      className={cn(
-                                        "grid grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-3",
-                                        styles.stage
-                                      )}
-                                      data-stage={stage}
-                                      data-state={state ?? "waiting"}
-                                    >
-                                      <span
-                                        aria-hidden="true"
-                                        className={styles.statusIcon}
-                                      >
-                                        <span data-icon="pending">
-                                          <IconLoader size={16} />
-                                        </span>
-                                        <span data-icon="success">
-                                          <SvgCheck className="size-4 text-status-success-05" />
-                                        </span>
-                                        <span data-icon="error">
-                                          <SvgX className="size-4 text-status-error-05" />
-                                        </span>
-                                        <span data-icon="waiting">
-                                          <span className="size-1 rounded-full bg-text-02" />
-                                        </span>
-                                      </span>
-                                      <Text
-                                        font="secondary-body"
-                                        color={state ? "text-04" : "text-02"}
-                                      >
-                                        {t(
-                                          checked &&
-                                            checked.kind !== "unreachable"
-                                            ? stage === "contacting_server"
-                                              ? "mcpAuthModal.authType.label"
-                                              : "mcpAuthModal.transport.label"
-                                            : stage === "contacting_server"
-                                              ? "mcpSetup.contactingServer"
-                                              : "mcpSetup.detectingAuthentication"
-                                        )}
-                                      </Text>
-                                      <Text
-                                        font="secondary-body"
-                                        color="text-03"
-                                      >
-                                        {checked &&
-                                        checked.kind !== "unreachable"
-                                          ? stage === "contacting_server"
-                                            ? t(
-                                                checked.kind === "oauth"
-                                                  ? "mcpSetup.oauthDetected"
-                                                  : checked.kind === "public"
-                                                    ? "mcpSetup.publicDetected"
-                                                    : "mcpSetup.manualRequired"
-                                              )
-                                            : t(
-                                                checked.transport ===
-                                                  MCPTransportType.SSE
-                                                  ? "mcpAuthModal.transport.sseLabel"
-                                                  : "mcpAuthModal.transport.httpLabel"
-                                              )
-                                          : t(
-                                              state === "pending"
-                                                ? "mcpSetup.stagePending"
-                                                : state === "success"
-                                                  ? "mcpSetup.stageSuccess"
-                                                  : state === "error"
-                                                    ? "mcpSetup.stageError"
-                                                    : "mcpSetup.stageWaiting"
-                                            )}
-                                      </Text>
-                                    </div>
-                                  );
-                                })}
-                                {checked?.kind === "unreachable" && (
-                                  <Text font="secondary-body" color="text-03">
-                                    {t("mcpSetup.unreachable")}
-                                  </Text>
-                                )}
-                                {checked?.kind === "unreachable" && (
-                                  <Text font="secondary-body" color="text-03">
+                            {(
+                              ["authentication", "contacting_server"] as const
+                            ).map((stage) => {
+                              let state =
+                                probe.kind === "idle" ||
+                                probe.url !== normalizedUrl
+                                  ? "idle"
+                                  : checked?.kind === "oauth" ||
+                                      checked?.kind === "public"
+                                    ? "success"
+                                    : (progress[stage] ?? "pending");
+                              if (
+                                checked?.kind === "unreachable" &&
+                                state === "pending"
+                              ) {
+                                state = "error";
+                              }
+                              return (
+                                <div
+                                  key={stage}
+                                  className={cn(
+                                    "grid grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-3",
+                                    styles.stage
+                                  )}
+                                  data-stage={stage}
+                                  data-state={state}
+                                >
+                                  <span
+                                    aria-hidden="true"
+                                    className={styles.statusIcon}
+                                  >
+                                    <span data-icon="idle">
+                                      <SvgMinus className="size-4 text-text-02" />
+                                    </span>
+                                    <span data-icon="pending">
+                                      <IconLoader size={16} />
+                                    </span>
+                                    <span data-icon="success">
+                                      <SvgCheck className="size-4 text-status-success-05" />
+                                    </span>
+                                    <span data-icon="error">
+                                      <SvgX className="size-4 text-status-error-05" />
+                                    </span>
+                                  </span>
+                                  <Text font="secondary-body" color="text-04">
                                     {t(
-                                      checked.reason === "blocked"
-                                        ? "mcpSetup.blocked"
-                                        : "mcpSetup.retryCheck"
+                                      stage === "authentication"
+                                        ? "mcpAuthModal.authType.label"
+                                        : "mcpAuthModal.transport.label"
                                     )}
                                   </Text>
+                                  <Text font="secondary-body" color="text-03">
+                                    {checked && checked.kind !== "unreachable"
+                                      ? stage === "authentication"
+                                        ? t(
+                                            checked.kind === "oauth"
+                                              ? "mcpSetup.oauthDetected"
+                                              : checked.kind === "public"
+                                                ? "mcpSetup.publicDetected"
+                                                : "mcpSetup.manualRequired"
+                                          )
+                                        : t(
+                                            checked.transport ===
+                                              MCPTransportType.SSE
+                                              ? "mcpAuthModal.transport.sseLabel"
+                                              : "mcpAuthModal.transport.httpLabel"
+                                          )
+                                      : state === "idle"
+                                        ? undefined
+                                        : t(
+                                            state === "pending"
+                                              ? "mcpSetup.stagePending"
+                                              : state === "success"
+                                                ? "mcpSetup.stageSuccess"
+                                                : "mcpSetup.stageError"
+                                          )}
+                                  </Text>
+                                </div>
+                              );
+                            })}
+                            {checked?.kind === "unreachable" && (
+                              <Text font="secondary-body" color="text-03">
+                                {t("mcpSetup.unreachable")}
+                              </Text>
+                            )}
+                            {checked?.kind === "unreachable" && (
+                              <Text font="secondary-body" color="text-03">
+                                {t(
+                                  checked.reason === "blocked"
+                                    ? "mcpSetup.blocked"
+                                    : "mcpSetup.retryCheck"
                                 )}
-                                {checked?.kind === "unreachable" && (
-                                  <div className="flex flex-wrap gap-3">
-                                    <Button
-                                      prominence="secondary"
-                                      onClick={() =>
-                                        setRetry((value) => value + 1)
-                                      }
-                                    >
-                                      {t("mcpSetup.retry")}
-                                    </Button>
-                                    {checked.reason === "connection_failed" && (
-                                      <Button
-                                        prominence="tertiary"
-                                        onClick={() =>
-                                          continueToConnection({
-                                            kind: "auth_unknown",
-                                            transport: null,
-                                          })
-                                        }
-                                      >
-                                        {t("mcpSetup.configureManually")}
-                                      </Button>
-                                    )}
-                                  </div>
+                              </Text>
+                            )}
+                            {checked?.kind === "unreachable" && (
+                              <div className="flex flex-wrap gap-3">
+                                <Button
+                                  prominence="secondary"
+                                  onClick={() => setRetry((value) => value + 1)}
+                                >
+                                  {t("mcpSetup.retry")}
+                                </Button>
+                                {checked.reason === "connection_failed" && (
+                                  <Button
+                                    prominence="tertiary"
+                                    disabled={!accessReady}
+                                    onClick={() =>
+                                      continueToConnection({
+                                        kind: "auth_unknown",
+                                        transport: null,
+                                      })
+                                    }
+                                  >
+                                    {t("mcpSetup.configureManually")}
+                                  </Button>
                                 )}
                               </div>
-                            </div>
+                            )}
                           </div>
+                          <Divider paddingParallel={0} />
+                          <MCPAccessControl
+                            isGlobalHolder={isGlobalHolder}
+                            isScopedManager={isScopedManager}
+                            canRestrict={canRestrict}
+                            disabled={busy}
+                          />
+                          {defaultChat.canEdit && (
+                            <PluginAvailabilitySwitch
+                              surface="chat"
+                              enabled={enableChat}
+                              disabled={busy}
+                              onChange={setEnableChat}
+                            />
+                          )}
+                          {settings.onyx_craft_available === true && (
+                            <PluginAvailabilitySwitch
+                              surface="mcp-craft"
+                              enabled={
+                                details.values.available_in_craft === true
+                              }
+                              disabled={busy}
+                              onChange={(enabled) =>
+                                void details.setFieldValue(
+                                  "available_in_craft",
+                                  enabled
+                                )
+                              }
+                            />
+                          )}
                           <MCPFormActions
                             variant="modal"
                             active={step === "server"}
@@ -567,7 +602,9 @@ function MCPSetupSession({
                             submit={
                               <Button
                                 disabled={
-                                  !checked || checked.kind === "unreachable"
+                                  !checked ||
+                                  checked.kind === "unreachable" ||
+                                  !accessReady
                                 }
                                 onClick={() => {
                                   if (checked && checked.kind !== "unreachable")
@@ -597,80 +634,16 @@ function MCPSetupSession({
                               description: details.values.description,
                               server_url: connection.url,
                             }}
-                            resolveServer={resolveServer}
-                            enableChatOnConnect={defaultChat.canEdit}
+                            onCreate={createServer}
                             recommendation={connection.recommendation}
                             canSubmit={
                               details.isValid &&
-                              (details.values.is_public || canRestrict) &&
-                              !(defaultChat.canEdit && defaultChat.isLoading) &&
-                              !(
-                                details.values.access_mode === "groups" &&
-                                (groupsLoading || !!groupsError)
-                              )
-                            }
-                            beforeFields={
-                              <FormikProvider value={details}>
-                                <div
-                                  hidden={step === "server"}
-                                  className={styles.panel}
-                                  data-direction="forward"
-                                >
-                                  <Section
-                                    gap={4}
-                                    alignItems="stretch"
-                                    height="auto"
-                                  >
-                                    <MCPAccessControl
-                                      isGlobalHolder={isGlobalHolder}
-                                      isScopedManager={isScopedManager}
-                                      canRestrict={canRestrict}
-                                      disabled={busy}
-                                    />
-                                  </Section>
-                                </div>
-                              </FormikProvider>
+                              accessReady &&
+                              !(defaultChat.canEdit && defaultChat.isLoading)
                             }
                             onBusyChange={setBusy}
                             onBack={() => setStep("server")}
                             onCancel={leave}
-                            onSaved={async () => {
-                              await mutate(SWR_KEYS.adminMcpServers);
-                            }}
-                            onTriggerFetchTools={async (id, token) => {
-                              await updateMCPServerStatus(
-                                id,
-                                MCPServerStatus.FETCHING_TOOLS
-                              );
-                              const tools = await refreshMCPServerTools(id);
-                              await mutate(
-                                SWR_KEYS.adminMcpServerToolSnapshots(id),
-                                tools,
-                                { revalidate: false }
-                              );
-                              if (
-                                defaultChat.canEdit &&
-                                tools.length > 0 &&
-                                consumeMcpChatEnableIntent(token, {
-                                  userId: actor.current,
-                                  serverId: id,
-                                })
-                              ) {
-                                if (!defaultChat.data || defaultChat.error)
-                                  throw new Error(
-                                    t("addMcpModal.toasts.updateFailed")
-                                  );
-                                await defaultChat.updateTools(
-                                  tools.map((tool) => tool.id),
-                                  true
-                                );
-                              }
-                              await refreshMemberPluginCaches(mutate);
-                            }}
-                            onComplete={() => {
-                              if (!savedServer.current) return;
-                              onCompleted(savedServer.current);
-                            }}
                           />
                         </div>
                       )}

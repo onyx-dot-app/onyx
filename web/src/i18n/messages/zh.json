@@ -124,13 +124,7 @@
     },
     "addMcpModal": {
       "addHeader": {
-        "description": "连接 MCP（Model Context Protocol）服务器以添加自定义操作。",
         "title": "添加 MCP 服务器"
-      },
-      "authStatus": {
-        "apiTokenDescription": "已配置 API token",
-        "connectedDescription": "已连接",
-        "title": "已验证身份并连接"
       },
       "cancelButton": {
         "label": "取消"
@@ -140,16 +134,6 @@
         "suffix": "可选",
         "title": "描述"
       },
-      "disconnectButton": {
-        "tooltip": "断开服务器连接"
-      },
-      "editConfigsButton": {
-        "label": "连接设置"
-      },
-      "manageHeader": {
-        "description": "更新 MCP 服务器配置并管理身份验证。",
-        "title": "管理 MCP 服务器"
-      },
       "name": {
         "placeholder": "例如 Linear",
         "required": "必须填写服务器名称",
@@ -157,19 +141,13 @@
       },
       "serverUrl": {
         "invalid": "必须是有效的 URL",
-        "required": "必须填写服务器 URL",
         "title": "MCP 服务器 URL"
       },
       "submitButton": {
-        "addLabel": "添加服务器",
-        "addingLabel": "正在添加...",
         "saveLabel": "保存更改",
         "savingLabel": "正在保存..."
       },
       "toasts": {
-        "createFailed": "创建 MCP 服务器失败",
-        "serverCreated": "MCP 服务器创建成功",
-        "serverUpdated": "MCP 服务器更新成功",
         "updateFailed": "更新 MCP 服务器失败"
       },
       "access": {
@@ -192,27 +170,13 @@
         "planTag": "Business",
         "planNote": "用户组访问需要 Business 套餐。"
       },
-      "craft": {
-        "title": "在 Craft 中可用",
-        "description": "允许用户在 Craft 中访问此 MCP 服务器。"
-      },
       "defaultChat": {
-        "title": "在默认 Onyx 聊天中可用",
-        "description": "关闭后，用户需要将此服务器添加到自定义智能体才能在聊天中使用。"
+        "title": "在默认 Onyx 聊天中可用"
       }
     },
     "addOpenApiModal": {
       "addHeader": {
-        "description": "添加 OpenAPI 架构以添加自定义操作。",
-        "title": "添加 OpenAPI 操作"
-      },
-      "authStatus": {
-        "configuredTitle": "已配置身份验证",
-        "enabledTitle": "已验证身份并启用",
-        "headersDescription": "已配置自定义身份验证请求头",
-        "oauthDescription": "已配置 OAuth 身份验证",
-        "oauthNamedDescription": "已通过 {name} 连接 OAuth",
-        "passthroughDescription": "已启用透传身份验证"
+        "title": "添加 OpenAPI 插件"
       },
       "cancelButton": {
         "label": "取消"
@@ -224,19 +188,14 @@
         "invalidJson": "JSON 格式无效",
         "placeholder": "在此输入您的 OpenAPI 架构",
         "required": "必须填写 OpenAPI 架构定义",
-        "subDescription": "指定一个 OpenAPI 架构，用于定义您想作为此操作一部分开放的 API。您可以在架构的任意位置使用占位符 `CHAT_SESSION_ID`、`MESSAGE_ID`、`USER_ID` 和 `USER_EMAIL`（例如服务器 URL、路径、参数默认值），调用时它们会被替换为当前请求的值。详细了解 [OpenAPI 操作]({docsUrl})。",
+        "subDescription": "指定一个 OpenAPI 架构，用于定义您想作为此插件一部分开放的 API。您可以在架构的任意位置使用占位符 `CHAT_SESSION_ID`、`MESSAGE_ID`、`USER_ID` 和 `USER_EMAIL`（例如服务器 URL、路径、参数默认值），调用时它们会被替换为当前请求的值。详细了解 [OpenAPI 插件]({docsUrl})。",
         "title": "OpenAPI 架构定义"
       },
-      "disableButton": {
-        "tooltip": "禁用操作"
-      },
       "editConfigsButton": {
-        "disabledTooltip": "只有该操作的创建者或管理员才能管理身份验证",
-        "label": "编辑配置"
+        "disabledTooltip": "只有该插件的创建者或管理员才能管理身份验证"
       },
       "editHeader": {
-        "description": "更新此操作的 OpenAPI 架构。",
-        "title": "编辑 OpenAPI 操作"
+        "title": "编辑 OpenAPI 插件"
       },
       "empty": {
         "description": "提供 OpenAPI 架构后即可在此预览操作。",
@@ -248,21 +207,27 @@
       "method": {
         "noSummary": "未提供摘要"
       },
-      "serverUrl": {
-        "description": "从架构中找到的 URL。只连接您信任的服务器。"
-      },
       "submitButton": {
-        "addLabel": "添加操作",
+        "addLabel": "添加插件",
         "addingLabel": "正在添加...",
         "saveLabel": "保存更改",
         "savingLabel": "正在保存..."
       },
       "toasts": {
-        "actionCreated": "OpenAPI 操作创建成功",
-        "actionUpdated": "OpenAPI 操作更新成功",
-        "createFailed": "创建 OpenAPI 操作失败",
+        "actionCreated": "OpenAPI 插件创建成功",
+        "actionUpdated": "OpenAPI 插件更新成功",
+        "createFailed": "创建 OpenAPI 插件失败",
         "invalidJson": "OpenAPI 架构定义中的 JSON 格式无效",
-        "updateFailed": "更新 OpenAPI 操作失败"
+        "updateFailed": "更新 OpenAPI 插件失败"
+      },
+      "humanDescription": {
+        "title": "面向用户的描述",
+        "hint": "显示在插件卡片和插件详情中。"
+      },
+      "agentDescription": {
+        "title": "面向智能体的描述",
+        "hint": "编辑 OpenAPI 架构中的 info.description。",
+        "disabled": "请输入有效的架构以编辑此字段。"
       }
     },
     "cardHeader": {
@@ -322,18 +287,22 @@
       },
       "authType": {
         "apiToken": {
-          "label": "API 密钥"
+          "label": "API 密钥",
+          "description": "使用每位用户的独立 API 密钥，或组织范围的共享 API 密钥。"
         },
         "label": "身份验证方式",
         "none": {
-          "label": "无需身份验证"
+          "label": "无需身份验证",
+          "description": "不推荐"
         },
         "oauth": {
-          "label": "OAuth"
+          "label": "OAuth",
+          "description": "每位用户需要使用各自的凭据通过 OAuth 验证身份。"
         },
         "placeholder": "选择方式",
         "ptOauth": {
-          "label": "OAuth 透传"
+          "label": "OAuth 透传",
+          "description": "转发用户用于验证 {appName} 身份的 OAuth 访问 token。"
         },
         "required": "必须选择身份验证类型"
       },
@@ -358,13 +327,13 @@
         "saveAuthFailed": "保存身份验证配置失败",
         "saveConfigFailed": "保存服务器配置失败",
         "saveStage": "无法保存连接设置",
-        "oauthStage": "无法开始登录",
-        "discoveryStage": "无法加载服务器工具",
         "loadStage": "无法加载连接设置",
         "clientRegistrationFailed": "自动注册客户端失败。请使用自己的 OAuth 客户端，或检查提供商的设置要求。",
+        "clientMetadataRejected": "提供方无法使用客户端元数据文档。如果此实例无法从公共互联网访问，请关闭“使用客户端元数据文档”后重新连接。",
         "discoveryFailed": "未找到 OAuth 登录设置。请检查服务器 URL，或输入提供商提供的端点。",
-        "connectionFailed": "无法连接 OAuth 服务器。请检查服务器 URL 后重试。",
-        "oauthFailed": "无法开始 OAuth 登录。请检查客户端设置后重试。"
+        "connectionFailed": "无法连接服务器。请检查服务器 URL 后重试。",
+        "oauthFailed": "无法开始 OAuth 登录。请检查客户端设置后重试。",
+        "oauthInitFailed": "发起 OAuth 失败：{detail}"
       },
       "header": {
         "defaultTitle": "配置身份验证",
@@ -441,6 +410,11 @@
           "description": "输入提供商提供的客户端 ID。仅在需要时添加密钥。"
         }
       },
+      "cimd": {
+        "label": "使用客户端元数据文档",
+        "description": "开启后，提供方会通过公共互联网获取 {appName} 的客户端元数据文档。如果此 {appName} 实例不对外公开，请关闭此选项。{appName} 将改用自动客户端注册。",
+        "turnOff": "关闭客户端元数据文档"
+      },
       "discovery": {
         "checking": "正在检查自动设置…",
         "supported": "可以使用自动设置",
@@ -453,12 +427,16 @@
         "unreachableTitle": "无法确定是否可以使用自动设置",
         "missingTitle": "未找到 OAuth 端点",
         "requiresClientTitle": "可能无法使用自动设置"
+      },
+      "advanced": {
+        "description": "配置已知的 OAuth 提供方，明确指定授权端点和 token 端点，不使用自动发现。",
+        "title": "高级"
+      },
+      "knownProvider": {
+        "hint": "已知提供方模式需要配置端点。Google 参考端点：授权端点 {authorizationEndpoint}，token 端点 {tokenEndpoint}。"
       }
     },
     "mcpCard": {
-      "card": {
-        "ariaLabel": "{title} MCP 服务器卡片"
-      },
       "deleteModal": {
         "body": {
           "confirmation": "确定要删除此 MCP 服务器吗？",
@@ -468,27 +446,6 @@
           "label": "删除"
         },
         "title": "删除 MCP 服务器"
-      },
-      "lastRefreshed": {
-        "label": "工具上次刷新时间：{time}"
-      },
-      "refreshToolsButton": {
-        "ariaLabel": "刷新工具",
-        "tooltip": "刷新工具"
-      },
-      "setupIncomplete": {
-        "label": "设置未完成。",
-        "actionHint": "设置未完成。点击完成设置。"
-      },
-      "status": {
-        "ready": "就绪 · {count, plural, one {# 个工具} other {# 个工具}}",
-        "incomplete": "设置未完成",
-        "loading": "正在加载工具",
-        "disconnected": "已断开连接"
-      },
-      "authenticationButton": {
-        "tooltip": "配置身份验证",
-        "ariaLabel": "配置 {serverName} 的身份验证"
       }
     },
     "mcpOauthCallback": {
@@ -550,25 +507,10 @@
       },
       "toasts": {
         "deleteFailed": "删除 MCP 服务器失败",
-        "disableAllFailed": "禁用所有工具失败",
         "disconnectFailed": "断开 MCP 服务器连接失败",
-        "enableAllFailed": "启用所有工具失败",
         "fetchToolsFailed": "获取工具失败：{error}",
-        "noToolsToDisable": "没有可禁用的工具",
         "reconnectFailed": "重新连接 MCP 服务器失败",
-        "refreshToolsFailed": "刷新工具失败",
-        "renameFailed": "重命名 MCP 服务器失败",
-        "serverDeleted": "MCP 服务器删除成功",
-        "serverDisconnected": "MCP 服务器已成功断开连接",
-        "serverReconnected": "MCP 服务器重新连接成功",
-        "serverRenamed": "MCP 服务器重命名成功",
-        "toolDisabled": "工具已成功禁用",
-        "toolEnabled": "工具已成功启用",
-        "toolUpdateFailed": "更新工具失败",
-        "toolsDisabled": "{count, plural, one {已成功禁用 # 个工具} other {已成功禁用 # 个工具}}",
-        "toolsEnabled": "{count, plural, one {已成功启用 # 个工具} other {已成功启用 # 个工具}}",
-        "toolsFetched": "工具已加载",
-        "toolsRefreshed": "工具刷新成功"
+        "serverDeleted": "MCP 服务器删除成功"
       }
     },
     "openApiAuthModal": {
@@ -611,13 +553,13 @@
         "loadConfigFailed": "加载现有 OAuth 配置失败。请重新输入详细信息以更新配置。"
       },
       "header": {
-        "description": "验证连接身份后即可开始使用 OpenAPI 操作。"
+        "description": "验证连接身份后即可开始使用 OpenAPI 插件。"
       },
       "headers": {
         "addButton": {
           "label": "添加请求头"
         },
-        "description": "为发送到此操作 API 端点的所有请求指定自定义请求头。",
+        "description": "为发送到此插件 API 端点的所有请求指定自定义请求头。",
         "keyRequired": "必须填写请求头名称",
         "keyTitle": "请求头",
         "minRequired": "请至少添加一个身份验证请求头",
@@ -690,7 +632,7 @@
         "submitButton": {
           "label": "删除"
         },
-        "title": "删除 OpenAPI 操作"
+        "title": "删除 OpenAPI 插件"
       },
       "method": {
         "noSummary": "未提供摘要"
@@ -704,27 +646,15 @@
       "addButton": {
         "label": "添加 OpenAPI 操作"
       },
-      "authModal": {
-        "authenticateTitle": "验证 {name} 的身份",
-        "defaultTitle": "验证 OpenAPI 操作的身份",
-        "updateTitle": "更新 {name} 的身份验证"
-      },
       "empty": {
         "description": "通过 OpenAPI 架构添加自定义操作。"
       },
       "toasts": {
-        "actionRenamed": "OpenAPI 操作重命名成功",
-        "authHeadersSaved": "{name} 的身份验证请求头保存成功。",
-        "authPassthroughSaved": "{name} 的身份验证透传保存成功。",
         "authSaveFailed": "保存身份验证设置失败。",
         "authSaved": "{name} 的身份验证保存成功。",
-        "authUpdated": "{name} 的身份验证更新成功。",
         "deleteFailed": "删除工具失败。",
-        "deleteUnexpectedError": "删除工具时发生意外错误。",
         "disconnectFailed": "断开 OpenAPI 操作连接失败。",
-        "renameFailed": "重命名 OpenAPI 操作失败",
-        "toolDeleted": "{name} 删除成功。",
-        "toolDisconnected": "{name} 已断开连接。"
+        "toolDeleted": "{name} 删除成功。"
       }
     },
     "perUserAuth": {
@@ -733,7 +663,9 @@
       },
       "credentials": {
         "perUserDescription": "使用您的凭据测试此 MCP 并加载其工具。凭据仅保存到您的账号。",
-        "sharedDescription": "这些值将用于您组织中的每位用户。"
+        "sharedDescription": "这些值将用于您组织中的每位用户。",
+        "perUserTitle": "仅用于您自己的账户",
+        "sharedTitle": "组织共享的值"
       },
       "headers": {
         "addButton": {
@@ -757,7 +689,7 @@
         "label": "询问"
       },
       "deny": {
-        "label": "拒绝"
+        "label": "已禁用"
       }
     },
     "switchList": {
@@ -832,7 +764,7 @@
           "tooltip": "配置图像生成"
         },
         "openapi": {
-          "tooltip": "管理 OpenAPI 操作"
+          "tooltip": "管理 OpenAPI 插件"
         },
         "webSearch": {
           "tooltip": "配置网络搜索"
@@ -982,7 +914,7 @@
       "kind": {
         "mcp": "MCP",
         "openapi": "OpenAPI",
-        "external-app": "Craft 应用"
+        "external-app": "Craft 应用程序"
       },
       "row": {
         "view": "查看{name}",
@@ -991,7 +923,7 @@
       "status": {
         "connected": "已连接",
         "workspace": "工作区连接",
-        "session": "使用您的登录信息",
+        "session": "使用您已连接的账户",
         "none": "可直接使用",
         "oauth": "连接您的账户",
         "credentials": "添加您的凭据",
@@ -1005,7 +937,11 @@
         "craft": "Craft",
         "on": "开启",
         "off": "关闭",
-        "unknown": "未知"
+        "unknown": "未知",
+        "disabledByAdmin": "已被管理员禁用",
+        "disabledByYou": "已被你禁用",
+        "agents": "自定义智能体",
+        "notAvailable": "不可用"
       },
       "state": {
         "loading": "正在加载插件",
@@ -1022,17 +958,15 @@
         "emptyDescription": "请尝试其他连接筛选条件，或请工作区管理员添加插件。"
       },
       "detail": {
+        "issuesTitle": "问题",
+        "noAuthentication": "无需身份验证",
         "connection": "连接",
-        "serverUrl": "服务器URL",
         "tools": "工具",
         "toolCount": "{count, plural, other {#个工具}}",
-        "toolsDescription": "此工作区插件提供的工具。",
         "noTools": "此插件尚未保存可见的工具。",
         "connect": "连接账户",
         "useInChat": "在聊天中使用",
-        "chatDisabled": "此插件尚未在主聊天中启用。工作区管理员可以更改其可用性。",
-        "chatUnknown": "无法确认主聊天中的可用性。",
-        "disconnect": "断开账户连接",
+        "disconnect": "断开连接",
         "disconnectTitle": "断开{name}的连接？",
         "disconnectDescription": "此操作将移除您的账户连接。工作区可用性保持不变。",
         "oauthDisconnectWarning": "使用相同OAuth配置的所有插件和应用会共享此账户连接。断开连接将移除您与所有这些插件和应用的连接。",
@@ -1077,18 +1011,20 @@
         "showAll": "查看所有插件"
       },
       "defaults": {
-        "chat": "在主聊天中默认启用",
-        "craft": "在 Craft 中默认启用",
-        "chatDescription": "适用于默认聊天。自定义智能体保留各自的工具设置。",
-        "craftDescription": "在你的 Craft 会话中使用此 MCP。",
+        "chat": "在默认聊天中启用",
+        "craft": "在 Craft 中启用",
+        "chatDescription": "在您未使用自定义智能体的聊天中提供此插件。",
+        "craftDescription": "在您的 Craft 会话和计划任务中提供此插件。您组织的工具权限仍然适用。",
         "unavailable": "管理员已在 {surface} 中禁用此插件。",
-        "saveFailed": "无法保存你的插件默认设置。请重试。"
+        "saveFailed": "无法保存你的插件默认设置。请重试。",
+        "chatUnavailable": "管理员已在 {surface} 中禁用此插件。配置了此插件的自定义智能体仍可能使用它。"
       },
       "openapi": {
         "chatOnly": "仅限 Chat",
         "chatOnlyDescription": "此插件可用于 Chat，不能用于 Craft。"
       },
       "appSkills": {
+        "preview": "预览",
         "search": "搜索技能",
         "count": "{count, plural, one {# 个技能} other {# 个技能}}",
         "empty": "此应用没有关联的技能。",
@@ -1101,7 +1037,8 @@
       "externalApp": {
         "description": "在 Craft 中使用你的账号。",
         "craftOnly": "仅限 Craft",
-        "craftOnlyDescription": "此应用可在 Craft 中使用。主聊天暂不支持。"
+        "craftOnlyDescription": "此应用可在 Craft 中使用。主聊天暂不支持。",
+        "craftDisabledDescription": "此应用在 Craft 中已禁用。主聊天不支持此应用。"
       }
     },
     "plugins": {
@@ -1126,9 +1063,14 @@
         "manageAvailability": "管理工作区可用性",
         "more": "更多操作",
         "disableChat": "在主聊天中禁用",
-        "enableChat": "在主聊天中启用",
+        "enableChat": "在默认聊天中启用",
         "disableCraft": "在 Craft 中禁用",
-        "enableCraft": "在 Craft 中启用"
+        "enableCraft": "在 Craft 中启用",
+        "chatDescription": "在未选择自定义智能体的聊天中提供此插件。访问控制仍然适用。",
+        "defaultChatAdminOnly": "只有工作区管理员可以更改默认聊天中的可用性。",
+        "mcpCraftDescription": "在 Craft 中提供此插件。访问控制和工具权限仍然适用。",
+        "craftAppDescription": "在 Craft 中提供此应用。连接和审批要求仍然适用。",
+        "workspaceDescription": "允许在 Chat 和自定义智能体中使用此插件。访问控制和身份验证要求仍然适用。"
       },
       "craftApp": {
         "tabs": {
@@ -1152,19 +1094,14 @@
           "viewTools": "查看工具",
           "saveToUpdate": "保存更改以更新工具。"
         },
-        "reviewTitle": "检查 {name}",
         "createTitle": "添加 OpenAPI 插件",
         "detailDescription": "管理此 API 和智能体可用的工具。",
-        "detailsTitle": "插件详情",
+        "detailsTitle": "配置",
         "schemaTitle": "OpenAPI 架构",
-        "editSchema": "编辑架构",
         "notFound": "未找到插件",
         "loadFailed": "无法加载此插件",
         "unavailable": "此插件可能已被删除，或你没有访问权限。",
         "readOnly": "你可以查看此插件，但你的账户无法更改其设置。",
-        "disableTitle": "停用 {name}？",
-        "disableDescription": "智能体将无法再使用此插件。你可以重新启用它。",
-        "deleteTitle": "删除 {name}？",
         "deleteDescription": "这会永久删除 OpenAPI 插件及其配置。"
       },
       "title": "插件",
@@ -1175,7 +1112,7 @@
       "add": {
         "label": "添加",
         "mcp": "添加自定义 MCP 服务器",
-        "openapi": "添加 OpenAPI 操作"
+        "openapi": "添加 OpenAPI 插件"
       },
       "catalog": {
         "slack": {
@@ -1213,6 +1150,7 @@
         }
       },
       "row": {
+        "externalAppKind": "Craft 应用",
         "manage": {
           "label": "管理 {name}"
         },
@@ -1233,7 +1171,7 @@
       "state": {
         "mcpError": "无法加载 MCP 服务器。",
         "listErrorDescription": "无法加载此插件列表。请稍后重试。",
-        "openapiError": "无法加载 OpenAPI 操作。",
+        "openapiError": "无法加载 OpenAPI 插件。",
         "retry": {
           "label": "重试"
         },
@@ -1291,35 +1229,57 @@
     },
     "mcpTools": {
       "title": "工具",
-      "description": "选择可用工具并设置其权限。",
       "enabledTab": "可用工具",
-      "policiesTab": "Craft 权限",
-      "enabledDescription": "选择用户可以在 Onyx 中使用的工具。",
-      "policiesDescription": "选择 Craft 在使用各项工具前何时请求批准。",
-      "back": "身份验证",
+      "policiesTab": "审批设置",
       "refresh": "刷新工具",
       "loadError": "无法加载工具",
       "saveError": "无法保存工具设置",
       "refreshError": "无法刷新工具",
-      "search": "搜索工具"
+      "search": "搜索工具",
+      "enabledCount": "已启用工具：{enabled} / {total}"
     },
     "mcpDetail": {
-      "configuration": "服务器配置",
-      "editConfiguration": "编辑服务器配置",
+      "configuration": "配置",
       "authentication": "身份验证",
-      "editAuthentication": "编辑身份验证",
-      "availability": "可用范围",
-      "edit": "编辑",
       "loadError": "无法加载 MCP 服务器",
       "notFound": "未找到 MCP 服务器",
       "unavailable": "此服务器可能已被删除，或者您没有访问权限。",
       "retry": "重试",
-      "restrictedAccess": "{groups, plural, one {# 个群组} other {# 个群组}} · {users, plural, one {# 位用户} other {# 位用户}}",
-      "authenticationIncomplete": "尚未配置身份验证。",
       "availabilitySaved": "可用范围已更新"
     }
   },
   "admin": {
+    "decisionModels": {
+      "sharedModelSettings": "在语言模型中管理聊天设置",
+      "decisionModel": {
+        "title": "决策模型",
+        "openAiDecisionsModelName": "OpenAI 决策 (GPT-6 Luna)",
+        "description": "选择用于未来分类和审核功能的模型。Onyx 尚未使用此模型。",
+        "clear": "清除",
+        "notConfigured": "未配置",
+        "saved": "决策模型已更新",
+        "saveFailed": "无法更新决策模型"
+      },
+      "header": {
+        "title": "决策模型",
+        "description": "管理决策模型提供商并选择可选的决策模型。"
+      },
+      "providers": {
+        "title": "提供商",
+        "description": "连接提供商或管理其决策模型。",
+        "clearBeforeRemoval": "移除此提供商前，请先清除已选的决策模型。",
+        "connect": "连接"
+      },
+      "loadFailed": "无法加载决策模型。",
+      "retry": "重试",
+      "zoom": {
+        "title": "连接 Zoom AI Services",
+        "description": "Zoom Scribe 和 Zoom AI Decisions 共用一个连接。更改会同时应用于两者。",
+        "connection": "Zoom 连接",
+        "selectConnection": "选择 Zoom 连接",
+        "removeDescription": "这将从语音和决策模型中删除共享的 Zoom 连接。"
+      }
+    },
     "addConnector": {
       "categories": {
         "codeRepository": {
@@ -2263,43 +2223,30 @@
     },
     "chatPreferences": {
       "chatNaming": {
-        "description": "用于为对话会话命名的模型。默认使用各会话自身的模型。",
-        "resetButton": {
-          "label": "重置"
-        },
-        "sessionModel": {
-          "label": "使用默认模型"
-        },
-        "title": "会话命名模型"
+        "description": "生成会话标题。快速、低成本的模型即可胜任。",
+        "title": "聊天命名模型"
       },
       "searchSelectionModel": {
-        "description": "筛选并检查检索到的文档。低成本模型可以降低搜索费用，但可能影响回答质量。",
-        "resetButton": {
-          "label": "重置"
-        },
-        "sessionModel": {
-          "label": "使用默认模型"
-        },
-        "title": "搜索筛选模型"
+        "description": "选择并检查检索到的文档。快速、低成本的模型可以降低搜索成本，但可能影响回答质量。",
+        "title": "搜索选择模型"
       },
       "taskModels": {
-        "title": "模型选择",
         "loadFailed": "无法加载任务模型",
         "retry": {
           "label": "重试"
         },
-        "noProviders": {
-          "title": "连接语言模型提供商"
-        },
         "addProvider": {
           "label": "添加提供商"
+        },
+        "chatDefault": {
+          "label": "聊天默认"
         }
       },
       "advanced": {
         "title": "高级选项"
       },
       "anonymousUsers": {
-        "description": "允许任何人无需登录即可发起对话。他们看不到其他任何对话，也无法创建智能体或修改设置。",
+        "description": "允许任何人**无需登录**即可开始聊天。他们看不到其他聊天，也无法创建智能体或更改设置。",
         "title": "允许匿名用户"
       },
       "autoDetectFilters": {
@@ -2310,15 +2257,13 @@
         "description": "在对话生成回复时自动滚动到新内容。用户可以在个人设置中覆盖此项。",
         "title": "对话自动滚动"
       },
-      "betaTag": {
-        "label": "测试版"
-      },
       "connectors": {
+        "description": "聊天中内部搜索使用的来源。请在索引状态页面添加或更改。",
         "empty": {
           "title": "尚未设置连接器"
         },
         "manageAllButton": {
-          "label": "管理全部"
+          "label": "管理连接器"
         },
         "title": "连接器"
       },
@@ -2327,12 +2272,12 @@
         "title": "深度研究"
       },
       "defaultLanguage": {
-        "description": "未在个人设置中选择语言的用户所使用的界面语言。",
+        "description": "适用于未在个人设置中设定语言的用户的界面语言。",
         "title": "默认语言"
       },
       "disableDefaultChat": {
-        "description": "这会强制用户始终在智能体中开始对话。新对话将在其第一个已固定的智能体中创建。设置精选智能体可帮助新用户快速上手。",
-        "title": "禁用默认对话"
+        "description": "这会移除默认聊天。用户将始终在智能体中开始，新聊天将在其最近使用的智能体中创建。设置[精选智能体](/admin/agents)以帮助新用户快速上手。",
+        "title": "始终从智能体开始"
       },
       "fileLimits": {
         "default": {
@@ -2390,10 +2335,6 @@
           "label": "显示并附带用户信息"
         },
         "title": "查询历史可见性"
-      },
-      "reasoning": {
-        "description": "允许用户在对话的模型选择器中调整模型回答前的推理程度。",
-        "title": "推理控制"
       },
       "retention": {
         "custom": {
@@ -2465,26 +2406,13 @@
         "placeholder": "输入团队名称",
         "title": "团队名称"
       },
-      "temperature": {
-        "description": "允许用户在对话的模型选择器中调整模型回复的温度（创造性）。",
-        "title": "温度控制"
-      },
       "toasts": {
-        "chatNamingUpdated": "会话命名模型已更新",
-        "chatNamingReset": "会话命名模型已重置为默认模型",
         "chatNamingUpdateFailed": "更新会话命名模型失败",
-        "chatNamingResetFailed": "重置会话命名模型失败",
         "providerResolveFailed": "无法解析提供商",
-        "searchSelectionReset": "搜索筛选模型已重置为默认模型",
-        "searchSelectionResetFailed": "重置搜索筛选模型失败",
         "searchSelectionUpdateFailed": "更新搜索筛选模型失败",
-        "searchSelectionUpdated": "搜索筛选模型已更新",
         "settingsUpdateFailed": "更新设置失败",
-        "settingsUpdated": "设置已更新",
         "systemPromptUpdateFailed": "更新系统提示词失败",
-        "systemPromptUpdated": "系统提示词已更新",
         "toolsUpdateFailed": "更新工具失败",
-        "toolsUpdated": "工具已更新",
         "unknownError": "发生未知错误"
       },
       "tools": {
@@ -2497,6 +2425,7 @@
           "title": "编程智能体"
         },
         "description": "对话可以使用的工具和能力。此项不适用于智能体。",
+        "pluginsNote": "在[插件]({url})中配置默认聊天使用的 MCP 服务器和 OpenAPI 插件。",
         "imageGeneration": {
           "description": "使用 AI 工具生成和处理图像。",
           "disabledTooltip": "图像生成需要已配置的模型。请在“配置 > 图像生成”中设置一个，或联系管理员。",
@@ -2710,15 +2639,13 @@
       },
       "manageMenu": {
         "delete": {
-          "label": "删除",
-          "tooltip": {
-            "active": "删除前请先暂停连接器"
-          }
+          "label": "删除"
         },
         "reIndex": {
           "tooltip": {
             "indexing": "索引正在进行中，无法重新索引",
-            "invalid": "重新索引前请先修复连接器配置"
+            "invalid": "重新索引前请先修复连接器配置",
+            "paused": "重新索引前请先恢复连接器"
           }
         },
         "toggleStatus": {
@@ -2748,6 +2675,13 @@
         "startIndexing": {
           "label": "开始索引",
           "description": "跳过连接器检查并立即索引。"
+        },
+        "syncPermissions": {
+          "label": "同步权限",
+          "description": "立即从来源拉取每个文档的可读用户。",
+          "tooltip": {
+            "syncing": "权限同步已在排队或运行"
+          }
         }
       },
       "reEnableModal": {
@@ -2783,22 +2717,104 @@
           "postProcessing": {
             "label": "后处理"
           }
+        },
+        "stages": {
+          "batchLoad": {
+            "label": "批次加载"
+          },
+          "batchTotal": {
+            "label": "批次总计"
+          },
+          "batchUnaccounted": {
+            "label": "未归类"
+          },
+          "checkpointLoad": {
+            "label": "检查点加载"
+          },
+          "chunking": {
+            "label": "分块"
+          },
+          "connectorFetch": {
+            "label": "连接器抓取"
+          },
+          "connectorValidation": {
+            "label": "连接器验证"
+          },
+          "contextualRag": {
+            "label": "上下文 RAG"
+          },
+          "coordLockAcquireWait": {
+            "label": "协调锁获取等待"
+          },
+          "coordinationUpdate": {
+            "label": "协调更新"
+          },
+          "docBatchEnqueue": {
+            "label": "文档批次入队"
+          },
+          "docBatchStore": {
+            "label": "文档批次存储"
+          },
+          "docDbPrepare": {
+            "label": "文档数据库准备"
+          },
+          "docLockAcquireWait": {
+            "label": "文档锁等待"
+          },
+          "docprocessingSetup": {
+            "label": "文档处理初始化"
+          },
+          "embedding": {
+            "label": "Embedding"
+          },
+          "enrichmentPrep": {
+            "label": "元数据填充准备"
+          },
+          "finalization": {
+            "label": "收尾"
+          },
+          "gcCollect": {
+            "label": "垃圾回收"
+          },
+          "hierarchyUpsert": {
+            "label": "层级写入"
+          },
+          "imageProcessing": {
+            "label": "图片处理"
+          },
+          "permissionValidation": {
+            "label": "权限校验"
+          },
+          "postIndexDbUpdate": {
+            "label": "索引后数据库更新"
+          },
+          "queueWait": {
+            "label": "队列等待"
+          },
+          "vectorDbWrite": {
+            "label": "向量数据库写入"
+          },
+          "embeddingRateLimitWait": {
+            "label": "嵌入速率限制等待",
+            "description": "嵌入请求因索引设置中的嵌入速率限制而等待的时间。属于嵌入阶段，为所有嵌入线程的总和。"
+          },
+          "embeddingProviderThrottleWait": {
+            "label": "提供商限流等待",
+            "description": "嵌入提供商限流后嵌入请求等待的时间。属于嵌入阶段，为所有嵌入线程的总和。"
+          }
         }
       },
       "statusCard": {
-        "documentsIndexed": {
-          "label": "已索引文档"
-        },
         "indexingSpeed": "{speed} 文档/分钟",
         "indexingSpeedTooltip": "自创建连接器以来每分钟索引的文档数",
         "lastIndexed": {
           "value": "上次索引 {when}"
         },
-        "statusLine": "索引状态 - {detail}",
         "documents": {
-          "label": "最近 / 总计",
-          "total": "/ {total}",
-          "totalLabel": "总计"
+          "totalLabel": "已索引文档总数",
+          "recentLabel": "最近处理的文档",
+          "syncedPermissionsLabel": "已同步的权限",
+          "syncedMembershipsLabel": "已同步的群组成员关系"
         },
         "throughput": {
           "ariaLabel": "随时间索引的文档",
@@ -2814,7 +2830,17 @@
           "released": "索引已开始",
           "releaseFailed": "无法开始索引",
           "viewChecks": "查看连接器检查"
-        }
+        },
+        "title": "索引状态",
+        "sync": {
+          "permissionsTitle": "权限同步状态",
+          "groupsTitle": "组成员关系同步状态",
+          "last": "上次同步 {when}",
+          "never": "尚未同步",
+          "neverTooltip": "在权限同步完成之前，已索引的文档可能无法被搜索。",
+          "waitingForFirstIndex": "等待首次索引"
+        },
+        "accessTitle": "连接器文档访问权限"
       },
       "toasts": {
         "completeReindexStarted": "已成功启动完全重新索引",
@@ -2830,12 +2856,17 @@
         "refreshFrequencyUpdateFailed": "更新连接器刷新频率失败",
         "refreshFrequencyUpdated": "已成功更新连接器刷新频率",
         "targetedReindexFailed": "定向重新索引失败：{message}",
-        "targetedReindexSubmitted": "已为 {count, plural, one {# 个文档} other {# 个文档}} 提交定向重新索引。文档重新索引完成后，相关错误会从列表中消失。",
+        "targetedReindexRunning": "正在重试 {count, plural, one {# 个错误} other {# 个错误}}…",
+        "targetedReindexDone": "重试完成。已解决 {resolved, plural, one {# 个错误} other {# 个错误}}。",
+        "targetedReindexPartial": "重试完成。已解决 {resolved, plural, one {# 个错误} other {# 个错误}}，仍有 {failing, plural, one {# 个文档} other {# 个文档}} 失败。",
+        "targetedReindexIncomplete": "重试未完成。未解决的错误仍保留在列表中。",
         "checkFrequencyUpdated": "连接器检查频率已更新",
         "checkFrequencyUpdateFailed": "无法更新连接器检查频率",
         "runResolved": "已标记为已解决。",
         "runResolveFailed": "无法解决：{message}",
-        "runsResolved": "已将 {count, plural, other {# 次运行}}标记为已解决。"
+        "runsResolved": "已将 {count, plural, other {# 次运行}}标记为已解决。",
+        "permissionSyncStarted": "已开始同步权限",
+        "permissionSyncFailed": "无法开始同步权限"
       },
       "backButton": {
         "label": "所有连接器"
@@ -2942,6 +2973,7 @@
           "label": "运行类型",
           "all": "所有类型",
           "indexing": "文档索引",
+          "backfill": "文档回填",
           "doc_permission_sync": "权限同步",
           "group_sync": "群组成员同步",
           "pruning": "文档清理",
@@ -2951,9 +2983,10 @@
           "queued": "排队中",
           "running": "运行中",
           "rate": "{rate} 文档/分钟",
-          "finished": "{time}（{minutes, number} 分钟）",
-          "rateFinished": "{rate} 文档/分钟（{minutes, number} 分钟）",
-          "membershipRate": "{rate} 成员关系/分钟"
+          "finished": "{time}（{duration}）",
+          "rateFinished": "{rate} 文档/分钟（{duration}）",
+          "membershipRate": "{rate} 成员关系/分钟",
+          "membershipRateFinished": "{rate} 成员关系/分钟（{duration}）"
         },
         "actions": {
           "stages": "查看阶段指标",
@@ -2962,7 +2995,7 @@
           "checks": "查看检查结果"
         },
         "warnings": {
-          "tooltip": "{count, plural, other {# 个文档失败}}",
+          "tooltip": "{count, plural, other {# 个项目失败}}",
           "checks": "{count, plural, one {# 项检查失败} other {# 项检查失败}}"
         },
         "newModel": {
@@ -2973,11 +3006,13 @@
           "indexed": "已索引",
           "synced": "已同步",
           "removed": "已移除",
-          "checksRun": "{count, plural, other {已运行 # 项检查}}"
+          "checksRun": "{count, plural, other {已运行 # 项检查}}",
+          "memberships": "个成员关系",
+          "checks": "项检查已运行"
         },
         "counts": {
-          "newDocs": "{count, plural, other {# 个新文档}}",
-          "updatedDocs": "已更新的文档",
+          "newDocs": "{count, plural, other {本次运行新加入索引的文档 # 个}}",
+          "updatedDocs": "{count, plural, other {已在索引中、本次运行处理过的文档 # 个，无论是否有变化}}",
           "removedDocs": "{count, plural, other {已移除 # 个文档}}",
           "users": "{count, plural, other {# 个用户}}",
           "groups": "{count, plural, other {# 个群组}}",
@@ -2987,17 +3022,17 @@
           "canceled": "{count, plural, other {已取消 # 次运行}}",
           "passedChecks": "{count, plural, one {# 项检查通过} other {# 项检查通过}}",
           "failedChecks": "{count, plural, one {# 项检查失败} other {# 项检查失败}}",
+          "incompleteChecks": "{count, plural, one {# 项检查未完成} other {# 项检查未完成}}",
           "skippedChecks": "{count, plural, one {# 项检查已跳过} other {# 项检查已跳过}}",
           "syncedDocs": "{count, plural, other {已同步 # 个文档}}"
         },
         "search": {
-          "placeholder": "搜索索引运行…"
+          "placeholder": "搜索运行错误…"
         },
         "window": {
           "label": "时间范围",
           "all": "全部时间",
           "h1": "过去 1 小时",
-          "h12": "过去 12 小时",
           "h24": "过去 24 小时",
           "d7": "过去 7 天",
           "d30": "过去 30 天"
@@ -3018,7 +3053,8 @@
           "filteredTitle": "没有符合这些筛选条件的运行。",
           "pastRuns": "{count, plural, other {# 次过去的运行}}",
           "view": "查看",
-          "viewAria": "{count, plural, other {查看 # 次过去的运行}}"
+          "viewAria": "{count, plural, other {查看 # 次过去的运行}}",
+          "description": "运行在后台调度，可能需要一点时间才会显示。"
         },
         "units": "{count, plural, other {个运行}}",
         "errorModal": {
@@ -3053,12 +3089,14 @@
           "failures": "失败",
           "errors": "错误",
           "other": "其他",
-          "resolved": "已解决"
+          "resolved": "已解决",
+          "toggle": "筛选"
         },
         "groups": {
           "failures": "{count, plural, =0 {失败} other {# 次失败}}",
           "errors": "{count, plural, =0 {错误} other {# 个错误}}",
-          "other": "其他"
+          "other": "其他",
+          "resolved": "{count, plural, other {# 个已解决}}"
         },
         "title": {
           "indexing": {
@@ -3069,6 +3107,7 @@
             "errors": "索引已完成，存在错误。",
             "resolved": "索引错误已解决。",
             "succeeded": "索引成功完成。",
+            "queued": "索引排队中。",
             "inProgress": "索引进行中。",
             "canceled": "索引已停止。"
           },
@@ -3080,6 +3119,7 @@
             "errors": "权限已同步，存在错误。",
             "resolved": "权限同步错误已解决。",
             "succeeded": "权限同步成功。",
+            "queued": "权限同步排队中。",
             "inProgress": "正在同步权限。",
             "canceled": "权限同步已停止。"
           },
@@ -3091,6 +3131,7 @@
             "errors": "群组成员已同步，存在错误。",
             "resolved": "群组成员同步错误已解决。",
             "succeeded": "群组成员同步成功。",
+            "queued": "群组成员同步排队中。",
             "inProgress": "正在同步群组成员。",
             "canceled": "群组同步已停止。"
           },
@@ -3102,6 +3143,7 @@
             "errors": "清理已完成，但有错误。",
             "resolved": "清理错误已解决。",
             "succeeded": "清理成功完成。",
+            "queued": "清理排队中。",
             "inProgress": "清理进行中。",
             "canceled": "清理已停止。"
           },
@@ -3113,6 +3155,7 @@
             "errors": "连接器检查已完成，但有错误。",
             "resolved": "连接器检查错误已解决。",
             "succeeded": "连接器检查通过。",
+            "queued": "连接器检查排队中。",
             "inProgress": "连接器检查进行中。",
             "canceled": "连接器检查已停止。"
           }
@@ -3128,11 +3171,14 @@
         "tags": {
           "stackTrace": "堆栈跟踪",
           "indexing": "{count, plural, other {# 个文档失败}}",
+          "indexingItems": "{count, plural, other {# 个项目失败}}",
           "doc_permission_sync": "{count, plural, other {# 个文档的权限同步失败}}",
           "group_sync": "{count, plural, other {# 个群组同步失败}}",
           "pruning": "{count, plural, one {# 个文档失败} other {# 个文档失败}}",
           "checks": "{count, plural, one {# 项检查失败} other {# 项检查失败}}",
-          "resolved": "已解决"
+          "resolved": "已解决",
+          "resolvedDocs": "{count, plural, other {# 个项目已解决}}",
+          "superseded": "已被取代"
         },
         "more": "显示更多",
         "empty": {
@@ -3147,23 +3193,26 @@
           "title": "无法加载活动。"
         },
         "docs": {
-          "title": "失败的文档",
+          "title": "失败的项目",
           "search": {
-            "placeholder": "搜索文档…"
+            "placeholder": "搜索项目…"
           },
-          "resolveAll": "全部解决",
+          "resolveAll": "全部重试",
           "resolveAllTooltip": "重新索引此运行中所有失败的文档",
-          "resolveOne": "解决此文档",
+          "resolveAllUnsupported": "此连接器无法重新索引单个文档。请重新索引连接器以重试。",
+          "resolveOne": "重试此文档",
+          "retry": "{count, plural, other {重试 # 个文档}}",
           "more": "更多",
           "less": "收起",
           "unknownDocument": "未知文档",
-          "empty": "没有未解决的文档错误",
-          "loadError": "无法加载失败的文档。",
+          "empty": "没有未解决的错误",
+          "loadError": "无法加载失败的项目。",
           "open": "打开文档"
         },
         "trace": {
           "header": "堆栈跟踪 • 运行 ID：{id}",
-          "copy": "复制堆栈跟踪"
+          "copy": "复制堆栈跟踪",
+          "runId": "运行 ID：{id}"
         },
         "actions": {
           "resolve": "解决"
@@ -3174,6 +3223,9 @@
           "description": "这会将符合当前筛选条件的 {count, plural, other {# 次运行}}标记为已解决。它们保留原有状态，并移到已解决下方。",
           "fleetDescription": "这会将您可操作的连接器上符合当前筛选条件的 {count, plural, other {# 次运行}}标记为已解决。它们保留原有状态，并移到已解决下方。",
           "confirm": "全部解决"
+        },
+        "resolved": {
+          "label": "已解决"
         }
       },
       "stageDetails": {
@@ -3355,11 +3407,13 @@
           },
           "deleteButton": {
             "label": "删除账户",
-            "inUseTooltip": "无法删除此凭据，因为有其他连接器正在使用它。"
+            "inUseTooltip": "无法删除此凭据，因为有其他连接器正在使用它。",
+            "notOwnerTooltip": "只有所有者可以删除此凭据"
           },
           "updateButton": {
             "label": "更新凭据",
-            "tooltip": "更改使用此帐户的所有连接器的已保存值。"
+            "tooltip": "更改使用此帐户的所有连接器的已保存值。",
+            "notOwnerTooltip": "只有所有者可以更新此凭据"
           },
           "usedBy": {
             "label": "{count, plural, other {# 个连接器}}正在使用"
@@ -3379,14 +3433,14 @@
           "rerunButton": {
             "label": "重新运行检查"
           },
+          "renameButton": {
+            "tooltip": "重命名账户"
+          },
           "authenticationType": {
             "label": "认证类型"
           },
           "rerunFailed": {
             "toast": "无法启动检查，请重试。"
-          },
-          "shareSaved": {
-            "toast": "共享已更新。"
           },
           "shareFailed": {
             "toast": "无法更改可使用此账户的人员。请重试。"
@@ -3401,10 +3455,16 @@
             "tooltip": "只有添加此账户的人才能将其设为私有。"
           },
           "shareLocked": {
-            "tooltip": "只有添加此账户的人或与其共享的管理员可以更改可使用此账户的人员。"
+            "tooltip": "只有所有者可以共享此凭据"
           },
           "viewDetails": {
             "tooltip": "查看详情"
+          },
+          "failedToRun": {
+            "title": "检查运行失败"
+          },
+          "unavailable": {
+            "label": "不可用"
           }
         },
         "accountUnavailable": {
@@ -3426,6 +3486,9 @@
       "field": {
         "optionalSuffix": {
           "label": "可选"
+        },
+        "availableRefresh": {
+          "tooltip": "刷新列表"
         }
       },
       "gdrive": {
@@ -3571,7 +3634,7 @@
         }
       },
       "content": {
-        "title": "连接器内容",
+        "title": "索引配置",
         "description": "选择此连接器要索引的内容。"
       },
       "selectInput": {
@@ -3619,13 +3682,16 @@
         },
         "checkFrequency": {
           "title": "检查运行间隔",
-          "description": "检查连接的功能与健康状况。"
-        }
+          "description": "检查连接的功能与健康状况。",
+          "placeholder": "从不"
+        },
+        "rangeRequired": "请输入 {min, number} - {max, number} 范围内的值。"
       },
       "settings": {
         "description": "连接器信息与访问权限。",
         "displayName": {
-          "title": "连接器显示名称"
+          "title": "显示名称",
+          "placeholder": "添加显示名称"
         },
         "documentAccess": {
           "description": "控制谁可以访问此连接器索引的文档。",
@@ -3684,7 +3750,7 @@
               "label": "包含附件"
             },
             "scoped_token": {
-              "label": "这是带作用域的 API 令牌",
+              "label": "带作用域的 API 令牌",
               "description": "带作用域的令牌需要通过 Atlassian 的 API 网关路由。使用经典令牌时请保持关闭。"
             }
           }
@@ -3811,13 +3877,13 @@
               "placeholder": "https://github.example.com"
             },
             "repo_owner": {
-              "label": "仓库所有者"
+              "label": "仓库所有者",
+              "placeholder": "指定仓库所有者"
             },
             "github_mode": {
-              "label": "要索引的 GitHub 内容",
               "tabs": {
                 "repo": {
-                  "label": "指定仓库"
+                  "label": "指定的仓库"
                 },
                 "everything": {
                   "label": "全部"
@@ -3825,12 +3891,12 @@
               }
             },
             "repositories": {
-              "label": "仓库名称",
-              "description": "如有多个仓库，请输入以逗号分隔的名称（例如 repo1,repo2,repo3）"
+              "label": "仓库名称列表",
+              "placeholder": "添加仓库名称"
             },
             "everything": {
-              "label": "全部",
-              "description": "此连接器将索引所提供凭据有权访问的所有仓库！"
+              "label": "索引全部",
+              "description": "Onyx 将索引为所有者 {owner} 找到的所有仓库。"
             },
             "include_prs": {
               "label": "包含拉取请求",
@@ -3846,7 +3912,8 @@
             },
             "branch": {
               "label": "分支",
-              "description": "要索引文档的分支（例如 gh-pages）。留空则使用各仓库的默认分支。仅在启用“包含文档”时适用。在现有连接器上更改此项后，请触发重新索引以立即应用新分支。"
+              "description": "要索引文档的分支（例如 gh-pages）。留空则使用各仓库的默认分支。仅在启用“包含文档”时适用。在现有连接器上更改此项后，请触发重新索引以立即应用新分支。",
+              "placeholder": "添加分支名称"
             }
           }
         },
@@ -3929,8 +3996,8 @@
               "description": "一个或多个 Bitbucket 项目键（以逗号分隔），用于索引这些项目中的所有仓库（例如 PROJ1,PROJ2）"
             },
             "workspace_tab": {
-              "label": "工作区",
-              "description": "此连接器将索引工作区中的所有仓库。"
+              "label": "索引工作区中的所有仓库",
+              "description": "Onyx 会索引工作区中所选账户可读取的全部仓库。如需缩小范围，请选择其他标签页。"
             }
           }
         },
@@ -4035,18 +4102,16 @@
             },
             "wiki_base": {
               "label": "站点 URL",
-              "placeholder": "https://nide-yuming.atlassian.net/wiki"
+              "placeholder": "https://nide-yuming.atlassian.net/wiki",
+              "placeholderDataCenter": "https://nide-yuming.com/wiki"
             },
             "indexing_scope": {
               "tabs": {
                 "everything": {
-                  "label": "全部"
+                  "label": "索引全部"
                 },
-                "space": {
-                  "label": "空间"
-                },
-                "page": {
-                  "label": "页面"
+                "select": {
+                  "label": "选择空间/页面"
                 },
                 "cql": {
                   "label": "CQL 查询"
@@ -4054,24 +4119,36 @@
               }
             },
             "everything": {
-              "label": "全部",
-              "description": "此连接器将索引所提供凭据有权访问的所有页面！"
+              "label": "索引全部",
+              "description": "Onyx 将索引所选账户有权访问的所有空间和页面。"
             },
             "space": {
-              "label": "空间键",
-              "description": "要索引的 Confluence 空间键（例如 `KB`）。"
+              "label": "空间",
+              "description": "此连接器要索引的空间键（例如 ENG）。",
+              "placeholder": "添加空间键或 URL",
+              "required": "请至少添加一个空间或页面。",
+              "available": "{more, select, true {{count, number}+ 个可用空间} other {{count, plural, one {# 个可用空间} other {# 个可用空间}}}}"
             },
             "page_id": {
-              "label": "页面 ID",
-              "description": "要索引的特定页面 ID（例如 `131368`）"
+              "label": "页面",
+              "description": "此连接器要索引的页面 ID（例如 123456）。",
+              "placeholder": "添加页面 ID 或 URL",
+              "available": "{more, select, true {{count, number}+ 个可用页面} other {{count, plural, one {# 个可用页面} other {# 个可用页面}}}}"
             },
             "index_recursively": {
-              "label": "递归索引",
-              "description": "设置后，将索引页面 ID 所指定的页面及其所有子页面。"
+              "label": "包含子页面",
+              "description": "同时索引嵌套在上述页面下的所有页面，无论层级深浅。"
             },
             "cql_query": {
               "label": "CQL 查询",
-              "description": "重要提示：目前仅支持返回“page”类型对象的 CQL 查询。这意味着所有 CQL 查询都必须包含“type=page”作为唯一的类型过滤条件。同时请勿使用“lastModified”过滤条件，否则会影响连接器的轮询逻辑。请勿使用 ORDER BY，因为连接器会设置自己的排序方式。我们仍会获取 CQL 查询所返回页面的所有附件和评论。任何“lastmodified”过滤条件都将被覆盖。更多详情请参阅 Atlassian 的 [CQL 文档](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)。"
+              "description": "仅返回页面。类型过滤器只保留 `type=page`。\n避免排序和日期过滤器。`order by` 或 `lastModified` 会破坏 Onyx 自身的查询。 [CQL 参考](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)",
+              "testButton": {
+                "label": "测试查询"
+              },
+              "required": "请添加 CQL 查询。"
+            },
+            "include_attachments": {
+              "description": "索引附加到页面的文件和图片。请参阅[图片索引/处理设置]({indexSettingsPath})。"
             }
           }
         },
@@ -4097,8 +4174,8 @@
               }
             },
             "everything": {
-              "label": "全部",
-              "description": "此连接器将索引所提供凭据有权访问的所有议题！"
+              "label": "索引该账户可读取的所有问题",
+              "description": "Onyx 会索引所选账户可读取的每个项目中的全部问题。如需缩小范围，请选择其他标签页。"
             },
             "project_key": {
               "label": "项目键",
@@ -4305,8 +4382,8 @@
               }
             },
             "everything_description": {
-              "label": "全部",
-              "description": "此连接器将索引所提供凭据有权访问的所有空间！"
+              "label": "索引该账户可读取的所有空间",
+              "description": "Onyx 会索引所选账户可读取的每个空间中的全部页面。如需缩小范围，请选择其他标签页。"
             },
             "spaces": {
               "label": "空间 ID",
@@ -4746,8 +4823,8 @@
               }
             },
             "everything_description": {
-              "label": "全部",
-              "description": "此连接器将自动发现并索引您的 API 令牌可访问的所有基础和数据表。"
+              "label": "索引该令牌可读取的所有 Base",
+              "description": "Onyx 会查找并索引 API 令牌可读取的全部 Base 和表。如需缩小范围，请选择其他标签页。"
             },
             "airtable_url": {
               "label": "Airtable URL",
@@ -4786,8 +4863,8 @@
               "description": "如有多个 Spot，请逐个输入。"
             },
             "everything": {
-              "label": "全部",
-              "description": "此连接器将索引所提供凭据有权访问的所有 Spot！"
+              "label": "索引该账户可读取的所有 Spot",
+              "description": "Onyx 会索引所选账户可读取的全部 Spot。如需缩小范围，请选择其他标签页。"
             }
           }
         },
@@ -4814,33 +4891,47 @@
       "allProviders": {
         "label": "所有提供方"
       },
+      "deleteModal": {
+        "description": "**{model}**（{provider}）的使用量将重新按内置价格计算。",
+        "submit": {
+          "label": "删除"
+        },
+        "title": "删除 *{model}* 的覆盖"
+      },
       "empty": {
         "description": "添加一项，为某个模型应用协商价格（每 100 万 tokens 的美元价格）。",
         "title": "尚未设置费用覆盖。"
       },
       "form": {
         "addButton": {
-          "label": "添加覆盖"
+          "label": "添加"
         },
+        "description": "为模型设置协商价格。它会在使用成本计算中替换内置价格。",
+        "editTitle": "编辑成本覆盖",
+        "newTitle": "新建成本覆盖",
         "cacheRate": {
-          "label": "缓存读取价格（每 100 万 tokens 美元，可选）",
-          "placeholder": "默认与输入价格相同"
+          "description": "单位为每 100 万 tokens 美元。默认与输入价格相同。",
+          "label": "缓存读取价格"
         },
         "cancelButton": {
           "label": "取消"
         },
         "inputRate": {
-          "label": "输入价格（每 100 万 tokens 美元）"
+          "label": "输入价格"
         },
         "model": {
+          "description": "对所选的此模型应用成本覆盖。",
           "label": "模型",
           "placeholder": "选择模型"
         },
         "outputRate": {
-          "label": "输出价格（每 100 万 tokens 美元）"
+          "label": "输出价格"
         },
         "saveButton": {
           "label": "保存"
+        },
+        "units": {
+          "description": "单位为每 100 万 tokens 美元。"
         }
       },
       "panel": {
@@ -4854,26 +4945,21 @@
         "title": "费用覆盖"
       },
       "row": {
+        "cache": "缓存 {value}",
         "deleteButton": {
           "ariaLabel": "删除 {model} 的 {provider} 覆盖"
         },
+        "description": "{provider} · 更新于 {time}",
         "editButton": {
           "ariaLabel": "编辑 {model} 的 {provider} 覆盖"
         },
-        "rates": "{provider} · 输入 {input} · 输出 {output} · 每 100 万 tokens 美元",
-        "ratesWithCache": "{provider} · 输入 {input} · 输出 {output} · 缓存 {cache} · 每 100 万 tokens 美元",
-        "updated": "更新于 {time}"
+        "input": "输入 {value}",
+        "output": "输出 {value}"
       },
       "toasts": {
         "removeFailed": "移除覆盖失败：{message}",
-        "removed": "已移除 {model} 的覆盖。",
         "saveFailed": "保存覆盖失败：{message}",
-        "saved": "已保存 {model} 的价格。",
         "unknownError": "未知错误"
-      },
-      "placeholders": {
-        "inputCost": "3.00",
-        "outputCost": "15.00"
       }
     },
     "craft": {
@@ -4918,9 +5004,6 @@
         }
       },
       "defaultToggle": {
-        "betaTag": {
-          "label": "beta"
-        },
         "disabled": {
           "description": "Craft 对所有人关闭。可在下方逐个用户切换。"
         },
@@ -5108,6 +5191,9 @@
         },
         "submitError": {
           "toast": "提交凭据时出错"
+        },
+        "personalAccessTokenField": {
+          "placeholder": "添加您的个人访问令牌"
         }
       },
       "delete": {
@@ -5118,9 +5204,9 @@
           "message": "确定要删除此凭据吗?无法删除与运行中的连接器关联的凭据。"
         },
         "confirmButton": {
-          "label": "确认"
+          "label": "删除"
         },
-        "confirmTitle": "确认删除"
+        "confirmTitle": "删除 *{name}*"
       },
       "displayNames": {
         "accessKeyId": "{source} 访问密钥 ID",
@@ -5166,7 +5252,8 @@
         "zuliprcContent": "Zuliprc 内容",
         "authenticationMethod": "身份验证方式",
         "primaryAdminEmail": "主管理员邮箱",
-        "serviceAccountKey": "服务账号密钥"
+        "serviceAccountKey": "服务账号密钥",
+        "personalAccessToken": "个人访问令牌"
       },
       "hints": {
         "boxUserEmail": "可选。要模拟的 Box 用户。",
@@ -5178,7 +5265,8 @@
         "outlineBaseUrl": "例如 https://app.getoutline.com，或你的自托管 URL。",
         "pfxFile": "上传包含应用注册私钥的 `.pfx` 文件。必须小于 10 KB。",
         "testrailBaseUrl": "例如 https://yourcompany.testrail.io。",
-        "googleServiceAccountKey": "上传或粘贴已启用全网域委派的 Google 服务账号的 `.json` 密钥。"
+        "googleServiceAccountKey": "上传或粘贴已启用全网域委派的 Google 服务账号的 `.json` 密钥。",
+        "confluencePersonalAccessToken": "粘贴您的 Confluence 管理员账户的[个人访问令牌](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html)。"
       },
       "methods": {
         "labels": {
@@ -5683,9 +5771,16 @@
         "newButton": {
           "label": "新建文档集"
         },
+        "noResults": {
+          "description": "没有与“{query}”匹配的文档集",
+          "title": "未找到文档集"
+        },
         "notFound": {
           "message": "未找到 id 为 {id} 的文档集",
           "title": "未找到文档集"
+        },
+        "search": {
+          "placeholder": "搜索文档集..."
         },
         "status": {
           "deleting": {
@@ -5820,24 +5915,11 @@
           "description": "添加应用，让组织中的所有人都可以使用。",
           "title": "暂无应用"
         },
-        "panel": {
-          "blurb": "为整个组织统一配置一次。编辑应用可设置共享凭证、操作策略和关联技能。"
-        },
         "tab": {
-          "label": "应用",
-          "labelWithCount": "应用 · {count, number}"
+          "label": "应用"
         }
       },
       "card": {
-        "actionsButton": {
-          "ariaLabel": "{name} 操作"
-        },
-        "availableInCraft": {
-          "label": "可在 Craft 中使用"
-        },
-        "customTag": {
-          "label": "自定义"
-        },
         "deleteAction": {
           "label": "删除"
         },
@@ -5847,34 +5929,12 @@
           "submit": {
             "label": "删除应用"
           },
-          "submitting": {
-            "label": "正在删除…"
-          },
           "title": "删除“{name}”？"
-        },
-        "editAction": {
-          "label": "编辑"
         },
         "toasts": {
           "deleteFailed": "删除“{name}”失败",
-          "disableFailed": "禁用“{name}”失败",
           "enableFailed": "启用“{name}”失败"
-        },
-        "toggle": {
-          "disableAriaLabel": "禁用 {name}",
-          "enableAriaLabel": "启用 {name}"
         }
-      },
-      "facts": {
-        "actions": "{count, plural, one {# 个操作} other {# 个操作}}",
-        "customSkills": "{count, plural, one {# 个自定义技能} other {# 个自定义技能}}",
-        "noCredentials": "无凭证",
-        "noCustomSkills": "无自定义技能",
-        "orgCredentialsSet": "已设置组织凭证",
-        "perUserCredentials": "按用户凭证",
-        "providedByOnyx": "由 Onyx 提供",
-        "tools": "{count, plural, one {# 个工具} other {# 个工具}}",
-        "upstreamPatterns": "{count, plural, one {# 个上游模式} other {# 个上游模式}}"
       },
       "loading": {
         "label": "正在加载…"
@@ -5882,33 +5942,16 @@
       "mcpServers": {
         "empty": {
           "description": "先在“操作”中连接服务器，然后在此处为您的组织启用它。",
-          "openActionsButton": {
-            "label": "打开操作"
-          },
           "title": "暂无 MCP 服务器"
         },
-        "manageInActionsButton": {
-          "label": "在操作中管理"
-        },
-        "panel": {
-          "blurb": "启用服务器后，有权访问它的成员即可在 Craft 中使用它的工具。编辑服务器可设置每个工具的审批策略。服务器连接和访问权限在“操作”中管理。"
-        },
         "tab": {
-          "label": "MCP 服务器",
-          "labelWithCount": "MCP 服务器 · {count, number}"
+          "label": "MCP 服务器"
         }
       },
       "page": {
-        "addAppButton": {
-          "label": "添加应用"
-        },
-        "backToCraftButton": {
-          "label": "返回 Craft"
-        },
         "description": "设置组织的 Craft 智能体可以使用的应用。每位成员在 Craft 的“应用”页面连接自己的账户。"
       },
       "warnings": {
-        "invalidSkill": "无效技能",
         "providerUnavailable": "提供商不可用"
       }
     },
@@ -6052,8 +6095,8 @@
     },
     "groups": {
       "card": {
-        "defaultTag": {
-          "label": "默认"
+        "defaultSuffix": {
+          "label": "（默认）"
         },
         "toasts": {
           "renameFailed": "重命名用户组失败",
@@ -6170,7 +6213,7 @@
           "title": "未找到用户组"
         },
         "search": {
-          "placeholder": "搜索用户组..."
+          "placeholder": "搜索用户组，或按 \"/\" 聚焦..."
         }
       },
       "members": {
@@ -6244,7 +6287,7 @@
         "learnMore": {
           "label": "了解更多"
         },
-        "title": "权限已变更"
+        "title": "权限已变更。"
       },
       "sharedResources": {
         "agent": {
@@ -6782,6 +6825,10 @@
           "description": "OpenAI 的高级图像生成模型，适用于最精确的编辑。"
         }
       },
+      "retiredModelWarning": {
+        "description": "请连接其他模型并将其设为默认，然后断开 {title} 的连接。",
+        "title": "{title} 已不再可用"
+      },
       "setDefaultError": {
         "message": "设置默认项失败"
       },
@@ -6790,6 +6837,10 @@
       }
     },
     "indexSettings": {
+      "advanced": {
+        "title": "高级选项",
+        "description": "这些设置会改变 {appName} 在搜索中应用文档权限的效率，不会改变每个用户可以看到的文档。如无 Onyx 团队的明确指导，请勿更改。"
+      },
       "actions": {
         "applyForward": {
           "label": "应用于新增和更新的文档"
@@ -6853,6 +6904,10 @@
           "description": "立即停止为新增和更新的文档生成上下文，或者重建所有文档以同时移除已生成的上下文。",
           "title": "选择关闭上下文检索的方式"
         },
+        "contextualEnableOnly": {
+          "description": "从现在起为新增和更新的文档生成上下文，或者重建所有文档，使每个文档都获得上下文。",
+          "title": "选择开启上下文检索的方式"
+        },
         "contextualModelMissing": {
           "description": "上下文检索已启用，但尚未选择模型。请先在下方选择上下文检索 LLM，再重新索引——没有模型，重新索引无法运行。",
           "title": "选择上下文检索 LLM"
@@ -6879,6 +6934,9 @@
         "reindex": {
           "description": "重新索引可能需要*数小时或数天*，具体取决于语料库大小。[了解更多](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "将运行完整的重新索引。"
+        },
+        "reindexModel": {
+          "title": "正在切换到 {provider} / {model}。将运行完整的重新索引。"
         }
       },
       "cloudDisabled": {
@@ -6893,6 +6951,9 @@
         "description": "为每个已索引的分块添加文档级上下文，以提升混合搜索的相关性。这可能会显著增加 embedding 成本。",
         "noModelsTooltip": "上下文检索已禁用，因为您尚未配置任何模型。请先设置[语言模型]({link})。",
         "title": "上下文检索"
+      },
+      "currentModel": {
+        "legacyHint": "这是旧版模型。它会继续工作，但不能再次选择用于新索引。如需升级，请点击“查看所有模型”并选择较新的模型。"
       },
       "embeddingModel": {
         "cloudManaged": {
@@ -6978,6 +7039,10 @@
         "description": "此后新增或更新的文档将不再使用上下文检索。现有文档会保留已生成的上下文，直到它们被更新或您重新索引。",
         "title": "今后关闭上下文检索"
       },
+      "enableForwardModal": {
+        "description": "此后新增或更新的文档将开始使用上下文检索。现有文档会保持原样，直到它们被更新或您重新索引，因此各文档的上下文增强可能不同。",
+        "title": "今后开启上下文检索"
+      },
       "header": {
         "description": "配置文档的索引方式、embedding 方式，以及为搜索和检索所做的准备。"
       },
@@ -7032,9 +7097,12 @@
         "currentButton": {
           "label": "当前模型"
         },
-        "deprecated": {
-          "connectTooltip": "此 embedding 模型已弃用，无法连接。",
-          "selectTooltip": "此 embedding 模型已弃用，无法选择。"
+        "gpuRecommended": {
+          "tag": "建议使用 GPU"
+        },
+        "legacy": {
+          "tag": "旧版",
+          "tooltip": "此模型不能用于新索引。在您更换模型之前，它会继续工作。"
         },
         "selectButton": {
           "label": "选择模型"
@@ -7044,8 +7112,14 @@
         }
       },
       "modelPicker": {
+        "cpuEstimateHint": "CPU 速度为估计值，会因硬件和文档大小而异。RAM 建议适用于一个已加载模型，并非整个 Onyx 系统的内存要求。重新索引时请预留更多内存。",
         "addCustomModel": {
           "label": "添加自定义模型"
+        },
+        "bringYourOwn": {
+          "cloudDescription": "连接 LiteLLM 代理、Azure OpenAI 部署或 Bifrost 网关。模型名称由您自行填写。对于 LiteLLM 和 Azure，还需填写维度。",
+          "selfHostedDescription": "运行上方列表中没有的 Hugging Face 嵌入模型。模型名称、维度和前缀由您自行填写。",
+          "title": "高级：使用自己的模型或代理"
         },
         "cloudTab": {
           "label": "云端"
@@ -7197,6 +7271,8 @@
         "contextualModelUpdated": "已更新上下文检索 LLM",
         "contextualRetrievalDisableFailed": "关闭上下文检索失败",
         "contextualRetrievalDisabled": "已关闭上下文检索",
+        "contextualRetrievalEnableFailed": "开启上下文检索失败",
+        "contextualRetrievalEnabled": "已开启上下文检索",
         "modelNotFound": "找不到所选模型",
         "providerResolveFailed": "无法解析提供商",
         "reindexCanceled": "已取消重新索引",
@@ -7245,22 +7321,27 @@
         "restoreHint": "如需保留某个连接器，请在此取消，先恢复或修复它，然后重新索引，它就会被迁移过去。否则请在重新索引完成后重新添加。"
       },
       "modelDescriptions": {
+        "cohereEmbedV5Pro": "Cohere 的旗舰嵌入模型。质量与成本的最佳平衡。2048 维输出。",
+        "cohereEmbedV5Fast": "Cohere Embed 5 的低成本版本。依然是非常出色的选择。2048 维输出。",
         "cohereEmbedEnglishV3": "Cohere 的英语嵌入模型。在英语任务上表现良好。",
         "cohereEmbedEnglishLightV3": "Cohere 的轻量级英语嵌入模型。处理简单任务更快、更高效。",
-        "cohereEmbedV4": "Cohere 最新的多语言嵌入模型，默认 1536 维输出，检索质量更高。",
-        "openaiTextEmbedding3Large": "OpenAI 的大型嵌入模型。性能最佳，但成本更高。",
-        "openaiTextEmbedding3Small": "OpenAI 更新、更高效的嵌入模型。性能与成本平衡良好。",
+        "cohereEmbedV4": "Cohere 的多语言嵌入模型，1536 维输出。",
+        "openaiTextEmbedding3Large": "OpenAI 的大型嵌入模型。适合已在使用 OpenAI 的团队。3072 维输出。",
+        "openaiTextEmbedding3Small": "OpenAI 的小型嵌入模型。在云端选项中最经济，优势明显。1536 维输出。",
         "googleGeminiEmbedding001": "Google 的 Gemini 嵌入模型。强大且高效。",
         "googleTextEmbedding005": "Google 更小、更轻量的嵌入模型。",
-        "googleGeminiEmbedding2": "Google 最新的多模态嵌入模型（GA）。3072 维输出，检索质量最高。",
+        "googleGeminiEmbedding2": "Google 的旗舰嵌入模型。功能非常强大，但成本高、速度较慢。3072 维输出会生成较大的索引。对已在使用 Google 的团队来说是稳妥的选择。",
         "googleGeminiEmbedding2Preview": "Gemini Embedding 2 的预览版。新部署已由 gemini-embedding-2 取代。",
         "voyageLarge2Instruct": "Voyage 的大型嵌入模型。经过指令微调，性能出色。",
         "voyage4Large": "Voyage 4 系列中最大的嵌入模型。Voyage 最佳检索质量，支持多语言。",
         "voyage4": "Voyage 4 系列通用嵌入模型。以适中成本提供高检索质量。",
         "voyage4Lite": "Voyage 4 系列轻量级嵌入模型。成本最低，速率限制最高。",
         "voyageLight2Instruct": "Voyage 的轻量级嵌入模型。性能与效率平衡良好。",
+        "graniteEmbedding97mMultilingualR2": "IBM 的小型多语言模型。随 {appName} 提供。9700 万参数，384 维输出。每个 CPU 核心每分钟最多处理 200 篇文档。CPU 推理建议 RAM：每个模型服务器 4 GB。",
+        "voyage4Nano": "Voyage AI 的开放权重模型。3.46 亿参数，2048 维输出。每个 CPU 核心每分钟最多处理 50 篇文档。CPU 推理建议 RAM：每个模型服务器 4 GB。",
+        "nemotron3Embed1b": "NVIDIA 的多语言模型。11 亿参数，2048 维输出。每个 CPU 核心每分钟最多处理 5 篇文档。CPU 推理建议 RAM：每个模型服务器 8 GB。建议使用 GPU。",
         "nomicEmbedTextV1": "Nomic 的嵌入模型，专注于检索、相似度、聚类和分类。",
-        "e5BaseV2": "比默认模型更小、更快的模型。速度约为默认模型的 2 倍，但搜索质量较低。",
+        "e5BaseV2": "Microsoft E5 系列的英文嵌入模型。在速度与搜索质量之间取得平衡。",
         "e5SmallV2": "E5 系列模型中最小、最快的版本。如果您在资源受限的系统上运行 {appName}，这是一个不错的选择。",
         "multilingualE5Base": "如果语料库包含英语以外的语言，请选择此模型。",
         "multilingualE5Small": "如果语料库包含英语以外的语言，且系统资源受限，请选择此模型。"
@@ -7358,13 +7439,19 @@
           "label": "连接器"
         },
         "documents": {
-          "caption": "最近索引 / 总计",
-          "label": "文档"
+          "caption": "索引中",
+          "label": "文档",
+          "tooltip": "将每个连接器的文档数相加，因此两个连接器都包含的文档会计两次。"
         },
         "ratio": {
           "whole": "/ {whole}"
         },
-        "loadError": "无法加载概览。"
+        "loadError": "无法加载概览。",
+        "processed": {
+          "caption": "时间范围内已处理",
+          "label": "文档",
+          "tooltip": "这是估算值，因为每次运行的数量会平均分摊到其运行时间内。运行每处理一次文档就计一次，包括失败的文档，因此可能超过索引中的文档数。"
+        }
       },
       "activities": {
         "title": "活动",
@@ -7388,7 +7475,9 @@
           "indexed": "{count, plural, other {# 个连接器已索引}}",
           "indexing": "{count, plural, other {# 个连接器正在索引}}",
           "failed": "{count, plural, other {# 个连接器失败}}",
-          "paused": "{count, plural, other {# 个连接器已暂停}}"
+          "paused": "{count, plural, other {# 个连接器已暂停}}",
+          "scheduled": "{count, plural, other {# 个连接器已计划}}",
+          "deleting": "{count, plural, other {# 个连接器正在删除}}"
         },
         "access": {
           "public": "公开",
@@ -7403,7 +7492,11 @@
         },
         "docs": {
           "label": "文档",
-          "recentOfTotal": "{recent} / {total}"
+          "processed": "已处理 {count, number} 个",
+          "processedTooltip": {
+            "running": "当前运行到目前为止处理过的文档数，包括失败的文档。运行处理两次的文档会计两次，因此可能超过该连接器的文档数。",
+            "finished": "上次运行处理过的文档数，包括失败的文档。运行处理两次的文档会计两次，之后删除的文档不再计入该连接器，因此可能超过该连接器的文档数。"
+          }
         },
         "actions": {
           "manage": "管理",
@@ -7435,7 +7528,7 @@
         "title": "暂时无法新增 LLM 配置。"
       },
       "defaultModel": {
-        "description": "{appName} 将在您的对话中默认使用此模型。",
+        "description": "默认用于新会话。",
         "title": "默认模型"
       },
       "deleteModal": {
@@ -7522,6 +7615,10 @@
           "accessKeyIdField": {
             "title": "AWS 访问密钥 ID"
           },
+          "assumeRoleField": {
+            "description": "使用其他 AWS 账户中的 Bedrock 角色。{appName} 使用上述凭证代入此角色。",
+            "title": "要代入的角色 ARN"
+          },
           "authMethodField": {
             "accessKey": {
               "description": "适用于非 AWS 环境",
@@ -7537,6 +7634,10 @@
               "label": "长期 API 密钥"
             },
             "title": "身份验证方式"
+          },
+          "externalIdField": {
+            "description": "仅当角色的信任策略要求时填写。",
+            "title": "外部 ID"
           },
           "iamNotice": {
             "title": "{appName} 将使用其运行环境所附加的 IAM 角色进行身份验证。"
@@ -7714,10 +7815,16 @@
             "label": "更多模型"
           },
           "refetch": {
+            "label": "刷新模型",
             "errorToast": "获取模型失败"
           },
           "row": {
             "defaultLabel": "默认模型",
+            "decisionTag": {
+              "label": "决策",
+              "decisionOnly": "决策模型。不在聊天模型选择器中显示。",
+              "chatAndDecision": "支持聊天和决策任务。"
+            },
             "renameButton": {
               "tooltip": "重命名"
             },
@@ -7933,24 +8040,24 @@
       },
       "toasts": {
         "providerDeleteFailed": "删除提供商失败：{message}",
-        "providerDeleted": "提供商已成功删除！",
         "providerLoadFailed": "无法加载提供商：{message}",
         "providerResolveFailed": "无法解析提供商",
         "settingsUpdateFailed": "更新设置失败",
-        "settingsUpdated": "设置已更新",
         "unknownError": "未知错误"
       },
       "modelRouting": {
         "autoMode": {
           "title": "自动模式",
-          "description": "在模型选择器中添加 Auto 项，为每条消息选择最合适的模型。"
+          "description": "在模型选择器中添加 Auto 项，为每条消息选择最合适的模型。",
+          "noRoutersTooltip": "未找到路由器模型。请先在网关提供商上启用一个路由器模型。",
+          "noRoutersError": "未找到路由模型，因此用户无法选择 Auto。请在网关提供商上启用路由模型。"
         },
         "target": {
           "title": "路由器模型",
           "description": "负责 Auto 模式的模型路由。",
-          "empty": "未找到路由器模型。请先在网关提供商上启用一个路由器模型。",
           "error": "无法加载路由器模型。",
-          "retry": "重试"
+          "retry": "重试",
+          "missing": "请选择路由模型，以便用户使用自动路由模式。"
         }
       },
       "providers": {
@@ -7962,6 +8069,14 @@
           "productName": "自定义模型",
           "companyName": "兼容 OpenAI 的端点"
         }
+      },
+      "reasoning": {
+        "description": "允许用户按会话覆盖模型的默认推理级别。",
+        "title": "推理控制"
+      },
+      "temperature": {
+        "description": "允许用户按会话覆盖模型的默认温度。",
+        "title": "温度控制"
       }
     },
     "mcpActions": {
@@ -8524,6 +8639,10 @@
           "description": "所有人只能通过 SSO 登录和注册。需要至少启用一个 SSO 提供商。",
           "title": "禁用密码登录和注册"
         },
+        "renamedClaim": {
+          "description": "允许电子邮件被改名的用户通过其他提供商登录当前电子邮件对应的账户，前提是该账户不再有任何提供商关联。仅在从已删除的 SSO 提供商迁移用户期间开启。",
+          "title": "提供商删除后接管已改名的账户"
+        },
         "section": {
           "title": "身份验证"
         },
@@ -8574,7 +8693,7 @@
           },
           "title": "SSRF 防护",
           "validateAll": {
-            "description": "限制最严格。所有出站请求（包括网页连接器）都不能访问私有或内部 IP。",
+            "description": "限制最严格。出站请求（包括网页连接器）不能访问私有或内部 IP。例外：自定义工具仍可访问私有网络地址。环回、链路本地和云元数据地址仍被阻止。",
             "label": "验证所有请求"
           },
           "validateLlm": {
@@ -9233,6 +9352,9 @@
         "successToast": "已复制重定向 URI",
         "errorToast": "无法复制"
       },
+      "deleteProvider": {
+        "tooltip": "删除"
+      },
       "editProvider": {
         "tooltip": "编辑"
       },
@@ -9245,6 +9367,17 @@
         "title": "加载 SSO 提供商失败"
       },
       "modals": {
+        "deleteProvider": {
+          "title": "删除 {name}",
+          "description": "通过 {name} 登录的用户会保留其帐户。他们下次使用相同电子邮件通过其他提供商登录时，会进入同一个帐户。请先添加替代提供商，再删除此提供商。",
+          "countsError": "无法加载通过此提供商登录的用户。请关闭后重试。",
+          "countsLoading": "正在加载通过此提供商登录的用户…",
+          "linkedUsers": "{count, plural, =0 {没有用户通过 {name} 登录过。} other {# 位用户通过 {name} 登录过。}}",
+          "renamedUsers": "{count, plural, other {其中 # 位用户已改名，需要在安全加固中开启已改名账户接管，才能通过其他提供商登录。}}",
+          "submit": {
+            "label": "删除"
+          }
+        },
         "domainVerification": {
           "description": "只有在您验证域名归属之后，该域名才会自动为您工作区的用户登录。请添加下面的 DNS 记录，然后进行验证。",
           "loadError": {
@@ -9343,6 +9476,7 @@
         "description": "让用户通过您的身份提供商登录。"
       },
       "toasts": {
+        "providerDeleted": "已删除 {name}",
         "unexpectedError": "发生意外错误。"
       },
       "providerTypes": {
@@ -9588,6 +9722,8 @@
         "deleting": "正在删除",
         "failed": "失败",
         "indexed": "已索引",
+        "backfilling": "正在回填",
+        "backfilled": "已回填",
         "indexing": "正在索引",
         "initialIndexing": "初始索引",
         "interrupted": "已中断",
@@ -9602,7 +9738,9 @@
         "pruned": "已清理",
         "checking": "检查中",
         "passed": "已完成",
-        "failedToRun": "无法运行"
+        "failedToRun": "无法运行",
+        "completedWithErrors": "已完成但有错误",
+        "error": "错误"
       }
     },
     "systemInfo": {
@@ -9925,6 +10063,9 @@
       "field": {
         "required": {
           "error": "{label} 为必填项"
+        },
+        "optional": {
+          "title": "{label}（可选）"
         }
       },
       "loadError": {
@@ -10277,7 +10418,7 @@
         "copyButton": {
           "label": "复制密码"
         },
-        "description": "这将为 <strong>{email}</strong> 生成一个新的随机密码。该用户当前的密码将立即失效。",
+        "description": "这将为 <strong>{email}</strong> 生成一个新的随机密码。该用户当前的密码将立即失效。该用户将退出所有会话，其个人访问 token 将被吊销。",
         "doneButton": {
           "label": "完成"
         },
@@ -10472,7 +10613,7 @@
           "required": "API 密钥为必填项"
         },
         "apiSecret": {
-          "description": "粘贴来自 {provider} 的 [API 机密]({url})，以访问 Scribe。",
+          "description": "粘贴来自 {provider} 的 [API 密钥机密]({url}) 以访问 Zoom AI Services。",
           "label": "API 机密",
           "placeholder": "API 机密",
           "required": "API 机密为必填项"
@@ -10707,26 +10848,28 @@
         "title": "测试连接",
         "description": "{appName} 将在继续之前运行检查，以验证所需的权限范围。",
         "startButton": {
-          "label": "开始检查"
+          "label": "开始检查",
+          "disabledTooltip": "请在上方选择一个账户或填写新账户以开始检查"
         }
       },
       "title": "连接器检查",
       "groups": {
         "failed": "{count} 项失败",
-        "indeterminate": "{count} 项未验证",
+        "indeterminate": "{count} 项未完成",
         "passed": "{count} 项成功",
         "skipped": "{count} 项跳过",
-        "running": "{count} 项运行中",
+        "running": "{count} 项进行中",
         "expected": "{count} 项待运行"
       },
       "status": {
-        "passed": "通过",
+        "passed": "成功",
         "failed": "失败",
-        "indeterminate": "无法验证",
+        "indeterminate": "未完成",
         "skipped": "已跳过",
-        "running": "正在测试…",
+        "running": "正在运行…",
         "pending": "排队中",
-        "waiting": "正在等待设置"
+        "waiting": "正在等待设置",
+        "stopped": "已由你停止"
       },
       "required": {
         "label": "必需"
@@ -10734,17 +10877,15 @@
       "empty": {
         "label": "尚未运行任何检查。"
       },
-      "docsLink": {
-        "label": "文档"
-      },
       "foldButton": {
         "fold": "收起",
         "expand": "查看全部"
       },
       "titleCount": "（{complete}/{total}）",
+      "titleTotal": "（{total}）",
       "summary": {
         "failed": "{count} 项失败",
-        "unverified": "{count} 项未验证",
+        "unverified": "{count} 项未完成",
         "inProgress": "{count} 项进行中",
         "expected": "{count} 项待执行",
         "skipped": "{count} 项跳过",
@@ -10753,7 +10894,9 @@
       "failedToRun": "检查未能运行。请重试。",
       "requiredFailed": "{count, plural, one {# 项必需检查失败} other {# 项必需检查失败}}",
       "state": {
-        "inProgress": "检查进行中..."
+        "inProgress": "检查进行中...",
+        "completed": "检查已完成。",
+        "waiting": "正在等待连接器设置..."
       },
       "advisory": {
         "title": "部分内容不会被索引。",
@@ -10765,6 +10908,31 @@
         "proceedButton": {
           "label": "仍然创建连接器"
         }
+      },
+      "actions": {
+        "run": {
+          "label": "运行检查"
+        },
+        "skip": {
+          "label": "跳过检查"
+        },
+        "rerun": {
+          "label": "重新运行检查"
+        }
+      },
+      "details": {
+        "expand": "显示详情",
+        "collapse": "隐藏详情"
+      },
+      "docsButton": {
+        "label": "文档"
+      },
+      "runLost": "检查已停止响应。请重试。",
+      "cancelButton": {
+        "label": "取消"
+      },
+      "cancelFailed": {
+        "toast": "无法取消检查。请重试。"
       }
     },
     "connectorEdit": {
@@ -10857,7 +11025,9 @@
           },
           "error": {
             "title": "设置无效"
-          }
+          },
+          "blocks": "新设置未通过验证。请在应用前修复。",
+          "warns": "部分可选检查失败。你仍然可以应用。"
         },
         "warnings": {
           "title": "警告"
@@ -11934,6 +12104,9 @@
         "personal": {
           "label": "个人"
         },
+        "required": {
+          "tooltip": "你的组织管理员要求你拥有此技能。"
+        },
         "unavailable": {
           "label": "不可用 - 点击了解更多"
         }
@@ -11996,6 +12169,9 @@
       }
     },
     "app": {
+      "createSessionFailed": {
+        "toast": "无法开始新聊天。请重试。"
+      },
       "failedFiles": {
         "toast": "{count, plural, one {文件处理失败并已移除：{names}} other {文件处理失败并已移除：{names}}}"
       },
@@ -12462,6 +12638,9 @@
         "authFailedStatus": {
           "text": "{toolName} 身份验证失败（HTTP {statusCode}）"
         },
+        "blockedStatus": {
+          "text": "{toolName} 已被阻止"
+        },
         "completedStatus": {
           "text": "{toolName} 已完成"
         },
@@ -12494,6 +12673,9 @@
         },
         "runningStatus": {
           "text": "{toolName} 正在运行..."
+        },
+        "unreachableStatus": {
+          "text": "{toolName} 无法连接到其服务器"
         },
         "waitingIndicator": {
           "text": "正在等待响应..."
@@ -13536,9 +13718,6 @@
   },
   "common": {
     "textListField": {
-      "addButton": {
-        "label": "新增"
-      },
       "removeButton": {
         "tooltip": "移除"
       }
@@ -14055,21 +14234,23 @@
     },
     "plans": {
       "free": {
-        "title": "免费版",
-        "tooltip": "所有版本均可用。"
+        "title": "免费版"
       },
       "business": {
         "title": "商业版",
-        "tooltip": "需要[商业版或企业版](/admin/billing)。"
+        "tooltip": "此功能仅在 [Onyx 商业版或企业版](/admin/billing) 中提供。"
       },
       "enterprise": {
         "title": "企业版",
-        "tooltip": "需要[企业版](/admin/billing)。"
+        "tooltip": "此功能仅在 [Onyx 企业版](/admin/billing) 中提供。"
       },
       "upgrade": {
         "label": "升级方案"
       },
-      "availableFor": "{plan}可用"
+      "availableFor": "{plan}可用",
+      "beta": {
+        "title": "测试版"
+      }
     },
     "placeholders": {
       "email": "youxiang@nide-gongsi.com",
@@ -14095,6 +14276,14 @@
         "projectId": "wode-vertex-xiangmu",
         "location": "global"
       }
+    },
+    "languageSelect": {
+      "globalDefault": {
+        "label": "全局默认"
+      }
+    },
+    "appFooter": {
+      "slogan": "开源 AI 平台"
     }
   },
   "craft": {
@@ -14146,7 +14335,8 @@
       },
       "status": {
         "approved": "已批准",
-        "rejected": "已拒绝"
+        "rejected": "已拒绝",
+        "expired": "已过期"
       },
       "submit": {
         "errorFallback": "提交决定失败"
@@ -14210,7 +14400,7 @@
         "title": "关联的技能",
         "unavailable": {
           "duplicateName": "名为“{name}”的技能已关联。",
-          "invalid": "技能无效，请先修复再关联。",
+          "invalid": "技能无效。请先修复再关联。",
           "otherApp": "已与应用“{name}”关联。"
         },
         "unlink": {
@@ -14309,51 +14499,25 @@
         "title": "正在连接您的应用"
       },
       "page": {
-        "connectButton": "连接",
-        "connectingButton": "正在重定向…",
-        "disconnectButton": "断开连接",
         "empty": {
           "description": "您的组织尚未配置任何应用或 MCP 服务器。",
           "title": "暂无可连接的内容"
         },
-        "errors": {
-          "disconnectFailed": "断开连接失败",
-          "startAuthFailed": "无法启动授权"
-        },
         "header": {
           "description": "连接 Onyx Craft 在工作时可用作上下文的工具。",
-          "manageButton": "管理应用",
-          "searchPlaceholder": "搜索应用...",
           "title": "应用"
-        },
-        "kinds": {
-          "app": {
-            "blurb": "Onyx 直接支持的集成。每个都附带教 Craft 如何使用它的技能，从这里开始。",
-            "empty": "您的组织尚未配置任何应用。",
-            "emptyTitle": "暂无应用",
-            "tabLabel": "应用 · {count}"
-          },
-          "mcp": {
-            "blurb": "管理员已向 Craft 开放的服务器。如果服务器需要个人凭据，请先连接自己的账号，再使用其工具。",
-            "empty": "尚未向 Craft 开放任何 MCP 服务器。",
-            "emptyTitle": "暂无 MCP 服务器",
-            "tabLabel": "MCP 服务器 · {count}"
-          }
         },
         "loading": {
           "label": "正在加载…"
         },
         "reviewSkillsButton": "查看技能",
-        "search": {
-          "noMatchesDescription": "这里没有与您的搜索匹配的内容。",
-          "noMatchesTitle": "无匹配项"
-        },
         "status": {
           "connected": "已连接",
           "connectedNeedsSkills": "已连接 · 并非所有关联技能都已启用",
           "notAvailable": "您的账户不可用，请咨询管理员",
           "skillWarningAriaLabel": "需要设置技能",
-          "skillWarningTooltip": "并非所有关联技能都已启用。此应用可能无法正常工作。"
+          "skillWarningTooltip": "并非所有关联技能都已启用。此应用可能无法正常工作。",
+          "skillWarningSummary": "并非所有关联技能都已启用。"
         }
       },
       "policyEditor": {
@@ -14369,7 +14533,11 @@
           "description": "选择智能体可以执行的操作。“询问”会在每个操作前请求批准；“自动批准”则无需提示即可运行。",
           "title": "权限"
         },
-        "savingButton": "正在保存…"
+        "savingButton": "正在保存…",
+        "advanced": {
+          "description": "为每个操作单独设置策略。",
+          "title": "高级"
+        }
       },
       "skillsStep": {
         "description": "可选。关联现有技能或为此应用创建一个技能。",
@@ -14535,11 +14703,12 @@
     },
     "filePreview": {
       "cannotPreview": {
-        "title": "无法预览文件"
+        "title": "暂不支持预览此文件类型"
       },
       "error": {
         "inline": "错误：{message}",
-        "title": "加载文件出错"
+        "title": "无法加载预览",
+        "description": "未能加载预览。请重试或下载文件后打开。"
       },
       "loading": {
         "label": "正在加载文件..."
@@ -14552,10 +14721,25 @@
         "malformed": "此 CSV 包含一个无效的引号字段。请下载原文件进行检查。"
       },
       "imageTooLarge": {
-        "description": "此图片过大，无法预览。请下载原始文件以打开它。"
+        "description": "支持预览最大 10 MB 的图片。请下载文件后打开。",
+        "title": "图片过大，无法预览"
       },
       "unsupported": {
-        "description": "此文件无法预览。请下载原文件后打开。"
+        "description": "下载文件以查看其内容。"
+      },
+      "retry": {
+        "label": "重试"
+      },
+      "download": {
+        "label": "下载文件"
+      },
+      "tooLarge": {
+        "title": "文件过大，无法预览",
+        "description": "此处支持预览最大 {size, number} MB 的文件。请下载文件后打开。"
+      },
+      "playback": {
+        "title": "暂不支持播放",
+        "description": "您的浏览器无法播放此文件。请下载文件后打开。"
       }
     },
     "filesTab": {
@@ -14954,7 +15138,7 @@
         "title": "删除\"{title}\"？"
       },
       "newSession": {
-        "label": "开始创作"
+        "label": "新会话"
       },
       "options": {
         "label": "会话选项"
@@ -15018,7 +15202,8 @@
         "missingTaskId": "缺少任务 ID。",
         "pauseButton": "暂停",
         "resumeButton": "恢复",
-        "runNowButton": "立即运行",
+        "runHistoryTab": "运行历史",
+        "runNowButton": "运行一次",
         "toasts": {
           "deleteFailed": "删除任务失败",
           "deleted": "已删除“{name}”。",
@@ -15044,10 +15229,6 @@
           "name": {
             "label": "名称",
             "placeholder": "例如：每周客户升级问题摘要"
-          },
-          "preApproval": {
-            "description": "当此任务在无人值守时运行，Craft 可以直接使用选定的应用和 MCP 服务器而不暂停。其他审批请求会暂停运行并可能导致失败。",
-            "label": "预批准的应用和 MCP 服务器"
           },
           "prompt": {
             "description": "每次任务触发时，此消息都会发送给 Craft。",
@@ -15108,31 +15289,6 @@
         "description": "保存提示词和计划。Craft 会按定时器运行它。",
         "title": "新建计划任务"
       },
-      "preApproval": {
-        "appFallbackName": "应用 #{id}",
-        "appsGroupTitle": "应用",
-        "empty": {
-          "label": "Craft 中尚无可用的应用或 MCP 服务器。"
-        },
-        "errors": {
-          "loadFailed": "无法加载应用和 MCP 服务器。请刷新重试。",
-          "partialLoadFailed": "部分预批准选项无法加载。请刷新重试。"
-        },
-        "loading": {
-          "label": "正在加载应用和 MCP 服务器…"
-        },
-        "mcpGroupTitle": "MCP 服务器",
-        "mcpServerFallbackName": "MCP 服务器 #{id}",
-        "status": {
-          "connected": "已连接",
-          "connectionRequired": "需要连接",
-          "unavailable": "已不可用"
-        },
-        "summary": {
-          "partialLoadFailed": "部分预批准详情无法加载。请刷新重试。",
-          "title": "预批准的应用和 MCP 服务器"
-        }
-      },
       "runHistory": {
         "columns": {
           "duration": "时长",
@@ -15142,7 +15298,7 @@
           "trigger": "触发方式"
         },
         "empty": {
-          "label": "尚无运行记录。任务每次触发都会创建一条，也可以使用上方的“立即运行”。"
+          "label": "尚无运行记录。任务每次触发都会创建一条，也可以使用上方的“运行一次”。"
         },
         "errors": {
           "loadFailed": "无法加载运行历史。",
@@ -15161,19 +15317,20 @@
           "notOpenableAriaLabel": "无法打开"
         },
         "trigger": {
-          "runNow": "立即运行",
+          "runNow": "运行一次",
           "schedule": "计划"
         }
       },
       "scheduleEditor": {
+        "localTimeHint": "时间使用您所在的本地时区。",
         "dailyWeekly": {
-          "atLabel": "时间",
-          "daysLabel": "在这些日子",
+          "atLabel": "运行时间",
+          "daysLabel": "日期",
           "runsEveryDay": "每天运行",
           "runsOn": "在{days}运行"
         },
         "interval": {
-          "everyLabel": "每"
+          "everyLabel": "重复间隔"
         },
         "intervalUnits": {
           "days": "天",
@@ -15507,6 +15664,52 @@
       "viewPlans": {
         "label": "查看套餐"
       }
+    },
+    "actionPolicies": {
+      "appTitle": "{name} 审批设置",
+      "title": "审批设置",
+      "personalDescription": "这些设置决定 Craft 对话和新任务中的操作是自动运行还是需要批准；现有任务保留各自的设置。",
+      "taskDescription": "选择此任务可使用的插件，并管理哪些操作可自动执行。更改仅适用于此任务。",
+      "newTaskDescription": "启用插件后，将以您当前的操作设置为初始设置。",
+      "workspace_disabled": "工作区已禁用",
+      "workspace_managed": "由工作区管理",
+      "userManagement": "允许用户管理审批设置",
+      "userManagementDescription": "用户可以更改可用操作的审批设置。",
+      "loading": "正在加载审批设置…",
+      "loadError": "无法加载审批设置。",
+      "retry": "重试",
+      "save": "保存",
+      "saving": "正在保存…",
+      "cancel": "取消",
+      "saveError": "无法保存审批设置。",
+      "emptyActions": "没有已知操作。未知操作需要审批。",
+      "emptyApps": "没有可用应用。",
+      "expired": "审批已超时。操作未执行。",
+      "rejected": "请求已拒绝。此请求未执行。",
+      "deadline": "请在 {time} 前批准",
+      "agentPermissionRequired": "某项操作需要审批，因此本次运行已停止。请检查权限，然后重新运行任务。",
+      "enableForTask": "为此任务启用",
+      "enableAppForTask": "为此任务启用 {app}",
+      "enabledForTask": "已为此任务启用",
+      "disabledForTask": "已为此任务禁用",
+      "externalApp": "应用",
+      "mcpServer": "MCP 服务器",
+      "taskAppsTitle": "插件",
+      "taskAccessTitle": "插件访问权限",
+      "noEnabledApps": "此任务未启用任何插件。",
+      "actionPolicies": "审批设置",
+      "policyCounts": "自动批准 {auto} · 询问 {ask} · 已禁用 {disabled}",
+      "manageActions": "管理操作",
+      "taskModalDescription": "更改将在保存任务时生效。工作区限制始终适用。",
+      "searchActions": "搜索操作",
+      "setPermissions": "设置权限",
+      "applyMatching": "{count} 个匹配的可编辑操作",
+      "noMatchingActions": "没有与搜索条件匹配的操作。",
+      "close": "关闭",
+      "saveChanges": "保存更改",
+      "resetDefaults": "全部重置为默认值",
+      "resetAll": "全部重置为工作区默认值",
+      "workspaceDisabledTooltip": "管理员已在工作区中禁用此操作。"
     }
   },
   "knowledge": {
@@ -15837,6 +16040,11 @@
     "iconTooltip": {
       "label": "更多信息"
     },
+    "inputCurrency": {
+      "amount": "金额",
+      "fraction": "金额小数部分",
+      "whole": "金额整数部分"
+    },
     "input": {
       "day": "日",
       "hidePassword": "隐藏密码",
@@ -15922,6 +16130,18 @@
     "tabs": {
       "scrollLeft": "向左滚动标签",
       "scrollRight": "向右滚动标签"
+    },
+    "toast": {
+      "moreCount": "还有 {count} 条"
+    },
+    "sidebar": {
+      "open": "打开侧边栏",
+      "close": "关闭侧边栏"
+    },
+    "inputNumber": {
+      "outOfRange": "请输入 {min, number} 到 {max, number} 之间的数字",
+      "belowMin": "请输入不小于 {min, number} 的数字",
+      "aboveMax": "请输入不大于 {max, number} 的数字"
     }
   },
   "settings": {
@@ -15943,6 +16163,7 @@
         "currentPassword": {
           "title": "当前密码"
         },
+        "description": "您的其他会话将退出登录，您的个人访问 token 将被吊销。",
         "newPassword": {
           "title": "新密码"
         },
@@ -15953,8 +16174,7 @@
         "title": "修改密码",
         "toasts": {
           "networkError": "修改密码时发生错误",
-          "updateFailed": "修改密码失败",
-          "updated": "密码更新成功"
+          "updateFailed": "修改密码失败"
         },
         "validation": {
           "confirmRequired": "请确认您的新密码",
@@ -16026,10 +16246,8 @@
       "toasts": {
         "createFailed": "创建 token 失败",
         "createNetworkError": "创建 token 时发生网络错误",
-        "created": "Token 创建成功",
         "deleteFailed": "删除 token 失败",
         "deleteNetworkError": "删除 token 时发生网络错误",
-        "deleted": "Token 删除成功",
         "loadFailed": "加载 token 失败",
         "loadPermissionsFailed": "加载权限选项失败",
         "nameRequired": "必须填写 token 名称"
@@ -16093,8 +16311,7 @@
       },
       "title": "对话",
       "toasts": {
-        "saveFailed": "保存偏好设置失败",
-        "saved": "偏好设置已保存"
+        "saveFailed": "保存偏好设置失败"
       }
     },
     "connectors": {
@@ -16114,8 +16331,7 @@
       },
       "title": "连接器",
       "toasts": {
-        "disconnectFailed": "断开连接失败",
-        "disconnected": "已成功断开连接"
+        "disconnectFailed": "断开连接失败"
       }
     },
     "dangerZone": {
@@ -16131,8 +16347,7 @@
         "description": "永久删除您的所有对话会话。",
         "title": "删除全部对话",
         "toasts": {
-          "deleteFailed": "删除全部对话会话失败",
-          "deleted": "您的所有对话会话已删除。"
+          "deleteFailed": "删除全部对话会话失败"
         }
       },
       "title": "危险区域"
@@ -16179,8 +16394,7 @@
       "title": "语言",
       "toasts": {
         "updateFailed": "更新语言偏好设置失败"
-      },
-      "workspaceDefault": "工作区默认 ({language})"
+      }
     },
     "layout": {
       "header": {
@@ -16267,8 +16481,7 @@
       },
       "title": "个人资料",
       "toasts": {
-        "updateFailed": "更新个性化设置失败",
-        "updated": "个性化设置更新成功"
+        "updateFailed": "更新个性化设置失败"
       },
       "workRole": {
         "description": "填写您的职位，以便更好地定制回复。",
@@ -16286,12 +16499,9 @@
       "title": "提示词快捷方式",
       "toasts": {
         "bothRequired": "快捷方式和展开内容都必须填写",
-        "created": "快捷方式已创建",
         "deleteFailed": "删除快捷方式失败",
-        "deleted": "快捷方式已删除",
         "loadFailed": "加载快捷方式失败",
-        "saveFailed": "保存快捷方式失败",
-        "updated": "快捷方式已更新"
+        "saveFailed": "保存快捷方式失败"
       },
       "toggle": {
         "description": "启用快捷方式以快速插入常用提示词。",
@@ -16454,6 +16664,9 @@
         "languageModels": {
           "label": "语言模型"
         },
+        "decisionModels": {
+          "label": "决策模型"
+        },
         "llmGateway": {
           "label": "LLM 网关"
         },
@@ -16531,12 +16744,6 @@
       }
     },
     "adminSidebar": {
-      "businessOrEnterpriseOnly": {
-        "tooltip": "此功能仅在 [Onyx 商业版或企业版](/admin/billing) 中提供。"
-      },
-      "enterpriseOnly": {
-        "tooltip": "此功能仅在 [Onyx 企业版](/admin/billing) 中提供。"
-      },
       "exitAdminPanel": {
         "label": "退出管理面板"
       },
@@ -16797,21 +17004,11 @@
         "title": "技能不可用"
       },
       "management": {
-        "description": "控制谁可以使用此技能。",
-        "externalApp": {
-          "manage": {
-            "label": "在应用设置中管理"
-          },
-          "readyDescription": "此技能使用应用“{appName}”。",
-          "title": "外部应用"
-        },
         "sharing": {
           "edit": {
             "label": "编辑共享"
-          },
-          "title": "共享"
-        },
-        "title": "管理"
+          }
+        }
       },
       "saveTooltip": {
         "missingDescription": "保存前请添加描述。",
@@ -16821,21 +17018,6 @@
         "noPermission": "您没有编辑此技能详情的权限。",
         "savingChanges": "正在保存更改...",
         "savingSkill": "正在保存技能..."
-      },
-      "sharing": {
-        "organization": {
-          "editorDescription": "组织中的所有人都可以使用和编辑此技能。",
-          "title": "组织",
-          "viewerDescription": "组织中的所有人都可以使用此技能。"
-        },
-        "personal": {
-          "description": "只有您可以使用此技能。",
-          "title": "个人"
-        },
-        "shares": {
-          "description": "只有选定的用户和群组可以使用此技能。",
-          "title": "{count, plural, one {# 个共享} other {# 个共享}}"
-        }
       },
       "toasts": {
         "created": "已创建“{name}”",
@@ -16983,7 +17165,7 @@
           "title": "指令"
         },
         "loadError": {
-          "description": "请尝试关闭预览后重新打开。",
+          "description": "无法加载此技能的指令。",
           "title": "加载技能失败"
         },
         "metadata": {
@@ -17016,7 +17198,6 @@
         },
         "externalAppNotice": "只要此技能与应用“{appName}”关联，就必须开放全组织的查看权限。",
         "header": {
-          "title": "共享 *{name}*",
           "transferTitle": "转移 *{name}*"
         },
         "loading": {
@@ -17028,7 +17209,9 @@
         },
         "ownerLabel": "所有者",
         "permissionMenu": {
-          "ariaLabel": "更新 {name} 的访问权限"
+          "ariaLabel": "更新 {name} 的访问权限",
+          "canUse": "可使用",
+          "canEdit": "可编辑"
         },
         "saveButton": {
           "label": "保存"
@@ -17050,7 +17233,23 @@
         },
         "transferredToast": {
           "message": "所有权已转移。"
-        }
+        },
+        "installation": {
+          "title": "安装",
+          "available": "可供安装",
+          "default": "默认安装",
+          "required": "必需",
+          "availableDescription": "用户可以随时安装或卸载。",
+          "defaultDescription": "自动安装。用户可以随时禁用或卸载。",
+          "requiredDescription": "自动安装。用户无法禁用或卸载。",
+          "description": "选择此技能对所有有访问权限的用户的安装方式。"
+        },
+        "description": "选择谁可以使用此技能及其安装方式。",
+        "accessTitle": "谁可以访问",
+        "peopleTitle": "有访问权限的人员",
+        "manageIndividualAccess": "管理单独访问权限",
+        "individualAccessTitle": "单独访问权限",
+        "ownershipTitle": "所有权"
       },
       "placeholders": {
         "githubRepository": "suoyouzhe/cangku 或 https://github.com/suoyouzhe/cangku"

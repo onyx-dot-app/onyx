@@ -1,12 +1,19 @@
 @reference "#reference.css";
 
 /* ── Log ─────────────────────────────────────────────────────────────────────
-   Not interactive: the status colours the icon (icons stroke with
-   `currentColor`, so a `text-*` colour sets it), and the heavy weight tints the
-   line. The centre content brings its own colour. */
+   The status colours the icon (icons stroke with `currentColor`, so a `text-*`
+   colour sets it), and the heavy weight tints the line and its body. The
+   centre content brings its own colour. An interactive line takes its hover
+   and press colours from `Interactive.Stateless`. */
 
 .opal-log {
   @apply rounded-08;
+}
+
+/* The body starts under the title: past the line's padding (0.5rem), the
+   icon's column (1.25rem) and the gap (0.25rem). */
+.opal-log-body {
+  @apply ps-8 pe-2 pb-2;
 }
 
 .opal-log .opal-log-icon {

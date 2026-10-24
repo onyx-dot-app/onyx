@@ -58,3 +58,6 @@ import { Tooltip } from "@opal/components";
   `suppressed` when the children hold state that is tied to the node: a ref that a measurement or
   an observer reads, a running animation, or focus. A remount costs nothing otherwise, so a plain
   conditional stays right for the usual "no tooltip in this state" case.
+- A suppressed tooltip prevents the default of pointer moves over its trigger, so it never opens in
+  Radix's state and never closes an enclosing tooltip. An enclosing tooltip therefore opens only
+  from pointer moves outside the suppressed trigger.

@@ -109,7 +109,7 @@ import { LineItemButton } from "@opal/components";
   state={isSelected ? "selected" : "empty"}
   rounding={2}
   onClick={handleClick}
-  title="gpt-4o"
+  title="gpt-6-sol"
   sizePreset="main-ui"
   variant="section"
 />

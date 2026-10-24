@@ -302,7 +302,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # Whether to infer source and time filters from the
         # query. When False, only user/persona-selected filters are applied.
         auto_detect_filters: bool = True,
-        enforce_selection_input_budget: bool = False,
         selection_llm_factory: Callable[[], LLM] | None = None,
         primary_llm_cost_checked: bool = True,
     ) -> None:
@@ -320,7 +319,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self.slack_context = slack_context
         self.enable_slack_search = enable_slack_search
         self.auto_detect_filters = auto_detect_filters
-        self._enforce_selection_input_budget = enforce_selection_input_budget
 
         self._search_cycles: list[SearchCycle] = []
         self._cached_expansion: tuple[str | None, list[str]] | None = None
@@ -359,7 +357,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
     @property
     def enforce_selection_input_budget(self) -> bool:
-        return self._enforce_selection_input_budget or (
+        return (
             self._selection_llm_factory is not None
             and self.selection_llm is not self.llm
         )

@@ -20,12 +20,14 @@ import {
   Tooltip,
 } from "@opal/components";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
+import { Tag, type TagProps } from "@opal/components";
 import { Disabled, Hoverable, Interactive } from "@opal/core";
 import { SvgSidebar } from "@opal/icons";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { useSidebarState } from "@opal/layouts/root/components";
 import { SidebarFoldedContext } from "@opal/layouts/sidebar/context";
 import useScreenSize from "@opal/hooks/useScreenSize";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -176,12 +178,13 @@ function SidebarHeader({
 }: SidebarHeaderProps) {
   const foldable = useContext(SidebarFoldableContext);
   const { folded, setFolded } = useSidebarState();
+  const strings = useOpalStrings();
   const toggleFolded = useCallback(
     () => setFolded((prev) => !prev),
     [setFolded]
   );
 
-  const foldLabel = folded ? "Open Sidebar" : "Close Sidebar";
+  const foldLabel = folded ? strings.sidebarOpen : strings.sidebarClose;
 
   const closeButton = useMemo(
     () => (
@@ -336,6 +339,8 @@ function SidebarFooter({ children }: SidebarFooterProps) {
 
 interface SidebarSectionProps {
   title?: string | RichStr;
+  /** Optional tag at the end of the header, in line with tab `rightChildren`. */
+  tag?: TagProps;
   /** Optional action shown on hover, e.g. a "+" button. */
   action?: React.ReactNode;
   /** When true, dims the section header to indicate it is unavailable. */
@@ -346,6 +351,7 @@ interface SidebarSectionProps {
 
 function SidebarSection({
   title,
+  tag,
   action,
   disabled,
   children,
@@ -361,6 +367,11 @@ function SidebarSection({
                   {title}
                 </Text>
               </div>
+              {tag && (
+                <div className="opal-sidebar-section__tag">
+                  <Tag {...tag} />
+                </div>
+              )}
               {action && (
                 <Hoverable.Item group="sidebar-section">
                   {action}

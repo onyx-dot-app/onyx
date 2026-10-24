@@ -3,6 +3,7 @@ import { FileTypeCategory } from "@/lib/connectors/types/fileTypes";
 import type {
   CredentialDisplayName,
   CredentialFieldOptions,
+  CredentialFormVariant,
   CredentialJsonOf,
   CredentialMethodDescription,
   CredentialMethodLabel,
@@ -21,6 +22,7 @@ function defineCredentialSpec<
   brandName: string;
   fields: TFields;
   methods?: TMethods;
+  formVariants?: readonly CredentialFormVariant[];
 }): DefinedCredentialSpec<TFields, TMethods> {
   // SAFETY: an omitted `methods` leaves TMethods at its `undefined` default.
   return { ...spec, methods: spec.methods as TMethods };
@@ -277,6 +279,17 @@ export const CREDENTIAL_SPECS = {
       confluence_username: email("accountEmail"),
       confluence_access_token: secret("apiToken"),
     },
+    // Data Center signs in with a personal access token alone.
+    formVariants: [
+      {
+        when: { is_cloud: false },
+        fields: {
+          confluence_access_token: secret("personalAccessToken", {
+            hint: { key: "confluencePersonalAccessToken" },
+          }),
+        },
+      },
+    ],
   }),
   jira: defineCredentialSpec({
     brandName: "Jira",

@@ -68,10 +68,12 @@ export default function ActivitiesCard({ onOpenHistory }: ActivitiesCardProps) {
   );
 
   return (
+    // Fills the row beside the overview, so the two cards share one height and the list scrolls inside.
     <Card
       border="solid"
       rounding={4}
       padding={2}
+      height="full"
       data-testid="indexing-activities"
     >
       <Section alignItems="stretch" gap={1} height="full">
@@ -137,7 +139,12 @@ export default function ActivitiesCard({ onOpenHistory }: ActivitiesCardProps) {
             </Text>
           </Section>
         ) : (
-          <ShadowDiv variant="mask" className="max-h-44 min-h-0">
+          <ShadowDiv
+            variant="mask"
+            containerClassName="flex-1"
+            // Stacked under the overview the feed keeps a cap. Beside it the card's height is the cap.
+            className="max-h-44 @[38.5rem]/overview:max-h-none"
+          >
             <Section alignItems="stretch" gap={1} height="fit">
               {items.map(({ group, item }) => (
                 <ActivityCard

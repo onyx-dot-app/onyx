@@ -121,6 +121,15 @@ spec:
                 secretKeyRef:
                   name: onyx-loadtest
                   key: ONYX_API_KEY
+            - name: ONYX_SCHEDULE_SEED
+              value: "0"
+            - name: ONYX_WAIT_SECONDS
+              value: "15"
+            - name: ONYX_WAIT_JITTER
+              value: "0.5"
+            - name: ONYX_START_STAGGER_SECONDS
+              value: "15"
+            # Mount a corpus and set ONYX_MESSAGES_FILE for representative search.
             # Optional scenario tuning (see ../README.md):
             # ONYX_LLM_PROVIDER, ONYX_SEARCH_MODEL, ONYX_DR_MODEL,
             # ONYX_WAIT_SECONDS, ONYX_STREAM_READ_TIMEOUT, ...

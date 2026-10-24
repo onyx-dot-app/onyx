@@ -6,7 +6,7 @@ import "@opal/components/inputs/texts/input-type-in/styles.css";
 import "@opal/components/inputs/texts/input-type-in-tag/styles.css";
 import { useCallback, useEffect, useRef } from "react";
 import type { IconFunctionComponent } from "@opal/types";
-import { Button, Tag, TAG_REMOVE_CLASS, Text } from "@opal/components";
+import { Button, Chip, CHIP_REMOVE_ATTR, Text } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import { useOpalStrings } from "@opal/strings";
 
@@ -99,6 +99,9 @@ interface TagFieldProps extends TagFieldBaseProps {
 
   onInputClick?: () => void;
 
+  /** A double click anywhere on the field but its buttons. */
+  onInputDoubleClick?: () => void;
+
   /** Extra attributes on the text input (a select's combobox aria). */
   inputAriaProps?: React.AriaAttributes & { role?: React.AriaRole };
 
@@ -123,7 +126,7 @@ interface TagFieldProps extends TagFieldBaseProps {
 
 /**
  * The chips-in-input chrome (Figma `Input/Tags`) that `InputTypeInTag` and
- * `InputMultiSelect` share: editable `Tag`s inline with a text input on the
+ * `InputMultiSelect` share: `Chip`s inline with a text input on the
  * `.opal-input` chrome. Backspace on an empty input arms the last tag, and
  * Backspace or Delete on an armed tag removes it. Internal to Opal.
  */
@@ -147,6 +150,7 @@ function TagField({
   onEnter,
   onInputFocus,
   onInputClick,
+  onInputDoubleClick,
   inputAriaProps,
   children,
   readOnly = false,
@@ -178,7 +182,6 @@ function TagField({
   useEffect(() => {
     if (focusOnMount) focusField();
     // Mount only: later prop changes must not steal focus back.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // A new chip lands on the last row, next to the input or the trigger.
@@ -197,7 +200,7 @@ function TagField({
   function removeButtons(): HTMLButtonElement[] {
     return Array.from(
       ownRootRef.current?.querySelectorAll<HTMLButtonElement>(
-        `.${TAG_REMOVE_CLASS}`
+        `[${CHIP_REMOVE_ATTR}]`
       ) ?? []
     );
   }
@@ -259,7 +262,18 @@ function TagField({
   // returns to the field.
   function handleRootKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     const target = event.target as HTMLElement;
-    if (!target.classList.contains(TAG_REMOVE_CLASS)) return;
+    // Escape on a control in the field (a chip, the clear button, a
+    // chevron) returns focus to the field, even when a tooltip or popover
+    // consumed the key to close itself.
+    if (
+      event.key === "Escape" &&
+      target !== inputRef.current &&
+      target !== triggerRef.current
+    ) {
+      focusField();
+      return;
+    }
+    if (!target.hasAttribute(CHIP_REMOVE_ATTR)) return;
     const buttons = removeButtons();
     const index = buttons.indexOf(target as HTMLButtonElement);
     // The arrows walk the chips; Right off the last one returns to the
@@ -296,6 +310,12 @@ function TagField({
       data-read-only={readOnly || undefined}
       onKeyDown={handleRootKeyDown}
       onClick={focusField}
+      // Anywhere on the field but its buttons (a tag's ×, the clear button).
+      onDoubleClick={(event) => {
+        if (disabled || !onInputDoubleClick) return;
+        if ((event.target as Element).closest("button")) return;
+        onInputDoubleClick();
+      }}
     >
       {Icon && (
         <div className="opal-input-type-in-tag-icon-container">
@@ -313,9 +333,8 @@ function TagField({
         }
       >
         {tags.map((tag) => (
-          <Tag
+          <Chip
             key={tag.id}
-            size="md"
             title={tag.label}
             icon={tag.icon}
             error={tag.error}
@@ -374,19 +393,21 @@ function TagField({
           />
         )}
       </div>
+      {children}
+      {/* The clear action is always the field's last control. */}
       {onClear !== undefined && !disabled && (
         <Button
-          prominence="internal"
+          prominence="tertiary"
           icon={SvgX}
-          size="xs"
+          size="sm"
           tooltip={strings.clear}
+          aria-label={strings.clear}
           onClick={(event) => {
             event.stopPropagation();
             onClear();
           }}
         />
       )}
-      {children}
     </div>
   );
 }

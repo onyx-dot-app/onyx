@@ -9,7 +9,10 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission, require_permission
 from onyx.auth.scoped_permissions import assert_within_scope
-from onyx.background.celery.tasks.pruning.tasks import try_creating_prune_generator_task
+from onyx.background.celery.tasks.pruning.tasks import (
+    reset_prune_and_cancel_sync_record,
+    try_creating_prune_generator_task,
+)
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.indexing.models import IndexAttemptErrorPydantic
 from onyx.configs.constants import (
@@ -43,6 +46,7 @@ from onyx.db.connector_credential_pair import (
     get_connector_credential_pair_for_user,
     get_connector_credential_pair_from_id_for_user,
     get_readable_connector_credential_pair_for_user,
+    lock_connector_credential_pair_row,
     remove_credential_from_connector,
     stamp_indexing_hold_release,
     update_connector_credential_pair_from_id,
@@ -65,6 +69,7 @@ from onyx.db.enums import (
     SyncType,
 )
 from onyx.db.index_attempt import (
+    OpenErrorCounts,
     cancel_waiting_index_attempt__no_commit,
     count_index_attempt_errors_for_cc_pair,
     count_index_attempts_for_cc_pair,
@@ -73,7 +78,7 @@ from onyx.db.index_attempt import (
     get_index_attempt_errors_with_document_names_for_cc_pair,
     get_latest_index_attempt_for_cc_pair_id,
     get_latest_successful_index_attempt_for_cc_pair_id,
-    get_open_doc_error_counts_for_index_attempts,
+    get_open_error_counts_for_index_attempts,
     get_paginated_index_attempts_for_cc_pair_id,
     get_waiting_index_attempt,
 )
@@ -200,15 +205,17 @@ def get_cc_pair_index_attempts(
     error_counts = get_error_counts_for_index_attempts(
         db_session=db_session, index_attempt_ids=attempt_ids
     )
-    open_counts = get_open_doc_error_counts_for_index_attempts(
+    open_counts = get_open_error_counts_for_index_attempts(
         db_session=db_session, index_attempt_ids=attempt_ids
     )
+    no_errors = OpenErrorCounts()
     return PaginatedReturn(
         items=[
             IndexAttemptSnapshot.from_index_attempt_db_model(
                 index_attempt,
                 error_count=error_counts.get(index_attempt.id, 0),
-                open_doc_error_count=open_counts.get(index_attempt.id, 0),
+                open_error_count=open_counts.get(index_attempt.id, no_errors).total,
+                open_doc_error_count=open_counts.get(index_attempt.id, no_errors).docs,
             )
             for index_attempt in index_attempts
         ],
@@ -475,7 +482,7 @@ def resolve_matching_cc_pair_runs(
 @router.get("/admin/cc-pair/{cc_pair_id}/throughput")
 def get_cc_pair_throughput(
     cc_pair_id: int,
-    window: CCPairThroughputWindow = Query(CCPairThroughputWindow.HOURS_12),
+    window: CCPairThroughputWindow = Query(CCPairThroughputWindow.HOURS_24),
     user: User = Depends(
         require_permission(Permission.READ_CONNECTORS, allow_scope=True)
     ),
@@ -496,20 +503,19 @@ def get_cc_pair_throughput(
     return throughput_of(db_session, [cc_pair_id], window)
 
 
-def _cancel_index_attempt(
+def _cancel_index_attempt__no_commit(
     db_session: Session, attempt: IndexAttempt, reason: str
-) -> None:
+) -> str | None:
     """Cancels an active attempt the way a pause does. A first attempt that
     waits for the capability checks has no task to see a cancel request, so it
-    ends now and stays undispatched. Any other gets the request its task reads,
-    and its task is revoked. The caller commits."""
+    ends now and stays undispatched. Any other gets the request its task reads.
+    Returns the task id to revoke after the caller commits."""
     if attempt.celery_task_id is None and cancel_waiting_index_attempt__no_commit(
         db_session, attempt.id, reason
     ):
-        return
-    IndexingCoordination.request_cancellation(db_session, attempt.id)
-    if attempt.celery_task_id:
-        client_app.control.revoke(attempt.celery_task_id)
+        return None
+    IndexingCoordination.request_cancellation__no_commit(db_session, attempt.id)
+    return attempt.celery_task_id
 
 
 @router.post("/admin/index-attempt/{index_attempt_id}/cancel")
@@ -537,8 +543,12 @@ def cancel_index_attempt(
     if attempt.status.is_terminal():
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Index attempt is not running.")
 
-    _cancel_index_attempt(db_session, attempt, reason="Canceled by a user.")
+    task_id = _cancel_index_attempt__no_commit(
+        db_session, attempt, reason="Canceled by a user."
+    )
     db_session.commit()
+    if task_id:
+        client_app.control.revoke(task_id)
     emit_audit_event(
         AuditAction.CC_PAIR_UPDATE,
         AuditOutcome.SUCCESS,
@@ -755,7 +765,13 @@ def update_cc_pair_status(
             "Connector status can only be set to ACTIVE or PAUSED.",
         )
 
+    # Held through the status commit. Attempt creation takes the same lock,
+    # so an attempt created before the pause is in the select below, and a
+    # creation after it sees PAUSED.
+    lock_connector_credential_pair_row(db_session, cc_pair_id)
+
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
+    task_ids_to_revoke: list[str] = []
     if status_update_request.status == ConnectorCredentialPairStatus.PAUSED:
         redis_connector.stop.set_fence(True)
 
@@ -775,8 +791,12 @@ def update_cc_pair_status(
 
         for attempt in active_attempts:
             try:
-                # The status commit below also commits a waiting attempt's cancel.
-                _cancel_index_attempt(db_session, attempt, reason="Connector paused.")
+                # The status commit below commits the cancel.
+                task_id = _cancel_index_attempt__no_commit(
+                    db_session, attempt, reason="Connector paused."
+                )
+                if task_id:
+                    task_ids_to_revoke.append(task_id)
                 logger.info(
                     "Requested cancellation for active indexing attempt %s due to connector pause: cc_pair=%s",
                     attempt.id,
@@ -796,7 +816,22 @@ def update_cc_pair_status(
         status=status_update_request.status,
     )
 
+    # A started prune exits on the stop signal. A queued one is dropped here,
+    # under the row lock its generator takes to mark the start. The drop
+    # commits the status with the canceled sync record.
+    if (
+        status_update_request.status == ConnectorCredentialPairStatus.PAUSED
+        and (prune_payload := redis_connector.prune.payload)
+        and prune_payload.started is None
+    ):
+        if prune_payload.celery_task_id:
+            task_ids_to_revoke.append(prune_payload.celery_task_id)
+        reset_prune_and_cancel_sync_record(redis_connector, db_session)
+
     db_session.commit()
+
+    for task_id in task_ids_to_revoke:
+        client_app.control.revoke(task_id)
 
     emit_audit_event(
         AuditAction.CC_PAIR_UPDATE,
@@ -1009,6 +1044,13 @@ def prune_cc_pair(
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "Connection not found for current user's permissions",
+        )
+
+    # The generator drops a prune for a paused pair, so refuse it here.
+    if cc_pair.status == ConnectorCredentialPairStatus.PAUSED:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "The connector is paused. Resume it to prune.",
         )
 
     r = get_redis_client()

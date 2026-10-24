@@ -41,6 +41,8 @@ function hasLoadedMatch(options: SelectOptions, query: string): boolean {
 }
 
 export interface GlobalDefaultRow {
+  /** The row's title, when "Global Default" is not the right name. */
+  label?: string;
   /** The model null resolves to, shown under the row's title. */
   description?: string | null;
 }
@@ -50,11 +52,7 @@ type EmittedModelConfigurationId<Nullable extends boolean> =
   Nullable extends true ? number | null : number;
 
 export interface SimpleModelSelectorProps<Nullable extends boolean = false> {
-  /**
-   * The model configurations to offer, grouped by provider. Nothing is
-   * filtered here: pass the list you want shown, trimmed with
-   * `filterModelConfigurations` when needed.
-   */
+  includeDecisionOnly?: boolean;
   providers: ModelOptionProvider[];
   /** The chosen model configuration id; null shows the placeholder. */
   value: number | null;
@@ -82,10 +80,19 @@ export interface SimpleModelSelectorProps<Nullable extends boolean = false> {
    */
   globalDefault?: Nullable extends true ? GlobalDefaultRow : never;
   disabled?: boolean;
+  /**
+   * Error chrome, e.g. while the models failed to load. Left undefined, the
+   * select flags a value outside its options itself; false turns that off.
+   */
+  isError?: boolean;
   placeholder?: InputSingleSelectProps["placeholder"];
   /** Pages a truncated listing in: the end of the list loads more models,
    *  and a search no loaded model matches asks the server. */
   modelPaging?: ModelPaging;
+  /** Where the list portals to; inside a modal, pass the modal content. */
+  container?: InputSingleSelectProps["container"];
+  /** The select input's id, so a `<label htmlFor>` (`withLabel="<id>"`) opens it. */
+  id?: string;
 }
 
 /**
@@ -101,10 +108,14 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
   onChange,
   nullable,
   grouped = true,
+  includeDecisionOnly = false,
   globalDefault,
   disabled,
+  isError,
   placeholder,
   modelPaging,
+  container,
+  id,
 }: SimpleModelSelectorProps<Nullable>) {
   const t = useTranslations("common.modelSelectors");
   const providerNames = useProviderNames();
@@ -112,18 +123,33 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
     const models = buildModelSelectOptions(providers, {
       grouped,
       providerNames,
+      includeDecisionOnly,
     });
     if (!globalDefault) return models;
+    // Loose model rows go under an untitled divider, so a line always
+    // separates them from the Global Default row.
+    const looseModels = models.filter(
+      (option): option is SelectOption => !("options" in option)
+    );
     return [
       {
         value: GLOBAL_DEFAULT_SELECT_VALUE,
-        title: t("globalDefault.label"),
+        title: globalDefault.label ?? t("globalDefault.label"),
         description: globalDefault.description ?? undefined,
         icon: getModelIcon("", ""),
       },
-      ...models,
+      ...(looseModels.length === models.length
+        ? [{ options: looseModels }]
+        : models),
     ];
-  }, [providers, grouped, globalDefault, t, providerNames]);
+  }, [
+    providers,
+    grouped,
+    globalDefault,
+    t,
+    providerNames,
+    includeDecisionOnly,
+  ]);
 
   // Server search only when nothing loaded matches. The query is remembered
   // so a merged page, which changes `modelPaging`, does not re-run it.
@@ -207,6 +233,7 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
       value={toSelectValue(value)}
       defaultOption={defaultOption}
       disabled={disabled}
+      isError={isError}
       onValueChange={(next) => {
         const id = fromSelectValue(next);
         // The Global Default row stands for null, so picking it while
@@ -221,6 +248,8 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
       options={options}
       onSearchChange={modelPaging ? setQuery : undefined}
       onReachEnd={modelPaging ? loadNextWindow : undefined}
+      container={container}
+      id={id}
     />
   );
 }

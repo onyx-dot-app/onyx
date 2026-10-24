@@ -30,6 +30,7 @@ from onyx.server.features.mcp.credentials import (
     MCPCredentialsError,
     resolve_mcp_credentials,
 )
+from onyx.server.features.tool.tool_visibility import is_tool_available_for_persona
 from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.interface import Tool
 from onyx.tools.models import (
@@ -268,11 +269,8 @@ def _construct_tools_impl(
 
     added_search_tool = False
     for db_tool_model in configuration.tools:
-        # Disabling an action leaves it attached to its personas, so an attached
-        # tool is not necessarily a usable one (see Persona__Tool). Only the tool
-        # listing endpoints filtered on this, which left a disabled tool callable
-        # by any request that sends no allowed_tool_ids whitelist.
-        if not db_tool_model.enabled:
+        # Legacy OpenAPI disablement now applies only to default Chat.
+        if not is_tool_available_for_persona(db_tool_model, configuration.persona_id):
             continue
 
         # If allowed_tool_ids is specified, skip tools not in the allowed list

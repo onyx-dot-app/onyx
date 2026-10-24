@@ -30,7 +30,7 @@ inside the Cloud deployment.
 | Events | Source | When |
 | --- | --- | --- |
 | `runtime`, `version`, `resource`, `heartbeat` | Each API server, Celery worker, and Slack bot process | At start, then every 5 minutes |
-| `query` | Chat turns and search requests: channel, mode, outcome, timing, error category, chat tool usage | At the end of server execution |
+| `query` | Chat turns and search requests: channel, mode, outcome, timing, error category, chat tool usage, LLM cycles | At the end of server execution |
 | `attempt` counters | Indexing: documents fetched, chunks embedded and written, errors, durations | Summed for 30 seconds |
 | `connector`, `tenant_domain`, `license` | Collector: connector settings and counts, signup email domains, license presence | On change, and every 6 hours |
 | `attempt`, `stage`, `job` | Collector: index attempts, stage timings, sync and migration jobs that changed | Every 5 minutes |
@@ -45,6 +45,20 @@ Repeated calls and nested research calls share one classification. Model compari
 The server emits one query event when execution ends, even if the client disconnects and reconnects.
 Cancellation freezes usage at the server's stop point. Search-mode requests leave this chat classification unset.
 Outcome remains separate from tool usage. Deploy the receiving server's optional `tool_usage` field before this instrumentation.
+
+Chat queries report `llm_cycles`: the chat-loop LLM calls up to and including the call that produced the
+first answer token. 1 means the model answered directly. 2 means one round of tool calls came first. Text
+that a model streams before a tool call is the first answer, so later calls do not count. The two values
+use different measurement points. The emitter records `llm_cycles` when the worker queues the first answer
+text. `first_answer_ms` is recorded when the stream writer reads that text, so it also includes any writer
+delay. A slow writer can increase `first_answer_ms`, but it cannot change `llm_cycles`. Model comparisons
+report the count of the model that answered first. If no answer token arrived, the count is the highest
+number of calls that one model made: the models run in parallel, so their counts are not added. LLM calls
+inside tools do not count.
+
+Deep research requests report the `deep_research` mode instead of `chat`. They report tool usage, but not
+`llm_cycles`, because their orchestration is not a chat loop. Deploy the receiving server's optional
+`llm_cycles` field and `deep_research` mode before this instrumentation.
 
 Connector document counts use the same query as the connector admin page. They count indexed
 document links for each connector and credential pair, excluding pending links. Counts follow

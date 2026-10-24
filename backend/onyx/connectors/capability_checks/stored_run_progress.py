@@ -10,30 +10,19 @@ from datetime import timedelta
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel
-
 from onyx.cache.factory import get_cache_backend
-from onyx.connectors.capability_checks.draft_runs import (
-    DraftCheckState,
-    DraftCheckStateKind,
-)
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckResult,
+    DraftCheckState,
+    DraftCheckStateKind,
+    StoredRunProgress,
 )
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 _KEY_PREFIX = "capability_check_stored_run_progress"
-
-
-class StoredRunProgress(BaseModel):
-    """The run's finished checks, and the checks still to finish in run
-    order: the first RUNNING, the rest PENDING."""
-
-    check_results: list[CapabilityCheckResult]
-    open_checks: list[DraftCheckState]
 
 
 def _key(run_id: UUID) -> str:
@@ -43,6 +32,8 @@ def _key(run_id: UUID) -> str:
 def _open_state(check: CapabilityCheck[Any]) -> DraftCheckState:
     return DraftCheckState(
         check_id=check.check_id,
+        row_id=check.row_id,
+        step=check.step,
         display_name=check.display_name,
         capability=check.capability,
         required=check.required,

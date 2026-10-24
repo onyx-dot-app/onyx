@@ -24,6 +24,21 @@ This file provides guidance to AI agents when working with code in this reposito
 - When making calls to the backend, always go through the frontend. E.g. make a call to `http://localhost:3000/api/persona` not `http://localhost:8080/api/persona`
 - If `.agents-local.md` exists at the repo root and its rules are not already in your context,
   read and follow it. It carries developer-local agent guidance and is never committed.
+- Before you start work, check that your branch does not need a rebase on `origin/main`.
+  Rebase if the branch has merge conflicts with main.
+  Rebase if the branch is stale: more than 3 days since it diverged from or last synced with main.
+  Keeping a branch current prevents a much more involved conflict resolution later.
+  Claude Code and Codex run this check at session start and on later prompts.
+  The hook is `.agents/hooks/ensure_latest_main.py`. It fetches at most once an hour.
+  It is silent unless a rebase is needed.
+  Other agents: run `git fetch origin +refs/heads/main:refs/remotes/origin/main`.
+  Check for conflicts with `git merge-tree --write-tree HEAD origin/main`.
+  Exit status 1 means conflicts. Other non-zero codes are errors, not conflicts.
+  Check the age with `git show -s --format=%cr $(git merge-base HEAD origin/main)`.
+  To update, run `git rebase origin/main`. Use `git merge origin/main` for a shared branch.
+  On `main`, run `git pull --ff-only origin main`.
+  If a merge or rebase is already in progress, finish it or abort it first.
+  Never discard uncommitted changes to do this.
 
 ## Project Overview
 

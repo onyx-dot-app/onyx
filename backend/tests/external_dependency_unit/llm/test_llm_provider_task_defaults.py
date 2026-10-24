@@ -63,6 +63,7 @@ def test_schema_engine() -> Generator[Engine, None, None]:
             tables=[
                 Base.metadata.tables[table_name]
                 for table_name in (
+                    "voice_provider",
                     "llm_provider",
                     "model_configuration",
                     "llm_model_flow",
@@ -91,8 +92,8 @@ def provider(db_session: Session) -> Generator[LLMProviderView, None, None]:
             name=f"test-naming-{uuid4().hex}",
             provider="openai",
             model_configurations=[
-                ModelConfigurationUpsertRequest(name="gpt-5-mini", is_visible=True),
-                ModelConfigurationUpsertRequest(name="gpt-5-nano", is_visible=False),
+                ModelConfigurationUpsertRequest(name="gpt-6-luna", is_visible=True),
+                ModelConfigurationUpsertRequest(name="gpt-6-sol", is_visible=False),
             ],
         ),
         db_session,
@@ -101,6 +102,37 @@ def provider(db_session: Session) -> Generator[LLMProviderView, None, None]:
         yield saved
     finally:
         db_session.rollback()
+        remove_llm_provider(db_session, saved.id)
+
+
+def test_typesafe_credentials_persist_without_chat_models(db_session: Session) -> None:
+    saved = upsert_llm_provider(
+        LLMProviderUpsertRequest(
+            provider="typesafe",
+            api_key="typesafe-test-key",
+            is_auto_mode=True,
+        ),
+        db_session,
+    )
+    try:
+        stored = fetch_existing_llm_provider_by_id(saved.id, db_session)
+        assert stored is not None
+        assert stored.api_key is not None
+        assert stored.api_key.get_value(apply_mask=False) == "typesafe-test-key"
+        assert stored.model_configurations == []
+        assert stored.is_auto_mode is False
+        for flow in (LLMModelFlowType.CHAT, LLMModelFlowType.CRAFT):
+            with pytest.raises(ValueError, match="not a valid model"):
+                update_default_model(db_session, saved.id, "jev-latest", flow)
+            db_session.rollback()
+        with pytest.raises(ValueError, match="chat model discovery"):
+            sync_model_configurations(
+                db_session,
+                saved.id,
+                [SyncModelEntry(name="jev-latest", display_name="Jev")],
+            )
+        db_session.rollback()
+    finally:
         remove_llm_provider(db_session, saved.id)
 
 
@@ -118,10 +150,10 @@ def _update_provider(
             provider="openai",
             model_configurations=[
                 ModelConfigurationUpsertRequest(
-                    name="gpt-5-mini", is_visible=mini_visible
+                    name="gpt-6-luna", is_visible=mini_visible
                 ),
                 ModelConfigurationUpsertRequest(
-                    name="gpt-5-nano", is_visible=nano_visible
+                    name="gpt-6-sol", is_visible=nano_visible
                 ),
             ],
         ),
@@ -130,7 +162,7 @@ def _update_provider(
 
 
 @pytest.mark.parametrize(
-    "model_name,is_visible", [("gpt-5-mini", True), ("gpt-5-nano", False)]
+    "model_name,is_visible", [("gpt-6-luna", True), ("gpt-6-sol", False)]
 )
 def test_setting_chat_naming_creates_one_mapping_and_preserves_visibility(
     db_session: Session,
@@ -173,19 +205,19 @@ def test_search_selection_persists_hidden_mapping_and_resets_independently(
 ) -> None:
     update_default_pointer_model(
         provider_id=provider.id,
-        model_name="gpt-5-mini",
+        model_name="gpt-6-luna",
         db_session=db_session,
         flow_type=LLMModelFlowType.CHAT_NAMING,
     )
     update_default_pointer_model(
         provider_id=provider.id,
-        model_name="gpt-5-nano",
+        model_name="gpt-6-sol",
         db_session=db_session,
         flow_type=LLMModelFlowType.SEARCH_SELECTION,
     )
     update_default_pointer_model(
         provider_id=provider.id,
-        model_name="gpt-5-nano",
+        model_name="gpt-6-sol",
         db_session=db_session,
         flow_type=LLMModelFlowType.SEARCH_SELECTION,
     )
@@ -193,7 +225,7 @@ def test_search_selection_persists_hidden_mapping_and_resets_independently(
 
     selection = fetch_default_model(db_session, LLMModelFlowType.SEARCH_SELECTION)
     assert selection is not None
-    assert (selection.name, selection.is_visible) == ("gpt-5-nano", False)
+    assert (selection.name, selection.is_visible) == ("gpt-6-sol", False)
     mappings = db_session.scalars(
         select(LLMModelFlow).where(
             LLMModelFlow.model_configuration_id == selection.id,
@@ -210,7 +242,7 @@ def test_search_selection_persists_hidden_mapping_and_resets_independently(
     )
     update_default_pointer_model(
         provider_id=provider.id,
-        model_name="gpt-5-mini",
+        model_name="gpt-6-luna",
         db_session=db_session,
         flow_type=LLMModelFlowType.CHAT_NAMING,
     )
@@ -218,7 +250,7 @@ def test_search_selection_persists_hidden_mapping_and_resets_independently(
     update_no_default_search_selection_provider(db_session)
     assert fetch_default_model(db_session, LLMModelFlowType.SEARCH_SELECTION) is None
     naming = fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING)
-    assert naming is not None and naming.name == "gpt-5-mini"
+    assert naming is not None and naming.name == "gpt-6-luna"
 
 
 def test_search_selection_survives_edit_discovery_and_auto_sync(
@@ -226,7 +258,7 @@ def test_search_selection_survives_edit_discovery_and_auto_sync(
 ) -> None:
     update_default_pointer_model(
         provider_id=provider.id,
-        model_name="gpt-5-nano",
+        model_name="gpt-6-sol",
         db_session=db_session,
         flow_type=LLMModelFlowType.SEARCH_SELECTION,
     )
@@ -236,7 +268,7 @@ def test_search_selection_survives_edit_discovery_and_auto_sync(
         provider.id,
         [
             SyncModelEntry(
-                name="gpt-5-nano", display_name="GPT 5 nano", supports_reasoning=True
+                name="gpt-6-sol", display_name="GPT 5 nano", supports_reasoning=True
             )
         ],
     )
@@ -250,14 +282,14 @@ def test_search_selection_survives_edit_discovery_and_auto_sync(
             updated_at=datetime.now(timezone.utc),
             providers={
                 "openai": LLMProviderRecommendation(
-                    default_model=SimpleKnownModel(name="gpt-5-mini")
+                    default_model=SimpleKnownModel(name="gpt-6-luna")
                 )
             },
         ),
     )
     selection = fetch_default_model(db_session, LLMModelFlowType.SEARCH_SELECTION)
     assert selection is not None
-    assert (selection.name, selection.is_visible) == ("gpt-5-nano", False)
+    assert (selection.name, selection.is_visible) == ("gpt-6-sol", False)
     assert LLMModelFlowType.REASONING in selection.llm_model_flow_types
 
 
@@ -266,7 +298,7 @@ def test_search_selection_can_be_hidden_but_not_removed(
 ) -> None:
     update_default_pointer_model(
         provider_id=provider.id,
-        model_name="gpt-5-mini",
+        model_name="gpt-6-luna",
         db_session=db_session,
         flow_type=LLMModelFlowType.SEARCH_SELECTION,
     )
@@ -287,13 +319,13 @@ def test_invalid_search_selection_preserves_existing_defaults(
 ) -> None:
     update_default_pointer_model(
         provider_id=provider.id,
-        model_name="gpt-5-mini",
+        model_name="gpt-6-luna",
         db_session=db_session,
         flow_type=LLMModelFlowType.CHAT_NAMING,
     )
     update_default_pointer_model(
         provider_id=provider.id,
-        model_name="gpt-5-nano",
+        model_name="gpt-6-sol",
         db_session=db_session,
         flow_type=LLMModelFlowType.SEARCH_SELECTION,
     )
@@ -306,8 +338,8 @@ def test_invalid_search_selection_preserves_existing_defaults(
         )
     selection = fetch_default_model(db_session, LLMModelFlowType.SEARCH_SELECTION)
     naming = fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING)
-    assert selection is not None and selection.name == "gpt-5-nano"
-    assert naming is not None and naming.name == "gpt-5-mini"
+    assert selection is not None and selection.name == "gpt-6-sol"
+    assert naming is not None and naming.name == "gpt-6-luna"
 
 
 def test_search_selection_shared_with_chat_cannot_be_hidden(
@@ -315,13 +347,13 @@ def test_search_selection_shared_with_chat_cannot_be_hidden(
 ) -> None:
     update_default_pointer_model(
         provider_id=provider.id,
-        model_name="gpt-5-mini",
+        model_name="gpt-6-luna",
         db_session=db_session,
         flow_type=LLMModelFlowType.SEARCH_SELECTION,
     )
     update_default_model(
         provider_id=provider.id,
-        model="gpt-5-mini",
+        model="gpt-6-luna",
         db_session=db_session,
         flow_type=LLMModelFlowType.CHAT,
     )
@@ -334,32 +366,32 @@ def test_replacing_and_clearing_chat_naming_preserves_chat_and_search_selection(
 ) -> None:
     update_default_model(
         provider_id=provider.id,
-        model="gpt-5-mini",
+        model="gpt-6-luna",
         db_session=db_session,
         flow_type=LLMModelFlowType.CHAT,
     )
     update_default_pointer_model(
         provider_id=provider.id,
-        model_name="gpt-5-mini",
+        model_name="gpt-6-luna",
         db_session=db_session,
         flow_type=LLMModelFlowType.SEARCH_SELECTION,
     )
     update_default_pointer_model(
         provider_id=provider.id,
-        model_name="gpt-5-mini",
+        model_name="gpt-6-luna",
         db_session=db_session,
         flow_type=LLMModelFlowType.CHAT_NAMING,
     )
     update_default_pointer_model(
         provider_id=provider.id,
-        model_name="gpt-5-nano",
+        model_name="gpt-6-sol",
         db_session=db_session,
         flow_type=LLMModelFlowType.CHAT_NAMING,
     )
 
     default = fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING)
     assert default is not None
-    assert (default.name, default.is_visible) == ("gpt-5-nano", False)
+    assert (default.name, default.is_visible) == ("gpt-6-sol", False)
     assert (
         sum(
             LLMModelFlowType.CHAT_NAMING in flows
@@ -379,7 +411,7 @@ def test_replacing_and_clearing_chat_naming_preserves_chat_and_search_selection(
         assert model is not None
         assert (model.llm_provider_id, model.name, model.is_visible) == (
             provider.id,
-            "gpt-5-mini",
+            "gpt-6-luna",
             True,
         )
 
@@ -389,7 +421,7 @@ def test_hidden_chat_naming_default_survives_provider_edit_and_discovery(
 ) -> None:
     update_default_pointer_model(
         provider_id=provider.id,
-        model_name="gpt-5-nano",
+        model_name="gpt-6-sol",
         db_session=db_session,
         flow_type=LLMModelFlowType.CHAT_NAMING,
     )
@@ -400,14 +432,14 @@ def test_hidden_chat_naming_default_survives_provider_edit_and_discovery(
         provider.id,
         [
             SyncModelEntry(
-                name="gpt-5-nano", display_name="GPT 5 nano", supports_reasoning=True
+                name="gpt-6-sol", display_name="GPT 5 nano", supports_reasoning=True
             )
         ],
     )
 
     default = fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING)
     assert default is not None
-    assert (default.name, default.is_visible) == ("gpt-5-nano", False)
+    assert (default.name, default.is_visible) == ("gpt-6-sol", False)
     assert {
         LLMModelFlowType.CHAT,
         LLMModelFlowType.REASONING,
@@ -420,18 +452,18 @@ def test_chat_naming_only_default_can_be_hidden_but_shared_chat_default_cannot(
 ) -> None:
     update_default_pointer_model(
         provider_id=provider.id,
-        model_name="gpt-5-mini",
+        model_name="gpt-6-luna",
         db_session=db_session,
         flow_type=LLMModelFlowType.CHAT_NAMING,
     )
     _update_provider(db_session, provider, mini_visible=False)
     default = fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING)
     assert default is not None
-    assert (default.name, default.is_visible) == ("gpt-5-mini", False)
+    assert (default.name, default.is_visible) == ("gpt-6-luna", False)
 
     update_default_model(
         provider_id=provider.id,
-        model="gpt-5-mini",
+        model="gpt-6-luna",
         db_session=db_session,
         flow_type=LLMModelFlowType.CHAT,
     )
@@ -444,7 +476,7 @@ def test_chat_naming_default_cannot_be_removed_during_provider_edit(
 ) -> None:
     update_default_pointer_model(
         provider_id=provider.id,
-        model_name="gpt-5-nano",
+        model_name="gpt-6-sol",
         db_session=db_session,
         flow_type=LLMModelFlowType.CHAT_NAMING,
     )
@@ -454,7 +486,7 @@ def test_chat_naming_default_cannot_be_removed_during_provider_edit(
                 id=provider.id,
                 provider="openai",
                 model_configurations=[
-                    ModelConfigurationUpsertRequest(name="gpt-5-mini", is_visible=True)
+                    ModelConfigurationUpsertRequest(name="gpt-6-luna", is_visible=True)
                 ],
             ),
             db_session,
@@ -466,7 +498,7 @@ def test_auto_sync_does_not_restore_hidden_chat_naming_only_default(
 ) -> None:
     update_default_pointer_model(
         provider_id=provider.id,
-        model_name="gpt-5-nano",
+        model_name="gpt-6-sol",
         db_session=db_session,
         flow_type=LLMModelFlowType.CHAT_NAMING,
     )
@@ -481,7 +513,7 @@ def test_auto_sync_does_not_restore_hidden_chat_naming_only_default(
             updated_at=datetime.now(timezone.utc),
             providers={
                 "openai": LLMProviderRecommendation(
-                    default_model=SimpleKnownModel(name="gpt-5-mini")
+                    default_model=SimpleKnownModel(name="gpt-6-luna")
                 )
             },
         ),
@@ -489,7 +521,7 @@ def test_auto_sync_does_not_restore_hidden_chat_naming_only_default(
 
     default = fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING)
     assert default is not None
-    assert (default.name, default.is_visible) == ("gpt-5-nano", False)
+    assert (default.name, default.is_visible) == ("gpt-6-sol", False)
 
 
 @pytest.mark.parametrize("model_name", ["missing-model", ""])
@@ -498,7 +530,7 @@ def test_invalid_selection_preserves_existing_chat_naming_default(
 ) -> None:
     update_default_pointer_model(
         provider_id=provider.id,
-        model_name="gpt-5-nano",
+        model_name="gpt-6-sol",
         db_session=db_session,
         flow_type=LLMModelFlowType.CHAT_NAMING,
     )
@@ -514,12 +546,12 @@ def test_invalid_selection_preserves_existing_chat_naming_default(
     assert default is not None
     assert (default.llm_provider_id, default.name, default.is_visible) == (
         provider.id,
-        "gpt-5-nano",
+        "gpt-6-sol",
         False,
     )
 
 
-@pytest.mark.parametrize("model_name", ["gpt-5-mini", "gpt-5-nano"])
+@pytest.mark.parametrize("model_name", ["gpt-6-luna", "gpt-6-sol"])
 def test_setting_craft_creates_one_mapping_and_makes_model_visible(
     db_session: Session, provider: LLMProviderView, model_name: str
 ) -> None:
@@ -571,7 +603,7 @@ def test_invalid_selection_preserves_existing_craft_default(
 ) -> None:
     update_default_pointer_model(
         provider_id=provider.id,
-        model_name="gpt-5-nano",
+        model_name="gpt-6-sol",
         db_session=db_session,
         flow_type=LLMModelFlowType.CRAFT,
     )
@@ -590,7 +622,7 @@ def test_invalid_selection_preserves_existing_craft_default(
     assert default is not None
     assert (default.llm_provider_id, default.name, default.is_visible) == (
         provider.id,
-        "gpt-5-nano",
+        "gpt-6-sol",
         True,
     )
 
@@ -599,30 +631,30 @@ def test_invalid_selection_preserves_existing_craft_default(
     ("rows", "expected"),
     [
         (
-            [("gpt-5-mini", "FAST", False), ("gpt-5-nano", "FAST", True)],
-            {("gpt-5-mini", False), ("gpt-5-nano", True)},
+            [("gpt-6-luna", "FAST", False), ("gpt-6-sol", "FAST", True)],
+            {("gpt-6-luna", False), ("gpt-6-sol", True)},
         ),
         (
             [
-                ("gpt-5-mini", "CHAT_NAMING", True),
-                ("gpt-5-mini", "FAST", False),
-                ("gpt-5-nano", "FAST", True),
+                ("gpt-6-luna", "CHAT_NAMING", True),
+                ("gpt-6-luna", "FAST", False),
+                ("gpt-6-sol", "FAST", True),
             ],
-            {("gpt-5-mini", True), ("gpt-5-nano", False)},
+            {("gpt-6-luna", True), ("gpt-6-sol", False)},
         ),
         (
             [
-                ("gpt-5-mini", "CHAT_NAMING", False),
-                ("gpt-5-nano", "CHAT_NAMING", False),
-                ("gpt-5-nano", "FAST", True),
+                ("gpt-6-luna", "CHAT_NAMING", False),
+                ("gpt-6-sol", "CHAT_NAMING", False),
+                ("gpt-6-sol", "FAST", True),
             ],
-            {("gpt-5-mini", False), ("gpt-5-nano", True)},
+            {("gpt-6-luna", False), ("gpt-6-sol", True)},
         ),
         ([], set()),
-        ([("gpt-5-mini", "CHAT_NAMING", True)], {("gpt-5-mini", True)}),
+        ([("gpt-6-luna", "CHAT_NAMING", True)], {("gpt-6-luna", True)}),
         (
-            [("gpt-5-mini", "CHAT_NAMING", True), ("gpt-5-mini", "FAST", True)],
-            {("gpt-5-mini", True)},
+            [("gpt-6-luna", "CHAT_NAMING", True), ("gpt-6-luna", "FAST", True)],
+            {("gpt-6-luna", True)},
         ),
     ],
 )
@@ -641,7 +673,7 @@ def test_migrate_draft_fast_preserves_naming_and_search_defaults(
     ).all()
     model_ids = {model.name: model.id for model in models}
     visibility_before = {model.name: model.is_visible for model in models}
-    for name, flow, is_default in [*rows, ("gpt-5-nano", "SEARCH_SELECTION", True)]:
+    for name, flow, is_default in [*rows, ("gpt-6-sol", "SEARCH_SELECTION", True)]:
         db_session.execute(
             text(
                 "INSERT INTO llm_model_flow (model_configuration_id, llm_model_flow_type, is_default) "
@@ -677,5 +709,5 @@ def test_migrate_draft_fast_preserves_naming_and_search_defaults(
     ).tuples()
     assert set(naming_rows) == expected
     selection = fetch_default_model(db_session, LLMModelFlowType.SEARCH_SELECTION)
-    assert selection is not None and selection.name == "gpt-5-nano"
+    assert selection is not None and selection.name == "gpt-6-sol"
     assert {model.name: model.is_visible for model in models} == visibility_before

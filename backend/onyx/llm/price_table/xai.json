@@ -1442,6 +1442,27 @@
       "mode": "video_generation",
       "name": "grok-imagine-video-1.5-preview"
     },
+    "grok-voice-2.0": {
+      "cost": {
+        "second_input": 0.001333333333333
+      },
+      "mode": "realtime",
+      "name": "grok-voice-2.0"
+    },
+    "grok-voice-3.0": {
+      "cost": {
+        "second_input": 0.001333333333333
+      },
+      "mode": "realtime",
+      "name": "grok-voice-3.0"
+    },
+    "grok-voice-latest": {
+      "cost": {
+        "second_input": 0.001333333333333
+      },
+      "mode": "realtime",
+      "name": "grok-voice-latest"
+    },
     "grok-voice-transcribe-1.0": {
       "cost": {
         "second": 0.0,

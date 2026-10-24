@@ -3,7 +3,11 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { SWRConfig } from "swr";
 import { Formik, useFormikContext } from "formik";
 import type { ReactNode } from "react";
-import { useConnectorChecks } from "@/lib/connectors/checks/hooks";
+import {
+  DRAFT_RUN_CLIENT_DEADLINE_MS,
+  useConnectorChecks,
+} from "@/lib/connectors/checks/hooks";
+import { errorHandlingFetchWith, FetchError } from "@/lib/fetcher";
 import {
   cancelDraftCheckRun,
   fetchDraftCheckPlan,
@@ -25,7 +29,8 @@ jest.mock("@/lib/connectors/checks/svc", () => ({
 }));
 // A run fetch returns what the latest start request returned.
 jest.mock("@/lib/fetcher", () => ({
-  errorHandlingFetcher: jest.fn(async () => {
+  ...jest.requireActual("@/lib/fetcher"),
+  errorHandlingFetchWith: jest.fn(async () => {
     const { startDraftCheckRun, startPairEditCheckRun } = jest.requireMock(
       "@/lib/connectors/checks/svc"
     );
@@ -77,6 +82,12 @@ function check(
     duration_ms: null,
     from_cache: false,
     validates_binding: false,
+    is_fallback: false,
+    summary: null,
+    description: null,
+    error_kind: null,
+    not_run_reason: null,
+    reports_field: null,
     findings: [],
     ...overrides,
   };
@@ -439,4 +450,131 @@ it("lets the checks start again after another tab supersedes the run", async () 
   act(() => result.current.begin());
   await waitFor(() => expect(pairStartMock).toHaveBeenCalledTimes(1));
   await waitFor(() => expect(result.current.status).toBe("notStarted"));
+});
+
+it("shows the server's reason when it refuses the start", async () => {
+  const detail = "Credential 1 is shared with you.";
+  startMock.mockRejectedValueOnce(
+    new FetchError("refused", 403, { error_code: "UNAUTHORIZED", detail })
+  );
+  const { result } = renderChecks();
+  act(() => result.current.checks.begin());
+
+  await waitFor(() => expect(result.current.checks.status).toBe("failedToRun"));
+  expect(result.current.checks.failure).toEqual({ kind: "refused", detail });
+});
+
+it("fails to run, and stops polling, when polling the run fails", async () => {
+  startMock.mockResolvedValue(run([BINDING, CONTENT], "running"));
+  const fetcher = jest.mocked(errorHandlingFetchWith);
+  fetcher.mockRejectedValueOnce(new FetchError("gone", 404, null));
+  const { result } = renderChecks();
+  act(() => result.current.checks.begin());
+
+  await waitFor(() => expect(result.current.checks.status).toBe("failedToRun"));
+  expect(result.current.checks.failure).toEqual({ kind: "lost" });
+  expect(result.current.checks.inProgressCount).toBe(0);
+  const calls: number = fetcher.mock.calls.length;
+  await act(() => new Promise((resolve) => setTimeout(resolve, 2000)));
+  expect(fetcher.mock.calls.length).toBe(calls);
+});
+
+it("fails to run once a running run passes the client deadline", async () => {
+  startMock.mockResolvedValue(run([BINDING, CONTENT], "running"));
+  const { result } = renderChecks();
+  act(() => result.current.checks.begin());
+  await waitFor(() => expect(result.current.checks.status).toBe("running"));
+
+  const now: number = Date.now();
+  const clock = jest
+    .spyOn(Date, "now")
+    .mockReturnValue(now + DRAFT_RUN_CLIENT_DEADLINE_MS + 1);
+  try {
+    await waitFor(
+      () => expect(result.current.checks.status).toBe("failedToRun"),
+      { timeout: 3000 }
+    );
+    expect(result.current.checks.failure).toEqual({ kind: "lost" });
+  } finally {
+    clock.mockRestore();
+  }
+});
+
+it("shows a run that finished while the tab slept past the client deadline", async () => {
+  startMock.mockResolvedValue(run([BINDING, CONTENT], "running"));
+  const { result } = renderChecks();
+  act(() => result.current.checks.begin());
+  await waitFor(() => expect(result.current.checks.status).toBe("running"));
+
+  const fetcher = jest.mocked(errorHandlingFetchWith);
+  const replayLatestStart = fetcher.getMockImplementation();
+  fetcher.mockResolvedValue(
+    run([check({ ...BINDING, state: "passed" }), CONTENT])
+  );
+  const now: number = Date.now();
+  const clock = jest
+    .spyOn(Date, "now")
+    .mockReturnValue(now + DRAFT_RUN_CLIENT_DEADLINE_MS + 1);
+  try {
+    await waitFor(() => expect(result.current.checks.status).toBe("passed"), {
+      timeout: 3000,
+    });
+    expect(result.current.checks.failure).toBeNull();
+  } finally {
+    clock.mockRestore();
+    fetcher.mockImplementation(replayLatestStart);
+  }
+});
+
+it("fails to run when a poll does not settle in time", async () => {
+  startMock.mockResolvedValue(run([BINDING, CONTENT], "running"));
+  // Stands in for the poll timeout, so the test can end the request.
+  const timeout = new AbortController();
+  const timeoutSpy = jest
+    .spyOn(AbortSignal, "timeout")
+    .mockReturnValue(timeout.signal);
+  const fetcher = jest.mocked(errorHandlingFetchWith);
+  const replayLatestStart = fetcher.getMockImplementation();
+  fetcher.mockClear();
+  fetcher.mockImplementation(
+    (_url: string, init?: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () =>
+          reject(init.signal?.reason)
+        );
+      })
+  );
+  try {
+    const { result } = renderChecks();
+    act(() => result.current.checks.begin());
+    await waitFor(() => expect(fetcher).toHaveBeenCalled());
+    expect(result.current.checks.status).toBe("running");
+
+    act(() => timeout.abort(new DOMException("timed out", "TimeoutError")));
+
+    await waitFor(() =>
+      expect(result.current.checks.status).toBe("failedToRun")
+    );
+    expect(result.current.checks.failure).toEqual({ kind: "lost" });
+  } finally {
+    timeoutSpy.mockRestore();
+    fetcher.mockImplementation(replayLatestStart);
+  }
+});
+
+it("cancels a running run and returns to the start prompt", async () => {
+  startMock.mockResolvedValue(run([BINDING, CONTENT], "running"));
+  const { result } = renderChecks();
+  expect(result.current.checks.cancel).toBeNull();
+  act(() => result.current.checks.begin());
+  await waitFor(() => expect(result.current.checks.cancel).not.toBeNull());
+
+  const cancel = result.current.checks.cancel;
+  await act(async () => {
+    await cancel?.();
+  });
+
+  expect(jest.mocked(cancelDraftCheckRun)).toHaveBeenCalledWith("run-1");
+  expect(result.current.checks.status).toBe("notStarted");
+  expect(result.current.checks.cancel).toBeNull();
 });

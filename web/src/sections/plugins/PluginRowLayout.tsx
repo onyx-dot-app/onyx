@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Tag, Text, type TagProps } from "@opal/components";
+import { Text } from "@opal/components";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { cn } from "@opal/utils";
 
@@ -9,7 +9,6 @@ interface PluginRowLayoutProps {
   icon: IconFunctionComponent;
   title: string | RichStr;
   description: string | RichStr;
-  descriptionTag?: Pick<TagProps, "title" | "color" | "tooltip">;
   action: ReactNode;
   status?: ReactNode;
 }
@@ -18,7 +17,6 @@ export default function PluginRowLayout({
   icon: Icon,
   title,
   description,
-  descriptionTag,
   action,
   status,
 }: PluginRowLayoutProps) {
@@ -39,18 +37,15 @@ export default function PluginRowLayout({
               {title}
             </Text>
           </div>
-          <div className="flex min-w-0 items-center gap-2 leading-none">
-            <div className="min-w-0 truncate">
-              <Text font="secondary-body" color="text-03">
-                {description}
-              </Text>
-            </div>
-            {descriptionTag && (
-              <div className="shrink-0">
-                <Tag {...descriptionTag} />
+          {description && (
+            <div className="flex min-w-0 items-center gap-2 leading-none">
+              <div className="min-w-0 truncate">
+                <Text font="secondary-body" color="text-03">
+                  {description}
+                </Text>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
         {status && <div className="pt-1">{status}</div>}
       </div>

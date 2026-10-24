@@ -156,10 +156,6 @@ def default_multi_llm() -> LitellmLLM:
 def test_multiple_tool_calls(default_multi_llm: LitellmLLM) -> None:
     # Mock the litellm.completion function
     with patch("litellm.completion") as mock_completion:
-        # Env injection defaults on outside multi-tenant, and this test does not
-        # patch it, so invoke() takes the streamed transport and the mock must
-        # return stream chunks. Plain-transport tool calls are covered by
-        # test_model_response_choice_merge.py.
         mock_stream_chunks = [
             litellm.ModelResponse(
                 id="chatcmpl-123",
@@ -195,7 +191,7 @@ def test_multiple_tool_calls(default_multi_llm: LitellmLLM) -> None:
                 model="gpt-3.5-turbo",
             ),
         ]
-        mock_completion.return_value = mock_stream_chunks
+        mock_completion.return_value = litellm.stream_chunk_builder(mock_stream_chunks)
 
         # Define input messages
         messages: list[ChatCompletionMessage] = [
@@ -268,13 +264,12 @@ def test_multiple_tool_calls(default_multi_llm: LitellmLLM) -> None:
                 {"role": "user", "content": "What's the weather and time in New York?"}
             ],
             tools=tools,
-            stream=True,
+            stream=False,
             temperature=0.0,  # Default value from GEN_AI_TEMPERATURE
             # The time left of the 60s default, just under 60 when sent.
             timeout=pytest.approx(60, abs=1),
             max_tokens=None,
             client=ANY,  # HTTPHandler instance created per-request
-            stream_options={"include_usage": True},
             parallel_tool_calls=True,
             allowed_openai_params=["tool_choice"],
         )
@@ -1038,7 +1033,7 @@ def test_openai_chat_omits_reasoning_params() -> None:
                 model="gpt-5-chat",
             ),
         ]
-        mock_completion.return_value = mock_stream_chunks
+        mock_completion.return_value = litellm.stream_chunk_builder(mock_stream_chunks)
 
         messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         llm.invoke_raw(messages)
@@ -1278,7 +1273,7 @@ def test_user_identity_metadata_enabled(default_multi_llm: LitellmLLM) -> None:
                 model="gpt-3.5-turbo",
             ),
         ]
-        mock_completion.return_value = mock_stream_chunks
+        mock_completion.return_value = litellm.stream_chunk_builder(mock_stream_chunks)
 
         messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         identity = LLMUserIdentity(user_id="user_123", session_id="session_abc")
@@ -1311,7 +1306,7 @@ def test_user_identity_user_id_truncated_to_64_chars(
                 model="gpt-3.5-turbo",
             ),
         ]
-        mock_completion.return_value = mock_stream_chunks
+        mock_completion.return_value = litellm.stream_chunk_builder(mock_stream_chunks)
 
         messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         long_user_id = "u" * 82
@@ -1344,7 +1339,7 @@ def test_user_identity_metadata_disabled_omits_identity(
                 model="gpt-3.5-turbo",
             ),
         ]
-        mock_completion.return_value = mock_stream_chunks
+        mock_completion.return_value = litellm.stream_chunk_builder(mock_stream_chunks)
 
         messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         identity = LLMUserIdentity(user_id="user_123", session_id="session_abc")
@@ -1389,7 +1384,7 @@ def test_existing_metadata_pass_through_when_identity_disabled() -> None:
                 model="gpt-3.5-turbo",
             ),
         ]
-        mock_completion.return_value = mock_stream_chunks
+        mock_completion.return_value = litellm.stream_chunk_builder(mock_stream_chunks)
 
         messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         identity = LLMUserIdentity(user_id="user_123", session_id="session_abc")
@@ -1422,7 +1417,7 @@ def test_openai_model_invoke_uses_httphandler_client(
                 model="gpt-3.5-turbo",
             ),
         ]
-        mock_completion.return_value = mock_stream_chunks
+        mock_completion.return_value = litellm.stream_chunk_builder(mock_stream_chunks)
 
         messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         default_multi_llm.invoke_raw(messages)
@@ -1475,7 +1470,7 @@ def test_anthropic_model_passes_isolated_client() -> None:
                 model="claude-3-opus-20240229",
             ),
         ]
-        mock_completion.return_value = mock_stream_chunks
+        mock_completion.return_value = litellm.stream_chunk_builder(mock_stream_chunks)
 
         messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         llm.invoke_raw(messages)
@@ -1515,7 +1510,7 @@ def test_bedrock_model_passes_isolated_client(model_provider: str) -> None:
                 model="anthropic.claude-3-sonnet-20240229-v1:0",
             ),
         ]
-        mock_completion.return_value = mock_stream_chunks
+        mock_completion.return_value = litellm.stream_chunk_builder(mock_stream_chunks)
 
         messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         llm.invoke_raw(messages)
@@ -1556,7 +1551,7 @@ def test_azure_openai_model_uses_httphandler_client() -> None:
                 model="gpt-4o",
             ),
         ]
-        mock_completion.return_value = mock_stream_chunks
+        mock_completion.return_value = litellm.stream_chunk_builder(mock_stream_chunks)
 
         messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
         llm.invoke_raw(messages)
@@ -1904,27 +1899,15 @@ def test_multithreaded_invoke_without_custom_config_does_not_inject_env() -> Non
         ),
     )
 
-    mock_stream_chunks = [
-        litellm.ModelResponse(
-            id="chatcmpl-123",
-            choices=[
-                litellm.Choices(
-                    delta=_create_delta(role="assistant", content="Hi"),
-                    finish_reason="stop",
-                    index=0,
-                )
-            ],
-            model=model_name,
-        ),
-    ]
-
     call_kwargs: dict[str, dict[str, Any]] = {}
 
-    def fake_completion(**kwargs: Any) -> list[litellm.ModelResponse]:
+    def fake_completion(
+        **kwargs: Any,
+    ) -> litellm.ModelResponse | list[litellm.ModelResponse]:
         api_key = kwargs.get("api_key", "")
         label = "A" if api_key == "key_a" else "B"
         call_kwargs[label] = kwargs
-        return mock_stream_chunks
+        return _simple_completion_result(kwargs, model_name)
 
     errors: list[Exception] = []
 
@@ -1954,10 +1937,9 @@ def test_multithreaded_invoke_without_custom_config_does_not_inject_env() -> Non
     assert not errors, f"Thread errors: {errors}"
     assert "A" in call_kwargs and "B" in call_kwargs
 
-    # Env injection forces the streamed transport so the env rwlock covers
-    # connection setup only, never a whole inference.
-    assert call_kwargs["A"]["stream"] is True
-    assert call_kwargs["B"]["stream"] is True
+    # Calls without injection use plain requests under the shared read lock.
+    assert call_kwargs["A"]["stream"] is False
+    assert call_kwargs["B"]["stream"] is False
 
     # Each call takes the lock via temporary_env_and_lock but injects nothing.
     assert mock_env_lock.call_count == 2
@@ -1990,24 +1972,12 @@ def test_invokes_without_custom_config_run_concurrently() -> None:
     llm_a = build_llm("key_a")
     llm_b = build_llm("key_b")
 
-    mock_stream_chunks = [
-        litellm.ModelResponse(
-            id="chatcmpl-123",
-            choices=[
-                litellm.Choices(
-                    delta=_create_delta(role="assistant", content="Hi"),
-                    finish_reason="stop",
-                    index=0,
-                )
-            ],
-            model=model_name,
-        ),
-    ]
-
     a_inside = threading.Event()
     b_inside = threading.Event()
 
-    def fake_completion(**kwargs: Any) -> list[litellm.ModelResponse]:
+    def fake_completion(
+        **kwargs: Any,
+    ) -> litellm.ModelResponse | list[litellm.ModelResponse]:
         # Each call waits for the other to also be inside its completion. If
         # readers were serialized by an exclusive lock, the first call would
         # time out here because the second could never enter.
@@ -2019,7 +1989,7 @@ def test_invokes_without_custom_config_run_concurrently() -> None:
         assert other.wait(timeout=5), (
             "Concurrent no-custom-config calls were serialized by the env lock"
         )
-        return mock_stream_chunks
+        return _simple_completion_result(kwargs, model_name)
 
     errors: list[Exception] = []
 
@@ -2089,27 +2059,15 @@ def test_keyless_reader_cannot_observe_writer_injected_secret(
         max_input_tokens=200000,
     )
 
-    mock_stream_chunks = [
-        litellm.ModelResponse(
-            id="chatcmpl-123",
-            choices=[
-                litellm.Choices(
-                    delta=_create_delta(role="assistant", content="Hi"),
-                    finish_reason="stop",
-                    index=0,
-                )
-            ],
-            model="anthropic.claude-3-sonnet-20240229-v1:0",
-        ),
-    ]
-
     writer_inside = threading.Event()
     release_writer = threading.Event()
     reader_ran = threading.Event()
     reader_env_snapshot: dict[str, str | None] = {}
     writer_env_snapshot: dict[str, str | None] = {}
 
-    def fake_completion(**kwargs: Any) -> list[litellm.ModelResponse]:
+    def fake_completion(
+        **kwargs: Any,
+    ) -> litellm.ModelResponse | list[litellm.ModelResponse]:
         # The victim's custom_config is mapped into explicit kwargs, so its
         # presence distinguishes the victim (writer) from the keyless attacker.
         is_writer = "aws_secret_access_key" in kwargs
@@ -2134,7 +2092,7 @@ def test_keyless_reader_cannot_observe_writer_injected_secret(
                 "AWS_SECRET_ACCESS_KEY"
             )
             reader_ran.set()
-        return mock_stream_chunks
+        return _simple_completion_result(kwargs, str(kwargs["model"]))
 
     errors: list[Exception] = []
 
@@ -2662,7 +2620,7 @@ def test_no_tool_choice_sent_when_no_tools(default_multi_llm: LitellmLLM) -> Non
     ]
 
     with patch("litellm.completion") as mock_completion:
-        mock_completion.return_value = mock_stream_chunks
+        mock_completion.return_value = litellm.stream_chunk_builder(mock_stream_chunks)
 
         default_multi_llm.invoke_raw(messages, tools=None)
 
@@ -3074,7 +3032,7 @@ def test_bifrost_claude_includes_allowed_openai_params() -> None:
     ]
 
     with patch("litellm.completion") as mock_completion:
-        mock_completion.return_value = mock_stream_chunks
+        mock_completion.return_value = litellm.stream_chunk_builder(mock_stream_chunks)
 
         llm.invoke_raw(messages, tools=tools)
 
@@ -3248,7 +3206,7 @@ def test_custom_config_bearer_token_clobbers_provider_api_key() -> None:
     )
 
     with patch("litellm.completion") as mock_completion:
-        mock_completion.return_value = _simple_stream_chunks(
+        mock_completion.return_value = _simple_response(
             "anthropic.claude-3-sonnet-20240229-v1:0"
         )
         llm.invoke_raw([UserMessage(content="Hi")])
@@ -3400,13 +3358,13 @@ def test_invoke_plain_request_even_for_a_long_timeout(
     assert response.choice.message.content == "Hi"
 
 
-def test_invoke_streams_when_injection_enabled(
+def test_invoke_plain_request_when_injection_enabled_without_env_keys(
     default_multi_llm: LitellmLLM,
 ) -> None:
-    """Self-hosted posture: streaming keeps the env rwlock to connection setup."""
+    """Permission to inject does not force ordinary calls to stream."""
     streamed, response = _invoke_stream_flag(default_multi_llm, injection_enabled=True)
 
-    assert streamed is True
+    assert streamed is False
     assert response.choice.message.content == "Hi"
 
 
@@ -3667,7 +3625,7 @@ def test_invoke_read_timeout_is_the_time_left(total_timeout_s: float) -> None:
     )
 
     with patch("litellm.completion") as mock_completion:
-        mock_completion.return_value = [chunk]
+        mock_completion.return_value = litellm.stream_chunk_builder([chunk])
         llm.invoke_raw([UserMessage(content="Hi")], total_timeout_s=total_timeout_s)
         sent_timeout = mock_completion.call_args.kwargs["timeout"]
         assert total_timeout_s - 1 < sent_timeout <= total_timeout_s
@@ -3828,7 +3786,79 @@ def test_invoke_raw_stream_reassembly_keeps_served_model() -> None:
         trace("test"),
         generation_span(model="openrouter/auto") as span,
     ):
-        result = _router_llm().invoke_raw([UserMessage(content="Hi")])
+        llm = _router_llm()
+        llm._env_only_custom_config = {"ONYX_TEST_ENV": "value"}
+        result = llm.invoke_raw([UserMessage(content="Hi")])
 
     assert result.model == "deepseek/deepseek-v4-flash"
     assert span.span_data.routed_model == "deepseek/deepseek-v4-flash"
+
+
+@pytest.mark.parametrize("injection_enabled", [False, True])
+@pytest.mark.parametrize(
+    ("custom_config", "has_env_keys"),
+    [
+        ({}, False),
+        ({"OPENAI_API_KEY": "mapped-key"}, False),
+        ({"ONYX_TEST_ENV": "value"}, True),
+    ],
+)
+def test_invoke_transport_depends_on_actual_injection(
+    injection_enabled: bool,
+    custom_config: dict[str, str],
+    has_env_keys: bool,
+) -> None:
+    llm = LitellmLLM(
+        api_key="test-key",
+        model_provider=LlmProviderNames.OPENAI,
+        model_name="gpt-3.5-turbo",
+        max_input_tokens=16000,
+        custom_config=custom_config,
+    )
+    streamed, response = _invoke_stream_flag(llm, injection_enabled)
+    assert streamed is (injection_enabled and has_env_keys)
+    assert response.choice.message.content == "Hi"
+
+
+@pytest.mark.parametrize("env_variables", [{}, {"ONYX_TEST_ENV": "waiting"}])
+def test_env_lock_deadline_and_recovery(env_variables: dict[str, str]) -> None:
+    from onyx.llm import multi_llm as module
+
+    # An exclusive holder blocks both readers and writers.
+    with module._env_rwlock.gen_wlock():
+        with pytest.raises(LLMTimeoutError, match="environment lock"):
+            with temporary_env_and_lock(
+                env_variables, deadline=time.monotonic() + 0.02
+            ):
+                pytest.fail("A blocked request must not enter the environment scope")
+
+    # Failed acquisition must leave the lock usable.
+    with temporary_env_and_lock(env_variables, deadline=time.monotonic() + 1):
+        pass
+
+
+def test_invoke_timeout_accounts_for_lock_wait(default_multi_llm: LitellmLLM) -> None:
+    from onyx.llm import multi_llm as module
+
+    now = 100.0
+
+    @contextmanager
+    def delayed_lock(
+        env_variables: dict[str, str], *, deadline: float | None = None
+    ) -> Iterator[None]:
+        nonlocal now
+        assert env_variables == {}
+        assert deadline == 110.0
+        now += 4.0
+        yield
+
+    with (
+        patch.object(module, "_env_injection_enabled", return_value=True),
+        patch.object(module, "temporary_env_and_lock", side_effect=delayed_lock),
+        patch.object(module.time, "monotonic", side_effect=lambda: now),
+        patch(
+            "litellm.completion", return_value=_simple_response("gpt-3.5-turbo")
+        ) as completion,
+    ):
+        default_multi_llm.invoke_raw([UserMessage(content="Hi")], total_timeout_s=10)
+    assert completion.call_args.kwargs["timeout"] == 6.0

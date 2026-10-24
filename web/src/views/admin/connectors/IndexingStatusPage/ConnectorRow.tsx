@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useFormatter, useLocale, useTranslations } from "next-intl";
-import { Button, Card, Popover, Tag, Text } from "@opal/components";
+import { Button, Card, Popover, Tag, Text, Tooltip } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
 import {
   SvgAlertTriangle,
@@ -36,6 +36,7 @@ import { DocCounts } from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
 import RunsCard from "@/views/admin/connectors/ConnectorDetailPage/RunsCard";
 import { focusDimClass } from "@/views/admin/connectors/ConnectorDetailPage/focusMode";
 import { connectorRowStatusTag } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
+import StatusTagPill from "@/views/admin/connectors/ConnectorDetailPage/StatusTagPill";
 import StageDetailsPopoverContent, {
   StageDetailsTrigger,
 } from "@/views/admin/connectors/ConnectorDetailPage/StageDetailsPopover";
@@ -71,7 +72,6 @@ export default function ConnectorRow({
 }: ConnectorRowProps) {
   const t = useTranslations("admin.indexing.list");
   const tRuns = useTranslations("admin.connector.runs");
-  const tBadges = useTranslations("admin.status.badges");
   const locale = useLocale();
   const format = useFormatter();
   const attempt = row.latest_index_attempt;
@@ -82,11 +82,15 @@ export default function ConnectorRow({
     row.status,
     attempt?.status
   );
-  const warnings = attempt?.error_count ?? 0;
+  // Open errors only, so the badge clears once Retry or Resolve closes them.
+  const warnings = row.open_error_count;
   // An empty display name falls back to the email, as an unset one does.
   const owner = row.creator_name?.trim() || row.creator_email;
-  // A paused or scheduled row has no run in flight, so its stages and file counts stay hidden.
-  const idle = row.status === "paused" || row.status === "scheduled";
+  // A paused, scheduled or deleting row has no run in flight, so its stages and file counts stay hidden.
+  const idle =
+    row.status === "paused" ||
+    row.status === "scheduled" ||
+    row.status === "deleting";
   const toggleLabel = expanded ? t("actions.collapse") : t("actions.expand");
   const [stagesOpen, setStagesOpen] = useState(false);
   const [runsFocused, setRunsFocused] = useState(false);
@@ -198,11 +202,7 @@ export default function ConnectorRow({
             data-testid={`indexing-connector-${row.cc_pair_id}`}
           >
             <Section alignItems="stretch" gap={0} height="fit">
-              <Section
-                alignItems="stretch"
-                height="fit"
-                className={expanded ? "px-2 pt-2 pb-1" : "p-2"}
-              >
+              <Section alignItems="stretch" height="fit">
                 <Section
                   flexDirection="row"
                   alignItems="start"
@@ -218,14 +218,16 @@ export default function ConnectorRow({
                     height="fit"
                     className="min-w-0 flex-1"
                   >
+                    {/* The link spans the column so the clamped title truncates at its edge. */}
                     {canOperate ? (
                       <Link
                         href={`/admin/connector/${row.cc_pair_id}`}
-                        className="hover:underline"
+                        className="w-full hover:underline"
                       >
                         <Content
                           icon={getSourceMetadata(row.source).icon}
                           title={row.name}
+                          titleMaxLines={1}
                           sizePreset="main-ui"
                           variant="section"
                         />
@@ -234,6 +236,7 @@ export default function ConnectorRow({
                       <Content
                         icon={getSourceMetadata(row.source).icon}
                         title={row.name}
+                        titleMaxLines={1}
                         sizePreset="main-ui"
                         variant="section"
                       />
@@ -281,27 +284,24 @@ export default function ConnectorRow({
                       width="fit"
                       height="fit"
                     >
-                      <Tag
-                        icon={tag.icon}
-                        title={tBadges(tag.labelKey)}
-                        color={tag.color}
-                        variant="status"
-                        font="secondary-body"
-                      />
+                      <StatusTagPill tag={tag} />
                       {attempt !== null && !idle && (
                         <StageDetailsTrigger open={stagesOpen} />
                       )}
                       {warnings > 0 && (
-                        <Tag
-                          icon={SvgAlertTriangle}
-                          title={format.number(warnings)}
+                        <Tooltip
                           tooltip={tRuns("warnings.tooltip", {
                             count: warnings,
                           })}
-                          color="orange"
-                          variant="count"
-                          font="secondary-body"
-                        />
+                          side="top"
+                        >
+                          <Tag
+                            icon={SvgAlertTriangle}
+                            title={format.number(warnings)}
+                            color="orange"
+                            variant="count"
+                          />
+                        </Tooltip>
                       )}
                     </Section>
                     <Text font="secondary-body" color="text-03">
@@ -326,19 +326,30 @@ export default function ConnectorRow({
                       height="fit"
                     >
                       <Text font="main-ui-action" color="text-04">
-                        {row.status === "indexing" && attempt !== null
-                          ? t("docs.recentOfTotal", {
-                              recent: format.number(attempt.total_docs_indexed),
-                              total: format.number(row.docs_indexed),
-                            })
-                          : format.number(row.docs_indexed)}
+                        {format.number(row.docs_indexed)}
                       </Text>
                       <Text font="secondary-body" color="text-03">
                         {t("docs.label")}
                       </Text>
                     </Section>
                     {attempt !== null && !idle && (
-                      <DocCounts attempt={attempt} />
+                      <>
+                        <Tooltip
+                          tooltip={
+                            row.status === "indexing"
+                              ? t("docs.processedTooltip.running")
+                              : t("docs.processedTooltip.finished")
+                          }
+                          side="top"
+                        >
+                          <Text font="secondary-body" color="text-03">
+                            {t("docs.processed", {
+                              count: attempt.total_docs_indexed,
+                            })}
+                          </Text>
+                        </Tooltip>
+                        <DocCounts attempt={attempt} />
+                      </>
                     )}
                   </Section>
 

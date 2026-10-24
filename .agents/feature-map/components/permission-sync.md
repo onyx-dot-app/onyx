@@ -93,9 +93,9 @@ only added to `beat_task_templates` when the build ships the EE code
 | OneDrive | `ONEDRIVE_PERMISSION_DOC_SYNC_FREQUENCY` (30 min) | `ONEDRIVE_PERMISSION_GROUP_SYNC_FREQUENCY` (5 min) |
 | Gmail | `DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY` (5 min) | no group sync |
 | Zoom | `DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY`, but `doc_sync_func=mock_doc_sync` (a no-op; see §4.3) | no group sync |
-| Linear | `LINEAR_PERMISSION_DOC_SYNC_FREQUENCY` (1 h); `initial_index_should_sync=False` because `ConnectorRunner` passes `include_permissions` only to checkpointed connectors, so an issue stays private until the first doc sync lists it | `LINEAR_PERMISSION_GROUP_SYNC_FREQUENCY` (5 min); one group per team the token can see plus `workspace_members:<organization id>`; a public team's issues name both, a restricted sub-team's its private parent too |
+| Linear | `LINEAR_PERMISSION_DOC_SYNC_FREQUENCY` (1 h); `initial_index_should_sync=False` because `ConnectorRunner` passes `include_permissions` only to checkpointed connectors, so an issue stays private until the first doc sync lists it. A targeted reindex (`LinearConnector.reindex`) sets access itself through the EE `issue_access_by_id`, which reuses the doc sync's access rules | `LINEAR_PERMISSION_GROUP_SYNC_FREQUENCY` (5 min); one group per team the token can see plus `workspace_members:<organization id>`; a public team's issues name both, a restricted sub-team's its private parent too |
 | Salesforce | none (`doc_sync_config=None`) | none; `censoring_config` only (§4.5) |
-| HubSpot | `HUBSPOT_PERMISSION_DOC_SYNC_FREQUENCY` (1 h); `initial_index_should_sync=False` (indexing never fetches viewers, so only the doc sync grants access) | no group sync; stores the viewer emails HubSpot's permitted-users API returns |
+| HubSpot | `HUBSPOT_PERMISSION_DOC_SYNC_FREQUENCY` (1 h); `initial_index_should_sync=False` (the crawl never fetches viewers, so only the doc sync grants access; a targeted reindex (`HubSpotConnector.reindex`) on a perm-synced cc-pair also sets access, with the same `HubSpotPermissionReader`) | no group sync; stores the viewer emails HubSpot's permitted-users API returns |
 | YouTrack | `YOUTRACK_PERMISSION_DOC_SYNC_FREQUENCY` (30 min); `initial_index_should_sync=False`, so an issue stays private until the first doc sync lists it | `YOUTRACK_PERMISSION_GROUP_SYNC_FREQUENCY` (30 min); per project a readers group (Read Issue and Read Issue Comment through project, organization or global roles) and an Override Visibility group, plus one group per visibility entry restricted issues name, intersected with the readers except in helpdesk projects |
 
 Every value is env-overridable and is additionally multiplied by
@@ -243,6 +243,8 @@ beat: CHECK_FOR_DOC_PERMISSIONS_SYNC (every 30s)
       LeaseHeartbeat renews heartbeat_at          tasks/shared/lease_heartbeat.py, see §5.9
       doc_sync_func(cc_pair, fetch_existing_docs_fn, fetch_existing_doc_ids_fn, callback)
         -> Generator[ElementExternalAccess]
+        (checkpointed_doc_sync_func with a FileStoreDocSyncCheckpointer instead,
+         when the source sets one; see §5.9)
       for each element:
         update_element_permissions_batch           doc_permission_syncing/tasks.py
           -> element_update_permissions
@@ -255,7 +257,19 @@ beat: CHECK_FOR_DOC_PERMISSIONS_SYNC (every 30s)
 
 The manual triggers `POST /manage/admin/cc-pair/{id}/sync-permissions` and
 `/sync-groups` (`ee/onyx/server/documents/cc_pair.py`) return `INVALID_INPUT`
-for a cc_pair that is not perm-synced. The indexing pipeline
+for a cc_pair that is not perm-synced, and `CONFLICT` while a sync is queued or
+running. The connector page's Manage Index menu offers Sync Permissions on a
+perm-synced pair whose source syncs document permissions (`supports_doc_permission_sync`
+on the pair, so Salesforce gets none), hidden while the pair is paused or deleting. It posts
+`sync-permissions` and is disabled while a sync is queued or running. The page's status
+card has a column for each sync kind the pair runs, and a pair that is not perm-synced gets
+a document access column instead. A column shows the newest run's tag, or Synced when the
+pair has a success but no run, and Paused on a paused pair unless a run is queued or in
+progress. Under the tag it shows the live rate while a run is in progress, else the time from
+`last_time_perm_sync` or `last_time_external_group_sync`, else "Waiting for first index" for
+a doc sync until the pair's first index succeeds and "Not synced yet" otherwise. A paused
+pair's documents card shows the newest runs' synced document and membership counts in place
+of the chart. The indexing pipeline
 (`indexing_pipeline.py:_upsert_documents_in_db`) also drops connector-emitted
 `external_access` unless the writing cc_pair is perm-synced.
 
@@ -578,9 +592,14 @@ document to the wrong person.
    loop read through `LeaseHeartbeat.is_lost()`. `is_lost()` is also true when
    no renewal has succeeded for `PERMISSION_SYNC_LEASE_SELF_EXPIRY`, which is
    shorter than the reaper's timeout, so a worker that cannot reach the DB
-   stops first. The heartbeat also stops renewing `PERMISSION_SYNC_LEASE_OVERRUN`
-   after the sync's time limit (`max_duration`), so a crawl thread that hangs
-   in a source call cannot hold the lease for the life of the process. Group sync writes (`upsert_external_groups`,
+   stops first. For a group sync the heartbeat also stops renewing
+   `PERMISSION_SYNC_LEASE_OVERRUN` after the sync's time limit
+   (`max_duration`), so a crawl thread that hangs in a source call cannot hold
+   the lease for the life of the process. A doc sync passes no `max_duration`:
+   the doc reaper also fails an `IN_PROGRESS` row whose
+   `coalesce(last_progress_at, time_started)` is older than
+   `PERMISSION_SYNC_STALL_TIMEOUT`, which frees a hung crawl's row the same
+   way without capping a crawl that keeps yielding. Group sync writes (`upsert_external_groups`,
    `remove_stale_external_groups` with `owning_attempt_id`) take a share lock
    on the attempt row in the write's own transaction
    (`lock_external_group_sync_attempt_if_owned`). The reaper cannot fail the
@@ -596,11 +615,32 @@ document to the wrong person.
    group counts) and `last_progress_at` from an in-memory
    `DocPermissionSyncProgress` / `ExternalGroupSyncProgress`, so the admin UI
    and fleet telemetry see progress mid-run; `complete_*` replaces the counts
-   with the final values. One doc or group sync stops after
+   with the final values. One group sync stops after
    `PERMISSION_SYNC_TIMEOUT` (`PERMISSION_SYNC_TIMEOUT_SECONDS`, default
-   `JOB_TIMEOUT`); the attempt's `error_message` names the real stop cause
-   (timeout, stop signal, or lost lease), because connectors raise a generic
-   "Stop signal detected" for all of them.
+   `JOB_TIMEOUT`). A doc sync has no time limit: it runs for as long as it
+   keeps yielding. The doc reaper fails an attempt with no recorded progress
+   for `PERMISSION_SYNC_STALL_TIMEOUT`, which costs the worker its lease at
+   the next renewal; the task ticks progress on every yielded element, so a
+   source that never reports progress still counts. The attempt's
+   `error_message` names the real stop cause (timeout or stall, stop signal,
+   or lost lease), because connectors raise a generic "Stop signal detected"
+   for all of them.
+   A source whose full crawl runs for days (Google Drive) sets
+   `DocSyncConfig.checkpointed_doc_sync_func` instead of `doc_sync_func`, so
+   a stopped attempt resumes instead of restarting. The
+   task passes it a
+   `FileStoreDocSyncCheckpointer` (`doc_permission_syncing/checkpointer.py`),
+   which saves one checkpoint file per cc_pair to the file store at most every
+   `CHECKPOINT_SAVE_INTERVAL_SECONDS`, holding the crawl window, the saving
+   attempt, and the connector config hash. The next attempt resumes it when the
+   saving attempt failed, only failures followed, the file is younger than
+   `NUM_DAYS_TO_KEEP_CHECKPOINTS`, the config hash matches, and no full refresh
+   was requested since. It keeps that window, and on success sets
+   `last_time_perm_sync` to the window end and deletes the file. The task
+   writes elements in batches of `PERMISSION_WRITE_BATCH_SIZE`, in parallel,
+   and the checkpointer flushes the pending batch before every save. Saving
+   stops after a failed element write, so the resume retries that element.
+   Connector deletion removes the file.
    The open attempt is also the per-cc_pair lock, for doc sync and group sync.
    The partial unique indexes `uq_doc_permission_sync_attempt_open_cc_pair`
    and `uq_group_sync_attempt_open_cc_pair` allow one `NOT_STARTED`/`IN_PROGRESS`

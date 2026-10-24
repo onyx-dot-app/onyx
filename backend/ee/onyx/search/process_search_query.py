@@ -27,7 +27,7 @@ from onyx.secondary_llm_flows.document_filter import select_sections_for_expansi
 from onyx.tools.tool_implementations.search.search_utils import (
     weighted_reciprocal_rank_fusion,
 )
-from onyx.utils.fleet_query_telemetry import telemetry_query
+from onyx.utils.fleet_query_telemetry import QueryMode, telemetry_query
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
@@ -68,7 +68,7 @@ def _run_single_search(
     )
 
 
-@telemetry_query(mode="search")
+@telemetry_query(mode=QueryMode.SEARCH)
 def stream_search_query(
     request: SendSearchQueryRequest,
     user: User,

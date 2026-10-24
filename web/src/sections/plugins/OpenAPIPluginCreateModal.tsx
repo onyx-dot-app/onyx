@@ -2,12 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { useCreateModal } from "@opal/components";
+import { Modal } from "@opal/components";
+import PluginModalContent from "@/sections/plugins/PluginModalContent";
 import { useSWRConfig } from "swr";
 import { useDefaultAssistantConfiguration } from "@/lib/agents/hooks";
 import { refreshMemberPluginCaches } from "@/lib/plugins/member";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
-import AddOpenAPIActionModal from "@/sections/actions/modals/AddOpenAPIActionModal";
+import AddOpenAPIActionModal, {
+  type OpenAPICreationDraft,
+} from "@/sections/actions/modals/AddOpenAPIActionModal";
 import OpenAPIAuthenticationModal, {
   type OpenAPIAuthFormValues,
 } from "@/sections/actions/modals/OpenAPIAuthenticationModal";
@@ -15,7 +18,7 @@ import { createCustomTool, updateCustomTool } from "@/lib/tools/svc";
 import { can } from "@/lib/permissions/resource-actions";
 import { saveOpenApiAuthentication } from "@/sections/plugins/openApiWorkflow";
 
-type SchemaDraft = Parameters<typeof createCustomTool>[0];
+type SchemaDraft = OpenAPICreationDraft;
 type CreationStep =
   | { kind: "schema"; draft?: SchemaDraft; auth?: OpenAPIAuthFormValues }
   | {
@@ -45,10 +48,11 @@ function OpenAPIPluginCreateSession({
   const actions = useTranslations("actions");
   const { refreshOpenApiTools } = useOpenApiTools();
   const defaultChat = useDefaultAssistantConfiguration();
+  const [busy, setBusy] = useState(false);
   const { mutate } = useSWRConfig();
-  const modal = useCreateModal();
-  const { toggle } = modal;
   const [step, setStep] = useState<CreationStep>({ kind: "schema" });
+  const defaultChatEnabled =
+    step.draft?.defaultChatEnabled ?? defaultChat.canEdit;
   const savedId = useRef<number | null>(null);
   const pendingOAuthConfigId = useRef<number | null>(null);
   const completed = useRef(false);
@@ -60,10 +64,6 @@ function OpenAPIPluginCreateSession({
       active.current = false;
     };
   }, []);
-
-  useEffect(() => {
-    toggle(step.kind === "schema");
-  }, [step.kind, toggle]);
 
   async function create(values: OpenAPIAuthFormValues) {
     if (step.kind !== "authentication") return;
@@ -88,7 +88,14 @@ function OpenAPIPluginCreateSession({
           definition: step.draft.definition,
           oauth_config_id: existing.oauth_config_id ?? null,
         })
-      : await createCustomTool(step.draft);
+      : await createCustomTool({
+          name: step.draft.name,
+          description: step.draft.description,
+          definition: step.draft.definition,
+          custom_headers: [],
+          passthrough_auth: false,
+          enabled: true,
+        });
     if (response.error || !response.data)
       throw new Error(
         response.error ?? actions("addOpenApiModal.toasts.createFailed")
@@ -122,7 +129,7 @@ function OpenAPIPluginCreateSession({
       await refreshOpenApiTools();
     }
     if (defaultChat.canEdit) {
-      await defaultChat.updateTools([tool.id], true);
+      await defaultChat.updateTools([tool.id], defaultChatEnabled);
       await refreshOpenApiTools();
     }
     await refreshMemberPluginCaches(mutate);
@@ -132,38 +139,47 @@ function OpenAPIPluginCreateSession({
   }
 
   function close() {
-    if (!completed.current) onClose();
+    if (!busy && !completed.current) onClose();
   }
 
   return (
-    <>
-      <modal.Provider>
-        <AddOpenAPIActionModal
-          title={t("createTitle")}
-          onClose={onClose}
-          initialDefinition={step.draft?.definition}
-          onConfigureAuthentication={(draft) =>
-            setStep({ kind: "authentication", draft, auth: step.auth })
-          }
-        />
-      </modal.Provider>
-      {step.kind === "authentication" && (
-        <OpenAPIAuthenticationModal
-          isOpen
-          title={actions("mcpSetup.connectTo", { name: step.draft.name })}
-          description=""
-          entityName={step.draft.name}
-          allowNoAuthentication
-          defaultMethod="none"
-          draftValues={step.auth}
-          submitLabel={actions("addOpenApiModal.submitButton.addLabel")}
-          onBack={(auth) =>
-            setStep({ kind: "schema", draft: step.draft, auth })
-          }
-          onConnect={create}
-          onClose={close}
-        />
-      )}
-    </>
+    <Modal open onOpenChange={(next) => !next && close()}>
+      <PluginModalContent>
+        {step.kind === "schema" ? (
+          <AddOpenAPIActionModal
+            presentation="content"
+            onBusyChange={setBusy}
+            title={t("createTitle")}
+            onClose={close}
+            initialDefinition={step.draft?.definition}
+            initialDescription={step.draft?.description}
+            defaultChatEnabled={defaultChatEnabled}
+            canManageDefaultChat={defaultChat.canEdit}
+            defaultChatReady={Boolean(defaultChat.data) && !defaultChat.error}
+            onConfigureAuthentication={(draft) =>
+              setStep({ kind: "authentication", draft, auth: step.auth })
+            }
+          />
+        ) : (
+          <OpenAPIAuthenticationModal
+            presentation="content"
+            isOpen
+            title={actions("mcpSetup.connectTo", { name: step.draft.name })}
+            description=""
+            entityName={step.draft.name}
+            onBusyChange={setBusy}
+            allowNoAuthentication
+            defaultMethod="none"
+            draftValues={step.auth}
+            submitLabel={actions("addOpenApiModal.submitButton.addLabel")}
+            onBack={(auth) =>
+              setStep({ kind: "schema", draft: step.draft, auth })
+            }
+            onConnect={create}
+            onClose={close}
+          />
+        )}
+      </PluginModalContent>
+    </Modal>
   );
 }

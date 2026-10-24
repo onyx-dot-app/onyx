@@ -163,7 +163,10 @@ rather than applied.
 When the scope narrows to a subset of sources, `run` appends a note to the
 response (`_build_scope_note`) that names the sources covered and the queries run, so a repeat
 call can vary its terms. Each call also records a `SearchCycle`, which
-`decide_search_scope` reads on later calls in the same turn.
+`decide_search_scope` reads on later calls in the same turn. It also passes the
+deduplicated `searched_sources` of those cycles as a separate prompt field, so a
+BACKOFF directive ("check A first, then B") advances to the next unsearched source
+while the subject stays the same.
 
 ### 4.3 Parallel retrieval lanes
 
@@ -462,3 +465,29 @@ than launching Playwright ad hoc.
 - **The Slack lane is not ACL-filtered the same way as every other lane.** Its
   `IndexFilters.access_control_list` is `None` by construction; access is
   whatever the pre-fetched Slack token can see. See §5.8.
+
+### Synthetic load-test helper responses
+
+`tools/loadtest/mock_llm/search_workload.py` supplies valid selection, classification,
+and neutral scope responses. Its sanitized `search_calibration.json` records weighted
+selection ranks and classification labels from a single ERAG sample. It models
+application work, not answer quality. `tools/loadtest/tests/test_mock_llm.py` reads
+production prompt constants without importing backend runtime dependencies.
+See `tools/loadtest/README.md` for calibration limits and explicit stress knobs.
+
+
+The representative load profiles in `tools/loadtest/mock_llm/profiles.py` add a
+seeded mix of search rounds, query counts, answer sizes, and reasoning. The mock
+uses current-turn result document numbers for citations. Helpers retain valid
+selection/classification responses. `tools/loadtest/mock_llm/response_plan.py` owns
+content, tool selection, timing, and usage; the HTTP handler delivers its plan. Shared response deadlines and tokenizer-based
+usage keep streaming and non-streaming workloads consistent. These are synthetic
+capacity profiles, not answer-quality evaluation. The default search scenario uses
+`mock-profile-search-v1`; explicit numeric stress models remain available.
+
+`tools/loadtest/workload_manifest.py` records the input hash and planned mix.
+`tools/loadtest/capacity_report.py` evaluates one measured plateau against explicit
+latency and failure thresholds. The load client supports ERAG question JSONL,
+seeded question order, startup staggering, and think-time jitter. Workload metrics
+report active turns and actual stream/search event counts. See the load-test README
+for calibration assumptions, distributed reproducibility limits, and fault modes.

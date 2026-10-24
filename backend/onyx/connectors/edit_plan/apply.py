@@ -110,6 +110,7 @@ def _validate_proposed_state(
     current: CurrentPairState,
     proposed: ProposedPairState,
     credential: Credential,
+    user_id: UUID,
 ) -> bool:
     """Runs the blocking validation on the proposed state and records it as
     the pairing's report. Returns False when nothing it checks changed.
@@ -131,6 +132,7 @@ def _validate_proposed_state(
             access_type=proposed.access_type,
             enforce_creation=True,
             trigger=CapabilityCheckTrigger.CONNECTOR_CONFIG_UPDATE,
+            user_id=user_id,
         )
     except ValidationError as e:
         raise OnyxError(
@@ -226,6 +228,7 @@ def _write_edit__no_commit(
             name=proposed.name,
             refresh_freq=proposed.refresh_freq,
             prune_freq=proposed.prune_freq,
+            check_freq=proposed.check_freq,
         )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
@@ -365,7 +368,9 @@ def _apply_claimed_plan(
     credential = fetch_proposed_credential(
         db_session, user=user, current=current, proposed=proposed
     )
-    validated = _validate_proposed_state(db_session, current, proposed, credential)
+    validated = _validate_proposed_state(
+        db_session, current, proposed, credential, user.id
+    )
 
     try:
         lock_cc_pair_for_edit__no_commit(db_session, cc_pair_id)

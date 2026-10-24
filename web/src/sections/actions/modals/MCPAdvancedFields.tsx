@@ -46,6 +46,9 @@ export function MCPAdvancedFields({
             <FormField.Label>
               {t("mcpAuthModal.transport.label")}
             </FormField.Label>
+            <FormField.Description>
+              {t("mcpAuthModal.transport.description")}
+            </FormField.Description>
             <FormField.Control asChild>
               <InputSingleSelect
                 value={values.transport}
@@ -64,9 +67,6 @@ export function MCPAdvancedFields({
                 ]}
               />
             </FormField.Control>
-            <FormField.Description>
-              {t("mcpAuthModal.transport.description")}
-            </FormField.Description>
           </FormField>
         </Section>
       </Collapsible>

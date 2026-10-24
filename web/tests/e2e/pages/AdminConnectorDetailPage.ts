@@ -19,8 +19,6 @@ export class AdminConnectorDetailPage {
   readonly timeWindowPicker: Locator;
   /** The run list's time filter, shared with the status card's window. */
   readonly runsTimeFilter: Locator;
-  /** The "All time" choice of an open time window menu. */
-  readonly allTimeOption: Locator;
   /** The logs action of every run that has logs, newest first. */
   readonly runLogsButtons: Locator;
   /** The run list's empty state, shown once the feed has loaded with no runs. */
@@ -36,6 +34,9 @@ export class AdminConnectorDetailPage {
   readonly editConnectorButton: Locator;
   /** Unfolds the section listing the connector's settings. */
   readonly indexConfigurationsToggle: Locator;
+  /** The pair's credential section, absent for a source without a credential. */
+  readonly authenticationAccountTitle: Locator;
+  readonly rerunChecksButton: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -43,12 +44,11 @@ export class AdminConnectorDetailPage {
     this.runsSection = page.getByTestId("connector-runs");
     this.runKindFilter = page.getByRole("button", { name: "All Types" });
     this.timeWindowPicker = this.indexingSection.getByRole("button", {
-      name: /^Last \d+ (hours|days)$/,
+      name: /^(Last \d+ (hours|days)|All time)$/,
     });
     this.runsTimeFilter = this.runsSection
-      .getByRole("button", { name: /Last \d+ (hours|days)/ })
+      .getByRole("button", { name: /Last \d+ (hours|days)|All time/ })
       .first();
-    this.allTimeOption = page.getByRole("option", { name: "All time" });
     this.runLogsButtons = page.getByRole("button", { name: "View Logs" });
     this.noRunsMessage = page.getByText("No recent indexing runs", {
       exact: true,
@@ -69,6 +69,12 @@ export class AdminConnectorDetailPage {
       .first();
     this.indexConfigurationsToggle = page.getByRole("button", {
       name: "Expand Index Configurations",
+    });
+    this.authenticationAccountTitle = page.getByText("Authentication Account", {
+      exact: true,
+    });
+    this.rerunChecksButton = page.getByRole("button", {
+      name: "Re-run Checks",
     });
   }
 

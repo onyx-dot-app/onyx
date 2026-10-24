@@ -185,7 +185,7 @@ export class GoogleConnectorSetupPage {
   }
 
   async expectCreated() {
-    await expect(this.page).toHaveURL(/\/admin\/indexing-status/);
+    await expect(this.page).toHaveURL(/\/admin\/connector\/\d+/);
   }
 
   private tab(name: "Service Account" | "OAuth") {

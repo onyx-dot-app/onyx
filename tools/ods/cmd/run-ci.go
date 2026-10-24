@@ -31,7 +31,6 @@ const (
 
 	cherryPickOptionText = "Please cherry-pick this PR to the latest release version."
 	cherryPickOption     = "- [ ] [Optional] " + cherryPickOptionText
-	linearCheckOverride  = "- [x] Override Linear Check"
 
 	gitRefComponentMaxBytes = 255
 	githubPRTitleMaxRunes   = 256
@@ -186,9 +185,8 @@ func buildRunCIPRMetadata(prInfo *PRInfo, forEdits bool) runCIPRMetadata {
 			Branch: fmt.Sprintf("run-ci/%d", prInfo.Number),
 			Title:  fmt.Sprintf("chore: [Running GitHub actions for #%d]", prInfo.Number),
 			Body: fmt.Sprintf(
-				"This PR runs GitHub Actions CI for #%d.\n\n%s\n\n**This PR should be closed (not merged) after CI completes.**",
+				"This PR runs GitHub Actions CI for #%d.\n\n**This PR should be closed (not merged) after CI completes.**",
 				prInfo.Number,
-				linearCheckOverride,
 			),
 		}
 	}
@@ -201,12 +199,9 @@ func buildRunCIPRMetadata(prInfo *PRInfo, forEdits bool) runCIPRMetadata {
 	if originalBody := strings.TrimSpace(prInfo.Body); originalBody != "" {
 		body += "\n\n## Original PR description\n\n" + originalBody
 	}
-	additionalOptions := []string{}
 	if !cherryPickOptionPattern.MatchString(prInfo.Body) {
-		additionalOptions = append(additionalOptions, cherryPickOption)
+		body += "\n\n" + cherryPickOption
 	}
-	additionalOptions = append(additionalOptions, linearCheckOverride)
-	body += "\n\n" + strings.Join(additionalOptions, "\n")
 
 	return runCIPRMetadata{
 		Branch: buildEditableBranchName(prInfo),

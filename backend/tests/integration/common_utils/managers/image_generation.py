@@ -28,7 +28,7 @@ class ImageGenerationConfigManager:
     def create(
         user_performing_action: DATestUser,
         image_provider_id: str | None = None,
-        model_name: str = "gpt-image-1",
+        model_name: str = "gpt-image-2.5-flare",
         provider: str = "openai",
         api_key: str | None = None,
         api_base: str | None = None,

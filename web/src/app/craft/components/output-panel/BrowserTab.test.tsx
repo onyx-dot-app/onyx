@@ -227,3 +227,24 @@ test("does not clear an in-flight frame reload when the reporting callback chang
   unmount();
   expect(nextCallback).toHaveBeenCalledWith("browser", false);
 });
+
+test("opens static HTML files without registering or navigating to a webapp", async () => {
+  const user = setupUser();
+  const onFileOpen = jest.fn();
+  const onNavigate = jest.fn();
+  render(
+    <BrowserTab
+      resourceId="browser"
+      apps={[]}
+      htmlFiles={["outputs/report.html"]}
+      onFileOpen={onFileOpen}
+      appId={null}
+      discoveryState="ready"
+      onNavigate={onNavigate}
+    />
+  );
+  expect(screen.queryByText("No webapps available")).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "report.html" }));
+  expect(onFileOpen).toHaveBeenCalledWith("outputs/report.html", "report.html");
+  expect(onNavigate).not.toHaveBeenCalled();
+});

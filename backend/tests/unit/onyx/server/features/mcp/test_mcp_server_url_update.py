@@ -51,6 +51,7 @@ def test_details_url_change_invalidates_credentials_before_returning_fresh_setti
         auth_type=auth_type,
         auth_performer=performer,
         oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
+        oauth_cimd_enabled=True,
         transport=MCPTransport.STREAMABLE_HTTP,
         status=MCPServerStatus.CONNECTED,
         is_public=True,
@@ -82,7 +83,8 @@ def test_details_url_change_invalidates_credentials_before_returning_fresh_setti
     )
     monkeypatch.setattr(api, "_hot_reload_craft_sessions", reload_sessions)
     monkeypatch.setattr(api, "get_user_connection_config", lambda *_: None)
-    monkeypatch.setattr(api, "get_action_policies", lambda *_: {})
+    monkeypatch.setattr(api, "get_workspace_action_policies", lambda *_: {})
+    monkeypatch.setattr(api, "users_can_manage_policies", lambda *_: True)
     result = api.update_mcp_server_simple(
         server.id,
         MCPServerSimpleUpdateRequest(

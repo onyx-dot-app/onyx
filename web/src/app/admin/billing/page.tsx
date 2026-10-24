@@ -275,7 +275,7 @@ export default function BillingPage() {
     };
     // changeView intentionally omitted: it only calls stable state setters and the
     // effect runs at most once (when session_id/portal_return params are present).
-  }, [searchParams, router, refreshBilling, refreshLicense]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [searchParams, router, refreshBilling, refreshLicense]);
 
   // Poll every 15s while activating, up to 2 minutes, to detect when the license arrives.
   useEffect(() => {
@@ -315,7 +315,7 @@ export default function BillingPage() {
     }, 15_000);
 
     return () => clearInterval(intervalId);
-  }, [isActivating]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isActivating]);
 
   const handleRefresh = async () => {
     await Promise.all([
@@ -348,7 +348,7 @@ export default function BillingPage() {
         )
       )
       .finally(() => setIsGraceSyncing(false));
-  }, [isSelfHosted, graceSyncAttempted, licenseData?.expiry_warning_stage, t]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isSelfHosted, graceSyncAttempted, licenseData?.expiry_warning_stage, t]);
 
   // Hide license activation card when Stripe connection is restored (only if auto-opened)
   useEffect(() => {

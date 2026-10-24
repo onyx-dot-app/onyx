@@ -9,6 +9,7 @@ import type {
   CredentialWithPrivateKey,
 } from "@/lib/credentials/types";
 import { AccessType, ProcessingMode } from "@/lib/types";
+import { fetchErrorFrom } from "@/lib/fetcher";
 import { TypedFile } from "@/lib/connectors/fileTypes";
 import type { ManageAccessEntry } from "@/lib/connectors/accessType";
 import type { ConnectorBase } from "@/lib/connectors/types";
@@ -61,15 +62,6 @@ export async function createCredentialWithPrivateKey(
   return await fetch(`/api/manage/credential/private-key`, {
     method: "POST",
     body: formData,
-  });
-}
-
-export async function adminDeleteCredential<T>(credentialId: number) {
-  return await fetch(`/api/manage/admin/credential/${credentialId}`, {
-    method: "DELETE",
-    headers: {
-      "Content-Type": "application/json",
-    },
   });
 }
 
@@ -277,7 +269,10 @@ export async function startCredentialCheckRun(
     }
   );
   if (!response.ok) {
-    throw new Error(`Credential check run request failed: ${response.status}`);
+    throw await fetchErrorFrom(
+      response,
+      `Credential check run request failed: ${response.status}`
+    );
   }
   return response.json();
 }

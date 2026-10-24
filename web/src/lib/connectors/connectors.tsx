@@ -1,5 +1,6 @@
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useMemo } from "react";
 import { useTranslations } from "next-intl";
 import type {
@@ -194,6 +195,7 @@ export function useConnectorConfiguration(
         // against en.json.
         t(key as Parameters<typeof t>[0], {
           docsAdminsPath: DOCS_ADMINS_PATH,
+          indexSettingsPath: ADMIN_ROUTES.INDEX_SETTINGS.path,
         })
       ),
     [connector, t]
@@ -212,9 +214,11 @@ export function translateConfiguration(
     const out: ConnectorField = {
       ...f,
       ...(f.label !== undefined && { label: text(f.label) }),
-      ...(f.description !== undefined && {
-        description: text(f.description),
-      }),
+      // A description with form arguments is formatted when it is shown.
+      ...(f.description !== undefined &&
+        !(f.type === "string_tab" && f.descriptionValues) && {
+          description: text(f.description),
+        }),
     };
     if (out.type === "tab") {
       out.tabs = out.tabs.map((tab) => ({
@@ -230,6 +234,19 @@ export function translateConfiguration(
       }));
     }
     if (out.type === "text" && out.placeholder !== undefined) {
+      const placeholder = out.placeholder;
+      out.placeholder =
+        typeof placeholder === "function"
+          ? (values) => translate(placeholder(values))
+          : translate(placeholder);
+    }
+    if (out.type === "text" && out.testCheck !== undefined) {
+      out.testCheck = {
+        ...out.testCheck,
+        label: translate(out.testCheck.label),
+      };
+    }
+    if (out.type === "list" && out.placeholder !== undefined) {
       out.placeholder = translate(out.placeholder);
     }
     if (out.type === "string_pair_list") {
@@ -301,6 +318,32 @@ const ATLASSIAN_SCOPED_TOKEN_FIELD: BooleanOption = {
   default: false,
   asCheckbox: true,
 };
+
+/**
+ * A Confluence space key from a typed key or a pasted space URL
+ * (`…/wiki/spaces/ENG/…`, or `…/display/ENG/…` on Data Center).
+ */
+function confluenceSpaceKey(entry: string): string {
+  const trimmed = entry.trim();
+  const match = /\/(?:spaces|display)\/([^/?#]+)/.exec(trimmed);
+  if (!match?.[1]) return trimmed;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    // A malformed escape, e.g. "KB%": keep the segment as typed.
+    return match[1];
+  }
+}
+
+/**
+ * A Confluence page ID from a typed ID or a pasted page URL
+ * (`…/pages/131368/…`, or `?pageId=131368` on Data Center).
+ */
+function confluencePageId(entry: string): string {
+  const trimmed = entry.trim();
+  const match = /\/pages\/(\d+)|[?&]pageId=(\d+)/.exec(trimmed);
+  return match?.[1] ?? match?.[2] ?? trimmed;
+}
 
 export const connectorConfigs: Record<
   ConfigurableSources,
@@ -442,27 +485,13 @@ export const connectorConfigs: Record<
         label: "connectors.github.fields.repo_owner.label",
         name: "repo_owner",
         optional: false,
+        placeholder: "connectors.github.fields.repo_owner.placeholder",
       },
       {
         type: "tab",
         name: "github_mode",
-        label: "connectors.github.fields.github_mode.label",
         optional: true,
         tabs: [
-          {
-            value: "repo",
-            label: "connectors.github.fields.github_mode.tabs.repo.label",
-            fields: [
-              {
-                type: "text",
-                label: "connectors.github.fields.repositories.label",
-                name: "repositories",
-                optional: false,
-                description:
-                  "connectors.github.fields.repositories.description",
-              },
-            ],
-          },
           {
             value: "everything",
             label: "connectors.github.fields.github_mode.tabs.everything.label",
@@ -472,6 +501,27 @@ export const connectorConfigs: Record<
                 label: "connectors.github.fields.everything.label",
                 name: "everything",
                 description: "connectors.github.fields.everything.description",
+                descriptionValues: (values) =>
+                  typeof values.repo_owner === "string" &&
+                  values.repo_owner.trim() !== ""
+                    ? { owner: values.repo_owner.trim() }
+                    : null,
+              },
+            ],
+          },
+          {
+            value: "repo",
+            label: "connectors.github.fields.github_mode.tabs.repo.label",
+            fields: [
+              {
+                type: "list",
+                label: "connectors.github.fields.repositories.label",
+                name: "repositories",
+                optional: false,
+                placeholder:
+                  "connectors.github.fields.repositories.placeholder",
+                // The config takes one comma-separated string.
+                transform: (names: string[]) => names.join(","),
               },
             ],
           },
@@ -506,6 +556,7 @@ export const connectorConfigs: Record<
         name: "branch",
         optional: true,
         description: "connectors.github.fields.branch.description",
+        placeholder: "connectors.github.fields.branch.placeholder",
       },
     ],
   },
@@ -878,7 +929,11 @@ export const connectorConfigs: Record<
           }
           return false;
         },
-        placeholder: "connectors.confluence.fields.wiki_base.placeholder",
+        // Cloud sites live on atlassian.net; Data Center is self-hosted.
+        placeholder: (values) =>
+          values.is_cloud === false
+            ? "connectors.confluence.fields.wiki_base.placeholderDataCenter"
+            : "connectors.confluence.fields.wiki_base.placeholder",
         subDescription: "siteUrl",
       },
       ATLASSIAN_SCOPED_TOKEN_FIELD,
@@ -902,30 +957,43 @@ export const connectorConfigs: Record<
             ],
           },
           {
-            value: "space",
+            value: "select",
             label:
-              "connectors.confluence.fields.indexing_scope.tabs.space.label",
+              "connectors.confluence.fields.indexing_scope.tabs.select.label",
             fields: [
               {
-                type: "text",
+                type: "list",
                 label: "connectors.confluence.fields.space.label",
                 name: "space",
-                default: "",
                 description: "connectors.confluence.fields.space.description",
+                placeholder: "connectors.confluence.fields.space.placeholder",
+                availableCount: {
+                  finding: "visible_spaces",
+                  checkId: "confluence_space_listing",
+                  label: "connectors.confluence.fields.space.available",
+                },
+                // Either list may stay empty, but not both; the schema checks
+                // the pair, so neither is marked optional.
+                optional: false,
+                // The config takes one comma-separated string of keys.
+                transform: (entries: string[]) =>
+                  entries.map(confluenceSpaceKey).join(","),
               },
-            ],
-          },
-          {
-            value: "page",
-            label:
-              "connectors.confluence.fields.indexing_scope.tabs.page.label",
-            fields: [
               {
-                type: "text",
+                type: "list",
                 label: "connectors.confluence.fields.page_id.label",
                 name: "page_id",
-                default: "",
                 description: "connectors.confluence.fields.page_id.description",
+                placeholder: "connectors.confluence.fields.page_id.placeholder",
+                availableCount: {
+                  finding: "visible_pages",
+                  checkId: "confluence_page_listing",
+                  label: "connectors.confluence.fields.page_id.available",
+                },
+                optional: false,
+                // The config takes one comma-separated string of page IDs.
+                transform: (entries: string[]) =>
+                  entries.map(confluencePageId).join(","),
               },
               {
                 type: "checkbox",
@@ -946,6 +1014,13 @@ export const connectorConfigs: Record<
                 type: "text",
                 label: "connectors.confluence.fields.cql_query.label",
                 name: "cql_query",
+                isTextArea: true,
+                mono: true,
+                testCheck: {
+                  checkId: "confluence_cql_query",
+                  label:
+                    "connectors.confluence.fields.cql_query.testButton.label",
+                },
                 default: "",
                 description:
                   "connectors.confluence.fields.cql_query.description",
@@ -953,9 +1028,12 @@ export const connectorConfigs: Record<
             ],
           },
         ],
-        defaultTab: "space",
+        defaultTab: "select",
       },
-      buildIncludeAttachmentsOption(true),
+      buildIncludeAttachmentsOption(
+        true,
+        "connectors.confluence.fields.include_attachments.description"
+      ),
     ],
     advanced_values: [],
   },
@@ -2369,7 +2447,6 @@ export const connectorConfigs: Record<
     advanced_values: [],
   },
 };
-export const defaultRefreshFreqMinutes = 30; // 30 minutes
 // Match the backend minimums in Connector.validate_refresh_freq / validate_prune_freq.
 const MIN_REFRESH_FREQ_SECONDS = 60;
 const MIN_PRUNE_FREQ_SECONDS = 300;
@@ -2381,3 +2458,6 @@ export const MIN_PRUNE_FREQ_HOURS =
 const MAX_FREQ_SECONDS = 2_147_483_647;
 export const MAX_REFRESH_FREQ_MINUTES = Math.floor(MAX_FREQ_SECONDS / 60);
 export const MAX_PRUNE_FREQ_HOURS = Math.floor(MAX_FREQ_SECONDS / 3600);
+// The create form's floor for its hour fields (Prune, Run Checks): a whole
+// hour, above the backend's 5 minutes, which the connector page still allows.
+export const MIN_SCHEDULE_HOURS = 1;

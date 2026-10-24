@@ -26,7 +26,7 @@ export const Default: Story = {
     sizePreset: "main-content",
     variant: "section",
     title: "OpenAI",
-    description: "GPT-4o language model provider.",
+    description: "GPT-6 Sol language model provider.",
     icon: SvgSettings,
     rightChildren: <Button prominence="tertiary">Edit</Button>,
   },

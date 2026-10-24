@@ -123,7 +123,7 @@ only models you are confident are the vendor's current recommended lineup.
 Sections and their naming conventions (native names, NOT OpenRouter ids). A
 section lists ONLY its own vendor's models:
 - openai: openai/* models only; strip the "openai/" prefix (e.g.
-  "gpt-5.6-sol"). No display_name.
+  "gpt-6.1-sol"). No display_name.
 - anthropic: anthropic/* models only; strip "anthropic/" and replace "." with
   "-" (e.g. "claude-opus-5").
 - vertex_ai: google/* models only; strip the "google/" prefix (e.g.

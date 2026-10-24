@@ -703,6 +703,7 @@ _VECTOR_DB_TASK_MODULES: set[str] = {
     "onyx.background.celery.tasks.pruning",
     "onyx.background.celery.tasks.vespa",
     "onyx.background.celery.tasks.cc_pair_ids_backfill",
+    "onyx.background.celery.tasks.tabular_rechunk",
     "onyx.background.celery.tasks.doc_permission_syncing",
     "onyx.background.celery.tasks.hierarchyfetching",
     # EE modules that are vector-DB-dependent

@@ -22,18 +22,18 @@ const llmProviderListJSON = `{
 		"deployment_name": null,
 		"model_configurations": [{
 			"id": 11,
-			"name": "gpt-5-mini",
+			"name": "gpt-6-luna",
 			"is_visible": true,
 			"max_input_tokens": 272000,
 			"supports_image_input": true,
 			"supports_reasoning": true,
-			"display_name": "GPT-5 Mini",
+			"display_name": "GPT-6 Luna",
 			"custom_display_name": null
 		}]
 	}],
-	"default_text": {"provider_id": 3, "model_name": "gpt-5-mini"},
+	"default_text": {"provider_id": 3, "model_name": "gpt-6-luna"},
 	"default_vision": null,
-	"default_chat_naming": {"provider_id": 3, "model_name": "gpt-5-nano"}
+	"default_chat_naming": {"provider_id": 3, "model_name": "gpt-6-astra"}
 }`
 
 func TestUpsertLLMProviderCreate(t *testing.T) {
@@ -45,7 +45,7 @@ func TestUpsertLLMProviderCreate(t *testing.T) {
 		IsPublic:      true,
 		APIKeyChanged: true,
 		ModelConfigurations: []ModelConfigurationUpsert{
-			{Name: "gpt-5-mini", IsVisible: true},
+			{Name: "gpt-6-luna", IsVisible: true},
 		},
 	}
 	view, err := c.UpsertLLMProvider(context.Background(), req, true)
@@ -140,13 +140,13 @@ func TestListLLMProvidersDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if list.DefaultText == nil || list.DefaultText.ProviderID != 3 || list.DefaultText.ModelName != "gpt-5-mini" {
+	if list.DefaultText == nil || list.DefaultText.ProviderID != 3 || list.DefaultText.ModelName != "gpt-6-luna" {
 		t.Errorf("unexpected default_text: %+v", list.DefaultText)
 	}
 	if list.DefaultVision != nil {
 		t.Errorf("default_vision should be nil, got %+v", list.DefaultVision)
 	}
-	if list.DefaultChatNaming == nil || list.DefaultChatNaming.ModelName != "gpt-5-nano" {
+	if list.DefaultChatNaming == nil || list.DefaultChatNaming.ModelName != "gpt-6-astra" {
 		t.Errorf("unexpected default_chat_naming: %+v", list.DefaultChatNaming)
 	}
 }
@@ -163,21 +163,21 @@ func TestDeleteLLMProvider(t *testing.T) {
 
 func TestSetDefaultLLMModel(t *testing.T) {
 	c, captured := newTestServer(t, http.StatusOK, `null`)
-	if err := c.SetDefaultLLMModel(context.Background(), DefaultModel{ProviderID: 3, ModelName: "gpt-5-mini"}); err != nil {
+	if err := c.SetDefaultLLMModel(context.Background(), DefaultModel{ProviderID: 3, ModelName: "gpt-6-luna"}); err != nil {
 		t.Fatal(err)
 	}
 	if captured.Method != http.MethodPost || captured.Path != "/admin/llm/default" {
 		t.Errorf("got %s %s, want POST /admin/llm/default", captured.Method, captured.Path)
 	}
 	body := bodyAsMap(t, captured.Body)
-	if body["provider_id"] != float64(3) || body["model_name"] != "gpt-5-mini" {
+	if body["provider_id"] != float64(3) || body["model_name"] != "gpt-6-luna" {
 		t.Errorf("unexpected body: %s", captured.Body)
 	}
 }
 
 func TestSetDefaultVisionModel(t *testing.T) {
 	c, captured := newTestServer(t, http.StatusOK, `null`)
-	if err := c.SetDefaultVisionModel(context.Background(), DefaultModel{ProviderID: 3, ModelName: "gpt-5-mini"}); err != nil {
+	if err := c.SetDefaultVisionModel(context.Background(), DefaultModel{ProviderID: 3, ModelName: "gpt-6-luna"}); err != nil {
 		t.Fatal(err)
 	}
 	if captured.Path != "/admin/llm/default-vision" {
@@ -187,7 +187,7 @@ func TestSetDefaultVisionModel(t *testing.T) {
 
 func TestSetDefaultChatNamingModel(t *testing.T) {
 	c, captured := newTestServer(t, http.StatusOK, `null`)
-	if err := c.SetDefaultChatNamingModel(context.Background(), DefaultModel{ProviderID: 3, ModelName: "gpt-5-nano"}); err != nil {
+	if err := c.SetDefaultChatNamingModel(context.Background(), DefaultModel{ProviderID: 3, ModelName: "gpt-6-astra"}); err != nil {
 		t.Fatal(err)
 	}
 	if captured.Method != http.MethodPost || captured.Path != "/admin/llm/default-chat-naming" {

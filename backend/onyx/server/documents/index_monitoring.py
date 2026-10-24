@@ -38,12 +38,15 @@ from onyx.db.enums import (
 )
 from onyx.db.federated import fetch_all_federated_connectors
 from onyx.db.index_attempt import (
+    OpenErrorCounts,
     get_error_counts_for_index_attempts,
     get_latest_index_attempts,
-    get_open_doc_error_counts_for_index_attempts,
+    get_open_error_counts_for_index_attempts,
     get_queued_index_attempts,
 )
 from onyx.db.models import ConnectorCredentialPair, IndexAttempt, User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents.cc_pair_runs_feed import (
     connector_supports_targeted_reindex,
     fetch_run_feed,
@@ -173,6 +176,11 @@ def get_indexing_overview(
     db_session: Session = Depends(get_session),
 ) -> IndexingOverviewResponse:
     """The overview card's figures and throughput over the readable pairs."""
+    # All time over every readable pair would load every attempt kept.
+    if window == CCPairThroughputWindow.ALL:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, "The overview has no all-time window."
+        )
     pairs = _readable_cc_pairs(db_session, user)
     throughput = throughput_of(db_session, list(pairs), window)
     return IndexingOverviewResponse(
@@ -193,10 +201,9 @@ def _connector_status(
     then the latest attempt's. A live attempt outranks the sticky error."""
     if cc_pair.status == ConnectorCredentialPairStatus.PAUSED:
         return IndexingConnectorStatus.PAUSED
-    if cc_pair.status in (
-        ConnectorCredentialPairStatus.DELETING,
-        ConnectorCredentialPairStatus.INVALID,
-    ):
+    if cc_pair.status == ConnectorCredentialPairStatus.DELETING:
+        return IndexingConnectorStatus.DELETING
+    if cc_pair.status == ConnectorCredentialPairStatus.INVALID:
         return IndexingConnectorStatus.FAILED
     running = latest is not None and latest.status == IndexingStatus.IN_PROGRESS
     if cc_pair.in_repeated_error_state and not running:
@@ -300,7 +307,7 @@ def get_indexing_connectors(
     )
     attempt_ids = [latest[cc_pair.id].id for cc_pair in page if cc_pair.id in latest]
     error_counts = get_error_counts_for_index_attempts(db_session, attempt_ids)
-    open_counts = get_open_doc_error_counts_for_index_attempts(db_session, attempt_ids)
+    open_counts = get_open_error_counts_for_index_attempts(db_session, attempt_ids)
     docs_indexed = _docs_indexed_by_pair(
         db_session, {cc_pair.id: cc_pair for cc_pair in page}
     )
@@ -308,6 +315,11 @@ def get_indexing_connectors(
 
     def row(cc_pair: ConnectorCredentialPair) -> IndexingConnectorRow:
         attempt = latest.get(cc_pair.id)
+        open_errors = (
+            OpenErrorCounts()
+            if attempt is None
+            else open_counts.get(attempt.id, OpenErrorCounts())
+        )
         return IndexingConnectorRow(
             cc_pair_id=cc_pair.id,
             name=cc_pair.name,
@@ -325,9 +337,11 @@ def get_indexing_connectors(
                 else IndexAttemptSnapshot.from_index_attempt_db_model(
                     attempt,
                     error_count=error_counts.get(attempt.id, 0),
-                    open_doc_error_count=open_counts.get(attempt.id, 0),
+                    open_error_count=open_errors.total,
+                    open_doc_error_count=open_errors.docs,
                 )
             ),
+            open_error_count=open_errors.total,
             queue_position=queue_positions.get(cc_pair.id),
             permissions=cc_pair_permissions(
                 can_operate=cc_pair.id in operate_ids,

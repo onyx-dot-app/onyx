@@ -19,13 +19,13 @@ from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 import onyx.server.features.build.external_apps.api as api
+from onyx.db.action_policy import get_workspace_action_policies
 from onyx.db.enums import ExternalAppType, GatedAppKind
 from onyx.db.external_app import (
     associate_built_in_skill__no_commit,
     create_external_app,
     get_built_in_external_app,
 )
-from onyx.db.gated_app import get_action_policies
 from onyx.db.models import ExternalApp, Skill, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -222,7 +222,10 @@ def test_self_hosted_built_in_response_shows_config_and_masked_creds(
     monkeypatch.setattr(api, "MULTI_TENANT", False)
     resp = api._to_admin_response(
         gmail,
-        stored=get_action_policies(db_session, GatedAppKind.EXTERNAL_APP, gmail.id),
+        db_session=db_session,
+        stored=get_workspace_action_policies(
+            db_session, GatedAppKind.EXTERNAL_APP, gmail.id
+        ),
     )
 
     assert resp.upstream_url_patterns  # config visible

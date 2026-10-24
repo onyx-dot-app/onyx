@@ -87,6 +87,7 @@ const app: ExternalAppAdminResponse = {
   actions: [],
   associated_skills: [],
   is_onyx_managed: false,
+  users_can_manage_policies: true,
 };
 const slack: BuiltInExternalAppDescriptor = {
   app_type: "SLACK",
@@ -159,7 +160,7 @@ test("retries app-list failure into the custom editor", async () => {
   expect(await screen.findByText("Apps could not load")).toBeVisible();
   const dialog = screen.getByRole("dialog");
   expect(dialog).toHaveAttribute("data-position", "top");
-  expect(dialog).toHaveAttribute("data-width", "md");
+  expect(dialog).toHaveAttribute("data-width", "lg");
   const user = setupUser();
   await user.click(screen.getByRole("button", { name: "Retry" }));
   expect(await screen.findByRole("dialog", { name: app.name })).toBeVisible();

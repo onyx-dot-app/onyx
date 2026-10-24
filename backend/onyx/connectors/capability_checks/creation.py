@@ -5,9 +5,11 @@ For a source with named checks, this replaces the legacy blocking validation
 (``validate_connector_settings`` and ``validate_perm_sync``). It runs the
 source's checks for the pairing's access type and stores the full report. A
 fresh result of a draft run on the same form (for an edit, of a dry run on the
-same pair and proposed state) is reused, so the check does not run again. Only
-a required check that failed within the blocking budget blocks the pairing:
-INDETERMINATE is transient, and skipped checks do not apply. A check that is
+same pair and proposed state) is reused, so the check does not run again. An
+optional check the same admin skipped on that form is reused as skipped; a required
+check always runs, also when the admin stopped it. Only a required check that
+failed within the blocking budget blocks the pairing: INCOMPLETE is transient,
+and skipped checks do not apply. A check that is
 still running at the end of the budget does not block; a background run
 produces its result.
 """
@@ -22,27 +24,35 @@ from onyx.background.celery.tasks.capability_checks.enqueue import (
 )
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.draft_runs import (
-    CachedDraftResult,
-    DraftCheckStateKind,
     cached_check_result,
     form_draft_result_keys,
     get_cached_draft_result,
+    get_user_skip,
     is_draft_result_in_flight,
     wait_for_draft_result,
 )
 from onyx.connectors.capability_checks.form_state import validate_form_state
 from onyx.connectors.capability_checks.models import (
+    CachedDraftResult,
     CapabilityCheck,
     CapabilityCheckResult,
     CapabilityCheckStatus,
+    CheckErrorKind,
+    CheckNotRunReason,
+    CredentialCapability,
     CredentialCapabilityReport,
+    DraftCheckStateKind,
     NamedCheckRun,
     PendingCheck,
 )
 from onyx.connectors.capability_checks.registry import get_capability_checks
 from onyx.connectors.capability_checks.runner import (
+    capability_check_run_lease,
+    dependency_not_run_result,
     generate_capability_report,
     merge_capability_results,
+    run_order,
+    stop_blocked_results,
 )
 from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.exceptions import ConnectorValidationError
@@ -101,10 +111,12 @@ def _cached_draft_results(
     access_type: AccessType,
     connector_specific_config: dict[str, Any],
     cc_pair_id: int | None,
+    user_id: UUID | None,
 ) -> dict[str, CachedDraftResult]:
     """check_id to its cached draft result, for the checks a draft run already
     ran with this credential, access type and form values. With ``cc_pair_id``,
-    only that pair's dry runs count; without it, only create-form runs."""
+    only that pair's dry runs count; without it, only create-form runs.
+    ``user_id``'s own skip replaces the shared result, and their stop hides it."""
     keys = _draft_result_keys(
         checks,
         credential=credential,
@@ -115,7 +127,13 @@ def _cached_draft_results(
     )
     cached_by_check_id: dict[str, CachedDraftResult] = {}
     for check_id, key in keys.items():
-        cached = get_cached_draft_result(key)
+        user_skip = get_user_skip(user_id, key) if user_id is not None else None
+        if (
+            user_skip is not None
+            and user_skip.not_run_reason == CheckNotRunReason.STOPPED_BY_USER
+        ):
+            continue
+        cached = user_skip or get_cached_draft_result(key)
         if cached is not None:
             cached_by_check_id[check_id] = cached
     return cached_by_check_id
@@ -129,10 +147,14 @@ def _fresh_draft_results(
     access_type: AccessType,
     connector_specific_config: dict[str, Any],
     cc_pair_id: int | None,
+    user_id: UUID | None,
 ) -> dict[str, CachedDraftResult]:
     """The cached draft results that a validation reuses. A cached FAILED
     result is left out, so the check runs again: the source may have been
-    fixed since, and a client without a draft run cannot ask for a re-run."""
+    fixed since, and a client without a draft run cannot ask for a re-run.
+    The admin's skip is reused only for an optional check: a skip never lets
+    a required check pass unrun."""
+    required_ids = {check.check_id for check in checks if check.required}
     return {
         check_id: cached
         for check_id, cached in _cached_draft_results(
@@ -142,8 +164,10 @@ def _fresh_draft_results(
             access_type=access_type,
             connector_specific_config=connector_specific_config,
             cc_pair_id=cc_pair_id,
+            user_id=user_id,
         ).items()
         if cached.state != DraftCheckStateKind.FAILED
+        and not (cached.skipped_by_user and check_id in required_ids)
     }
 
 
@@ -154,10 +178,12 @@ def get_cc_pair_dry_run_results(
     source: DocumentSource,
     access_type: AccessType,
     connector_specific_config: dict[str, Any],
+    user_id: UUID,
 ) -> list[CapabilityCheckResult]:
     """The cached results of the pair's dry runs for this proposed state, as
-    report rows, failures included. Reads the cache only: a check with no
-    terminal result for exactly this state is left out."""
+    report rows, failures included, with ``user_id``'s own skips. Reads the
+    cache only: a check with no terminal result for exactly this state is
+    left out."""
     checks = get_capability_checks(source)
     cached_by_check_id = _cached_draft_results(
         checks,
@@ -166,6 +192,7 @@ def get_cc_pair_dry_run_results(
         access_type=access_type,
         connector_specific_config=connector_specific_config,
         cc_pair_id=cc_pair_id,
+        user_id=user_id,
     )
     return [
         cached_check_result(check, cached)
@@ -191,6 +218,7 @@ def _mark_running(
             connector_id=connector_id,
             source=source,
             trigger=trigger,
+            lease=capability_check_run_lease(source),
             active_within=timedelta(0),
         )
         db_session.commit()
@@ -310,24 +338,60 @@ def _run_checks_within_budget(
     return finished, frozenset(unfinished)
 
 
+def _defer_dependents_of_unfinished(
+    checks: list[CapabilityCheck[Any]],
+    finished: list[CapabilityCheckResult],
+    unfinished: frozenset[str],
+) -> tuple[list[CapabilityCheckResult], frozenset[str]]:
+    """Moves each check that depends, directly or not, on an unfinished check
+    to the unfinished checks: its result came before its dependency's, so it
+    neither blocks the pairing nor goes into a report."""
+    deferred: set[str] = set(unfinished)
+    for check in run_order(checks):
+        if deferred.intersection(check.depends_on):
+            deferred.add(check.check_id)
+    return (
+        [result for result in finished if result.check_id not in deferred],
+        frozenset(deferred),
+    )
+
+
 def _unfinished_results(
-    checks: list[CapabilityCheck[Any]], unfinished: frozenset[str], message: str
+    checks: list[CapabilityCheck[Any]],
+    unfinished: frozenset[str],
+    finished: list[CapabilityCheckResult],
+    message: str,
 ) -> list[CapabilityCheckResult]:
-    """INDETERMINATE rows for checks with no result, for a report that is
-    stored without a background run."""
-    return [
-        CapabilityCheckResult(
+    """Rows for checks with no result, for a report that is stored without a
+    background run: not run when a dependency stops the check, else
+    INCOMPLETE: their result never arrives, so they time out."""
+    result_by_check_id = {result.check_id: result for result in finished}
+    result_by_key: dict[tuple[str, CredentialCapability], CapabilityCheckResult] = {}
+    # In run order, so a row built here stops the unfinished checks after it.
+    for check in run_order(checks):
+        if check.check_id not in unfinished:
+            continue
+        result = dependency_not_run_result(
+            check, result_by_check_id
+        ) or CapabilityCheckResult(
             capability=check.capability,
             check_id=check.check_id,
+            row_id=check.row_id,
+            step=check.step,
             display_name=check.display_name,
             required=check.required,
-            status=CapabilityCheckStatus.INDETERMINATE,
+            status=CapabilityCheckStatus.INCOMPLETE,
             message=message,
+            error_kind=CheckErrorKind.TIMEOUT,
             is_fallback=check.is_fallback,
             remediation=check.remediation,
             docs_link=check.docs_link,
             validates_binding=check.validates_binding,
         )
+        result_by_key[(check.check_id, check.capability)] = result
+        result_by_check_id[check.check_id] = result
+    return [
+        result_by_key[(check.check_id, check.capability)]
         for check in checks
         if check.check_id in unfinished
     ]
@@ -438,11 +502,13 @@ def run_named_checks_within_budget(
     connector_specific_config: dict[str, Any],
     credential: Credential,
     access_type: AccessType,
+    user_id: UUID | None,
 ) -> NamedCheckRun:
     """Runs the source's named checks for a pairing, with no writes.
 
     Fresh draft results for the same form are reused and count as finished at
-    once: with ``cc_pair_id``, those of the pair's dry runs. The other checks
+    once: with ``cc_pair_id``, those of the pair's dry runs. ``user_id`` is who
+    asks for the pairing; only their own skips are reused. The other checks
     run for at most ``CREATION_BLOCKING_BUDGET_SECONDS``. A discovery check
     with no reused result does not run: creation and the first index attempt
     never wait on it. Does not claim or store a report row and does not start a
@@ -456,6 +522,7 @@ def run_named_checks_within_budget(
         access_type=access_type,
         connector_specific_config=connector_specific_config,
         cc_pair_id=cc_pair_id,
+        user_id=user_id,
     )
     # Discovery checks are not run at creation, so they are not awaited either.
     to_check: list[str] = list(
@@ -499,8 +566,11 @@ def run_named_checks_within_budget(
         for check in checks
         if check.discovery and check.check_id not in reused
     )
+    finished, unfinished = _defer_dependents_of_unfinished(checks, finished, unfinished)
+    # The checks ran side by side, so a check whose dependency failed ran
+    # anyway: it reports its dependency, not its own failure.
     return NamedCheckRun(
-        finished_results=finished,
+        finished_results=stop_blocked_results(checks, finished),
         unfinished_checks=[
             PendingCheck(
                 capability=check.capability,
@@ -518,6 +588,8 @@ def _discovery_not_run_result(check: CapabilityCheck[Any]) -> CapabilityCheckRes
     return CapabilityCheckResult(
         capability=check.capability,
         check_id=check.check_id,
+        row_id=check.row_id,
+        step=check.step,
         display_name=check.display_name,
         required=False,
         status=CapabilityCheckStatus.SKIPPED,
@@ -542,10 +614,12 @@ def validate_pairing_with_named_checks(
     credential: Credential,
     access_type: AccessType,
     enforce_creation: bool,
+    user_id: UUID | None,
 ) -> bool:
     """Runs the source's named checks for a pairing and stores the report
     under ``trigger``. ``cc_pair_id`` is the edited pair whose dry-run results
-    are reused; None for a new pairing.
+    are reused; None for a new pairing. ``user_id`` as for
+    ``run_named_checks_within_budget``.
 
     Waits at most ``CREATION_BLOCKING_BUDGET_SECONDS``. Reused draft results
     count as finished at once. When checks are still running at the end of the
@@ -577,6 +651,7 @@ def validate_pairing_with_named_checks(
             connector_specific_config=connector_specific_config,
             credential=credential,
             access_type=access_type,
+            user_id=user_id,
         )
         finished = run.finished_results
         unfinished = run.unfinished_check_ids
@@ -604,7 +679,10 @@ def validate_pairing_with_named_checks(
             _store_report(
                 finished
                 + _unfinished_results(
-                    get_capability_checks(source), unfinished, _REJECTED_MESSAGE
+                    get_capability_checks(source),
+                    unfinished,
+                    finished,
+                    _REJECTED_MESSAGE,
                 ),
                 credential_id=credential_id,
                 connector_id=connector_id,

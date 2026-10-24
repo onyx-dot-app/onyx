@@ -53,9 +53,10 @@ import { SidebarLayouts, useSidebarState } from "@opal/layouts";
 import { renderSidebarLogo } from "@/lib/sidebar/utils";
 import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 import { Button as OpalButton } from "@opal/components";
-import { cn, markdown } from "@opal/utils";
+import { cn } from "@opal/utils";
 import { Disabled } from "@opal/core";
-import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { usePlans, useTierAtLeast } from "@/lib/tiers/hooks";
+import { BetaTag } from "@/lib/tiers/components";
 import { Tier } from "@/lib/tiers/types";
 import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
 import { PHFeatureFlag, usePHFeatureFlag } from "@/lib/analytics/hooks";
@@ -275,6 +276,7 @@ export default function AppSidebar() {
     combinedSettingsData?.onyx_craft_requires_upgrade === true;
   // Gated like a Business admin page: below that tier the tab is disabled.
   const hasCraftTier = useTierAtLeast(Tier.BUSINESS);
+  const plans = usePlans();
 
   // Fetch notifications for build mode intro
   const { notifications, refresh: mutateNotifications } = useNotifications({
@@ -642,9 +644,7 @@ export default function AppSidebar() {
                 // Only admins can open billing, so others are told to ask one.
                 tooltip={
                   isAdmin
-                    ? markdown(
-                        t("adminSidebar.businessOrEnterpriseOnly.tooltip")
-                      )
+                    ? plans[Tier.BUSINESS].tooltip
                     : tCraftUpgrade("userDescription")
                 }
               >
@@ -662,7 +662,9 @@ export default function AppSidebar() {
                         title={t("appSidebar.craft.businessTag")}
                         color="blue"
                       />
-                    ) : undefined
+                    ) : (
+                      <BetaTag />
+                    )
                   }
                 >
                   {t("appSidebar.craft.label")}

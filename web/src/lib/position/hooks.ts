@@ -197,7 +197,7 @@ class AppPosition {
    *
    * - You are in a chat that started with `Agent XYZ`. The chat tab *and* the
    *   `Agent XYZ` tab both highlight.
-   * - "Disable Default Chat" is on (Admin -> Chat Preferences -> Advanced
+   * - "Always Start with an Agent" is on (Admin -> Chat Preferences -> Advanced
    *   Options). You open "New Session" (`/app`), which resolves to an agent
    *   because no default chat exists. The new-session tab *and* that agent's
    *   tab both highlight.

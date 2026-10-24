@@ -24,13 +24,14 @@
 
 /* The card: the bordered box with the search field and the rows. */
 .opal-dropdown-card {
-  @apply relative overflow-hidden border bg-background-neutral-00 rounded-12 shadow-box-01;
+  @apply relative flex flex-col overflow-hidden border bg-background-neutral-00 rounded-12 shadow-box-01;
+  max-height: var(--opal-dropdown-available-height);
 }
 
 /* The search field pinned above the rows: a borderless input on its own
    row, with a 4px inset on every side. */
 .opal-dropdown-search {
-  @apply p-1;
+  @apply shrink-0 p-1;
 }
 
 /* The inner padding sits inside the ShadowDiv, so its scroll gradients span

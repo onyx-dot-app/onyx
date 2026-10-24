@@ -77,6 +77,38 @@ const meta = {
     const originalFetch = globalThis.fetch;
     const preferences = { enabled_in_chat: true, enabled_in_craft: true };
     globalThis.fetch = async (input, init) => {
+      if (String(input).startsWith("/api/build/action-policies/")) {
+        return Response.json({
+          gated_app_id: 7,
+          kind: "mcp_server",
+          target_id: 7,
+          name: "Linear",
+          enabled: null,
+          users_can_manage_policies: true,
+          actions: [
+            {
+              action_id: "search",
+              normalised_name: "Search issues",
+              description: "Find issues across your projects.",
+              effective_policy: "ALWAYS",
+              workspace_policy: "ASK",
+              stored_policy: "ALWAYS",
+              editable: true,
+              lock_reason: null,
+            },
+            {
+              action_id: "delete",
+              normalised_name: "Delete issues",
+              description: "Delete an issue permanently.",
+              effective_policy: "DENY",
+              workspace_policy: "DENY",
+              stored_policy: null,
+              editable: false,
+              lock_reason: "workspace_disabled",
+            },
+          ],
+        });
+      }
       if (String(input) === "/api/skills") return Response.json(appSkills);
       if (String(input) === "/api/settings")
         return Response.json({
@@ -175,7 +207,6 @@ const meta = {
     },
     onClose: () => undefined,
     onConnect: () => undefined,
-    onUseInChat: () => undefined,
     onDisconnected: () => undefined,
   },
 } satisfies Meta<typeof MemberPluginDetailModal>;
@@ -188,9 +219,6 @@ export const Tools: Story = {
   play: async () => {
     const page = within(document.body);
     await userEvent.click(await page.findByRole("tab", { name: "Tools" }));
-    await userEvent.click(
-      page.getByRole("button", { name: "Expand Search issues" })
-    );
     await expect(
       page.getByText(/Search issues across the projects you can access/)
     ).toBeVisible();
@@ -285,5 +313,16 @@ export const OpenAPITools: Story = {
     await userEvent.click(await page.findByRole("tab", { name: "Tools" }));
     await expect(page.getByText("getAuthenticatedUser")).toBeVisible();
     await expect(page.getByText("GET")).toBeVisible();
+  },
+};
+
+export const ApprovalSettings: Story = {
+  args: { initialTab: "approvals", surface: "craft" },
+  play: async () => {
+    const page = within(document.body);
+    const action = await page.findByRole("group", { name: "Search issues" });
+    await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();
+    await userEvent.click(within(action).getByRole("button", { name: "Ask" }));
+    await expect(page.getByRole("button", { name: "Save" })).toBeEnabled();
   },
 };

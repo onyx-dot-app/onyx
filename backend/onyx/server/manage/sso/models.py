@@ -50,6 +50,11 @@ class SSODomainRecordsRequest(BaseModel):
     domains: list[str]
 
 
+class SSOProviderHandoffResponse(BaseModel):
+    linked_users: int
+    renamed_users: int
+
+
 class SSOProviderResponse(BaseModel):
     id: int
     name: str

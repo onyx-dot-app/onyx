@@ -155,17 +155,6 @@ export function PerUserAuthConfig({
           state={missingSharedApiKey ? "error" : "idle"}
         >
           <FormField.Label>{t("perUserAuth.headers.label")}</FormField.Label>
-          <FormField.Control asChild>
-            <InputKeyValue
-              keyTitle={t("perUserAuth.headers.keyTitle")}
-              valueTitle={t("perUserAuth.headers.valueTitle")}
-              items={headersDraft}
-              onChange={handleHeadersChange}
-              mode="fixed-line"
-              layout="equal"
-              addButtonLabel={t("perUserAuth.headers.addButton.label")}
-            />
-          </FormField.Control>
           <FormField.Description>
             {mode === "per-user"
               ? t.rich("perUserAuth.headers.perUserDescription", {
@@ -186,6 +175,17 @@ export function PerUserAuthConfig({
                   ),
                 })}
           </FormField.Description>
+          <FormField.Control asChild>
+            <InputKeyValue
+              keyTitle={t("perUserAuth.headers.keyTitle")}
+              valueTitle={t("perUserAuth.headers.valueTitle")}
+              items={headersDraft}
+              onChange={handleHeadersChange}
+              mode="fixed-line"
+              layout="equal"
+              addButtonLabel={t("perUserAuth.headers.addButton.label")}
+            />
+          </FormField.Control>
           <FormField.Message
             messages={{
               error: t("perUserAuth.headers.error.message", {

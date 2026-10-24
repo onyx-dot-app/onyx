@@ -1,6 +1,7 @@
 "use client";
 import { useTranslations } from "next-intl";
 import { useFormikContext } from "formik";
+import { useState } from "react";
 import type { MCPAuthFormValues } from "@/sections/actions/modals/types";
 import { FormField } from "@/refresh-components/form/FormField";
 import { Section } from "@opal/layouts";
@@ -16,8 +17,18 @@ export function MCPApiTokenFields({
   disabled = false,
 }: MCPApiTokenFieldsProps) {
   const t = useTranslations("actions");
-  const { values, setValues, setFieldValue, errors, touched, handleChange } =
-    useFormikContext<MCPAuthFormValues>();
+  const {
+    values,
+    initialValues,
+    setValues,
+    setFieldValue,
+    errors,
+    touched,
+    handleChange,
+  } = useFormikContext<MCPAuthFormValues>();
+  // The server's masked token, captured before a save can reset the form to
+  // the typed plaintext.
+  const [storedApiToken] = useState(() => initialValues.api_token);
   return (
     <Section alignItems="stretch" height="auto" gap={4}>
       <FormField name="auth_performer">
@@ -91,6 +102,7 @@ export function MCPApiTokenFields({
                 name="api_token"
                 value={values.api_token}
                 onChange={handleChange}
+                existingValue={storedApiToken}
                 placeholder={t("mcpAuthModal.sharedApiKey.placeholder")}
               />
             </FormField.Control>

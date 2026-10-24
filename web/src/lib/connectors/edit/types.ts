@@ -26,6 +26,7 @@ export interface ConnectorEditProposal {
   name: string;
   refresh_freq: number | null;
   prune_freq: number | null;
+  check_freq: number | null;
 }
 
 /** Mirrors `EditStepKind` in `backend/onyx/connectors/edit_plan/models.py`. */
@@ -106,7 +107,12 @@ export interface CredentialChoice {
   options: CredentialPath[];
 }
 
-export type EditCheckStatus = "passed" | "failed" | "indeterminate" | "skipped";
+export type EditCheckStatus =
+  | "passed"
+  | "failed"
+  | "incomplete"
+  | "indeterminate"
+  | "skipped";
 
 export interface EditCheckResult {
   capability: CredentialCapability;
@@ -115,6 +121,12 @@ export interface EditCheckResult {
   required: boolean;
   status: EditCheckStatus;
   message: string;
+  /** The row's short line: what the check found or what is wrong. */
+  summary: string | null;
+  /** Up to three lines of what happened and what is needed. */
+  description: string | null;
+  /** False for a skipped check that does not apply to the access type or config. */
+  applicable: boolean;
   remediation: string | null;
   docs_link: string | null;
 }

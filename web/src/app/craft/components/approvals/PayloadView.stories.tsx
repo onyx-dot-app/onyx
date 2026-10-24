@@ -29,7 +29,7 @@ export const ShortStrings: Story = {
   args: {
     payload: {
       channel: "#eng-craft",
-      text: "Heads up — the docfetching worker is restarting in 5min.",
+      text: "Heads up: the docfetching worker is restarting in 5min.",
     },
   },
 };
@@ -42,7 +42,7 @@ export const LongStringWithShowMore: Story = {
     payload: {
       channel: "#customer-acme-corp",
       text:
-        "Hi team — wanted to flag that the connector backfill we kicked off last night completed " +
+        "Hi team, wanted to flag that the connector backfill we kicked off last night completed " +
         "successfully across all 3 spaces. We re-indexed ~412k documents and ran a sample audit " +
         "against the previous index to confirm chunk parity (99.7% overlap, the gap is from the " +
         "new sentence-splitter heuristic that handles inline code blocks differently). The next " +

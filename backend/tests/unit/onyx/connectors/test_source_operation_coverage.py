@@ -50,10 +50,17 @@ from onyx.connectors.microsoft_utils.models import (
 from onyx.connectors.microsoft_utils.sharepoint_principals import (
     SharepointPrincipalType,
 )
-from onyx.connectors.sharepoint.models import SharepointDrive, SitePagesPage
+from onyx.connectors.sharepoint.models import (
+    SharepointDrive,
+    SitePagesPage,
+    SiteUrlListing,
+)
 from onyx.connectors.slack.source_operations import (
+    SlackAuthTestResponse,
     SlackChannelMembersPage,
     SlackChannelsPage,
+    SlackTeamsPage,
+    SlackUsersPage,
 )
 from onyx.connectors.source_operations import (
     SourceOperations,
@@ -90,9 +97,26 @@ def _configure_confluence_spy(spy: MagicMock) -> None:
     spy.get_space_permissions.side_effect = get_space_permissions
 
 
+def _configure_confluence_rest_spy(spy: MagicMock) -> None:
+    """A DC 9.1+ site whose REST space-permissions endpoint answers: the
+    anonymous-access check reads the anonymous endpoint, as permission sync
+    does on such a site."""
+    spy.get_server_version.return_value = (9, 1)
+    spy.get_space_permissions.return_value = []
+    spy.get_anonymous_space_permissions.return_value = []
+
+
 def _configure_slack_spy(spy: MagicMock) -> None:
-    """A workspace where the bot sees one channel with one member, so the
-    checks that read a channel after they find one run."""
+    """A Grid org with one workspace, where the bot sees one channel with one
+    member and one user, so the checks that read an item after they find one
+    run."""
+    spy.check_auth.return_value = SlackAuthTestResponse(ok=True, enterprise_id="E1")
+    spy.list_teams.side_effect = lambda **_kwargs: iter(
+        [SlackTeamsPage(teams=[{"id": "T1", "name": "Acme"}])]
+    )
+    spy.list_users.side_effect = lambda **_kwargs: iter(
+        [SlackUsersPage(members=[{"id": "U1"}])]
+    )
     spy.list_channels.side_effect = lambda **_kwargs: iter(
         [SlackChannelsPage(channels=[{"id": "C1", "name": "general"}])]
     )
@@ -170,7 +194,9 @@ def _configure_sharepoint_spy(spy: MagicMock) -> None:
     the read checks reach the item-level and group-level operations."""
     site_url: str = "https://contoso.sharepoint.com/sites/eng"
     spy.get_auth_method.return_value = MicrosoftAuthMethod.CERTIFICATE
-    spy.list_site_urls.return_value = [site_url]
+    spy.list_site_urls.return_value = SiteUrlListing(
+        site_urls=[site_url], complete=True
+    )
     spy.get_site_id.return_value = "site-id"
     spy.list_drives.return_value = [
         SharepointDrive(
@@ -313,7 +339,10 @@ def _configure_youtrack_spy(spy: MagicMock) -> None:
 # A unit is covered when the checks exercise it under any one configuration:
 # a source whose credential picks the API family needs one per family.
 _SPY_CONFIGURATIONS: dict[DocumentSource, list[Callable[[MagicMock], None]]] = {
-    DocumentSource.CONFLUENCE: [_configure_confluence_spy],
+    DocumentSource.CONFLUENCE: [
+        _configure_confluence_spy,
+        _configure_confluence_rest_spy,
+    ],
     DocumentSource.GOOGLE_DRIVE: [_configure_google_drive_spy],
     DocumentSource.JIRA: [_configure_jira_cloud_spy, _configure_jira_server_spy],
     DocumentSource.SHAREPOINT: [_configure_sharepoint_spy],
@@ -337,6 +366,10 @@ _CONNECTOR_CONFIGS: dict[DocumentSource, list[dict[str, Any]]] = {
     DocumentSource.YOUTRACK: [
         {"base_url": "https://example.youtrack.cloud", "projects": ["ABC"]}
     ],
+    # The root page check reads a page only when a root page is set.
+    DocumentSource.NOTION: [{"root_page_id": "17ab3186873d418fb899c3f6a43f68de"}],
+    # The selected-scope checks read teams and projects only when some are set.
+    DocumentSource.LINEAR: [{"team_keys": ["ENG"], "projects": ["Roadmap"]}],
 }
 
 

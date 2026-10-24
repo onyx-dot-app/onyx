@@ -16,6 +16,8 @@ import type {
   CCPairFullInfo,
   CCPairRun,
   CCPairRunErrors,
+  CCPairRunKind,
+  CCPairRunsResponse,
   CCPairRef,
   CCPairRunLevel,
   CCPairRunsQuery,
@@ -27,6 +29,11 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   resolveAllErrorsForCCPair,
   resolveErrors,
+  waitForTargetedReindexJobs,
+} from "@/lib/targeted_reindex";
+import type {
+  ResolveAllSubmitted,
+  TargetedReindexOutcome,
 } from "@/lib/targeted_reindex";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 
@@ -124,8 +131,8 @@ interface ActivityGroupQuery {
 
 const NOT_FAILED: CCPairRunStatusGroup[] = ["running", "succeeded", "canceled"];
 
-/** How each level narrows the runs feed, for its open runs and its closed ones: a closed failure was resolved or followed by a newer run of its kind, a closed
- * error run was resolved or had all its document errors resolved, and nothing in "other" is open, so it has no closed runs. */
+/** How each level narrows the runs feed, for its open runs and its closed ones: a closed failure was resolved or a newer succeeded or failed run of its kind followed it,
+ * a closed error run was resolved, had all its document errors resolved, or a newer succeeded or failed run followed it on a kind other than indexing, and nothing in "other" is open, so it has no closed runs. */
 const ACTIVITY_GROUP_QUERY = {
   failures: {
     open: {
@@ -145,13 +152,13 @@ const ACTIVITY_GROUP_QUERY = {
     open: {
       statusGroups: NOT_FAILED,
       errors: "unresolved",
-      superseded: null,
+      superseded: false,
       resolved: false,
     },
     closed: {
       statusGroups: NOT_FAILED,
       errors: "resolved",
-      superseded: null,
+      superseded: true,
       resolved: true,
     },
   },
@@ -283,7 +290,7 @@ export function useActivityItems(
           kinds: null,
           q,
           ...groupQuery,
-          // A search finds old failures too, under the failures group. The closed feed keeps its superseded ones.
+          // A search finds superseded runs too, under their open level. The closed feed keeps its superseded ones.
           superseded: q && !closed ? null : groupQuery.superseded,
         };
         return ccPairId === null
@@ -407,34 +414,94 @@ export function useResolvableRunsCount(
 // useResolveRunErrors
 // ---------------------------------------------------------------------------
 
+// Error ids with a retry in flight per run, or "all" for a run-wide retry.
+// Module-level, so a remounted panel still sees them.
+const retryingByRun = new Map<number, Set<number> | "all">();
+
+function isRetrying(runId: number, errorIds: number[] | null): boolean {
+  const held = retryingByRun.get(runId);
+  if (held === undefined) return false;
+  if (held === "all" || errorIds === null) return true;
+  return errorIds.some((id) => held.has(id));
+}
+
+function holdRetry(runId: number, errorIds: number[] | null): void {
+  const held = retryingByRun.get(runId);
+  if (errorIds === null) retryingByRun.set(runId, "all");
+  else if (held instanceof Set) errorIds.forEach((id) => held.add(id));
+  else retryingByRun.set(runId, new Set(errorIds));
+}
+
+function releaseRetry(runId: number, errorIds: number[] | null): void {
+  const held = retryingByRun.get(runId);
+  if (errorIds === null || !(held instanceof Set)) {
+    retryingByRun.delete(runId);
+    return;
+  }
+  errorIds.forEach((id) => held.delete(id));
+  if (held.size === 0) retryingByRun.delete(runId);
+}
+
 /** Resolves a run's document errors by a targeted reindex, or marks the run resolved, and refreshes every feed it appears in, one submit at a time. */
 export function useResolveRunErrors() {
   const tToasts = useTranslations("admin.connector.toasts");
   const [resolving, setResolving] = useState(false);
 
-  // Awaits only the submit. The feeds poll, so rows clear as documents land.
+  // Holds the buttons only for the submit. A progress toast follows the jobs
+  // and is replaced by their outcome, so other runs can be retried meanwhile.
   async function resolve(item: ActivityItem, errorIds: number[] | null) {
-    if (resolving) return;
+    const runId = item.run.attempt.id;
+    // Retrying errors already in flight would only resolve nothing.
+    if (resolving || isRetrying(runId, errorIds)) return;
     setResolving(true);
+    let submitted: ResolveAllSubmitted;
     try {
-      const result =
+      submitted =
         errorIds === null
           ? await resolveAllErrorsForCCPair(item.ccPairId, item.run.attempt.id)
           : await resolveErrors(errorIds);
-      if (result.total_error_ids === 0) {
-        toast.success(tToasts("noUnresolvedErrors"));
-      } else {
-        toast.success(
-          tToasts("targetedReindexSubmitted", { count: result.total_error_ids })
-        );
-      }
-      await refreshFeeds([item.ccPairId]);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       toast.error(tToasts("targetedReindexFailed", { message }));
+      return;
     } finally {
       setResolving(false);
     }
+    void refreshFeeds([item.ccPairId]);
+    if (submitted.total_error_ids === 0) {
+      toast.success(tToasts("noUnresolvedErrors"));
+      return;
+    }
+
+    const toastId = `targeted-reindex-${submitted.job_ids[0]}`;
+    toast.info(
+      tToasts("targetedReindexRunning", { count: submitted.total_error_ids }),
+      { id: toastId, duration: Infinity }
+    );
+    holdRetry(runId, errorIds);
+    let outcome: TargetedReindexOutcome;
+    try {
+      outcome = await waitForTargetedReindexJobs(submitted.job_ids);
+    } finally {
+      releaseRetry(runId, errorIds);
+    }
+    if (!outcome.finished) {
+      toast.error(tToasts("targetedReindexIncomplete"), { id: toastId });
+    } else if (outcome.still_failing > 0) {
+      toast.warning(
+        tToasts("targetedReindexPartial", {
+          resolved: outcome.resolved,
+          failing: outcome.still_failing,
+        }),
+        { id: toastId }
+      );
+    } else {
+      toast.success(
+        tToasts("targetedReindexDone", { resolved: outcome.resolved }),
+        { id: toastId }
+      );
+    }
+    await refreshFeeds([item.ccPairId]);
   }
 
   // Marks the run resolved without a targeted reindex: it keeps its status.
@@ -484,4 +551,35 @@ export function useResolveRunErrors() {
   }
 
   return { resolving, resolve, resolveRun, resolveMatching };
+}
+
+// ---------------------------------------------------------------------------
+// useLatestCCPairRun
+// ---------------------------------------------------------------------------
+
+/** The pair's newest run of one kind. The response's `kinds` lists every kind the pair runs. */
+export function useLatestCCPairRun(
+  ccPairId: number,
+  kind: CCPairRunKind,
+  enabled: boolean,
+  pollMs: number
+) {
+  return useSWR<CCPairRunsResponse>(
+    enabled
+      ? SWR_KEYS.ccPairRuns(ccPairId, {
+          pageNum: 0,
+          pageSize: 1,
+          since: null,
+          until: null,
+          kinds: [kind],
+          statusGroups: null,
+          q: "",
+          errors: null,
+          superseded: null,
+          resolved: null,
+        })
+      : null,
+    errorHandlingFetcher,
+    { refreshInterval: pollMs }
+  );
 }

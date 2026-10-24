@@ -383,3 +383,23 @@ def test_prepuller_uses_sandbox_runtime_class(runtime_class: str) -> None:
         == (sandbox["template"]["spec"].get("runtimeClassName"))
         == (runtime_class or None)
     )
+
+
+@pytest.mark.parametrize("override", ["", "https://onyx.example/api"])
+def test_sandbox_callback_url_matches_api_configuration(override: str) -> None:
+    args = [
+        "--namespace",
+        "custom",
+        "--set-string",
+        f"configMap.ONYX_SERVER_URL={override}",
+    ]
+    pod = yaml.safe_load(_render(_PODTEMPLATE_TEMPLATE, args))
+    config = yaml.safe_load(_render("templates/configmap.yaml", args))
+    expected = override or "http://onyx-api-service.custom.svc.cluster.local:8080"
+    assert config["data"]["ONYX_SERVER_URL"] == expected
+    containers = pod["template"]["spec"]["containers"]
+    sandbox = next(c for c in containers if c["name"] == "sandbox")
+    assert (
+        next(v["value"] for v in sandbox["env"] if v["name"] == "ONYX_SERVER_URL")
+        == expected
+    )

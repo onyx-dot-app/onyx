@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
-import { Section, SettingsLayouts, useToastFromQuery } from "@opal/layouts";
+import { Section, SettingsLayouts } from "@opal/layouts";
+import { cn } from "@opal/utils";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import { LARGE_BREAKPOINT_PX } from "@/lib/constants";
 import type {
   CCPairFullInfo,
   IndexingConnectorRow,
@@ -21,32 +23,43 @@ import type { SliceRange } from "@/views/admin/connectors/ConnectorDetailPage/Th
 
 const route = ADMIN_ROUTES.INDEXING_STATUS;
 
+// Tailwind's lg breakpoint, from which the history panel sits beside the list.
+const SIDE_BY_SIDE_QUERY = `(min-width: ${LARGE_BREAKPOINT_PX}px)`;
+
+/** Stacked on a narrow screen, the history sits above the list and out of view, so it scrolls there. */
+export function revealHistory(panel: HTMLDivElement | null) {
+  if (panel === null || window.matchMedia(SIDE_BY_SIDE_QUERY).matches) return;
+  panel.scrollIntoView({ block: "start", behavior: "smooth" });
+}
+
 interface PairActivityPanelProps {
   row: IndexingConnectorRow;
   onClose: () => void;
+  ref: React.Ref<HTMLDivElement>;
 }
 
 /** The history panel on one connector's runs, opened from its row. */
-function PairActivityPanel({ row, onClose }: PairActivityPanelProps) {
+function PairActivityPanel({ row, onClose, ref }: PairActivityPanelProps) {
   const t = useTranslations("admin.indexing");
   // The row does not say whether its source resolves errors one by one, so the pair's details do.
   const { data: ccPair } = useSWR<CCPairFullInfo>(
     buildCCPairInfoUrl(row.cc_pair_id),
     errorHandlingFetcher
   );
+  // Both flags come from the details, so a supported connector never reads as unsupported while they load.
+  const operates = ccPair !== undefined && can(ccPair, "operate");
   return (
     <ActivityPanel
       scope={{
         ccPairId: row.cc_pair_id,
-        canResolve:
-          ccPair !== undefined &&
-          can(ccPair, "operate") &&
-          ccPair.supports_targeted_reindex,
-        canResolveRuns: can(row, "operate"),
+        canResolve: operates && ccPair.supports_targeted_reindex,
+        canResolveRuns: operates,
       }}
       title={t("activities.panel.pairTitle", { name: row.name })}
       onClose={onClose}
+      sticky
       className="max-lg:order-first"
+      ref={ref}
     />
   );
 }
@@ -63,13 +76,17 @@ export default function IndexingStatusPage() {
   const [range, setRange] = useState<SliceRange | null>(null);
   // A connector's open popover steps the overview and the Activities card back with the other connectors.
   const [listFocused, setListFocused] = useState(false);
-
-  useToastFromQuery({
-    "connector-created": {
-      message: t("connectorCreated.toast"),
-      type: "success",
-    },
-  });
+  const panelRef = useRef<HTMLDivElement>(null);
+  // What the history shows: the fleet over a span, or one connector. A new subject brings the panel into view.
+  const subject =
+    history === null
+      ? null
+      : history === "fleet"
+        ? `fleet ${range?.since ?? ""} ${range?.until ?? ""}`
+        : `pair ${history.cc_pair_id}`;
+  useEffect(() => {
+    if (subject !== null) revealHistory(panelRef.current);
+  }, [subject]);
 
   // The history panel takes the Activities card's place and widens the page to fit beside the column.
   return (
@@ -89,16 +106,17 @@ export default function IndexingStatusPage() {
             height="fit"
             className="min-w-0 flex-1"
           >
-            {/* The overview takes the wider share. Both wrap to full width on a narrow screen. */}
+            {/* The overview takes the wider share. Both wrap to full width on a narrow screen. Side by side, the overview sets the row's height and starts at its top, so it never floats while the Activities card's minimum holds the row during the overview's load or error. */}
             <Section
               flexDirection="row"
               alignItems="stretch"
               gap={2}
               height="fit"
               wrap
-              className={focusDimClass(listFocused)}
+              className={cn("@container/overview", focusDimClass(listFocused))}
             >
               <Section
+                justifyContent="start"
                 alignItems="stretch"
                 width="auto"
                 height="auto"
@@ -112,20 +130,26 @@ export default function IndexingStatusPage() {
                   }}
                 />
               </Section>
+              {/* At 38.5rem (both min widths plus the gap) the cards sit side by side, and size containment lets a long feed scroll inside at the overview's height instead of stretching the row. The minimum keeps the card usable while the overview shows only a loader or an error. */}
               {!historyOpen && (
                 <Section
                   alignItems="stretch"
                   width="auto"
                   height="auto"
-                  className="min-w-72 grow-[5] basis-0"
+                  className="min-w-72 grow-[5] basis-0 @[38.5rem]/overview:contain-size @[38.5rem]/overview:min-h-64"
                 >
                   <ActivitiesCard onOpenHistory={() => setHistory("fleet")} />
                 </Section>
               )}
             </Section>
             <ConnectorList
+              // View Logs on the connector whose history is open closes it.
               onViewLogs={(row) => {
-                setHistory(row);
+                setHistory((open) =>
+                  open !== "fleet" && open?.cc_pair_id === row.cc_pair_id
+                    ? null
+                    : row
+                );
                 setRange(null);
               }}
               onFocusChange={setListFocused}
@@ -141,7 +165,9 @@ export default function IndexingStatusPage() {
                 setRange(null);
               }}
               range={range}
+              sticky
               className="max-lg:order-first"
+              ref={panelRef}
             />
           ) : (
             history !== null && (
@@ -149,6 +175,7 @@ export default function IndexingStatusPage() {
                 key={history.cc_pair_id}
                 row={history}
                 onClose={() => setHistory(null)}
+                ref={panelRef}
               />
             )
           )}

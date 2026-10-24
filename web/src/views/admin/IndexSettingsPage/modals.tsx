@@ -20,6 +20,7 @@ import {
   type EmbeddingProvider,
   type VertexEmbeddingConfig,
 } from "@/lib/searchSettings/types";
+import { defaultTestModelName } from "@/lib/searchSettings";
 import {
   connectEmbeddingProvider,
   testEmbedding,
@@ -103,7 +104,8 @@ function ModalShell({ provider, isEditing, children }: ModalShellProps) {
 // returns `null`.
 //
 // `apiUrl`, `apiVersion`, `deploymentName` default to "" / null so simple
-// providers (OpenAI / Cohere / Voyage / Google) only have to pass `apiKey`.
+// providers (OpenAI / Cohere / Voyage / Google) only have to pass `apiKey`
+// and the `modelName` the test embeds with.
 // ---------------------------------------------------------------------------
 
 interface ProviderTestResult {
@@ -115,7 +117,7 @@ async function testAndSaveProviderCredentials({
   apiKey,
   unknownErrorMessage,
   apiUrl = "",
-  modelName = "",
+  modelName,
   apiVersion = null,
   deploymentName = null,
   vertexConfig,
@@ -126,7 +128,7 @@ async function testAndSaveProviderCredentials({
   /** Fallback toast copy when the backend error carries no message. */
   unknownErrorMessage: string;
   apiUrl?: string;
-  modelName?: string;
+  modelName: string;
   apiVersion?: string | null;
   deploymentName?: string | null;
   vertexConfig?: VertexEmbeddingConfig | null;
@@ -158,8 +160,10 @@ interface ProviderModalProps {
   provider: EmbeddingProvider;
   existingCredentials?: ConfiguredEmbeddingProvider;
   /**
-   * Model being connected, selected, or edited for this provider. Google
-   * tests this model. Custom providers also use it to preload model fields.
+   * Model being connected, selected, or edited for this provider. The
+   * credential test of a registry provider embeds with it, else with
+   * `defaultTestModelName`. Custom providers also use it to preload model
+   * fields.
    */
   existingModel?: EmbeddingModel;
   /**
@@ -181,6 +185,7 @@ interface StandardFormValues {
 function StandardProviderModal({
   provider,
   existingCredentials,
+  existingModel,
   onSubmit,
 }: ProviderModalProps) {
   const t = useTranslations("admin.indexSettings");
@@ -207,6 +212,9 @@ function StandardProviderModal({
           await testAndSaveProviderCredentials({
             provider,
             apiKey,
+            modelName:
+              existingModel?.modelName ??
+              defaultTestModelName(provider.providerName),
             unknownErrorMessage: t("toasts.unknownError"),
           })
         ) {
@@ -360,8 +368,7 @@ function GoogleProviderModal({
             },
             modelName:
               existingModel?.modelName ??
-              provider.embeddingModels[0]?.modelName ??
-              "",
+              defaultTestModelName(provider.providerName),
             unknownErrorMessage: t("toasts.unknownError"),
           })
         ) {
@@ -446,6 +453,7 @@ function AzureProviderModal({
             apiKey,
             unknownErrorMessage: t("toasts.unknownError"),
             apiUrl: values.apiUrl,
+            modelName: values.modelName.trim(),
             apiVersion: values.apiVersion,
             deploymentName: values.deploymentName,
           })

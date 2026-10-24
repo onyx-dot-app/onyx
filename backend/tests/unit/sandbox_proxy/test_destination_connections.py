@@ -11,12 +11,14 @@ from contextvars import ContextVar
 from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
+from uuid import UUID, uuid4
 
 import pytest
 from mitmproxy.proxy import server_hooks
 from mitmproxy.tools.dump import DumpMaster
 
 from onyx.sandbox_proxy import server
+from onyx.sandbox_proxy.addons import gate
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.destination_policy import (
@@ -87,6 +89,7 @@ async def _proxy(
     evaluator: RequestEvaluator | None = None,
     dispatcher: CredentialInjectionDispatcher | None = None,
     connection_strategy: str = "eager",
+    session_id: UUID | None = None,
 ) -> AsyncIterator[int]:
     monkeypatch.setattr(server, "SANDBOX_PROXY_LISTEN_HOST", address)
     monkeypatch.setattr(server, "SANDBOX_PROXY_LISTEN_PORT", 0)
@@ -98,7 +101,9 @@ async def _proxy(
     master.addons.add(
         GateAddon(
             mcp_resolver=mcp_resolver,
-            identity=StubResolver(sandbox=make_resolved_sandbox()),
+            identity=StubResolver(
+                sandbox=make_resolved_sandbox(), session_by_id=session_id
+            ),
             request_evaluator=evaluator or NoMatchedRequest(),
             cache_factory=unused_cache,
             proxy_instance_id="connection-test",
@@ -427,7 +432,7 @@ def test_private_mcp_http_enforces_path_credentials_and_policy(
     from unittest.mock import MagicMock
 
     from onyx.db.enums import (
-        EndpointPolicy,
+        ActionPolicy,
         MCPAuthenticationPerformer,
         MCPAuthenticationType,
     )
@@ -453,10 +458,16 @@ def test_private_mcp_http_enforces_path_credentials_and_policy(
                     module, "get_craft_enabled_mcp_servers", lambda *_args: [stored]
                 )
                 monkeypatch.setattr(module, "fetch_user_by_id", lambda *_args: user)
+            session_id = uuid4()
+            monkeypatch.setattr(gate, "get_session_with_tenant", MagicMock())
             monkeypatch.setattr(
-                request_evaluator,
-                "get_action_policies",
-                lambda *_args: {"delete_records": EndpointPolicy.DENY},
+                gate, "get_active_scheduled_task_context", lambda *_args: None
+            )
+            monkeypatch.setattr(gate, "get_gated_app_id", lambda *_args: 1)
+            monkeypatch.setattr(
+                gate,
+                "resolve_action_policies",
+                lambda *_args, **_kwargs: {"delete_records": ActionPolicy.DENY},
             )
             monkeypatch.setattr(
                 mcp_server, "get_mcp_server_by_id", lambda *_args: stored
@@ -484,6 +495,7 @@ def test_private_mcp_http_enforces_path_credentials_and_policy(
                 1,
                 mcp_resolver=resolver,
                 evaluator=request_evaluator.McpRequestEvaluator(),
+                session_id=session_id,
                 dispatcher=CredentialInjectionDispatcher([resolver]),
             ) as proxy_port:
                 reader, writer = await asyncio.open_connection(address, proxy_port)
@@ -500,7 +512,7 @@ def test_private_mcp_http_enforces_path_credentials_and_policy(
                 ).encode()
                 try:
                     writer.write(
-                        f"POST http://{_HOST}:{port}{path} HTTP/1.1\r\nHost: {_HOST}:{port}\r\nContent-Type: application/json\r\nAuthorization: Bearer placeholder\r\nContent-Length: {len(body)}\r\nConnection: close\r\n\r\n".encode()
+                        f"POST http://{_HOST}:{port}{path} HTTP/1.1\r\nHost: {_HOST}:{port}\r\nContent-Type: application/json\r\nX-Onyx-Mcp-Session: {session_id}\r\nAuthorization: Bearer placeholder\r\nContent-Length: {len(body)}\r\nConnection: close\r\n\r\n".encode()
                         + body
                     )
                     await writer.drain()

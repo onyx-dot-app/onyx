@@ -34,6 +34,9 @@ SALESFORCE_BLACKLISTED_SUFFIXES: set[str] = {
     "definition",
     "eventstream",
     "__mdt",
+    # big objects: ORDER BY needs an EQ predicate on the index key, so the
+    # child window subquery fails
+    "__b",
 }
 
 SALESFORCE_BLACKLISTED_OBJECTS: set[str] = {
@@ -228,6 +231,8 @@ SALESFORCE_BLACKLISTED_OBJECTS: set[str] = {
     "outgoingemailrelation",
     "ownerchangeoptioninfo",
     "packagelicense",
+    # standard big object (see the "__b" suffix)
+    "pendingordersummary",
     "period",
     "permissionsetlicense",
     "permissionsetlicenseassign",

@@ -1,24 +1,62 @@
-.PHONY: craft-up craft-down craft-sandbox-image craft-backend-image craft-refresh-images craft-check-images
+.PHONY: craft-connect craft-intercept craft-ready craft-ready-infra craft-api craft-up craft-down craft-pause craft-resume craft-doctor craft-disk craft-clean craft-migrate craft-migration-status craft-sandbox-image craft-backend-image craft-refresh-images craft-check-images
+
+CLUSTER_NAME ?= onyx-dev
+NAMESPACE ?= onyx
+DEV = python3 deployment/helm/dev/dev.py --cluster-name $(CLUSTER_NAME) --namespace $(NAMESPACE)
 
 craft-up:
-	deployment/helm/dev/craft-up.sh
+	deployment/helm/dev/craft-up.sh --cluster-name $(CLUSTER_NAME) --namespace $(NAMESPACE)
 
 craft-down:
-	deployment/helm/dev/craft-down.sh
+	deployment/helm/dev/craft-down.sh --cluster-name $(CLUSTER_NAME) --namespace $(NAMESPACE)
+
+craft-pause:
+	$(DEV) pause
+
+craft-resume:
+	$(DEV) resume
+
+craft-disk:
+	$(DEV) disk
+
+craft-doctor:
+	$(DEV) doctor
+
+# Preview only. Pass CLEAN_ARGS=--apply to remove listed checkout images.
+craft-clean:
+	$(DEV) clean $(CLEAN_ARGS)
+
+craft-migrate:
+	.venv/bin/python deployment/helm/dev/dev.py --cluster-name $(CLUSTER_NAME) --namespace $(NAMESPACE) migrate upgrade
+
+craft-migration-status:
+	.venv/bin/python deployment/helm/dev/dev.py --cluster-name $(CLUSTER_NAME) --namespace $(NAMESPACE) migrate status
 
 craft-sandbox-image:
-	docker build -t onyxdotapp/sandbox:dev backend/onyx/server/features/build/sandbox/image
-	kind load docker-image onyxdotapp/sandbox:dev --name onyx-dev
+	$(DEV) images --only sandbox
 
 # Rebuild the image the in-cluster sandbox-proxy/api-server run, then restart them.
 craft-backend-image:
-	docker build -t onyxdotapp/onyx-backend:dev backend/
-	kind load docker-image onyxdotapp/onyx-backend:dev --name onyx-dev
-	kubectl rollout restart deploy/onyx-sandbox-proxy deploy/onyx-api-server -n onyx
+	$(DEV) images --only backend
 
 # Refresh everything: backend + sandbox images, PodTemplate, proxy/api restart.
 craft-refresh-images:
-	deployment/helm/dev/refresh-images.sh
+	$(DEV) images
 
 craft-check-images:
-	deployment/helm/dev/refresh-images.sh --check || true
+	$(DEV) images --check
+
+craft-connect:
+	$(DEV) connect
+
+craft-intercept:
+	$(DEV) intercept $(INTERCEPT_ARGS)
+
+craft-ready-infra:
+	$(DEV) ready --stage infrastructure
+
+craft-ready:
+	$(DEV) ready
+
+craft-api: craft-intercept
+	.venv/bin/python deployment/helm/dev/launch.py --cluster-name $(CLUSTER_NAME) --namespace $(NAMESPACE) api

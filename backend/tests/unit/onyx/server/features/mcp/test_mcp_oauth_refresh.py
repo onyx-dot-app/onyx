@@ -47,6 +47,7 @@ def _server_stub(transport: MCPTransport = MCPTransport.SSE) -> DbMCPServer:
             server_url="https://mcp.gitlab.example.com",
             transport=transport,
             oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
+            oauth_cimd_enabled=True,
             oauth_authorization_endpoint=None,
             oauth_token_endpoint=None,
         ),

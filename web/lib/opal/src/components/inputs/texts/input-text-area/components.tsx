@@ -35,6 +35,9 @@ interface InputTextAreaProps extends WithoutStyles<
   /** Slot pinned to the top-right inside the field. */
   rightSection?: React.ReactNode;
 
+  /** Monospace text, for code or queries. */
+  mono?: boolean;
+
   ref?: React.Ref<HTMLTextAreaElement>;
 }
 
@@ -50,6 +53,7 @@ function InputTextArea({
   maxRows,
   resizable = true,
   rightSection,
+  mono = false,
   ref,
   ...props
 }: InputTextAreaProps) {
@@ -100,7 +104,8 @@ function InputTextArea({
         readOnly={isReadOnly}
         className={cn(
           "opal-input-field opal-input-textarea-field",
-          autoResize || !resizable ? "resize-none" : "resize-y"
+          autoResize || !resizable ? "resize-none" : "resize-y",
+          mono && "font-main-ui-mono"
         )}
         rows={rows}
         {...props}

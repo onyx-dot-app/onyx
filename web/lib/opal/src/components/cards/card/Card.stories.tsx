@@ -155,7 +155,7 @@ export const ExpandableNoContent: Story = {
             width="full"
             onClick={() => setOpen((v) => !v)}
           >
-            Toggle (no content — renders like a plain card)
+            Toggle (no content, renders like a plain card)
           </Button>
         </Card>
       </div>

@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl";
 import { useLayoutEffect, useState, type ReactNode } from "react";
 import useSWR, { SWRConfig, type State } from "swr";
 import { Button, Modal, MessageCard } from "@opal/components";
@@ -20,10 +21,9 @@ import {
   type MCPSetupProbeResult,
   type MCPProbeProgress,
 } from "@/lib/mcp/types";
-import { refreshMCPServerTools } from "@/lib/mcp/svc";
 import { Permission } from "@/lib/types";
 import type { ToolSnapshot } from "@/lib/tools/types";
-import type { EndpointPolicy } from "@/app/craft/v1/apps/registry";
+import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
 import type { MCPOAuthDiscovery } from "@/lib/mcp/types";
 
 export const storyServer: MCPServer = {
@@ -170,18 +170,26 @@ function MockEnvironment({
       if (!path.startsWith("/api/")) return originalFetch(input, init);
       if (path === "/api/admin/default-assistant/configuration")
         return json({ tool_ids: defaultToolIds });
-      if (path === "/api/admin/default-assistant" && init?.method === "PATCH") {
+      if (
+        path === "/api/admin/default-assistant/tools" &&
+        init?.method === "PATCH"
+      ) {
         const payload: unknown =
           typeof init.body === "string" ? JSON.parse(init.body) : null;
         if (
           payload &&
           typeof payload === "object" &&
           "tool_ids" in payload &&
-          Array.isArray(payload.tool_ids)
+          Array.isArray(payload.tool_ids) &&
+          "enabled" in payload
         ) {
-          defaultToolIds = payload.tool_ids.filter(
-            (id): id is number => typeof id === "number"
+          const changed = new Set(
+            payload.tool_ids.filter(
+              (id): id is number => typeof id === "number"
+            )
           );
+          const others = defaultToolIds.filter((id) => !changed.has(id));
+          defaultToolIds = payload.enabled ? [...others, ...changed] : others;
           return json({ tool_ids: defaultToolIds });
         }
         return json(
@@ -375,11 +383,31 @@ function MockEnvironment({
       }
       if (path.includes("/status")) return json({});
       if (
+        path === "/api/admin/mcp/setup" ||
         path === "/api/admin/mcp/servers/create" ||
         path === "/api/admin/mcp/server" ||
         path === "/api/admin/mcp/server/42"
       ) {
         if (scenario.submit === "pending") return pendingResponse();
+        if (
+          path === "/api/admin/mcp/setup" &&
+          scenario.submit === "oauth-error"
+        )
+          return json(
+            {
+              oauth_error: "client_registration_failed",
+              detail: "Provider registration failed.",
+            },
+            400
+          );
+        if (
+          path === "/api/admin/mcp/setup" &&
+          scenario.submit === "tools-error"
+        )
+          return json(
+            { detail: "The server tools could not be loaded. Try again." },
+            503
+          );
         if (scenario.submit === "save-error")
           return json(
             { detail: "The server configuration could not be saved." },
@@ -409,16 +437,18 @@ function MockEnvironment({
           )
             savedServer.available_in_craft = payload.available_in_craft;
           if (
-            "tool_policies" in payload &&
-            payload.tool_policies &&
-            typeof payload.tool_policies === "object"
+            "action_policies" in payload &&
+            payload.action_policies &&
+            typeof payload.action_policies === "object"
           ) {
-            const policies: Record<string, EndpointPolicy> = {};
-            for (const [name, value] of Object.entries(payload.tool_policies)) {
+            const policies: Record<string, ActionPolicy> = {};
+            for (const [name, value] of Object.entries(
+              payload.action_policies
+            )) {
               if (value === "ALWAYS" || value === "ASK" || value === "DENY")
                 policies[name] = value;
             }
-            savedServer.tool_policies = policies;
+            savedServer.action_policies = policies;
           }
           if ("name" in payload && typeof payload.name === "string")
             savedServer.name = payload.name;
@@ -429,6 +459,10 @@ function MockEnvironment({
             typeof payload.description === "string"
           )
             savedServer.description = payload.description;
+        }
+        if (path === "/api/admin/mcp/setup") {
+          savedServer.status = MCPServerStatus.CONNECTED;
+          return json({ status: "connected", server: savedServer });
         }
         return json({ ...savedServer, server_id: 42 });
       }
@@ -459,6 +493,7 @@ function MockEnvironment({
 const REOPEN_PREVIEW = "Reopen preview";
 
 function SavedEditorCanvas({ kind }: { kind: "auth" | "add" }) {
+  const t = useTranslations("actions.mcpDetail");
   const [open, setOpen] = useState(true);
   const [busy, setBusy] = useState(false);
   const [footerTarget, setFooterTarget] = useState<HTMLDivElement | null>(null);
@@ -487,7 +522,7 @@ function SavedEditorCanvas({ kind }: { kind: "auth" | "add" }) {
       >
         <Modal.Content preventAccidentalClose={false}>
           <Modal.Header
-            title={kind === "auth" ? "Authentication" : "Server configuration"}
+            title={kind === "auth" ? t("authentication") : t("configuration")}
             onClose={close}
           />
           <Modal.Body padding={0}>
@@ -501,9 +536,6 @@ function SavedEditorCanvas({ kind }: { kind: "auth" | "add" }) {
                 variant="modal"
                 footerTarget={footerTarget}
                 mcpServer={server}
-                onTriggerFetchTools={async () => {
-                  await refreshMCPServerTools(server.id);
-                }}
                 onBusyChange={setBusy}
                 onCancel={close}
                 onSaved={async () => {}}

@@ -284,6 +284,11 @@ invisible (the DaemonSet looks healthy while every sandbox still cold-pulls).
 {{- (index .Values.configMap "SANDBOX_IMAGE_PULL_POLICY") | default .Values.global.pullPolicy -}}
 {{- end }}
 
+{{/* Sandbox callbacks stay inside Kubernetes unless the operator sets a URL. */}}
+{{- define "onyx.sandboxApiUrl" -}}
+{{- (index .Values.configMap "ONYX_SERVER_URL") | default (printf "http://%s.%s.svc.cluster.local:%v" (include "onyx.resourceName" (list . "api-service")) .Release.Namespace (.Values.api.service.servicePort | default 8080)) -}}
+{{- end }}
+
 {{- define "onyx.sandboxProxyHost" -}}
 {{- (index .Values.configMap "SANDBOX_PROXY_HOST") | default (printf "%s.%s.svc.cluster.local" (include "onyx.resourceName" (list . "sandbox-proxy")) .Release.Namespace) -}}
 {{- end }}
@@ -685,6 +690,39 @@ so the templates must not depend on values.yaml for these keys.
 {{- printf "http://%s:%v" (include "onyx.resourceName" (list . "object-store")) $objectStore.service.port -}}
 {{- end }}
 
+{{/*
+Holds a pod until the bundled object store's Service answers, so the api's
+startup bucket check and the legacy copy do not crash-loop while it starts.
+Uses the app image and the guarded container's resources and securityContext,
+so mirrors, admission and the pod's request stay the same. It renders into the
+legacy copy pod, so any edit here reruns the copy.
+*/}}
+{{- define "onyx.objectStore.waitInitContainer" -}}
+{{- $ctx := .ctx -}}
+- name: wait-for-object-store
+  image: "{{ $ctx.Values.api.image.repository }}:{{ $ctx.Values.api.image.tag | default $ctx.Values.global.version }}"
+  imagePullPolicy: {{ $ctx.Values.global.pullPolicy }}
+  command:
+    - python
+    - -c
+    - |
+      import http.client
+      import time
+      import urllib.request
+      url = "{{ include "onyx.objectStore.endpoint" $ctx }}/healthz"
+      while True:
+          try:
+              urllib.request.urlopen(url, timeout=5).close()
+              break
+          except (OSError, http.client.HTTPException) as e:
+              print(f"Waiting for the object store at {url}: {e}", flush=True)
+              time.sleep(3)
+  resources:
+    {{- toYaml .resources | nindent 4 }}
+  securityContext:
+    {{- include "onyx.containerSecurityContext" .securityContext | nindent 4 }}
+{{- end }}
+
 {{/* The app's S3 key pair, which is also the object store's admin identity. */}}
 {{- define "onyx.objectStore.credentialEnv" -}}
 {{- $auth := .Values.auth.objectstorage -}}
@@ -734,6 +772,9 @@ spec:
   tolerations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+  {{- /* Waiting here keeps the copy's retries for real copy failures. */}}
+  initContainers:
+    {{- include "onyx.objectStore.waitInitContainer" (dict "ctx" $ctx "resources" $copy.resources "securityContext" $ctx.Values.api.securityContext) | nindent 4 }}
   containers:
     - name: legacy-minio-copy
       image: "{{ $ctx.Values.api.image.repository }}:{{ $ctx.Values.api.image.tag | default $ctx.Values.global.version }}"
@@ -768,4 +809,18 @@ spec:
       {{- include "onyx.renderVolumeMounts" (dict "ctx" $ctx "volumeMounts" (prepend ($ctx.Values.api.volumeMounts | default list) $tmpMount)) | nindent 6 }}
   {{- $tmpVolume := dict "name" "tmp" "emptyDir" dict }}
   {{- include "onyx.renderVolumes" (dict "ctx" $ctx "volumes" (prepend ($ctx.Values.api.volumes | default list) $tmpVolume)) | nindent 2 }}
+{{- end }}
+
+{{/*
+The legacy-minio-copy Job's name, empty when the Job does not render. The name
+changes with the pod template or retry limit, since a Job's pod template is
+immutable.
+*/}}
+{{- define "onyx.objectStore.legacyCopyJobName" -}}
+{{- $objectStore := include "onyx.objectStore.values" . | fromYaml -}}
+{{- if and (eq (include "onyx.objectStore.enabled" .) "true") .Values.minio.enabled $objectStore.legacyCopy.enabled -}}
+{{- $copy := $objectStore.legacyCopy -}}
+{{- $podTemplate := include "onyx.objectStore.legacyCopyPod" (dict "ctx" . "copy" $copy) -}}
+{{- printf "%s-%s" (include "onyx.resourceName" (list . "legacy-minio-copy") | trunc 54 | trimSuffix "-") (printf "%s\n%v" $podTemplate $copy.backoffLimit | sha256sum | trunc 8) -}}
+{{- end -}}
 {{- end }}

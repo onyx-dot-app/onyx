@@ -148,12 +148,18 @@ export class OneDriveConnectorSetupPage {
 
   async selectSpecificScope(user?: string) {
     await this.page.getByRole("tab", { name: "Specific" }).click();
-    if (!user) return;
-    // The Excluded Paths list has its own add button outside the tab, so the
-    // users list is found inside the Specific tab's panel.
+    // The Excluded Paths list has its own rows outside the tab, so the users
+    // list is found inside the Specific tab's panel. Its last row is empty.
     const panel = this.page.getByRole("tabpanel", { name: "Specific" });
-    await panel.getByRole("button", { name: "Add New" }).click();
-    await panel.getByRole("textbox").last().fill(user);
+    const emptyRow = panel.getByRole("textbox").last();
+    if (user) {
+      await emptyRow.fill(user);
+      return;
+    }
+    // Opening the tab does not mark the list touched, so leave the empty row
+    // to make its error show.
+    await emptyRow.focus();
+    await emptyRow.blur();
   }
 
   async selectGeneralScope() {
@@ -180,11 +186,12 @@ export class OneDriveConnectorSetupPage {
     await expect(
       this.page.getByRole("button", { name: "Create Connector", exact: true })
     ).toBeDisabled();
-    await expect(this.page.getByText(message)).toBeVisible();
+    // The Create tooltip also holds the message, so match the field error.
+    await expect(this.page.getByRole("alert", { name: message })).toBeVisible();
   }
 
   async expectCreated() {
-    await expect(this.page).toHaveURL(/\/admin\/indexing-status/);
+    await expect(this.page).toHaveURL(/\/admin\/connector\/\d+/);
   }
 
   /**

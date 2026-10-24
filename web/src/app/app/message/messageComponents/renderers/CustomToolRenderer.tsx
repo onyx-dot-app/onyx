@@ -9,7 +9,10 @@ import {
   CustomToolErrorInfo,
   SectionEnd,
 } from "../../../services/streamingModels";
-import { MessageRenderer, RenderType } from "../interfaces";
+import {
+  MessageRenderer,
+  RenderType,
+} from "@/app/app/message/messageComponents/types";
 import { buildImgUrl } from "../../../components/files/images/utils";
 import Text from "@/refresh-components/texts/Text";
 import { SvgActions, SvgDownload, SvgExternalLink } from "@opal/icons";
@@ -120,6 +123,10 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
   const status = useMemo(() => {
     if (isComplete) {
       if (error) {
+        if (error.is_unreachable)
+          return t("customTool.unreachableStatus.text", { toolName });
+        if (error.status_code === null)
+          return t("customTool.blockedStatus.text", { toolName });
         return error.is_auth_error
           ? t("customTool.authFailedStatus.text", {
               toolName,
@@ -265,8 +272,8 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
     [toolArgsJson, dataJson, data, fileIds, error, isRunning, t]
   );
 
-  // Auth error: always render FULL with error surface
-  if (error?.is_auth_error) {
+  // Blocked, unreachable, or auth error: always render FULL with error surface
+  if (error && (error.status_code === null || error.is_auth_error)) {
     return children([
       {
         icon,

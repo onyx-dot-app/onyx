@@ -49,7 +49,7 @@ export class GroupsAdminPage {
 
   /** The search input on the list page. */
   get listSearchInput(): Locator {
-    return this.page.getByPlaceholder("Search groups...");
+    return this.page.getByPlaceholder('Search groups or press "/" to focus...');
   }
 
   /** The "New Group" button on the list page header. */
@@ -73,7 +73,8 @@ export class GroupsAdminPage {
   /** Click into a group's edit page from the list. */
   async openGroup(name: string) {
     const card = this.getGroupCard(name);
-    await card.getByRole("button", { name: "View group" }).click();
+    // The member count is the button that opens the group.
+    await card.getByRole("button", { name: /^\d+ Members?$/ }).click();
     await expect(this.groupNameInput).toBeVisible({ timeout: 15000 });
   }
 

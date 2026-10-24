@@ -21,7 +21,7 @@ func TestStackStopAndDownCommandsPreserveDataAndPorts(t *testing.T) {
 	for _, action := range []string{"stop", "down"} {
 		t.Run(action, func(t *testing.T) {
 			_, calls := stackTestRepo(t)
-			stack, _ := openStack()
+			stack, _ := openStack(nil)
 			if err := stack.WriteState(&devstack.State{Phase: devstack.PhaseReady, Profile: "minimal", Ports: map[string]int{"web": 3100}}); err != nil {
 				t.Fatal(err)
 			}
@@ -53,7 +53,7 @@ func TestStackStopAndDownCommandsPreserveDataAndPorts(t *testing.T) {
 
 func TestStackStatusCommandJSONUsesWorktreePorts(t *testing.T) {
 	root, _ := stackTestRepo(t)
-	stack, _ := openStack()
+	stack, _ := openStack(nil)
 	if err := stack.WriteState(&devstack.State{
 		Phase: devstack.PhaseReady, Profile: "full", Ports: map[string]int{"web": 3101, "api": 8181},
 		Services: []devstack.ServiceRecord{{Name: "Slack Bot", Slug: "slack-bot", Skipped: "credentials missing", Optional: true}},
@@ -81,7 +81,7 @@ func TestStackStatusCommandJSONUsesWorktreePorts(t *testing.T) {
 
 func TestStackLogsCommandAcceptsLaunchName(t *testing.T) {
 	root, calls := stackTestRepo(t)
-	stack, _ := openStack()
+	stack, _ := openStack(nil)
 	logPath := filepath.Join(root, "api.log")
 	if err := stack.WriteState(&devstack.State{Services: []devstack.ServiceRecord{{Name: "API Server", Slug: "api", Log: logPath}}}); err != nil {
 		t.Fatal(err)
@@ -113,6 +113,36 @@ func TestStackCommandsRejectUnexpectedArgumentsBeforeSetup(t *testing.T) {
 	}
 }
 
+func TestStackUsesGlobalIsolationAndRejectsRemovedFrontendFlag(t *testing.T) {
+	_, calls := stackTestRepo(t)
+	original := rootIsolated
+	t.Cleanup(func() { rootIsolated = original })
+	cmd := NewRootCommand()
+	cmd.SetArgs([]string{"stack", "plan", "--frontend-only"})
+	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "unknown flag") {
+		t.Fatalf("removed flag accepted: %v", err)
+	}
+	for _, path := range calls {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatal("invalid flag invoked tools")
+		}
+	}
+	for _, isolated := range []bool{false, true} {
+		rootIsolated = isolated
+		stack, _ := openStack(nil)
+		want := devstack.Shared
+		if isolated {
+			want = devstack.Isolated
+		}
+		if stack.Mode != want {
+			t.Fatalf("isolation=%v selected %s", isolated, stack.Mode)
+		}
+	}
+	if NewRootCommand().PersistentFlags().Lookup("isolated") == nil {
+		t.Fatal("isolation is not a global target option")
+	}
+}
+
 func TestStackPrepareReportsDockerAndDependencyFailures(t *testing.T) {
 	for _, tool := range []string{"docker", "uv"} {
 		t.Run(tool, func(t *testing.T) {
@@ -122,7 +152,7 @@ func TestStackPrepareReportsDockerAndDependencyFailures(t *testing.T) {
 				t.Fatal(err)
 			}
 			devtoolFakeTool(t, filepath.Dir(bin), tool, "exit 42\n")
-			_, provider := openStack()
+			_, provider := openStack(nil)
 			err = provider.Prepare(context.Background())
 			if err == nil || !strings.Contains(err.Error(), tool) || !strings.Contains(err.Error(), "exit status 42") {
 				t.Fatalf("missing actionable setup failure: %v", err)
@@ -160,7 +190,7 @@ func TestStackLifecycleCommandsReportFailedSetup(t *testing.T) {
 				}()
 				_ = cmd.Execute()
 			}()
-			stack, _ := openStack()
+			stack, _ := openStack(nil)
 			state, err := stack.ReadState()
 			if err != nil || state == nil || state.Phase != devstack.PhaseFailed || len(state.Errors) != 1 || !strings.Contains(state.Errors[0], "exit status 42") {
 				t.Fatalf("failed setup was not recorded: state=%+v err=%v", state, err)

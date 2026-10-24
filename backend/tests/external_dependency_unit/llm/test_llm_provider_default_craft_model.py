@@ -36,8 +36,8 @@ def _create_test_provider(db_session: Session, name: str) -> LLMProviderView:
             api_key="sk-test-key-00000000000000000000000000000000000",
             api_key_changed=True,
             model_configurations=[
-                ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
-                ModelConfigurationUpsertRequest(name="gpt-4o-mini", is_visible=False),
+                ModelConfigurationUpsertRequest(name="gpt-6-sol", is_visible=True),
+                ModelConfigurationUpsertRequest(name="gpt-6-luna", is_visible=False),
             ],
         ),
         db_session=db_session,
@@ -66,14 +66,14 @@ class TestDefaultCraftModel:
 
         update_default_pointer_model(
             provider_id=provider.id,
-            model_name="gpt-4o",
+            model_name="gpt-6-sol",
             db_session=db_session,
             flow_type=LLMModelFlowType.CRAFT,
         )
 
         default = fetch_default_model(db_session, LLMModelFlowType.CRAFT)
         assert default is not None
-        assert default.name == "gpt-4o"
+        assert default.name == "gpt-6-sol"
         assert default.llm_provider_id == provider.id
 
     def test_replacing_the_default_leaves_exactly_one(
@@ -85,20 +85,20 @@ class TestDefaultCraftModel:
 
         update_default_pointer_model(
             provider_id=provider.id,
-            model_name="gpt-4o",
+            model_name="gpt-6-sol",
             db_session=db_session,
             flow_type=LLMModelFlowType.CRAFT,
         )
         update_default_pointer_model(
             provider_id=provider.id,
-            model_name="gpt-4o-mini",
+            model_name="gpt-6-luna",
             db_session=db_session,
             flow_type=LLMModelFlowType.CRAFT,
         )
 
         default = fetch_default_model(db_session, LLMModelFlowType.CRAFT)
         assert default is not None
-        assert default.name == "gpt-4o-mini"
+        assert default.name == "gpt-6-luna"
 
     def test_clearing_the_default_leaves_none(
         self,
@@ -108,7 +108,7 @@ class TestDefaultCraftModel:
         provider = _create_test_provider(db_session, provider_name)
         update_default_pointer_model(
             provider_id=provider.id,
-            model_name="gpt-4o",
+            model_name="gpt-6-sol",
             db_session=db_session,
             flow_type=LLMModelFlowType.CRAFT,
         )

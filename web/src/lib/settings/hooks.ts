@@ -101,7 +101,6 @@ export function useSettings(): AppSettings {
   // timestamp whenever the enterprise settings reference changes forces a
   // re-fetch. We use referential equality on the SWR data (compare: a===b),
   // so this only fires when SWR actually receives new enterprise data.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const logoBuster = useMemo(() => Date.now(), [enterprise]);
 
   return {

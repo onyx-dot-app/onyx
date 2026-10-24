@@ -23,7 +23,7 @@ interface BuildWelcomeProps {
     message: string,
     files: BuildFile[],
     model?: BuildLlmSelection | null
-  ) => void;
+  ) => boolean | void | Promise<boolean | void>;
   isRunning: boolean;
   /** When true, shows spinner on send button with "Initializing sandbox..." tooltip */
   sandboxInitializing?: boolean;

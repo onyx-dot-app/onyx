@@ -59,6 +59,7 @@ from onyx.db.port_attempt import (
     count_active_port_attempts,
     count_consecutive_failed_port_attempts_no_progress,
     create_port_attempt,
+    fail_unstarted_port_attempt,
     get_active_port_attempt,
     get_latest_port_attempt,
     get_port_attempt,
@@ -227,6 +228,62 @@ def _sweep_port_orphan_candidates(
         log.info("Swept %d resurrected orphan chunk(s) from the port target", deleted)
 
 
+def _resolve_port_settings(
+    db_session: Session,
+    attempt: PortAttempt,
+    log: _PortLogAdapter,
+) -> tuple[SearchSettings, SearchSettings] | None:
+    """The (source, target) settings for an unclaimed attempt. Returns None after it
+    handles an attempt that must not run (it marks or cancels it)."""
+    port_attempt_id = attempt.id
+    future_search_settings = get_search_settings_by_id(
+        db_session, attempt.search_settings_id
+    )
+    if future_search_settings is None:
+        mark_port_terminal(
+            db_session,
+            port_attempt_id,
+            PortAttemptStatus.FAILED,
+            error_msg="FUTURE search settings missing",
+        )
+        return None
+    # Refuse a FUTURE that is no longer the port target: a revert/supersede or stale
+    # enqueue can leave a fresh attempt that cancel_active_port_attempts never flagged.
+    # Cancel through request_port_cancel, not outright — a second dispatch of an
+    # attempt another worker owns must not ack for it.
+    target_id = port_target_settings_id(
+        get_current_search_settings(db_session),
+        get_secondary_search_settings(db_session),
+    )
+    if target_id != attempt.search_settings_id:
+        request_port_cancel(db_session, port_attempt_id)
+        log.info(
+            "PortAttempt targets settings %s, no longer the port target (now %s); "
+            "canceling",
+            attempt.search_settings_id,
+            target_id,
+        )
+        return None
+    # Source to copy from: the recorded backfill source when the target was
+    # promoted mid-port (INSTANT) — "current" is now the target itself — else
+    # the live PRESENT for a normal reindex.
+    if future_search_settings.port_backfill_source_id is not None:
+        present_search_settings = get_search_settings_by_id(
+            db_session, future_search_settings.port_backfill_source_id
+        )
+        if present_search_settings is None:
+            mark_port_terminal(
+                db_session,
+                port_attempt_id,
+                PortAttemptStatus.FAILED,
+                error_msg="port backfill source settings missing",
+            )
+            return None
+    else:
+        present_search_settings = get_current_search_settings(db_session)
+    return present_search_settings, future_search_settings
+
+
 def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) -> None:
     """Body of the port task, lifted out of @shared_task so tests call it
     directly. Resumes from the attempt's cursor and commits a new cursor after
@@ -275,51 +332,20 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
         up_to_doc_id = attempt.up_to_doc_id  # snapshot upper bound (None = unbounded)
         docs_ported = attempt.docs_ported or 0
 
-        future_search_settings = get_search_settings_by_id(
-            db_session, attempt.search_settings_id
-        )
-        if future_search_settings is None:
-            mark_port_terminal(
-                db_session,
-                port_attempt_id,
-                PortAttemptStatus.FAILED,
-                error_msg="FUTURE search settings missing",
+        try:
+            resolved = _resolve_port_settings(db_session, attempt, log)
+        except Exception as e:
+            # Unclaimed, so the stall watchdog does not cover this attempt. FAIL it so
+            # check_for_port retries it on the next tick (with its usual backoff).
+            log.exception("Port setup failed before claim; marking FAILED")
+            db_session.rollback()
+            fail_unstarted_port_attempt(
+                db_session, port_attempt_id, error_msg=f"setup failed: {e}"
             )
             return
-        # Refuse a FUTURE that is no longer the port target: a revert/supersede or stale
-        # enqueue can leave a fresh attempt that cancel_active_port_attempts never flagged.
-        # Cancel through request_port_cancel, not outright — a second dispatch of an
-        # attempt another worker owns must not ack for it.
-        target_id = port_target_settings_id(
-            get_current_search_settings(db_session),
-            get_secondary_search_settings(db_session),
-        )
-        if target_id != attempt.search_settings_id:
-            request_port_cancel(db_session, port_attempt_id)
-            log.info(
-                "PortAttempt targets settings %s, no longer the port target (now %s); "
-                "canceling",
-                attempt.search_settings_id,
-                target_id,
-            )
+        if resolved is None:
             return
-        # Source to copy from: the recorded backfill source when the target was
-        # promoted mid-port (INSTANT) — "current" is now the target itself — else
-        # the live PRESENT for a normal reindex.
-        if future_search_settings.port_backfill_source_id is not None:
-            present_search_settings = get_search_settings_by_id(
-                db_session, future_search_settings.port_backfill_source_id
-            )
-            if present_search_settings is None:
-                mark_port_terminal(
-                    db_session,
-                    port_attempt_id,
-                    PortAttemptStatus.FAILED,
-                    error_msg="port backfill source settings missing",
-                )
-                return
-        else:
-            present_search_settings = get_current_search_settings(db_session)
+        present_search_settings, future_search_settings = resolved
 
         if not mark_port_in_progress(
             db_session, port_attempt_id, celery_task_id=celery_task_id

@@ -83,6 +83,16 @@ export interface CredentialSpecMethod<TKey extends string = string> {
   ownSetup?: boolean;
 }
 
+/**
+ * Fields that replace a spec's own on the add-connector page while the
+ * connector form holds every value in `when`, e.g. Confluence Data Center
+ * signs in with a personal access token alone.
+ */
+export interface CredentialFormVariant {
+  when: Readonly<Record<string, string | boolean>>;
+  fields: CredentialSpecFields;
+}
+
 /** A source's credential: its fields and, optionally, its auth methods. */
 export interface CredentialSpec {
   /** The name field titles use for `{source}`, like "Microsoft Teams". */
@@ -91,6 +101,8 @@ export interface CredentialSpec {
   fields: CredentialSpecFields;
   /** Two or more ways to authenticate. The first is the default. */
   methods?: readonly CredentialSpecMethod[];
+  /** Field sets for some connector form values. The first match wins. */
+  formVariants?: readonly CredentialFormVariant[];
 }
 
 export type MethodsOf<TFields> = readonly CredentialSpecMethod<
@@ -105,6 +117,7 @@ export interface DefinedCredentialSpec<
   brandName: string;
   fields: TFields;
   methods: TMethods;
+  formVariants?: readonly CredentialFormVariant[];
 }
 
 // A file field is uploaded on its own; the stored JSON holds its content as a

@@ -163,7 +163,9 @@ def test_failed_crawl_records_docs_synced_before_the_error(
         patch.object(
             perm_tasks,
             "update_element_permissions_batch",
-            return_value=perm_tasks.PermissionSyncResult(num_updated=1, num_errors=0),
+            side_effect=lambda new_permissions, **_: perm_tasks.PermissionSyncResult(
+                num_updated=len(new_permissions), num_errors=0
+            ),
         ),
         pytest.raises(RuntimeError, match="connector died mid-crawl"),
     ):

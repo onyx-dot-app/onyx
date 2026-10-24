@@ -559,7 +559,7 @@ def test_query_failure_and_disconnect_do_not_replace_application_errors(
 def test_rejected_requests_are_not_failed_queries(
     query_sink: Mock, code: OnyxErrorCode, reported: bool
 ) -> None:
-    @query.telemetry_query(mode="search")
+    @query.telemetry_query(mode=query.QueryMode.SEARCH)
     def search() -> None:
         raise OnyxError(code)
 
@@ -577,7 +577,7 @@ def test_search_stream_times_the_first_results(
     ticks = iter([1.0, 1.5])
     monkeypatch.setattr(query, "time", SimpleNamespace(monotonic=lambda: next(ticks)))
 
-    @query.telemetry_query(mode="search")
+    @query.telemetry_query(mode=query.QueryMode.SEARCH)
     def stream() -> Iterator[object]:
         yield object()
         yield SearchDocsPacket()
@@ -614,7 +614,7 @@ def test_stop_button_and_api_origin_map_to_reported_outcome_and_channel(
 
 def test_each_query_has_its_own_id(query_sink: Mock) -> None:
     for _ in range(2):
-        query.QueryObservation(channel="web", mode="chat").finish()
+        query.QueryObservation(channel="web", mode=query.QueryMode.CHAT).finish()
     ids = {uuid.UUID(call.args[1]["query_id"]) for call in query_sink.call_args_list}
     assert len(ids) == 2
 
@@ -660,6 +660,69 @@ def test_fetch_counts_connector_batches_and_passes_every_yield_through(
         list(fetch._timed_connector_runs(broken(), 1))
     assert raised.value is error
     assert sink.call_args.args == (1, "fetch", {"fetch_errors": 1})
+
+
+@pytest.mark.parametrize("ends_with_error", [False, True])
+def test_fetch_records_events_only_for_document_and_hierarchy_batches(
+    monkeypatch: pytest.MonkeyPatch,
+    ends_with_error: bool,
+) -> None:
+    from onyx.background.indexing import run_docfetching as fetch
+
+    buffer = Mock(count=0)
+    monkeypatch.setattr(fetch, "StageEventBuffer", Mock(return_value=buffer))
+    sink = Mock()
+    monkeypatch.setattr(fetch, "emit_stage_counter", sink)
+    now = 0.0
+    monkeypatch.setattr(fetch.time, "monotonic", lambda: now)
+    checkpoint_only = (None, None, None, object())
+    failure = (None, None, object(), None)
+    hierarchy = (None, [object()], None, None)
+    docs = ([object()], None, None, None)
+    # Each item with the connector's wait for it, in seconds. Binary fractions
+    # keep the clock arithmetic exact.
+    timed_items = [
+        (checkpoint_only, 0.125),
+        (failure, 0.25),
+        (checkpoint_only, 0.5),
+        (hierarchy, 0.125),
+        (docs, 0.0625),
+        (checkpoint_only, 0.5),
+    ]
+    items = [item for item, _ in timed_items]
+
+    def runner() -> Iterator[object]:
+        nonlocal now
+        for item, wait_s in timed_items:
+            now += wait_s
+            yield item
+        if ends_with_error:
+            now += 0.25
+            raise TimeoutError("connector failure")
+
+    yielded: list[object] = []
+    if ends_with_error:
+        with pytest.raises(TimeoutError):
+            yielded.extend(fetch._timed_connector_runs(runner(), 1))
+    else:
+        yielded.extend(fetch._timed_connector_runs(runner(), 1))
+    assert yielded == items
+
+    # Waits before a batch carry into it. A trailing wait is dropped, or
+    # carried into the failed fetch.
+    expected_sink = [
+        ({"fetch_docs": 0, "fetch_errors": 1}, 0),
+        ({"fetch_docs": 0, "fetch_errors": 0}, 1000),
+        ({"fetch_docs": 1, "fetch_errors": 0}, 62),
+    ]
+    expected_records = [1000, 62]
+    if ends_with_error:
+        expected_sink.append(({"fetch_errors": 1}, 750))
+        expected_records.append(750)
+    assert [call.args[0] for call in buffer.record.call_args_list] == expected_records
+    assert [
+        (call.args[2], call.kwargs["duration_ms"]) for call in sink.call_args_list
+    ] == expected_sink
 
 
 @pytest.mark.parametrize("deployment_type", list(fleet.DeploymentType))

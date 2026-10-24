@@ -58,8 +58,8 @@ from onyx.db.search_settings import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.natural_language_processing.search_nlp_models import clean_model_name
 from shared_configs.configs import ALT_INDEX_SUFFIX
+from shared_configs.utils import clean_model_name
 from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,

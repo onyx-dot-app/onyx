@@ -18,6 +18,7 @@ from onyx.db.enums import (
     SandboxStatus,
 )
 from onyx.db.models import (
+    GatedApp,
     MCPAuthenticationType,
     MCPConnectionConfig,
     MCPServer,
@@ -114,9 +115,14 @@ def get_all_mcp_servers(db_session: Session) -> list[MCPServer]:
     )
 
 
-def get_mcp_server_by_id(server_id: int, db_session: Session) -> MCPServer:
-    """Get MCP server by ID"""
-    server = db_session.scalar(select(MCPServer).where(MCPServer.id == server_id))
+def get_mcp_server_by_id(
+    server_id: int, db_session: Session, *, for_update: bool = False
+) -> MCPServer:
+    """Get a server, optionally locking it for an atomic configuration update."""
+    stmt = select(MCPServer).where(MCPServer.id == server_id)
+    if for_update:
+        stmt = stmt.with_for_update().execution_options(populate_existing=True)
+    server = db_session.scalar(stmt)
     if not server:
         raise ValueError("MCP server by specified id does not exist")
     return server
@@ -132,7 +138,11 @@ def get_mcp_servers_by_owner(owner_email: str, db_session: Session) -> list[MCPS
 
 
 def get_craft_enabled_mcp_servers(
-    db_session: Session, user: User | None, *, include_personal_disabled: bool = False
+    db_session: Session,
+    user: User | None,
+    *,
+    include_personal_disabled: bool = False,
+    server_ids: set[int] | None = None,
 ) -> list[MCPServer]:
     """MCP servers an admin has made available to the Craft agent, filtered to
     those ``user`` may use (public / shared / owned). ``None`` skips the access
@@ -157,6 +167,8 @@ def get_craft_enabled_mcp_servers(
                 )
                 .exists()
             )
+    if server_ids is not None:
+        stmt = stmt.where(MCPServer.id.in_(server_ids))
     return list(db_session.scalars(stmt).all())
 
 
@@ -318,6 +330,7 @@ def create_mcp_server__no_commit(
     oauth_token_endpoint: str | None = None,
     oauth_scopes_override: list[str] | None = None,
     oauth_additional_auth_params: dict[str, str] | None = None,
+    oauth_cimd_enabled: bool = True,
     admin_connection_config_id: int | None = None,
     is_public: bool = True,
     available_in_craft: bool = False,
@@ -336,12 +349,15 @@ def create_mcp_server__no_commit(
         oauth_token_endpoint=oauth_token_endpoint,
         oauth_scopes_override=oauth_scopes_override,
         oauth_additional_auth_params=oauth_additional_auth_params,
+        oauth_cimd_enabled=oauth_cimd_enabled,
         admin_connection_config_id=admin_connection_config_id,
         is_public=is_public,
         available_in_craft=available_in_craft,
     )
     db_session.add(new_server)
     db_session.flush()  # Get the ID without committing
+    db_session.add(GatedApp(mcp_server_id=new_server.id))
+    db_session.flush()
     return new_server
 
 
@@ -359,6 +375,7 @@ def update_mcp_server__no_commit(
     oauth_token_endpoint: str | None | UnsetType = UNSET,
     oauth_scopes_override: list[str] | None | UnsetType = UNSET,
     oauth_additional_auth_params: dict[str, str] | None | UnsetType = UNSET,
+    oauth_cimd_enabled: bool | None = None,
     transport: MCPTransport | None = None,
     status: MCPServerStatus | None = None,
     last_refreshed_at: datetime.datetime | None = None,
@@ -392,6 +409,8 @@ def update_mcp_server__no_commit(
         server.oauth_scopes_override = oauth_scopes_override
     if not isinstance(oauth_additional_auth_params, UnsetType):
         server.oauth_additional_auth_params = oauth_additional_auth_params
+    if oauth_cimd_enabled is not None:
+        server.oauth_cimd_enabled = oauth_cimd_enabled
     if transport is not None:
         server.transport = transport
     if status is not None:

@@ -27,6 +27,7 @@ def _run_with_server_text(text: str) -> tuple[ToolResponse, CustomToolDelta]:
         auth_type=MCPAuthenticationType.NONE,
         transport=None,
         oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
+        oauth_cimd_enabled=True,
         oauth_authorization_endpoint=None,
         oauth_token_endpoint=None,
     )

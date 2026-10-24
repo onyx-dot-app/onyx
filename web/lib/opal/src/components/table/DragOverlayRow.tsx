@@ -83,7 +83,11 @@ function DragOverlayRowInner<TData>({
             }
 
             return (
-              <TableCell key={cell.id} alignment={colDef?.alignment}>
+              <TableCell
+                key={cell.id}
+                alignment={colDef?.alignment}
+                truncate={colDef?.kind === "data" && colDef.truncate}
+              >
                 {flexRender(cell.column.columnDef.cell, cell.getContext())}
               </TableCell>
             );
