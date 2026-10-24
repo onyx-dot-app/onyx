@@ -113,7 +113,7 @@ def _process_file(
     # If a zip is uploaded with a metadata file, we can process it here
     onyx_metadata, custom_tags = process_onyx_metadata(metadata)
     file_display_name = onyx_metadata.file_display_name or os.path.basename(file_name)
-    time_updated = onyx_metadata.doc_updated_at or datetime.now(timezone.utc)
+    time_updated = onyx_metadata.doc_updated_at
     primary_owners = onyx_metadata.primary_owners
     secondary_owners = onyx_metadata.secondary_owners
     link = onyx_metadata.link
