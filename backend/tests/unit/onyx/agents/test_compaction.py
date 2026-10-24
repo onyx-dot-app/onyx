@@ -1,7 +1,7 @@
 """Context pressure preserves the task, tool effects, and recorded history."""
 
 import threading
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Sequence
 from unittest.mock import Mock, patch
 
 import pytest
@@ -178,15 +178,16 @@ def test_rebuilt_prompts_reuse_counts_and_recount_changed_content() -> None:
                     execute=lambda _: ToolResult(content=evidence),
                 )
 
-                def assemble(messages: list[Message]) -> list[Message]:
-                    for message in messages:
-                        if (
-                            isinstance(message, ToolResultMessage)
-                            and state.step.index == 2
-                        ):
-                            message.content = revised_evidence
+                def assemble(messages: Sequence[Message]) -> list[Message]:
+                    updated_messages = [
+                        message.model_copy(update={"content": revised_evidence})
+                        if isinstance(message, ToolResultMessage)
+                        and state.step.index == 2
+                        else message
+                        for message in messages
+                    ]
                     return prepare_prompt(
-                        messages,
+                        updated_messages,
                         system_prompt=SystemMessage(content=system),
                         custom_agent_prompt=None,
                         reminder_message=None,
@@ -300,7 +301,7 @@ def test_compaction_replaces_attachment_body_with_file_reference() -> None:
     )
     findings = "The report supports option A; the user chose option B."
 
-    def assemble(messages: list[Message]) -> list[Message]:
+    def assemble(messages: Sequence[Message]) -> list[Message]:
         return prepare_prompt(
             messages,
             system_prompt=None,
@@ -429,7 +430,7 @@ def test_compaction_within_task_preserves_tool_effects_and_prepared_steps() -> N
         prepared.append(step.index)
         return PreparedStep(tools=tools, assemble_messages=render)
 
-    def render(messages: list[Message]) -> list[Message]:
+    def render(messages: Sequence[Message]) -> list[Message]:
         assert threading.current_thread() is execution_threads[0]
         return [*messages, SystemMessage(content="Use the required report format.")]
 

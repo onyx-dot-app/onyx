@@ -600,7 +600,7 @@ def _deduplicate_search_passages(messages: list[Message]) -> None:
 
 
 def prepare_prompt(
-    messages: list[Message],
+    messages: Sequence[Message],
     *,
     system_prompt: Message | None,
     custom_agent_prompt: Message | None,
@@ -612,18 +612,19 @@ def prepare_prompt(
     llm_config: LLMConfig | None = None,
     available_tool_names: set[str] | None = None,
 ) -> list[Message]:
-    """Assemble instructions and file context without discarding execution history."""
-    history = [message.model_copy(deep=True) for message in messages]
+    """Assemble detached prompt messages without modifying borrowed inputs."""
+    # Nested payloads stay read-only until output formatting detaches them.
+    history = [message.model_copy() for message in messages]
     _deduplicate_search_passages(history)
     for message in history:
-        metadata = prompt_metadata(message)
+        metadata = prompt_metadata(message).model_copy()
+        message.metadata = metadata
         if isinstance(message, ToolResultMessage) and metadata.omit_tool_result_content:
             # Keep stored evidence intact; later questions use the existing placeholder.
             message.content = TOOL_CALL_RESPONSE_CROSS_MESSAGE
             metadata.token_count = None
         metadata.token_count = count_message_tokens(message, token_counter)
         metadata.should_cache = not metadata.is_reminder
-        message.metadata = metadata
     insertion = next(
         (
             index
@@ -635,22 +636,18 @@ def prepare_prompt(
     )
     result: list[Message] = []
     if system_prompt is not None:
-        system_prompt = system_prompt.model_copy(deep=True)
-        metadata = prompt_metadata(system_prompt)
-        metadata.should_cache = True
-        system_prompt.metadata = metadata
-        result.append(system_prompt)
+        result.append(system_prompt.model_copy())
     if user_info_prompt is not None:
-        result.append(user_info_prompt.model_copy(deep=True))
+        result.append(user_info_prompt.model_copy())
     result.extend(history[:insertion])
     if custom_agent_prompt is not None:
-        result.append(custom_agent_prompt.model_copy(deep=True))
+        result.append(custom_agent_prompt.model_copy())
     if context_files and context_files.file_texts:
         result.append(_create_context_files_message(context_files))
     for message in result:
-        metadata = prompt_metadata(message)
-        metadata.should_cache = True
-        message.metadata = metadata
+        message.metadata = prompt_metadata(message).model_copy(
+            update={"should_cache": True}
+        )
     result.extend(history[insertion:])
 
     # Tool-dependent file notices change between rounds, so keep them after
@@ -680,7 +677,7 @@ def prepare_prompt(
     return (
         prepare_model_messages(result, llm_config, token_counter=token_counter)
         if llm_config
-        else result
+        else [message.model_copy(deep=True) for message in result]
     )
 
 

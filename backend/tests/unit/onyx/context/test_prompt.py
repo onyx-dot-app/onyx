@@ -1,11 +1,14 @@
 """Prompt assembly preserves history and makes retained file references usable."""
 
+from functools import partial
+
 import pytest
 
 from onyx.agents.compaction import working_messages
 from onyx.agents.execution_records import CompactionCheckpoint
 from onyx.chat.prompt_formatting import PromptMetadata, prompt_metadata
 from onyx.chat.prompt_utils import prepare_prompt
+from onyx.context.search.models import SearchDocsResponse
 from onyx.file_store.models import (
     ChatFileType,
     ChatLoadedFile,
@@ -13,11 +16,14 @@ from onyx.file_store.models import (
     ExtractedContextFiles,
     FileToolMetadata,
 )
+from onyx.llm.interfaces import LLMConfig
 from onyx.llm.models import (
     AssistantMessage,
     Message,
     SystemMessage,
     TextContent,
+    ThinkingBlock,
+    ThinkingContent,
     ToolCall,
     ToolResultMessage,
     UserMessage,
@@ -184,12 +190,15 @@ def test_prompt_can_be_rebuilt_without_a_user_message(history: list[Message]) ->
     ]
 
 
-def test_historical_tool_filter_preserves_checkpoint_and_current_evidence() -> None:
+@pytest.mark.parametrize("with_model", [False, True])
+def test_historical_tool_filter_preserves_checkpoint_and_current_evidence(
+    with_model: bool,
+) -> None:
     prior_result = ToolResultMessage(
         tool_call_id="old",
         tool_name="web_search",
         content="Old evidence",
-        metadata=PromptMetadata(omit_tool_result_content=True),
+        metadata=PromptMetadata(omit_tool_result_content=True, token_count=9000),
     )
     image_result = ToolResultMessage(
         tool_call_id="image",
@@ -222,6 +231,14 @@ def test_historical_tool_filter_preserves_checkpoint_and_current_evidence() -> N
         context_files=None,
         token_counter=len,
         available_tool_names={"read_file"},
+        llm_config=LLMConfig(
+            model_provider="openai",
+            model_name="test",
+            temperature=0,
+            max_input_tokens=4096,
+        )
+        if with_model
+        else None,
     )
     results = [message for message in request if isinstance(message, ToolResultMessage)]
     assert [message.text for message in results] == [
@@ -233,7 +250,89 @@ def test_historical_tool_filter_preserves_checkpoint_and_current_evidence() -> N
         TOOL_CALL_RESPONSE_CROSS_MESSAGE
     )
     assert prior_result.text == "Old evidence"
+    assert prompt_metadata(prior_result).token_count == 9000
     assert [message.model_dump() for message in history] == original
+
+
+@pytest.mark.parametrize("with_model", [False, True])
+def test_prompt_output_isolates_history_and_captured_instructions(
+    with_model: bool,
+) -> None:
+    history: list[Message] = [
+        UserMessage(content="Question", metadata=PromptMetadata()),
+        AssistantMessage(
+            content=[
+                ThinkingContent(
+                    text="Thinking",
+                    blocks=[ThinkingBlock(thinking="Thinking", signature="signed")],
+                ),
+                ToolCall(
+                    id="search", name="search", arguments={"queries": ["original"]}
+                ),
+            ]
+        ),
+        ToolResultMessage(
+            tool_call_id="search",
+            tool_name="search",
+            content="Evidence",
+            details=SearchDocsResponse(
+                search_docs=[], citation_mapping={1: "document"}
+            ),
+        ),
+    ]
+    system = SystemMessage(content="System", metadata=PromptMetadata())
+    user_info = SystemMessage(content="User info", metadata=PromptMetadata())
+    custom = UserMessage(content="Custom instructions", metadata=PromptMetadata())
+    reminder = UserMessage(
+        content="Cite sources", metadata=PromptMetadata(is_reminder=True)
+    )
+    inputs = [*history, system, user_info, custom, reminder]
+    originals = [message.model_copy(deep=True) for message in inputs]
+    assemble = partial(
+        prepare_prompt,
+        system_prompt=system,
+        user_info_prompt=user_info,
+        custom_agent_prompt=custom,
+        reminder_message=reminder,
+        context_files=None,
+        token_counter=len,
+        llm_config=LLMConfig(
+            model_provider="openai",
+            model_name="test",
+            temperature=0,
+            max_input_tokens=4096,
+        )
+        if with_model
+        else None,
+    )
+    result = assemble(tuple(history))
+    expected = [message.model_copy(deep=True) for message in result]
+    assert inputs == originals
+    assistant = next(
+        message for message in result if isinstance(message, AssistantMessage)
+    )
+    assert assistant.thinking_blocks == [
+        ThinkingBlock(thinking="Thinking", signature="signed")
+    ]
+    assistant.tool_calls[0].arguments["queries"] = ["changed"]
+    thinking = assistant.content[0]
+    assert isinstance(thinking, ThinkingContent) and thinking.blocks
+    block = thinking.blocks[0]
+    assert isinstance(block, ThinkingBlock)
+    block.signature = "changed"
+    tool_result = next(
+        message for message in result if isinstance(message, ToolResultMessage)
+    )
+    assert isinstance(tool_result.details, SearchDocsResponse)
+    tool_result.details.citation_mapping[1] = "changed"
+    for message in result:
+        if isinstance(message, (UserMessage, SystemMessage)):
+            message.content = "changed"
+        if isinstance(message.metadata, PromptMetadata):
+            message.metadata.token_count = -1
+            message.metadata.should_cache = False
+    assert inputs == originals
+    assert assemble(tuple(history)) == expected
 
 
 @pytest.mark.parametrize(
