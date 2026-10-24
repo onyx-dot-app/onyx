@@ -161,6 +161,8 @@ Compaction does not repeat either callback.
 Callbacks must use bounded I/O and check cancellation during long operations.
 Cancellation waits for a synchronous callback or model read to return before execution can finish.
 `PreparedStep.assemble_messages` must be pure and repeatable: compaction can call it again with shorter history.
+It borrows a read-only `Sequence[Message]`. Do not modify its messages or nested data; return replacements for changes.
+The sequence is a tuple, but nested objects are not immutable. The SDK detaches the returned messages before model execution.
 Capture instructions and other step decisions during preparation. Assemble them around the history supplied by the runtime.
 Do not fetch settings, advance feature state, or capture the original history inside the assembler.
 

@@ -2,7 +2,7 @@
 
 import base64
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -33,6 +33,7 @@ from onyx.llm.models import (
     GenerationRequest,
     ImageContentPart,
     Message,
+    SystemMessage,
     TextContent,
     ThinkingDeltaEvent,
     ToolCall,
@@ -427,12 +428,15 @@ def test_prepared_request_isolates_nested_tool_arguments(with_assembly: bool) ->
     ]
     retained: list[Message] = []
 
-    def assemble(history: list[Message]) -> list[Message]:
+    def assemble(history: Sequence[Message]) -> list[Message]:
         assistant = history[0]
         assert isinstance(assistant, AssistantMessage)
-        assistant.tool_calls[0].arguments["filters"] = {"q": "assembled"}
-        retained.extend(history)
-        return history
+        call = assistant.tool_calls[0].model_copy(
+            update={"arguments": {"filters": {"q": "assembled"}}}
+        )
+        result = [assistant.model_copy(update={"content": [call]}), *history[1:]]
+        retained.extend(result)
+        return result
 
     request = PreparedStep(
         assemble_messages=assemble if with_assembly else None
@@ -451,6 +455,29 @@ def test_prepared_request_isolates_nested_tool_arguments(with_assembly: bool) ->
         assembled = retained[0]
         assert isinstance(assembled, AssistantMessage)
         assert assembled.tool_calls[0].arguments == {"filters": {"q": "assembled"}}
+
+
+def test_request_mutation_cannot_change_captured_assembly_instructions() -> None:
+    instructions = SystemMessage(content="Use sources", metadata=ExtraData())
+    history: list[Message] = [UserMessage(content="Question")]
+    prepared = PreparedStep(
+        assemble_messages=lambda messages: [instructions, *messages]
+    )
+    request = prepared.generation_request(history)
+    system = request.messages[0]
+    assert isinstance(system, SystemMessage)
+    system.content = "changed"
+    assert isinstance(system.metadata, ExtraData)
+    system.metadata.value = "changed"
+    question = request.messages[1]
+    assert isinstance(question, UserMessage)
+    question.content = "changed"
+
+    rebuilt = prepared.generation_request(history)
+    assert rebuilt.messages == [instructions, *history]
+    assert instructions.content == "Use sources"
+    assert instructions.metadata == ExtraData()
+    assert history[0].content == "Question"
 
 
 def test_message_end_observer_cannot_mutate_recorded_generation() -> None:

@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import datetime
 from enum import Enum
 from typing import Literal
@@ -73,14 +73,13 @@ class PreparedStep(BaseModel):
     options: GenerationOptions = Field(default_factory=GenerationOptions)
     stall_timeout_s: int | None = Field(default=None, gt=0)
     output_metadata: SerializeAsAny[BaseModel] | None = None
-    assemble_messages: Callable[[list[Message]], list[Message]] | None = None
+    assemble_messages: Callable[[Sequence[Message]], list[Message]] | None = None
 
     def generation_request(self, messages: list[Message]) -> GenerationRequest:
+        """Build a detached request; assembly must not mutate borrowed history."""
         history = messages
         if self.assemble_messages is not None:
-            history = self.assemble_messages(
-                [message.model_copy(deep=True) for message in messages]
-            )
+            history = self.assemble_messages(tuple(messages))
         return GenerationRequest(
             messages=messages_for_model(history),
             system_prompt=self.system_prompt,
