@@ -408,8 +408,9 @@ LiteLLM's stream wrapper overwrites chunk models with the requested name) and
 records it with `tracing/llm_utils.py:record_llm_routed_model` on the generation
 span. `_track_llm_cost` and the usage processors pass it as
 `compute_cost_cents(served_model=...)`: the catalog is priced by the served
-model, an admin cost override on the router name still wins, and the ledger key
-stays the router name.
+model, an admin cost override on the router's model configuration still wins
+(`compute_cost_cents(model_configuration_id=...)`), and the ledger key stays the
+router name.
 
 ### 4.6 Retries
 
