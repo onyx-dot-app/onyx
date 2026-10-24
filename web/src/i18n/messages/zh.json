@@ -4865,9 +4865,6 @@
       }
     },
     "costOverrides": {
-      "allProviders": {
-        "label": "所有提供方"
-      },
       "deleteModal": {
         "description": "**{model}**（{provider}）的使用量将重新按内置价格计算。",
         "submit": {

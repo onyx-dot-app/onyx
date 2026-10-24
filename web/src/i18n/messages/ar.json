@@ -4865,9 +4865,6 @@
       }
     },
     "costOverrides": {
-      "allProviders": {
-        "label": "جميع الموفرين"
-      },
       "deleteModal": {
         "description": "سيُحتسب استخدام **{model}** ({provider}) بالسعر المدمج مرة أخرى.",
         "submit": {
