@@ -63,7 +63,7 @@ def test_stable_prefix_precedes_file_notices(with_history: bool) -> None:
     assert all(not prompt_metadata(message).should_cache for message in prepared[-3:])
     assert "large.txt" in prepared[-3].text
     assert "old.txt" in prepared[-2].text
-    assert prepared[-1] is reminder
+    assert prepared[-1] == reminder
     if with_history:
         assert prepared[-4].text == "Evidence"
     assert history == original_history

@@ -414,12 +414,17 @@ def test_native_and_attached_images_share_limit_without_loading_dropped_files(
     native = ImageContentPart(
         image_url=ImageUrlDetail(url="https://example.com/new.png")
     )
+    text = TextContentPart(text="before", cache_control={"type": "ephemeral"})
+    newest_image = image("new")
+    oldest_image = image("old")
+    original_files = [file.model_dump() for file in (newest_image, oldest_image)]
     message = CanonicalUserMessage(
-        content=[TextContentPart(text="before"), native, TextContentPart(text="after")],
-        metadata=PromptMetadata(image_files=[image("new")]),
+        content=[text, native, TextContentPart(text="after")],
+        metadata=PromptMetadata(image_files=[newest_image]),
     )
+    history = [_make_user_msg("older", images=[oldest_image]), message]
     translated = prepare_model_messages(
-        [_make_user_msg("older", images=[image("old")]), message],
+        history,
         _make_llm_config(AZURE_PROVIDER_NAME),
     )
     recent = translated[1]
@@ -429,6 +434,24 @@ def test_native_and_attached_images_share_limit_without_loading_dropped_files(
     assert sum(isinstance(part, ImageContentPart) for part in recent.content) == cap
     assert loaded == (["new"] if cap == 2 else [])
     assert translated[-1].content == _expected_image_drop_reminder(3 - cap)
+    assert (
+        prepare_model_messages(history, _make_llm_config(AZURE_PROVIDER_NAME))
+        == translated
+    )
+    assert loaded == (["new"] if cap == 2 else [])
+    assert [
+        file.model_dump() for file in (newest_image, oldest_image)
+    ] == original_files
+
+    first, second = recent.content[:2]
+    assert isinstance(first, TextContentPart) and first.cache_control is not None
+    first.text = "changed"
+    first.cache_control["type"] = "changed"
+    assert isinstance(second, ImageContentPart)
+    second.image_url.url = "https://example.com/changed.png"
+    assert text.text == "before"
+    assert text.cache_control == {"type": "ephemeral"}
+    assert native.image_url.url == "https://example.com/new.png"
 
 
 @pytest.mark.parametrize("include_attachment", [False, True])

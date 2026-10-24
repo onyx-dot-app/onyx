@@ -139,7 +139,7 @@ def _format_user_message(
     image_tokens = 0
     for part_index, part in enumerate(_user_content_parts(message)):
         if isinstance(part, TextContentPart):
-            content.append(part)
+            content.append(part.model_copy(deep=True))
             continue
         if keep_images is not None and (message_index, part_index) not in keep_images:
             continue
@@ -159,9 +159,11 @@ def _format_user_message(
                 else _NON_VISION_MARKER_TOKEN_FALLBACK
             )
         elif isinstance(part, ImageContentPart):
-            content.append(part)
+            content.append(part.model_copy(deep=True))
             image_tokens += IMAGE_TOKEN_ESTIMATE
         else:
+            # Materialization updates the descriptor; only the loader cache is shared.
+            part = part.model_copy()
             try:
                 image_type = get_image_type_from_bytes(part.content)
                 image_url = f"data:{image_type};base64,{part.to_base64()}"
@@ -200,7 +202,7 @@ def prepare_model_messages(  # noqa: C901
     *,
     token_counter: Callable[[str], int] | None = None,
 ) -> list[Message]:
-    """Resolve application attachments and reminders into shared model messages."""
+    """Resolve attachments and reminders into detached model messages."""
     messages: list[Message] = []
     # Replay images as text markers when the selected model does not accept images.
     supports_image_input = True

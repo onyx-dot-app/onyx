@@ -125,10 +125,11 @@ Per cycle, `backend/onyx/chat/prompt_utils.py:prepare_prompt` produces this orde
 [reminder]                   -- USER_REMINDER message, always last (§4.5)
 ```
 
-This whole list is rebuilt from scratch on every LLM cycle inside one turn, not
-once per turn. A turn that runs three tool cycles calls
-`construct_message_history` three times, each with a growing
-`[tool calls and responses]` section and a freshly recomputed reminder.
+The SDK rebuilds this list for each model call and after compaction. Prompt assembly
+borrows history without modifying its messages or nested payloads. It creates replacement
+message containers and metadata for prompt changes. Formatting returns detached model
+messages, including native image parts. Selected lazy file descriptors are copied before
+loading; their synchronized content cache remains shared.
 
 ### 4.1 System prompt
 
