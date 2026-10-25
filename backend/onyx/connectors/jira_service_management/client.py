@@ -102,8 +102,21 @@ class JsmClient:
 
     def get_service_desks(self) -> list[dict[str, Any]]:
         endpoint = "/rest/servicedeskapi/servicedesk"
-        res = self._request("GET", endpoint)
-        return res.get("values", [])
+        start = 0
+        service_desks: list[dict[str, Any]] = []
+
+        while True:
+            res = self._request(
+                "GET", endpoint, params={"start": start, "limit": 50}
+            )
+            values = res.get("values", [])
+            service_desks.extend(values)
+
+            if not values or res.get("isLastPage", True):
+                break
+            start += len(values)
+
+        return service_desks
 
     def get_customer_requests(
         self,
@@ -113,17 +126,15 @@ class JsmClient:
         request_status: str = "ALL_REQUESTS",
         search_term: str | None = None,
     ) -> dict[str, Any]:
-        if service_desk_id:
-            endpoint = f"/rest/servicedeskapi/servicedesk/{service_desk_id}/request"
-        else:
-            endpoint = "/rest/servicedeskapi/request"
-
+        endpoint = "/rest/servicedeskapi/request"
         params: dict[str, Any] = {
             "start": start,
             "limit": limit,
             "requestStatus": request_status,
             "requestOwnership": "ALL_REQUESTS",
         }
+        if service_desk_id:
+            params["serviceDeskId"] = service_desk_id
         if search_term:
             params["searchTerm"] = search_term
 
@@ -137,17 +148,22 @@ class JsmClient:
         public: bool | None = None,
     ) -> list[dict[str, Any]]:
         endpoint = f"/rest/servicedeskapi/request/{issue_id_or_key}/comment"
-        params: dict[str, Any] = {
-            "start": start,
-            "limit": limit,
-        }
-        if public is not None:
-            params["public"] = str(public).lower()
-
+        comments: list[dict[str, Any]] = []
+        next_start = start
         try:
-            res = self._request("GET", endpoint, params=params)
-            return res.get("values", [])
+            while True:
+                params: dict[str, Any] = {
+                    "start": next_start,
+                    "limit": limit,
+                }
+                if public is not None:
+                    params["public"] = str(public).lower()
+                res = self._request("GET", endpoint, params=params)
+                page = res.get("values", [])
+                comments.extend(page)
+                if res.get("isLastPage", True) or not page:
+                    break
+                next_start += len(page)
         except JsmApiError as e:
-            # If comments fail or 403, log warning and return empty list rather than aborting ticket indexing
-            logger.warning(f"Could not fetch comments for JSM ticket {issue_id_or_key}: {e}")
-            return []
+            logger.warning("Could not fetch all comments for JSM ticket %s: %s", issue_id_or_key, e)
+        return comments
