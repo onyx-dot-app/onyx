@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 import pytest
 import requests
 
 import onyx.tools.tool_implementations.web_search.clients.ollama_client as ollama_module
-from onyx.tools.tool_implementations.web_search.clients.ollama_client import OllamaClient
+from onyx.error_handling.exceptions import OnyxError
+from onyx.tools.tool_implementations.web_search.clients.ollama_client import (
+    OllamaClient,
+)
 from onyx.tools.tool_implementations.web_search.providers import (
     build_search_provider_from_config,
 )
@@ -19,7 +21,7 @@ class DummyResponse:
         self,
         *,
         status_code: int,
-        payload: dict[str, Any] | None = None,
+        payload: Any = None,
         text: str = "",
     ) -> None:
         self.status_code = status_code
@@ -32,7 +34,7 @@ class DummyResponse:
             http_error.response = cast(requests.Response, self)
             raise http_error
 
-    def json(self) -> dict[str, Any]:
+    def json(self) -> Any:
         if self._payload is None:
             raise ValueError("No JSON payload")
         return self._payload
@@ -95,6 +97,70 @@ def test_search_returns_empty_on_no_results(monkeypatch: pytest.MonkeyPatch) -> 
 
     results = client.search("onyx")
     assert results == []
+
+
+@pytest.mark.parametrize("payload", [[], "oops", {"results": {"url": "x"}}])
+def test_search_rejects_invalid_response_shape(
+    monkeypatch: pytest.MonkeyPatch, payload: Any
+) -> None:
+    client = OllamaClient(api_key="test-key")
+
+    def _mock_post(*args: Any, **kwargs: Any) -> DummyResponse:  # noqa: ARG001
+        return DummyResponse(status_code=200, payload=payload)
+
+    monkeypatch.setattr(ollama_module.requests, "post", _mock_post)
+
+    with pytest.raises(ValueError, match="Ollama search API returned"):
+        client.search("onyx")
+
+
+def test_search_rejects_non_string_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OllamaClient(api_key="test-key")
+
+    def _mock_post(*args: Any, **kwargs: Any) -> DummyResponse:  # noqa: ARG001
+        return DummyResponse(status_code=200, payload={"results": [{"url": 123}]})
+
+    monkeypatch.setattr(ollama_module.requests, "post", _mock_post)
+
+    with pytest.raises(ValueError, match="non-string 'url'"):
+        client.search("onyx")
+
+
+@pytest.mark.parametrize("status_code", [408, 429, 500, 503, 520, 529, 599])
+def test_retryable_statuses(status_code: int) -> None:
+    assert ollama_module._is_retryable_status(status_code)  # noqa: SLF001
+
+
+@pytest.mark.parametrize("status_code", [400, 401, 403, 404, 600])
+def test_non_retryable_statuses(status_code: int) -> None:
+    assert not ollama_module._is_retryable_status(status_code)  # noqa: SLF001
+
+
+def test_connection_succeeds_with_empty_results(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OllamaClient(api_key="test-key")
+
+    def _mock_post(*args: Any, **kwargs: Any) -> DummyResponse:  # noqa: ARG001
+        return DummyResponse(status_code=200, payload={"results": []})
+
+    monkeypatch.setattr(ollama_module.requests, "post", _mock_post)
+
+    assert client.test_connection() == {"status": "ok"}
+
+
+def test_connection_raises_onyx_error_on_invalid_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = OllamaClient(api_key="bad-key")
+
+    def _mock_post(*args: Any, **kwargs: Any) -> DummyResponse:  # noqa: ARG001
+        return DummyResponse(status_code=401, text="unauthorized")
+
+    monkeypatch.setattr(ollama_module.requests, "post", _mock_post)
+
+    with pytest.raises(OnyxError, match="status 401"):
+        client.test_connection()
 
 
 def test_build_ollama_provider_requires_api_key() -> None:

@@ -4,7 +4,6 @@ import {
   SvgFirecrawl,
   SvgGoogle,
   SvgOllama,
-  SvgSearxng,
   SvgSearXNG,
   SvgSerper,
   SvgTavily,
@@ -62,7 +61,6 @@ export const SEARCH_PROVIDER_DETAILS: Record<
   ollama: {
     label: "Ollama",
     subtitle: "Ollama",
-    helper: "Connect to Ollama to set up web search.",
     logo: SvgOllama,
     apiKeyUrl: "https://ollama.com/settings/keys",
   },
@@ -134,8 +132,7 @@ const SEARCH_PROVIDER_CAPABILITIES: Record<
   },
   ollama: {
     requiresApiKey: true,
-    requiredConfigKeys: ["ollama_base_url"],
-    storedConfigAliases: { ollama_base_url: ["ollama_base_url"] },
+    requiredConfigKeys: [],
   },
   tavily: {
     requiresApiKey: true,

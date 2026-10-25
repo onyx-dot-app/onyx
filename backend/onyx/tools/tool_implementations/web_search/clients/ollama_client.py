@@ -3,10 +3,13 @@ from __future__ import annotations
 from typing import Any
 
 import requests
-from fastapi import HTTPException
 
-from onyx.tools.tool_implementations.web_search.models import WebSearchProvider
-from onyx.tools.tool_implementations.web_search.models import WebSearchResult
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.tools.tool_implementations.web_search.models import (
+    WebSearchProvider,
+    WebSearchResult,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
@@ -21,6 +24,8 @@ class RetryableOllamaSearchError(Exception):
 
 
 class OllamaClient(WebSearchProvider):
+    """Web search provider backed by Ollama's hosted web search API."""
+
     def __init__(
         self,
         api_key: str,
@@ -45,6 +50,7 @@ class OllamaClient(WebSearchProvider):
         exceptions=(RetryableOllamaSearchError,),
     )
     def _search_with_retries(self, query: str) -> list[WebSearchResult]:
+        """Run one search request, raising RetryableOllamaSearchError on transient failures."""
         payload: dict[str, Any] = {
             "query": query,
             "max_results": self._num_results,
@@ -66,25 +72,34 @@ class OllamaClient(WebSearchProvider):
             response.raise_for_status()
         except requests.HTTPError as exc:
             status_code = response.status_code
-            error_msg = f"Ollama search API error (status {status_code}): {response.text}"
+            error_msg = (
+                f"Ollama search API error (status {status_code}): {response.text}"
+            )
             if _is_retryable_status(status_code):
                 raise RetryableOllamaSearchError(error_msg) from exc
             raise ValueError(error_msg) from exc
 
         data = response.json()
-        results_list = data.get("results") or []
+        if not isinstance(data, dict):
+            raise ValueError("Ollama search API returned an unexpected response shape.")
+
+        results_list = data.get("results")
+        if results_list is None:
+            results_list = []
+        if not isinstance(results_list, list):
+            raise ValueError("Ollama search API returned a non-list 'results' field.")
 
         search_results: list[WebSearchResult] = []
         for result in results_list:
             if not isinstance(result, dict):
                 continue
 
-            link = (result.get("url") or "").strip()
+            link = _get_str_field(result, "url")
             if not link:
                 continue
 
-            title = (result.get("title") or "").strip()
-            content = (result.get("content") or "").strip()
+            title = _get_str_field(result, "title")
+            content = _get_str_field(result, "content")
 
             search_results.append(
                 WebSearchResult(
@@ -97,30 +112,33 @@ class OllamaClient(WebSearchProvider):
         return search_results
 
     def search(self, query: str) -> list[WebSearchResult]:
+        """Search the web, raising ValueError once retries are exhausted."""
         try:
             return self._search_with_retries(query)
         except RetryableOllamaSearchError as exc:
             raise ValueError(str(exc)) from exc
 
     def test_connection(self) -> dict[str, str]:
+        """Validate the API key with a test search; an empty result set still counts as success."""
         try:
-            test_results = self.search("test")
-            if not test_results or not any(result.link for result in test_results):
-                raise HTTPException(
-                    status_code=400,
-                    detail="Ollama API key validation failed: search returned no results.",
-                )
-        except HTTPException:
-            raise
+            self.search("test")
         except ValueError as exc:
-            raise HTTPException(
-                status_code=400,
-                detail=str(exc),
-            ) from exc
+            raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(exc)) from exc
 
         logger.info("Web search provider test succeeded for Ollama.")
         return {"status": "ok"}
 
 
+def _get_str_field(result: dict[str, Any], key: str) -> str:
+    """Return a stripped string field, raising ValueError if it is present but not a string."""
+    value = result.get(key)
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        raise ValueError(f"Ollama search API returned a non-string '{key}' field.")
+    return value.strip()
+
+
 def _is_retryable_status(status_code: int) -> bool:
-    return status_code in (408, 429, 500, 502, 503, 504)
+    """Retry on request timeout, rate limiting, and any 5xx server error."""
+    return status_code in (408, 429) or 500 <= status_code < 600

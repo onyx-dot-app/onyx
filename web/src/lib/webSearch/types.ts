@@ -16,7 +16,6 @@ export type WebSearchProviderType =
   | "searxng"
   | "brave"
   | "ollama"
-  | "tavily";
   | "tavily"
   | "firecrawl";
 
