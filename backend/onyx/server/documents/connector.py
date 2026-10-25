@@ -2285,6 +2285,7 @@ def get_indexed_sources(
     _: User = Depends(require_permission(Permission.READ_SEARCH)),
     db_session: Session = Depends(get_session),
 ) -> IndexedSourcesResponse:
+    """List searchable sources; include_internal also exposes ingestion API sources."""
     sources = sorted(
         fetch_unique_document_sources(db_session, include_internal=include_internal),
         key=lambda source: source.value,

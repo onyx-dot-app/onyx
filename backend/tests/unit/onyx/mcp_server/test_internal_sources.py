@@ -33,13 +33,13 @@ class _SourceAPI:
     requests: list[dict[str, Any]] = field(default_factory=list)
 
 
-@pytest_asyncio.fixture(
-    params=[DocumentSource.INGESTION_API, DocumentSource.CRAFT_FILE]
-)
+@pytest_asyncio.fixture(params=[DocumentSource.INGESTION_API])
 async def source_api(
     request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
 ) -> AsyncGenerator[_SourceAPI, None]:
-    source = cast(DocumentSource, request.param)
+    requested = cast(DocumentSource | tuple[DocumentSource, ...], request.param)
+    sources = (requested,) if isinstance(requested, DocumentSource) else requested
+    source = sources[0]
     engine = create_engine(
         "sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False}
     )
@@ -52,7 +52,10 @@ async def source_api(
     )
     table.create(engine)
     with engine.begin() as connection:
-        connection.execute(table.insert(), [{"source": source}, {"source": source}])
+        connection.execute(
+            table.insert(),
+            [{"source": source} for source in sources for _ in range(2)],
+        )
 
     app = FastAPI()
     app.add_api_route("/manage/indexed-sources", get_indexed_sources)
@@ -101,7 +104,7 @@ async def source_api(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("explicit_filter", [False, True])
-async def test_internal_documents_are_searchable(
+async def test_ingestion_documents_are_searchable(
     source_api: _SourceAPI, explicit_filter: bool
 ) -> None:
     sources = [source_api.source.value] if explicit_filter else None
@@ -127,7 +130,7 @@ async def test_internal_sources_remain_hidden_by_default(
 
 
 @pytest.mark.asyncio
-async def test_opt_in_lists_each_internal_source_once(source_api: _SourceAPI) -> None:
+async def test_opt_in_lists_ingestion_source_once(source_api: _SourceAPI) -> None:
     response = await source_api.client.get(
         "/manage/indexed-sources", params={"include_internal": "true"}
     )
@@ -152,6 +155,64 @@ async def test_resource_lists_internal_sources(source_api: _SourceAPI) -> None:
     result = await resource_module.indexed_sources_resource()
 
     assert json.loads(result) == [source_api.source.value]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "source_api",
+    [
+        DocumentSource.CRAFT_FILE,
+        (DocumentSource.INGESTION_API, DocumentSource.CRAFT_FILE),
+    ],
+    indirect=True,
+)
+async def test_craft_files_are_excluded_from_source_inventory(
+    source_api: _SourceAPI,
+) -> None:
+    # Craft stores raw blobs, not indexed text. A connector row does not make
+    # it a searchable source, even when an ingestion connector also exists.
+    expected = (
+        [] if source_api.source == DocumentSource.CRAFT_FILE else ["ingestion_api"]
+    )
+    default = await source_api.client.get("/manage/indexed-sources")
+    inclusive = await source_api.client.get(
+        "/manage/indexed-sources", params={"include_internal": "true"}
+    )
+
+    assert default.json() == {"sources": []}
+    assert inclusive.json() == {"sources": expected}
+    assert json.loads(await resource_module.indexed_sources_resource()) == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source_api", [DocumentSource.CRAFT_FILE], indirect=True)
+@pytest.mark.parametrize("explicit_filter", [False, True])
+async def test_craft_only_has_no_searchable_sources(
+    source_api: _SourceAPI, explicit_filter: bool
+) -> None:
+    result = await search_module.search_indexed_documents(
+        query="raw blob", source_types=["craft_file"] if explicit_filter else None
+    )
+
+    assert "No document sources are indexed" in result["error"]
+    assert source_api.requests == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "source_api",
+    [(DocumentSource.INGESTION_API, DocumentSource.CRAFT_FILE)],
+    indirect=True,
+)
+async def test_craft_filter_is_rejected_with_searchable_sources(
+    source_api: _SourceAPI,
+) -> None:
+    result = await search_module.search_indexed_documents(
+        query="raw blob", source_types=["craft_file"]
+    )
+
+    assert "craft_file" in result["error"]
+    assert source_api.requests == []
 
 
 @pytest.mark.asyncio
