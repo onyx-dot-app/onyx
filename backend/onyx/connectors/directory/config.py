@@ -12,10 +12,15 @@ class DirectoryConnectorConfig(ConnectorConfig):
 
     root_directory: Annotated[
         str,
-        FieldPolicy(FieldClass.SCOPE, scope=ScopeInclude(empty_means_all=False)),
+        FieldPolicy(
+            FieldClass.SCOPE,
+            scope=ScopeInclude(empty_means_all=False, split_on_commas=False),
+        ),
     ]
-    # Internal source identity; used to build stable document ids, not a UI field.
-    source_id: Annotated[str, FieldPolicy(FieldClass.COSMETIC)]
+    # Internal source identity; used to build stable document ids, not a UI
+    # field. When unset (configs created or edited through the UI form), the
+    # connector derives a stable identity from the resolved root directory.
+    source_id: Annotated[str | None, FieldPolicy(FieldClass.IDENTITY)] = None
     recursive: Annotated[bool, _BEHAVIOR] = True
     file_extensions: Annotated[list[str] | None, _BEHAVIOR] = None
     include_patterns: Annotated[list[str] | None, _BEHAVIOR] = None

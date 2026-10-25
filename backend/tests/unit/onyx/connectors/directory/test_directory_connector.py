@@ -6,6 +6,7 @@ re-resolution of failed documents.
 """
 
 import time
+import unicodedata
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any
@@ -330,7 +331,9 @@ def test_zero_max_file_size_ignores_small_limits(source_root: Path) -> None:
     unlimited = _make_connector(source_root, batch_size=10, max_file_size_mb=0)
     results = _run_to_completion(unlimited, start=0, end=time.time() + 10)
     assert len(_documents(results)) == 1
-    assert not [r for r in results if isinstance(r, (ConnectorFailure, DocumentFailure))]
+    assert not [
+        r for r in results if isinstance(r, (ConnectorFailure, DocumentFailure))
+    ]
 
 
 def test_negative_max_file_size_rejected(source_root: Path) -> None:
@@ -345,9 +348,7 @@ def test_zero_max_directories_is_unlimited(source_root: Path) -> None:
         directory.mkdir()
         (directory / "note.txt").write_text(f"content {index}")
 
-    connector = _make_connector(
-        source_root, batch_size=10, max_directories_per_batch=0
-    )
+    connector = _make_connector(source_root, batch_size=10, max_directories_per_batch=0)
     connector.validate_connector_settings()
     results = _run_to_completion(connector, start=0, end=time.time() + 10)
 
@@ -358,3 +359,95 @@ def test_zero_max_directories_is_unlimited(source_root: Path) -> None:
 def test_negative_max_directories_rejected(source_root: Path) -> None:
     with pytest.raises(ConnectorValidationError):
         _make_connector(source_root, max_directories_per_batch=-1)
+
+
+def test_connector_without_source_id_uses_derived_identity(source_root: Path) -> None:
+    """The UI form does not send source_id; the connector must still work and
+    derive a stable identity from the resolved root."""
+    (source_root / "doc.txt").write_text("content")
+
+    connector = DirectoryConnector(str(source_root))
+    connector.validate_connector_settings()
+    results = _run_to_completion(connector, start=0, end=time.time() + 10)
+    documents = _documents(results)
+    assert len(documents) == 1
+    assert documents[0].id.startswith("directory:dir-")
+
+    second = DirectoryConnector(str(source_root))
+    second_results = _run_to_completion(second, start=0, end=time.time() + 10)
+    second_documents = _documents(second_results)
+    assert len(second_documents) == 1
+    assert second_documents[0].id == documents[0].id
+
+
+def test_explicit_source_id_still_wins_over_derivation(source_root: Path) -> None:
+    (source_root / "doc.txt").write_text("content")
+
+    connector = _make_connector(source_root, source_id="geodata")
+    results = _run_to_completion(connector, start=0, end=time.time() + 10)
+    documents = _documents(results)
+    assert len(documents) == 1
+    assert documents[0].id.startswith("directory:geodata:")
+
+
+def test_connector_config_accepts_missing_source_id() -> None:
+    """DirectoryConnectorConfig must validate UI-created configs (no source_id)."""
+    from onyx.connectors.directory.config import DirectoryConnectorConfig
+
+    config = DirectoryConnectorConfig.model_validate(
+        {"root_directory": "/data/documents"}
+    )
+    assert config.source_id is None
+
+
+def test_posix_backslash_filename_is_indexed(source_root: Path) -> None:
+    """A literal backslash is a valid POSIX filename and must not silently
+    drop the file (old code rewrote it to a path separator)."""
+    name = "back\\slash.txt"
+    (source_root / name).write_text("content")
+
+    connector = _make_connector(source_root, batch_size=10)
+    results = _run_to_completion(connector, start=0, end=time.time() + 10)
+
+    documents = _documents(results)
+    assert len(documents) == 1
+    # The file must be indexed; its identity is the canonicalized form, the
+    # filesystem access uses the raw name (see _absolute_path).
+    assert documents[0].metadata["relative_path"] == "back/slash.txt"
+
+
+def test_nfd_filename_is_indexed(source_root: Path) -> None:
+    """NFD-stored names (e.g. macOS-created files on an NFS share) must not
+    be silently dropped by NFC normalization before filesystem access."""
+    name = unicodedata.normalize("NFD", "café.txt")
+    (source_root / name).write_text("accented")
+
+    connector = _make_connector(source_root, batch_size=10)
+    results = _run_to_completion(connector, start=0, end=time.time() + 10)
+
+    documents = _documents(results)
+    assert len(documents) == 1
+    assert documents[0].metadata["relative_path"] == unicodedata.normalize(
+        "NFC", "café.txt"
+    )
+
+
+def test_reindex_resolves_raw_path_from_uri(source_root: Path) -> None:
+    """Failures record the raw path in the URI so reindex resolves the name
+    the filesystem stores (NFD case)."""
+    name = unicodedata.normalize("NFD", "café.txt")
+    (source_root / name).write_text("accented")
+
+    connector = _make_connector(source_root)
+    document_id = connector._document_id(name)
+    failure = ConnectorFailure(
+        failed_document=DocumentFailure(
+            document_id=document_id,
+            document_link=connector._directory_uri(name),
+        ),
+        failure_message="synthetic failure",
+    )
+
+    results = list(connector.reindex([failure]))
+    documents = _documents(results)
+    assert len(documents) == 1

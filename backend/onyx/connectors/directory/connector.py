@@ -72,7 +72,7 @@ class DirectoryConnector(
     def __init__(
         self,
         root_directory: str,
-        source_id: str,
+        source_id: str | None = None,
         recursive: bool = True,
         file_extensions: list[str] | None = None,
         include_patterns: list[str] | None = None,
@@ -86,7 +86,14 @@ class DirectoryConnector(
         link_base_url: str | None = None,
     ) -> None:
         self.root_directory = os.path.realpath(os.path.abspath(root_directory))
-        self.source_id = source_id.strip().lower()
+        # The UI form does not set a source_id, so configs created (or edited)
+        # there omit it. A stable identity is derived from the resolved root
+        # instead: the same root always yields the same document ids.
+        self.source_id = (
+            source_id.strip().lower()
+            if source_id and source_id.strip()
+            else self._derive_source_id(self.root_directory)
+        )
         self.recursive = bool(recursive)
         self.exclude_hidden = bool(exclude_hidden)
         self.batch_size = int(batch_size)
@@ -118,6 +125,11 @@ class DirectoryConnector(
                 f"Invalid directory path pattern: {error}"
             ) from error
         self._validate_configuration_values()
+
+    @staticmethod
+    def _derive_source_id(root_directory: str) -> str:
+        digest = hashlib.sha256(root_directory.encode("utf-8")).hexdigest()
+        return f"dir-{digest[:16]}"
 
     @staticmethod
     def _normalize_extension(extension: str) -> str:
@@ -230,11 +242,11 @@ class DirectoryConnector(
         return DirectoryCheckpoint.model_validate_json(checkpoint_json)
 
     @staticmethod
-    def _normalize_relative_path(relative_path: str) -> str:
+    def _validate_relative_path(relative_path: str) -> None:
+        """Rejects paths that would escape the root. Does not transform the
+        name: the raw form is what the filesystem stores (see _absolute_path)."""
         posix_path = PurePosixPath(relative_path.replace("\\", "/"))
         normalized = unicodedata.normalize("NFC", posix_path.as_posix())
-        if normalized in {"", "."}:
-            return ""
         if (
             normalized.startswith("../")
             or normalized == ".."
@@ -243,13 +255,22 @@ class DirectoryConnector(
             raise ConnectorValidationError(
                 "Directory path escaped the configured root."
             )
+
+    @staticmethod
+    def _normalize_relative_path(relative_path: str) -> str:
+        posix_path = PurePosixPath(relative_path.replace("\\", "/"))
+        normalized = unicodedata.normalize("NFC", posix_path.as_posix())
+        if normalized in {"", "."}:
+            return ""
+        DirectoryConnector._validate_relative_path(relative_path)
         return normalized
 
     def _absolute_path(self, relative_path: str) -> str:
-        normalized = self._normalize_relative_path(relative_path)
-        candidate = os.path.realpath(
-            os.path.join(self.root_directory, normalized.replace("/", os.sep))
-        )
+        # Resolve the raw relative path against the root. Normalizing first
+        # (backslash to slash, Unicode NFC) would silently miss names the
+        # filesystem stores in a different form.
+        self._validate_relative_path(relative_path)
+        candidate = os.path.realpath(os.path.join(self.root_directory, relative_path))
         if os.path.commonpath([candidate, self.root_directory]) != self.root_directory:
             raise ConnectorValidationError(
                 "Directory path escaped the configured root."
@@ -264,8 +285,10 @@ class DirectoryConnector(
         return f"directory:{self.source_id}:{digest}"
 
     def _directory_uri(self, relative_path: str) -> str:
-        normalized = self._normalize_relative_path(relative_path)
-        return f"directory://{self.source_id}/{quote(normalized, safe='/')}"
+        # The raw path rides in the URI so reindex resolves the name the
+        # filesystem actually stores (see _absolute_path).
+        self._validate_relative_path(relative_path)
+        return f"directory://{self.source_id}/{quote(relative_path, safe='/')}"
 
     def _source_link(self, relative_path: str) -> str | None:
         if self.link_base_url is None:
@@ -279,7 +302,9 @@ class DirectoryConnector(
         parsed = urlparse(failure.failed_document.document_link)
         if parsed.scheme != "directory" or parsed.netloc != self.source_id:
             return None
-        return self._normalize_relative_path(unquote(parsed.path.lstrip("/")))
+        relative_path = unquote(parsed.path.lstrip("/"))
+        self._validate_relative_path(relative_path)
+        return relative_path
 
     def _is_hidden_path(self, relative_path: str) -> bool:
         return any(part.startswith(".") for part in PurePosixPath(relative_path).parts)
@@ -302,9 +327,7 @@ class DirectoryConnector(
         subdirectories: list[str] = []
         with os.scandir(absolute_directory) as entries:
             for entry in entries:
-                relative_path = self._normalize_relative_path(
-                    str(PurePosixPath(relative_directory) / entry.name)
-                )
+                relative_path = str(PurePosixPath(relative_directory) / entry.name)
                 if entry.is_file(follow_symlinks=False):
                     if self._is_candidate_file(relative_path):
                         file_names.append(entry.name)
@@ -338,7 +361,7 @@ class DirectoryConnector(
         apply_time_window: bool,
     ) -> Document | ConnectorFailure | None:
         normalized = self._normalize_relative_path(relative_path)
-        absolute_path = self._absolute_path(normalized)
+        absolute_path = self._absolute_path(relative_path)
         document_id = self._document_id(normalized)
         source_link = self._source_link(normalized)
 
@@ -475,8 +498,8 @@ class DirectoryConnector(
                     file_name = current.file_names[current.offset]
                     current.offset += 1
                     processed_files += 1
-                    relative_path = self._normalize_relative_path(
-                        str(PurePosixPath(current.relative_directory) / file_name)
+                    relative_path = str(
+                        PurePosixPath(current.relative_directory) / file_name
                     )
                     result = self._process_path(
                         relative_path, start=start, end=end, apply_time_window=True
@@ -531,9 +554,7 @@ class DirectoryConnector(
             file_names, subdirectories = self._scan_directory(relative_directory)
             pending_directories.extend(subdirectories)
             for file_name in file_names:
-                yield self._normalize_relative_path(
-                    str(PurePosixPath(relative_directory) / file_name)
-                )
+                yield str(PurePosixPath(relative_directory) / file_name)
 
     @override
     def retrieve_all_slim_docs(
