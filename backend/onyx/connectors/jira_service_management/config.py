@@ -1,5 +1,7 @@
 from typing import Annotated
 
+from pydantic import Field
+
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.connectors.connector_config import ConnectorConfig
 from onyx.connectors.field_policy import (
@@ -25,4 +27,7 @@ class JiraServiceManagementConnectorConfig(ConnectorConfig):
             scope=ScopeInclude(empty_means_all=True),
         ),
     ] = None
-    include_internal_comments: Annotated[bool, FieldPolicy(FieldClass.BEHAVIOR)] = True
+    include_internal_comments: Annotated[bool, FieldPolicy(FieldClass.BEHAVIOR)] = False
+    max_active_sla_requests: Annotated[int, FieldPolicy(FieldClass.COSMETIC)] = Field(
+        default=1000, ge=1, le=10000
+    )

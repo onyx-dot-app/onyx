@@ -242,6 +242,16 @@ user can use the credential (§4.7), validates
 business tier (`fetch_ee_implementation_or_noop("onyx.utils.tier", ...)`),
 then inserts the `ConnectorCredentialPair` row with `status=SCHEDULED`. The gate applies to both `SYNC` and `SYNC_RESTRICTED` (`AccessType.is_perm_synced`). The call also writes the manage-access groups and data-access groups.
 
+The shared credential form uses `web/src/lib/credentials/constants.ts` for
+fields and `utils.ts:createValidationSchema` for validation. JSM requires either
+a complete email/API-token pair or a nonblank bearer token. A partial pair is
+rejected even when a bearer token is present. The backend loader enforces the
+same combinations. Form errors identify the missing field. Remote validity and
+agent permissions are checked when the connector validates its settings.
+The JSM catalog description must also be registered in
+`web/src/lib/connectors/constants.ts:SOURCE_DESCRIPTION_KEYS` and all locale
+catalogs, or the catalog's typed lookup fails.
+
 ### 4.2 Encryption
 
 `Credential.credential_json` uses the `EncryptedJson` column type

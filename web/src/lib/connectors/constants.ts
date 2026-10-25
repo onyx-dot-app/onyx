@@ -145,6 +145,8 @@ export const SOURCE_DESCRIPTION_KEYS = {
   [ValidSources.Braintrust]: "sources.braintrust.description",
   [ValidSources.Lumapps]: "sources.lumapps.description",
   [ValidSources.YouTrack]: "sources.youtrack.description",
+  [ValidSources.JiraServiceManagement]:
+    "sources.jiraServiceManagement.description",
   [ValidSources.Canvas]: "sources.canvas.description",
   [ValidSources.CraftFile]: "sources.craftFile.description",
   [ValidSources.FederatedSlack]: "sources.federatedSlack.description",

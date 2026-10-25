@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator
 from datetime import datetime, timezone
 from typing import Any, ClassVar
@@ -9,6 +10,7 @@ import requests
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE, REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
@@ -24,6 +26,8 @@ from onyx.connectors.interfaces import (
     SecondsSinceUnixEpoch,
     SlimConnector,
 )
+from onyx.connectors.jira.source_operations import JiraApiError, JiraSourceOperations
+from onyx.connectors.jira.utils import rich_text
 from onyx.connectors.models import (
     BasicExpertInfo,
     ConnectorMissingCredentialError,
@@ -33,9 +37,6 @@ from onyx.connectors.models import (
     TextSection,
 )
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
-from onyx.utils.logger import setup_logger
-
-logger = setup_logger()
 
 _JSM_ID_PREFIX = "JSM_REQUEST_"
 _JSM_PAGE_LIMIT = 50
@@ -159,8 +160,9 @@ def _format_sla_metrics(slas: list[dict[str, Any]]) -> list[str]:
 class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector):
     """Connector for Atlassian Jira Service Management (JSM) REST API (`/rest/servicedeskapi`).
 
-    Indexes service desks, customer requests, request field values, SLA metrics,
-    and public/internal comments. Supports full load, incremental polling, and slim pruning.
+    Enumerates credential-visible project issues through Jira search. JSM supplies
+    public request comments; Jira fields supply issue updates and SLA cycles.
+    Agent access is required. Source issue-security restrictions still apply.
     """
 
     document_source_type: ClassVar[DocumentSource] = (
@@ -172,10 +174,20 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         batch_size: int = INDEX_BATCH_SIZE,
         service_desk_ids: str | list[str] | None = None,
         project_key: str | None = None,
-        include_internal_comments: bool = True,
+        include_internal_comments: bool = False,
+        max_active_sla_requests: int = 1000,
     ) -> None:
         self.batch_size = batch_size
+        if not isinstance(include_internal_comments, bool):
+            raise ConnectorValidationError(
+                "Internal-comment selection must be a boolean."
+            )
         self.include_internal_comments = include_internal_comments
+        if batch_size < 1 or not 1 <= max_active_sla_requests <= 10000:
+            raise ConnectorValidationError(
+                "Invalid JSM batch size or SLA refresh limit."
+            )
+        self.max_active_sla_requests = max_active_sla_requests
         self.project_key = (
             project_key.strip().upper()
             if isinstance(project_key, str) and project_key.strip()
@@ -199,6 +211,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         self.api_token: str | None = None
         self.bearer_token: str | None = None
         self._session = requests.Session()
+        self._jira: JiraSourceOperations | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         base_url = (
@@ -222,31 +235,68 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
 
         parsed_url = urlparse(normalized_url)
         is_local = parsed_url.hostname in ("localhost", "127.0.0.1")
-        if parsed_url.scheme != "https" and not is_local:
+        if (
+            not parsed_url.hostname
+            or parsed_url.username
+            or parsed_url.password
+            or parsed_url.query
+            or parsed_url.fragment
+            or parsed_url.scheme not in ({"https", "http"} if is_local else {"https"})
+        ):
             raise ConnectorValidationError(
-                f"Jira Service Management URL must use HTTPS: {normalized_url}"
+                "Jira Service Management requires an HTTPS site URL without embedded credentials."
             )
 
+        def text(value: Any) -> str | None:
+            if value is None or value == "":
+                return None
+            if not isinstance(value, str):
+                raise ConnectorValidationError("JSM credentials must contain strings.")
+            return value.strip() or None
+
+        user_email, api_token, bearer_token = (
+            text(user_email),
+            text(api_token),
+            text(bearer_token),
+        )
+        if bool(user_email) != bool(api_token):
+            raise ConnectorValidationError("Supply both the JSM email and API token.")
         if not bearer_token and not (user_email and api_token):
             raise ConnectorMissingCredentialError(
                 "Jira Service Management requires either (`jsm_user_email` + `jsm_api_token`) or `jsm_bearer_token`"
             )
 
         self.base_url = normalized_url
-        self.user_email = str(user_email).strip() if user_email else None
-        self.api_token = str(api_token).strip() if api_token else None
-        self.bearer_token = str(bearer_token).strip() if bearer_token else None
+        self.user_email = user_email
+        self.api_token = api_token
+        self.bearer_token = bearer_token
+        jira_credentials = {"jira_api_token": bearer_token or api_token}
+        if not bearer_token and user_email:
+            jira_credentials["jira_user_email"] = user_email
+        self._jira = JiraSourceOperations(
+            credentials_provider=OnyxStaticCredentialsProvider(
+                None, DocumentSource.JIRA.value, jira_credentials
+            ),
+            connector_specific_config={"jira_base_url": normalized_url},
+        )
         return None
 
     def _api_get(
-        self, path: str, params: dict[str, Any] | None = None
+        self,
+        path: str,
+        params: dict[str, Any] | None = None,
+        *,
+        jira_api: bool = False,
     ) -> dict[str, Any]:
         if not self.base_url or (
             not self.bearer_token and not (self.user_email and self.api_token)
         ):
             raise ConnectorMissingCredentialError("jira_service_management")
 
-        url = f"{self.base_url}/rest/servicedeskapi/{path.lstrip('/')}"
+        api = (
+            f"api/{'2' if self.bearer_token else '3'}" if jira_api else "servicedeskapi"
+        )
+        url = f"{self.base_url}/rest/{api}/{path.lstrip('/')}"
         headers: dict[str, str] = {
             "Accept": "application/json",
             "X-ExperimentalApi": "opt-in",
@@ -267,6 +317,8 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
                 allow_redirects=False,
             )
             response.raise_for_status()
+            if not 200 <= response.status_code < 300:
+                raise UnexpectedValidationError("Unexpected Jira redirect response.")
         except requests.exceptions.HTTPError as e:
             status = e.response.status_code if e.response is not None else None
             if status == 401:
@@ -288,13 +340,15 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
             raise UnexpectedValidationError(
                 f"Unexpected Jira Service Management HTTP error (status={status})."
             ) from e
-        except requests.exceptions.RequestException as e:
+        except requests.exceptions.RequestException:
             raise UnexpectedValidationError(
-                f"Jira Service Management request failed: {e}"
-            ) from e
+                "Jira Service Management request failed."
+            ) from None
 
         try:
             data = response.json()
+            if not isinstance(data, (dict, list)):
+                raise UnexpectedValidationError("Invalid Jira response structure.")
             return data if isinstance(data, dict) else {"values": data}
         except ValueError as e:
             raise UnexpectedValidationError(
@@ -305,6 +359,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         self, path: str, extra_params: dict[str, Any] | None = None
     ) -> Iterator[dict[str, Any]]:
         start_index = 0
+        seen: set[str] = set()
         while True:
             params: dict[str, Any] = {"start": start_index, "limit": _JSM_PAGE_LIMIT}
             if extra_params:
@@ -312,19 +367,34 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
 
             payload = self._api_get(path, params=params)
             values = payload.get("values")
-            if not isinstance(values, list) or not values:
-                break
+            if not isinstance(values, list) or any(
+                not isinstance(v, dict) for v in values
+            ):
+                raise UnexpectedValidationError(
+                    "Incomplete JSM page: missing or invalid values."
+                )
+            if not values and payload.get("isLastPage") is not True:
+                raise UnexpectedValidationError(
+                    "Empty JSM page without a completion marker."
+                )
 
             for item in values:
-                if isinstance(item, dict):
-                    yield item
+                item_id = str(item.get("id", ""))
+                if not item_id or item_id in seen:
+                    raise UnexpectedValidationError(
+                        "JSM page has missing or repeated item IDs."
+                    )
+                seen.add(item_id)
+                yield item
 
             is_last_page = payload.get("isLastPage")
             if isinstance(is_last_page, bool):
                 if is_last_page:
                     break
-            elif len(values) < _JSM_PAGE_LIMIT:
-                break
+            else:
+                raise UnexpectedValidationError(
+                    "JSM page has no valid completion marker."
+                )
             start_index += len(values)
 
     def _list_service_desks(self) -> list[dict[str, Any]]:
@@ -343,7 +413,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
             filtered.append(desk)
         return filtered
 
-    def validate_connector_settings(self) -> None:
+    def _validated_desks(self) -> list[dict[str, Any]]:
         if not self.project_key and not self.service_desk_ids:
             raise ConnectorValidationError(
                 "A specific Jira Service Management project key or service desk ID must be configured."
@@ -355,58 +425,48 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
             raise UnexpectedValidationError(
                 f"Jira Service Management: no matching service desks visible for scope '{target}'."
             )
-        try:
-            self._api_get(
-                "request",
-                params={"limit": 1, "requestOwnership": "ALL_REQUESTS"},
-            )
-        except InsufficientPermissionsError as e:
+        visible_ids = {str(d.get("id")) for d in desks}
+        if self.service_desk_ids and not set(self.service_desk_ids) <= visible_ids:
             raise InsufficientPermissionsError(
-                "Jira Service Management: credential lacks agent permissions to access service requests."
-            ) from e
+                "Not all configured service desks are visible."
+            )
+        for desk in desks:
+            if not re.fullmatch(r"[A-Z][A-Z0-9_]*", str(desk.get("projectKey", ""))):
+                raise UnexpectedValidationError(
+                    "Service desk has no valid Jira project key."
+                )
+            desk_id = str(desk.get("id", ""))
+            if not desk_id.isdigit():
+                raise UnexpectedValidationError("Service desk has no valid ID.")
+            # Unlike the customer request endpoint, queues require a desk agent.
+            probe = self._api_get(
+                f"servicedesk/{desk_id}/queue", {"limit": 1, "includeCount": False}
+            )
+            if not isinstance(probe.get("values"), list):
+                raise UnexpectedValidationError(
+                    "Invalid agent permission probe response."
+                )
+        return desks
+
+    def validate_connector_settings(self) -> None:
+        self._validated_desks()
 
     def _fetch_request_comments(self, issue_key: str) -> list[dict[str, Any]]:
-        try:
-            comments = list(self._paginate(f"request/{issue_key}/comment"))
-        except InsufficientPermissionsError as e:
-            logger.warning(
-                "Insufficient permissions to fetch comments for JSM request %s: %s",
-                issue_key,
-                e,
-            )
-            return []
-        except JSMResourceNotFoundError:
-            logger.debug(
-                "Comments endpoint not found for JSM request %s",
-                issue_key,
-            )
-            return []
-
-        if self.include_internal_comments:
-            return comments
-        return [c for c in comments if bool(c.get("public", True))]
-
-    def _fetch_request_slas(self, issue_key: str) -> list[dict[str, Any]]:
-        try:
-            return list(self._paginate(f"request/{issue_key}/sla"))
-        except InsufficientPermissionsError as e:
-            logger.debug(
-                "Insufficient permissions to fetch SLA metrics for JSM request %s: %s",
-                issue_key,
-                e,
-            )
-            return []
-        except JSMResourceNotFoundError:
-            logger.debug(
-                "SLA metrics endpoint not found for JSM request %s",
-                issue_key,
-            )
-            return []
+        comments = list(self._paginate(f"request/{issue_key}/comment"))
+        return [
+            c
+            for c in comments
+            if c.get("public") is True
+            or (self.include_internal_comments and c.get("public") is False)
+        ]
 
     def _request_updated_at(
         self, req: dict[str, Any], comments: list[dict[str, Any]]
     ) -> datetime | None:
         candidates: list[datetime] = []
+        issue_updated = _parse_jsm_datetime(req.get("updatedDate"))
+        if issue_updated:
+            return issue_updated
         created_dt = _parse_jsm_datetime(req.get("createdDate"))
         if created_dt:
             candidates.append(created_dt)
@@ -418,6 +478,10 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
                 candidates.append(status_dt)
 
         for comment in comments:
+            if comment.get("public") is not True and not (
+                self.include_internal_comments and comment.get("public") is False
+            ):
+                continue
             c_dt = _parse_jsm_datetime(comment.get("created"))
             if c_dt:
                 candidates.append(c_dt)
@@ -436,7 +500,8 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         project_key = str(desk.get("projectKey", ""))
         project_name = str(desk.get("projectName") or project_key or "Service Desk")
 
-        links = req.get("_links") if isinstance(req.get("_links"), dict) else {}
+        raw_links = req.get("_links")
+        links = raw_links if isinstance(raw_links, dict) else {}
         web_link = (
             links.get("web")
             or links.get("agent")
@@ -449,11 +514,8 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
             default_summary=issue_key,
         )
 
-        current_status = (
-            req.get("currentStatus")
-            if isinstance(req.get("currentStatus"), dict)
-            else {}
-        )
+        raw_status = req.get("currentStatus")
+        current_status = raw_status if isinstance(raw_status, dict) else {}
         status_name = str(current_status.get("status") or "Unknown")
         status_category = str(current_status.get("statusCategory") or "")
 
@@ -479,6 +541,10 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
 
         secondary_owners: list[BasicExpertInfo] = []
         for comment in comments:
+            if comment.get("public") is not True and not (
+                self.include_internal_comments and comment.get("public") is False
+            ):
+                continue
             body = str(comment.get("body") or "").strip()
             if not body:
                 continue
@@ -492,7 +558,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
                 if author
                 else "User"
             )
-            visibility = "Public" if comment.get("public", True) else "Internal"
+            visibility = "Public" if comment.get("public") is True else "Internal"
             sections.append(
                 TextSection(
                     link=web_link,
@@ -535,45 +601,322 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
             secondary_owners=secondary_owners or None,
         )
 
+    def _iter_issues(
+        self, jql: str, *, fields: str | None = None
+    ) -> Iterator[dict[str, Any]]:
+        """Use the existing Jira gateway for Cloud cursor/DC offset search.
+
+        Cloud bulk fetch can omit inaccessible IDs. Fail rather than let an
+        incomplete listing authorize pruning. Short DC pages are not EOF.
+        """
+        if self._jira is None:
+            raise ConnectorMissingCredentialError("jira_service_management")
+        token: str | None = None
+        tokens: set[str] = set()
+        seen: set[str] = set()
+        offset = 0
+        try:
+            while True:
+                if self.bearer_token:
+                    issues = self._jira.search_issues(
+                        jql=jql,
+                        start_at=offset,
+                        max_results=_JSM_PAGE_LIMIT,
+                        fields=fields,
+                        require_complete_page=True,
+                    )
+                    if not issues:
+                        return
+                    offset += len(issues)
+                else:
+                    page = self._jira.search_issue_ids(
+                        jql=jql,
+                        next_page_token=token,
+                        max_results=_JSM_PAGE_LIMIT,
+                        require_completion_marker=True,
+                    )
+                    issues = (
+                        self._jira.bulk_fetch_issues(
+                            issue_ids=page.issue_ids, fields=fields
+                        )
+                        if page.issue_ids
+                        else []
+                    )
+                    if {str(issue.get("id")) for issue in issues} != set(
+                        page.issue_ids
+                    ) or len(issues) != len(page.issue_ids):
+                        raise UnexpectedValidationError(
+                            "Jira bulk fetch omitted or duplicated searched issues."
+                        )
+                    token = page.next_page_token
+                    if token and token in tokens:
+                        raise UnexpectedValidationError(
+                            "Jira search repeated its cursor."
+                        )
+                    if token:
+                        tokens.add(token)
+                for issue in issues:
+                    key = issue.get("key")
+                    if (
+                        not isinstance(key, str)
+                        or key in seen
+                        or not isinstance(issue.get("fields"), dict)
+                    ):
+                        raise UnexpectedValidationError(
+                            "Jira returned an invalid or repeated issue."
+                        )
+                    seen.add(key)
+                    yield issue
+                if not self.bearer_token and token is None:
+                    return
+        except JiraApiError as exc:
+            if exc.status_code == 400:
+                raise ConnectorValidationError(
+                    "Jira rejected the scoped issue/SLA query; check project fields and permissions."
+                ) from None
+            if exc.status_code == 401:
+                raise CredentialExpiredError(
+                    "Jira search credentials expired."
+                ) from None
+            if exc.status_code == 403:
+                raise InsufficientPermissionsError(
+                    "Jira project search was forbidden."
+                ) from None
+            if exc.status_code == 429:
+                raise RateLimitedValidationError(
+                    "Jira search rate limit exceeded."
+                ) from None
+            raise UnexpectedValidationError(
+                "Jira project search failed; retry the indexing run."
+            ) from None
+
+    def _field_metadata(self) -> tuple[dict[str, str], set[str], set[str]]:
+        fields = self._api_get("field", jira_api=True).get("values")
+        if not isinstance(fields, list):
+            raise UnexpectedValidationError("Jira did not return field metadata.")
+        names: dict[str, str] = {}
+        request_types: set[str] = set()
+        sla_fields: set[str] = set()
+        for field in fields:
+            if not isinstance(field, dict) or not isinstance(field.get("id"), str):
+                raise UnexpectedValidationError(
+                    "Jira returned malformed field metadata."
+                )
+            key = field["id"]
+            names[key] = str(field.get("name") or key)
+            schema = field.get("schema") or {}
+            if not isinstance(schema, dict):
+                raise UnexpectedValidationError("Invalid Jira field schema.")
+            if schema.get("custom") == "com.atlassian.servicedesk:vp-origin":
+                request_types.add(key)
+            if schema.get("custom") == "com.atlassian.servicedesk:sd-sla-field":
+                if not re.fullmatch(r"customfield_\d+", key):
+                    raise UnexpectedValidationError("Invalid Jira SLA field ID.")
+                sla_fields.add(key)
+        if not request_types:
+            raise UnexpectedValidationError(
+                "JSM request-type metadata is unavailable to this credential."
+            )
+        return names, request_types, sla_fields
+
+    def _check_issue_scope(self, issue: dict[str, Any], desk: dict[str, Any]) -> None:
+        key = issue["key"]
+        project = str(desk["projectKey"])
+        if not re.fullmatch(rf"{re.escape(project)}-\d+", key):
+            raise UnexpectedValidationError(
+                "Jira returned an issue outside the selected project."
+            )
+        fields = issue["fields"]
+        if (
+            not isinstance(fields.get("project"), dict)
+            or fields["project"].get("key") != project
+        ):
+            raise UnexpectedValidationError(
+                "Jira issue project metadata does not match the selected scope."
+            )
+
+    def _issue_content(
+        self,
+        issue: dict[str, Any],
+        names: dict[str, str],
+        request_types: set[str],
+        sla_fields: set[str],
+    ) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]]]:
+        fields = issue["fields"]
+        if _parse_jsm_datetime(fields.get("updated")) is None:
+            raise UnexpectedValidationError("Jira issue has no valid update cursor.")
+        request_fields = [
+            {
+                "fieldId": key,
+                "label": names.get(key, key),
+                "value": rich_text(value) if key == "description" else value,
+            }
+            for key, value in fields.items()
+            if key in {"summary", "description"}
+            or (
+                key.startswith("customfield_") and key not in request_types | sla_fields
+            )
+        ]
+        status = fields.get("status") or {}
+        req = {
+            "issueKey": issue["key"],
+            "issueId": issue.get("id"),
+            "createdDate": fields.get("created"),
+            "updatedDate": fields["updated"],
+            "reporter": fields.get("reporter"),
+            "requestFieldValues": request_fields,
+            "currentStatus": {
+                "status": status.get("name"),
+                "statusCategory": (status.get("statusCategory") or {}).get("name"),
+            },
+            "_links": {"web": f"{self.base_url}/browse/{issue['key']}"},
+        }
+        if not any(key in fields for key in request_types):
+            raise UnexpectedValidationError(
+                "Jira omitted the issue request-type field."
+            )
+        is_request = any(fields.get(key) is not None for key in request_types)
+        for key in request_types:
+            value = fields.get(key)
+            if isinstance(value, dict) and isinstance(value.get("requestType"), dict):
+                req["requestTypeId"] = value["requestType"].get("id")
+        comments = self._fetch_request_comments(issue["key"]) if is_request else []
+        if not is_request and self.include_internal_comments:
+            comments = self._fetch_issue_comments(issue["key"])
+        slas = [
+            dict(fields[key], name=names[key])
+            for key in sorted(sla_fields)
+            if isinstance(fields.get(key), dict)
+        ]
+        return req, comments, slas
+
+    def _fetch_issue_comments(self, key: str) -> list[dict[str, Any]]:
+        """Non-customer Jira issue comments are internal; only fetch on explicit opt-in."""
+        comments: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        while True:
+            page = self._api_get(
+                f"issue/{key}/comment",
+                {"startAt": len(comments), "maxResults": _JSM_PAGE_LIMIT},
+                jira_api=True,
+            )
+            rows, total = page.get("comments"), page.get("total")
+            if (
+                not isinstance(rows, list)
+                or not isinstance(total, int)
+                or any(not isinstance(c, dict) for c in rows)
+            ):
+                raise UnexpectedValidationError("Invalid Jira comment page.")
+            if not rows and len(comments) < total:
+                raise UnexpectedValidationError(
+                    "Jira comment listing ended prematurely."
+                )
+            for comment in rows:
+                comment_id = str(comment.get("id", ""))
+                if not comment_id or comment_id in seen:
+                    raise UnexpectedValidationError(
+                        "Jira comment page has missing or repeated IDs."
+                    )
+                seen.add(comment_id)
+            comments.extend(
+                dict(c, body=rich_text(c.get("body")), public=False) for c in rows
+            )
+            if len(comments) >= total:
+                return comments
+
     def _process_requests(
         self, start: datetime | None = None, end: datetime | None = None
     ) -> GenerateDocumentsOutput:
+        desks = self._validated_desks()
+        names, request_types, sla_fields = self._field_metadata()
+        active: dict[str, tuple[dict[str, Any], dict[str, Any]]] = {}
+        # A running/paused SLA can breach without Jira's updated value changing.
+        # Fetch that set before yielding documents; never silently truncate it.
+        if start and end and start.timestamp() > 0 and sla_fields:
+            sla_clauses = " OR ".join(
+                f"cf[{key.removeprefix('customfield_')}] = {function}()"
+                for key in sorted(sla_fields)
+                for function in ("running", "paused")
+            )
+            for desk in desks:
+                jql = f'project = "{desk["projectKey"]}" AND updated <= {int(end.timestamp() * 1000)} AND ({sla_clauses}) ORDER BY key ASC'
+                for issue in self._iter_issues(jql):
+                    self._check_issue_scope(issue, desk)
+                    updated = _parse_jsm_datetime(issue["fields"].get("updated"))
+                    if updated is None:
+                        raise UnexpectedValidationError(
+                            "Jira issue has no valid update cursor."
+                        )
+                    if updated > end:
+                        continue
+                    active[issue["key"]] = (issue, desk)
+                    if len(active) > self.max_active_sla_requests:
+                        raise ConnectorValidationError(
+                            "Active SLA refresh limit exceeded; narrow the project scope or increase max_active_sla_requests."
+                        )
         doc_batch: list[Document | HierarchyNode] = []
-
-        for desk in self._list_service_desks():
-            desk_id = desk.get("id")
-            proj_key = str(desk.get("projectKey", "")).strip().upper()
-            extra_params: dict[str, Any] = {
-                "requestOwnership": "ALL_REQUESTS",
-            }
-            if desk_id is not None:
-                extra_params["serviceDeskId"] = desk_id
-
-            for req in self._paginate("request", extra_params=extra_params):
-                issue_key = str(req.get("issueKey") or req.get("issueId") or "")
-                if not issue_key:
+        seen: set[str] = set()
+        for desk in desks:
+            jql = f'project = "{desk["projectKey"]}"'
+            if start and end:
+                jql += f" AND updated >= {int(start.timestamp() * 1000)} AND updated <= {int(end.timestamp() * 1000)}"
+            for issue in self._iter_issues(jql + " ORDER BY key ASC"):
+                self._check_issue_scope(issue, desk)
+                if start and end:
+                    updated = _parse_jsm_datetime(issue["fields"].get("updated"))
+                    if updated is None:
+                        raise UnexpectedValidationError(
+                            "Jira issue has no valid update cursor."
+                        )
+                    if updated < start or updated > end:
+                        continue
+                key = issue["key"]
+                if key in seen:
                     continue
-                if proj_key and not issue_key.upper().startswith(f"{proj_key}-"):
-                    continue
-
-                comments = self._fetch_request_comments(issue_key)
-                updated_at = self._request_updated_at(req, comments)
-
-                if start and updated_at and updated_at < start:
-                    continue
-                if end and updated_at and updated_at > end:
-                    continue
-
-                slas = self._fetch_request_slas(issue_key)
-                doc = self._convert_request_to_document(req, desk, comments, slas)
-                doc_batch.append(doc)
-
+                seen.add(key)
+                # Active refresh uses the observed content once even if also updated.
+                refreshed = key in active
+                if refreshed:
+                    active.pop(key)
+                doc_batch.append(
+                    self._issue_document(
+                        issue, desk, names, request_types, sla_fields, end, refreshed
+                    )
+                )
                 if len(doc_batch) >= self.batch_size:
                     yield doc_batch
                     doc_batch = []
-
+        for issue, desk in active.values():
+            doc_batch.append(
+                self._issue_document(
+                    issue, desk, names, request_types, sla_fields, end, True
+                )
+            )
+            if len(doc_batch) >= self.batch_size:
+                yield doc_batch
+                doc_batch = []
         if doc_batch:
             yield doc_batch
+
+    def _issue_document(
+        self,
+        issue: dict[str, Any],
+        desk: dict[str, Any],
+        names: dict[str, str],
+        request_types: set[str],
+        sla_fields: set[str],
+        observed_at: datetime | None,
+        refreshed: bool = False,
+    ) -> Document:
+        req, comments, slas = self._issue_content(
+            issue, names, request_types, sla_fields
+        )
+        doc = self._convert_request_to_document(req, desk, comments, slas)
+        if refreshed or any(isinstance(s.get("ongoingCycle"), dict) for s in slas):
+            # A clock-only change must pass Onyx's timestamp dedup gate.
+            doc.metadata["jira_updated_at"] = str(req["updatedDate"])
+            doc.doc_updated_at = observed_at or datetime.now(timezone.utc)
+        return doc
 
     def load_from_state(self) -> GenerateDocumentsOutput:
         return self._process_requests()
@@ -583,6 +926,8 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
     ) -> GenerateDocumentsOutput:
         start_dt = datetime.fromtimestamp(start, tz=timezone.utc)
         end_dt = datetime.fromtimestamp(end, tz=timezone.utc)
+        if end_dt < start_dt:
+            raise ConnectorValidationError("JSM polling end precedes start.")
         yield from self._process_requests(start=start_dt, end=end_dt)
 
     def retrieve_all_slim_docs(
@@ -593,27 +938,20 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
     ) -> GenerateSlimDocumentOutput:
         slim_batch: list[SlimDocument | HierarchyNode] = []
 
-        for desk in self._list_service_desks():
+        for desk in self._validated_desks():
             if callback and callback.should_stop():
-                return
-            desk_id = desk.get("id")
-            proj_key = str(desk.get("projectKey", "")).strip().upper()
-            extra_params: dict[str, Any] = {
-                "requestOwnership": "ALL_REQUESTS",
-            }
-            if desk_id is not None:
-                extra_params["serviceDeskId"] = desk_id
-
-            for req in self._paginate("request", extra_params=extra_params):
+                raise RuntimeError(
+                    "JSM slim enumeration was interrupted; pruning is unsafe."
+                )
+            jql = f'project = "{desk["projectKey"]}" ORDER BY key ASC'
+            for issue in self._iter_issues(jql, fields="created,project"):
                 if callback and callback.should_stop():
-                    return
-                issue_key = str(req.get("issueKey") or req.get("issueId") or "")
-                if not issue_key:
-                    continue
-                if proj_key and not issue_key.upper().startswith(f"{proj_key}-"):
-                    continue
-
-                created_at = _parse_jsm_datetime(req.get("createdDate"))
+                    raise RuntimeError(
+                        "JSM slim enumeration was interrupted; pruning is unsafe."
+                    )
+                self._check_issue_scope(issue, desk)
+                issue_key = issue["key"]
+                created_at = _parse_jsm_datetime(issue["fields"].get("created"))
                 slim_batch.append(
                     SlimDocument(
                         id=f"{_JSM_ID_PREFIX}{issue_key}",

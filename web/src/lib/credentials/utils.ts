@@ -270,7 +270,34 @@ export function createValidationSchema(
       fieldMethods && ((method) => fieldMethods.includes(method))
     );
   }
-  return Yup.object().shape(schemaFields);
+  const schema = Yup.object().shape(schemaFields);
+  if (!("jsm_base_url" in spec.fields)) return schema;
+  return schema.test(
+    "jsm-authentication",
+    function (values: CredentialFieldValues) {
+      const hasValue = (key: string) => {
+        const value = values[key];
+        return typeof value === "string" && value.trim() !== "";
+      };
+      const hasEmail = hasValue("jsm_user_email");
+      const hasApiToken = hasValue("jsm_api_token");
+      const hasBearer = hasValue("jsm_bearer_token");
+      const missing =
+        hasEmail !== hasApiToken
+          ? hasEmail
+            ? "jsm_api_token"
+            : "jsm_user_email"
+          : !hasBearer && !hasEmail
+            ? "jsm_bearer_token"
+            : undefined;
+      return missing
+        ? this.createError({
+            path: missing,
+            message: messages.required(messages.fieldTitle(missing)),
+          })
+        : true;
+    }
+  );
 }
 
 export function createEditingValidationSchema(

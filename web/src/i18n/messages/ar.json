@@ -1513,7 +1513,7 @@
           "description": "البحث في Slack عند الاستعلام"
         },
         "jiraServiceManagement": {
-          "description": "Atlassian service desk & customer requests"
+          "description": "تذاكر Jira Service Management"
         }
       }
     },
@@ -4866,20 +4866,24 @@
           }
         },
         "jira_service_management": {
-          "description": "Configure Jira Service Management connector",
+          "description": "فهرسة تذاكر مشروع Jira Service Management التي يمكن لحساب الوكيل الاطلاع عليها.",
           "fields": {
             "project_key": {
-              "label": "Project Key",
-              "description": "The key of a specific Jira Service Management project to index (e.g. 'ITSM').",
+              "label": "مفتاح المشروع",
+              "description": "مفتاح مشروع JSM (مثل ITSM). يجب أن يكون الحساب حساب وكيل لديه صلاحية الوصول إلى تذاكر المشروع.",
               "placeholder": "ITSM"
             },
             "service_desk_ids": {
-              "label": "Service Desk IDs",
-              "description": "Optional list of numeric service desk IDs to narrow indexing scope."
+              "label": "معرّفات مكاتب الخدمة",
+              "description": "معرّفات رقمية اختيارية لمكاتب الخدمة. يجب أن يتمكن الوكيل من الوصول إلى كل مكتب محدد."
             },
             "include_internal_comments": {
-              "label": "Include Internal Comments",
-              "description": "Index internal agent comments. By default, only public customer-facing comments are indexed."
+              "label": "تضمين التعليقات الداخلية",
+              "description": "تضمين تعليقات الوكلاء الداخلية لكل من يمكنه قراءة هذا الاتصال. هذا الخيار معطّل افتراضيًا."
+            },
+            "max_active_sla_requests": {
+              "label": "حد تحديث اتفاقيات مستوى الخدمة النشطة",
+              "description": "أقصى عدد من التذاكر ذات اتفاقيات مستوى الخدمة النشطة التي تُحدَّث في كل دورة استقصاء (1–10000). يؤدي تجاوز الحد إلى فشل الدورة بدلًا من تخطي التذاكر."
             }
           }
         }
@@ -5265,7 +5269,7 @@
         "testrailBaseUrl": "مثل https://yourcompany.testrail.io.",
         "googleServiceAccountKey": "ارفع أو الصق مفتاح `.json` لحساب خدمة Google مع التفويض على مستوى النطاق.",
         "confluencePersonalAccessToken": "الصق [رمز الوصول الشخصي](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html) من حساب مسؤول Confluence.",
-        "jsmBaseUrl": "The URL of your Jira Service Management instance (e.g., https://your-domain.atlassian.net)."
+        "jsmBaseUrl": "عنوان HTTPS لمثيل Jira Service Management (مثل https://your-domain.atlassian.net). يلزم توفر صلاحيات وكيل."
       },
       "methods": {
         "labels": {

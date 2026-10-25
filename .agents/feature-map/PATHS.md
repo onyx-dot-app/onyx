@@ -194,6 +194,8 @@ so verify the callers rather than a single component.
 | Path | Component(s) |
 |---|---|
 | `web/src/app/app/` | chat-frontend |
+| `web/src/lib/credentials/` | cc-pairs-and-credentials |
+| `web/src/lib/connectors/` | connectors |
 | `web/src/lib/tools/components/ToolsPopover.tsx` | mcp-and-custom-tools, chat-frontend |
 | `web/src/sections/input/AppInputBar.tsx` | chat-frontend |
 | `web/src/app/app/plugins/` | mcp-and-custom-tools, chat-frontend |

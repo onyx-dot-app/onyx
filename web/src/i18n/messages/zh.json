@@ -1513,7 +1513,7 @@
           "description": "查询时搜索 Slack"
         },
         "jiraServiceManagement": {
-          "description": "Atlassian service desk & customer requests"
+          "description": "Jira Service Management 工单"
         }
       }
     },
@@ -4866,20 +4866,24 @@
           }
         },
         "jira_service_management": {
-          "description": "Configure Jira Service Management connector",
+          "description": "索引代理账户有权查看的 Jira Service Management 项目工单。",
           "fields": {
             "project_key": {
-              "label": "Project Key",
-              "description": "The key of a specific Jira Service Management project to index (e.g. 'ITSM').",
+              "label": "项目键",
+              "description": "JSM 项目键（例如 ITSM）。该账户必须是有权访问项目工单的代理账户。",
               "placeholder": "ITSM"
             },
             "service_desk_ids": {
-              "label": "Service Desk IDs",
-              "description": "Optional list of numeric service desk IDs to narrow indexing scope."
+              "label": "服务台 ID",
+              "description": "可选的数字服务台 ID。代理必须有权访问所有选定的服务台。"
             },
             "include_internal_comments": {
-              "label": "Include Internal Comments",
-              "description": "Index internal agent comments. By default, only public customer-facing comments are indexed."
+              "label": "包含内部评论",
+              "description": "向所有可读取此连接的用户提供代理的内部评论。默认禁用。"
+            },
+            "max_active_sla_requests": {
+              "label": "活跃 SLA 刷新上限",
+              "description": "每次轮询刷新的活跃 SLA 工单数量上限（1–10000）。超出上限时将使本次运行失败，而不是跳过工单。"
             }
           }
         }
@@ -5265,7 +5269,7 @@
         "testrailBaseUrl": "例如 https://yourcompany.testrail.io。",
         "googleServiceAccountKey": "上传或粘贴已启用全网域委派的 Google 服务账号的 `.json` 密钥。",
         "confluencePersonalAccessToken": "粘贴您的 Confluence 管理员账户的[个人访问令牌](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html)。",
-        "jsmBaseUrl": "The URL of your Jira Service Management instance (e.g., https://your-domain.atlassian.net)."
+        "jsmBaseUrl": "您的 Jira Service Management 实例的 HTTPS URL（例如 https://your-domain.atlassian.net）。需要代理访问权限。"
       },
       "methods": {
         "labels": {

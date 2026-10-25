@@ -501,7 +501,18 @@ export const connectorConfigs: Record<
           "connectors.jira_service_management.fields.include_internal_comments.description",
       },
     ],
-    advanced_values: [],
+    advanced_values: [
+      {
+        type: "number",
+        label:
+          "connectors.jira_service_management.fields.max_active_sla_requests.label",
+        name: "max_active_sla_requests",
+        optional: true,
+        default: 1000,
+        description:
+          "connectors.jira_service_management.fields.max_active_sla_requests.description",
+      },
+    ],
   },
   github: {
     description: "connectors.github.description",

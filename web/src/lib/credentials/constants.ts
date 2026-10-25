@@ -247,7 +247,10 @@ export const CREDENTIAL_SPECS = {
   jira_service_management: defineCredentialSpec({
     brandName: "Jira Service Management",
     fields: {
-      jsm_base_url: url("baseUrl", { realm: true }),
+      jsm_base_url: url("baseUrl", {
+        realm: true,
+        hint: { key: "jsmBaseUrl" },
+      }),
       jsm_user_email: email("accountEmail", {
         optional: true,
         hint: { key: "jiraUserEmail" },

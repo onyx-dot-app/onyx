@@ -1513,7 +1513,7 @@
           "description": "Pesquisar no Slack na consulta"
         },
         "jiraServiceManagement": {
-          "description": "Atlassian service desk & customer requests"
+          "description": "Chamados do Jira Service Management"
         }
       }
     },
@@ -4866,20 +4866,24 @@
           }
         },
         "jira_service_management": {
-          "description": "Configure Jira Service Management connector",
+          "description": "Indexar os chamados do Jira Service Management visíveis para uma conta de agente.",
           "fields": {
             "project_key": {
-              "label": "Project Key",
-              "description": "The key of a specific Jira Service Management project to index (e.g. 'ITSM').",
+              "label": "Chave do projeto",
+              "description": "A chave do projeto JSM (por exemplo, ITSM). A conta deve ser de um agente com acesso aos chamados do projeto.",
               "placeholder": "ITSM"
             },
             "service_desk_ids": {
-              "label": "Service Desk IDs",
-              "description": "Optional list of numeric service desk IDs to narrow indexing scope."
+              "label": "IDs das centrais de serviço",
+              "description": "IDs numéricos opcionais das centrais de serviço. O agente deve ter acesso a todas as centrais selecionadas."
             },
             "include_internal_comments": {
-              "label": "Include Internal Comments",
-              "description": "Index internal agent comments. By default, only public customer-facing comments are indexed."
+              "label": "Incluir comentários internos",
+              "description": "Incluir os comentários internos dos agentes para todos os leitores desta conexão. Desativado por padrão."
+            },
+            "max_active_sla_requests": {
+              "label": "Limite de atualização de SLAs ativos",
+              "description": "Número máximo de chamados com SLAs ativos atualizados por consulta (1–10000). Se o limite for excedido, a execução falha em vez de ignorar chamados."
             }
           }
         }
@@ -5265,7 +5269,7 @@
         "testrailBaseUrl": "Por exemplo, https://yourcompany.testrail.io.",
         "googleServiceAccountKey": "Envie ou cole a chave `.json` de uma conta de serviço do Google com delegação em todo o domínio.",
         "confluencePersonalAccessToken": "Cole o [token de acesso pessoal](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html) da sua conta de administrador do Confluence.",
-        "jsmBaseUrl": "The URL of your Jira Service Management instance (e.g., https://your-domain.atlassian.net)."
+        "jsmBaseUrl": "A URL HTTPS da sua instância do Jira Service Management (por exemplo, https://your-domain.atlassian.net). É necessário acesso de agente."
       },
       "methods": {
         "labels": {
