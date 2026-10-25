@@ -314,13 +314,15 @@ _INTERNAL_ONLY_SOURCES = {
 }
 
 
-def fetch_unique_document_sources(db_session: Session) -> list[DocumentSource]:
+def fetch_unique_document_sources(
+    db_session: Session, *, include_internal: bool = False
+) -> list[DocumentSource]:
     distinct_sources = db_session.query(Connector.source).distinct().all()
 
     sources = [
         source[0]
         for source in distinct_sources
-        if source[0] not in _INTERNAL_ONLY_SOURCES
+        if include_internal or source[0] not in _INTERNAL_ONLY_SOURCES
     ]
 
     return sources
