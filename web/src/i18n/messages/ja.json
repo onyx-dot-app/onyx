@@ -1511,6 +1511,9 @@
         },
         "federatedSlack": {
           "description": "クエリ時に Slack を検索"
+        },
+        "jiraServiceManagement": {
+          "description": "Atlassian service desk & customer requests"
         }
       }
     },
@@ -4861,6 +4864,24 @@
               "description": "インデックスするメールボックスを指定します(例: INBOX、Sent、Drafts)。空欄の場合は、すべてのメールボックスをインデックスします。"
             }
           }
+        },
+        "jira_service_management": {
+          "description": "Configure Jira Service Management connector",
+          "fields": {
+            "project_key": {
+              "label": "Project Key",
+              "description": "The key of a specific Jira Service Management project to index (e.g. 'ITSM').",
+              "placeholder": "ITSM"
+            },
+            "service_desk_ids": {
+              "label": "Service Desk IDs",
+              "description": "Optional list of numeric service desk IDs to narrow indexing scope."
+            },
+            "include_internal_comments": {
+              "label": "Include Internal Comments",
+              "description": "Index internal agent comments. By default, only public customer-facing comments are indexed."
+            }
+          }
         }
       }
     },
@@ -5243,7 +5264,8 @@
         "pfxFile": "アプリ登録の秘密キーを含む `.pfx` ファイルをアップロードしてください。10 KB 未満である必要があります。",
         "testrailBaseUrl": "例: https://yourcompany.testrail.io。",
         "googleServiceAccountKey": "ドメイン全体の委任を設定した Google サービスアカウントの `.json` キーをアップロードまたは貼り付けてください。",
-        "confluencePersonalAccessToken": "Confluence 管理者アカウントの[個人用アクセストークン](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html)を貼り付けてください。"
+        "confluencePersonalAccessToken": "Confluence 管理者アカウントの[個人用アクセストークン](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html)を貼り付けてください。",
+        "jsmBaseUrl": "The URL of your Jira Service Management instance (e.g., https://your-domain.atlassian.net)."
       },
       "methods": {
         "labels": {

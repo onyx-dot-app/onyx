@@ -1511,6 +1511,9 @@
         },
         "federatedSlack": {
           "description": "查询时搜索 Slack"
+        },
+        "jiraServiceManagement": {
+          "description": "Atlassian service desk & customer requests"
         }
       }
     },
@@ -4861,6 +4864,24 @@
               "description": "指定要索引的邮箱（例如 INBOX、Sent、Drafts）。留空则索引所有邮箱。"
             }
           }
+        },
+        "jira_service_management": {
+          "description": "Configure Jira Service Management connector",
+          "fields": {
+            "project_key": {
+              "label": "Project Key",
+              "description": "The key of a specific Jira Service Management project to index (e.g. 'ITSM').",
+              "placeholder": "ITSM"
+            },
+            "service_desk_ids": {
+              "label": "Service Desk IDs",
+              "description": "Optional list of numeric service desk IDs to narrow indexing scope."
+            },
+            "include_internal_comments": {
+              "label": "Include Internal Comments",
+              "description": "Index internal agent comments. By default, only public customer-facing comments are indexed."
+            }
+          }
         }
       }
     },
@@ -5243,7 +5264,8 @@
         "pfxFile": "上传包含应用注册私钥的 `.pfx` 文件。必须小于 10 KB。",
         "testrailBaseUrl": "例如 https://yourcompany.testrail.io。",
         "googleServiceAccountKey": "上传或粘贴已启用全网域委派的 Google 服务账号的 `.json` 密钥。",
-        "confluencePersonalAccessToken": "粘贴您的 Confluence 管理员账户的[个人访问令牌](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html)。"
+        "confluencePersonalAccessToken": "粘贴您的 Confluence 管理员账户的[个人访问令牌](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html)。",
+        "jsmBaseUrl": "The URL of your Jira Service Management instance (e.g., https://your-domain.atlassian.net)."
       },
       "methods": {
         "labels": {

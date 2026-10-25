@@ -244,6 +244,18 @@ export const CREDENTIAL_SPECS = {
       youtrack_token: secret("apiToken", { hint: { key: "youtrackToken" } }),
     },
   }),
+  jira_service_management: defineCredentialSpec({
+    brandName: "Jira Service Management",
+    fields: {
+      jsm_base_url: url("baseUrl", { realm: true }),
+      jsm_user_email: email("accountEmail", {
+        optional: true,
+        hint: { key: "jiraUserEmail" },
+      }),
+      jsm_api_token: secret("apiToken", { optional: true }),
+      jsm_bearer_token: secret("personalAccessToken", { optional: true }),
+    },
+  }),
   bitbucket: defineCredentialSpec({
     brandName: "Bitbucket",
     fields: {

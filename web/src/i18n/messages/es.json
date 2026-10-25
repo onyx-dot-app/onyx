@@ -1511,6 +1511,9 @@
         },
         "federatedSlack": {
           "description": "Buscar en Slack al consultar"
+        },
+        "jiraServiceManagement": {
+          "description": "Atlassian service desk & customer requests"
         }
       }
     },
@@ -4861,6 +4864,24 @@
               "description": "Especifica los buzones a indexar (p. ej., INBOX, Sent, Drafts). Déjalo vacío para indexar todos los buzones."
             }
           }
+        },
+        "jira_service_management": {
+          "description": "Configure Jira Service Management connector",
+          "fields": {
+            "project_key": {
+              "label": "Project Key",
+              "description": "The key of a specific Jira Service Management project to index (e.g. 'ITSM').",
+              "placeholder": "ITSM"
+            },
+            "service_desk_ids": {
+              "label": "Service Desk IDs",
+              "description": "Optional list of numeric service desk IDs to narrow indexing scope."
+            },
+            "include_internal_comments": {
+              "label": "Include Internal Comments",
+              "description": "Index internal agent comments. By default, only public customer-facing comments are indexed."
+            }
+          }
         }
       }
     },
@@ -5243,7 +5264,8 @@
         "pfxFile": "Sube el archivo `.pfx` que contiene la clave privada del registro de la aplicación. Debe ocupar menos de 10 KB.",
         "testrailBaseUrl": "Por ejemplo, https://yourcompany.testrail.io.",
         "googleServiceAccountKey": "Sube o pega la clave `.json` de una cuenta de servicio de Google con delegación de todo el dominio.",
-        "confluencePersonalAccessToken": "Pega el [token de acceso personal](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html) de tu cuenta de administrador de Confluence."
+        "confluencePersonalAccessToken": "Pega el [token de acceso personal](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html) de tu cuenta de administrador de Confluence.",
+        "jsmBaseUrl": "The URL of your Jira Service Management instance (e.g., https://your-domain.atlassian.net)."
       },
       "methods": {
         "labels": {

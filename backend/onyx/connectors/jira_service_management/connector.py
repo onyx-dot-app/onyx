@@ -13,6 +13,7 @@ from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
     InsufficientPermissionsError,
+    RateLimitedValidationError,
     UnexpectedValidationError,
 )
 from onyx.connectors.interfaces import (
@@ -38,6 +39,10 @@ logger = setup_logger()
 
 _JSM_ID_PREFIX = "JSM_REQUEST_"
 _JSM_PAGE_LIMIT = 50
+
+
+class JSMResourceNotFoundError(UnexpectedValidationError):
+    """Raised when a specific Jira Service Management endpoint returns HTTP 404."""
 
 
 def _parse_jsm_datetime(value: Any) -> datetime | None:
@@ -272,6 +277,14 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
                 raise InsufficientPermissionsError(
                     "Insufficient permissions to access Jira Service Management (HTTP 403)."
                 ) from e
+            if status == 404:
+                raise JSMResourceNotFoundError(
+                    f"Jira Service Management resource not found (HTTP 404): {url}"
+                ) from e
+            if status == 429:
+                raise RateLimitedValidationError(
+                    "Jira Service Management rate limit exceeded (HTTP 429)."
+                ) from e
             raise UnexpectedValidationError(
                 f"Unexpected Jira Service Management HTTP error (status={status})."
             ) from e
@@ -331,13 +344,22 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         return filtered
 
     def validate_connector_settings(self) -> None:
+        if not self.project_key and not self.service_desk_ids:
+            raise ConnectorValidationError(
+                "A specific Jira Service Management project key or service desk ID must be configured."
+            )
+
         desks = self._list_service_desks()
         if not desks:
+            target = self.project_key or self.service_desk_ids
             raise UnexpectedValidationError(
-                "Jira Service Management: no matching service desks visible to this credential."
+                f"Jira Service Management: no matching service desks visible for scope '{target}'."
             )
         try:
-            self._api_get("request", params={"limit": 1})
+            self._api_get(
+                "request",
+                params={"limit": 1, "requestOwnership": "ALL_REQUESTS"},
+            )
         except InsufficientPermissionsError as e:
             raise InsufficientPermissionsError(
                 "Jira Service Management: credential lacks agent permissions to access service requests."
@@ -353,6 +375,12 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
                 e,
             )
             return []
+        except JSMResourceNotFoundError:
+            logger.debug(
+                "Comments endpoint not found for JSM request %s",
+                issue_key,
+            )
+            return []
 
         if self.include_internal_comments:
             return comments
@@ -361,8 +389,18 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
     def _fetch_request_slas(self, issue_key: str) -> list[dict[str, Any]]:
         try:
             return list(self._paginate(f"request/{issue_key}/sla"))
-        except Exception as e:
-            logger.debug("SLA metrics unavailable for JSM request %s: %s", issue_key, e)
+        except InsufficientPermissionsError as e:
+            logger.debug(
+                "Insufficient permissions to fetch SLA metrics for JSM request %s: %s",
+                issue_key,
+                e,
+            )
+            return []
+        except JSMResourceNotFoundError:
+            logger.debug(
+                "SLA metrics endpoint not found for JSM request %s",
+                issue_key,
+            )
             return []
 
     def _request_updated_at(
@@ -504,13 +542,18 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
 
         for desk in self._list_service_desks():
             desk_id = desk.get("id")
-            extra_params: dict[str, Any] = {}
+            proj_key = str(desk.get("projectKey", "")).strip().upper()
+            extra_params: dict[str, Any] = {
+                "requestOwnership": "ALL_REQUESTS",
+            }
             if desk_id is not None:
                 extra_params["serviceDeskId"] = desk_id
 
             for req in self._paginate("request", extra_params=extra_params):
                 issue_key = str(req.get("issueKey") or req.get("issueId") or "")
                 if not issue_key:
+                    continue
+                if proj_key and not issue_key.upper().startswith(f"{proj_key}-"):
                     continue
 
                 comments = self._fetch_request_comments(issue_key)
@@ -554,7 +597,10 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
             if callback and callback.should_stop():
                 return
             desk_id = desk.get("id")
-            extra_params: dict[str, Any] = {}
+            proj_key = str(desk.get("projectKey", "")).strip().upper()
+            extra_params: dict[str, Any] = {
+                "requestOwnership": "ALL_REQUESTS",
+            }
             if desk_id is not None:
                 extra_params["serviceDeskId"] = desk_id
 
@@ -563,6 +609,8 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
                     return
                 issue_key = str(req.get("issueKey") or req.get("issueId") or "")
                 if not issue_key:
+                    continue
+                if proj_key and not issue_key.upper().startswith(f"{proj_key}-"):
                     continue
 
                 created_at = _parse_jsm_datetime(req.get("createdDate"))

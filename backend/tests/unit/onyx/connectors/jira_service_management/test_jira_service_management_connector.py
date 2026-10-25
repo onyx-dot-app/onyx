@@ -11,6 +11,7 @@ from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
     InsufficientPermissionsError,
+    RateLimitedValidationError,
     UnexpectedValidationError,
 )
 from onyx.connectors.jira_service_management.config import (
@@ -375,7 +376,7 @@ class TestJiraServiceManagementConnector(unittest.TestCase):
 
     @patch("onyx.connectors.jira_service_management.connector.requests.Session.get")
     def test_auth_error_mapping(self, mock_get: MagicMock) -> None:
-        connector = JiraServiceManagementConnector()
+        connector = JiraServiceManagementConnector(project_key="IT")
         connector.load_credentials(
             {
                 "jsm_base_url": "https://acme.atlassian.net",
@@ -393,7 +394,18 @@ class TestJiraServiceManagementConnector(unittest.TestCase):
 
     @patch("onyx.connectors.jira_service_management.connector.requests.Session.get")
     def test_validate_connector_settings_validation(self, mock_get: MagicMock) -> None:
-        connector = JiraServiceManagementConnector()
+        unscoped_connector = JiraServiceManagementConnector()
+        unscoped_connector.load_credentials(
+            {
+                "jsm_base_url": "https://acme.atlassian.net",
+                "jsm_bearer_token": "pat-token",
+            }
+        )
+        # 1. Unscoped configuration (missing project_key and service_desk_ids) -> ConnectorValidationError
+        with self.assertRaises(ConnectorValidationError):
+            unscoped_connector.validate_connector_settings()
+
+        connector = JiraServiceManagementConnector(project_key="IT")
         connector.load_credentials(
             {
                 "jsm_base_url": "https://acme.atlassian.net",
@@ -401,12 +413,12 @@ class TestJiraServiceManagementConnector(unittest.TestCase):
             }
         )
 
-        # 1. No desks visible -> UnexpectedValidationError
+        # 2. No matching desks visible for scope -> UnexpectedValidationError
         mock_get.return_value = _mock_response(200, {"values": [], "isLastPage": True})
         with self.assertRaises(UnexpectedValidationError):
             connector.validate_connector_settings()
 
-        # 2. Desks visible but agent request probe gets 403 -> InsufficientPermissionsError
+        # 3. Desks visible but agent request probe gets 403 -> InsufficientPermissionsError
         def side_effect(url: str, **_kwargs: Any) -> requests.Response:
             if url.endswith("/rest/servicedeskapi/servicedesk"):
                 return _mock_response(
@@ -421,7 +433,7 @@ class TestJiraServiceManagementConnector(unittest.TestCase):
         with self.assertRaises(InsufficientPermissionsError):
             connector.validate_connector_settings()
 
-        # 3. Both succeed -> None returned
+        # 4. Both succeed -> None returned
         def success_side_effect(url: str, **_kwargs: Any) -> requests.Response:
             if url.endswith("/rest/servicedeskapi/servicedesk"):
                 return _mock_response(
@@ -450,10 +462,109 @@ class TestJiraServiceManagementConnector(unittest.TestCase):
         comments = connector._fetch_request_comments("IT-1")
         self.assertEqual(comments, [])
 
-        # Unexpected HTTP error (e.g. 500) propagates
+        # 404 JSMResourceNotFoundError is tolerated and returns empty comments
+        mock_get.return_value = _mock_response(404, {"message": "Not Found"})
+        comments = connector._fetch_request_comments("IT-1")
+        self.assertEqual(comments, [])
+
+        # Transient 429 rate limit error propagates
+        mock_get.return_value = _mock_response(429, {"message": "Rate limited"})
+        with self.assertRaises(RateLimitedValidationError):
+            connector._fetch_request_comments("IT-1")
+
+        # Transient HTTP error (e.g. 500) propagates
         mock_get.return_value = _mock_response(500, {"message": "Server Error"})
         with self.assertRaises(UnexpectedValidationError):
             connector._fetch_request_comments("IT-1")
+
+    @patch("onyx.connectors.jira_service_management.connector.requests.Session.get")
+    def test_fetch_slas_error_handling(self, mock_get: MagicMock) -> None:
+        connector = JiraServiceManagementConnector()
+        connector.load_credentials(
+            {
+                "jsm_base_url": "https://acme.atlassian.net",
+                "jsm_bearer_token": "pat-token",
+            }
+        )
+
+        # 1. Genuine absence of SLAs (200 with empty list) returns empty list
+        mock_get.return_value = _mock_response(200, {"values": [], "isLastPage": True})
+        slas = connector._fetch_request_slas("IT-1")
+        self.assertEqual(slas, [])
+
+        # 2. 403 InsufficientPermissionsError returns empty list
+        mock_get.return_value = _mock_response(403, {"message": "Forbidden"})
+        slas = connector._fetch_request_slas("IT-1")
+        self.assertEqual(slas, [])
+
+        # 3. 404 JSMResourceNotFoundError returns empty list
+        mock_get.return_value = _mock_response(404, {"message": "Not Found"})
+        slas = connector._fetch_request_slas("IT-1")
+        self.assertEqual(slas, [])
+
+        # 4. Transient 429 rate limit propagates
+        mock_get.return_value = _mock_response(429, {"message": "Rate limited"})
+        with self.assertRaises(RateLimitedValidationError):
+            connector._fetch_request_slas("IT-1")
+
+        # 5. Transient 500 server error propagates
+        mock_get.return_value = _mock_response(500, {"message": "Server Error"})
+        with self.assertRaises(UnexpectedValidationError):
+            connector._fetch_request_slas("IT-1")
+
+    @patch("onyx.connectors.jira_service_management.connector.requests.Session.get")
+    def test_project_scoping_enforcement(self, mock_get: MagicMock) -> None:
+        def side_effect(url: str, **kwargs: Any) -> requests.Response:
+            if url.endswith("/rest/servicedeskapi/servicedesk"):
+                return _mock_response(
+                    200,
+                    {
+                        "values": [
+                            {"id": "1", "projectKey": "ITSM"},
+                            {"id": "2", "projectKey": "OTHER"},
+                        ],
+                        "isLastPage": True,
+                    },
+                )
+            if url.endswith("/rest/servicedeskapi/request"):
+                params = kwargs.get("params", {})
+                self.assertEqual(params.get("requestOwnership"), "ALL_REQUESTS")
+                # When serviceDeskId 1 is requested, return mixed keys to test prefix filter
+                if params.get("serviceDeskId") == "1":
+                    return _mock_response(
+                        200,
+                        {
+                            "values": [
+                                {
+                                    "issueKey": "ITSM-1",
+                                    "createdDate": {"epochMillis": 1704067200000},
+                                },
+                                {
+                                    "issueKey": "LEAK-99",
+                                    "createdDate": {"epochMillis": 1704067200000},
+                                },
+                            ],
+                            "isLastPage": True,
+                        },
+                    )
+                return _mock_response(200, {"values": [], "isLastPage": True})
+            raise AssertionError(f"Unexpected URL: {url}")
+
+        mock_get.side_effect = side_effect
+
+        connector = JiraServiceManagementConnector(project_key="ITSM")
+        connector.load_credentials(
+            {
+                "jsm_base_url": "https://acme.atlassian.net",
+                "jsm_bearer_token": "pat-token",
+            }
+        )
+
+        # Slim docs should strictly only yield ITSM-1, skipping LEAK-99 and OTHER
+        slim_batches = list(connector.retrieve_all_slim_docs())
+        self.assertEqual(len(slim_batches), 1)
+        self.assertEqual(len(slim_batches[0]), 1)
+        self.assertEqual(slim_batches[0][0].id, "JSM_REQUEST_ITSM-1")
 
     @patch("onyx.connectors.jira_service_management.connector.requests.Session.get")
     def test_paginate_respects_is_last_page_boolean(self, mock_get: MagicMock) -> None:
