@@ -1,8 +1,7 @@
 import time
-from unittest.mock import create_autospec, patch
+from unittest.mock import MagicMock, create_autospec, patch
 import pytest
 import responses
-
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.jira_service_management.client import JsmClient, JsmApiError
@@ -247,10 +246,9 @@ def test_retrieve_all_slim_docs(sample_requests_response):
 
 @patch("time.sleep")
 @responses.activate
-def test_client_retry_after(mock_sleep):
+def test_client_retry_after(mock_sleep: MagicMock) -> None:
     base_url = "https://company.atlassian.net"
     endpoint = f"{base_url}/rest/servicedeskapi/servicedesk"
-
     # First call returns 429 with Retry-After 1s, second returns 200
     responses.add(responses.GET, endpoint, status=429, headers={"Retry-After": "1"})
     responses.add(responses.GET, endpoint, json={"values": [{"id": "1", "projectKey": "IT"}]}, status=200)

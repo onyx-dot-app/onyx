@@ -74,11 +74,14 @@ class JsmClient:
                     except (TypeError, ValueError):
                         retry_after = _BASE_BACKOFF_SECONDS * (attempt + 1)
                     retry_after = min(max(retry_after, 1), 60)
-                    logger.warning(
-                        f"JSM rate limited (429). Retrying after {retry_after}s."
-                    )
-                    time.sleep(retry_after)
-                    continue
+                    if attempt < _MAX_RETRY_ATTEMPTS - 1:
+                        logger.warning(
+                            "JSM rate limited (429). Retrying after %ss.",
+                            retry_after,
+                        )
+                        time.sleep(retry_after)
+                        continue
+                    break
 
                 if not response.ok:
                     raise JsmApiError(
