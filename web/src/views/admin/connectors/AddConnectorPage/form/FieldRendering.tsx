@@ -369,14 +369,25 @@ export const RenderField: FC<RenderFieldProps> = ({
       ? formikError
       : fieldError;
 
-  const label =
+  // Labels/descriptions may be i18n message keys (e.g. "connectors.directory.*");
+  // resolve those against the connectorsList catalog and pass everything else
+  // through unchanged.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const translateIfKey = (value: any): any =>
+    typeof value === "string" && value.startsWith("connectors.")
+      ? (t as unknown as (key: string) => string)(value)
+      : value;
+
+  const label = translateIfKey(
     typeof field.label === "function"
       ? field.label(currentCredential)
-      : field.label;
-  const description =
+      : field.label
+  );
+  const description = translateIfKey(
     typeof field.description === "function"
       ? field.description(currentCredential)
-      : field.description;
+      : field.description
+  );
   const disabled =
     typeof field.disabled === "function"
       ? field.disabled(currentCredential)
