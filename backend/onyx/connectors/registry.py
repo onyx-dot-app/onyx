@@ -18,6 +18,7 @@ from onyx.connectors.confluence.config import ConfluenceConnectorConfig
 from onyx.connectors.connector_config import ConnectorConfig
 from onyx.connectors.discord.config import DiscordConnectorConfig
 from onyx.connectors.discourse.config import DiscourseConnectorConfig
+from onyx.connectors.directory.config import DirectoryConnectorConfig
 from onyx.connectors.document360.config import Document360ConnectorConfig
 from onyx.connectors.dropbox.config import DropboxConnectorConfig
 from onyx.connectors.drupal_wiki.config import DrupalWikiConnectorConfig
@@ -79,6 +80,11 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.file.connector",
         class_name="LocalFileConnector",
         config_class=LocalFileConnectorConfig,
+    ),
+    DocumentSource.DIRECTORY: ConnectorMapping(
+        module_path="onyx.connectors.directory.connector",
+        class_name="DirectoryConnector",
+        config_class=DirectoryConnectorConfig,
     ),
     DocumentSource.SLACK: ConnectorMapping(
         module_path="onyx.connectors.slack.connector",

@@ -294,6 +294,7 @@ class DocumentSource(str, Enum):
     SLAB = "slab"
     PRODUCTBOARD = "productboard"
     FILE = "file"
+    DIRECTORY = "directory"
     CODA = "coda"
     CANVAS = "canvas"
     NOTION = "notion"
