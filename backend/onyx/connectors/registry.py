@@ -37,6 +37,9 @@ from onyx.connectors.highspot.config import HighspotConnectorConfig
 from onyx.connectors.hubspot.config import HubSpotConnectorConfig
 from onyx.connectors.imap.config import ImapConnectorConfig
 from onyx.connectors.jira.config import JiraConnectorConfig
+from onyx.connectors.jira_service_management.config import (
+    JiraServiceManagementConnectorConfig,
+)
 from onyx.connectors.linear.config import LinearConnectorConfig
 from onyx.connectors.loopio.config import LoopioConnectorConfig
 from onyx.connectors.lumapps.config import LumAppsConnectorConfig
@@ -359,6 +362,11 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.youtrack.connector",
         class_name="YouTrackConnector",
         config_class=YouTrackConnectorConfig,
+    ),
+    DocumentSource.JIRA_SERVICE_MANAGEMENT: ConnectorMapping(
+        module_path="onyx.connectors.jira_service_management.connector",
+        class_name="JiraServiceManagementConnector",
+        config_class=JiraServiceManagementConnectorConfig,
     ),
     # just for integration tests
     DocumentSource.MOCK_CONNECTOR: ConnectorMapping(
