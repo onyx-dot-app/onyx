@@ -60,8 +60,23 @@ class JsmClient:
                 )
 
                 if response.status_code == 429:
-                    retry_after = int(response.headers.get("Retry-After", _BASE_BACKOFF_SECONDS * (attempt + 1)))
-                    logger.warning(f"JSM rate limited (429). Retrying after {retry_after}s.")
+                    last_exception = JsmApiError(
+                        "Rate limited (429) by Atlassian Service Desk API",
+                        status_code=429,
+                    )
+                    raw_retry_after = response.headers.get("Retry-After")
+                    try:
+                        retry_after = (
+                            int(raw_retry_after)
+                            if raw_retry_after
+                            else _BASE_BACKOFF_SECONDS * (attempt + 1)
+                        )
+                    except (TypeError, ValueError):
+                        retry_after = _BASE_BACKOFF_SECONDS * (attempt + 1)
+                    retry_after = min(max(retry_after, 1), 60)
+                    logger.warning(
+                        f"JSM rate limited (429). Retrying after {retry_after}s."
+                    )
                     time.sleep(retry_after)
                     continue
 

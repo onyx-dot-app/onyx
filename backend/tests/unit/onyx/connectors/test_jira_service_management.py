@@ -1,8 +1,9 @@
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import create_autospec, patch
 import pytest
 import responses
 
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.jira_service_management.client import JsmClient, JsmApiError
 from onyx.connectors.jira_service_management.config import (
@@ -201,6 +202,12 @@ def test_poll_source(sample_requests_response):
         json={"values": []},
         status=200,
     )
+    responses.add(
+        responses.GET,
+        f"{base_url}/rest/servicedeskapi/request/IT-102/comment",
+        json={"values": []},
+        status=200,
+    )
 
     connector = JiraServiceManagementConnector(jira_base_url=base_url)
     connector.load_credentials({"user_email": "admin@example.com", "api_token": "token123"})
@@ -227,7 +234,7 @@ def test_retrieve_all_slim_docs(sample_requests_response):
     connector = JiraServiceManagementConnector(jira_base_url=base_url)
     connector.load_credentials({"user_email": "admin@example.com", "api_token": "token123"})
 
-    callback = MagicMock()
+    callback = create_autospec(IndexingHeartbeatInterface, instance=True)
     slim_batches = list(connector.retrieve_all_slim_docs(callback=callback))
     assert len(slim_batches) == 1
     slim_docs = slim_batches[0]
@@ -235,11 +242,12 @@ def test_retrieve_all_slim_docs(sample_requests_response):
     assert isinstance(slim_docs[0], SlimDocument)
     assert slim_docs[0].id == "https://company.atlassian.net/servicedesk/customer/portal/1/IT-101"
     assert slim_docs[1].id == "https://company.atlassian.net/servicedesk/customer/portal/1/IT-102"
-    assert callback.progress.called
+    callback.progress.assert_called_once_with("jsm_retrieve_all_slim_docs", 2)
 
 
+@patch("time.sleep")
 @responses.activate
-def test_client_retry_after():
+def test_client_retry_after(mock_sleep):
     base_url = "https://company.atlassian.net"
     endpoint = f"{base_url}/rest/servicedeskapi/servicedesk"
 

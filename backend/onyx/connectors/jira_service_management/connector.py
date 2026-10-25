@@ -33,7 +33,6 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         service_desk_id: str | None = None,
         include_internal_comments: bool = True,
         batch_size: int = 50,
-        **kwargs: Any,
     ) -> None:
         self.jira_base_url = jira_base_url.rstrip("/")
         self.project_key = project_key.upper() if project_key else None
@@ -294,7 +293,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
                 yield slim_docs
 
             if callback:
-                callback.progress(len(slim_docs))
+                callback.progress("jsm_retrieve_all_slim_docs", len(slim_docs))
 
             if res.get("isLastPage", True):
                 break

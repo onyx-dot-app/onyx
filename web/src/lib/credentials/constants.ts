@@ -301,6 +301,16 @@ export const CREDENTIAL_SPECS = {
       jira_api_token: secret("apiToken"),
     },
   }),
+  jira_service_management: defineCredentialSpec({
+    brandName: "Jira Service Management",
+    fields: {
+      user_email: email("accountEmail", {
+        optional: true,
+        hint: { key: "jiraUserEmail" },
+      }),
+      api_token: secret("apiToken"),
+    },
+  }),
   productboard: defineCredentialSpec({
     brandName: "Productboard",
     fields: { productboard_access_token: secret("apiToken") },
