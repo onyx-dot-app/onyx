@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-
 import requests
 
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -51,7 +49,7 @@ class OllamaClient(WebSearchProvider):
     )
     def _search_with_retries(self, query: str) -> list[WebSearchResult]:
         """Run one search request, raising RetryableOllamaSearchError on transient failures."""
-        payload: dict[str, Any] = {
+        payload: dict[str, str | int] = {
             "query": query,
             "max_results": self._num_results,
         }
@@ -129,7 +127,7 @@ class OllamaClient(WebSearchProvider):
         return {"status": "ok"}
 
 
-def _get_str_field(result: dict[str, Any], key: str) -> str:
+def _get_str_field(result: dict[str, object], key: str) -> str:
     """Return a stripped string field, raising ValueError if it is present but not a string."""
     value = result.get(key)
     if value is None:

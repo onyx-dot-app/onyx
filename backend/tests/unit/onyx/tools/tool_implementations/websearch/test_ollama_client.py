@@ -21,7 +21,7 @@ class DummyResponse:
         self,
         *,
         status_code: int,
-        payload: Any = None,
+        payload: object = None,
         text: str = "",
     ) -> None:
         self.status_code = status_code
@@ -34,10 +34,15 @@ class DummyResponse:
             http_error.response = cast(requests.Response, self)
             raise http_error
 
-    def json(self) -> Any:
+    def json(self) -> object:
         if self._payload is None:
             raise ValueError("No JSON payload")
         return self._payload
+
+
+def _no_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
+    # retry_builder (tenacity) sleeps between attempts; keep retry tests fast.
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
 
 
 def test_search_maps_ollama_response(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -101,7 +106,7 @@ def test_search_returns_empty_on_no_results(monkeypatch: pytest.MonkeyPatch) -> 
 
 @pytest.mark.parametrize("payload", [[], "oops", {"results": {"url": "x"}}])
 def test_search_rejects_invalid_response_shape(
-    monkeypatch: pytest.MonkeyPatch, payload: Any
+    monkeypatch: pytest.MonkeyPatch, payload: object
 ) -> None:
     client = OllamaClient(api_key="test-key")
 
@@ -134,6 +139,67 @@ def test_retryable_statuses(status_code: int) -> None:
 @pytest.mark.parametrize("status_code", [400, 401, 403, 404, 600])
 def test_non_retryable_statuses(status_code: int) -> None:
     assert not ollama_module._is_retryable_status(status_code)  # noqa: SLF001
+
+
+@pytest.mark.parametrize("status_code", [408, 429, 503])
+def test_search_retries_transient_status(
+    monkeypatch: pytest.MonkeyPatch, status_code: int
+) -> None:
+    _no_sleep(monkeypatch)
+    client = OllamaClient(api_key="test-key")
+    calls = 0
+
+    def _mock_post(*args: object, **kwargs: object) -> DummyResponse:  # noqa: ARG001
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return DummyResponse(status_code=status_code, text="transient")
+        return DummyResponse(
+            status_code=200,
+            payload={"results": [{"url": "https://example.com", "title": "ok"}]},
+        )
+
+    monkeypatch.setattr(ollama_module.requests, "post", _mock_post)
+
+    results = client.search("onyx")
+
+    assert [result.link for result in results] == ["https://example.com"]
+    assert calls == 2
+
+
+def test_search_stops_after_three_transient_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _no_sleep(monkeypatch)
+    client = OllamaClient(api_key="test-key")
+    calls = 0
+
+    def _mock_post(*args: object, **kwargs: object) -> DummyResponse:  # noqa: ARG001
+        nonlocal calls
+        calls += 1
+        return DummyResponse(status_code=503, text="unavailable")
+
+    monkeypatch.setattr(ollama_module.requests, "post", _mock_post)
+
+    with pytest.raises(ValueError, match="status 503"):
+        client.search("onyx")
+    assert calls == 3
+
+
+def test_search_does_not_retry_client_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OllamaClient(api_key="test-key")
+    calls = 0
+
+    def _mock_post(*args: object, **kwargs: object) -> DummyResponse:  # noqa: ARG001
+        nonlocal calls
+        calls += 1
+        return DummyResponse(status_code=400, text="bad request")
+
+    monkeypatch.setattr(ollama_module.requests, "post", _mock_post)
+
+    with pytest.raises(ValueError, match="status 400"):
+        client.search("onyx")
+    assert calls == 1
 
 
 def test_connection_succeeds_with_empty_results(
