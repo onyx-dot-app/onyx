@@ -299,6 +299,7 @@ def test_strict_search_accepts_terminal_or_continuation(
         {"issues": [], "total": 10, "startAt": 0},
         {"issues": []},
         {"issues": [], "total": "0", "startAt": 0},
+        {"issues": [{"id": "1", "key": "TEST-1"}], "total": 0, "startAt": 0},
     ],
 )
 def test_strict_dc_search_rejects_incomplete_page(page: dict[str, Any]) -> None:

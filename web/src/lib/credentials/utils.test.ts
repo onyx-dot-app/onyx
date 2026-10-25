@@ -147,6 +147,34 @@ const MESSAGES: CredentialValidationMessages = {
   authMethodRequired: "auth method required",
 };
 
+describe("JSM authentication validation", () => {
+  const jsmSchema = createValidationSchema(
+    CREDENTIAL_SPECS[ValidSources.JiraServiceManagement],
+    MESSAGES
+  );
+
+  it("rejects missing or blank jira_api_token and accepts valid Cloud or PAT credentials", () => {
+    expect(jsmSchema.isValidSync({})).toBe(false);
+    expect(jsmSchema.isValidSync({ jira_user_email: "agent@example.com" })).toBe(
+      false
+    );
+    expect(jsmSchema.isValidSync({ jira_api_token: "   " })).toBe(false);
+    expect(
+      jsmSchema.isValidSync({
+        jira_user_email: "not-an-email",
+        jira_api_token: "token",
+      })
+    ).toBe(false);
+    expect(jsmSchema.isValidSync({ jira_api_token: "pat-token" })).toBe(true);
+    expect(
+      jsmSchema.isValidSync({
+        jira_user_email: "agent@example.com",
+        jira_api_token: "cloud-token",
+      })
+    ).toBe(true);
+  });
+});
+
 describe("createValidationSchema", () => {
   const schema = createValidationSchema(
     CREDENTIAL_SPECS[ValidSources.Outlook],

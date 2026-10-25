@@ -641,4 +641,25 @@ def test_retrieve_all_slim_docs_propagates_comment_fetch_error(
     with pytest.raises(requests.exceptions.HTTPError):
         list(connector.retrieve_all_slim_docs(start=1700000000, end=1700086400))
 
-
+@patch.object(JiraServiceManagementApiClient, "_request")
+def test_get_request_comments_paginates_all_pages(mock_request: MagicMock) -> None:
+    """Verify get_request_comments follows start/limit/isLastPage until all comment pages are fetched."""
+    client = JiraServiceManagementApiClient(
+        jira_base_url="https://example.atlassian.net",
+        jira_user_email="agent@example.com",
+        jira_api_token="token",
+    )
+    mock_request.side_effect = [
+        {
+            "values": [{"id": "c1", "body": "First page comment"}],
+            "isLastPage": False,
+        },
+        {
+            "values": [{"id": "c2", "body": "Second page comment"}],
+            "isLastPage": True,
+        },
+    ]
+    comments = client.get_request_comments("SD-200")
+    assert len(comments) == 2
+    assert [c["id"] for c in comments] == ["c1", "c2"]
+    assert mock_request.call_count == 2

@@ -45,6 +45,7 @@ from onyx.connectors.jira.utils import (
     rich_text,
 )
 from onyx.connectors.models import (
+    BasicExpertInfo,
     ConnectorMissingCredentialError,
     Document,
     SlimDocument,
@@ -159,7 +160,7 @@ def _issue_to_document(
 
     fields = issue.get("fields") or {}
     raw_labels = fields.get("labels") or []
-    issue_labels = [str(l) for l in raw_labels if isinstance(l, str)]
+    issue_labels = [str(label) for label in raw_labels if isinstance(label, str)]
 
     if any(label in labels_to_skip for label in issue_labels):
         logger.info("Skipping issue %s due to skipped labels", issue_key)
@@ -177,7 +178,7 @@ def _issue_to_document(
     project_key = project.get("key") if isinstance(project, dict) else ""
     project_name = project.get("name") if isinstance(project, dict) else ""
 
-    people = set()
+    people: set[BasicExpertInfo] = set()
     reporter_obj = fields.get("reporter")
     reporter_name = ""
     reporter_email = ""
@@ -487,11 +488,23 @@ class JiraServiceManagementApiClient:
         return self._request("GET", path, params=params)
 
     def get_request_comments(self, issue_id_or_key: str) -> list[dict[str, Any]]:
-        """Fetch comments for a specific customer request."""
+        """Fetch all paginated comments for a specific customer request."""
         path = f"{_JSM_REQUEST_ENDPOINT}/{issue_id_or_key}/comment"
+        all_comments: list[dict[str, Any]] = []
+        start = 0
+        limit = 50
         try:
-            res = self._request("GET", path)
-            return res.get("values", [])
+            while True:
+                res = self._request(
+                    "GET", path, params={"start": start, "limit": limit}
+                )
+                page_values = res.get("values", [])
+                if isinstance(page_values, list):
+                    all_comments.extend(page_values)
+                if res.get("isLastPage", True) or not page_values:
+                    break
+                start += len(page_values)
+            return all_comments
         except Exception as e:
             logger.warning("Failed to fetch comments for request %s: %s", issue_id_or_key, e)
             raise
@@ -569,6 +582,7 @@ class JiraServiceManagementConnector(
         self.client: JiraServiceManagementApiClient | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> None:
+        """Load and validate Jira Service Management authentication credentials."""
         jira_base = credentials.get("jira_base_url") or self.jira_base_url
         if not jira_base:
             raise ConnectorMissingCredentialError("Jira Service Management Base URL")
@@ -590,6 +604,7 @@ class JiraServiceManagementConnector(
         )
 
     def _ensure_client(self) -> JiraServiceManagementApiClient:
+        """Return the initialized API client or raise if credentials were not loaded."""
         if self.client is None:
             raise ConnectorMissingCredentialError("Jira Service Management")
         return self.client
@@ -599,6 +614,7 @@ class JiraServiceManagementConnector(
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
     ) -> GenerateDocumentsOutput:
+        """Fetch and yield batches of JSM request or issue documents."""
         client = self._ensure_client()
         current_batch: list[Document] = []
 

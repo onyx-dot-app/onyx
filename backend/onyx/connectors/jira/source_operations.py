@@ -393,6 +393,7 @@ class JiraSourceOperations(SourceOperations):
                     or page.get("startAt") != start_at
                     or any(not isinstance(row, dict) for row in rows)
                     or (not rows and start_at < total)
+                    or start_at + len(rows) > total
                 ):
                     raise JiraApiError("Incomplete Jira offset page.", status_code=None)
                 return rows
