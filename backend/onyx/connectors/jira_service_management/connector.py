@@ -263,11 +263,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
             )
             response.raise_for_status()
         except requests.exceptions.HTTPError as e:
-            status = (
-                e.response.status_code
-                if getattr(e, "response", None) is not None
-                else None
-            )
+            status = e.response.status_code if e.response is not None else None
             if status == 401:
                 raise CredentialExpiredError(
                     "Invalid or expired Jira Service Management credentials (HTTP 401)."
@@ -311,7 +307,10 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
                     yield item
 
             is_last_page = payload.get("isLastPage")
-            if is_last_page is True or len(values) < _JSM_PAGE_LIMIT:
+            if isinstance(is_last_page, bool):
+                if is_last_page:
+                    break
+            elif len(values) < _JSM_PAGE_LIMIT:
                 break
             start_index += len(values)
 
@@ -334,16 +333,24 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
     def validate_connector_settings(self) -> None:
         desks = self._list_service_desks()
         if not desks:
-            logger.warning(
+            raise UnexpectedValidationError(
                 "Jira Service Management: no matching service desks visible to this credential."
             )
+        try:
+            self._api_get("request", params={"limit": 1})
+        except InsufficientPermissionsError as e:
+            raise InsufficientPermissionsError(
+                "Jira Service Management: credential lacks agent permissions to access service requests."
+            ) from e
 
     def _fetch_request_comments(self, issue_key: str) -> list[dict[str, Any]]:
         try:
             comments = list(self._paginate(f"request/{issue_key}/comment"))
-        except Exception as e:
+        except InsufficientPermissionsError as e:
             logger.warning(
-                "Failed to fetch comments for JSM request %s: %s", issue_key, e
+                "Insufficient permissions to fetch comments for JSM request %s: %s",
+                issue_key,
+                e,
             )
             return []
 

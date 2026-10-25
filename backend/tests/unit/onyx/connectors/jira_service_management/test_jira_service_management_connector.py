@@ -11,6 +11,7 @@ from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
     InsufficientPermissionsError,
+    UnexpectedValidationError,
 )
 from onyx.connectors.jira_service_management.config import (
     JiraServiceManagementConnectorConfig,
@@ -389,6 +390,103 @@ class TestJiraServiceManagementConnector(unittest.TestCase):
         mock_get.return_value = _mock_response(403, {"message": "Forbidden"})
         with self.assertRaises(InsufficientPermissionsError):
             connector.validate_connector_settings()
+
+    @patch("onyx.connectors.jira_service_management.connector.requests.Session.get")
+    def test_validate_connector_settings_validation(self, mock_get: MagicMock) -> None:
+        connector = JiraServiceManagementConnector()
+        connector.load_credentials(
+            {
+                "jsm_base_url": "https://acme.atlassian.net",
+                "jsm_bearer_token": "pat-token",
+            }
+        )
+
+        # 1. No desks visible -> UnexpectedValidationError
+        mock_get.return_value = _mock_response(200, {"values": [], "isLastPage": True})
+        with self.assertRaises(UnexpectedValidationError):
+            connector.validate_connector_settings()
+
+        # 2. Desks visible but agent request probe gets 403 -> InsufficientPermissionsError
+        def side_effect(url: str, **_kwargs: Any) -> requests.Response:
+            if url.endswith("/rest/servicedeskapi/servicedesk"):
+                return _mock_response(
+                    200,
+                    {"values": [{"id": "1", "projectKey": "IT"}], "isLastPage": True},
+                )
+            if url.endswith("/rest/servicedeskapi/request"):
+                return _mock_response(403, {"message": "Agent license required"})
+            raise AssertionError(f"Unexpected URL: {url}")
+
+        mock_get.side_effect = side_effect
+        with self.assertRaises(InsufficientPermissionsError):
+            connector.validate_connector_settings()
+
+        # 3. Both succeed -> None returned
+        def success_side_effect(url: str, **_kwargs: Any) -> requests.Response:
+            if url.endswith("/rest/servicedeskapi/servicedesk"):
+                return _mock_response(
+                    200,
+                    {"values": [{"id": "1", "projectKey": "IT"}], "isLastPage": True},
+                )
+            if url.endswith("/rest/servicedeskapi/request"):
+                return _mock_response(200, {"values": [], "isLastPage": True})
+            raise AssertionError(f"Unexpected URL: {url}")
+
+        mock_get.side_effect = success_side_effect
+        connector.validate_connector_settings()
+
+    @patch("onyx.connectors.jira_service_management.connector.requests.Session.get")
+    def test_fetch_comments_error_handling(self, mock_get: MagicMock) -> None:
+        connector = JiraServiceManagementConnector()
+        connector.load_credentials(
+            {
+                "jsm_base_url": "https://acme.atlassian.net",
+                "jsm_bearer_token": "pat-token",
+            }
+        )
+
+        # 403 InsufficientPermissionsError is tolerated and returns empty comments
+        mock_get.return_value = _mock_response(403, {"message": "Forbidden"})
+        comments = connector._fetch_request_comments("IT-1")
+        self.assertEqual(comments, [])
+
+        # Unexpected HTTP error (e.g. 500) propagates
+        mock_get.return_value = _mock_response(500, {"message": "Server Error"})
+        with self.assertRaises(UnexpectedValidationError):
+            connector._fetch_request_comments("IT-1")
+
+    @patch("onyx.connectors.jira_service_management.connector.requests.Session.get")
+    def test_paginate_respects_is_last_page_boolean(self, mock_get: MagicMock) -> None:
+        connector = JiraServiceManagementConnector()
+        connector.load_credentials(
+            {
+                "jsm_base_url": "https://acme.atlassian.net",
+                "jsm_bearer_token": "pat-token",
+            }
+        )
+
+        # Even if page has fewer items than _JSM_PAGE_LIMIT, continue if isLastPage is false
+        calls = []
+
+        def side_effect(_url: str, **kwargs: Any) -> requests.Response:
+            start = kwargs.get("params", {}).get("start", 0)
+            calls.append(start)
+            if start == 0:
+                # Page 1: returns 2 items, but isLastPage is explicitly False
+                return _mock_response(
+                    200,
+                    {"values": [{"id": 1}, {"id": 2}], "isLastPage": False},
+                )
+            # Page 2: returns 1 item, isLastPage is True
+            return _mock_response(
+                200,
+                {"values": [{"id": 3}], "isLastPage": True},
+            )
+
+        mock_get.side_effect = side_effect
+        items = list(connector._paginate("servicedesk"))
+        self.assertEqual(len(items), 3)
+        self.assertEqual(calls, [0, 2])
 
 
 if __name__ == "__main__":
