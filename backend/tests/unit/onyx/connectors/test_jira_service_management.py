@@ -260,8 +260,9 @@ def test_client_retry_after(mock_sleep: MagicMock) -> None:
     assert desks[0]["projectKey"] == "IT"
     assert len(responses.calls) == 2
     mock_sleep.assert_called_once_with(1)
+
 @responses.activate
-def test_comments_multi_page_pagination():
+def test_comments_multi_page_pagination() -> None:
     base_url = "https://company.atlassian.net"
     endpoint = f"{base_url}/rest/servicedeskapi/request/IT-200/comment"
 

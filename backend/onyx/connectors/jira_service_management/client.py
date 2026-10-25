@@ -164,6 +164,6 @@ class JsmClient:
                 if res.get("isLastPage", True) or not page:
                     break
                 next_start += len(page)
-        except JsmApiError as e:
-            logger.warning("Could not fetch all comments for JSM ticket %s: %s", issue_id_or_key, e)
+        except JsmApiError:
+            raise
         return comments

@@ -151,9 +151,10 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
                 is_public = c.get("public", True)
                 note_label = "Public Comment" if is_public else "Internal Note"
                 comments_text.append(f"[{note_label} by {author}]:\n{body}")
+        except JsmApiError:
+            raise
         except Exception as e:
             logger.warning(f"Error reading comments for {issue_key}: {e}")
-
         # Assemble document sections
         sections = [
             TextSection(text=f"Summary: {summary}\nStatus: {status_name}\n\nDescription:\n{description}")
