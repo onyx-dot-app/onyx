@@ -258,3 +258,4 @@ def test_client_retry_after(mock_sleep: MagicMock) -> None:
     assert len(desks) == 1
     assert desks[0]["projectKey"] == "IT"
     assert len(responses.calls) == 2
+    mock_sleep.assert_called_once_with(1)
