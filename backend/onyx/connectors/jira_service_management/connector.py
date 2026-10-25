@@ -115,12 +115,15 @@ def _render_request_field_values(
         if isinstance(rendered_val, dict) and rendered_val.get("html"):
             val_str = str(rendered_val["html"])
         elif isinstance(raw_val, dict):
-            val_str = str(
-                raw_val.get("name")
-                or raw_val.get("value")
-                or raw_val.get("displayName")
-                or raw_val
-            )
+            if raw_val.get("type") == "doc":
+                val_str = rich_text(raw_val)
+            else:
+                val_str = str(
+                    raw_val.get("name")
+                    or raw_val.get("value")
+                    or raw_val.get("displayName")
+                    or raw_val
+                )
         elif isinstance(raw_val, list):
             val_str = ", ".join(
                 str(v.get("name") or v.get("value") or v if isinstance(v, dict) else v)
@@ -749,7 +752,12 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
             {
                 "fieldId": key,
                 "label": names.get(key, key),
-                "value": rich_text(value) if key == "description" else value,
+                "value": (
+                    rich_text(value)
+                    if key == "description"
+                    or (isinstance(value, dict) and value.get("type") == "doc")
+                    else value
+                ),
             }
             for key, value in fields.items()
             if key in {"summary", "description"}

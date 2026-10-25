@@ -738,3 +738,159 @@ def test_initial_epoch_poll_does_not_duplicate_full_load_with_active_scan(
     ) as search:
         assert len(documents(connector.poll_source(0, END))) == 2
     assert "running()" not in search.call_args.args[0]
+
+
+@pytest.mark.usefixtures("responses")
+def test_adf_and_custom_field_value_rendering(
+    connector: JiraServiceManagementConnector,
+) -> None:
+    test_issue = {
+        "id": "100",
+        "key": "ITSM-100",
+        "fields": {
+            "project": {"key": "ITSM"},
+            "created": "2026-10-01T10:00:00Z",
+            "updated": "2026-10-25T12:30:00Z",
+            "summary": "Outage Incident",
+            "description": {
+                "type": "doc",
+                "version": 1,
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [
+                            {"type": "text", "text": "Incident description text"}
+                        ],
+                    }
+                ],
+            },
+            "customfield_10001": {"requestType": {"id": "5"}},
+            "customfield_10002": None,
+            "customfield_10010": {
+                "type": "doc",
+                "version": 1,
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "Root cause: network switch failure.",
+                            }
+                        ],
+                    }
+                ],
+            },
+            "customfield_10011": {
+                "type": "doc",
+                "version": 1,
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [{"type": "text", "text": "First paragraph text."}],
+                    },
+                    {
+                        "type": "paragraph",
+                        "content": [
+                            {"type": "text", "text": "Second paragraph text"},
+                            {"type": "text", "text": "with multiple parts."},
+                        ],
+                    },
+                ],
+            },
+            "customfield_10012": "Plain string value unchanged",
+            "customfield_10013": {"name": "Hardware", "id": "101"},
+            "customfield_10014": 42,
+            "customfield_10015": True,
+            "customfield_10016": None,
+            "status": {
+                "name": "Investigating",
+                "statusCategory": {"name": "In Progress"},
+            },
+        },
+    }
+    names = {
+        "summary": "Summary",
+        "description": "Description",
+        "customfield_10010": "Root Cause",
+        "customfield_10011": "Impact Details",
+        "customfield_10012": "Source Channel",
+        "customfield_10013": "Component",
+        "customfield_10014": "Affected Hosts",
+        "customfield_10015": "Customer Impacting",
+        "customfield_10016": "Resolution Notes",
+    }
+    request_types = {"customfield_10001"}
+    sla_fields = {"customfield_10002"}
+
+    req, comments, slas = connector._issue_content(
+        test_issue, names, request_types, sla_fields
+    )
+
+    fields_by_id = {f["fieldId"]: f for f in req["requestFieldValues"]}
+
+    # 1. ADF custom text becomes readable string
+    assert (
+        fields_by_id["customfield_10010"]["value"]
+        == "Root cause: network switch failure."
+    )
+
+    # 2. Nested ADF paragraphs correctly extracted
+    assert (
+        fields_by_id["customfield_10011"]["value"]
+        == "First paragraph text. Second paragraph text with multiple parts."
+    )
+
+    # 3. Ordinary strings remain unchanged
+    assert fields_by_id["customfield_10012"]["value"] == "Plain string value unchanged"
+
+    # 4. Non-ADF structured values preserve existing types/values
+    assert fields_by_id["customfield_10013"]["value"] == {
+        "name": "Hardware",
+        "id": "101",
+    }
+    assert fields_by_id["customfield_10014"]["value"] == 42
+    assert fields_by_id["customfield_10015"]["value"] is True
+    assert fields_by_id["customfield_10016"]["value"] is None
+
+    # 5. Description ADF conversion preserved
+    assert fields_by_id["description"]["value"] == "Incident description text"
+
+    # Verify rendering through _render_request_field_values into indexed text lines
+    summary, field_lines = _render_request_field_values(
+        req["requestFieldValues"], default_summary=test_issue["key"]
+    )
+    assert summary == "Outage Incident"
+    assert "Root Cause: Root cause: network switch failure." in field_lines
+    assert (
+        "Impact Details: First paragraph text. Second paragraph text with multiple parts."
+        in field_lines
+    )
+    assert "Source Channel: Plain string value unchanged" in field_lines
+    assert "Component: Hardware" in field_lines
+    assert "Affected Hosts: 42" in field_lines
+    assert "Customer Impacting: True" in field_lines
+    for line in field_lines:
+        assert "{'type': 'doc'" not in line
+
+    # Direct helper test: ADF dictionary passed directly to _render_request_field_values
+    direct_fields = [
+        {
+            "fieldId": "customfield_direct",
+            "label": "Direct ADF",
+            "value": {
+                "type": "doc",
+                "version": 1,
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [
+                            {"type": "text", "text": "Direct ADF value rendered"}
+                        ],
+                    }
+                ],
+            },
+        }
+    ]
+    _, direct_lines = _render_request_field_values(direct_fields, "DEFAULT")
+    assert "Direct ADF: Direct ADF value rendered" in direct_lines
