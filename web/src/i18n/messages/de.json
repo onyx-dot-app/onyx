@@ -1511,6 +1511,9 @@
         },
         "federatedSlack": {
           "description": "Slack zur Abfragezeit durchsuchen"
+        },
+        "directory": {
+          "description": "Dateien aus einem auf dem Server eingebundenen Verzeichnis indexieren"
         }
       }
     },
@@ -4859,6 +4862,44 @@
             "mailboxes": {
               "label": "Postfächer",
               "description": "Geben Sie die zu indexierenden Postfächer an (z. B. INBOX, Sent, Drafts). Leer lassen, um alle Postfächer zu indexieren."
+            }
+          }
+        },
+        "directory": {
+          "description": "Indexiert Dokumente aus einem auf dem Onyx-Server eingebundenen Ordner.",
+          "fields": {
+            "root_directory": {
+              "label": "Wurzelverzeichnis",
+              "description": "Absoluter Pfad des zu indexierenden Ordners (z. B. /data/documents). Der Pfad muss im Backend-Env in DIRECTORY_CONNECTOR_ALLOWED_ROOTS enthalten sein.",
+              "placeholder": "/data/documents"
+            },
+            "recursive": {
+              "label": "Unterverzeichnisse einbeziehen",
+              "description": "Dateien in Unterverzeichnissen des Wurzelverzeichnisses mit indexieren."
+            },
+            "file_extensions": {
+              "label": "Dateiendungen",
+              "description": "Indexierung auf diese Dateiendungen beschränken (z. B. .pdf, .docx). Leer lassen, um alle unterstützten Dateien zu indexieren."
+            },
+            "include_patterns": {
+              "label": "Einschluss-Muster",
+              "description": "Glob-Muster; nur passende Dateien werden indexiert (z. B. reports/**). Optional."
+            },
+            "exclude_patterns": {
+              "label": "Ausschluss-Muster",
+              "description": "Glob-Muster für Dateien, die übersprungen werden (z. B. **/entwuerfe/*). Optional."
+            },
+            "exclude_hidden": {
+              "label": "Versteckte Dateien ausschließen",
+              "description": "Punktdateien und versteckte Verzeichnisse überspringen."
+            },
+            "max_file_size_mb": {
+              "label": "Max. Dateigröße (MB)",
+              "description": "Größere Dateien werden übersprungen."
+            },
+            "max_directories_per_batch": {
+              "label": "Max. Verzeichnisse pro Batch",
+              "description": "Obergrenze der pro Batch gescannten Verzeichnisse."
             }
           }
         }

@@ -1,7 +1,13 @@
 import type { FC } from "react";
 import { DOCS_ADMINS_PATH, DOCS_BASE_URL } from "@/lib/constants";
 import { SourceCategory, ValidSources } from "@/lib/connectors/types/source";
-import { SvgFileText, SvgGlobe, SvgUploadCloud, SvgMail } from "@opal/icons";
+import {
+  SvgFileText,
+  SvgFolder,
+  SvgGlobe,
+  SvgUploadCloud,
+  SvgMail,
+} from "@opal/icons";
 import {
   SvgAirtable,
   SvgAsana,
@@ -108,6 +114,7 @@ export const SOURCE_DESCRIPTION_KEYS = {
   [ValidSources.Hubspot]: "sources.hubspot.description",
   [ValidSources.Document360]: "sources.document360.description",
   [ValidSources.File]: "sources.file.description",
+  [ValidSources.Directory]: "sources.directory.description",
   [ValidSources.UserFile]: "sources.userFile.description",
   [ValidSources.GoogleSites]: "sources.googleSites.description",
   [ValidSources.Loopio]: "sources.loopio.description",
@@ -545,6 +552,11 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Other,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/file`,
     isPopular: true,
+  },
+  directory: {
+    icon: SvgFolder,
+    displayName: "Directory",
+    category: SourceCategory.Other,
   },
   user_file: {
     icon: SvgUploadCloud,
