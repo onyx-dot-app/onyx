@@ -113,6 +113,8 @@ backend = [
     "tiktoken==0.13.0",
     "timeago==1.0.16",
     "unstructured-client==0.42.6",
+    # Reads xlsx and xlsm files for indexing and chat previews.
+    "wolfxl==2.0.14",
     "zulip==0.8.2",
     "hubspot-api-client==12.0.0",
     "asana==5.0.8",

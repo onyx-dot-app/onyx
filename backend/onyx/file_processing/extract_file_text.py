@@ -14,8 +14,7 @@ from typing import IO, TYPE_CHECKING, Any, NamedTuple, Optional, cast
 from zipfile import BadZipFile
 
 import chardet
-import openpyxl
-from openpyxl.worksheet._read_only import ReadOnlyWorksheet
+import wolfxl
 
 from onyx.configs.app_configs import (
     MAX_EMBEDDED_IMAGES_PER_FILE,
@@ -53,13 +52,12 @@ TEXT_SECTION_SEPARATOR = "\n\n"
 
 _MARKITDOWN_CONVERTER: Optional["MarkItDown"] = None
 
-KNOWN_OPENPYXL_BUGS = [
-    "Value must be either numerical or a string containing a wildcard",
-    "File contains no valid workbook part",
-    "Unable to read workbook: could not read stylesheet from None",
-    "Colors must be aRGB hex values",
-    "Max value is",
-    "There is no item named",
+# Errors that wolfxl raises at load time for a workbook it cannot read: a
+# damaged archive or package, or an encrypted workbook. The xlsx indexers skip
+# these files and continue.
+UNREADABLE_XLSX_ERRORS = [
+    "native xlsx open failed",
+    "this workbook is OOXML-encrypted",
 ]
 
 
@@ -632,14 +630,14 @@ def _sheet_to_csv(rows: Iterator[tuple[Any, ...]]) -> str:
 
 def _load_readonly_workbook(
     file: IO[Any], file_name: str, max_decompressed_bytes: int | None = None
-) -> openpyxl.Workbook | None:
+) -> wolfxl.Workbook | None:
     """Load a read-only workbook, returning None (and logging) for the BadZipFile
-    / known-openpyxl-bug cases the xlsx indexers treat as skip-and-continue rather
-    than a hard failure. Raises ZipSizeLimitError if the container exceeds the
-    decompression limits."""
+    / unreadable-workbook cases the xlsx indexers treat as skip-and-continue
+    rather than a hard failure. Raises ZipSizeLimitError if the container
+    exceeds the decompression limits."""
     assert_zip_container_within_limits(file, max_total_bytes=max_decompressed_bytes)
     try:
-        return openpyxl.load_workbook(file, read_only=True, data_only=True)
+        return wolfxl.load_workbook(file, read_only=True, data_only=True)
     except BadZipFile as e:
         error_str = f"Failed to extract text from {file_name or 'xlsx file'}: {e}"
         if file_name.startswith("~"):
@@ -648,9 +646,9 @@ def _load_readonly_workbook(
             logger.warning(error_str)
         return None
     except Exception as e:
-        if any(s in str(e) for s in KNOWN_OPENPYXL_BUGS):
+        if any(s in str(e) for s in UNREADABLE_XLSX_ERRORS):
             logger.warning(
-                "Failed to extract text from %s. This happens due to a bug in openpyxl. %s",
+                "Failed to extract text from %s. The workbook is damaged or encrypted. %s",
                 file_name or "xlsx file",
                 e,
             )
@@ -675,10 +673,9 @@ def xlsx_sheet_extraction(
     try:
         for sheet in workbook.worksheets:
             # Declared dimensions can be different to what is actually there
-            ro_sheet = cast(ReadOnlyWorksheet, sheet)
-            ro_sheet.reset_dimensions()
-            csv_text = _sheet_to_csv(ro_sheet.iter_rows(values_only=True))
-            sheets.append((csv_text.strip(), ro_sheet.title))
+            sheet.reset_dimensions()
+            csv_text = _sheet_to_csv(sheet.iter_rows(values_only=True))
+            sheets.append((csv_text.strip(), sheet.title))
     finally:
         workbook.close()
 
@@ -715,11 +712,10 @@ def stage_xlsx_sheets(
         return sheets
     try:
         for sheet in workbook.worksheets:
-            ro_sheet = cast(ReadOnlyWorksheet, sheet)
-            ro_sheet.reset_dimensions()
+            sheet.reset_dimensions()
             with tempfile.TemporaryFile(mode="w+", encoding="utf-8", newline="") as tmp:
                 writer = csv.writer(tmp, lineterminator="\n")
-                for row in ro_sheet.iter_rows(values_only=True):
+                for row in sheet.iter_rows(values_only=True):
                     if _row_has_content(row):
                         writer.writerow([_cell(v) for v in row])
                 tmp.flush()
@@ -727,7 +723,7 @@ def stage_xlsx_sheets(
                 if binary.seek(0, io.SEEK_END) == 0:
                     continue
                 binary.seek(0)
-                sheets.append(StreamedSheet(ro_sheet.title, stage(binary, "text/csv")))
+                sheets.append(StreamedSheet(sheet.title, stage(binary, "text/csv")))
     finally:
         workbook.close()
     return sheets
@@ -841,7 +837,7 @@ def extract_file_text_locally(
         ".docx": lambda f: read_docx_file(f, file_name)[0],  # no images
         ".pptx": lambda f: pptx_to_text(f, file_name),
         ".xlsx": lambda f: xlsx_to_text(f, file_name),
-        # openpyxl reads macro-enabled workbooks like any other.
+        # wolfxl reads macro-enabled workbooks like any other.
         ".xlsm": lambda f: xlsx_to_text(f, file_name),
         ".eml": eml_to_text,
         ".epub": epub_to_text,
@@ -914,7 +910,7 @@ def extract_text_and_images(
     res = _extract_text_and_images(
         file, file_name, pdf_pass, content_type, image_callback
     )
-    # openpyxl leaves reference cycles behind a workbook, so a collection
+    # Workbook parsers leave reference cycles behind a workbook, so a collection
     # follows a spreadsheet. On any other file it only costs time, about a
     # tenth of a second per file in a loaded process.
     if _is_spreadsheet(file_name, content_type):

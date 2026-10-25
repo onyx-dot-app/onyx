@@ -1,4 +1,5 @@
 import io
+import zipfile
 from typing import cast
 from unittest.mock import patch
 
@@ -25,6 +26,21 @@ def _make_xlsx(sheets: dict[str, list[list[str]]]) -> io.BytesIO:
     wb.save(buf)
     buf.seek(0)
     return buf
+
+
+def _replace_member(xlsx: io.BytesIO, name: str, old: str, new: str) -> io.BytesIO:
+    """Copy an xlsx package and replace text in one of its XML parts."""
+    out = io.BytesIO()
+    with zipfile.ZipFile(xlsx) as src, zipfile.ZipFile(out, "w") as dst:
+        for info in src.infolist():
+            data = src.read(info.filename)
+            if info.filename == name:
+                text = data.decode()
+                assert old in text
+                data = text.replace(old, new, 1).encode()
+            dst.writestr(info, data)
+    out.seek(0)
+    return out
 
 
 class TestXlsxToText:
@@ -469,15 +485,26 @@ class TestXlsxSheetExtraction:
         sheets = xlsx_sheet_extraction(bad_file, file_name="~$temp.xlsx")
         assert sheets == []
 
-    def test_known_openpyxl_bug_max_value_returns_empty(self) -> None:
-        """openpyxl's strict descriptor validation rejects font family
-        values >14 with 'Max value is 14'. Treat as a known openpyxl bug
-        and skip the file rather than fail the whole connector batch."""
-        with patch(
-            "onyx.file_processing.extract_file_text.openpyxl.load_workbook",
-            side_effect=ValueError("Max value is 14"),
-        ):
-            sheets = xlsx_sheet_extraction(io.BytesIO(b""), file_name="bad_font.xlsx")
+    def test_out_of_range_font_family_is_extracted(self) -> None:
+        """A font family value above 14 is out of range for the schema but
+        occurs in real files. The cell text must still be extracted."""
+        xlsx = _replace_member(
+            _make_xlsx({"Data": [["revenue", "42"]]}),
+            "xl/styles.xml",
+            'family val="2"',
+            'family val="20"',
+        )
+        sheets = xlsx_sheet_extraction(xlsx, file_name="bad_font.xlsx")
+        assert sheets == [("revenue,42", "Data")]
+
+    def test_package_without_workbook_part_returns_empty(self) -> None:
+        """A zip with no workbook part is skipped, not raised, so one bad
+        file does not fail the whole connector batch."""
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as archive:
+            archive.writestr("hello.txt", "not a workbook")
+        buf.seek(0)
+        sheets = xlsx_sheet_extraction(buf, file_name="not_a_workbook.xlsx")
         assert sheets == []
 
     def test_csv_content_matches_xlsx_to_text_per_sheet(self) -> None:

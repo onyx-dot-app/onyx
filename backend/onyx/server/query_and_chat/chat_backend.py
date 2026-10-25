@@ -1196,8 +1196,8 @@ def fetch_chat_file(
         return Response(status_code=304, headers=cache_headers)
 
     if parse_spreadsheet:
-        # Use a tempfile since openpyxl needs a seekable file and the workbook
-        # may be large.
+        # Use a tempfile since the xlsx reader needs a seekable file and the
+        # workbook may be large.
         with file_store.read_file(file_id, mode="b", use_tempfile=True) as xlsx_io:
             preview = parse_spreadsheet_for_preview(
                 xlsx_io, file_record.display_name or ""

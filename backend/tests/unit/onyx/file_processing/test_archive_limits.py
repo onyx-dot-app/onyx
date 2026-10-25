@@ -166,9 +166,9 @@ def _recompress(data: bytes, compression: int) -> BytesIO:
 
 
 @pytest.mark.parametrize("entry", ["sheets", "stage", "text"])
-def test_xlsx_bomb_rejected_before_openpyxl(entry: str) -> None:
+def test_xlsx_bomb_rejected_before_parsing(entry: str) -> None:
     bomb: BytesIO = _xlsx_bomb()
-    with patch.object(extraction.openpyxl, "load_workbook") as load_workbook:
+    with patch.object(extraction.wolfxl, "load_workbook") as load_workbook:
         started: float = time.monotonic()
         with pytest.raises(zip_limits.ZipSizeLimitError):
             if entry == "sheets":
@@ -183,7 +183,7 @@ def test_xlsx_bomb_rejected_before_openpyxl(entry: str) -> None:
 
 def test_xlsx_rejects_bzip2_members() -> None:
     xlsx: BytesIO = _recompress(_workbook_bytes(), zipfile.ZIP_BZIP2)
-    with patch.object(extraction.openpyxl, "load_workbook") as load_workbook:
+    with patch.object(extraction.wolfxl, "load_workbook") as load_workbook:
         with pytest.raises(zip_limits.ZipSizeLimitError, match="compression"):
             extraction.xlsx_sheet_extraction(xlsx, "bzip2.xlsx")
         load_workbook.assert_not_called()
