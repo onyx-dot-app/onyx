@@ -22,8 +22,10 @@ class DirectoryConnectorConfig(ConnectorConfig):
     exclude_patterns: Annotated[list[str] | None, _BEHAVIOR] = None
     exclude_hidden: Annotated[bool, _BEHAVIOR] = True
     batch_size: Annotated[int, FieldPolicy(FieldClass.COSMETIC)] = INDEX_BATCH_SIZE
+    # 0 = unlimited (files of any size are accepted).
     max_file_size_mb: Annotated[int, _BEHAVIOR] = 512
     poll_overlap_seconds: Annotated[int, _BEHAVIOR] = 5
     minimum_prune_files: Annotated[int, _BEHAVIOR] = 1
+    # 0 = unlimited (no per-batch directory scan limit).
     max_directories_per_batch: Annotated[int, _BEHAVIOR] = 1000
     link_base_url: Annotated[str | None, _BEHAVIOR] = None

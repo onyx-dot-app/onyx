@@ -90,7 +90,9 @@ class DirectoryConnector(
         self.recursive = bool(recursive)
         self.exclude_hidden = bool(exclude_hidden)
         self.batch_size = int(batch_size)
-        self.max_file_size_bytes = int(max_file_size_mb) * 1024 * 1024
+        # 0 = unlimited: no per-file size check is performed.
+        self.max_file_size_mb = int(max_file_size_mb)
+        self.max_file_size_bytes = self.max_file_size_mb * 1024 * 1024
         self.poll_overlap_seconds = int(poll_overlap_seconds)
         self.minimum_prune_files = int(minimum_prune_files)
         self.max_directories_per_batch = int(max_directories_per_batch)
@@ -145,8 +147,10 @@ class DirectoryConnector(
             )
         if not 1 <= self.batch_size <= 100:
             raise ConnectorValidationError("batch_size must be between 1 and 100.")
-        if self.max_file_size_bytes <= 0:
-            raise ConnectorValidationError("max_file_size_mb must be greater than 0.")
+        if self.max_file_size_mb < 0:
+            raise ConnectorValidationError(
+                "max_file_size_mb must be 0 (unlimited) or greater."
+            )
         if not 0 <= self.poll_overlap_seconds <= 3600:
             raise ConnectorValidationError(
                 "poll_overlap_seconds must be between 0 and 3600."
@@ -155,9 +159,14 @@ class DirectoryConnector(
             raise ConnectorValidationError(
                 "minimum_prune_files must be zero or greater."
             )
-        if not 1 <= self.max_directories_per_batch <= 100_000:
+        if self.max_directories_per_batch < 0:
             raise ConnectorValidationError(
-                "max_directories_per_batch must be between 1 and 100000."
+                "max_directories_per_batch must be 0 (unlimited) or greater."
+            )
+        if self.max_directories_per_batch > 100_000:
+            raise ConnectorValidationError(
+                "max_directories_per_batch must be between 1 and 100000 "
+                "(0 = unlimited)."
             )
 
     @override
@@ -353,7 +362,10 @@ class DirectoryConnector(
                     return self._failure_for_file(
                         normalized, "Directory file is empty."
                     )
-                if stat_before.st_size > self.max_file_size_bytes:
+                if (
+                    self.max_file_size_bytes
+                    and stat_before.st_size > self.max_file_size_bytes
+                ):
                     return self._failure_for_file(
                         normalized,
                         "Directory file exceeds configured max_file_size_mb "
@@ -480,7 +492,10 @@ class DirectoryConnector(
             if not checkpoint.pending_directories:
                 checkpoint.has_more = False
                 return checkpoint
-            if scanned_directories >= self.max_directories_per_batch:
+            if (
+                self.max_directories_per_batch
+                and scanned_directories >= self.max_directories_per_batch
+            ):
                 break
 
             relative_directory = checkpoint.pending_directories.pop()

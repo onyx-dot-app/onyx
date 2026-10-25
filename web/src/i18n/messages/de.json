@@ -4895,11 +4895,11 @@
             },
             "max_file_size_mb": {
               "label": "Max. Dateigröße (MB)",
-              "description": "Größere Dateien werden übersprungen."
+              "description": "Größere Dateien werden übersprungen. 0 bedeutet: unbegrenzt."
             },
             "max_directories_per_batch": {
               "label": "Max. Verzeichnisse pro Batch",
-              "description": "Obergrenze der pro Batch gescannten Verzeichnisse."
+              "description": "Obergrenze der pro Batch gescannten Verzeichnisse. 0 bedeutet: unbegrenzt."
             }
           }
         }

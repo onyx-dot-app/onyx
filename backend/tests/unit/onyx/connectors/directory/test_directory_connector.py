@@ -303,3 +303,58 @@ def test_checkpoint_json_roundtrip(source_root: Path) -> None:
     )
     restored = connector.validate_checkpoint_json(checkpoint.model_dump_json())
     assert restored == checkpoint
+
+
+def test_zero_max_file_size_is_unlimited(source_root: Path) -> None:
+    """max_file_size_mb=0 disables the per-file size check entirely."""
+    (source_root / "big.txt").write_bytes(b"x" * 2048)
+
+    connector = _make_connector(source_root, batch_size=10, max_file_size_mb=0)
+    connector.validate_connector_settings()
+    results = _run_to_completion(connector, start=0, end=time.time() + 10)
+
+    assert [r for r in results if isinstance(r, ConnectorFailure)] == []
+    assert [r for r in results if isinstance(r, DocumentFailure)] == []
+    assert len(_documents(results)) == 1
+
+
+def test_zero_max_file_size_ignores_small_limits(source_root: Path) -> None:
+    """A file far above a *set* limit fails; the same file passes with 0."""
+    (source_root / "big.txt").write_bytes(b"x" * 4096)
+
+    limited = _make_connector(source_root, batch_size=10, max_file_size_mb=1)
+    limited.max_file_size_bytes = 1024
+    results = _run_to_completion(limited, start=0, end=time.time() + 10)
+    assert len([r for r in results if isinstance(r, ConnectorFailure)]) == 1
+
+    unlimited = _make_connector(source_root, batch_size=10, max_file_size_mb=0)
+    results = _run_to_completion(unlimited, start=0, end=time.time() + 10)
+    assert len(_documents(results)) == 1
+    assert not [r for r in results if isinstance(r, (ConnectorFailure, DocumentFailure))]
+
+
+def test_negative_max_file_size_rejected(source_root: Path) -> None:
+    with pytest.raises(ConnectorValidationError):
+        _make_connector(source_root, max_file_size_mb=-1)
+
+
+def test_zero_max_directories_is_unlimited(source_root: Path) -> None:
+    """max_directories_per_batch=0 removes the per-batch directory scan limit."""
+    for index in range(3):
+        directory = source_root / f"sub-{index}"
+        directory.mkdir()
+        (directory / "note.txt").write_text(f"content {index}")
+
+    connector = _make_connector(
+        source_root, batch_size=10, max_directories_per_batch=0
+    )
+    connector.validate_connector_settings()
+    results = _run_to_completion(connector, start=0, end=time.time() + 10)
+
+    assert len(_documents(results)) == 3
+    assert [r for r in results if isinstance(r, ConnectorFailure)] == []
+
+
+def test_negative_max_directories_rejected(source_root: Path) -> None:
+    with pytest.raises(ConnectorValidationError):
+        _make_connector(source_root, max_directories_per_batch=-1)
