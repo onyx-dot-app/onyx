@@ -385,12 +385,6 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "YouTrack",
     category: SourceCategory.TicketingAndTaskManagement,
   },
-  jira_service_management: {
-    icon: SvgJira,
-    displayName: "Jira Service Management",
-    category: SourceCategory.TicketingAndTaskManagement,
-    docs: `${DOCS_ADMINS_PATH}/connectors/official/jira_service_management`,
-  },
   freshdesk: {
     icon: SvgFreshdesk,
     displayName: "Freshdesk",

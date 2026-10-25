@@ -68,7 +68,6 @@ export enum ValidSources {
   Braintrust = "braintrust",
   Lumapps = "lumapps",
   YouTrack = "youtrack",
-  JiraServiceManagement = "jira_service_management",
   Canvas = "canvas",
   Zoom = "zoom",
 
@@ -80,7 +79,7 @@ export enum ValidSources {
 }
 
 export const federatedSourceToRegularSource = (
-  maybeFederatedSource: ValidSources,
+  maybeFederatedSource: ValidSources
 ): ValidSources => {
   if (maybeFederatedSource === ValidSources.FederatedSlack) {
     return ValidSources.Slack;
