@@ -38,7 +38,22 @@ function buildCredential(
 }
 
 describe("credential edit helpers", () => {
-  it("includes optional template fields omitted from stored credential json", () => {
+  it("includes optional template fields omitted from stored credential json for Jira and JSM", () => {
+    const jsmCredential = buildCredential({
+      credential_json: {
+        jira_api_token: "masked-jsm-token",
+      },
+      source: ValidSources.JiraServiceManagement,
+    });
+    expect(
+      getEditableCredentialFields(
+        jsmCredential,
+        ValidSources.JiraServiceManagement
+      )
+    ).toEqual({
+      jira_user_email: null,
+      jira_api_token: "masked-jsm-token",
+    });
     const credential = buildCredential({
       credential_json: {
         jira_api_token: "masked-token",

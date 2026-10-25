@@ -262,6 +262,66 @@ def test_http_errors_become_jira_api_errors() -> None:
     assert "Error in the JQL Query" in (exc_info.value.body or "")
 
 
+@pytest.mark.parametrize("marker", [False, None, "true", "false"])
+def test_strict_search_rejects_missing_completion_marker(marker: Any) -> None:
+    client = _mock_jira_client()
+    client._session.get.return_value.json.return_value = {
+        "issues": [],
+        "isLast": marker,
+    }
+    with pytest.raises(JiraApiError, match="completion marker"):
+        _gateway(client).search_issue_ids(
+            jql="project = TEST", require_completion_marker=True
+        )
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"issues": [], "isLast": True},
+        {"issues": [], "isLast": False, "nextPageToken": "page2"},
+    ],
+)
+def test_strict_search_accepts_terminal_or_continuation(
+    payload: dict[str, Any],
+) -> None:
+    client = _mock_jira_client()
+    client._session.get.return_value.json.return_value = payload
+    page = _gateway(client).search_issue_ids(
+        jql="project = TEST", require_completion_marker=True
+    )
+    assert page.next_page_token == payload.get("nextPageToken")
+
+
+@pytest.mark.parametrize(
+    "page",
+    [
+        {"issues": [], "total": 10, "startAt": 0},
+        {"issues": []},
+        {"issues": [], "total": "0", "startAt": 0},
+    ],
+)
+def test_strict_dc_search_rejects_incomplete_page(page: dict[str, Any]) -> None:
+    client = _mock_jira_client()
+    client.search_issues.return_value = page
+    with pytest.raises(JiraApiError, match="offset page"):
+        _gateway(client).search_issues(
+            jql="project = TEST", start_at=0, max_results=50, require_complete_page=True
+        )
+
+
+def test_strict_dc_search_accepts_short_nonfinal_page() -> None:
+    client = _mock_jira_client()
+    rows = [_make_raw_issue("1")]
+    client.search_issues.return_value = {"issues": rows, "total": 2, "startAt": 0}
+    assert (
+        _gateway(client).search_issues(
+            jql="project = TEST", start_at=0, max_results=50, require_complete_page=True
+        )
+        == rows
+    )
+
+
 @pytest.mark.parametrize(
     "credentials,expected_cloud",
     [
