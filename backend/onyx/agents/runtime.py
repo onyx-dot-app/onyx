@@ -28,15 +28,20 @@ from onyx.agents.concurrency import (
     EventDelivery,
     EventDispatcher,
     ExecutionWork,
+    wait_operation,
 )
 from onyx.agents.events import (
     AgentEndEvent,
     AgentEvent,
     AgentStartEvent,
     AgentSuspendedEvent,
+    InputRequiredEvent,
     MessageEndEvent,
     MessageStartEvent,
     MessageUpdateEvent,
+    ToolEndEvent,
+    ToolStartEvent,
+    ToolUpdateEvent,
 )
 from onyx.agents.execution_records import (
     CompactionCheckpoint,
@@ -60,14 +65,18 @@ from onyx.agents.models import (
     StepRecord,
     StepResult,
     ToolCallContext,
+    ToolExecutionRecord,
+    messages_from_steps,
 )
 from onyx.agents.tool_execution import ToolBatch
 from onyx.agents.tools import (
     AgentTool,
+    ChildRunWait,
     HumanToolAnswer,
     InputDecision,
     InputMode,
     PendingToolInput,
+    ToolProgress,
 )
 from onyx.llm.cancellation import (
     AgentCancelled,
@@ -91,7 +100,9 @@ from onyx.llm.models import (
     GenerationOptions,
     GenerationRequest,
     Message,
+    ToolCall,
     ToolResult,
+    ToolResultMessage,
     UserMessage,
     apply_generation_event,
 )
@@ -266,7 +277,7 @@ class Agent:
             latest_run = self._latest_run
             if latest_run is None:
                 return self._state.snapshot()
-            with latest_run._lock:
+            with latest_run.execution_lock:
                 record = latest_run._state
                 return AgentState(
                     messages=[
@@ -304,7 +315,7 @@ class Agent:
         with self._lock:
             previous = self._latest_run
             if previous is not None:
-                with previous._lock:
+                with previous.execution_lock:
                     if previous._released:
                         raise RunReleased(
                             "Agent execution was released; restore it from saved state"
@@ -413,7 +424,11 @@ class Agent:
 
 
 class Run:
-    """Own one run’s lifecycle, controls, and accepted output."""
+    """Own lifecycle, controls, and accepted output.
+
+    Runtime collaborators lock borrowed step data with execution_lock and use
+    recording methods to change it.
+    """
 
     def __init__(
         self,
@@ -429,19 +444,19 @@ class Run:
             raise ValueError("Executable run requires an agent identity")
         self.id = state.run_id
         self.agent_id = state.agent_id
-        self._lock = threading.RLock()
+        self.execution_lock = threading.RLock()
         self._state = state
         self._history = history if history is not None else AgentState()
         self._token_counts: dict[str, int] = {}
-        self._cancellation_signal = cancellation_signal
+        self.cancellation_signal = cancellation_signal
         self._completed: Future[None] = Future()
         self._idle: Future[None] = Future()
         self._reusable: Future[None] = Future()
-        self._delivery: EventDelivery | None = EventDelivery(
+        self.event_delivery: EventDelivery | None = EventDelivery(
             event_dispatcher, parent=event_parent
         )
         self._delivery_failed = False
-        self._execution_condition = threading.Condition(self._lock)
+        self._execution_condition = threading.Condition(self.execution_lock)
         self._settled: Future[None] = Future()
         # Reserve execution through cleanup, even after output becomes terminal.
         self._execution_active = True
@@ -452,16 +467,16 @@ class Run:
         self._generation_context = GenerationContext()
         self._prepare_step: Callable[[StepInput], PreparedStep] | None = None
         self._after_step: Callable[[StepResult], bool] | None = None
-        self._before_tool_call: (
+        self.before_tool_call: (
             Callable[[ToolCallContext], ToolResult | PendingToolInput | None] | None
         ) = None
-        self._after_tool_call: (
+        self.after_tool_call: (
             Callable[[ToolCallContext, ToolResult], ToolResult] | None
         ) = None
         self._restoration: RestorableFeature | None = None
         self._prepared_step: PreparedStep | None = None
-        self._work = ExecutionWork()
-        self._coordination: RunCoordination | None = None
+        self.work = ExecutionWork()
+        self.coordination: RunCoordination | None = None
         self._thread_context = copy_context()
         self._cancellation_link = ExitStack()
         self._released = False
@@ -472,7 +487,7 @@ class Run:
         if snapshot.status in (RunStatus.RUNNING, RunStatus.SUSPENDED):
             raise ValueError("Only terminal snapshots can become completed handles")
         run = cls(snapshot.model_copy(deep=True), CancellationSignal())
-        run._delivery = None
+        run.event_delivery = None
         run._execution_active = False
         run._completed.set_result(None)
         run._idle.set_result(None)
@@ -482,23 +497,23 @@ class Run:
 
     @property
     def previous_run_id(self) -> str | None:
-        with self._lock:
+        with self.execution_lock:
             return self._state.previous_run_id
 
     @property
     def parent_run_id(self) -> str | None:
-        with self._lock:
+        with self.execution_lock:
             return self._state.parent_run_id
 
     @property
     def status(self) -> RunStatus:
-        with self._lock:
+        with self.execution_lock:
             return self._state.status
 
     @property
     def pending_inputs(self) -> list[PendingToolInput]:
         """Copy unanswered tool requests without copying execution history."""
-        with self._lock:
+        with self.execution_lock:
             progress = self._state.progress
             return (
                 [
@@ -512,22 +527,22 @@ class Run:
 
     @property
     def delivery_failed(self) -> bool:
-        delivery = self._delivery
+        delivery = self.event_delivery
         return delivery.failed.is_set() if delivery else self._delivery_failed
 
     def snapshot(self, *, include_children: bool = True) -> RunState:
         """Copy run state, optionally omitting independently persisted child runs."""
-        with self._lock:
+        with self.execution_lock:
             state = self._state
             if not include_children:
                 state = state.model_copy(update={"child_runs": []})
             return state.model_copy(deep=True)
 
     def cancel(self) -> None:
-        with self._lock:
+        with self.execution_lock:
             if self._released or self._completed.done():
                 return
-        self._cancellation_signal.cancel()
+        self.cancellation_signal.cancel()
         self._wake_execution()
 
     def suspend(self) -> None:
@@ -542,7 +557,7 @@ class Run:
 
     def resume(self) -> None:
         """Continue a resident suspended run without changing its identity."""
-        with self._lock:
+        with self.execution_lock:
             if self._released:
                 raise RunReleased("Resume the saved run state in a new Agent")
             if self._completed.done():
@@ -591,20 +606,20 @@ class Run:
     def result(self, timeout: float = OPERATION_TIMEOUT_SECONDS) -> RunResult:
         """Wait for terminal output; cleanup can still be in progress."""
         self._completed.result(timeout=timeout)
-        with self._lock:
+        with self.execution_lock:
             return result_from_snapshot(self._state)
 
     def wait_until_settled(
         self, timeout: float = OPERATION_TIMEOUT_SECONDS
     ) -> RunState:
         """Wait until execution suspends or finishes; this does not wait for user input."""
-        with self._lock:
+        with self.execution_lock:
             settled = self._settled
         settled.result(timeout=timeout)
         return self.snapshot()
 
     def wait_for_idle(self, timeout: float = OPERATION_TIMEOUT_SECONDS) -> bool:
-        delivery = self._delivery
+        delivery = self.event_delivery
         if delivery is not None and delivery.is_dispatch_thread:
             raise RuntimeError("An observer cannot wait for its own run to become idle")
         if timeout < 0:
@@ -618,7 +633,7 @@ class Run:
         return True
 
     def subscribe(self, listener: Callable[[AgentEvent], None]) -> Callable[[], None]:
-        delivery = self._delivery
+        delivery = self.event_delivery
         if delivery is None:
             return lambda: None
         return delivery.subscribe(listener)
@@ -627,12 +642,172 @@ class Run:
         """Call once owned work finishes; callbacks must not block."""
         self._idle.add_done_callback(lambda _future: callback())
 
+    def add_done_callback(self, callback: Callable[[], None]) -> None:
+        """Notify after terminal output or release; cleanup can still be running."""
+        self._completed.add_done_callback(lambda _future: callback())
+
     @property
-    def _accepting(self) -> bool:
+    def is_done(self) -> bool:
+        """Whether execution has completed or released ownership."""
+        return self._completed.done()
+
+    def wait_for_completion(self, timeout: float = OPERATION_TIMEOUT_SECONDS) -> None:
+        """Wait for terminal handling without copying output or waiting for cleanup."""
+        self._completed.result(timeout=timeout)
+
+    def wait_until_reusable(self, cancellation: CancellationSignal) -> None:
+        """Wait for ownership cleanup before another run uses this agent."""
+        wait_operation(self._reusable, cancellation)
+
+    def track_child_work(self, child: "Run") -> None:
+        """Keep this execution busy until the child's current workers drain."""
+        self.work.track_operation(child._idle)
+
+    def notify_tool_activity(self) -> None:
+        with self._execution_condition:
+            self._execution_condition.notify_all()
+
+    @property
+    def suspension_requested(self) -> bool:
+        with self.execution_lock:
+            return self._execution_request == ExecutionRequest.SUSPEND
+
+    def start_tool_calls(self, calls: Sequence[ToolCall]) -> None:
+        with self.execution_lock:
+            self.cancellation_signal.check()
+            record = self._state.steps[self._progress.step_index]
+            message_id = record.message.id
+            if message_id is None:
+                raise RuntimeError("Tool execution requires a message ID")
+            for call in calls:
+                if call.id in record.tools:
+                    continue
+                record.tools[call.id] = ToolExecutionRecord(
+                    status=ExecutionStatus.RUNNING
+                )
+                self.publish_event(
+                    ToolStartEvent(
+                        **self.event_context,
+                        message_id=message_id,
+                        step_index=self._progress.step_index,
+                        tool_call=call,
+                    )
+                )
+
+    def record_tool_results(
+        self, result: ToolResult, calls: Sequence[ToolCall]
+    ) -> None:
+        # Checkpoint capture must not split a completed batch.
+        with self.execution_lock:
+            if not self.is_accepting:
+                logger.warning("Tool batch completed after its run closed: %s", self.id)
+                raise AgentCancelled()
+            record = self._state.steps[self._progress.step_index]
+            message_id = record.message.id
+            if message_id is None:
+                raise RuntimeError("Tool execution requires a message ID")
+            for call in calls:
+                execution = record.tools[call.id]
+                execution.result = _tool_result_message(result, call, message_id)
+                execution.status = (
+                    ExecutionStatus.ERROR
+                    if result.is_error
+                    else ExecutionStatus.COMPLETE
+                )
+                self.publish_event(
+                    ToolUpdateEvent(
+                        **self.event_context,
+                        message_id=message_id,
+                        step_index=self._progress.step_index,
+                        tool_call=call,
+                        progress=ToolProgress(
+                            content=result.text, details=result.details
+                        ),
+                    )
+                )
+
+    def record_pending_tool(
+        self, call: ToolCall, pending: PendingToolInput | ChildRunWait
+    ) -> None:
+        event = (
+            InputRequiredEvent(
+                **self.event_context, tool_call_id=call.id, request=pending
+            )
+            if isinstance(pending, PendingToolInput)
+            else None
+        )
+        with self.execution_lock:
+            if isinstance(pending, PendingToolInput) and (
+                pending.request_id in self._progress.human_tool_answers
+                or any(
+                    isinstance(existing, PendingToolInput)
+                    and existing.request_id == pending.request_id
+                    for existing in self._progress.pending_tool_calls.values()
+                )
+            ):
+                raise ValueError("Input request IDs must be unique within a run")
+            self._progress.pending_tool_calls[call.id] = pending.model_copy(deep=True)
+            self._state.revision += 1
+            if event is not None and self.is_accepting and self.event_delivery:
+                self.event_delivery.publish(event)
+
+    def resolve_tool_wait(self, call: ToolCall) -> None:
+        with self.execution_lock:
+            del self._progress.pending_tool_calls[call.id]
+            self._state.revision += 1
+
+    def finish_tool(
+        self, result: ToolResult, call: ToolCall, context: ToolCallContext | None
+    ) -> None:
+        try:
+            if self.after_tool_call is not None:
+                if context is None:
+                    raise RuntimeError("Tool finalization requires callback context")
+                self.cancellation_signal.check()
+                result = self.after_tool_call(context, result.model_copy(deep=True))
+                self.cancellation_signal.check()
+        finally:
+            with self.execution_lock:
+                if self.is_accepting and not self.cancellation_signal.cancelled:
+                    record = self._state.steps[self._progress.step_index]
+                    execution = record.tools[call.id]
+                    if execution.result is None:
+                        raise RuntimeError(
+                            "Completed tool result is missing from history"
+                        )
+                    message_id = record.message.id
+                    if message_id is None:
+                        raise RuntimeError("Tool execution requires a message ID")
+                    if self.after_tool_call is not None:
+                        execution.result = _tool_result_message(
+                            result, call, message_id
+                        )
+                        execution.status = (
+                            ExecutionStatus.ERROR
+                            if result.is_error
+                            else ExecutionStatus.COMPLETE
+                        )
+                    self.publish_event(
+                        ToolEndEvent(
+                            **self.event_context,
+                            message_id=message_id,
+                            step_index=self._progress.step_index,
+                            tool_call=call,
+                            result=result,
+                        )
+                    )
+                else:
+                    logger.debug("Ignoring late tool finalization: %s", call.id)
+        with self.execution_lock:
+            self._progress.finalized_tools += 1
+            self._state.revision += 1
+
+    @property
+    def is_accepting(self) -> bool:
         return not self._released and not self._state.status.is_terminal
 
     @property
-    def _ancestry(self) -> _Ancestry:
+    def event_context(self) -> _Ancestry:
         run_state = self._state
         return _Ancestry(
             agent_id=self.agent_id,
@@ -658,7 +833,7 @@ class Run:
     ) -> None:
         state = self._state
         is_resuming = state.status == RunStatus.SUSPENDED
-        with self._lock:
+        with self.execution_lock:
             self._state.status = RunStatus.RUNNING
         try:
             if state.progress is not None:
@@ -677,7 +852,7 @@ class Run:
             )
             self._generation_context = agent.generation_context.model_copy(
                 update={
-                    "cancellation": self._cancellation_signal,
+                    "cancellation": self.cancellation_signal,
                     "user_identity": agent.generation_context.user_identity.model_copy()
                     if agent.generation_context.user_identity
                     else None,
@@ -685,21 +860,21 @@ class Run:
             )
             self._prepare_step = agent.prepare_step
             self._after_step = agent.after_step
-            self._before_tool_call = agent.before_tool_call
-            self._after_tool_call = agent.after_tool_call
+            self.before_tool_call = agent.before_tool_call
+            self.after_tool_call = agent.after_tool_call
             self._restoration = agent._restoration
             self._thread_context = copy_context()
             if coordinator is not None:
-                self._coordination = coordinator.bind(self)
+                self.coordination = coordinator.bind(self)
                 coordinator.bind_agent(agent)
                 if state.progress is not None:
-                    self._coordination.attach_children(state.progress.child_run_ids)
-                    self._coordination.observe_children(
+                    self.coordination.attach_children(state.progress.child_run_ids)
+                    self.coordination.observe_children(
                         state.progress.observed_child_run_ids
                     )
                 coordinator.begin(self)
             self._cancellation_link.enter_context(
-                self._cancellation_signal.on_cancel(self._wake_execution)
+                self.cancellation_signal.on_cancel(self._wake_execution)
             )
             deadline_at = self._progress.deadline_at
             if deadline_at is not None:
@@ -715,29 +890,29 @@ class Run:
         except BaseException:
             self._cancellation_link.close()
             if coordinator is not None and (
-                self._coordination is not None or not is_resuming
+                self.coordination is not None or not is_resuming
             ):
                 try:
                     coordinator.abort_start(self.id)
                 except Exception:
                     logger.exception("Agent start registration rollback failed")
-            if self._coordination is not None:
-                self._coordination.release()
-            if self._delivery is not None:
-                self._delivery.close()
+            if self.coordination is not None:
+                self.coordination.release()
+            if self.event_delivery is not None:
+                self.event_delivery.close()
             raise
 
     def _start_execution(self, *, background: bool) -> None:
-        with self._lock:
+        with self.execution_lock:
             resuming = not self._execution_active
             if resuming:
                 self._idle = Future()
                 self._settled = Future()
-                self._work = ExecutionWork()
+                self.work = ExecutionWork()
             self._execution_active = True
             self._state.status = RunStatus.RUNNING
-            if self._delivery is not None:
-                self._delivery.resume()
+            if self.event_delivery is not None:
+                self.event_delivery.resume()
             if background:
                 try:
                     start_thread_with_context(
@@ -751,8 +926,8 @@ class Run:
                         raise
                     self._execution_active = False
                     self._state.status = RunStatus.SUSPENDED
-                    if self._delivery is not None:
-                        self._delivery.pause()
+                    if self.event_delivery is not None:
+                        self.event_delivery.pause()
                     self._idle.set_result(None)
                     self._settled.set_result(None)
                     raise
@@ -761,31 +936,31 @@ class Run:
 
     def _wake_execution(self, *, resume: bool = False) -> None:
         with self._execution_condition:
-            if not self._accepting or self._llm is None:
+            if not self.is_accepting or self._llm is None:
                 return
             if resume or self._execution_request != ExecutionRequest.SUSPEND:
                 self._execution_request = ExecutionRequest.WAKE
             self._execution_condition.notify_all()
             if not self._execution_active and (
                 self._execution_request == ExecutionRequest.WAKE
-                or self._cancellation_signal.cancelled
+                or self.cancellation_signal.cancelled
             ):
                 self._start_execution(background=True)
 
-    def _begin_work_cycle(self) -> bool:
+    def begin_work_cycle(self) -> bool:
         """Acknowledge pending wakeups and return whether new work may start."""
-        with self._lock:
-            self._cancellation_signal.check()
+        with self.execution_lock:
+            self.cancellation_signal.check()
             if self._execution_request == ExecutionRequest.SUSPEND:
                 return False
             self._execution_request = ExecutionRequest.NONE
             return True
 
-    def _wait_for_tool_activity(self, completed: Callable[[], bool]) -> None:
+    def wait_for_tool_activity(self, completed: Callable[[], bool]) -> None:
         with self._execution_condition:
             ready = self._execution_condition.wait_for(
                 lambda: (
-                    self._cancellation_signal.cancelled
+                    self.cancellation_signal.cancelled
                     or self._execution_request == ExecutionRequest.WAKE
                     or completed()
                 ),
@@ -801,10 +976,10 @@ class Run:
         outcome = RunStatus.ERROR
         suspended = False
         try:
-            with cancellation_scope(self._cancellation_signal):
-                self._cancellation_signal.check()
+            with cancellation_scope(self.cancellation_signal):
+                self.cancellation_signal.check()
                 if not self._state.steps:
-                    self._publish_event(AgentStartEvent(**self._ancestry))
+                    self.publish_event(AgentStartEvent(**self.event_context))
                 boundary = _advance_loop(self, llm)
                 if boundary == RunStatus.SUSPENDED or self._await_children():
                     self._suspend()
@@ -813,35 +988,35 @@ class Run:
                 outcome = boundary
         except AgentCancelled:
             outcome = RunStatus.CANCELLED
-            self._cancellation_signal.cancel()
+            self.cancellation_signal.cancel()
         except Exception as error:
             logger.exception("Agent run failed")
-            with self._lock:
+            with self.execution_lock:
                 self._state.failure = _failure(error, llm)
-            self._cancellation_signal.cancel()
+            self.cancellation_signal.cancel()
         finally:
             if not suspended:
                 self._finish(outcome, llm)
 
     def _await_children(self) -> bool:
         """Suspend until foreground children finish, without occupying a worker."""
-        if self._coordination is None:
+        if self.coordination is None:
             return False
-        pending = self._coordination.pending_children()
+        pending = self.coordination.pending_children()
         if pending:
-            self._watch_children(pending)
+            self.watch_children(pending)
             return True
-        children = self._coordination.finish(cancel=False)
-        with self._lock:
+        children = self.coordination.finish(cancel=False)
+        with self.execution_lock:
             self._state.child_runs = children
         return False
 
-    def _watch_children(self, run_ids: list[str]) -> None:
-        if self._coordination is None:
+    def watch_children(self, run_ids: list[str]) -> None:
+        if self.coordination is None:
             raise RuntimeError("Child dependencies require a coordinator")
-        coordinator = self._coordination.coordinator
+        coordinator = self.coordination.coordinator
         for run_id in run_ids:
-            with self._lock:
+            with self.execution_lock:
                 if run_id in self._watched_children:
                     continue
                 self._watched_children.add(run_id)
@@ -852,30 +1027,30 @@ class Run:
 
     def _suspend(self) -> None:
         if self._restoration is not None:
-            self._cancellation_signal.check()
+            self.cancellation_signal.check()
             feature_state = _FEATURE_STATE.validate_python(
                 self._restoration.capture_state().model_dump(mode="json")
             )
-            self._cancellation_signal.check()
-            with self._lock:
+            self.cancellation_signal.check()
+            with self.execution_lock:
                 self._progress.feature_state = feature_state
-        if self._coordination is not None:
-            with self._lock:
-                self._progress.child_run_ids = list(self._coordination.children)
+        if self.coordination is not None:
+            with self.execution_lock:
+                self._progress.child_run_ids = list(self.coordination.children)
                 self._progress.observed_child_run_ids = (
-                    self._coordination.observed_children()
+                    self.coordination.observed_children()
                 )
         idle = self._idle
         settled = self._settled
 
         def released() -> None:
-            with self._lock:
+            with self.execution_lock:
                 self._state.status = RunStatus.SUSPENDED
                 self._state.revision += 1
                 self._execution_active = False
                 restart = (
                     self._execution_request == ExecutionRequest.WAKE
-                    or self._cancellation_signal.cancelled
+                    or self.cancellation_signal.cancelled
                 )
             idle.set_result(None)
             settled.set_result(None)
@@ -883,17 +1058,17 @@ class Run:
                 self._wake_execution()
 
         def drained() -> None:
-            with self._lock:
+            with self.execution_lock:
                 self._state.status = RunStatus.SUSPENDED
-            self._publish_event(AgentSuspendedEvent(**self._ancestry))
-            delivery = self._delivery
+            self.publish_event(AgentSuspendedEvent(**self.event_context))
+            delivery = self.event_delivery
             if delivery is not None:
                 delivery.pause()
                 delivery.tracker.on_idle(released)
             else:
                 released()
 
-        self._work.tracker.on_idle(drained)
+        self.work.tracker.on_idle(drained)
 
     def _finish(
         self,
@@ -903,26 +1078,26 @@ class Run:
         llm: LLM,
     ) -> None:
         self._cancellation_link.close()
-        if self._coordination and outcome in (
+        if self.coordination and outcome in (
             RunStatus.ERROR,
             RunStatus.CANCELLED,
         ):
             try:
-                children = self._coordination.finish(cancel=True)
+                children = self.coordination.finish(cancel=True)
             except Exception as error:
                 logger.exception("Child executions did not reach terminal output")
                 outcome = RunStatus.ERROR
                 children = [
                     _capture_unsettled_child(
-                        self._coordination.coordinator.run_state(run_id, self.agent_id)
+                        self.coordination.coordinator.run_state(run_id, self.agent_id)
                     )
-                    for run_id in self._coordination.children
+                    for run_id in self.coordination.children
                 ]
-                with self._lock:
+                with self.execution_lock:
                     self._state.failure = _failure(error, llm)
-            with self._lock:
+            with self.execution_lock:
                 self._state.child_runs = children
-        with self._lock:
+        with self.execution_lock:
             for index, step in enumerate(self._state.steps):
                 if step.generation_status == ExecutionStatus.RUNNING:
                     partial = step.message
@@ -931,10 +1106,10 @@ class Run:
                     )
                     if partial.id is None:
                         raise RuntimeError("Recorded generation has no message ID")
-                    if self._delivery:
-                        self._delivery.publish(
+                    if self.event_delivery:
+                        self.event_delivery.publish(
                             MessageEndEvent(
-                                **self._ancestry,
+                                **self.event_context,
                                 message_id=partial.id,
                                 step_index=index,
                                 message=partial,
@@ -946,10 +1121,10 @@ class Run:
                     if execution.status == ExecutionStatus.RUNNING:
                         execution.status = ExecutionStatus(outcome.value)
             self._state.status = outcome
-            if self._delivery:
-                self._delivery.publish(
+            if self.event_delivery:
+                self.event_delivery.publish(
                     AgentEndEvent(
-                        **self._ancestry,
+                        **self.event_context,
                         outcome=outcome,
                     )
                 )
@@ -957,11 +1132,11 @@ class Run:
         self._completed.set_result(None)
         if not self._settled.done():
             self._settled.set_result(None)
-        if self._delivery is not None:
-            self._delivery.close()
+        if self.event_delivery is not None:
+            self.event_delivery.close()
         try:
-            if self._coordination is not None:
-                self._coordination.coordinator.complete(self)
+            if self.coordination is not None:
+                self.coordination.coordinator.complete(self)
         except Exception:
             logger.exception("Agent output persistence failed")
         finally:
@@ -975,23 +1150,23 @@ class Run:
         self._generation_context = GenerationContext()
         self._prepare_step = None
         self._after_step = None
-        self._before_tool_call = None
-        self._after_tool_call = None
+        self.before_tool_call = None
+        self.after_tool_call = None
         self._restoration = None
 
     def _drain_workers(self) -> None:
-        delivery = self._delivery
+        delivery = self.event_delivery
         if delivery is not None:
-            self._work.tracker.follow(delivery.tracker)
+            self.work.tracker.follow(delivery.tracker)
 
-        if self._coordination is not None:
-            self._coordination._links.close()
+        if self.coordination is not None:
+            self.coordination.close()
         self._execution_active = False
 
         def finish_cleanup() -> None:
             try:
-                if self._coordination is not None:
-                    self._coordination.coordinator.finish(self)
+                if self.coordination is not None:
+                    self.coordination.coordinator.finish(self)
             except Exception as error:
                 logger.exception("Agent ownership release failed")
                 self._reusable.set_exception(error)
@@ -999,20 +1174,20 @@ class Run:
                 self._reusable.set_result(None)
             if delivery is not None:
                 self._delivery_failed = delivery.failed.is_set()
-                self._delivery = None
+                self.event_delivery = None
             self._clear_execution_config()
-            self._coordination = None
+            self.coordination = None
             error = self._reusable.exception()
             if error is not None:
                 self._idle.set_exception(error)
             else:
                 self._idle.set_result(None)
 
-        self._work.tracker.on_idle(finish_cleanup)
+        self.work.tracker.on_idle(finish_cleanup)
 
     def capture(self) -> ExecutionCheckpoint:
         """Capture this run and its preceding conversation under one lock."""
-        with self._lock:
+        with self.execution_lock:
             self._state.revision += 1
             return ExecutionCheckpoint(
                 agent_state=self._history.snapshot(),
@@ -1026,11 +1201,11 @@ class Run:
         save: Callable[[ExecutionCheckpoint], None] | None = None,
     ) -> ExecutionCheckpoint:
         """Save suspended state before releasing local execution ownership."""
-        with self._lock:
+        with self.execution_lock:
             if (
                 self._released
                 or self._state.status != RunStatus.SUSPENDED
-                or self._cancellation_signal.cancelled
+                or self.cancellation_signal.cancelled
                 or self._execution_active
                 or not self._idle.done()
             ):
@@ -1042,8 +1217,8 @@ class Run:
                 and self._state.revision != expected_revision
             ):
                 raise RunNotTransferable("Run changed while preparing its checkpoint")
-            if self._coordination is not None:
-                self._coordination.validate_handoff()
+            if self.coordination is not None:
+                self.coordination.validate_handoff()
             checkpoint = ExecutionCheckpoint(
                 agent_state=self._history.snapshot(),
                 run_state=self._state.model_copy(deep=True),
@@ -1052,10 +1227,10 @@ class Run:
                 save(checkpoint)
             self._released = True
             self._clear_execution_config()
-            coordination = self._coordination
-            self._coordination = None
-            delivery = self._delivery
-            self._delivery = None
+            coordination = self.coordination
+            self.coordination = None
+            delivery = self.event_delivery
+            self.event_delivery = None
         self._cancellation_link.close()
         if delivery is not None:
             delivery.close()
@@ -1065,24 +1240,24 @@ class Run:
         self._completed.set_exception(RunReleased("Local execution has been released"))
         return checkpoint
 
-    def _publish_event(self, event: AgentEvent) -> None:
-        with self._lock:
-            if not self._accepting:
+    def publish_event(self, event: AgentEvent) -> None:
+        with self.execution_lock:
+            if not self.is_accepting:
                 return
-            if self._delivery:
-                self._delivery.publish(event)
+            if self.event_delivery:
+                self.event_delivery.publish(event)
 
 
 def _advance_loop(
     run: Run, llm: LLM
 ) -> Literal[RunStatus.COMPLETE, RunStatus.LIMIT, RunStatus.SUSPENDED]:
-    cancellation_signal = run._cancellation_signal
+    cancellation_signal = run.cancellation_signal
     max_steps = run._progress.step_limit
     while run._progress.step_index < max_steps:
         cancellation_signal.check()
         progress = run._progress
         if progress.action == RunAction.FINISH:
-            if not run._begin_work_cycle():
+            if not run.begin_work_cycle():
                 return RunStatus.SUSPENDED
             if progress.outcome not in (
                 RunStatus.COMPLETE,
@@ -1091,7 +1266,7 @@ def _advance_loop(
                 raise RuntimeError("Execution is missing its terminal decision")
             return progress.outcome
         if progress.action == RunAction.PREPARE:
-            if not run._begin_work_cycle():
+            if not run.begin_work_cycle():
                 return RunStatus.SUSPENDED
             step = AgentStep(index=progress.step_index, limit=max_steps)
             prepare = run._prepare_step
@@ -1125,7 +1300,7 @@ def _advance_loop(
 
 
 def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -> None:
-    cancellation_signal = run._cancellation_signal
+    cancellation_signal = run.cancellation_signal
     if len({tool.name for tool in prepared.tools}) != len(prepared.tools):
         raise ValueError("Tool names must be unique")
     prepared = prepared.model_copy(
@@ -1149,11 +1324,11 @@ def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -
     message_id = f"{run._state.run_id}:{step.index}"
     started = MessageStartEvent(
         message_id=message_id,
-        **run._ancestry,
+        **run.event_context,
         step_index=step.index,
         metadata=prepared.output_metadata,
     )
-    with run._lock:
+    with run.execution_lock:
         cancellation_signal.check()
         recorded_step = StepRecord(
             message=AssistantMessage(
@@ -1165,8 +1340,8 @@ def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -
             generation_status=ExecutionStatus.RUNNING,
         )
         run._state.steps.append(recorded_step)
-        if run._delivery:
-            run._delivery.publish(started)
+        if run.event_delivery:
+            run.event_delivery.publish(started)
 
     timeout = generation_context.total_timeout_s
     deadline = time.monotonic() + min(
@@ -1188,8 +1363,8 @@ def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -
                         raise LLMTimeoutError(
                             "Model generation exceeded its total timeout"
                         )
-                    with run._lock:
-                        if not run._accepting:
+                    with run.execution_lock:
+                        if not run.is_accepting:
                             raise AgentCancelled()
                         if event.request_params:
                             run._state.request_params = event.request_params.model_copy(
@@ -1197,13 +1372,13 @@ def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -
                             )
                         message = recorded_step.message
                         apply_generation_event(message, event)
-                        if run._delivery and not isinstance(
+                        if run.event_delivery and not isinstance(
                             event, GenerationLifecycleEvent
                         ):
-                            run._delivery.publish(
+                            run.event_delivery.publish(
                                 MessageUpdateEvent(
                                     message_id=message_id,
-                                    **run._ancestry,
+                                    **run.event_context,
                                     step_index=step.index,
                                     generation_event=event,
                                 )
@@ -1226,23 +1401,23 @@ def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -
         request = _compact_context(
             run, llm, source, prepared, generation_context, force=True
         )
-        with run._lock:
+        with run.execution_lock:
             recorded_step.message = AssistantMessage(
                 id=message_id, metadata=recorded_step.message.metadata
             )
         generate()
-    with run._lock:
+    with run.execution_lock:
         cancellation_signal.check()
         recorded_step.generation_status = ExecutionStatus.COMPLETE
         ended = MessageEndEvent(
-            **run._ancestry,
+            **run.event_context,
             message_id=message_id,
             step_index=step.index,
             message=recorded_step.message,
             status=ExecutionStatus.COMPLETE,
         )
-        if run._delivery:
-            run._delivery.publish(ended)
+        if run.event_delivery:
+            run.event_delivery.publish(ended)
         run._progress.options = request.options.model_copy(deep=True)
         run._progress.tools = [tool.model_copy(deep=True) for tool in request.tools]
         run._progress.action = RunAction.TOOLS
@@ -1258,7 +1433,7 @@ def _compact_context(
     *,
     force: bool = False,
 ) -> GenerationRequest:
-    cancellation_signal = run._cancellation_signal
+    cancellation_signal = run.cancellation_signal
     previous = run._state.checkpoint
     try:
         messages = working_messages(source, previous)
@@ -1266,7 +1441,7 @@ def _compact_context(
         logger.info("Ignoring compaction checkpoint: %s", error)
         previous = None
         messages = list(source)
-        with run._lock:
+        with run.execution_lock:
             run._state.checkpoint = None
     cancellation_signal.check()
     request = prepared.generation_request(messages)
@@ -1316,7 +1491,7 @@ def _compact_context(
             original_size=original_size,
         )
 
-    with run._lock:
+    with run.execution_lock:
         cancellation_signal.check()
         run._state.checkpoint = selected_checkpoint
     return _limit_output(llm, candidate_request, candidate_size)
@@ -1382,16 +1557,30 @@ def _execute_tools(run: Run) -> bool:
                 raise ValueError("Restored tools do not match the saved step")
             tools.append(tool)
         run._prepared_step = PreparedStep(tools=tools, options=progress.options)
-    if not ToolBatch(run).execute():
+    batch = ToolBatch(
+        run,
+        prepared=run._prepared_step,
+        progress=progress,
+        record=run._state.steps[progress.step_index],
+        history=working_messages(
+            [
+                *run._history.messages,
+                *run._state.input_messages,
+                *messages_from_steps(run._state.steps[: progress.step_index]),
+            ],
+            run._state.checkpoint,
+        ),
+    )
+    if not batch.execute():
         return False
-    with run._lock:
+    with run.execution_lock:
         progress.action = RunAction.AFTER_STEP
         run._state.revision += 1
     return True
 
 
 def _complete_step(run: Run) -> None:
-    cancellation_signal = run._cancellation_signal
+    cancellation_signal = run.cancellation_signal
     after_step = run._after_step
     cancellation_signal.check()
     progress = run._progress
@@ -1414,7 +1603,7 @@ def _complete_step(run: Run) -> None:
             results and all(result.terminate for result in results)
         )
     cancellation_signal.check()
-    with run._lock:
+    with run.execution_lock:
         progress.previous_options = progress.options
         if not should_continue or progress.step_index + 1 >= progress.step_limit:
             progress.outcome = (
@@ -1451,3 +1640,19 @@ def _step_result(
         ],
         options=options,
     )
+
+
+def _tool_result_message(
+    result: ToolResult, call: ToolCall, message_id: str
+) -> ToolResultMessage:
+    return ToolResultMessage(
+        id=f"{message_id}:result:{call.id}",
+        content=result.content,
+        metadata=result.metadata,
+        cacheable=result.cacheable,
+        details=result.details,
+        is_error=result.is_error,
+        terminate=result.terminate,
+        tool_call_id=call.id,
+        tool_name=call.name,
+    ).model_copy(deep=True)
