@@ -112,8 +112,20 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
      which the wrapper copies through to the consumer
    STATUS: STILL NEEDED - v1.93.0 only preserves chunk models for Azure.
 
+10. Gemini 4+ And Content-less Candidates (_patch_vertex_gemini_newer_models):
+   - VertexGeminiConfig._is_gemini_3_or_newer matches the "gemini-3" substring, so
+     gemini-4-argon takes the Gemini 2 path: reasoning maps to thinkingBudget,
+     which Gemini 4 rejects. get_supported_openai_params also looks the bare name
+     up in the registry, which lists gemini-4-argon only as vertex_ai/gemini-4-argon,
+     so reasoning_effort is reported unsupported and dropped
+   - _process_candidates skips a candidate with a finishReason but no content,
+     e.g. a reply whose whole output budget went to thinking. A non-streamed
+     response then has no choices; streaming adds an empty choice for the same reply
+   STATUS: STILL NEEDED - Fixed upstream by v1.106.4; drop once we are on it.
+
 """
 
+import re
 import time
 import uuid
 from typing import Any, List, Optional, cast
@@ -948,6 +960,62 @@ def _patch_openrouter_routed_model() -> None:
     )
 
 
+_GEMINI_PRE_3_PATTERN = re.compile(
+    r"^gemini-(?:[12](?:\.\d+)?|exp|(?:pro|flash)(?!-(?:lite-)?latest$))(?:-|$)"
+)
+
+
+def _is_gemini_3_or_newer(model: str) -> bool:
+    model_name = model.split("/")[-1].lower()
+    if not model_name.startswith("gemini-"):
+        return False
+    return _GEMINI_PRE_3_PATTERN.match(model_name) is None
+
+
+def _patch_vertex_gemini_newer_models() -> None:
+    from litellm.llms.vertex_ai.gemini.vertex_and_google_ai_studio_gemini import (
+        VertexGeminiConfig,
+    )
+
+    if (
+        VertexGeminiConfig.get_supported_openai_params.__name__
+        == "_patched_gemini_get_supported_openai_params"
+    ):
+        return
+
+    original_get_supported_openai_params = (
+        VertexGeminiConfig.get_supported_openai_params
+    )
+    original_process_candidates = VertexGeminiConfig._process_candidates
+
+    def _patched_gemini_get_supported_openai_params(self: Any, model: str) -> list[str]:
+        params: list[str] = original_get_supported_openai_params(self, model)
+        if _is_gemini_3_or_newer(model):
+            params += [p for p in ("reasoning_effort", "thinking") if p not in params]
+        return params
+
+    def _patched_gemini_process_candidates(
+        _candidates: list[Any], *args: Any, **kwargs: Any
+    ) -> Any:
+        candidates = [
+            (
+                {**candidate, "content": {"role": "model", "parts": []}}
+                if "content" not in candidate and "finishReason" in candidate
+                else candidate
+            )
+            for candidate in _candidates
+        ]
+        return original_process_candidates(cast(Any, candidates), *args, **kwargs)
+
+    VertexGeminiConfig._is_gemini_3_or_newer = staticmethod(_is_gemini_3_or_newer)  # ty: ignore[invalid-assignment]
+    VertexGeminiConfig.get_supported_openai_params = (  # type: ignore[method-assign]
+        _patched_gemini_get_supported_openai_params
+    )
+    VertexGeminiConfig._process_candidates = staticmethod(  # ty: ignore[invalid-assignment]
+        _patched_gemini_process_candidates
+    )
+
+
 def apply_monkey_patches() -> None:
     """
     Apply all necessary monkey patches to LiteLLM for compatibility.
@@ -963,6 +1031,7 @@ def apply_monkey_patches() -> None:
     - Patching responses_api_bridge_check to always honor an explicit responses/ prefix
     - Patching AnthropicConfig.transform_request to keep disabled thinking on tool turns
     - Patching OpenRouterChatCompletionStreamingHandler.chunk_parser to keep the served model
+    - Patching VertexGeminiConfig for Gemini 4+ thinking and content-less candidates
     """
     _patch_ollama_chunk_parser()
     _patch_responses_reasoning_summary_newlines()
@@ -973,3 +1042,4 @@ def apply_monkey_patches() -> None:
     _patch_responses_api_bridge_check()
     _patch_anthropic_keeps_disabled_thinking()
     _patch_openrouter_routed_model()
+    _patch_vertex_gemini_newer_models()

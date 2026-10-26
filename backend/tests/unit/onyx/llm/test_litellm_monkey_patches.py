@@ -539,3 +539,47 @@ def test_openrouter_chunk_parser_keeps_served_model() -> None:
     assert parsed.provider_specific_fields == {
         "routed_model": "deepseek/deepseek-v4-flash"
     }
+
+
+def _gemini_thinking_config(model: str, reasoning_effort: str) -> Any:
+    from litellm.llms.vertex_ai.gemini.vertex_and_google_ai_studio_gemini import (
+        VertexGeminiConfig,
+    )
+
+    apply_monkey_patches()
+    config = VertexGeminiConfig()
+    assert "reasoning_effort" in config.get_supported_openai_params(model)
+    params = config.map_openai_params(
+        non_default_params={"reasoning_effort": reasoning_effort},
+        optional_params={},
+        model=model,
+        drop_params=False,
+    )
+    return params["thinkingConfig"]
+
+
+def test_gemini_4_maps_reasoning_to_thinking_level() -> None:
+    assert _gemini_thinking_config("gemini-4-argon", "low") == {
+        "thinkingLevel": "low",
+        "includeThoughts": True,
+    }
+
+
+def test_gemini_2_keeps_thinking_budget() -> None:
+    assert "thinkingBudget" in _gemini_thinking_config("gemini-2.5-flash", "low")
+
+
+def test_gemini_candidate_without_content_yields_empty_choice() -> None:
+    from litellm.llms.vertex_ai.gemini.vertex_and_google_ai_studio_gemini import (
+        VertexGeminiConfig,
+    )
+
+    apply_monkey_patches()
+    response = ModelResponse()
+    response.choices = []
+    VertexGeminiConfig._process_candidates(
+        [{"finishReason": "MAX_TOKENS", "index": 0}], response, {}
+    )
+    assert [(c.finish_reason, c.message.content) for c in response.choices] == [
+        ("length", None)
+    ]
