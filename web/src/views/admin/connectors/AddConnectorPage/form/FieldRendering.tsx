@@ -436,13 +436,16 @@ export const RenderField: FC<RenderFieldProps> = ({
   const checkActions = useConnectorCheckActions();
   const testCheck: { checkId: string; label: string } | undefined =
     field.type === "text" ? field.testCheck : undefined;
-  // A text field's placeholder can follow the form's values.
-  const textPlaceholder: string | undefined =
+  // A text field's placeholder can follow the form's values. A
+  // "connectors." key (see `isConnectorMessageKey`) is translated; anything
+  // else passes through unchanged.
+  const textPlaceholder: string | undefined = translateIfKey(
     field.type === "text"
       ? typeof field.placeholder === "function"
         ? field.placeholder(values)
         : field.placeholder
-      : undefined;
+      : undefined
+  );
   const optionalSuffix: string | undefined = field.optional
     ? t("field.optionalSuffix.label")
     : undefined;
