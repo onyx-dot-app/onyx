@@ -322,22 +322,19 @@ class NullFilteredString(TypeDecorator):
         return value
 
 
-# Migration b3f1c9a27d84 sized search_settings.reclaim_status from IndexReclaimStatus
-# when it ran. Databases migrated before RECLAIMED existed got VARCHAR(8), and release
-# branches have no migration that widens it. "RECLAIMED" has 9 characters, so
-# RECLAIMED is stored as this shorter value.
-_RECLAIMED_DB_VALUE = "RECLAIMD"
-# Databases created after RECLAIMED existed got VARCHAR(9) and can hold this value.
-_LEGACY_RECLAIMED_DB_VALUE = "RECLAIMED"
+# Releases without migration ca7cc9a98a6b write RECLAIMED as this value on every
+# database. The migration rewrites it to "RECLAIMED", but those releases can still
+# write it beside this version during a rolling deploy, or after a rollback; the
+# migration does not run again on the next upgrade.
+_SHORT_RECLAIMED_DB_VALUE = "RECLAIMD"
 
 
 class IndexReclaimStatusType(TypeDecorator):
-    """Stores an IndexReclaimStatus by member name, except RECLAIMED, which is stored
-    as _RECLAIMED_DB_VALUE so that it fits every database. Reads accept both stored
-    forms of RECLAIMED.
+    """Stores an IndexReclaimStatus by member name, as a non-native Enum does, and
+    also reads _SHORT_RECLAIMED_DB_VALUE as RECLAIMED.
 
-    A SQL comparison with RECLAIMED binds only _RECLAIMED_DB_VALUE, so it misses rows
-    that hold the legacy value. Compare with the other statuses instead."""
+    A SQL comparison with RECLAIMED misses rows that hold the short value. Compare
+    with the other statuses instead."""
 
     impl = String
     cache_ok = True
@@ -349,8 +346,6 @@ class IndexReclaimStatusType(TypeDecorator):
     ) -> str | None:
         if value is None:
             return None
-        if value == IndexReclaimStatus.RECLAIMED:
-            return _RECLAIMED_DB_VALUE
         return value.name
 
     def process_result_value(
@@ -360,7 +355,7 @@ class IndexReclaimStatusType(TypeDecorator):
     ) -> IndexReclaimStatus | None:
         if value is None:
             return None
-        if value in (_RECLAIMED_DB_VALUE, _LEGACY_RECLAIMED_DB_VALUE):
+        if value == _SHORT_RECLAIMED_DB_VALUE:
             return IndexReclaimStatus.RECLAIMED
         return IndexReclaimStatus[value]
 
@@ -2407,9 +2402,9 @@ class SearchSettings(Base):
 
     # Old-index reclamation (see reclaim helpers in db/search_settings.py).
     # NULL = not reclaim-tracked; set to PENDING at reindex submit on the current
-    # PRESENT (the future PAST).
+    # PRESENT (the future PAST). The length matches migration ca7cc9a98a6b.
     reclaim_status: Mapped[IndexReclaimStatus | None] = mapped_column(
-        IndexReclaimStatusType(), nullable=True
+        IndexReclaimStatusType(64), nullable=True
     )
     # Soak anchor: when the index stopped being read (port drained), NOT swap time —
     # so INSTANT backfills (which read PAST post-swap) anchor correctly.

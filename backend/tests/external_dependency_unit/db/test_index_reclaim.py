@@ -14,8 +14,7 @@ in test_index_reclaim_task.py; here we cover the guards + query logic):
 - fetch_reclaimable_past_settings: actionable PAST rows only, excludes BLOCKED, honors limit
 - name-reuse guard: refuses a reindex whose new index_name still belongs to a not-yet-
   reclaimed PAST; find_unreclaimed_past_by_index_name decides which rows count
-- RECLAIMED storage: fits the VARCHAR(8) column of databases migrated before RECLAIMED
-  existed, and both stored forms count as reclaimed
+- RECLAIMED storage: both stored forms count as reclaimed
 - consent: set_reclaim_intent stamps the PRESENT; drift enforcement rejects deleting a
   cc_pair the admin never acknowledged
 """
@@ -51,7 +50,6 @@ from onyx.db.enums import (
 from onyx.db.models import ConnectorCredentialPair, Notification, SearchSettings
 from onyx.db.notification import batch_create_notifications
 from onyx.db.search_settings import (
-    advance_to_reclaimed__no_commit,
     advance_to_soaking__no_commit,
     clear_reclaim_intent__no_commit,
     create_search_settings,
@@ -589,72 +587,29 @@ def test_find_unreclaimed_includes_blocked_and_legacy_excludes_reclaimed(
         db_session.commit()
 
 
-def _set_reclaim_status_length__no_commit(db_session: Session, length: int) -> None:
-    """Gives search_settings.reclaim_status the width that some databases have. Postgres
-    runs the ALTER in the caller's transaction, so a rollback undoes it."""
-    # Fail instead of waiting behind an open transaction that read the table.
-    db_session.execute(text("SET LOCAL lock_timeout = '10s'"))
-    db_session.execute(
-        text(
-            "ALTER TABLE search_settings ALTER COLUMN reclaim_status "
-            f"TYPE VARCHAR({length})"
-        )
-    )
-
-
 def test_find_unreclaimed_excludes_both_stored_forms_of_reclaimed(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
-    """RECLAIMED is stored in a short form, but databases created after RECLAIMED
-    existed have VARCHAR(9) and may already hold "RECLAIMED". Both forms mean the index
-    is gone."""
+    """Releases without the widening migration write RECLAIMED as "RECLAIMD". Both
+    forms mean the index is gone."""
     name = f"test_find_reclaimed_forms_{uuid4().hex[:8]}"
     reclaimed = _make_settings(
         db_session, IndexReclaimStatus.RECLAIMED, index_name=name
     )
-    stored_before_short_form = _make_settings(db_session, None, index_name=name)
+    short_reclaimed = _make_settings(db_session, None, index_name=name)
+    db_session.execute(
+        text("UPDATE search_settings SET reclaim_status = 'RECLAIMD' WHERE id = :id"),
+        {"id": short_reclaimed.id},
+    )
+    db_session.commit()
+    db_session.refresh(short_reclaimed)
     try:
-        # The test database may have VARCHAR(8), which cannot hold "RECLAIMED".
-        _set_reclaim_status_length__no_commit(db_session, 9)
-        db_session.execute(
-            text(
-                "UPDATE search_settings SET reclaim_status = 'RECLAIMED' WHERE id = :id"
-            ),
-            {"id": stored_before_short_form.id},
-        )
-        db_session.expire(stored_before_short_form)
-        assert stored_before_short_form.reclaim_status == IndexReclaimStatus.RECLAIMED
+        assert short_reclaimed.reclaim_status == IndexReclaimStatus.RECLAIMED
         assert find_unreclaimed_past_by_index_name(db_session, name) == []
     finally:
-        db_session.rollback()
-        for row in (reclaimed, stored_before_short_form):
+        for row in (reclaimed, short_reclaimed):
             db_session.delete(row)
-        db_session.commit()
-
-
-def test_reclaimed_fits_the_column_from_before_reclaimed_existed(
-    db_session: Session,
-    tenant_context: None,  # noqa: ARG001
-) -> None:
-    """Databases migrated before RECLAIMED existed have VARCHAR(8)."""
-    ss = _make_settings(db_session, IndexReclaimStatus.DELETING)
-    try:
-        # A 9-character value in any row would make the ALTER fail.
-        db_session.execute(
-            text(
-                "UPDATE search_settings SET reclaim_status = NULL "
-                "WHERE reclaim_status = 'RECLAIMED'"
-            )
-        )
-        _set_reclaim_status_length__no_commit(db_session, 8)
-        assert advance_to_reclaimed__no_commit(ss)
-        db_session.flush()
-        db_session.expire(ss)
-        assert ss.reclaim_status == IndexReclaimStatus.RECLAIMED
-    finally:
-        db_session.rollback()
-        db_session.delete(ss)
         db_session.commit()
 
 
