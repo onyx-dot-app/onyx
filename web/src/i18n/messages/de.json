@@ -6176,8 +6176,7 @@
           "text": "Erstellen Sie Gruppen, um Benutzer zu organisieren und den Zugriff zu verwalten."
         },
         "loadError": {
-          "description": "Weitere Details finden Sie in der Konsole.",
-          "title": "Gruppen konnten nicht geladen werden."
+          "description": "Weitere Details finden Sie in der Konsole."
         },
         "newGroup": {
           "label": "Neue Gruppe"
@@ -8836,8 +8835,7 @@
       "page": {
         "description": "Verwenden Sie Dienstkonten, um programmatisch auf die {appName}-API zuzugreifen.",
         "error": {
-          "description": "Weitere Details finden Sie in der Konsole.",
-          "title": "Dienstkonten konnten nicht geladen werden."
+          "description": "Weitere Details finden Sie in der Konsole."
         }
       },
       "regenerateModal": {
@@ -10043,8 +10041,7 @@
         }
       },
       "loadError": {
-        "description": "Die Tracing-Konfiguration kann nicht geladen werden.",
-        "title": "Tracing-Einstellungen konnten nicht geladen werden"
+        "description": "Die Tracing-Konfiguration kann nicht geladen werden."
       },
       "page": {
         "description": "Verbinden Sie Observability-Plattformen, um LLM-Aufrufe zu überwachen und auszuwerten."
@@ -16081,6 +16078,12 @@
     },
     "settingsHeader": {
       "cancel": "Abbrechen"
+    },
+    "settingsBody": {
+      "error": {
+        "title": "{page} konnte nicht geladen werden",
+        "description": "Etwas ist schiefgelaufen. Versuchen Sie es gleich noch einmal."
+      }
     },
     "table": {
       "alwaysShown": "Immer angezeigt",

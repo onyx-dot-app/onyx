@@ -6176,8 +6176,7 @@
           "text": "Créez des groupes pour organiser les utilisateurs et gérer les accès."
         },
         "loadError": {
-          "description": "Consultez la console pour plus de détails.",
-          "title": "Échec du chargement des groupes."
+          "description": "Consultez la console pour plus de détails."
         },
         "newGroup": {
           "label": "Nouveau groupe"
@@ -8836,8 +8835,7 @@
       "page": {
         "description": "Utilisez des comptes de service pour accéder à l'API {appName} par programmation.",
         "error": {
-          "description": "Consultez la console pour plus de détails.",
-          "title": "Échec du chargement des comptes de service."
+          "description": "Consultez la console pour plus de détails."
         }
       },
       "regenerateModal": {
@@ -10043,8 +10041,7 @@
         }
       },
       "loadError": {
-        "description": "Impossible de charger la configuration du traçage.",
-        "title": "Échec du chargement des paramètres de traçage"
+        "description": "Impossible de charger la configuration du traçage."
       },
       "page": {
         "description": "Connectez des plateformes d'observabilité pour surveiller et évaluer les appels LLM."
@@ -16081,6 +16078,12 @@
     },
     "settingsHeader": {
       "cancel": "Annuler"
+    },
+    "settingsBody": {
+      "error": {
+        "title": "Impossible de charger {page}",
+        "description": "Un problème est survenu. Réessayez dans un instant."
+      }
     },
     "table": {
       "alwaysShown": "Toujours affichée",

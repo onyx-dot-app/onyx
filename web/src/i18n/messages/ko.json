@@ -6176,8 +6176,7 @@
           "text": "그룹을 만들어 사용자를 정리하고 접근 권한을 관리하세요."
         },
         "loadError": {
-          "description": "자세한 내용은 콘솔을 확인하세요.",
-          "title": "그룹을 불러오지 못했습니다."
+          "description": "자세한 내용은 콘솔을 확인하세요."
         },
         "newGroup": {
           "label": "새 그룹"
@@ -8836,8 +8835,7 @@
       "page": {
         "description": "서비스 계정을 사용하여 {appName} API에 프로그래밍 방식으로 접근하세요.",
         "error": {
-          "description": "자세한 내용은 콘솔을 확인하세요.",
-          "title": "서비스 계정을 불러오지 못했습니다."
+          "description": "자세한 내용은 콘솔을 확인하세요."
         }
       },
       "regenerateModal": {
@@ -10043,8 +10041,7 @@
         }
       },
       "loadError": {
-        "description": "추적 구성을 불러올 수 없습니다.",
-        "title": "추적 설정을 불러오지 못했습니다"
+        "description": "추적 구성을 불러올 수 없습니다."
       },
       "page": {
         "description": "관측 플랫폼을 연결하여 LLM 호출을 모니터링하고 평가하세요."
@@ -16081,6 +16078,12 @@
     },
     "settingsHeader": {
       "cancel": "취소"
+    },
+    "settingsBody": {
+      "error": {
+        "title": "{page}을(를) 불러오지 못했습니다",
+        "description": "문제가 발생했습니다. 잠시 후 다시 시도하세요."
+      }
     },
     "table": {
       "alwaysShown": "항상 표시",
