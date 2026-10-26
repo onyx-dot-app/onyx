@@ -1259,7 +1259,6 @@
       "reasoning": true,
       "release_date": "2026-02-05",
       "structured_output": true,
-      "supports_none_reasoning_effort": true,
       "temperature": true,
       "tool_call": true
     },
