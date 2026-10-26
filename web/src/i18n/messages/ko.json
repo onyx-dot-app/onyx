@@ -11503,9 +11503,6 @@
         },
         "people": {
           "label": "액세스 권한이 있는 사용자"
-        },
-        "generalAccess": {
-          "title": "일반 액세스"
         }
       },
       "viewer": {

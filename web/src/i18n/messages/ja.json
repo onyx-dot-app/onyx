@@ -11503,9 +11503,6 @@
         },
         "people": {
           "label": "アクセスできるユーザー"
-        },
-        "generalAccess": {
-          "title": "一般アクセス"
         }
       },
       "viewer": {
