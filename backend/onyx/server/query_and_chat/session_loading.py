@@ -959,7 +959,11 @@ def _response_packets(
         setting = settings.get(message_id, MessageRendering(mode=default_mode))
         renderer = MessageRenderer(setting, documents, layout, parent)
         packets.extend(renderer.complete(message))
-        calls = [call for call in message.tool_calls if call.name not in HIDDEN_TOOLS]
+        calls = [
+            call
+            for call in message.tool_calls
+            if call.name not in HIDDEN_TOOLS and call.name != setting.think_tool
+        ]
         if not calls:
             continue
         for call in calls:

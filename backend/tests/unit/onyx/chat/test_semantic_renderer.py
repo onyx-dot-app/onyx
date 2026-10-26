@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from queue import Queue
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue
 
 from onyx.agents.events import (
     AgentEndEvent,
@@ -13,13 +13,25 @@ from onyx.agents.events import (
     MessageUpdateEvent,
     ToolStartEvent,
 )
-from onyx.agents.models import ExecutionStatus, RunState, RunStatus, StepRecord
+from onyx.agents.models import (
+    ExecutionStatus,
+    RunState,
+    RunStatus,
+    StepRecord,
+    ToolExecutionRecord,
+)
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.chat.emitter import Emitter
-from onyx.chat.models import ChatMessageMetadata, CitationMode, MessageRendering
+from onyx.chat.models import (
+    ChatMessageMetadata,
+    CitationMode,
+    MessageRendering,
+    ResponseRecord,
+)
 from onyx.chat.presentation import ResponsePresenter, project_response
-from onyx.chat.renderer import MessageRenderer, ResponseLayout
+from onyx.chat.renderer import MessageRenderer, ResponseLayout, ToolRenderer
+from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import GenerationContext
@@ -43,16 +55,26 @@ from onyx.llm.models import (
     ToolCall,
     ToolDefinition,
     ToolResult,
+    ToolResultMessage,
     UserMessage,
 )
+from onyx.server.query_and_chat.placement import Placement
+from onyx.server.query_and_chat.session_loading import _response_packets
 from onyx.server.query_and_chat.streaming_models import (
     AgentResponseDelta,
     AgentResponseStart,
+    BashToolDelta,
+    BashToolStart,
+    CitationInfo,
+    CustomToolStart,
     OverallStop,
     Packet,
+    PacketException,
     SearchToolStart,
     SectionEnd,
+    ToolCallDebug,
 )
+from onyx.tools.models import LlmBashExecutionResult, ToolExecutionError
 from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
 
@@ -386,3 +408,186 @@ def test_root_narration_and_search_use_distinct_render_groups() -> None:
         != (search.placement.turn_index, search.placement.tab_index)
         for p in narration
     )
+
+
+@pytest.mark.parametrize("live", [False, True])
+def test_leading_citation_keeps_metadata(live: bool) -> None:
+    doc = SearchDoc(
+        document_id="doc",
+        chunk_ind=0,
+        semantic_identifier="Source",
+        link="https://example.com",
+        blurb="source",
+        source_type=DocumentSource.WEB,
+        boost=1,
+        hidden=False,
+        metadata={},
+        match_highlights=[],
+    )
+    renderer = MessageRenderer(
+        MessageRendering(
+            citation_mode=CitationMode.HYPERLINK, citation_documents={1: "doc"}
+        ),
+        {"doc": doc},
+        ResponseLayout(),
+    )
+    packets = (
+        renderer.consume(TextDeltaEvent(content_index=0, text="[1] Answer"))
+        if live
+        else []
+    )
+    packets.extend(
+        renderer.complete(AssistantMessage(content=[TextContent(text="[1] Answer")]))
+    )
+    citations = [p for p in packets if isinstance(p.obj, CitationInfo)]
+    starts = [p for p in packets if isinstance(p.obj, AgentResponseStart)]
+    assert len(citations) == len(starts) == 1
+    assert citations[0].placement == starts[0].placement
+
+
+@pytest.mark.parametrize("debug", [False, True])
+def test_bash_debug_packet_precedes_output_start(
+    debug: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("onyx.chat.renderer.INTEGRATION_TESTS_MODE", debug)
+    renderer = ToolRenderer(
+        ToolCall(id="bash", name="bash", arguments={"cmd": "pwd"}),
+        Placement(turn_index=0),
+    )
+    packets = renderer.start()
+    packets.extend(
+        renderer.complete(
+            ToolResult(
+                content="done",
+                details=LlmBashExecutionResult(
+                    stdout="/repo", stderr="", exit_code=0, timed_out=False
+                ),
+            )
+        )
+    )
+    assert sum(isinstance(p.obj, ToolCallDebug) for p in packets) == int(debug)
+    start = next(i for i, p in enumerate(packets) if isinstance(p.obj, BashToolStart))
+    assert isinstance(packets[start + 1].obj, BashToolDelta)
+
+
+@pytest.mark.parametrize(
+    ("name", "arguments"),
+    [
+        ("run_python", {"code": []}),
+        ("internal_search", {"queries": 3}),
+        ("open_url", {"urls": {}}),
+        ("bash", {"cmd": None}),
+    ],
+)
+def test_invalid_tool_arguments_replay_the_error_and_later_answer(
+    name: str, arguments: dict[str, JsonValue]
+) -> None:
+    call = ToolCall(id="call", name=name, arguments=arguments)
+    response = ResponseRecord(
+        run_id="r",
+        status=RunStatus.COMPLETE,
+        steps=[
+            StepRecord(
+                message=AssistantMessage(id="m", content=[call]),
+                generation_status=ExecutionStatus.COMPLETE,
+                tools={
+                    "call": ToolExecutionRecord(
+                        status=ExecutionStatus.ERROR,
+                        result=ToolResultMessage(
+                            tool_call_id="call",
+                            tool_name=name,
+                            content="Invalid arguments",
+                            is_error=True,
+                            details=ToolExecutionError(message="Invalid arguments"),
+                        ),
+                    )
+                },
+            ),
+            StepRecord(
+                message=AssistantMessage(
+                    id="answer", content=[TextContent(text="Recovered answer")]
+                ),
+                generation_status=ExecutionStatus.COMPLETE,
+            ),
+        ],
+        answer_step_index=1,
+    )
+    packets = _response_packets(response, {}, {}, {})
+    assert any(isinstance(p.obj, CustomToolStart) for p in packets)
+    assert any(
+        isinstance(p.obj, PacketException)
+        and str(p.obj.exception) == "Invalid arguments"
+        for p in packets
+    )
+    assert any(
+        isinstance(p.obj, AgentResponseDelta) and p.obj.content == "Recovered answer"
+        for p in packets
+    )
+
+
+@pytest.mark.parametrize("reasoning", ["Reasoning", []])
+def test_replay_hides_configured_thinking_tool(reasoning: str | list[str]) -> None:
+    response = ResponseRecord(
+        run_id="r",
+        status=RunStatus.COMPLETE,
+        steps=[
+            StepRecord(
+                message=AssistantMessage(
+                    id="m",
+                    content=[
+                        ToolCall(
+                            id="think",
+                            name="think",
+                            arguments={"reasoning": reasoning},
+                        )
+                    ],
+                ),
+                generation_status=ExecutionStatus.COMPLETE,
+            ),
+        ],
+    )
+    packets = _response_packets(
+        response, {}, {"m": MessageRendering(think_tool="think")}, {}
+    )
+    assert not any(isinstance(p.obj, CustomToolStart) for p in packets)
+    assert any(p.obj.type == "reasoning_delta" for p in packets) == bool(reasoning)
+
+
+@pytest.mark.parametrize("status", [RunStatus.ERROR, RunStatus.CANCELLED])
+def test_interrupted_answer_citations_belong_to_the_selected_text(
+    status: RunStatus,
+) -> None:
+    doc = SearchDoc(
+        document_id="doc",
+        chunk_ind=0,
+        semantic_identifier="Source",
+        link="https://example.com",
+        blurb="source",
+        source_type=DocumentSource.WEB,
+        boost=1,
+        hidden=False,
+        metadata={},
+        match_highlights=[],
+    )
+    metadata = ChatMessageMetadata(sources={1: doc})
+    snapshot = RunState(
+        run_id="r",
+        status=status,
+        steps=[
+            StepRecord(
+                message=AssistantMessage(
+                    content=[TextContent(text="Checking [1].")], metadata=metadata
+                ),
+                generation_status=ExecutionStatus.COMPLETE,
+            ),
+            StepRecord(
+                message=AssistantMessage(
+                    content=[TextContent(text="Partial answer")], metadata=metadata
+                ),
+                generation_status=ExecutionStatus.ERROR,
+            ),
+        ],
+    )
+    response = project_response(snapshot, tool_ids={})
+    assert response.answer == "Partial answer"
+    assert response.citation_info == []

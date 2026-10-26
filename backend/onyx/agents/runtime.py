@@ -1404,7 +1404,7 @@ def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -
         generate()
     except LLMContextLimitError:
         partial = recorded_step.message
-        if partial.text or partial.tool_calls:
+        if partial.content:
             raise
         request = _compact_context(
             run, llm, source, prepared, generation_context, force=True

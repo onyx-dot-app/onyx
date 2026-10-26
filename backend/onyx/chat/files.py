@@ -7,8 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.chat.models import AvailableFiles, SearchParams
-from onyx.chat.prompt_formatting import PromptMetadata
+from onyx.chat.models import AvailableFiles, PromptMetadata, SearchParams
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import DEFAULT_PERSONA_ID, FileOrigin
 from onyx.context.search.models import SearchDoc
@@ -45,7 +44,7 @@ logger = setup_logger()
 APPROX_CHARS_PER_TOKEN = 4
 
 
-def _collect_available_file_ids(
+def collect_available_file_ids(
     chat_history: list[ChatMessage],
     context_user_files: list[UserFileMetadata],
 ) -> AvailableFiles:
@@ -74,7 +73,7 @@ def _collect_available_file_ids(
     )
 
 
-def _convert_loaded_files_to_chat_files(
+def convert_loaded_files_to_chat_files(
     loaded_files: list[ChatLoadedFile],
 ) -> list[ChatFile]:
     """Expose attachments to tools without loading their bytes."""
@@ -102,7 +101,7 @@ def _deduped_filename(filename: str, seen_filenames: set[str], file_id: str) -> 
     return deduped_filename
 
 
-def _load_context_user_files_for_tools(
+def load_context_user_files_for_tools(
     user_files: list[UserFileMetadata],
     existing_filenames: set[str],
 ) -> list[ChatFile]:

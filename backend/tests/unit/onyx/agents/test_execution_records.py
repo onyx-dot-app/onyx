@@ -1,12 +1,14 @@
 """Model replay omits ambiguous exchanges without changing recorded output."""
 
 import pytest
+from pydantic import TypeAdapter
 
 from onyx.agents.execution_records import messages_for_model
 from onyx.llm.model_request import format_provider_message
 from onyx.llm.models import (
     AssistantMessage,
     Message,
+    MessageRole,
     RedactedThinkingBlock,
     TextContent,
     ThinkingBlock,
@@ -139,3 +141,24 @@ def test_replay_preserves_signed_blocks_and_omits_unfinished_thinking(
         redacted.model_dump(),
     ]
     assert messages == original
+
+
+@pytest.mark.parametrize(
+    ("role", "payload"),
+    [
+        (MessageRole.SYSTEM, '{"role":"system","content":"instructions"}'),
+        (MessageRole.USER, '{"role":"user","content":"question"}'),
+        (MessageRole.ASSISTANT, '{"role":"assistant","content":[]}'),
+        (
+            MessageRole.TOOL_RESULT,
+            '{"role":"tool_result","tool_call_id":"a","tool_name":"search","content":"result"}',
+        ),
+    ],
+)
+def test_message_roles_keep_existing_json(role: MessageRole, payload: str) -> None:
+    adapter = TypeAdapter(Message)
+    message = adapter.validate_json(payload)
+    assert message.role is role
+    assert message.role == role.value
+    assert message.model_dump(mode="json")["role"] == role.value
+    assert adapter.validate_json(adapter.dump_json(message)) == message

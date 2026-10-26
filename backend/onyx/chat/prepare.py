@@ -17,12 +17,12 @@ from onyx.chat.chat_utils import (
     is_last_assistant_message_clarification,
 )
 from onyx.chat.files import (
-    _collect_available_file_ids,
-    _convert_loaded_files_to_chat_files,
-    _load_context_user_files_for_tools,
+    collect_available_file_ids,
+    convert_loaded_files_to_chat_files,
     determine_search_params,
     extract_context_files,
     load_chat_files,
+    load_context_user_files_for_tools,
     resolve_context_user_files,
 )
 from onyx.chat.history_store import get_chat_history_store
@@ -276,9 +276,9 @@ def _prepare_history(
     additional_context: str | None,
 ) -> _PreparedHistory:
     files = load_chat_files(file_inputs)
-    tool_files = _convert_loaded_files_to_chat_files(files)
+    tool_files = convert_loaded_files_to_chat_files(files)
     tool_files.extend(
-        _load_context_user_files_for_tools(
+        load_context_user_files_for_tools(
             context_user_files, {file.filename for file in tool_files}
         )
     )
@@ -364,7 +364,7 @@ def prepare_chat_turn(
             # Collect file IDs for the file reader tool *before* summary truncation so
             # that files attached to older (summarized-away) messages are still accessible
             # via the FileReaderTool.
-            available_files = _collect_available_file_ids(
+            available_files = collect_available_file_ids(
                 chat_history, context_user_files
             )
             memory = get_memories(user, session)

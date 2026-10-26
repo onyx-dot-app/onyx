@@ -4,7 +4,7 @@ import json
 from collections.abc import Callable, Sequence
 
 from onyx.agents.compaction import IMAGE_TOKEN_ESTIMATE
-from onyx.agents.models import CompactionMetadata
+from onyx.chat.models import PromptMetadata
 from onyx.configs.app_configs import ENABLE_AZURE_IMAGE_CAP, PROMPT_CACHE_CHAT_HISTORY
 from onyx.file_store.models import ChatFileType, ChatLoadedFile
 from onyx.llm.interfaces import LLMConfig
@@ -35,16 +35,6 @@ _AZURE_DEFAULT_IMAGE_CAP = 50
 
 # Match main when no tokenizer is available for a non-vision marker.
 _NON_VISION_MARKER_TOKEN_FALLBACK = 40
-
-
-class PromptMetadata(CompactionMetadata):
-    token_count: int | None = None
-    image_files: list[ChatLoadedFile] | None = None
-    image_token_count: int = 0
-    should_cache: bool = False
-    file_id: str | None = None
-    is_reminder: bool = False
-    omit_tool_result_content: bool = False
 
 
 def prompt_metadata(message: Message) -> PromptMetadata:

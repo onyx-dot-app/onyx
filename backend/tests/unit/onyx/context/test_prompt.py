@@ -6,7 +6,8 @@ import pytest
 
 from onyx.agents.compaction import working_messages
 from onyx.agents.models import CompactionCheckpoint
-from onyx.chat.prompt_formatting import PromptMetadata, prompt_metadata
+from onyx.chat.models import PromptMetadata
+from onyx.chat.prompt_formatting import prompt_metadata
 from onyx.chat.prompt_utils import prepare_prompt
 from onyx.context.search.models import SearchDocsResponse
 from onyx.file_store.models import (

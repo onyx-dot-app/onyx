@@ -544,3 +544,11 @@ uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit/db/
 [[core-chat-loop]] [[citations]] [[context-assembly]] [[streaming-protocol]]
 [[chat-frontend]] [[tools-framework]] [[access-control]] [[multi-tenancy]]
 [[background-jobs]]
+
+
+### Incremental content writes
+
+Database response writers reject content-free sessions before writing response
+content. Durable child reservations enforce the same root-session rule. Content-free
+runs use in-memory coordination; their final saves retain usage without conversation
+content. Child sessions inherit the root's recording mode.

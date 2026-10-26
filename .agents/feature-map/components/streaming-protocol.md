@@ -321,7 +321,9 @@ and `web/tests/e2e/utils/chatMock.ts` (`buildMockStream`, `mockChatEndpoint`) bu
 and parse mock NDJSON bodies matching this exact format; use them when a test
 needs to assert on packet ordering or a new packet type without a real LLM call.
 
-`backend/onyx/chat/renderer.py:ToolRenderer.start` emits `ToolCallDebug` packets.
+`backend/onyx/chat/renderer.py:ToolRenderer.start` emits `ToolCallDebug` only in
+integration-test mode, before the start packet. Debug packets must not close a
+coding-agent bash step before its output arrives.
 Tests can use them to assert tool names and arguments without an environment flag.
 
 ### Manual reproduction
@@ -367,3 +369,13 @@ Tests can use them to assert tool names and arguments without an environment fla
 - **A capped buffer read (`max_chunks`) can return `done=True` with more data
   still pending.** Any new reader of `read_stream_chunks` must loop until
   `blocks` comes back empty, not stop at the first `done=True`.
+
+
+### Tool rendering and replay
+
+Malformed model arguments use a generic tool card. They do not prevent the saved
+error or later answer from loading. Tools retain their existing error-display
+policy; a model-facing error alone does not request a browser error marker.
+
+Live and saved answers retain citation metadata when the answer starts with a
+citation. Saved history hides the configured thinking tool, just as live output does.
