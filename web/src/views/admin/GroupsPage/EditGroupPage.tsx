@@ -605,7 +605,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
 
   return (
     <>
-      <SettingsLayouts.Root loading={isLoading}>
+      <SettingsLayouts.Root loading={isLoading && !error}>
         <SettingsLayouts.Header
           icon={SvgUsers}
           title={t("edit.header.title")}
