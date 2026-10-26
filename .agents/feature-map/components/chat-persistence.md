@@ -550,3 +550,10 @@ uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit/db/
 [[core-chat-loop]] [[citations]] [[context-assembly]] [[streaming-protocol]]
 [[chat-frontend]] [[tools-framework]] [[access-control]] [[multi-tenancy]]
 [[background-jobs]]
+
+
+### Incremental response content
+
+Canonical response writers reject content-free sessions before writing content.
+Durable child reservations enforce the same root-session policy. Child sessions
+inherit the root recording mode. Production chat still uses its existing writer.
