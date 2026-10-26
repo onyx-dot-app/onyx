@@ -355,6 +355,8 @@ Child discovery rejects unrelated branches and bounds traversal and payload size
 The canonical writer enforces the session's recording policy. Content-free sessions
 retain status and usage without response items, tool results, or child content.
 Projected saves update the displayed answer and accepted records in one transaction.
+`read_response_replay_data` loads detached tool IDs and saved source documents.
+It checks references against accepted calls and keeps saved document IDs for source cards.
 Existing legacy tool response text remains a mapped column for the production writer.
 
 ## 5. Contracts and invariants

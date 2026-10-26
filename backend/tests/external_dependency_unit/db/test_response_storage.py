@@ -15,19 +15,21 @@ from onyx.agents.models import (
     ExecutionStatus,
     RunFailure,
     RunFailureKind,
+    RunState,
     RunStatus,
     StepRecord,
     ToolExecutionRecord,
     messages_from_steps,
 )
+from onyx.chat.presentation import project_response, replay_response
 from onyx.chat.response_models import (
     ChatResponseSnapshot,
     MessageRendering,
     ResponseRecord,
 )
 from onyx.chat.save_chat import save_chat_turn as save_legacy_chat_turn
-from onyx.configs.constants import MessageType
-from onyx.context.search.models import SearchDocsResponse
+from onyx.configs.constants import DocumentSource, MessageType
+from onyx.context.search.models import SavedSearchDoc, SearchDoc, SearchDocsResponse
 from onyx.db import chat_subagents
 from onyx.db.chat import (
     checkpoint_from_summary,
@@ -41,6 +43,7 @@ from onyx.db.chat import (
 )
 from onyx.db.chat_response import (
     read_chat_execution,
+    read_response_replay_data,
     read_response_steps,
     reserve_child_response__no_commit,
     save_chat_response_to_db,
@@ -68,6 +71,11 @@ from onyx.llm.models import (
     ToolCall,
     ToolResultMessage,
     UserMessage,
+)
+from onyx.server.query_and_chat.streaming_models import (
+    AgentResponseDelta,
+    MemoryToolDelta,
+    SearchToolDocumentsDelta,
 )
 from onyx.tools.records import ToolCallInfo
 from onyx.tools.results import (
@@ -1556,3 +1564,180 @@ def test_legacy_writer_keeps_tool_results_and_display_text(
         )
         == "Existing result"
     )
+
+
+def test_projected_response_round_trip_replays_tool_and_answer(
+    db_session: Session, conversation: ChatSession, tool_record: Tool
+) -> None:
+    response = _response(db_session, conversation)
+    record = _record(response)
+    record.steps = _steps(
+        record.run_id,
+        [
+            AssistantMessage(
+                content=[
+                    ToolCall(
+                        id="remember", name="memory", arguments={"text": "Prefers tea"}
+                    )
+                ]
+            ),
+            ToolResultMessage(
+                tool_call_id="remember",
+                tool_name="memory",
+                content="Saved preference",
+                details=MemoryUpdated(
+                    memory_text="Prefers tea",
+                    operation=MemoryOperation.ADD,
+                    memory_id=7,
+                ),
+            ),
+            AssistantMessage(content=[TextContent(text="I saved your preference.")]),
+        ],
+    )
+    record.answer_step_index = 1
+    snapshot = RunState(
+        run_id=record.run_id,
+        agent_id=record.agent_id,
+        status=RunStatus.COMPLETE,
+        input_messages=record.input_messages,
+        steps=record.steps,
+        answer_step_index=1,
+    )
+    projected = project_response(snapshot, tool_ids={"memory": tool_record.id})
+    assert projected.error is None
+    message_id, session_id = response.id, conversation.id
+    db_session.commit()
+    assert (
+        save_chat_response_to_db(
+            message_id=message_id,
+            chat_session_id=session_id,
+            expected_persist_content=True,
+            response=projected,
+        )
+        == "I saved your preference."
+    )
+    db_session.expire_all()
+    stored = db_session.get(ChatMessage, message_id)
+    assert stored is not None
+    execution = read_chat_execution(stored)
+    assert execution is not None
+    assert [step.model_dump() for step in execution.response.steps] == [
+        step.model_dump() for step in record.steps
+    ]
+    assert len(execution.tool_records) == 1
+    replay = read_response_replay_data(execution, db_session)
+    packets = replay_response(
+        execution.response, replay.tools, execution.presentation, replay.documents
+    )
+    assert (
+        "".join(
+            packet.obj.content
+            for packet in packets
+            if isinstance(packet.obj, AgentResponseDelta)
+        )
+        == "I saved your preference."
+    )
+    memory = [
+        packet.obj for packet in packets if isinstance(packet.obj, MemoryToolDelta)
+    ]
+    assert len(memory) == 1
+    assert memory[0].memory_text == "Prefers tea"
+    assert memory[0].memory_id == 7
+    assert memory[0].operation == "add"
+
+
+def test_search_projection_restores_saved_source_cards(
+    db_session: Session, conversation: ChatSession, tool_record: Tool
+) -> None:
+    response = _response(db_session, conversation)
+    record = _record(response)
+    document = SearchDoc(
+        document_id="cedar-doc",
+        chunk_ind=0,
+        semantic_identifier="Cedar guide",
+        blurb="Cedar facts",
+        source_type=DocumentSource.WEB,
+        boost=1,
+        hidden=False,
+        metadata={},
+        match_highlights=[],
+    )
+    record.steps = _steps(
+        record.run_id,
+        [
+            AssistantMessage(
+                content=[
+                    ToolCall(
+                        id="search",
+                        name="internal_search",
+                        arguments={"query": "cedar"},
+                    )
+                ]
+            ),
+            ToolResultMessage(
+                tool_call_id="search",
+                tool_name="internal_search",
+                content="Cedar facts",
+                details=SearchDocsResponse(
+                    search_docs=[document], citation_mapping={1: document.document_id}
+                ),
+            ),
+            AssistantMessage(content=[TextContent(text="Cedar is a tree.")]),
+        ],
+    )
+    projected = project_response(
+        RunState(
+            run_id=record.run_id,
+            agent_id=record.agent_id,
+            status=RunStatus.COMPLETE,
+            input_messages=record.input_messages,
+            steps=record.steps,
+            answer_step_index=1,
+        ),
+        tool_ids={"internal_search": tool_record.id},
+    )
+    assert projected.error is None
+    message_id, session_id = response.id, conversation.id
+    db_session.commit()
+    save_chat_response_to_db(
+        message_id=message_id,
+        chat_session_id=session_id,
+        expected_persist_content=True,
+        response=projected,
+    )
+    db_session.expire_all()
+    stored = db_session.get(ChatMessage, message_id)
+    assert stored is not None
+    execution = read_chat_execution(stored)
+    assert execution is not None
+    replay = read_response_replay_data(execution, db_session)
+    saved_document = replay.documents[document.document_id]
+    assert isinstance(saved_document, SavedSearchDoc)
+    assert saved_document.db_doc_id > 0
+    packets = replay_response(
+        execution.response, replay.tools, execution.presentation, replay.documents
+    )
+    cards = [
+        packet.obj
+        for packet in packets
+        if isinstance(packet.obj, SearchToolDocumentsDelta)
+    ]
+    assert len(cards) == 1
+    assert cards[0].documents == [saved_document]
+    assert (
+        "".join(
+            packet.obj.content
+            for packet in packets
+            if isinstance(packet.obj, AgentResponseDelta)
+        )
+        == "Cedar is a tree."
+    )
+    reference = execution.tool_records[0]
+    assert (
+        replay.tools[(reference.message_id, reference.tool_call_id)].tool_id
+        == tool_record.id
+    )
+    invalid = execution.model_copy(deep=True)
+    invalid.tool_records[0].message_id = "unrelated-message"
+    with pytest.raises(ValueError, match="not part of this response"):
+        read_response_replay_data(invalid, db_session)

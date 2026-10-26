@@ -153,3 +153,17 @@ class ChatResponseSnapshot(BaseModel):
     cancelled: bool
     delivery_failed: bool = False
     error: str | None = None
+
+
+class ToolReplayData(BaseModel):
+    """Saved application data needed to replay one accepted tool invocation."""
+
+    tool_id: int | None
+    search_docs: list[SearchDoc] = Field(default_factory=list)
+
+
+class ResponseReplayData(BaseModel):
+    """Detached source documents and tool identities for response replay."""
+
+    tools: dict[tuple[str, str], ToolReplayData]
+    documents: dict[str, SearchDoc]

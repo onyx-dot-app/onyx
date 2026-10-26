@@ -13,7 +13,9 @@ from onyx.chat.response_models import (
     ChatResponseSnapshot,
     MessageRendering,
     ResponseRecord,
+    ResponseReplayData,
     ToolRecordReference,
+    ToolReplayData,
 )
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc
@@ -29,6 +31,7 @@ from onyx.db.chat import (
     find_summary_for_ancestry,
     parent_session_id,
     root_response_id,
+    translate_db_search_doc_to_saved_search_doc,
     visible_message_ids,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -1179,3 +1182,71 @@ def save_response_record__no_commit(
             writer.tools[(assistant_message_id, tool.tool_call_id)] = tool
     writer.store(record, parent)
     session.flush()
+
+
+def read_response_replay_data(
+    execution: ChatExecutionRecord, db_session: Session
+) -> ResponseReplayData:
+    """Load detached display data for an already authorized response execution."""
+    root = db_session.get(ChatMessage, int(execution.response.run_id))
+    if root is None:
+        raise ValueError("Chat response is unavailable")
+    tools: dict[tuple[str, str], ToolReplayData] = {}
+    references = {
+        reference.record_id: reference for reference in execution.tool_records
+    }
+    accepted: set[tuple[str, str]] = set()
+    pending = [execution.response]
+    while pending:
+        response = pending.pop()
+        for step in response.steps:
+            if step.message.id is not None:
+                accepted.update(
+                    (step.message.id, call.id) for call in step.message.tool_calls
+                )
+        pending.extend(response.child_runs)
+    if len(references) != len(execution.tool_records) or any(
+        (reference.message_id, reference.tool_call_id) not in accepted
+        for reference in references.values()
+    ):
+        raise ValueError("Tool replay reference is not part of this response")
+
+    rows = (
+        db_session.execute(
+            select(ToolCall, ChatResponseItem.id)
+            .join(
+                ChatResponseItem,
+                (ChatResponseItem.chat_message_id == ToolCall.parent_chat_message_id)
+                & (ChatResponseItem.step_index == ToolCall.turn_number),
+            )
+            .where(ToolCall.id.in_(references))
+            .options(selectinload(ToolCall.search_docs))
+        ).all()
+        if references
+        else []
+    )
+    for tool, message_id in rows:
+        reference = references[tool.id]
+        if (
+            reference.message_id != message_id
+            or reference.tool_call_id != tool.tool_call_id
+        ):
+            raise ValueError(
+                "Tool replay reference does not match its accepted invocation"
+            )
+        tools[(message_id, tool.tool_call_id)] = ToolReplayData(
+            tool_id=tool.tool_id,
+            search_docs=[
+                translate_db_search_doc_to_saved_search_doc(document)
+                for document in tool.search_docs or []
+            ],
+        )
+    if len(rows) != len(references):
+        raise ValueError("Accepted tool replay data is unavailable")
+    return ResponseReplayData(
+        tools=tools,
+        documents={
+            document.document_id: translate_db_search_doc_to_saved_search_doc(document)
+            for document in root.search_docs or []
+        },
+    )
