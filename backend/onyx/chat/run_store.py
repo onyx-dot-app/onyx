@@ -565,10 +565,8 @@ class ChatRunStore(RunStore, RunOwnership):
         )
         record = self._record(captured.run_state)
         data = serialize_checkpoint(captured, record, self._binding(response_id))
-        published = False
 
         def save(_checkpoint: ExecutionCheckpoint) -> None:
-            nonlocal published
             with self._ownership_lock(response_id):
                 self._require_owner(owned)
                 with get_session_with_tenant(tenant_id=self.tenant_id) as session:
@@ -596,17 +594,8 @@ class ChatRunStore(RunStore, RunOwnership):
                         expected_ownership_version=owned.owner.ownership_version,
                     )
                     session.commit()
-                    published = True
 
-        try:
-            owned.run.handoff(expected_revision=captured.run_state.revision, save=save)
-        finally:
-            if published:
-                try:
-                    self._release_owner(response_id, owned.lease)
-                finally:
-                    with self._lock:
-                        self._owned.pop(response_id, None)
+        owned.run.handoff(expected_revision=captured.run_state.revision, save=save)
 
     def resume(self, run_id: str, *, context: AgentState) -> Run | None:
         """Resume with authorized, rehydrated history; never reconstruct a live owner."""

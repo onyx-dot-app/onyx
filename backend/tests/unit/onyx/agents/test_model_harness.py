@@ -126,11 +126,12 @@ def test_partial_message_closes_before_run_completion(cancelled: bool) -> None:
             self, request: GenerationRequest, context: GenerationContext | None = None
         ) -> Generator[GenerationEvent, None, None]:
             assert not request.messages
-            assert context is not None and context.cancellation is signal
+            assert context is not None and context.cancellation is not None
+            assert context.cancellation is not signal
             yield TextDeltaEvent(content_index=0, text="Partial output")
             if cancelled:
                 signal.cancel()
-                signal.check()
+                context.cancellation.check()
             raise ValueError("Provider disconnected")
 
     events: list[AgentEvent] = []
@@ -141,6 +142,7 @@ def test_partial_message_closes_before_run_completion(cancelled: bool) -> None:
     with pytest.raises(AgentCancelled if cancelled else RunFailed):
         run.result()
     assert run.wait_for_idle(2)
+    assert signal.cancelled == cancelled
     ends = [event for event in events if event.type == "message_end"]
     assert len(ends) == 1
     terminal = ends[0]
@@ -154,7 +156,9 @@ def test_partial_message_closes_before_run_completion(cancelled: bool) -> None:
     )
 
 
-def test_model_event_rechecks_cancellation_before_recording() -> None:
+def test_model_event_rechecks_cancellation_before_recording(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     pause_next_check = threading.Event()
     check_passed = threading.Event()
     continue_check = threading.Event()
@@ -178,7 +182,8 @@ def test_model_event_rechecks_cancellation_before_recording() -> None:
             yield TextDeltaEvent(content_index=0, text=" late output")
 
     events: list[AgentEvent] = []
-    signal = PausingSignal()
+    signal = CancellationSignal()
+    monkeypatch.setattr("onyx.agents.runtime.CancellationSignal", PausingSignal)
     run = Agent(
         StreamingModel(lambda *_: AssistantMessage()),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),

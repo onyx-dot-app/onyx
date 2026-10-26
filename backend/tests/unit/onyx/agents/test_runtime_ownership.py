@@ -1,6 +1,7 @@
 """Execution cleanup, restoration, and concurrent result acceptance remain independent."""
 
 import threading
+from contextlib import nullcontext
 from threading import Event
 from unittest.mock import patch
 
@@ -22,8 +23,8 @@ from onyx.agents.models import (
     StepResult,
 )
 from onyx.agents.runtime import Agent, Run, RunFailed
-from onyx.agents.tools import AgentTool, ToolInvocation, ToolProgress
-from onyx.llm.cancellation import AgentCancelled, CancellationSignal
+from onyx.agents.tools import AgentTool, ChildRunCancelled, ToolInvocation, ToolProgress
+from onyx.llm.cancellation import AgentCancelled, CancellationSignal, cancellation_scope
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
     AssistantMessage,
@@ -40,8 +41,10 @@ from tests.unit.onyx.agents.fakes import FakeAgentDirectory, FakeModelClient, ru
 from tests.unit.onyx.agents.test_child_coordination import parent_agent
 
 
-def test_first_step_failure_is_recorded_and_agent_can_retry() -> None:
+@pytest.mark.parametrize("source", ["configured", "explicit", "scope"])
+def test_first_step_failure_is_recorded_and_agent_can_retry(source: str) -> None:
     attempts = 0
+    external = CancellationSignal()
 
     def decide(_state: StepInput) -> PreparedStep:
         nonlocal attempts
@@ -54,12 +57,23 @@ def test_first_step_failure_is_recorded_and_agent_can_retry() -> None:
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="Recovered")])
         ),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        generation_context=GenerationContext(
+            flow=LLMFlow.CHAT_RESPONSE,
+            cancellation=external if source == "configured" else None,
+        ),
         prepare_step=decide,
     )
     handles: list[Run] = []
-    with pytest.raises(RunFailed):
-        run_agent(agent, max_steps=1, runs=handles)
+    with cancellation_scope(external) if source == "scope" else nullcontext():
+        with pytest.raises(RunFailed):
+            run_agent(
+                agent,
+                max_steps=1,
+                runs=handles,
+                cancellation=external if source == "explicit" else None,
+            )
+    assert not external.cancelled
+    assert handles[0].cancellation_signal.cancelled
     assert handles[0].snapshot().status == RunStatus.ERROR
     assert (
         agent.start(background=False, max_steps=1).result().output.text == "Recovered"
@@ -468,7 +482,7 @@ def test_child_cancel_does_not_need_a_free_blocking_worker() -> None:
             assert entered.wait(2)
             assert invocation.agents.wait_run(submitted.run_id, timeout=0) is None
             invocation.agents.cancel_run(submitted.run_id)
-            with pytest.raises(AgentCancelled):
+            with pytest.raises(ChildRunCancelled):
                 invocation.agents.wait_run(submitted.run_id, timeout=1)
         finally:
             release.set()
@@ -521,7 +535,7 @@ def test_child_restart_waits_for_cancelled_archive_read() -> None:
         )
         assert entered.wait(2)
         invocation.agents.cancel_run(submitted.run_id)
-        with pytest.raises(AgentCancelled):
+        with pytest.raises(ChildRunCancelled):
             invocation.agents.wait_run(submitted.run_id, timeout=2)
         restarting = start_thread_future(
             name="test-restart",

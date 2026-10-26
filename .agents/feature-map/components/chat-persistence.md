@@ -347,6 +347,8 @@ one query per assistant message.
 
 Coordinator setup reuses its validated branch for child-agent discovery. It
 registers the root separately and skips ancestry reads when no children exist.
+Root metadata reads only the latest selected response. Child histories retain their separate response limit;
+root conversation length does not consume that limit or hide child metadata.
 Discovery tests must check selected-branch visibility as well as query counts.
 
 The response also carries `current_stream` (`CurrentStreamInfo.stream_id`) when the
