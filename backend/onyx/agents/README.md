@@ -70,6 +70,9 @@ A terminal result does not mean all work has finished:
 An Agent accepts another run only after terminal handling and owned work permit
 reuse. A suspended run reserves its Agent until it resumes or transfers ownership.
 
+Each run owns its cancellation signal. Caller cancellation propagates into the
+run. Run failure or cancellation does not cancel the caller's signal.
+
 ## Tools and step callbacks
 
 `Run` owns changes to recorded execution state. `ToolBatch` receives the prepared
@@ -81,6 +84,10 @@ child work, and resource cleanup.
 `AgentTool` pairs a `ToolDefinition` with an execution function. The function
 receives `ToolInvocation`, which contains arguments, call identity, working
 messages, cancellation, progress delivery, and optional child controls.
+
+Register executable tools on `Agent.tools`. `PreparedStep.tools` selects those
+same instances; it cannot supply new implementations. Invalid selections fail
+before the model call. Restored tools must match the saved step's declarations.
 
 Tools return `ToolResult`. Ordinary tool exceptions become error results that the
 model can inspect. Cancellation propagates. Errors in coordination or tool hooks
@@ -158,6 +165,10 @@ to authorize access to saved agents and runs. It rejects competing local owners.
 Closing the coordinator cancels owned runs and waits for execution, saving, and
 cleanup. A timeout leaves unfinished work owned.
 
+Waiting for a cancelled child raises `ChildRunCancelled`. Tools can handle it;
+otherwise, it becomes a tool error and the parent can continue. Parent
+cancellation still interrupts the wait with `AgentCancelled`.
+
 ## Compaction
 
 Compaction reduces working model context while preserving recorded history. A
@@ -189,6 +200,11 @@ For transfer to another owner:
 `handoff()` requires terminal foreground children. A failed save leaves the current
 owner intact. Restored progress retains completed tool results and callback
 boundaries, so execution can avoid repeating completed work.
+
+Handoff releases the ownership adapter's reservation after saving suspended state.
+The SDK calls release once; applications implement the storage operation. Failed
+release makes handoff and local completion waiters report the cleanup error.
+A new owner can register the same run ID after release.
 
 `ExecutionCheckpoint` contains history and execution state. It does not serialize
 Python clients, callbacks, or external resources. Applications must reconstruct

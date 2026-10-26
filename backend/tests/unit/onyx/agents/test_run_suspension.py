@@ -14,8 +14,10 @@ from onyx.agents.events import AgentEvent, AgentSuspendedEvent, InputRequiredEve
 from onyx.agents.models import (
     AgentState,
     ExecutionCheckpoint,
+    PreparedStep,
     RunFailureKind,
     RunStatus,
+    StepInput,
     StepResult,
     ToolCallContext,
 )
@@ -41,7 +43,7 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.tracing.flows import LLMFlow
-from tests.unit.onyx.agents.fakes import FakeModelClient, FakeRunStore
+from tests.unit.onyx.agents.fakes import FakeModelClient, FakeRunOwnership, FakeRunStore
 
 
 def _approve(request_id: str = "permission") -> HumanToolAnswer:
@@ -65,6 +67,153 @@ def _model(calls: list[ToolCall]) -> FakeModelClient:
         return AssistantMessage(content=list(calls))
 
     return FakeModelClient(generate)
+
+
+def test_prepared_tool_selection_survives_json_handoff_without_repreparation() -> None:
+    effects: list[str] = []
+    prepared_steps: list[int] = []
+    reservations: set[str] = set()
+
+    def register(run: Run) -> None:
+        assert run.id not in reservations
+        reservations.add(run.id)
+
+    coordinator = AgentCoordinator(
+        ownership=FakeRunOwnership(register=register, release=reservations.remove)
+    )
+
+    def execute(_invocation: ToolInvocation) -> ToolResult:
+        effects.append("sent")
+        return ToolResult(content="sent")
+
+    def unexpected(_invocation: ToolInvocation) -> ToolResult:
+        pytest.fail("Unselected tool must not execute")
+
+    def make_agent(state: AgentState) -> Agent:
+        selected = AgentTool(
+            definition=ToolDefinition(name="effect", description="", parameters={}),
+            execute=execute,
+        )
+        unselected = AgentTool(
+            definition=ToolDefinition(name="unused", description="", parameters={}),
+            execute=unexpected,
+        )
+
+        def prepare(step: StepInput) -> PreparedStep:
+            prepared_steps.append(step.step.index)
+            return PreparedStep(tools=[selected] if step.step.index == 0 else [])
+
+        return Agent(
+            _model([ToolCall(id="effect", name="effect", arguments={})]),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            agent_id="agent",
+            state=state,
+            tools=[selected, unselected],
+            prepare_step=prepare,
+            before_tool_call=_gate,
+        )
+
+    run = make_agent(AgentState()).start(max_steps=2, coordinator=coordinator)
+    try:
+        assert run.wait_until_settled(3).status == RunStatus.SUSPENDED
+        assert run.wait_for_idle(3)
+        checkpoint = ExecutionCheckpoint.model_validate_json(
+            run.handoff().model_dump_json()
+        )
+        assert not reservations
+        restored = make_agent(checkpoint.agent_state).resume(
+            checkpoint.run_state, coordinator=coordinator
+        )
+        try:
+            assert restored.wait_until_settled(3).status == RunStatus.SUSPENDED
+            assert prepared_steps == [0]
+            restored.submit(_approve())
+            assert restored.result(3).output.text == "done"
+            assert effects == ["sent"]
+            assert prepared_steps == [0, 1]
+        finally:
+            restored.cancel()
+            assert restored.wait_for_idle(3)
+    finally:
+        run.cancel()
+        assert run.wait_for_idle(3)
+        assert coordinator.close(3)
+        assert not reservations
+
+
+def test_handoff_release_failure_settles_waiters_after_saving() -> None:
+    saved: list[ExecutionCheckpoint] = []
+    released: list[str] = []
+    finished = threading.Event()
+    failure = RuntimeError("Ownership release failed")
+
+    def release(run_id: str) -> None:
+        released.append(run_id)
+        raise failure
+
+    coordinator = AgentCoordinator(ownership=FakeRunOwnership(release=release))
+    agent = Agent(
+        _model([ToolCall(id="effect", name="effect", arguments={})]),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="effect", description="", parameters={}),
+                execute=lambda _: ToolResult(content="sent"),
+            )
+        ],
+        before_tool_call=_gate,
+    )
+    run = agent.start(max_steps=2, coordinator=coordinator)
+    try:
+        assert run.wait_until_settled(3).status == RunStatus.SUSPENDED
+        assert run.wait_for_idle(3)
+        run.add_done_callback(finished.set)
+        with pytest.raises(RuntimeError) as raised:
+            run.handoff(save=saved.append)
+        assert raised.value is failure
+        assert released == [run.id]
+        assert len(saved) == 1 and saved[0].run_state.status == RunStatus.SUSPENDED
+        assert finished.is_set() and run.is_done
+        assert coordinator.active_run(agent.id) is None
+        with pytest.raises(RuntimeError) as result_error:
+            run.result(0)
+        assert result_error.value is failure
+        assert run._reusable.done()
+        with pytest.raises(RuntimeError) as reuse_error:
+            run.wait_until_reusable(CancellationSignal())
+        assert reuse_error.value is failure
+    finally:
+        assert coordinator.close(3)
+
+
+@pytest.mark.parametrize("registered", [False, True])
+def test_preparation_rejects_unregistered_implementation_before_generation(
+    registered: bool,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def unexpected(
+        _request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        pytest.fail("Invalid tool configuration must not reach the model")
+
+    tool = AgentTool(
+        definition=ToolDefinition(name="effect", description="", parameters={}),
+        execute=lambda _: ToolResult(content="sent"),
+    )
+    run = Agent(
+        FakeModelClient(unexpected),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[tool] if registered else [],
+        prepare_step=lambda _: PreparedStep(tools=[tool.snapshot()]),
+    ).start(background=False, max_steps=1)
+    try:
+        with pytest.raises(RunFailed):
+            run.result(3)
+        assert run.snapshot().steps == []
+        assert "must be registered in Agent.tools" in caplog.text
+    finally:
+        run.cancel()
+        assert run.wait_for_idle(3)
 
 
 def test_answer_starts_approved_action_while_parallel_sibling_is_running() -> None:

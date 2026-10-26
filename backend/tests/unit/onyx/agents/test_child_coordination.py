@@ -8,6 +8,7 @@ from collections.abc import Callable, Generator
 from concurrent.futures import Future
 from contextvars import ContextVar
 from datetime import timedelta
+from typing import Literal
 from unittest.mock import patch
 
 import pytest
@@ -36,6 +37,7 @@ from onyx.agents.tools import (
     AgentControl,
     AgentLifetime,
     AgentTool,
+    ChildRunCancelled,
     ChildRunWait,
     HumanToolAnswer,
     InputDecision,
@@ -1745,12 +1747,17 @@ def test_remote_run_wait_and_cancel_use_authorized_fresh_snapshots(
 
 
 @pytest.mark.parametrize("cached", [False, True])
-def test_handled_remote_child_failure_does_not_fail_parent(cached: bool) -> None:
+@pytest.mark.parametrize("cancelled", [False, True])
+def test_handled_remote_child_failure_does_not_fail_parent(
+    cached: bool, cancelled: bool
+) -> None:
     remote = RunState(
         run_id="remote-run",
         agent_id="remote-agent",
-        status=RunStatus.ERROR,
-        failure=RunFailure(kind=RunFailureKind.EXECUTION, message="remote failed"),
+        status=RunStatus.CANCELLED if cancelled else RunStatus.ERROR,
+        failure=None
+        if cancelled
+        else RunFailure(kind=RunFailureKind.EXECUTION, message="remote failed"),
     )
 
     def execute(invocation: ToolInvocation) -> ToolResult:
@@ -1758,7 +1765,10 @@ def test_handled_remote_child_failure_does_not_fail_parent(cached: bool) -> None
         assert parent_run is not None
         assert parent_run.coordination is not None
         parent_run.coordination.children[remote.run_id] = False
-        with pytest.raises(RunFailed, match="remote failed"):
+        with pytest.raises(
+            ChildRunCancelled if cancelled else RunFailed,
+            match="was cancelled" if cancelled else "remote failed",
+        ):
             invocation.agents.wait_run(remote.run_id, timeout=1)
         return ToolResult(content="Child failure handled")
 
@@ -1781,6 +1791,75 @@ def test_handled_remote_child_failure_does_not_fail_parent(cached: bool) -> None
     try:
         result = run_agent(parent, max_steps=2, coordinator=coordinator)
         assert result.output.text == "first finished"
+    finally:
+        assert coordinator.close(3)
+
+
+@pytest.mark.parametrize("location", ["local", "saved", "polled"])
+def test_unhandled_child_cancellation_is_a_tool_error(
+    location: Literal["local", "saved", "polled"],
+) -> None:
+    remote = RunState(
+        run_id="cancelled-child", agent_id="remote-agent", status=RunStatus.CANCELLED
+    )
+    reads = 0
+
+    def read(_run_id: str, _parent_id: str) -> RunState:
+        nonlocal reads
+        reads += 1
+        return remote.model_copy(
+            update={"status": RunStatus.RUNNING}
+            if location == "polled" and reads == 1
+            else {}
+        )
+
+    def cancelled_child(
+        _request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        raise AgentCancelled()
+
+    def execute(invocation: ToolInvocation) -> ToolResult:
+        if location == "local":
+            child = invocation.agents.spawn_agent(
+                Agent(
+                    FakeModelClient(cancelled_child),
+                    generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+                ),
+                name="cancelled",
+                description="",
+                max_steps=1,
+                messages=[],
+            )
+            child_run_id = child.run_id
+        else:
+            child_run_id = remote.run_id
+        invocation.agents.wait_run(child_run_id, timeout=2)
+        pytest.fail("Waiting for a cancelled child must raise")
+
+    parent = parent_agent(execute)
+    coordinator = AgentCoordinator(directory=FakeAgentDirectory(read_run=read))
+    coordinator.register(
+        AgentInfo(
+            id="remote-agent",
+            path="/root/remote",
+            parent_id=parent.id,
+            description="",
+            restoration_config=None,
+        )
+    )
+    runs: list[Run] = []
+    try:
+        result = run_agent(parent, max_steps=2, coordinator=coordinator, runs=runs)
+        assert result.output.text == "first finished"
+        state = runs[0].snapshot()
+        assert state.status == RunStatus.COMPLETE
+        result_message = state.steps[0].tools["first"].result
+        assert result_message is not None and result_message.is_error
+        assert "was cancelled" in result_message.text
+        if location == "local":
+            assert state.child_runs[0].status == RunStatus.CANCELLED
+        if location == "polled":
+            assert reads >= 2
     finally:
         assert coordinator.close(3)
 

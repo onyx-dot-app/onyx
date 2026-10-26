@@ -277,6 +277,7 @@ def test_preparation_previous_output_shares_only_detached_callback_messages() ->
         FakeModelClient(generate),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         state=AgentState(messages=[UserMessage(content="history")]),
+        tools=[tool],
         prepare_step=prepare,
     )
     run = agent.start(max_steps=2, messages=[UserMessage(content="question")])
@@ -329,7 +330,7 @@ def test_tool_hooks_can_block_transform_and_report_progress() -> None:
     ] == ["raw!", "blocked!"]
     assert sorted(
         event.progress.content for event in events if event.type == "tool_update"
-    ) == ["blocked", "raw", "working"]
+    ) == ["", "raw", "working"]
 
 
 def test_abort_reaches_nested_agent_and_waits_for_idle() -> None:
@@ -479,12 +480,14 @@ def test_cancellation_closes_active_client_stream() -> None:
             self, request: GenerationRequest, context: GenerationContext | None = None
         ) -> Generator[GenerationEvent, None, None]:
             del request
-            assert context is not None and context.cancellation is signal
+            assert context is not None and context.cancellation is not None
+            run_signal = context.cancellation
+            assert run_signal is not signal
             try:
                 yield TextDeltaEvent(content_index=0, text="partial")
-                with signal.on_cancel(cancelled.set):
+                with run_signal.on_cancel(cancelled.set):
                     assert cancelled.wait(2)
-                signal.check()
+                run_signal.check()
                 yield GenerationDoneEvent()
             finally:
                 closed.append(True)
@@ -537,7 +540,8 @@ def test_configured_cancellation_applies_unless_run_overrides_it(
             run_agent(agent, runs=runs, max_steps=1, cancellation=active).output.text
             == "done"
         )
-        assert called == [active]
+        assert called == [runs[-1].cancellation_signal]
+        assert not active.cancelled
     else:
         with pytest.raises(AgentCancelled):
             run_agent(agent, runs=runs, max_steps=1)

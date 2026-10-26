@@ -10,6 +10,8 @@ import tiktoken
 from onyx.agents.compaction import (
     SUMMARY_TIMEOUT_SECONDS,
     CheckpointMismatchError,
+    ContextLimitError,
+    compact_history,
     context_budget,
     history_boundaries,
     request_tokens,
@@ -177,6 +179,7 @@ def test_compaction_within_task_preserves_tool_effects_and_prepared_steps() -> N
         model,
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         state=AgentState(messages=[UserMessage(content=TASK)]),
+        tools=tools,
         prepare_step=prepare,
     )
     run = agent.start(max_steps=6)
@@ -282,7 +285,7 @@ def test_provider_context_rejection_preserves_execution_settings(
         LLMFlow.CHAT_RESPONSE,
     ]
     for context in model.contexts:
-        assert context.cancellation is signal
+        assert context.cancellation is run.cancellation_signal
         assert context.stall_timeout_s == (step_timeout or 23)
         if context.flow == LLMFlow.CHAT_HISTORY_SUMMARIZATION:
             assert context.total_timeout_s is not None
@@ -321,6 +324,7 @@ def test_step_timeout_override_does_not_change_later_steps() -> None:
         generation_context=GenerationContext(
             flow=LLMFlow.CHAT_RESPONSE, stall_timeout_s=23
         ),
+        tools=[tool],
         prepare_step=prepare,
     )
     run = agent.start(background=False, max_steps=2)
@@ -762,18 +766,20 @@ def test_rebuilt_prompts_reuse_counts_and_recount_changed_content() -> None:
         for _ in range(2):
             model = ContextModel(tool_rounds=2)
 
-            def prepare(
-                state: StepInput,
-            ) -> PreparedStep:
-                tool = AgentTool(
-                    definition=ToolDefinition(
-                        name="lookup",
-                        description="Search updated sources"
+            tool = AgentTool(
+                definition=ToolDefinition(
+                    name="lookup", description="Search", parameters={}
+                ),
+                execute=lambda _: ToolResult(content=evidence),
+            )
+
+            def prepare(state: StepInput, tool: AgentTool = tool) -> PreparedStep:
+                tool.definition = tool.definition.model_copy(
+                    update={
+                        "description": "Search updated sources"
                         if state.step.index == 2
-                        else "Search",
-                        parameters={},
-                    ),
-                    execute=lambda _: ToolResult(content=evidence),
+                        else "Search"
+                    }
                 )
 
                 def assemble(messages: Sequence[Message]) -> list[Message]:
@@ -792,6 +798,7 @@ def test_rebuilt_prompts_reuse_counts_and_recount_changed_content() -> None:
                 model,
                 generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
                 state=AgentState(messages=[UserMessage(content=TASK)]),
+                tools=[tool],
                 prepare_step=prepare,
             )
             run = agent.start(background=False, max_steps=3)
@@ -910,3 +917,15 @@ def test_context_rejection_after_thinking_does_not_restart_generation() -> None:
     ends = [e for e in events if e.type == "message_end"]
     assert len(ends) == 1
     assert ends[0].message == state.steps[0].message
+
+
+def test_compaction_rejects_missing_cutoff_identity_before_model_work() -> None:
+    model = ContextModel()
+    history: list[Message] = [
+        UserMessage(content="Old evidence. " * 600),
+        UserMessage(id="question", content="Continue"),
+    ]
+    with pytest.raises(ContextLimitError, match="source message has no identity"):
+        compact_history(model, history, None, GenerationContext())
+    assert model.summaries == []
+    assert model.generations == []
