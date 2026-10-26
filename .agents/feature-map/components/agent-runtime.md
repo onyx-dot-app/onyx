@@ -2,7 +2,7 @@
 
 > Executes model and tool steps with explicit cancellation, ownership, and restoration boundaries.
 
-**Verified against:** `c8148fbcab` (2026-10-26)
+**Verified against:** `62a362f5e4` (2026-10-26)
 **Domain:** core-loop
 **Edition:** CE
 **Owns:** `backend/onyx/agents/`
@@ -46,6 +46,8 @@ See `backend/onyx/agents/README.md` for the public contracts and usage.
 - Result readiness, saved completion, suspension, and idle state have distinct meanings.
 - Recorded partial output survives even when model-history replay excludes incomplete tool exchanges.
 - Tool results and completion callbacks follow the original model-call order.
+- Run owns recorded mutations; tool scheduling receives explicit borrowed step data.
+- Collaborators lock borrowed step data with execution_lock and use recording methods for changes.
 - Step callback inputs and public snapshots do not share mutable recorded state.
 - Message assembly borrows history and must not mutate its messages or nested data.
 - Compaction changes working context, not recorded conversation history.

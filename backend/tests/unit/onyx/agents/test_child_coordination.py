@@ -1620,7 +1620,7 @@ def test_registration_releases_execution_locks_during_spawn_and_resume() -> None
         agent = agents[run.agent_id]
 
         def probe() -> None:
-            with agent._lock, run._lock, coordinator._state.lock:
+            with agent._lock, run.execution_lock, coordinator._state.lock:
                 binding = coordinator._state.bindings[run.id]
                 with binding._lock:
                     parent_id = run.snapshot().parent_run_id

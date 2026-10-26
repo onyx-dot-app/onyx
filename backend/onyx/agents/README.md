@@ -70,6 +70,12 @@ reuse. A suspended run reserves its Agent until it resumes or transfers ownershi
 
 ## Tools and step callbacks
 
+`Run` owns changes to recorded execution state. `ToolBatch` receives the prepared
+step, progress, record, and history explicitly. It schedules tools and submits
+results through the run's recording methods. Collaborators use `execution_lock`
+when reading borrowed step data. Coordination uses lifecycle methods for completion,
+child work, and resource cleanup.
+
 `AgentTool` pairs a `ToolDefinition` with an execution function. The function
 receives `ToolInvocation`, which contains arguments, call identity, working
 messages, cancellation, progress delivery, and optional child controls.

@@ -3,7 +3,7 @@
 import math
 import threading
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from concurrent.futures import Future
 from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
@@ -182,8 +182,7 @@ class AgentCoordinator:
                 run.id in owner.children for owner in self._state.bindings.values()
             )
         if binding is not None:
-            binding._links.close()
-            binding.children.clear()
+            binding.close(released_run_ids=binding.children)
         if has_waiters:
             self.observe_completion(run.id)
 
@@ -211,7 +210,7 @@ class AgentCoordinator:
             deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
             while not stop.is_set() and not future.done():
                 try:
-                    if self._remote_status(run_id, parent_id).is_terminal:
+                    if self.remote_run_status(run_id, parent_id).is_terminal:
                         directory = self._directory
                         if directory is None:
                             raise ValueError("Released run storage is unavailable")
@@ -260,16 +259,16 @@ class AgentCoordinator:
         if run is not None:
             run.cancel()
             return
-        state = self._read_visible_run(run_id, parent_id)
+        state = self.read_visible_run(run_id, parent_id)
         if not state.status.is_terminal:
             if self._directory is None:
                 raise ValueError("Remote run cancellation is unavailable")
             self._directory.cancel_run(run_id, parent_id)
 
-    def _remote_status(self, run_id: str, parent_id: str) -> RunStatus:
+    def remote_run_status(self, run_id: str, parent_id: str) -> RunStatus:
         if self._directory is not None:
             return self._directory.read_run_status(run_id, parent_id)
-        return self._read_visible_run(run_id, parent_id).status
+        return self.read_visible_run(run_id, parent_id).status
 
     def restore_completed(self, snapshot: RunState) -> Run:
         """Retain an archived terminal result without executing or saving it again."""
@@ -287,7 +286,7 @@ class AgentCoordinator:
                 self._state.completions[restored.id] = completion
                 self._visible_run_ids.add(restored.id)
                 return restored
-        if not existing._completed.done() or existing.snapshot() != snapshot:
+        if not existing.is_done or existing.snapshot() != snapshot:
             raise RuntimeError("Run identity already has an execution owner")
         return existing
 
@@ -342,10 +341,10 @@ class AgentCoordinator:
                 )
                 clean()
 
-        run._completed.add_done_callback(lambda _future: run.add_idle_callback(start))
+        run.add_done_callback(lambda: run.add_idle_callback(start))
         return completion
 
-    def _cleanup_for(self, run_id: str) -> list[Future[None]]:
+    def cleanup_futures(self, run_id: str) -> list[Future[None]]:
         with self._state.lock:
             return list(self._state.cleanup.get(run_id, ()))
 
@@ -518,17 +517,14 @@ class AgentCoordinator:
         with self._state.lock:
             released_ids = set(self._state.completions) - set(self._state.runs)
         for binding in bindings:
-            with binding._lock:
-                binding._links.close()
-                for run_id in released_ids:
-                    binding.children.pop(run_id, None)
+            binding.close(released_run_ids=released_ids)
             binding.run.cancel()
         with self._state.lock:
             runs = list(self._state.runs.values())
         deadline = time.monotonic() + timeout
         for run in runs:
             try:
-                run._completed.result(timeout=max(0, deadline - time.monotonic()))
+                run.wait_for_completion(timeout=max(0, deadline - time.monotonic()))
             except TimeoutError:
                 return False
             try:
@@ -643,7 +639,7 @@ class AgentCoordinator:
         with self._state.lock:
             visible = run_id in self._visible_run_ids
         if not visible:
-            self._read_visible_run(run_id, parent_id, agent_id=run.agent_id)
+            self.read_visible_run(run_id, parent_id, agent_id=run.agent_id)
         return run
 
     def release(self, run: Run) -> None:
@@ -719,7 +715,7 @@ class AgentCoordinator:
             self._state.agents[agent_id] = _LoadedAgent(restored, self._view_id)
         return restored
 
-    def _read_visible_run(
+    def read_visible_run(
         self, run_id: str, parent_id: str, *, agent_id: str | None = None
     ) -> RunState:
         """Authorize a specific run through this view's selected history."""
@@ -774,7 +770,7 @@ class AgentCoordinator:
             return saved.model_copy(deep=True)
         if not load_archive:
             return None
-        return self._read_visible_run(
+        return self.read_visible_run(
             run_id, parent_id, agent_id=saved.agent_id if saved is not None else None
         )
 
@@ -793,7 +789,26 @@ class RunCoordination:
         self.children: dict[str, bool] = {}
         self._links = ExitStack()
         self._finished = False
-        self._lock = run._lock
+        self._lock = run.execution_lock
+
+    def close(self, *, released_run_ids: Collection[str] = ()) -> None:
+        """Close cancellation links and forget dependencies no longer owned locally."""
+        with self._lock:
+            self._links.close()
+            for run_id in tuple(released_run_ids):
+                self.children.pop(run_id, None)
+
+    def check_tool_active(self, active: threading.Event) -> None:
+        self.run.cancellation_signal.check()
+        with self._lock:
+            if not active.is_set() or self._finished or not self.run.is_accepting:
+                raise RuntimeError("Coordination requires an active tool invocation")
+        self.coordinator.check_open()
+
+    def track_cleanup(self, run_id: str, future: Future[None]) -> None:
+        with self._lock:
+            if self._finished and run_id in self.children:
+                self.run.work.track_operation(future)
 
     def for_tool(
         self, call_id: str, parent_message_id: str, active: threading.Event
@@ -820,7 +835,7 @@ class RunCoordination:
             parent_run_id=self.run.id,
             parent_tool_call_id=call_id,
             parent_message_id=message_id,
-            _event_parent=self.run._delivery
+            _event_parent=self.run.event_delivery
             if lifetime == AgentLifetime.FOREGROUND
             else None,
         )
@@ -828,7 +843,7 @@ class RunCoordination:
             with self._lock:
                 if self._finished:
                     run.cancel()
-                    self.run._work.track_operation(run._idle)
+                    self.run.track_child_work(run)
                 else:
                     self._include_predecessors(run)
                     self._attach(run)
@@ -857,7 +872,7 @@ class RunCoordination:
         run_id = run.id
         self.children[run_id] = False
         self._links.enter_context(
-            self.run._cancellation_signal.on_cancel(
+            self.run.cancellation_signal.on_cancel(
                 lambda: self.coordinator.cancel_child(run_id, self.run.agent_id)
             )
         )
@@ -920,9 +935,9 @@ class RunCoordination:
         for run_id in child_run_ids:
             local = self.coordinator.child_run(run_id, self.run.agent_id)
             if local is not None:
-                self.run._work.track_operation(local._idle)
-            for cleanup in self.coordinator._cleanup_for(run_id):
-                self.run._work.track_operation(cleanup)
+                self.run.track_child_work(local)
+            for cleanup in self.coordinator.cleanup_futures(run_id):
+                self.run.work.track_operation(cleanup)
         deadline = time.monotonic() + (
             CHILD_TERMINAL_TIMEOUT_SECONDS if cancel else OPERATION_TIMEOUT_SECONDS
         )
@@ -935,7 +950,7 @@ class RunCoordination:
                     if not cancel:
                         wait_operation(
                             future,
-                            self.run._cancellation_signal,
+                            self.run.cancellation_signal,
                             max(0, deadline - time.monotonic()),
                         )
                     state = future.result(timeout=max(0, deadline - time.monotonic()))
@@ -948,7 +963,7 @@ class RunCoordination:
                         failure = error
                 except AgentCancelled:
                     if not cancel:
-                        self.run._cancellation_signal.check()
+                        self.run.cancellation_signal.check()
                     logger.debug("Child execution was cancelled: %s", run_id)
                 except TimeoutError as error:
                     self.coordinator.cancel_child(run_id, self.run.agent_id)
@@ -996,18 +1011,8 @@ class _ToolControl(AgentControl):
         self.message_id = message_id
         self.active = active
 
-    def _check(self) -> None:
-        self.owner.run._cancellation_signal.check()
-        if (
-            not self.active.is_set()
-            or self.owner._finished
-            or not self.owner.run._accepting
-        ):
-            raise RuntimeError("Coordination requires an active tool invocation")
-        self.owner.coordinator.check_open()
-
     def discover_children(self) -> list[AgentInfo]:
-        self._check()
+        self.owner.check_tool_active(self.active)
         return self.owner.coordinator.discover_children(self.owner.run.agent_id)
 
     def spawn_agent(
@@ -1022,7 +1027,7 @@ class _ToolControl(AgentControl):
         total_timeout_s: float | None = None,
         lifetime: AgentLifetime = AgentLifetime.FOREGROUND,
     ) -> SpawnResult:
-        self._check()
+        self.owner.check_tool_active(self.active)
         if total_timeout_s is not None and (
             not math.isfinite(total_timeout_s) or total_timeout_s <= 0
         ):
@@ -1061,14 +1066,14 @@ class _ToolControl(AgentControl):
         messages: Sequence[Message],
         lifetime: AgentLifetime = AgentLifetime.FOREGROUND,
     ) -> str:
-        self._check()
+        self.owner.check_tool_active(self.active)
         coordinator = self.owner.coordinator
         agent = coordinator.resolve_child(agent_id, self.owner.run.agent_id)
-        self._check()
+        self.owner.check_tool_active(self.active)
         previous = coordinator.active_run(agent_id)
         if previous is not None and previous.status.is_terminal:
-            wait_operation(previous._reusable, self.owner.run._cancellation_signal)
-        self._check()
+            previous.wait_until_reusable(self.owner.run.cancellation_signal)
+        self.owner.check_tool_active(self.active)
         return self.owner.start_child(
             agent,
             messages,
@@ -1081,7 +1086,7 @@ class _ToolControl(AgentControl):
     def wait_run(
         self, run_id: str, *, timeout: float = DEFAULT_AGENT_WAIT_SECONDS
     ) -> RunResult | None:
-        self._check()
+        self.owner.check_tool_active(self.active)
         if not 0 <= timeout <= OPERATION_TIMEOUT_SECONDS:
             raise ValueError("Wait timeout is outside its allowed bounds")
         run = self.owner.coordinator.child_run(run_id, self.owner.run.agent_id)
@@ -1089,7 +1094,7 @@ class _ToolControl(AgentControl):
             completion = self.owner.coordinator.completion(run_id)
             try:
                 state = wait_operation(
-                    completion, self.owner.run._cancellation_signal, timeout
+                    completion, self.owner.run.cancellation_signal, timeout
                 )
                 result = result_from_snapshot(state)
             except TimeoutError:
@@ -1114,23 +1119,23 @@ class _ToolControl(AgentControl):
         try:
             deadline = time.monotonic() + timeout
             while True:
-                self.owner.run._cancellation_signal.check()
-                if coordinator._remote_status(
+                self.owner.run.cancellation_signal.check()
+                if coordinator.remote_run_status(
                     run_id, self.owner.run.agent_id
                 ).is_terminal:
                     result = result_from_snapshot(
-                        coordinator._read_visible_run(run_id, self.owner.run.agent_id)
+                        coordinator.read_visible_run(run_id, self.owner.run.agent_id)
                     )
-                    self._check()
+                    self.owner.check_tool_active(self.active)
                     return result
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
-                    self._check()
+                    self.owner.check_tool_active(self.active)
                     return None
                 try:
                     wait_operation(
                         Future(),
-                        self.owner.run._cancellation_signal,
+                        self.owner.run.cancellation_signal,
                         min(REMOTE_POLL_SECONDS, remaining),
                     )
                 except TimeoutError:
@@ -1140,9 +1145,9 @@ class _ToolControl(AgentControl):
             return None
 
     def cancel_run(self, run_id: str) -> None:
-        self._check()
+        self.owner.check_tool_active(self.active)
         self.owner.coordinator.cancel_child(run_id, self.owner.run.agent_id)
-        self._check()
+        self.owner.check_tool_active(self.active)
 
     def add_completion_cleanup(
         self, run_id: str, callback: Callable[[], None]
@@ -1156,7 +1161,5 @@ class _ToolControl(AgentControl):
         if run is None:
             raise ValueError("Cleanup requires an owned child run")
         future = self.owner.coordinator.add_completion_cleanup(run_id, callback)
-        with self.owner._lock:
-            if self.owner._finished and run_id in self.owner.children:
-                self.owner.run._work.track_operation(future)
+        self.owner.track_cleanup(run_id, future)
         return future
