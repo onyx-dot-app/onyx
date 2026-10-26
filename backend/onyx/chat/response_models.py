@@ -1,10 +1,12 @@
 """Detached accepted responses and their application presentation settings."""
 
 from enum import Enum
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from onyx.agents.models import (
+    AgentInfo,
     CompactionCheckpoint,
     RunFailure,
     RunStatus,
@@ -167,3 +169,53 @@ class ResponseReplayData(BaseModel):
 
     tools: dict[tuple[str, str], ToolReplayData]
     documents: dict[str, SearchDoc]
+
+
+class ChatBranch(BaseModel):
+    chat_session_id: UUID
+    message_ids: list[int]
+
+
+class ResponseLink(BaseModel):
+    id: int
+    chat_session_id: UUID
+    previous_response_id: int | None
+    root_id: int
+    status: RunStatus
+
+
+class SavedResponse(BaseModel):
+    message_id: int
+    root_message_id: int
+    root_session_id: UUID
+    agent: AgentInfo
+    response: ResponseRecord
+
+
+class ResponseStatus(BaseModel):
+    message_id: int
+    root_message_id: int
+    root_session_id: UUID
+    parent_agent_id: str | None
+    status: RunStatus
+
+
+class ResponseAncestry(BaseModel):
+    message_id: int
+    session_id: UUID
+    status: RunStatus | None
+    spawned_by_message_id: int | None
+    parent_session_id: UUID | None
+    parent_response_id: int | None
+
+
+class HistoryLink(BaseModel):
+    id: int
+    parent_message_id: int | None
+    chat_session_id: UUID
+
+
+class SessionAncestor(BaseModel):
+    id: UUID
+    agent_name: str | None
+    parent_id: UUID | None

@@ -574,3 +574,11 @@ after reload.
 Root metadata reads only the latest selected response. The child-history limit
 applies to child responses. A long root conversation does not consume this limit
 or hide its child agents.
+
+
+Root history restoration uses the validated message-branch limit. Child history
+uses the child-response limit. Citation-only documents also link to the root
+response; restoration reports missing cited sources explicitly.
+
+Shared history and response data models live in `chat/response_models.py`.
+Database modules import those models instead of defining separate data contracts.

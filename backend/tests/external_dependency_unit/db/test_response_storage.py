@@ -30,6 +30,7 @@ from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.presentation import project_response, replay_response
 from onyx.chat.response import response_snapshot
 from onyx.chat.response_models import (
+    ChatBranch,
     ChatMessageMetadata,
     ChatResponseSnapshot,
     MessageRendering,
@@ -61,7 +62,6 @@ from onyx.db.chat_response import (
     write_response_items,
 )
 from onyx.db.chat_subagents import (
-    ChatBranch,
     _load_history,
     load_session_agent_metadata,
     lookup_session_agent,
@@ -1918,8 +1918,12 @@ def test_child_usage_is_reported_with_root_attribution(
         db_session.commit()
 
 
+@pytest.mark.parametrize("citation_only", [False, True])
 def test_metadata_sources_survive_storage_without_search_results(
-    db_session: Session, conversation: ChatSession, tool_record: Tool
+    db_session: Session,
+    conversation: ChatSession,
+    tool_record: Tool,
+    citation_only: bool,
 ) -> None:
     response = _response(db_session, conversation)
     record = _record(response)
@@ -1973,6 +1977,13 @@ def test_metadata_sources_survive_storage_without_search_results(
     )
     assert set(projected.all_search_docs) == {doc.document_id for doc in documents}
     assert projected.citation_to_doc == {1: documents[0]}
+    emitted_citations = {
+        citation.citation_number for citation in projected.citation_info
+    }
+    if citation_only:
+        projected.all_search_docs.pop(documents[1].document_id)
+        projected.citation_to_doc[2] = documents[1]
+        emitted_citations.add(2)
     save_chat_turn(
         message_text=projected.answer or "",
         reasoning_tokens=projected.reasoning,
@@ -1981,9 +1992,7 @@ def test_metadata_sources_survive_storage_without_search_results(
         all_search_docs=projected.all_search_docs,
         db_session=db_session,
         assistant_message=response,
-        emitted_citations={
-            citation.citation_number for citation in projected.citation_info
-        },
+        emitted_citations=emitted_citations,
         response_record=projected.response,
         presentation=projected.presentation,
     )
@@ -1991,7 +2000,9 @@ def test_metadata_sources_survive_storage_without_search_results(
     assert {doc.document_id for doc in response.search_docs} == {
         doc.document_id for doc in documents
     }
-    assert response.citations and set(response.citations) == {"1"}
+    assert response.citations and set(response.citations) == (
+        {"1", "2"} if citation_only else {"1"}
+    )
     execution = read_chat_execution(response)
     assert execution is not None
     artifacts = read_response_replay_data(execution, db_session)
@@ -2014,9 +2025,22 @@ def test_metadata_sources_survive_storage_without_search_results(
         child,
     )
     assert restored.sources[2].document_id == "child-source"
+    response.search_docs = [
+        doc for doc in response.search_docs if doc.document_id != "child-source"
+    ]
+    db_session.flush()
+    with pytest.raises(ValueError, match="Cited source is unavailable"):
+        _load_history(
+            db_session,
+            ChatBranch(
+                chat_session_id=conversation.id,
+                message_ids=visible_message_ids(db_session, response),
+            ),
+            child,
+        )
 
 
-def test_root_metadata_does_not_consume_child_history_limit(
+def test_root_history_and_metadata_do_not_consume_child_history_limit(
     db_session: Session,
     conversation: ChatSession,
     monkeypatch: pytest.MonkeyPatch,
@@ -2035,6 +2059,16 @@ def test_root_metadata_does_not_consume_child_history_limit(
     for _ in range(6):
         latest = _response(db_session, conversation, previous=latest)
         _save(db_session, latest, _record(latest))
+    restored = chat_subagents.load_agent_history(latest.id, str(conversation.id))
+    assert restored.previous_run_id == str(latest.id)
+    assert sum(isinstance(message, UserMessage) for message in restored.messages) == 7
+    assert restored.messages[0].id == f"chat:{first.parent_message_id}"
+    restored_child = chat_subagents.load_agent_history(latest.id, str(child_id))
+    assert restored_child.previous_run_id == child.run_id
+    monkeypatch.setattr("onyx.db.chat_subagents.MAX_AGENT_HISTORY_RUNS", 0)
+    with pytest.raises(ValueError, match="response limit"):
+        chat_subagents.load_agent_history(latest.id, str(child_id))
+    monkeypatch.setattr("onyx.db.chat_subagents.MAX_AGENT_HISTORY_RUNS", 2)
     metadata = {agent.id: agent for agent in load_session_agent_metadata(latest.id)}
     assert metadata[str(conversation.id)].latest_run_id == str(latest.id)
     assert metadata[str(child_id)].latest_run_id == child.run_id

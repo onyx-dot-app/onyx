@@ -1,7 +1,6 @@
 import json
 from uuid import UUID
 
-from pydantic import BaseModel
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, aliased, joinedload, object_session, selectinload
 
@@ -12,8 +11,11 @@ from onyx.chat.response_models import (
     ChatExecutionRecord,
     ChatResponseSnapshot,
     MessageRendering,
+    ResponseAncestry,
     ResponseRecord,
     ResponseReplayData,
+    ResponseStatus,
+    SavedResponse,
     ToolRecordReference,
     ToolReplayData,
 )
@@ -893,34 +895,9 @@ def finish_checkpoint__no_commit(session: Session, message_id: int) -> None:
         session.delete(row)
 
 
-class SavedResponse(BaseModel):
-    message_id: int
-    root_message_id: int
-    root_session_id: UUID
-    agent: AgentInfo
-    response: ResponseRecord
-
-
-class ResponseStatus(BaseModel):
-    message_id: int
-    root_message_id: int
-    root_session_id: UUID
-    parent_agent_id: str | None
-    status: RunStatus
-
-
-class _ResponseAncestry(BaseModel):
-    message_id: int
-    session_id: UUID
-    status: RunStatus | None
-    spawned_by_message_id: int | None
-    parent_session_id: UUID | None
-    parent_response_id: int | None
-
-
 def _read_response_ancestry(
     session: Session, response_id: int
-) -> _ResponseAncestry | None:
+) -> ResponseAncestry | None:
     question = aliased(ChatMessage)
     spawning_response = aliased(ChatMessage)
     row = (
@@ -945,7 +922,7 @@ def _read_response_ancestry(
         .mappings()
         .one_or_none()
     )
-    return _ResponseAncestry.model_validate(row) if row is not None else None
+    return ResponseAncestry.model_validate(row) if row is not None else None
 
 
 def read_response_status__no_commit(

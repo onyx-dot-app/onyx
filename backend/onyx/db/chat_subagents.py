@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from pydantic import BaseModel, TypeAdapter
+from pydantic import TypeAdapter
 from sqlalchemy import Text, case, cast, func, literal, or_, select
 from sqlalchemy.orm import Session, aliased, joinedload, load_only, selectinload
 from sqlalchemy.sql.selectable import CTE
@@ -10,15 +10,17 @@ from sqlalchemy.sql.selectable import CTE
 from onyx.agents.execution_records import run_input_message_id
 from onyx.agents.models import AgentInfo, RunStatus, messages_from_steps
 from onyx.chat.response_models import (
+    ChatBranch,
     MessageRendering,
+    ResponseLink,
     ResponseRecord,
     SavedAgentContext,
+    SessionAncestor,
 )
 from onyx.configs.constants import MessageType
 from onyx.db.chat import (
     MAX_AGENT_DEPTH,
     MAX_AGENT_HISTORY_RUNS,
-    SessionAncestor,
     agent_path_from_ancestors,
     agent_session_path,
     checkpoint_from_summary,
@@ -40,11 +42,6 @@ MAX_AGENT_HISTORY_BYTES = 16 * 1024 * 1024
 
 
 MAX_DISCOVERED_AGENTS = 128
-
-
-class ChatBranch(BaseModel):
-    chat_session_id: UUID
-    message_ids: list[int]
 
 
 def load_chat_branch(message_id: int) -> ChatBranch:
@@ -88,14 +85,6 @@ def _visible_agent(
     if agent is None:
         raise ValueError("Agent is unavailable on the selected branch")
     return agent
-
-
-class _ResponseLink(BaseModel):
-    id: int
-    chat_session_id: UUID
-    previous_response_id: int | None
-    root_id: int
-    status: RunStatus
 
 
 def _selected_responses(branch: ChatBranch) -> CTE:
@@ -146,10 +135,16 @@ def _selected_responses(branch: ChatBranch) -> CTE:
 
 def _selected_response_links(
     db_session: Session, branch: ChatBranch, agent_ids: list[UUID]
-) -> dict[UUID, list[_ResponseLink]]:
+) -> dict[UUID, list[ResponseLink]]:
     """Read branch-visible response links once, then order each conversation."""
     if not agent_ids:
         return {}
+    response_limits = {
+        agent_id: len(branch.message_ids)
+        if agent_id == branch.chat_session_id
+        else MAX_AGENT_HISTORY_RUNS
+        for agent_id in agent_ids
+    }
     responses = _selected_responses(branch)
     rows = (
         db_session.execute(
@@ -164,18 +159,18 @@ def _selected_response_links(
                     value=responses.c.root_id,
                 ),
             )
-            .limit(MAX_AGENT_HISTORY_RUNS * len(agent_ids) + 1)
+            .limit(sum(response_limits.values()) + 1)
         )
         .mappings()
         .all()
     )
-    links_by_agent: dict[UUID, list[_ResponseLink]] = {
+    links_by_agent: dict[UUID, list[ResponseLink]] = {
         agent_id: [] for agent_id in agent_ids
     }
-    for link in TypeAdapter(list[_ResponseLink]).validate_python(rows):
+    for link in TypeAdapter(list[ResponseLink]).validate_python(rows):
         links = links_by_agent[link.chat_session_id]
         links.append(link)
-        if len(links) > MAX_AGENT_HISTORY_RUNS:
+        if len(links) > response_limits[link.chat_session_id]:
             raise ValueError("Selected agent history exceeds its response limit")
     return {
         agent_id: links
@@ -185,7 +180,7 @@ def _selected_response_links(
     }
 
 
-def _order_response_links(links: list[_ResponseLink]) -> list[_ResponseLink]:
+def _order_response_links(links: list[ResponseLink]) -> list[ResponseLink]:
     """Follow predecessors from the unique selected tip, newest response first."""
     if not links:
         return []
@@ -194,7 +189,7 @@ def _order_response_links(links: list[_ResponseLink]) -> list[_ResponseLink]:
     if len(tips) != 1:
         raise ValueError("Child history has ambiguous response selection")
     by_id = {link.id: link for link in links}
-    selected: list[_ResponseLink] = []
+    selected: list[ResponseLink] = []
     visited: set[int] = set()
     current = tips[0]
     while True:
@@ -332,7 +327,12 @@ def _load_history(
             if item.rendering:
                 rendering = MessageRendering.model_validate(item.rendering)
                 for number, document_id in rendering.citation_documents.items():
-                    restored.sources[number] = documents[document_id]
+                    document = documents.get(document_id)
+                    if document is None:
+                        raise ValueError(
+                            "Cited source is unavailable on the root response"
+                        )
+                    restored.sources[number] = document
     return restored
 
 

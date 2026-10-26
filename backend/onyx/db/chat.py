@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Tuple
 from uuid import UUID
 
-from pydantic import BaseModel, TypeAdapter
+from pydantic import TypeAdapter
 from sqlalchemy import (
     Integer,
     Row,
@@ -25,6 +25,7 @@ from sqlalchemy.sql.expression import ColumnElement
 from sqlalchemy.sql.selectable import CTE
 
 from onyx.agents.models import CompactionCheckpoint
+from onyx.chat.response_models import HistoryLink, SessionAncestor
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import ANONYMOUS_USER_UUID, MessageType
 from onyx.context.search.models import InferenceSection, SavedSearchDoc
@@ -1479,12 +1480,6 @@ def checkpoint_from_summary(message: ChatMessage | None) -> CompactionCheckpoint
     )
 
 
-class _HistoryLink(BaseModel):
-    id: int
-    parent_message_id: int | None
-    chat_session_id: UUID
-
-
 def visible_message_ids(db_session: Session, message: ChatMessage) -> list[int]:
     """Return the selected ancestry, including the current response."""
     ancestry = (
@@ -1507,7 +1502,7 @@ def visible_message_ids(db_session: Session, message: ChatMessage) -> list[int]:
         .join(ancestry, ChatMessage.id == ancestry.c.parent_message_id)
         .where(ancestry.c.depth < MAX_CONVERSATION_MESSAGES)
     )
-    rows = TypeAdapter(list[_HistoryLink]).validate_python(
+    rows = TypeAdapter(list[HistoryLink]).validate_python(
         db_session.execute(select(ancestry)).mappings().all()
     )
     if any(row.chat_session_id != message.chat_session_id for row in rows):
@@ -1527,12 +1522,6 @@ def visible_message_ids(db_session: Session, message: ChatMessage) -> list[int]:
             )
         current = parents[current]
     return ids
-
-
-class SessionAncestor(BaseModel):
-    id: UUID
-    agent_name: str | None
-    parent_id: UUID | None
 
 
 def session_ancestors(

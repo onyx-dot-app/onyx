@@ -5,7 +5,6 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import add_search_docs_to_chat_message, create_db_search_doc
 from onyx.db.models import ChatMessage
@@ -96,15 +95,13 @@ def save_chat_display__no_commit[Key: Hashable](
         )
         for tool in tool_calls
     ]
-    linked_source_ids = set(source_ids.values())
     citations: dict[int, int] = {}
     for number, document in citation_to_doc.items():
         if emitted_citations is not None and number not in emitted_citations:
             continue
         citations[number] = save_source(document)
-        # Project files can be cited without appearing in a tool's source list.
-        if document.source_type == DocumentSource.FILE:
-            linked_source_ids.add(citations[number])
+    # Restored citations resolve against the response's saved sources.
+    linked_source_ids = set(source_ids.values())
     if linked_source_ids:
         add_search_docs_to_chat_message(
             chat_message_id=assistant_message.id,
