@@ -248,6 +248,8 @@ so verify the callers rather than a single component.
 | `mobile/` | mobile-app |
 | `desktop/`, `widget/`, `extensions/` | desktop-widget-extensions |
 
+| `backend/onyx/db/chat_response.py`, `backend/onyx/db/chat_subagents.py` | chat-persistence |
+
 ## Infrastructure
 
 | Path | Component(s) |

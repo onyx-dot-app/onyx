@@ -337,6 +337,26 @@ Configured utility clients receive one provider cost check in the factory.
 Naming keeps its existing rate-limit check and text fallback on failure. Sessions whose
 incognito mode does not persist content skip the naming call.
 
+### Canonical response storage APIs
+
+`db/chat_response.py` adds storage APIs for accepted runtime records. Each response
+item stores one model generation, including thinking blocks and provider metadata.
+`ToolCall.result` stores the actual tool result and typed application details.
+Readers rebuild model history from these records in step and tool-call order.
+The existing production loop still uses `chat/save_chat.py` and its legacy rows.
+These APIs prepare the runtime transition; they do not switch chat execution.
+
+`db/chat_subagents.py` loads child history from the selected conversation branch.
+A child session belongs to the root conversation that created it. Public chat
+lists, search, message reads, and admin history exclude child sessions. Deleting
+a root removes its descendants and files. Retention considers descendant activity.
+Child discovery rejects unrelated branches and bounds traversal and payload size.
+
+The canonical writer enforces the session's recording policy. Content-free sessions
+retain status and usage without response items, tool results, or child content.
+Projected saves update the displayed answer and accepted records in one transaction.
+Existing legacy tool response text remains a mapped column for the production writer.
+
 ## 5. Contracts and invariants
 
 1. **Messages alternate user and assistant.** The empty `SYSTEM` root row is

@@ -30,7 +30,10 @@ def _build_filter_conditions(
     feedback_filter: Feedback type to filter by
     Returns: List of filter conditions
     """
-    conditions = [content_persisting_sessions_filter()]
+    conditions = [
+        content_persisting_sessions_filter(),
+        ChatSession.spawned_by_message_id.is_(None),
+    ]
 
     if start_time is not None:
         conditions.append(ChatSession.time_created >= start_time)
@@ -140,6 +143,7 @@ def fetch_persisting_chat_session_by_id(
     chat_session = db_session.scalar(
         select(ChatSession).where(
             ChatSession.id == chat_session_id,
+            ChatSession.spawned_by_message_id.is_(None),
             content_persisting_sessions_filter(),
         )
     )
@@ -164,6 +168,7 @@ def fetch_chat_sessions_eagerly_by_time(
     # token counts and no message content, and every mode meters usage.
     filters: list[ColumnElement | BinaryExpression] = [
         ChatSession.time_created.between(start, end),
+        ChatSession.spawned_by_message_id.is_(None),
     ]
 
     if initial_time:
