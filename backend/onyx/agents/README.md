@@ -141,7 +141,8 @@ shares one result between consumers; consumers must not mutate it.
 Restored parents can observe authorized children that are still running remotely.
 Completing an older child run does not replace a newer run for that agent.
 
-Foreground children hold parent completion open. Parent cancellation reaches them.
+Foreground children hold parent completion open. Parent cancellation reaches them. A failed child cancellation records an error
+without skipping sibling cancellation or releasing local work before it drains.
 Background children can outlive the parent; the application must retain their
 coordinator. Register `add_completion_cleanup` for resources that must survive
 suspension and remain available until local work drains.
@@ -166,6 +167,7 @@ Each run reuses token counts for unchanged text across model steps. The cache
 retains only the latest request text and clears when execution configuration is released.
 
 Summary calls use `LLMFlow.CHAT_HISTORY_SUMMARIZATION` and bounded output.
+Truncation computes history boundaries once and reuses them across candidate prompts.
 All summary batches share one time budget: the smaller of the caller timeout and
 180 seconds. When this budget expires, context fitting uses its truncation fallback. Invalid checkpoints or summaries that do not reduce context fail
 explicitly. Compaction does not rerun step-preparation or completion callbacks.

@@ -885,6 +885,171 @@ def test_foreground_continuation_retains_consumed_background_history() -> None:
         assert owner.close(3)
 
 
+@pytest.mark.parametrize("read_fails", [False, True])
+def test_remote_cancellation_failure_preserves_parent_completion_and_local_cleanup(
+    read_fails: bool,
+) -> None:
+    stopped, provider_draining, release_provider = (
+        threading.Event(),
+        threading.Event(),
+        threading.Event(),
+    )
+    cleaning, release_cleanup = threading.Event(), threading.Event()
+    provider_entered = threading.Event()
+    children: list[SpawnResult] = []
+    remote_states: list[RunState] = []
+
+    def generate(
+        _request: GenerationRequest, signal: CancellationSignal
+    ) -> AssistantMessage:
+        provider_entered.set()
+        with signal.on_cancel(stopped.set):
+            assert stopped.wait(5)
+            provider_draining.set()
+            assert release_provider.wait(5)
+            signal.check()
+        return AssistantMessage()
+
+    def cleanup() -> None:
+        cleaning.set()
+        assert release_cleanup.wait(5)
+
+    def delegate(invocation: ToolInvocation) -> ChildRunWait:
+        for name, child in (
+            ("remote", suspended_agent()),
+            (
+                "local",
+                Agent(
+                    FakeModelClient(generate),
+                    generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+                ),
+            ),
+        ):
+            children.append(
+                invocation.agents.spawn_agent(
+                    child, name=name, description="", messages=[], max_steps=1
+                )
+            )
+        invocation.agents.add_completion_cleanup(children[1].run_id, cleanup)
+        return ChildRunWait(run_ids=[child.run_id for child in children])
+
+    def read(_run_id: str, _parent_id: str) -> RunState:
+        if read_fails:
+            raise OSError("archive unavailable")
+        return remote_states[0]
+
+    def cancel(_run_id: str, _parent_id: str) -> None:
+        raise OSError("cancellation unavailable")
+
+    coordinator = AgentCoordinator(
+        directory=FakeAgentDirectory(
+            read_run=read,
+            read_run_status=lambda *_: RunStatus.SUSPENDED,
+            cancel_run=cancel,
+        )
+    )
+    parent = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(
+                content=[ToolCall(id="delegate", name="delegate", arguments={})]
+            )
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name="delegate", description="", parameters={}
+                ),
+                execute=delegate,
+                result_from_children=lambda *_: ToolResult(content="done"),
+            )
+        ],
+    )
+    root = parent.start(max_steps=1, coordinator=coordinator)
+    try:
+        assert root.wait_until_settled(2).status == RunStatus.SUSPENDED
+        remote = coordinator.run(children[0].run_id)
+        assert remote.wait_until_settled(2).status == RunStatus.SUSPENDED
+        remote_states.append(remote.handoff().run_state)
+        assert provider_entered.wait(2)
+        root.cancel()
+        with pytest.raises(RunFailed):
+            root.result(3)
+        assert coordinator.completion(root.id).result(2).status == RunStatus.ERROR
+        assert provider_draining.wait(2)
+        assert not root.wait_for_idle(0)
+        release_provider.set()
+        assert cleaning.wait(2)
+        assert not root.wait_for_idle(0)
+        release_cleanup.set()
+        assert root.wait_for_idle(3)
+        assert children[1].run_id in [
+            child.run_id for child in root.snapshot().child_runs
+        ]
+    finally:
+        release_provider.set()
+        release_cleanup.set()
+        root.cancel()
+        assert coordinator.close(3)
+
+
+@pytest.mark.parametrize("cancel", [False, True])
+def test_child_cancellation_attempts_all_siblings_and_preserves_wait_failure(
+    cancel: bool,
+) -> None:
+    states = {
+        name: RunState(run_id=name, agent_id=name, status=RunStatus.SUSPENDED)
+        for name in ("first", "second")
+    }
+    attempts: list[str] = []
+    cancellation_error = OSError("remote cancellation failed")
+
+    def cancel_remote(run_id: str, _parent_id: str) -> None:
+        attempts.append(run_id)
+        if run_id == "first":
+            raise cancellation_error
+
+    coordinator = AgentCoordinator(
+        directory=FakeAgentDirectory(
+            read_run=lambda run_id, _parent_id: states[run_id],
+            read_run_status=lambda *_: RunStatus.SUSPENDED,
+            cancel_run=cancel_remote,
+        )
+    )
+    parent = suspended_agent().start(max_steps=1, coordinator=coordinator)
+    try:
+        assert parent.wait_until_settled(2).status == RunStatus.SUSPENDED
+        for name in states:
+            coordinator.register(
+                AgentInfo(
+                    id=name,
+                    path=f"/root/{name}",
+                    parent_id=parent.agent_id,
+                    description="",
+                    restoration_config=None,
+                )
+            )
+        assert parent.coordination is not None
+        parent.coordination.attach_children(list(states))
+        if cancel:
+            with pytest.raises(OSError) as caught:
+                parent.coordination.finish(cancel=True)
+            assert caught.value is cancellation_error
+            assert attempts == ["first", "second"]
+        else:
+            timeout = TimeoutError("Child completion timed out")
+            coordinator.completion("first").set_exception(timeout)
+            with pytest.raises(TimeoutError) as caught_timeout:
+                parent.coordination.finish(cancel=False)
+            assert caught_timeout.value is timeout
+            assert attempts == ["first"]
+    finally:
+        parent.cancel()
+        with pytest.raises(RunFailed):
+            parent.result(3)
+        assert coordinator.close(3)
+
+
 def test_coordinator_shutdown_cancels_background_child_after_parent_failure() -> None:
     from onyx.agents.tools import AgentLifetime
 

@@ -2,7 +2,7 @@
 
 > Executes model and tool steps with explicit cancellation, ownership, and restoration boundaries.
 
-**Verified against:** `f9a64de5fe` (2026-10-26)
+**Verified against:** `f4ae122a9b` (2026-10-26)
 **Domain:** core-loop
 **Edition:** CE
 **Owns:** `backend/onyx/agents/`
@@ -43,6 +43,8 @@ See `backend/onyx/agents/README.md` for the public contracts and usage.
 ## 5. Contracts and invariants
 
 - Cancellation rejects late updates but retains ownership until workers drain.
+- Child cancellation failures do not skip siblings, retained local work, or parent completion.
+- Model events recheck cancellation under the execution lock before changing recorded state.
 - Result readiness, saved completion, suspension, and idle state have distinct meanings.
 - Recorded partial output survives even when replay excludes incomplete exchanges or unsigned thinking.
 - Tool results and completion callbacks follow the original model-call order.
