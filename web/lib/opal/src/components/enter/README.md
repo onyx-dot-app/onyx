@@ -3,8 +3,9 @@
 **Import:** `import { Enter } from "@opal/components";`
 
 Animates its content in once, when it mounts. It paints nothing of its own (no
-border, background or padding). `SettingsLayouts.Body` uses it by default (its
-`animateEnter` prop), so the body of every settings-style page arrives through it.
+border, background or padding). `SettingsLayouts.Body` uses it by default (see
+`SettingsLayouts.Root`'s `animateEnter` prop), so the body of every
+settings-style page arrives through it.
 
 ## Props
 

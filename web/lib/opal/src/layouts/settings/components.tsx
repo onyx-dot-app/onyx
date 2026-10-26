@@ -12,7 +12,14 @@ import type {
   WithoutStyles,
 } from "@opal/types";
 import { spacingToRem } from "@opal/shared";
-import { HtmlHTMLAttributes, useEffect, useRef, useState } from "react";
+import {
+  HtmlHTMLAttributes,
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { Content } from "@opal/layouts";
 import { useOpalStrings } from "@opal/strings";
 // Imported from its own file: the loaders index pulls in @opal/layouts.
@@ -33,10 +40,32 @@ const widthClasses: Record<
   full: "w-(--app-container-full)",
 };
 
+/** The page's state, set on `Root` and read by `Body`. */
+interface SettingsPageState {
+  animateEnter: boolean;
+  loading: boolean;
+}
+
+const SettingsPageContext = createContext<SettingsPageState>({
+  animateEnter: true,
+  loading: false,
+});
+
 interface SettingsRootProps extends WithoutStyles<
   React.HtmlHTMLAttributes<HTMLDivElement>
 > {
   width?: Extract<SizeVariants, "sm" | "md" | "lg" | "xl" | "full">;
+  /**
+   * The body animates in with `Enter` when the page mounts; the header does
+   * not. `false` renders it at once. @default true
+   */
+  animateEnter?: boolean;
+  /**
+   * The body shows the page loader in place of its children. When it turns
+   * false, the children mount and animate in, so the animation plays when
+   * the content is ready. @default false
+   */
+  loading?: boolean;
 }
 
 /**
@@ -44,16 +73,23 @@ interface SettingsRootProps extends WithoutStyles<
  * The `id="page-wrapper-scroll-container"` is referenced by `Header` for
  * scroll-shadow detection — do not remove it.
  */
-function SettingsRoot({ width = "md", ...props }: SettingsRootProps) {
+function SettingsRoot({
+  width = "md",
+  animateEnter = true,
+  loading = false,
+  ...props
+}: SettingsRootProps) {
   return (
-    <div
-      id="page-wrapper-scroll-container"
-      className="w-full h-full flex flex-col items-center overflow-y-auto"
-    >
-      <div className={cn("h-full", widthClasses[width])}>
-        <div {...props} />
+    <SettingsPageContext.Provider value={{ animateEnter, loading }}>
+      <div
+        id="page-wrapper-scroll-container"
+        className="w-full h-full flex flex-col items-center overflow-y-auto"
+      >
+        <div className={cn("h-full", widthClasses[width])}>
+          <div {...props} />
+        </div>
       </div>
-    </div>
+    </SettingsPageContext.Provider>
   );
 }
 
@@ -261,26 +297,11 @@ function SettingsHeader({
 type SettingsBodyProps = WithoutStyles<HtmlHTMLAttributes<HTMLDivElement>> & {
   /** Space between sections, as a spacing step (`N / 4` rem). @default 8 */
   gap?: Spacing;
-  /**
-   * The body animates in with `Enter` when the page mounts; the header does
-   * not. `false` renders it at once. @default true
-   */
-  animateEnter?: boolean;
-  /**
-   * Shows the page loader in place of the children. When it turns false, the
-   * children mount and animate in, so the animation plays when the content
-   * is ready. @default false
-   */
-  loading?: boolean;
 };
 
-function SettingsBody({
-  gap = 8,
-  animateEnter = true,
-  loading = false,
-  children,
-  ...props
-}: SettingsBodyProps) {
+/** The page body. It renders the loading state and animation set on `Root`. */
+function SettingsBody({ gap = 8, children, ...props }: SettingsBodyProps) {
+  const { animateEnter, loading } = useContext(SettingsPageContext);
   const body = (
     <div
       className="pt-6 pb-18 px-4 flex flex-col w-full"
