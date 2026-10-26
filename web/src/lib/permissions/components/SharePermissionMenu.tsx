@@ -26,6 +26,8 @@ export interface SharePermissionMenuProps<T extends string> {
   removeLabel?: string;
   disabled?: boolean;
   width?: "fit" | "full";
+  /** With `width="full"`: icon + label to the left, chevron to the right edge. */
+  justifyContent?: "between";
   /** A fixed width for the open list. Left out, it follows the trigger. */
   menuWidth?: DropdownWidth;
   /** The status row's qualifier already shows the scope icon — the mock's
@@ -42,6 +44,7 @@ export default function SharePermissionMenu<T extends string>({
   removeLabel,
   disabled = false,
   width = "fit",
+  justifyContent,
   menuWidth,
   showTriggerIcon = true,
   ariaLabel,
@@ -67,6 +70,7 @@ export default function SharePermissionMenu<T extends string>({
         size="sm"
         variant="select-light"
         width={width}
+        justifyContent={justifyContent}
       >
         {selectedOption.label}
       </SelectButton>
@@ -118,6 +122,7 @@ export default function SharePermissionMenu<T extends string>({
           size="sm"
           variant="select-light"
           width={width}
+          justifyContent={justifyContent}
         >
           {selectedOption.label}
         </SelectButton>
