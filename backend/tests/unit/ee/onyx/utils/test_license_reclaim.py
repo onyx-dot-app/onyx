@@ -19,6 +19,7 @@ from ee.onyx.utils.license import (
     maybe_schedule_license_reclaim,
     publish_license_cache,
     reclaim_license_from_control_plane,
+    resume_license_reclaim,
     verify_and_store_license,
 )
 from ee.onyx.utils.license_expiry import LICENSE_RECLAIM_WINDOW
@@ -509,6 +510,34 @@ class TestReclaimLicenseFromControlPlaneErrors:
 
 def _expiring_in(delta: timedelta) -> datetime:
     return datetime.now(timezone.utc) + delta
+
+
+class TestResumeLicenseReclaim:
+    @pytest.mark.parametrize("cache_backend", list(CacheBackendType))
+    @patch("ee.onyx.utils.license.get_redis_client")
+    @patch("ee.onyx.utils.license.get_cache_backend")
+    def test_clears_the_block_without_connecting_to_unused_redis(
+        self,
+        mock_get_cache: MagicMock,
+        mock_get_redis: MagicMock,
+        cache_backend: CacheBackendType,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr("ee.onyx.utils.license.CACHE_BACKEND", cache_backend)
+
+        resume_license_reclaim()
+
+        mock_get_cache.assert_called_once_with()
+        mock_get_cache.return_value.delete.assert_called_once_with(
+            "license_reclaim_blocked"
+        )
+        if cache_backend == CacheBackendType.REDIS:
+            mock_get_redis.assert_called_once_with()
+            mock_get_redis.return_value.delete.assert_called_once_with(
+                "license_reclaim_debounce"
+            )
+        else:
+            mock_get_redis.assert_not_called()
 
 
 class TestMaybeScheduleLicenseReclaim:

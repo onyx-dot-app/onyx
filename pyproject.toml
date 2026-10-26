@@ -346,7 +346,7 @@ extend-immutable-calls = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
+known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server", "scripts"]
 
 [tool.ruff.lint.per-file-ignores]
 # alembic has a folder named `alembic` in backend/ which confuses import sorters.

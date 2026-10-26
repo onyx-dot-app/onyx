@@ -128,6 +128,11 @@ throw if `NEXT_PUBLIC_CLOUD_ENABLED` is true.
   (`ee/onyx/server/billing/api.py:BILLING_CIRCUIT_BREAKER_KEY`), and the
   license metadata cache read by `ee/onyx/db/license.py:get_cached_license_metadata`.
 
+The admin-page cache uses Redis only when `CACHE_BACKEND=redis`.
+With `CACHE_BACKEND=postgres`, `_billing_cache_client` returns `None` without
+connecting to Redis. Billing-info reads fetch live data, and admin-cache
+invalidation skips Redis.
+
 ---
 
 ## 4. How it works

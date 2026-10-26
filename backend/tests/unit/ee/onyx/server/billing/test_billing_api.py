@@ -11,8 +11,48 @@ from ee.onyx.server.billing.models import (
     SeatUpdateResponse,
     SubscriptionStatusResponse,
 )
+from onyx.cache.interface import CacheBackendType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+
+
+class TestBillingCacheClient:
+    @pytest.mark.parametrize("cache_backend", list(CacheBackendType))
+    @pytest.mark.parametrize("multi_tenant", [False, True])
+    @patch(
+        "ee.onyx.server.billing.api.get_current_tenant_id", return_value="tenant_123"
+    )
+    @patch("ee.onyx.server.billing.api.get_shared_redis_client")
+    @patch("ee.onyx.server.billing.api.get_redis_client")
+    def test_connects_only_when_redis_is_the_cache_backend(
+        self,
+        mock_get_redis: MagicMock,
+        mock_get_shared_redis: MagicMock,
+        mock_tenant_id: MagicMock,
+        cache_backend: CacheBackendType,
+        multi_tenant: bool,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from ee.onyx.server.billing import api
+
+        monkeypatch.setattr(api, "CACHE_BACKEND", cache_backend)
+        monkeypatch.setattr(api, "MULTI_TENANT", multi_tenant)
+
+        result = api._billing_cache_client()
+
+        if cache_backend == CacheBackendType.POSTGRES:
+            assert result is None
+            mock_get_redis.assert_not_called()
+            mock_get_shared_redis.assert_not_called()
+            mock_tenant_id.assert_not_called()
+        elif multi_tenant:
+            assert result is mock_get_redis.return_value
+            mock_get_redis.assert_called_once_with(tenant_id="tenant_123")
+            mock_get_shared_redis.assert_not_called()
+        else:
+            assert result is mock_get_shared_redis.return_value
+            mock_get_shared_redis.assert_called_once_with()
+            mock_get_redis.assert_not_called()
 
 
 class TestCreateCheckoutSession:

@@ -487,6 +487,8 @@ def resume_license_reclaim() -> None:
         get_cache_backend().delete(_LICENSE_RECLAIM_BLOCKED_KEY)
     except Exception as e:
         logger.warning("Failed to clear license reclaim block: %s", e)
+    if CACHE_BACKEND != CacheBackendType.REDIS:
+        return
     try:
         get_redis_client().delete(_LICENSE_RECLAIM_DEBOUNCE_KEY)
     except Exception as e:

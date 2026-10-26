@@ -193,6 +193,60 @@ auth:
       REDIS_PASSWORD: redis_password
 ```
 
+## Load a license file at startup
+
+Self-hosted Onyx can load a signed license file when the API starts.
+Use a backend image that supports `ONYX_LICENSE_FILE`.
+The file path must point inside the API container.
+
+Create a Secret in the release namespace before installing or upgrading the chart.
+This example uses the Secret name `onyx-license` and the key `license.lic`:
+
+```bash
+kubectl create namespace onyx
+kubectl -n onyx create secret generic onyx-license \
+  --from-file=license.lic=/path/to/license.lic
+```
+
+For an existing namespace, omit the first command.
+Keep the license content out of Helm values and source control.
+Add the following to your values file, preserving any existing API environment variables, volumes, and mounts:
+
+```yaml
+api:
+  extraEnv:
+    - name: ONYX_LICENSE_FILE
+      value: /etc/onyx/license/license.lic
+  podSecurityContext:
+    fsGroup: 1000
+  volumes:
+    - name: onyx-license
+      secret:
+        secretName: onyx-license
+        defaultMode: 0440
+        items:
+          - key: license.lic
+            path: license.lic
+  volumeMounts:
+    - name: onyx-license
+      mountPath: /etc/onyx/license
+      readOnly: true
+```
+
+The `0440` file mode permits reads by the owner and group.
+The pod's `fsGroup` gives non-root API processes access through that group.
+Use a group ID that your cluster permits.
+See the [Kubernetes security context documentation](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/).
+
+The chart references the existing Secret. It does not create a license Secret.
+The API verifies and stores the license after database setup, before serving requests.
+An unreadable, empty, or invalid file leaves the stored license unchanged.
+Cloud deployments ignore `ONYX_LICENSE_FILE`.
+
+After replacing the Secret's license file, restart the API pods to load the change.
+Removing this mount or environment variable does not delete the stored license.
+If you leave the file configured, the API loads it again on subsequent starts.
+
 ## Sourcing secrets from an external secret manager (ESO)
 
 The chart can render an `ExternalSecret` CR that has [External Secrets

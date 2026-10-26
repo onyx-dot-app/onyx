@@ -272,6 +272,7 @@ outside development mode. Multi-tenant startup skips it before file access.
 The helper normalizes the file, then calls
 `backend/ee/onyx/utils/license.py:verify_and_store_license` to verify, store,
 and publish it. The existing store lock protects concurrent startup workers.
+After the store returns, startup invalidates the billing information cache.
 A newer stored license survives repeated seeds. Missing, unreadable, empty,
 or invalid files log a nonsecret error and leave the stored license intact.
 Unexpected database errors propagate. Removing the setting does not delete
@@ -445,7 +446,8 @@ To exercise the CE path in a test, call `global_version.unset_ee()` and
 3. To load a signed `.lic` file at API startup, set `ONYX_LICENSE_FILE` to
    an absolute path visible to the API process. For local development, put
    it in .vscode/.env. For containers, mount the file read-only and set the
-   container path. See deployment/docker_compose/README.md for an example.
+   container path. See deployment/docker_compose/README.md and
+   deployment/helm/README.md for examples.
    Restart the API and confirm the expected tier through `/settings`.
    To seed a blob directly, run `python -m scripts.seed_dev_license` from
    `backend/` with `ONYX_DEV_LICENSE` set. With an empty blob, the script does nothing.

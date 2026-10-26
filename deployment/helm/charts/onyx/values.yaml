@@ -560,7 +560,11 @@ webserver:
     maxUnavailable: 1
 
 api:
+  # For a startup license, mount a Secret with volumes and volumeMounts below.
+  # See deployment/helm/README.md for the full example.
   extraEnv: []
+  # - name: ONYX_LICENSE_FILE
+  #   value: /etc/onyx/license/license.lic
   replicaCount: 1
   image:
     repository: onyxdotapp/onyx-backend

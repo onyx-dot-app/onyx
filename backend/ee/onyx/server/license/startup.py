@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from ee.onyx.configs.app_configs import ONYX_LICENSE_FILE
+from ee.onyx.server.billing.api import invalidate_billing_info_cache
 from ee.onyx.utils.license import normalize_license_file, verify_and_store_license
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.utils.logger import setup_logger
@@ -32,4 +33,5 @@ def seed_license_from_file() -> None:
             logger.error("ONYX_LICENSE_FILE is invalid. Keeping the stored license.")
             return
 
+    invalidate_billing_info_cache()
     logger.info("Processed ONYX_LICENSE_FILE.")

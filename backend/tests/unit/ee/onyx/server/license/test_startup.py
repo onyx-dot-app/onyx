@@ -27,11 +27,13 @@ def test_unset_path_does_nothing(
     with (
         patch.object(Path, "read_text") as read_file,
         patch.object(startup, "get_session_with_current_tenant") as session,
+        patch.object(startup, "invalidate_billing_info_cache") as invalidate_billing,
     ):
         startup.seed_license_from_file()
 
     read_file.assert_not_called()
     session.assert_not_called()
+    invalidate_billing.assert_not_called()
 
 
 def test_multi_tenant_skips_the_file(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -40,11 +42,13 @@ def test_multi_tenant_skips_the_file(monkeypatch: pytest.MonkeyPatch) -> None:
     with (
         patch.object(Path, "read_text") as read_file,
         patch.object(startup, "get_session_with_current_tenant") as session,
+        patch.object(startup, "invalidate_billing_info_cache") as invalidate_billing,
     ):
         startup.seed_license_from_file()
 
     read_file.assert_not_called()
     session.assert_not_called()
+    invalidate_billing.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -90,18 +94,29 @@ def test_signed_file_reaches_the_guarded_store(
     monkeypatch.setattr(startup, "ONYX_LICENSE_FILE", license_file.name)
     monkeypatch.setattr(startup, "MULTI_TENANT", False)
 
+    events: list[str] = []
     with (
         patch.object(startup, "get_session_with_current_tenant") as session,
         patch("ee.onyx.utils.license._get_public_keys", return_value=[public_key]),
         patch("ee.onyx.db.license.acquire_license_store_lock") as store_lock,
         patch("ee.onyx.db.license.get_license", return_value=stored),
         patch("ee.onyx.db.license.upsert_license") as upsert,
-        patch("ee.onyx.utils.license.publish_license_cache") as publish,
+        patch(
+            "ee.onyx.utils.license.publish_license_cache",
+            side_effect=lambda _session: events.append("license cache published"),
+        ) as publish,
         patch("ee.onyx.utils.license.resume_license_reclaim"),
+        patch.object(
+            startup,
+            "invalidate_billing_info_cache",
+            side_effect=lambda: events.append("billing cache invalidated"),
+        ) as invalidate_billing,
     ):
+        db_session = session.return_value.__enter__.return_value
+        db_session.commit.side_effect = lambda: events.append("commit")
+        db_session.rollback.side_effect = lambda: events.append("rollback")
         startup.seed_license_from_file()
 
-    db_session = session.return_value.__enter__.return_value
     store_lock.assert_called_once_with(db_session)
     if newer_stored_license:
         upsert.assert_not_called()
@@ -111,6 +126,12 @@ def test_signed_file_reaches_the_guarded_store(
         upsert.assert_called_once_with(db_session, license_data, commit=False)
         db_session.commit.assert_called_once()
     publish.assert_called_once_with(db_session)
+    invalidate_billing.assert_called_once_with()
+    assert events == [
+        "rollback" if newer_stored_license else "commit",
+        "license cache published",
+        "billing cache invalidated",
+    ]
 
 
 @pytest.mark.parametrize("contents", [None, b"", b" \n\t", b"\xff", b"invalid"])
@@ -128,6 +149,7 @@ def test_bad_file_preserves_the_stored_license(
         patch("ee.onyx.db.license.acquire_license_store_lock") as store_lock,
         patch("ee.onyx.db.license.upsert_license") as upsert,
         patch("ee.onyx.utils.license.publish_license_cache") as publish,
+        patch.object(startup, "invalidate_billing_info_cache") as invalidate_billing,
     ):
         startup.seed_license_from_file()
 
@@ -135,6 +157,7 @@ def test_bad_file_preserves_the_stored_license(
     upsert.assert_not_called()
     session.return_value.__enter__.return_value.commit.assert_not_called()
     publish.assert_not_called()
+    invalidate_billing.assert_not_called()
 
 
 def test_invalid_payload_does_not_log_file_contents(
@@ -153,12 +176,16 @@ def test_invalid_payload_does_not_log_file_contents(
     monkeypatch.setattr(startup, "ONYX_LICENSE_FILE", str(license_file))
     monkeypatch.setattr(startup, "MULTI_TENANT", False)
 
-    with patch.object(startup, "get_session_with_current_tenant"):
+    with (
+        patch.object(startup, "get_session_with_current_tenant"),
+        patch.object(startup, "invalidate_billing_info_cache") as invalidate_billing,
+    ):
         startup.seed_license_from_file()
 
     assert "ONYX_LICENSE_FILE is invalid" in caplog.text
     assert secret_marker not in caplog.text
     assert contents not in caplog.text
+    invalidate_billing.assert_not_called()
 
 
 def test_database_errors_propagate(
@@ -174,9 +201,12 @@ def test_database_errors_propagate(
         patch.object(
             startup, "verify_and_store_license", side_effect=RuntimeError("database")
         ),
+        patch.object(startup, "invalidate_billing_info_cache") as invalidate_billing,
         pytest.raises(RuntimeError, match="database"),
     ):
         startup.seed_license_from_file()
+
+    invalidate_billing.assert_not_called()
 
 
 @pytest.mark.asyncio

@@ -190,7 +190,10 @@ Keep any other active overlays, such as Craft or dev ports, before the license o
 
 At each startup, Onyx verifies the file's signature and stores the license in PostgreSQL.
 It keeps a stored license that has a later issue time and updates the license cache.
-Missing, unreadable, empty, or invalid files produce an error log. The API continues with the stored license.
+After the container starts, missing, unreadable, empty, or invalid license files produce an error log.
+The API continues with the stored license.
+The host source must exist before Compose creates or recreates `api_server`.
+With `create_host_path: false`, Compose rejects a missing source before the API starts.
 Multi-tenant deployments ignore this setting.
 
 Removing `ONYX_LICENSE_FILE` does not delete the stored license. Remove the setting before you delete or downgrade a license.

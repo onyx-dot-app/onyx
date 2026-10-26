@@ -59,7 +59,9 @@ from ee.onyx.server.billing.service import update_seat_count as update_seat_serv
 from ee.onyx.utils.license import clear_claim_cooldown
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import User
+from onyx.cache.interface import CacheBackendType
 from onyx.configs.app_configs import (
+    CACHE_BACKEND,
     STRIPE_PUBLISHABLE_KEY_OVERRIDE,
     STRIPE_PUBLISHABLE_KEY_URL,
     WEB_DOMAIN,
@@ -251,6 +253,8 @@ def _billing_cache_client() -> TenantRedisClient | None:
     fetch — matches the broad guard used by ``_is_billing_circuit_open``
     in this same file.
     """
+    if CACHE_BACKEND != CacheBackendType.REDIS:
+        return None
     try:
         if MULTI_TENANT:
             return get_redis_client(tenant_id=get_current_tenant_id())
