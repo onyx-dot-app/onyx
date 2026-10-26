@@ -1257,7 +1257,6 @@
         "description": "Sélectionnez un modèle pour les futures fonctions de classification et de révision. Onyx n’utilise pas encore ce modèle.",
         "clear": "Effacer",
         "notConfigured": "Non configuré",
-        "saved": "Modèle de décision mis à jour",
         "saveFailed": "Impossible de mettre à jour le modèle de décision"
       },
       "header": {
@@ -2846,18 +2845,14 @@
         "indexingStartUnexpectedError": "Une erreur inattendue est survenue lors du démarrage de l'indexation",
         "indexingUpdateStarted": "Mise à jour de l'indexation démarrée avec succès",
         "nameUpdateFailed": "Échec de la mise à jour du nom du connecteur",
-        "nameUpdated": "Nom du connecteur mis à jour avec succès",
         "noUnresolvedErrors": "Aucune erreur non résolue à réessayer.",
         "pruningFrequencyUpdateFailed": "Échec de la mise à jour de la fréquence d'élagage du connecteur",
-        "pruningFrequencyUpdated": "Fréquence d'élagage du connecteur mise à jour avec succès",
         "refreshFrequencyUpdateFailed": "Échec de la mise à jour de la fréquence d'actualisation du connecteur",
-        "refreshFrequencyUpdated": "Fréquence d'actualisation du connecteur mise à jour avec succès",
         "targetedReindexFailed": "Échec de la réindexation ciblée : {message}",
         "targetedReindexRunning": "Nouvelle tentative pour {count, plural, one {# erreur} other {# erreurs}}…",
         "targetedReindexDone": "Nouvelle tentative terminée. {resolved, plural, one {# erreur résolue} other {# erreurs résolues}}.",
         "targetedReindexPartial": "Nouvelle tentative terminée. {resolved, plural, one {# erreur résolue} other {# erreurs résolues}}, {failing, plural, one {# document toujours en échec} other {# documents toujours en échec}}.",
         "targetedReindexIncomplete": "La nouvelle tentative n’a pas abouti. Les erreurs non résolues restent dans la liste.",
-        "checkFrequencyUpdated": "Fréquence de vérification du connecteur mise à jour",
         "checkFrequencyUpdateFailed": "Échec de la mise à jour de la fréquence de vérification du connecteur",
         "runResolved": "Marqué comme résolu.",
         "runResolveFailed": "Impossible de résoudre : {message}",
@@ -3441,9 +3436,6 @@
           },
           "shareFailed": {
             "toast": "Impossible de modifier qui peut utiliser ce compte. Réessayez."
-          },
-          "renameSaved": {
-            "toast": "Compte renommé."
           },
           "renameFailed": {
             "toast": "Impossible de renommer ce compte. Réessayez."
@@ -4938,12 +4930,6 @@
     },
     "craft": {
       "accessCell": {
-        "disabledSuccess": {
-          "message": "Craft désactivé pour l'utilisateur"
-        },
-        "enabledSuccess": {
-          "message": "Craft activé pour l'utilisateur"
-        },
         "error": {
           "message": "Échec de la mise à jour de l'accès à Craft"
         }
@@ -5058,14 +5044,8 @@
         "resetError": {
           "message": "Échec de l'effacement du modèle par défaut"
         },
-        "resetSuccess": {
-          "message": "Modèle par défaut de Craft effacé"
-        },
         "saveError": {
           "message": "Échec de l'enregistrement du modèle par défaut"
-        },
-        "saveSuccess": {
-          "message": "Modèle par défaut de Craft enregistré"
         }
       },
       "header": {
@@ -5444,9 +5424,6 @@
         }
       },
       "defaultAgent": {
-        "cleared": {
-          "toast": "Agent par défaut effacé"
-        },
         "section": {
           "description": "L'agent utilisé par le bot dans tous les canaux, sauf remplacement.",
           "title": "Agent par défaut"
@@ -5459,9 +5436,6 @@
         },
         "updateError": {
           "toast": "Échec de la mise à jour de l'agent"
-        },
-        "updated": {
-          "toast": "Agent par défaut mis à jour"
         }
       },
       "error": {
@@ -5514,15 +5488,9 @@
         "deleted": {
           "toast": "Configuration du serveur supprimée"
         },
-        "disabled": {
-          "toast": "Serveur désactivé"
-        },
         "empty": {
           "description": "Créez une configuration de serveur pour commencer.",
           "title": "Aucun serveur Discord configuré pour l'instant"
-        },
-        "enabled": {
-          "toast": "Serveur activé"
         },
         "fallbackName": "Serveur #{id}",
         "notRegistered": {
@@ -5646,9 +5614,6 @@
       "score": {
         "notANumber": {
           "toast": "Le score doit être un nombre"
-        },
-        "updated": {
-          "toast": "Score mis à jour !"
         }
       },
       "sets": {
@@ -6073,8 +6038,7 @@
           "label": "(Par défaut)"
         },
         "toasts": {
-          "renameFailed": "Échec du renommage du groupe",
-          "renamed": "Groupe renommé en \"{name}\""
+          "renameFailed": "Échec du renommage du groupe"
         },
         "viewGroup": {
           "label": "Voir le groupe"
@@ -6153,8 +6117,6 @@
         "toasts": {
           "deleteFailed": "Échec de la suppression du groupe",
           "deleted": "Groupe \"{name}\" supprimé",
-          "managerAssigned": "Gestionnaire attribué",
-          "managerRevoked": "Gestionnaire révoqué",
           "managerUpdateFailed": "Échec de la mise à jour du gestionnaire",
           "membersStranded": "Certains de ces membres se retrouveraient sans groupe. Ajoutez-les d'abord à un autre groupe.",
           "syncing": "Ce groupe est en cours de synchronisation. Patientez un instant et réessayez.",
@@ -6631,9 +6593,6 @@
       "deselectError": {
         "message": "Échec de la désélection"
       },
-      "deselectSuccess": {
-        "message": "{title} désélectionné"
-      },
       "disconnectError": {
         "message": "Échec de la déconnexion"
       },
@@ -6804,9 +6763,6 @@
       },
       "setDefaultError": {
         "message": "Échec de la définition du modèle par défaut"
-      },
-      "setDefaultSuccess": {
-        "message": "{title} défini par défaut"
       }
     },
     "indexSettings": {
@@ -7366,8 +7322,7 @@
           },
           "placeholder": "Sélectionner un mode",
           "toasts": {
-            "error": "Impossible de mettre à jour le mode d’accès à la recherche.",
-            "success": "Mode d’accès à la recherche défini sur {mode}."
+            "error": "Impossible de mettre à jour le mode d’accès à la recherche."
           }
         },
         "loadError": {
@@ -7394,7 +7349,6 @@
           "period": "Saisissez un nombre entier de secondes de 1 à {max, number}."
         },
         "toasts": {
-          "saved": "Limite enregistrée.",
           "failed": "Impossible d'enregistrer la limite."
         }
       },
@@ -8448,9 +8402,6 @@
         "error": "Échec du chargement de l'état du jeton SCIM."
       },
       "modal": {
-        "copied": {
-          "message": "Jeton copié dans le presse-papiers"
-        },
         "copyFailed": {
           "error": "Échec de la copie du jeton"
         },
@@ -8711,9 +8662,7 @@
       },
       "toasts": {
         "securitySettingsUpdateFailed": "Échec de la mise à jour des paramètres de sécurité",
-        "securitySettingsUpdated": "Paramètres de sécurité mis à jour",
-        "settingsUpdateFailed": "Échec de la mise à jour des paramètres",
-        "settingsUpdated": "Paramètres mis à jour"
+        "settingsUpdateFailed": "Échec de la mise à jour des paramètres"
       },
       "placeholders": {
         "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
@@ -8886,7 +8835,6 @@
       "toasts": {
         "deleteFailed": "Échec de la suppression de la clé d'API.",
         "deleteFailedWithDetail": "Échec de la suppression de la clé d'API : {detail}",
-        "keyCopied": "Clé d'API copiée dans le presse-papiers.",
         "regenerateFailed": "Échec de la régénération de la clé d'API.",
         "regenerateFailedWithDetail": "Échec de la régénération de la clé d'API : {detail}"
       },
@@ -9293,9 +9241,6 @@
         "fieldUpdateFailed": {
           "toast": "Échec de la mise à jour du champ {field} du connecteur"
         },
-        "fieldUpdated": {
-          "toast": "Champ {field} du connecteur mis à jour avec succès"
-        },
         "updateTokensButton": {
           "label": "Mettre à jour les jetons"
         }
@@ -9320,9 +9265,7 @@
         "gatedTooltip": "L'activation de plusieurs fournisseurs SSO est disponible avec le forfait Business ou Enterprise."
       },
       "copyRedirectUri": {
-        "tooltip": "Copier l'URI de redirection",
-        "successToast": "URI de redirection copiée",
-        "errorToast": "Copie impossible"
+        "tooltip": "Copier l'URI de redirection"
       },
       "deleteProvider": {
         "tooltip": "Supprimer"
@@ -10809,7 +10752,6 @@
         "title": "Chaque utilisateur configure son propre jeton et les détails de connexion sous Paramètres → LLM Gateway."
       },
       "toasts": {
-        "settingsUpdated": "Paramètres mis à jour",
         "settingsUpdateFailed": "Échec de la mise à jour des paramètres"
       }
     },
@@ -11492,8 +11434,6 @@
         },
         "toasts": {
           "accessRemoved": "Accès retiré.",
-          "copyLinkFailed": "Échec de la copie du lien.",
-          "linkCopied": "Lien copié.",
           "ownershipTransferred": "Propriété transférée.",
           "sharingUpdated": "Partage mis à jour."
         },

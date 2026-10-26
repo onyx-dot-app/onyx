@@ -1257,7 +1257,6 @@
         "description": "Wählen Sie ein Modell für künftige Klassifizierungs- und Prüffunktionen. Onyx verwendet dieses Modell noch nicht.",
         "clear": "Löschen",
         "notConfigured": "Nicht konfiguriert",
-        "saved": "Entscheidungsmodell aktualisiert",
         "saveFailed": "Entscheidungsmodell konnte nicht aktualisiert werden"
       },
       "header": {
@@ -2846,18 +2845,14 @@
         "indexingStartUnexpectedError": "Beim Starten der Indexierung ist ein unerwarteter Fehler aufgetreten",
         "indexingUpdateStarted": "Indexierungsaktualisierung erfolgreich gestartet",
         "nameUpdateFailed": "Der Konnektorname konnte nicht aktualisiert werden",
-        "nameUpdated": "Konnektorname erfolgreich aktualisiert",
         "noUnresolvedErrors": "Keine nicht behobenen Fehler für einen erneuten Versuch.",
         "pruningFrequencyUpdateFailed": "Das Bereinigungsintervall des Konnektors konnte nicht aktualisiert werden",
-        "pruningFrequencyUpdated": "Bereinigungsintervall des Konnektors erfolgreich aktualisiert",
         "refreshFrequencyUpdateFailed": "Das Aktualisierungsintervall des Konnektors konnte nicht aktualisiert werden",
-        "refreshFrequencyUpdated": "Aktualisierungsintervall des Konnektors erfolgreich aktualisiert",
         "targetedReindexFailed": "Die gezielte Neuindexierung ist fehlgeschlagen: {message}",
         "targetedReindexRunning": "{count, plural, one {# Fehler wird} other {# Fehler werden}} erneut versucht…",
         "targetedReindexDone": "Erneuter Versuch abgeschlossen. {resolved, plural, one {# Fehler} other {# Fehler}} behoben.",
         "targetedReindexPartial": "Erneuter Versuch abgeschlossen. {resolved, plural, one {# Fehler} other {# Fehler}} behoben, {failing, plural, one {# Dokument schlägt} other {# Dokumente schlagen}} weiterhin fehl.",
         "targetedReindexIncomplete": "Der erneute Versuch wurde nicht abgeschlossen. Nicht behobene Fehler bleiben in der Liste.",
-        "checkFrequencyUpdated": "Prüfintervall des Konnektors erfolgreich aktualisiert",
         "checkFrequencyUpdateFailed": "Prüfintervall des Konnektors konnte nicht aktualisiert werden",
         "runResolved": "Als behoben markiert.",
         "runResolveFailed": "Konnte nicht als behoben markiert werden: {message}",
@@ -3441,9 +3436,6 @@
           },
           "shareFailed": {
             "toast": "Die Freigabe dieses Kontos konnte nicht geändert werden. Versuchen Sie es erneut."
-          },
-          "renameSaved": {
-            "toast": "Konto umbenannt."
           },
           "renameFailed": {
             "toast": "Das Konto konnte nicht umbenannt werden. Versuchen Sie es erneut."
@@ -4938,12 +4930,6 @@
     },
     "craft": {
       "accessCell": {
-        "disabledSuccess": {
-          "message": "Craft für den Benutzer deaktiviert"
-        },
-        "enabledSuccess": {
-          "message": "Craft für den Benutzer aktiviert"
-        },
         "error": {
           "message": "Der Craft-Zugriff konnte nicht aktualisiert werden"
         }
@@ -5058,14 +5044,8 @@
         "resetError": {
           "message": "Das Standardmodell konnte nicht gelöscht werden"
         },
-        "resetSuccess": {
-          "message": "Craft-Standardmodell gelöscht"
-        },
         "saveError": {
           "message": "Das Standardmodell konnte nicht gespeichert werden"
-        },
-        "saveSuccess": {
-          "message": "Craft-Standardmodell gespeichert"
         }
       },
       "header": {
@@ -5444,9 +5424,6 @@
         }
       },
       "defaultAgent": {
-        "cleared": {
-          "toast": "Standardagent zurückgesetzt"
-        },
         "section": {
           "description": "Der Agent, den der Bot in allen Kanälen verwendet, sofern er nicht überschrieben wird.",
           "title": "Standardagent"
@@ -5459,9 +5436,6 @@
         },
         "updateError": {
           "toast": "Der Agent konnte nicht aktualisiert werden"
-        },
-        "updated": {
-          "toast": "Standardagent aktualisiert"
         }
       },
       "error": {
@@ -5514,15 +5488,9 @@
         "deleted": {
           "toast": "Serverkonfiguration gelöscht"
         },
-        "disabled": {
-          "toast": "Server deaktiviert"
-        },
         "empty": {
           "description": "Erstellen Sie eine Serverkonfiguration, um zu beginnen.",
           "title": "Noch keine Discord-Server konfiguriert"
-        },
-        "enabled": {
-          "toast": "Server aktiviert"
         },
         "fallbackName": "Server #{id}",
         "notRegistered": {
@@ -5646,9 +5614,6 @@
       "score": {
         "notANumber": {
           "toast": "Die Bewertung muss eine Zahl sein"
-        },
-        "updated": {
-          "toast": "Bewertung aktualisiert!"
         }
       },
       "sets": {
@@ -6073,8 +6038,7 @@
           "label": "(Standard)"
         },
         "toasts": {
-          "renameFailed": "Die Gruppe konnte nicht umbenannt werden",
-          "renamed": "Gruppe umbenannt in \"{name}\""
+          "renameFailed": "Die Gruppe konnte nicht umbenannt werden"
         },
         "viewGroup": {
           "label": "Gruppe anzeigen"
@@ -6153,8 +6117,6 @@
         "toasts": {
           "deleteFailed": "Die Gruppe konnte nicht gelöscht werden",
           "deleted": "Gruppe \"{name}\" gelöscht",
-          "managerAssigned": "Manager zugewiesen",
-          "managerRevoked": "Manager entzogen",
           "managerUpdateFailed": "Der Manager konnte nicht aktualisiert werden",
           "membersStranded": "Einige dieser Mitglieder wären danach in keiner Gruppe. Fügen Sie sie zuerst einer anderen Gruppe hinzu.",
           "syncing": "Diese Gruppe wird gerade synchronisiert. Bitte warten Sie einen Moment und versuchen Sie es erneut.",
@@ -6631,9 +6593,6 @@
       "deselectError": {
         "message": "Auswahl konnte nicht aufgehoben werden"
       },
-      "deselectSuccess": {
-        "message": "Auswahl von {title} aufgehoben"
-      },
       "disconnectError": {
         "message": "Trennung fehlgeschlagen"
       },
@@ -6804,9 +6763,6 @@
       },
       "setDefaultError": {
         "message": "Der Standard konnte nicht festgelegt werden"
-      },
-      "setDefaultSuccess": {
-        "message": "{title} als Standard festgelegt"
       }
     },
     "indexSettings": {
@@ -7366,8 +7322,7 @@
           },
           "placeholder": "Modus auswählen",
           "toasts": {
-            "error": "Der Suchzugriffsmodus konnte nicht aktualisiert werden.",
-            "success": "Suchzugriffsmodus auf {mode} gesetzt."
+            "error": "Der Suchzugriffsmodus konnte nicht aktualisiert werden."
           }
         },
         "loadError": {
@@ -7394,7 +7349,6 @@
           "period": "Geben Sie eine ganze Zahl von Sekunden von 1 bis {max, number} ein."
         },
         "toasts": {
-          "saved": "Limit gespeichert.",
           "failed": "Das Limit konnte nicht gespeichert werden."
         }
       },
@@ -8448,9 +8402,6 @@
         "error": "Der Status des SCIM-Tokens konnte nicht geladen werden."
       },
       "modal": {
-        "copied": {
-          "message": "Token in die Zwischenablage kopiert"
-        },
         "copyFailed": {
           "error": "Der Token konnte nicht kopiert werden"
         },
@@ -8711,9 +8662,7 @@
       },
       "toasts": {
         "securitySettingsUpdateFailed": "Die Sicherheitseinstellungen konnten nicht aktualisiert werden",
-        "securitySettingsUpdated": "Sicherheitseinstellungen aktualisiert",
-        "settingsUpdateFailed": "Die Einstellungen konnten nicht aktualisiert werden",
-        "settingsUpdated": "Einstellungen aktualisiert"
+        "settingsUpdateFailed": "Die Einstellungen konnten nicht aktualisiert werden"
       },
       "placeholders": {
         "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
@@ -8886,7 +8835,6 @@
       "toasts": {
         "deleteFailed": "Der API-Schlüssel konnte nicht gelöscht werden.",
         "deleteFailedWithDetail": "Der API-Schlüssel konnte nicht gelöscht werden: {detail}",
-        "keyCopied": "API-Schlüssel in die Zwischenablage kopiert.",
         "regenerateFailed": "Der API-Schlüssel konnte nicht neu erzeugt werden.",
         "regenerateFailedWithDetail": "Der API-Schlüssel konnte nicht neu erzeugt werden: {detail}"
       },
@@ -9293,9 +9241,6 @@
         "fieldUpdateFailed": {
           "toast": "{field} des Konnektors konnte nicht aktualisiert werden"
         },
-        "fieldUpdated": {
-          "toast": "{field} des Konnektors erfolgreich aktualisiert"
-        },
         "updateTokensButton": {
           "label": "Token aktualisieren"
         }
@@ -9320,9 +9265,7 @@
         "gatedTooltip": "Mehrere aktivierte SSO-Anbieter sind im Business- oder Enterprise-Tarif verfügbar."
       },
       "copyRedirectUri": {
-        "tooltip": "Weiterleitungs-URI kopieren",
-        "successToast": "Weiterleitungs-URI kopiert",
-        "errorToast": "Kopieren nicht möglich"
+        "tooltip": "Weiterleitungs-URI kopieren"
       },
       "deleteProvider": {
         "tooltip": "Löschen"
@@ -10809,7 +10752,6 @@
         "title": "Jeder Benutzer konfiguriert sein eigenes Token und die Verbindungsdetails unter Einstellungen → LLM Gateway."
       },
       "toasts": {
-        "settingsUpdated": "Einstellungen aktualisiert",
         "settingsUpdateFailed": "Die Einstellungen konnten nicht aktualisiert werden"
       }
     },
@@ -11492,8 +11434,6 @@
         },
         "toasts": {
           "accessRemoved": "Zugriff entfernt.",
-          "copyLinkFailed": "Der Link konnte nicht kopiert werden.",
-          "linkCopied": "Link kopiert.",
           "ownershipTransferred": "Eigentum übertragen.",
           "sharingUpdated": "Freigabe aktualisiert."
         },

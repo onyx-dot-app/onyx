@@ -155,7 +155,6 @@ export default function CraftPreferencesPage() {
     try {
       await setDefaultCraftModel(selection.providerId, selection.modelName);
       await refreshLlmProviderCaches(mutateScoped);
-      toast.success(t("defaultModel.saveSuccess.message"));
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : t("defaultModel.saveError.message")
@@ -170,7 +169,6 @@ export default function CraftPreferencesPage() {
     try {
       await deleteDefaultCraftModel();
       await refreshLlmProviderCaches(mutateScoped);
-      toast.success(t("defaultModel.resetSuccess.message"));
     } catch (err) {
       toast.error(
         err instanceof Error
