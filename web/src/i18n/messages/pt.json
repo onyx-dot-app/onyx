@@ -11500,6 +11500,9 @@
         "transfer": {
           "label": "Transferir",
           "title": "Transferir *{name}*"
+        },
+        "people": {
+          "label": "Pessoas com acesso"
         }
       },
       "viewer": {

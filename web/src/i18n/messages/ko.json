@@ -11500,6 +11500,9 @@
         "transfer": {
           "label": "이전",
           "title": "*{name}* 이전"
+        },
+        "people": {
+          "label": "액세스 권한이 있는 사용자"
         }
       },
       "viewer": {

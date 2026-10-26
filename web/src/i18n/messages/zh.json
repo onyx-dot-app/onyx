@@ -11500,6 +11500,9 @@
         "transfer": {
           "label": "转移",
           "title": "转移 *{name}*"
+        },
+        "people": {
+          "label": "有权访问的人员"
         }
       },
       "viewer": {
