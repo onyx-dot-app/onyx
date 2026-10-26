@@ -21,12 +21,14 @@ from onyx.agents.events import AgentEvent, MessageEndEvent
 from onyx.agents.models import (
     AgentInfo,
     ExecutionCheckpoint,
+    ExecutionStatus,
     PreparedStep,
     RunFailure,
     RunFailureKind,
     RunState,
     RunStatus,
     StepInput,
+    StepRecord,
     StepResult,
 )
 from onyx.agents.runtime import Agent, Run, RunFailed, RunNotTransferable, RunReleased
@@ -2951,3 +2953,217 @@ def test_adoption_cannot_publish_stale_observer_timeout(
         observed.set()
         monkeypatch.undo()
         assert coordinator.close(3)
+
+
+def test_cancelled_suspended_child_retains_parent_until_ownership_release() -> None:
+    spawned: list[SpawnResult] = []
+    releasing, finish_release = threading.Event(), threading.Event()
+
+    def release(run_id: str) -> None:
+        if spawned and run_id == spawned[0].run_id:
+            releasing.set()
+            assert finish_release.wait(5)
+
+    def delegate(invocation: ToolInvocation) -> ChildRunWait:
+        spawned.append(
+            invocation.agents.spawn_agent(
+                suspended_agent(),
+                name="child",
+                description="",
+                messages=[],
+                max_steps=2,
+            )
+        )
+        return ChildRunWait(run_ids=[spawned[0].run_id])
+
+    owner = AgentCoordinator(ownership=FakeRunOwnership(release=release))
+    parent = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(
+                content=[ToolCall(id="delegate", name="delegate", arguments={})]
+            )
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name="delegate", description="", parameters={}
+                ),
+                execute=delegate,
+                result_from_children=lambda *_: ToolResult(content="done"),
+            )
+        ],
+    )
+    root = parent.start(max_steps=1, coordinator=owner)
+    try:
+        assert root.wait_until_settled(3).status == RunStatus.SUSPENDED
+        child = owner.run(spawned[0].run_id)
+        assert child.wait_until_settled(3).status == RunStatus.SUSPENDED
+        assert child.wait_for_idle(3)
+        root.cancel()
+        with pytest.raises(AgentCancelled):
+            root.result(3)
+        assert releasing.wait(3)
+        assert not root.wait_for_idle(0)
+        finish_release.set()
+        assert root.wait_for_idle(3)
+    finally:
+        finish_release.set()
+        assert owner.close(3)
+
+
+@pytest.mark.parametrize("remote_observer", [False, True])
+def test_restoring_terminal_child_resolves_existing_parent_dependency(
+    remote_observer: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    spawned: list[SpawnResult] = []
+    saved: list[RunState] = []
+    publishing, finish_publish = threading.Event(), threading.Event()
+
+    def delegate(invocation: ToolInvocation) -> ChildRunWait:
+        spawned.append(
+            invocation.agents.spawn_agent(
+                suspended_agent(),
+                name="child",
+                description="",
+                messages=[],
+                max_steps=2,
+            )
+        )
+        return ChildRunWait(run_ids=[spawned[0].run_id])
+
+    parent = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(
+                content=[ToolCall(id="delegate", name="delegate", arguments={})]
+            )
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name="delegate", description="", parameters={}
+                ),
+                execute=delegate,
+                result_from_children=lambda *_: ToolResult(content="done"),
+            )
+        ],
+    )
+    owner = AgentCoordinator(
+        directory=FakeAgentDirectory(
+            read_run_status=lambda *_: (
+                RunStatus.COMPLETE if saved else RunStatus.SUSPENDED
+            ),
+            read_run=lambda *_: saved[0],
+        )
+        if remote_observer
+        else None
+    )
+    root = parent.start(max_steps=1, coordinator=owner)
+    try:
+        assert root.wait_until_settled(3).status == RunStatus.SUSPENDED
+        child = owner.run(spawned[0].run_id)
+        assert child.wait_until_settled(3).status == RunStatus.SUSPENDED
+        completion = owner.completion(child.id)
+        publish = completion.set_result
+
+        def publish_completion(state: RunState) -> None:
+            publishing.set()
+            assert finish_publish.wait(5)
+            publish(state)
+
+        if remote_observer:
+            monkeypatch.setattr(completion, "set_result", publish_completion)
+        snapshot = child.handoff().run_state
+        terminal = RunState(
+            run_id=snapshot.run_id,
+            agent_id=snapshot.agent_id,
+            parent_run_id=snapshot.parent_run_id,
+            parent_message_id=snapshot.parent_message_id,
+            parent_tool_call_id=snapshot.parent_tool_call_id,
+            status=RunStatus.COMPLETE,
+            answer_step_index=0,
+            steps=[
+                StepRecord(
+                    message=AssistantMessage(content=[TextContent(text="done")]),
+                    generation_status=ExecutionStatus.COMPLETE,
+                )
+            ],
+        )
+        saved.append(terminal)
+        if remote_observer:
+            assert publishing.wait(3)
+            restoring = start_thread_future(
+                lambda: owner.restore_completed(terminal),
+                name="restore-completed-child",
+            )
+            finish_publish.set()
+            restoring.result(timeout=3)
+        else:
+            owner.restore_completed(terminal)
+        assert owner.completion(child.id) is completion
+        assert completion.result(1) == terminal
+        info = next(
+            info
+            for info in owner.discover_children(root.agent_id)
+            if info.id == child.agent_id
+        )
+        assert info.status == RunStatus.COMPLETE
+        root.result(3)
+        assert root.wait_for_idle(3)
+        assert root.snapshot().steps[0].tools["delegate"].result is not None
+        terminal.steps[0].message.content.clear()
+        assert completion.result(0).steps[0].message.text == "done"
+        completion.result(0).steps[0].message.content.clear()
+        assert owner.run(child.id).snapshot().steps[0].message.text == "done"
+        assert owner.saved_run(child.id, root.agent_id).steps[0].message.text == "done"
+    finally:
+        finish_publish.set()
+        assert owner.close(3)
+
+
+@pytest.mark.parametrize("newer_run", [False, True])
+def test_conflicting_restore_keeps_accepted_result_and_latest_run(
+    newer_run: bool,
+) -> None:
+    owner = AgentCoordinator()
+    owner.register(
+        AgentInfo(
+            id="child",
+            path="/root/child",
+            parent_id="root",
+            description="",
+            restoration_config=None,
+        )
+    )
+    accepted = RunState(
+        run_id="accepted",
+        agent_id="child",
+        status=RunStatus.COMPLETE,
+        answer_step_index=0,
+        steps=[
+            StepRecord(
+                message=AssistantMessage(content=[TextContent(text="Accepted answer")]),
+                generation_status=ExecutionStatus.COMPLETE,
+            )
+        ],
+    )
+    original = owner.restore_completed(accepted)
+    owner.release_execution(original)
+    if newer_run:
+        newer = accepted.model_copy(update={"run_id": "newer"})
+        owner.release_execution(owner.restore_completed(newer))
+    conflicting = accepted.model_copy(update={"status": RunStatus.CANCELLED})
+    completion = owner.completion(accepted.run_id)
+    with pytest.raises(RuntimeError, match="different completion"):
+        owner.restore_completed(conflicting)
+    assert owner.completion(accepted.run_id) is completion
+    assert completion.result(0) == accepted
+    with pytest.raises(ValueError, match="not owned"):
+        owner.run(accepted.run_id)
+    restored = owner.restore_completed(accepted)
+    assert restored.snapshot() == accepted
+    info = owner.discover_children("root")[0]
+    assert info.latest_run_id == ("newer" if newer_run else "accepted")
+    assert info.status == RunStatus.COMPLETE
+    assert owner.close(2)
