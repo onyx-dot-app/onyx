@@ -1,8 +1,8 @@
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from functools import partial
 
-from pydantic import BaseModel
+from pydantic import JsonValue
 
 from onyx.agents.execution_records import CompactionCheckpoint
 from onyx.agents.models import (
@@ -155,12 +155,10 @@ class ChatAgent(Agent, RestorableFeature):
             has_called_search_tool=self.has_called_search_tool,
             ran_image_gen=self.ran_image_gen,
             search_tools=capture_search_state(self.application_tools),
-        ).model_copy(deep=True)
+        )
 
-    def restore_state(self, state: BaseModel) -> None:
-        if not isinstance(state, ChatFeatureState):
-            raise ValueError("Chat restoration requires ChatFeatureState")
-        saved = state.model_copy(deep=True)
+    def restore_state(self, state: Mapping[str, JsonValue]) -> None:
+        saved = ChatFeatureState.model_validate(state)
         if (
             saved.persona != self.persona
             or saved.context_files != SavedContextFiles.capture(self.context_files)

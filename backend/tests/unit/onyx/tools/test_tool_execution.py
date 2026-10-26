@@ -9,7 +9,7 @@ from onyx.agents.models import RunState
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import ToolInvocation, ToolOutcome
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
-from onyx.llm.interfaces import LLM
+from onyx.llm.interfaces import LLM, GenerationContext
 from onyx.llm.models import (
     AssistantMessage,
     GenerationRequest,
@@ -27,6 +27,7 @@ from onyx.tools.models import (
     ToolExecutionException,
 )
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
+from onyx.tracing.flows import LLMFlow
 from onyx.utils.fleet_query_telemetry import CURRENT_QUERY_OBSERVATION, QueryObservation
 from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
 
@@ -103,7 +104,11 @@ def test_model_can_respond_after_tool_execution_failure(
         )
 
     result = run_agent(
-        Agent(FakeModelClient(generate), tools=[tool.bind(lambda: ToolContext())]),
+        Agent(
+            FakeModelClient(generate),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            tools=[tool.bind(lambda: ToolContext())],
+        ),
         max_steps=2,
     )
     assert result.output.text == "I can try another way."

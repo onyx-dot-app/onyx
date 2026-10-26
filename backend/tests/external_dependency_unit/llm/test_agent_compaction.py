@@ -4,6 +4,7 @@ import pytest
 
 from onyx.agents.models import AgentState
 from onyx.agents.runtime import Agent
+from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
     AssistantMessage,
     GenerationOptions,
@@ -14,6 +15,7 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.llm.multi_llm import LitellmLLM
+from onyx.tracing.flows import LLMFlow
 from tests.utils.secret_names import TestSecret
 
 
@@ -58,6 +60,7 @@ def test_compacted_tool_history_preserves_answer_and_source(
         )
     agent = Agent(
         model,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         options=GenerationOptions(
             reasoning_effort=ReasoningEffort.LOW, max_tokens=2048
         ),

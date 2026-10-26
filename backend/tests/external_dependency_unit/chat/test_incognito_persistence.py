@@ -43,6 +43,7 @@ from onyx.db.file_record import (
 )
 from onyx.db.models import ChatMessage, ChatSession, User
 from onyx.file_store.file_store import get_default_file_store
+from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
     AssistantMessage,
     TextContent,
@@ -53,6 +54,7 @@ from onyx.llm.models import (
 )
 from onyx.redis.redis_pool import get_redis_client
 from onyx.tools.models import CustomToolCallSummary, ToolCallInfo
+from onyx.tracing.flows import LLMFlow
 from shared_configs.contextvars import CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR
 from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 
@@ -496,7 +498,7 @@ def test_incognito_response_restores_agents_without_database_content(
     )
     llm = FakeModelClient(lambda *_: next(replies))
     identity = LLMUserIdentity(user_id=str(owner.id), session_id=str(session.id))
-    child = Agent(llm)
+    child = Agent(llm, generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE))
 
     def delegate(invocation: ToolInvocation) -> ToolResult:
         spawned = invocation.agents.spawn_agent(
@@ -512,6 +514,7 @@ def test_incognito_response_restores_agents_without_database_content(
 
     root = Agent(
         llm,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         agent_id=str(session.id),
         tools=[
             AgentTool(
@@ -611,7 +614,11 @@ def test_incognito_response_restores_agents_without_database_content(
             == []
         )
 
-        restored_root = Agent(llm, agent_id=root.id)
+        restored_root = Agent(
+            llm,
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            agent_id=root.id,
+        )
         restored_coordinator = create_chat_agent_coordinator(
             restored_root,
             previous_run_id=transcript.run_id,

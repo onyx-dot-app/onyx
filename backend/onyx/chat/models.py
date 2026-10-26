@@ -405,6 +405,7 @@ class PersonaPromptConfig(BaseModel):
 class ChatFeatureState(BaseModel):
     """Chat settings and accumulated state needed to resume suspended execution."""
 
+    kind: Literal["chat.state.v1"] = "chat.state.v1"
     persona: PersonaPromptConfig | None
     context_files: SavedContextFiles
     file_metadata: dict[str, FileToolMetadata] | None

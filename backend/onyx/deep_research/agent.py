@@ -1,9 +1,10 @@
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from functools import partial
 from threading import Lock
+from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue
 
 from onyx.agents.execution_records import CompactionCheckpoint
 from onyx.agents.models import (
@@ -96,6 +97,7 @@ class ResearchTask(BaseModel):
 
 
 class DeepResearchFeatureState(BaseModel):
+    kind: Literal["deep_research.state.v1"] = "deep_research.state.v1"
     language_section: str
     reasoning_effort: ReasoningEffort
     file_metadata: dict[str, FileToolMetadata] | None
@@ -189,14 +191,10 @@ class DeepResearchAgent(Agent, RestorableFeature):
                 skip_clarification=self.skip_clarification,
                 elapsed_seconds=max(0.0, time.monotonic() - self.started),
                 citation_mapping=self.citation_mapping,
-            ).model_copy(deep=True)
-
-    def restore_state(self, state: BaseModel) -> None:
-        if not isinstance(state, DeepResearchFeatureState):
-            raise ValueError(
-                "Deep research restoration requires DeepResearchFeatureState"
             )
-        saved = state.model_copy(deep=True)
+
+    def restore_state(self, state: Mapping[str, JsonValue]) -> None:
+        saved = DeepResearchFeatureState.model_validate(state)
         if (
             saved.language_section != self.language_section
             or saved.reasoning_effort != self.reasoning_effort

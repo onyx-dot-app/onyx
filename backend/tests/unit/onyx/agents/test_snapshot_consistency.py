@@ -18,6 +18,7 @@ from onyx.agents.models import (
 from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.llm.cancellation import CancellationSignal
+from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
     AssistantMessage,
     GenerationRequest,
@@ -27,6 +28,7 @@ from onyx.llm.models import (
     ToolResult,
     ToolResultMessage,
 )
+from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient
 
 
@@ -123,7 +125,10 @@ def test_message_and_operation_updates_are_visible_together(
         return result
 
     run = Agent(
-        FakeModelClient(generate), prepare_step=prepare, after_tool_call=enrich
+        FakeModelClient(generate),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        prepare_step=prepare,
+        after_tool_call=enrich,
     ).start(max_steps=2)
     try:
         assert preparing.wait(3)
@@ -178,6 +183,7 @@ def test_tool_result_is_retained_while_finalization_blocks_the_next_step() -> No
 
     agent = Agent(
         FakeModelClient(generate),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(name="lookup", description="", parameters={}),

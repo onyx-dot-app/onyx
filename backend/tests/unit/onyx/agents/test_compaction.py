@@ -10,6 +10,7 @@ import tiktoken
 from onyx.agents.compaction import (
     IMAGE_TOKEN_ESTIMATE,
     MESSAGE_OVERHEAD_TOKENS,
+    SUMMARY_TIMEOUT_SECONDS,
     CheckpointMismatchError,
     compact_history,
     context_budget,
@@ -200,6 +201,7 @@ def test_rebuilt_prompts_reuse_counts_and_recount_changed_content() -> None:
 
             agent = Agent(
                 model,
+                generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
                 state=AgentState(messages=[UserMessage(content=TASK)]),
                 prepare_step=prepare,
             )
@@ -315,6 +317,7 @@ def test_compaction_replaces_attachment_body_with_file_reference() -> None:
 
     agent = Agent(
         model,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         state=AgentState(
             messages=[
                 file.message,
@@ -444,6 +447,7 @@ def test_compaction_within_task_preserves_tool_effects_and_prepared_steps() -> N
     ]
     agent = Agent(
         model,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         state=AgentState(messages=[UserMessage(content=TASK)]),
         prepare_step=prepare,
     )
@@ -484,6 +488,7 @@ def test_compaction_within_task_preserves_tool_effects_and_prepared_steps() -> N
     assert snapshot is not None and snapshot.checkpoint is not None
     reloaded = Agent(
         model,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         state=AgentState(messages=agent.state.messages, checkpoint=snapshot.checkpoint),
     )
     reloaded_run = reloaded.start(
@@ -551,7 +556,11 @@ def test_provider_context_rejection_preserves_execution_settings(
     for context in model.contexts:
         assert context.cancellation is signal
         assert context.stall_timeout_s == (step_timeout or 23)
-        assert context.total_timeout_s == 71
+        if context.flow == LLMFlow.CHAT_HISTORY_SUMMARIZATION:
+            assert context.total_timeout_s is not None
+            assert 0 < context.total_timeout_s <= 71
+        else:
+            assert context.total_timeout_s == 71
         assert context.user_identity == identity
         assert context.content_mode == TraceContentMode.METADATA_ONLY
     assert len(model.generations) == 2
@@ -581,7 +590,9 @@ def test_step_timeout_override_does_not_change_later_steps() -> None:
 
     agent = Agent(
         model,
-        generation_context=GenerationContext(stall_timeout_s=23),
+        generation_context=GenerationContext(
+            flow=LLMFlow.CHAT_RESPONSE, stall_timeout_s=23
+        ),
         prepare_step=prepare,
     )
     run = agent.start(background=False, max_steps=2)
@@ -594,7 +605,9 @@ def test_step_timeout_override_does_not_change_later_steps() -> None:
 def test_oversized_required_instruction_fails_without_losing_snapshot() -> None:
     model = ContextModel()
     agent = Agent(
-        model, state=AgentState(messages=[UserMessage(content="mandatory " * 2000)])
+        model,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        state=AgentState(messages=[UserMessage(content="mandatory " * 2000)]),
     )
     run = agent.start(max_steps=1)
     with pytest.raises(RunFailed):
@@ -636,6 +649,7 @@ def test_context_fitting_reuses_checkpoint_after_content_changes() -> None:
 def test_checkpoint_from_another_branch_is_removed_from_context() -> None:
     agent = Agent(
         ContextModel(),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         state=AgentState(
             messages=[UserMessage(content="Current branch")],
             checkpoint=CompactionCheckpoint(
@@ -663,6 +677,7 @@ def test_output_budget_is_recalculated_after_compaction(
     model = ContextModel(reject_first=True)
     agent = Agent(
         model,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         state=AgentState(
             messages=[
                 UserMessage(content="Old question"),
@@ -779,7 +794,12 @@ def test_image_replay_cost_controls_compaction_and_output_allowance(
             )
         )
 
-    agent = Agent(model, state=AgentState(messages=history), prepare_step=prepare)
+    agent = Agent(
+        model,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        state=AgentState(messages=history),
+        prepare_step=prepare,
+    )
     agent.start(background=False, max_steps=1).result()
     request = model.generations[0]
     compacted = configured_input_limit == 8000 or (
@@ -850,7 +870,11 @@ def test_failed_summary_truncates_old_turns_without_changing_history(
             tool_call_id="current", tool_name="lookup", content="Current evidence"
         ),
     ]
-    agent = Agent(model, state=AgentState(messages=history))
+    agent = Agent(
+        model,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        state=AgentState(messages=history),
+    )
     history = agent.state.messages
     run = agent.start(background=False, max_steps=1)
     run.result()
@@ -864,10 +888,66 @@ def test_failed_summary_truncates_old_turns_without_changing_history(
     assert checkpoint.covered_through_message_id == history[4].id
 
     # The same cutoff survives a resumed agent without losing recorded history.
-    reloaded = Agent(model, state=agent.state)
+    reloaded = Agent(
+        model,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        state=agent.state,
+    )
     reloaded.start(background=False, max_steps=1).result()
     assert model.generations[-1].messages[: len(request.messages)] == request.messages
     assert reloaded.state.messages[: len(history)] == history
+
+
+@pytest.mark.parametrize("total_timeout", [None, 71, 500])
+def test_summary_batches_share_deadline_and_fall_back_to_truncation(
+    total_timeout: int | None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    elapsed = 0.0
+    time_limit = min(total_timeout or SUMMARY_TIMEOUT_SECONDS, SUMMARY_TIMEOUT_SECONDS)
+    monkeypatch.setattr("onyx.agents.compaction.monotonic", lambda: elapsed)
+
+    class SlowSummaryModel(ContextModel):
+        def invoke(
+            self, request: GenerationRequest, context: GenerationContext | None = None
+        ) -> AssistantMessage:
+            nonlocal elapsed
+            response = super().invoke(request, context)
+            if context and context.flow == LLMFlow.CHAT_HISTORY_SUMMARIZATION:
+                elapsed += time_limit / 2
+            return response
+
+    model = SlowSummaryModel()
+    agent = Agent(
+        model,
+        state=AgentState(
+            messages=[
+                UserMessage(content="Old question"),
+                AssistantMessage(content=[TextContent(text="Old evidence " * 3000)]),
+                UserMessage(content=TASK),
+            ]
+        ),
+        generation_context=GenerationContext(
+            flow=LLMFlow.CHAT_RESPONSE, total_timeout_s=total_timeout
+        ),
+    )
+    history = agent.state.messages
+    run = agent.start(background=False, max_steps=1)
+    assert run.result().output.text == "Evidence supports the conclusion [1]."
+    summary_contexts = [
+        context
+        for context in model.contexts
+        if context.flow == LLMFlow.CHAT_HISTORY_SUMMARIZATION
+    ]
+    assert [context.total_timeout_s for context in summary_contexts] == [
+        time_limit,
+        time_limit / 2,
+    ]
+    assert len(model.generations) == 1
+    assert model.generations[0].messages == [history[-1]]
+    checkpoint = run.snapshot().checkpoint
+    assert checkpoint is not None and checkpoint.summary == ""
+    assert checkpoint.covered_through_message_id == history[-2].id
+    assert agent.state.messages[:-1] == history
 
 
 def test_truncation_does_not_drop_oversized_current_tool_result() -> None:
@@ -881,7 +961,11 @@ def test_truncation_does_not_drop_oversized_current_tool_result() -> None:
             tool_call_id="current", tool_name="lookup", content="Evidence " * 2000
         ),
     ]
-    agent = Agent(model, state=AgentState(messages=history))
+    agent = Agent(
+        model,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        state=AgentState(messages=history),
+    )
     history = agent.state.messages
     with patch(
         "onyx.agents.runtime.compact_history", side_effect=RuntimeError("Failed")
@@ -960,6 +1044,7 @@ def test_compaction_identity_survives_suspension_and_resume(
     ]
     agent = Agent(
         model,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=tools,
         state=AgentState(
             messages=[
@@ -1005,7 +1090,13 @@ def test_compaction_identity_survives_suspension_and_resume(
     saved = storage.load(stored.model_dump_json())
     input_id = f"run:{run.id}:input:0" if parent_run_id else "supplied-id"
     assert saved.run_state.input_messages[0].id == input_id
-    restored = Agent(model, tools=tools, state=saved.agent_state, agent_id=agent.id)
+    restored = Agent(
+        model,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=tools,
+        state=saved.agent_state,
+        agent_id=agent.id,
+    )
     resumed = restored.resume(saved.run_state)
     resumed.submit(
         HumanToolAnswer(request_id="approval", decision=InputDecision.APPROVE)
