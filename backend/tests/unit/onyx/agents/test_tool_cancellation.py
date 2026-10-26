@@ -14,6 +14,7 @@ from onyx.llm.cancellation import (
     cancellation_scope,
     current_cancellation,
 )
+from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
     AssistantMessage,
     GenerationRequest,
@@ -23,6 +24,7 @@ from onyx.llm.models import (
     ToolResult,
     ToolResultMessage,
 )
+from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
 
 
@@ -33,7 +35,8 @@ def test_nested_child_runs_complete_without_parent_deadlock() -> None:
             return Agent(
                 FakeModelClient(
                     lambda *_: AssistantMessage(content=[TextContent(text="leaf")])
-                )
+                ),
+                generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
             )
 
         def execute(invocation: ToolInvocation) -> ToolResult:
@@ -61,6 +64,7 @@ def test_nested_child_runs_complete_without_parent_deadlock() -> None:
 
         return Agent(
             FakeModelClient(reply),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
             tools=[
                 AgentTool(
                     definition=ToolDefinition(
@@ -130,6 +134,7 @@ def test_cancelled_child_does_not_block_independent_parent_work() -> None:
                 content=[ToolCall(id="block", name="block", arguments={})]
             )
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(name="block", description="", parameters={}),
@@ -169,6 +174,7 @@ def test_cancelled_child_does_not_block_independent_parent_work() -> None:
 
     root = Agent(
         FakeModelClient(reply),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(name="child", description="", parameters={}),
@@ -212,6 +218,7 @@ def test_stop_cancels_a_cooperative_tool_wait() -> None:
                 content=[ToolCall(id="wait", name="wait", arguments={})]
             )
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(name="wait", description="", parameters={}),
@@ -260,6 +267,7 @@ def test_parallel_tool_failure_preserves_other_calls() -> None:
                 ]
             )
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(name="work", description="", parameters={}),
@@ -308,7 +316,10 @@ def test_parent_completion_joins_unawaited_child_runs(child_fails: bool) -> None
             raise child_error
         return AssistantMessage(content=[TextContent(text="child complete")])
 
-    child = Agent(FakeModelClient(child_reply))
+    child = Agent(
+        FakeModelClient(child_reply),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+    )
 
     def execute(invocation: ToolInvocation) -> ToolResult:
         invocation.agents.spawn_agent(
@@ -324,6 +335,7 @@ def test_parent_completion_joins_unawaited_child_runs(child_fails: bool) -> None
                 else [ToolCall(id="child", name="child", arguments={})]
             )
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(name="child", description="", parameters={}),
@@ -373,6 +385,7 @@ def test_cancelled_tool_cleanup_uses_its_own_live_signal() -> None:
                 content=[ToolCall(id="cleanup", name="cleanup", arguments={})]
             )
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(
@@ -411,7 +424,10 @@ def test_tool_failure_logs_unobserved_child_failure(
         child_started.set()
         raise child_error
 
-    child = Agent(FakeModelClient(fail_child))
+    child = Agent(
+        FakeModelClient(fail_child),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+    )
 
     def execute(invocation: ToolInvocation) -> ToolResult:
         invocation.agents.spawn_agent(
@@ -426,6 +442,7 @@ def test_tool_failure_logs_unobserved_child_failure(
                 content=[ToolCall(id="child", name="child", arguments={})]
             )
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(name="child", description="", parameters={}),

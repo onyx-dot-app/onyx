@@ -50,6 +50,7 @@ from onyx.llm.models import (
     ToolResult,
     UserMessage,
 )
+from onyx.tracing.flows import LLMFlow
 from onyx.utils.threadpool_concurrency import start_thread_future
 from tests.unit.onyx.agents.checkpoint_storage import CheckpointStorage
 from tests.unit.onyx.agents.fakes import (
@@ -105,6 +106,7 @@ def parent_agent(
     )
     return Agent(
         FakeModelClient(lambda *_: next(responses)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         agent_id=agent_id,
         tools=[
             AgentTool(
@@ -134,7 +136,10 @@ def test_saved_failure_matches_live_failure(
     ) -> AssistantMessage:
         raise failure
 
-    child = Agent(FakeModelClient(fail))
+    child = Agent(
+        FakeModelClient(fail),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+    )
     handles = []
     with pytest.raises(RunFailed) as live:
         run_agent(child, max_steps=1, runs=handles)
@@ -184,7 +189,11 @@ def test_child_reuse_preserves_old_records_and_rejects_stale_tool_capabilities()
             budgets.append(state.step.limit)
         return PreparedStep()
 
-    child = Agent(FakeModelClient(generate), prepare_step=prepare)
+    child = Agent(
+        FakeModelClient(generate),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        prepare_step=prepare,
+    )
 
     def coordinate(invocation: ToolInvocation) -> ToolResult:
         nonlocal spawned, prior_control
@@ -252,7 +261,10 @@ def test_busy_child_rejects_new_input_and_unknown_identity() -> None:
             signal.check()
         return AssistantMessage(content=[TextContent(text="finished")])
 
-    child = Agent(FakeModelClient(generate))
+    child = Agent(
+        FakeModelClient(generate),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+    )
 
     def coordinate(invocation: ToolInvocation) -> ToolResult:
         spawned = invocation.agents.spawn_agent(
@@ -297,7 +309,10 @@ def test_cancelled_parent_keeps_child_identity_for_later_turn() -> None:
             signal.check()
         return AssistantMessage(content=[TextContent(text="replacement")])
 
-    child = Agent(FakeModelClient(reply))
+    child = Agent(
+        FakeModelClient(reply),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+    )
 
     def coordinate(invocation: ToolInvocation) -> ToolResult:
         nonlocal spawned
@@ -341,7 +356,10 @@ def test_cancelled_parent_keeps_child_identity_for_later_turn() -> None:
 def test_immediate_restart_waits_for_terminal_child_delivery_to_drain() -> None:
     entered, release = threading.Event(), threading.Event()
     child = Agent(
-        FakeModelClient(lambda *_: AssistantMessage(content=[TextContent(text="done")]))
+        FakeModelClient(
+            lambda *_: AssistantMessage(content=[TextContent(text="done")])
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
     )
 
     class ObservedCoordinator(AgentCoordinator):
@@ -392,7 +410,8 @@ def test_parent_join_allows_child_to_start_nested_work() -> None:
         leaf = Agent(
             FakeModelClient(
                 lambda *_: AssistantMessage(content=[TextContent(text="leaf")])
-            )
+            ),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         )
         submitted = invocation.agents.spawn_agent(
             leaf, name="leaf", description="Nested work", messages=[], max_steps=1
@@ -455,6 +474,7 @@ def test_cancelled_parent_waits_for_child_terminal_record_before_snapshot() -> N
                     content=[ToolCall(id="work", name="work", arguments={})]
                 )
             ),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
             tools=[
                 AgentTool(
                     definition=ToolDefinition(
@@ -509,7 +529,10 @@ def test_child_cancellation_retains_provider_cleanup_ownership() -> None:
             assert release_cleanup.wait(3)
             return AssistantMessage(content=[TextContent(text="late")])
 
-        child = Agent(FakeModelClient(pending))
+        child = Agent(
+            FakeModelClient(pending),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        )
 
         def delegate(invocation: ToolInvocation) -> ToolResult:
             spawned = invocation.agents.spawn_agent(
@@ -571,7 +594,10 @@ def test_failed_child_settlement_retains_accepted_partial_output(
             assert release.wait(3)
             yield GenerationDoneEvent()
 
-    child = Agent(PartialModel(lambda _request, _signal: AssistantMessage()))
+    child = Agent(
+        PartialModel(lambda _request, _signal: AssistantMessage()),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+    )
 
     def coordinate(invocation: ToolInvocation) -> ToolResult:
         invocation.agents.spawn_agent(
@@ -657,7 +683,10 @@ def test_background_child_outlives_parent_and_reports_to_application() -> None:
             signal.check()
         return AssistantMessage(content=[TextContent(text="background finished")])
 
-    child = Agent(FakeModelClient(generate))
+    child = Agent(
+        FakeModelClient(generate),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+    )
 
     def delegate(invocation: ToolInvocation) -> ToolResult:
         spawned.append(
@@ -730,7 +759,10 @@ def test_completion_failure_is_retained_and_shutdown_waits_for_handler() -> None
         store=FakeRunStore(save=lambda run: save(run.snapshot()))
     )
     agent = Agent(
-        FakeModelClient(lambda *_: AssistantMessage(content=[TextContent(text="done")]))
+        FakeModelClient(
+            lambda *_: AssistantMessage(content=[TextContent(text="done")])
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
     )
     run = agent.start(max_steps=1, coordinator=coordinator)
     try:
@@ -752,7 +784,8 @@ def test_fresh_coordinator_view_rebinds_idle_child_and_checks_visibility() -> No
     child = Agent(
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="old binding")])
-        )
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
     )
 
     def delegate(invocation: ToolInvocation) -> ToolResult:
@@ -783,6 +816,7 @@ def test_fresh_coordinator_view_rebinds_idle_child_and_checks_visibility() -> No
             FakeModelClient(
                 lambda *_: AssistantMessage(content=[TextContent(text="new binding")])
             ),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
             agent_id=agent_id,
         )
         return replacement
@@ -808,7 +842,10 @@ def test_fresh_coordinator_view_rebinds_idle_child_and_checks_visibility() -> No
 
 def test_views_authorize_runs_independently_for_the_same_child() -> None:
     child = Agent(
-        FakeModelClient(lambda *_: AssistantMessage(content=[TextContent(text="done")]))
+        FakeModelClient(
+            lambda *_: AssistantMessage(content=[TextContent(text="done")])
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
     )
     run_ids: list[str] = []
 
@@ -890,7 +927,10 @@ def test_foreground_continuation_retains_consumed_background_history() -> None:
     from onyx.agents.tools import AgentLifetime
 
     child = Agent(
-        FakeModelClient(lambda *_: AssistantMessage(content=[TextContent(text="done")]))
+        FakeModelClient(
+            lambda *_: AssistantMessage(content=[TextContent(text="done")])
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
     )
     runs: list[str] = []
 
@@ -951,7 +991,10 @@ def test_coordinator_shutdown_cancels_background_child_after_parent_failure() ->
     def delegate(invocation: ToolInvocation) -> ToolResult:
         spawned.append(
             invocation.agents.spawn_agent(
-                Agent(FakeModelClient(generate)),
+                Agent(
+                    FakeModelClient(generate),
+                    generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+                ),
                 name="background",
                 description="",
                 messages=[],
@@ -1002,6 +1045,7 @@ def test_parent_child_wait_releases_worker_while_sibling_continues() -> None:
 
     question = Agent(
         FakeModelClient(question_reply),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(
@@ -1027,7 +1071,14 @@ def test_parent_child_wait_releases_worker_while_sibling_continues() -> None:
     def delegate(invocation: ToolInvocation) -> ChildRunWait:
         for name, child, steps in [
             ("question", question, 2),
-            ("sibling", Agent(FakeModelClient(sibling_reply)), 1),
+            (
+                "sibling",
+                Agent(
+                    FakeModelClient(sibling_reply),
+                    generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+                ),
+                1,
+            ),
         ]:
             spawned.append(
                 invocation.agents.spawn_agent(
@@ -1043,6 +1094,7 @@ def test_parent_child_wait_releases_worker_while_sibling_continues() -> None:
     def complete(_invocation: ToolInvocation, snapshots: list[RunState]) -> ToolResult:
         assert execution_context.get() == "parent"
         completed_children.extend(snapshot.run_id for snapshot in snapshots)
+        snapshots[0].steps[-1].message.content = [TextContent(text="callback edit")]
         return ToolResult(content="children finished")
 
     parent_messages = iter(
@@ -1055,6 +1107,7 @@ def test_parent_child_wait_releases_worker_while_sibling_continues() -> None:
     )
     parent = Agent(
         FakeModelClient(lambda *_: next(parent_messages)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(
@@ -1090,6 +1143,8 @@ def test_parent_child_wait_releases_worker_while_sibling_continues() -> None:
         assert run.result(3).output.text == "parent finished"
         assert run.wait_for_idle(3)
         assert completed_children == [child.run_id for child in spawned]
+        assert waiting_child.result(0).output.text == "answered"
+        assert run.snapshot().child_runs[0].steps[-1].message.text == "answered"
     finally:
         sibling_release.set()
         assert coordinator.close(3)
@@ -1105,6 +1160,7 @@ def test_cold_restore_rejects_existing_owner_and_missing_child_rolls_back() -> N
                     content=[ToolCall(id="q", name="q", arguments={})]
                 )
             ),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
             agent_id=agent_id,
             tools=[
                 AgentTool(
@@ -1166,7 +1222,12 @@ def test_cold_parent_restores_archived_handled_child_failure() -> None:
         def delegate(invocation: ToolInvocation) -> ChildRunWait:
             children.append(
                 invocation.agents.spawn_agent(
-                    Agent(FakeModelClient(fail)),
+                    Agent(
+                        FakeModelClient(fail),
+                        generation_context=GenerationContext(
+                            flow=LLMFlow.CHAT_RESPONSE
+                        ),
+                    ),
                     name="child",
                     description="",
                     messages=[],
@@ -1187,6 +1248,7 @@ def test_cold_parent_restores_archived_handled_child_failure() -> None:
         )
         parent = Agent(
             FakeModelClient(lambda *_: next(replies)),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
             tools=[
                 AgentTool(
                     definition=ToolDefinition(
@@ -1258,6 +1320,7 @@ def test_cold_parent_restores_archived_handled_child_failure() -> None:
                 content=[TextContent(text="restored parent finished")]
             )
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         agent_id=restored.run_state.agent_id,
         state=restored.agent_state,
         tools=[
@@ -1321,6 +1384,7 @@ def test_completion_cleanup_waits_for_terminal_and_parent_retains_it(
     )
     child = Agent(
         FakeModelClient(lambda *_: next(child_replies)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(
@@ -1362,6 +1426,7 @@ def test_completion_cleanup_waits_for_terminal_and_parent_retains_it(
     )
     parent = Agent(
         FakeModelClient(lambda *_: next(replies)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(
@@ -1410,7 +1475,10 @@ def test_completion_cleanup_falls_back_when_worker_start_fails(
     cleaned: list[str] = []
     owner = AgentCoordinator()
     agent = Agent(
-        FakeModelClient(lambda *_: AssistantMessage(content=[TextContent(text="done")]))
+        FakeModelClient(
+            lambda *_: AssistantMessage(content=[TextContent(text="done")])
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
     )
     run = agent.start(max_steps=1, coordinator=owner)
     run.result(2)
@@ -1445,6 +1513,7 @@ def test_child_handoff_preserves_parent_waiter_and_cleanup(early_answer: bool) -
                 content=[ToolCall(id="q", name="q", arguments={})]
             )
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(name="q", description="", parameters={}),
@@ -1482,6 +1551,7 @@ def test_child_handoff_preserves_parent_waiter_and_cleanup(early_answer: bool) -
     )
     parent = Agent(
         FakeModelClient(lambda *_: next(replies)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(
@@ -1518,6 +1588,7 @@ def test_child_handoff_preserves_parent_waiter_and_cleanup(early_answer: bool) -
                     content=[TextContent(text="restored child finished")]
                 )
             ),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
             state=saved.agent_state,
             agent_id=saved.run_state.agent_id,
             tools=[
@@ -1553,6 +1624,7 @@ def test_coordinator_close_leaves_released_state_unchanged() -> None:
                 content=[ToolCall(id="q", name="q", arguments={})]
             )
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(name="q", description="", parameters={}),
@@ -1589,7 +1661,10 @@ def test_parent_handoff_releases_feature_and_preserves_child_dependency() -> Non
 
     def delegate(invocation: ToolInvocation) -> ChildRunWait:
         submission = invocation.agents.spawn_agent(
-            Agent(FakeModelClient(child_reply)),
+            Agent(
+                FakeModelClient(child_reply),
+                generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            ),
             name="child",
             description="",
             messages=[],
@@ -1604,6 +1679,7 @@ def test_parent_handoff_releases_feature_and_preserves_child_dependency() -> Non
                 content=[ToolCall(id="delegate", name="delegate", arguments={})]
             )
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(
@@ -1642,6 +1718,7 @@ def test_parent_handoff_releases_feature_and_preserves_child_dependency() -> Non
                     content=[TextContent(text="parent finished")]
                 )
             ),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
             state=saved.agent_state,
             agent_id=saved.run_state.agent_id,
             tools=[
@@ -1675,7 +1752,8 @@ def test_remote_run_wait_and_cancel_use_authorized_fresh_snapshots(
     child = Agent(
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="remote done")])
-        )
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
     )
     handles: list[Run] = []
     run_agent(child, max_steps=1, runs=handles)
@@ -1748,7 +1826,10 @@ def test_registration_failure_prevents_model_and_thread_failure_rolls_back() -> 
         invoked.set()
         return AssistantMessage(content=[])
 
-    agent = Agent(FakeModelClient(reply))
+    agent = Agent(
+        FakeModelClient(reply),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+    )
     captured: list[Run] = []
     rolled_back: list[str] = []
 
@@ -1804,7 +1885,8 @@ def test_registration_releases_execution_locks_during_spawn_and_resume() -> None
     child = Agent(
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="child")])
-        )
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
     )
 
     def spawn(invocation: ToolInvocation) -> ToolResult:
@@ -1833,6 +1915,7 @@ def test_registration_releases_execution_locks_during_spawn_and_resume() -> None
                 content=[ToolCall(id="pause", name="pause", arguments={})]
             )
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[tool],
     )
     coordinator = AgentCoordinator(ownership=FakeRunOwnership(register=register))
@@ -1845,6 +1928,7 @@ def test_registration_releases_execution_locks_during_spawn_and_resume() -> None
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="done")])
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[tool],
         agent_id=original.id,
         state=checkpoint.agent_state,
@@ -1864,13 +1948,15 @@ def test_registration_releases_execution_locks_during_spawn_and_resume() -> None
     assert coordinator.close(timeout=3)
 
 
-def suspended_agent() -> Agent:
+def suspended_agent(*, agent_id: str | None = None) -> Agent:
     return Agent(
         FakeModelClient(
             lambda *_: AssistantMessage(
                 content=[ToolCall(id="ask", name="ask", arguments={})]
             )
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        agent_id=agent_id,
         tools=[
             AgentTool(
                 definition=ToolDefinition(name="ask", description="", parameters={}),
@@ -1908,6 +1994,7 @@ def test_released_child_observation_failure_ends_parent(
                 content=[ToolCall(id="delegate", name="delegate", arguments={})]
             )
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(
@@ -1974,7 +2061,7 @@ def test_released_run_has_no_local_cleanup_or_controls() -> None:
     assert checkpoint.run_state.status == RunStatus.SUSPENDED
 
 
-def test_saved_completion_notifies_dependencies_without_execution_locks() -> None:
+def test_saved_completion_isolated_and_notifies_without_execution_locks() -> None:
     result_ready = threading.Event()
     snapshots: list[RunState] = []
     coordinator = AgentCoordinator(
@@ -2005,7 +2092,13 @@ def test_saved_completion_notifies_dependencies_without_execution_locks() -> Non
     coordinator.observe_completion(run.id)
     try:
         assert checked.wait(3)
-        assert coordinator.completion(run.id).result(3).status == RunStatus.COMPLETE
+        exposed = coordinator.completion(run.id).result(3)
+        assert exposed.status == RunStatus.COMPLETE
+        original = snapshots[0].model_copy(deep=True)
+        exposed.status = RunStatus.SUSPENDED
+        exposed.steps[0].message.content.clear()
+        assert snapshots[0] == original
+        assert coordinator._state.latest[agent.id] == original
         with pytest.raises(ValueError, match="not owned"):
             coordinator.run(run.id)
     finally:
@@ -2024,6 +2117,7 @@ def test_duplicate_resume_does_not_release_the_current_owner() -> None:
         assert run.wait_for_idle(3)
         duplicate = Agent(
             FakeModelClient(lambda *_: AssistantMessage(content=[])),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
             agent_id=original.id,
             tools=original.tools,
         )
@@ -2059,6 +2153,7 @@ def test_failed_resume_can_retry_with_a_new_execution() -> None:
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="done")])
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=original.tools,
         state=saved.agent_state,
         agent_id=original.id,
@@ -2174,7 +2269,10 @@ def test_same_scope_view_observes_completion_of_a_running_child() -> None:
         assert finish.wait(3)
         return AssistantMessage(content=[TextContent(text="done")])
 
-    child = Agent(FakeModelClient(reply))
+    child = Agent(
+        FakeModelClient(reply),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+    )
     owner = AgentCoordinator()
     owner.register(
         AgentInfo(
@@ -2257,6 +2355,7 @@ def test_child_deadline_survives_checkpoint_and_ownership_transfer(
 
     replacement = Agent(
         FakeModelClient(generate),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=child.tools,
         agent_id=child.id,
         state=restored.agent_state,
@@ -2276,3 +2375,152 @@ def test_child_deadline_survives_checkpoint_and_ownership_transfer(
     with pytest.raises(RunReleased):
         run.result(timeout=0)
     assert coordinator.close(timeout=3)
+
+
+@pytest.mark.parametrize("save_error", [None, ValueError, TimeoutError])
+def test_wait_run_exposes_only_saved_child_results(
+    save_error: type[Exception] | None,
+) -> None:
+    saving, release, checked = threading.Event(), threading.Event(), threading.Event()
+    observed: list[str] = []
+
+    def save(run: Run) -> None:
+        if run.parent_run_id is None:
+            return
+        saving.set()
+        assert release.wait(3)
+        if save_error is not None:
+            raise save_error("child save failed")
+
+    coordinator = AgentCoordinator(store=FakeRunStore(save=save))
+    child = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(content=[TextContent(text="child")])
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+    )
+
+    def delegate(invocation: ToolInvocation) -> ToolResult:
+        spawned = invocation.agents.spawn_agent(
+            child, name="child", description="", messages=[], max_steps=1
+        )
+        assert saving.wait(2)
+        assert invocation.agents.wait_run(spawned.run_id, timeout=0) is None
+        checked.set()
+        if save_error is not None:
+            with pytest.raises(save_error, match="child save failed"):
+                invocation.agents.wait_run(spawned.run_id, timeout=2)
+        else:
+            result = invocation.agents.wait_run(spawned.run_id, timeout=2)
+            assert result is not None
+            observed.append(result.output.text)
+        return ToolResult(content="done")
+
+    root = parent_agent(delegate).start(max_steps=2, coordinator=coordinator)
+    try:
+        assert checked.wait(2)
+        assert observed == []
+        release.set()
+        if save_error is None:
+            root.result(3)
+            assert observed == ["child"]
+        else:
+            with pytest.raises(RunFailed):
+                root.result(3)
+            assert observed == []
+    finally:
+        release.set()
+        assert coordinator.close(3) == (save_error is not TimeoutError)
+
+
+def test_parent_history_isolated_from_public_child_completion() -> None:
+    children: list[str] = []
+    coordinator = AgentCoordinator()
+
+    def delegate(invocation: ToolInvocation) -> ToolResult:
+        child = Agent(
+            FakeModelClient(
+                lambda *_: AssistantMessage(content=[TextContent(text="original")])
+            ),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        )
+        spawned = invocation.agents.spawn_agent(
+            child, name="child", description="", messages=[], max_steps=1
+        )
+        children.append(spawned.run_id)
+        assert invocation.agents.wait_run(spawned.run_id, timeout=2) is not None
+        return ToolResult(content="done")
+
+    root = parent_agent(delegate).start(max_steps=2, coordinator=coordinator)
+    try:
+        root.result(3)
+        assert root.wait_for_idle(3)
+        original = root.snapshot()
+        exposed = coordinator.completion(children[0]).result(0)
+        exposed.status = RunStatus.ERROR
+        exposed.steps[0].message.content = [TextContent(text="changed")]
+        assert root.snapshot() == original
+    finally:
+        assert coordinator.close(3)
+
+
+@pytest.mark.parametrize("timeout_claimed", [False, True])
+def test_adoption_cannot_publish_stale_observer_timeout(
+    timeout_claimed: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    reading, publish, release, observed = (
+        threading.Event(),
+        threading.Event(),
+        threading.Event(),
+        threading.Event(),
+    )
+
+    def status(_run_id: str, _parent_id: str) -> RunStatus:
+        reading.set()
+        assert release.wait(3)
+        return RunStatus.SUSPENDED
+
+    coordinator = AgentCoordinator(directory=FakeAgentDirectory(read_run_status=status))
+    monkeypatch.setattr("onyx.agents.agent_coordination.OPERATION_TIMEOUT_SECONDS", 0)
+    original = suspended_agent()
+    run = original.start(max_steps=2, coordinator=coordinator)
+    assert run.wait_until_settled(3).status == RunStatus.SUSPENDED
+    assert run.wait_for_idle(3)
+    checkpoint = run.handoff()
+    completion = coordinator.completion(run.id)
+    set_exception = completion.set_exception
+
+    def delayed_exception(error: BaseException) -> None:
+        publish.set()
+        assert observed.wait(3)
+        set_exception(error)
+
+    if timeout_claimed:
+        monkeypatch.setattr(completion, "set_exception", delayed_exception)
+    coordinator.observe_completion(run.id)
+    assert reading.wait(2)
+    if timeout_claimed:
+        release.set()
+        assert publish.wait(2)
+    replacement = suspended_agent(agent_id=original.id)
+    try:
+        adopted = replacement.resume(checkpoint.run_state, coordinator=coordinator)
+        assert adopted.wait_until_settled(3).status == RunStatus.SUSPENDED
+        release.set()
+        observed.set()
+        assert coordinator._state.work.tracker.wait_idle(3)
+        active_completion = coordinator.completion(adopted.id)
+        if timeout_claimed:
+            with pytest.raises(TimeoutError, match="Released run"):
+                completion.result(0)
+            assert active_completion is not completion
+        else:
+            assert active_completion is completion
+        assert not active_completion.done()
+        adopted.cancel()
+        assert active_completion.result(3).status == RunStatus.CANCELLED
+    finally:
+        release.set()
+        observed.set()
+        monkeypatch.undo()
+        assert coordinator.close(3)

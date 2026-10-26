@@ -29,10 +29,11 @@ from onyx.agents.tools import (
     PendingToolInput,
     ToolInvocation,
 )
-from onyx.chat.checkpoint import _checkpoint_model_types
+from onyx.chat.checkpoint import CHECKPOINT_PAYLOAD_TYPES
 from onyx.chat.models import CheckpointBinding, MessageRendering, PresentationMode
 from onyx.chat.presentation import message_presentation
 from onyx.llm.cancellation import CancellationSignal
+from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
     AssistantMessage,
     GenerationOptions,
@@ -44,6 +45,7 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
+from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.checkpoint_storage import CheckpointStorage, SavedCheckpoint
 from tests.unit.onyx.agents.fakes import FakeModelClient
 
@@ -56,16 +58,11 @@ class SearchDetails(BaseModel):
     documents: list[str]
 
 
-class FeatureState(BaseModel):
-    next_citation: int
-
-
 def codec() -> CheckpointStorage:
     return CheckpointStorage(
         {
             "test.citations.v1": CitationMetadata,
             "test.search.v1": SearchDetails,
-            "test.state.v1": FeatureState,
         }
     )
 
@@ -113,7 +110,7 @@ def checkpoint() -> ExecutionCheckpoint:
             action=RunAction.TOOLS,
             options=GenerationOptions(),
             previous_options=GenerationOptions(),
-            feature_state=FeatureState(next_citation=2),
+            feature_state={"next_citation": 2},
             finalized_tools=1,
             pending_tool_calls={
                 "send": PendingToolInput(
@@ -165,7 +162,7 @@ def test_coding_rendering_survives_checkpoint_round_trip(
     captured = checkpoint()
     rendering = MessageRendering(mode=mode, think_tool="think_tool")
     captured.run_state.steps[0].message.metadata = rendering
-    storage = CheckpointStorage({**codec().payload_types, **_checkpoint_model_types()})
+    storage = CheckpointStorage({**codec().payload_types, **CHECKPOINT_PAYLOAD_TYPES})
     serialized = storage.save(
         captured.run_state,
         captured.agent_state,
@@ -272,6 +269,7 @@ def _make_executable_agent(counts: dict[str, int], context: AgentState) -> Agent
 
     return Agent(
         FakeModelClient(generate),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         agent_id="agent",
         state=context,
         tools=[
@@ -311,6 +309,7 @@ def test_answer_resumes_in_the_execution_owners_context() -> None:
     token = tenant.set("owner")
     agent = Agent(
         FakeModelClient(generate),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(name="ask", description="", parameters={}),

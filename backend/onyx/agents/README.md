@@ -75,7 +75,9 @@ Standalone and temporary incognito runs use generated run IDs.
 ```python
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolInvocation
+from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import ToolDefinition, ToolResult, UserMessage
+from onyx.tracing.flows import LLMFlow
 
 
 def get_weather(invocation: ToolInvocation) -> ToolResult:
@@ -84,6 +86,7 @@ def get_weather(invocation: ToolInvocation) -> ToolResult:
 
 agent = Agent(
     llm,  # any LLM, e.g. onyx.llm.factory.get_default_llm()
+    generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
     system_prompt="You are a weather assistant.",
     tools=[
         AgentTool(
@@ -166,7 +169,8 @@ The sequence is a tuple, but nested objects are not immutable. The SDK detaches 
 Capture instructions and other step decisions during preparation. Assemble them around the history supplied by the runtime.
 Do not fetch settings, advance feature state, or capture the original history inside the assembler.
 
-`Agent.generation_context` supplies tracing identity, content policy, and execution timeouts for every step.
+`Agent` requires a `GenerationContext` with an explicit `LLMFlow` operation tag.
+This context supplies tracing identity, content policy, and execution timeouts for every step.
 The run copies these defaults at startup and binds its cancellation signal.
 Each model call receives a separate context copy. Compaction applies its own tracing flow and timeout.
 `PreparedStep.stall_timeout_s` overrides the stream's idle timeout; `None` uses the agent's setting.
@@ -401,8 +405,9 @@ Only a suspended snapshot can resume. Wait for its workers to become idle before
 Chat stores accepted output as shared messages. `chat/checkpoint.py` serializes the extra data needed to resume:
 step progress, application state, message metadata, and cache flags.
 `serialize_checkpoint()` builds this data. `deserialize_checkpoint()` validates it against the selected history and reconstructs `ExecutionCheckpoint`.
-The module registers the application models that can be restored. Each saved model includes a stable type tag and its fields.
-Unknown tags are rejected. `chat/restoration.py` constructs agents and persists the file resources needed for resumption.
+The module registers message metadata and tool details with stable type tags. Unknown tags are rejected.
+Feature state is a JSON object. Chat's feature discriminator selects the schema used to validate it.
+`chat/restoration.py` constructs agents and persists the file resources needed for resumption.
 
 `ChatRunStore.handoff()` saves this data in `ChatResponseCheckpoint.state` (JSONB) before releasing ownership.
 `ChatRunStore.resume()` loads it, rebuilds the feature, and resumes the saved run.
@@ -411,8 +416,11 @@ Unknown tags are rejected. `chat/restoration.py` constructs agents and persists 
 `run.result()` raises `RunReleased` after release; input must target a resumed execution.
 The storage adapter uses `save` and `expected_revision` to save matching state before ownership is released.
 If saving fails, the local execution remains owned and can accept input or retry the save.
-Features with private state supply `RestorableFeature` from `runtime.py` for typed state capture and restoration.
-This state lets a suspended run continue with its accumulated feature data.
+Features with private state supply `RestorableFeature` from `runtime.py`.
+`capture_state()` returns a Pydantic model. Its nested values may borrow feature state until the runtime immediately serializes it.
+`restore_state()` borrows that JSON data as a read-only mapping, including its nested values.
+Validate it with the feature's model before retaining or changing the data.
+The fields survive a direct `ExecutionCheckpoint` JSON round trip without a feature-type registry in the SDK.
 
 `spawn_agent(restoration_config=...)` accepts application-owned settings for rebuilding a saved child
 for another run. Chat stores `ResearchConfiguration` directly; the SDK passes these settings to the application.
@@ -473,6 +481,8 @@ Root attachments use the existing user-message file associations.
 ## Compaction
 
 Features never manage the context window; the runtime compacts on its own.
+Summary batches share one time budget: the smaller of the caller's total timeout and 180 seconds.
+If this budget expires, context fitting uses its truncation fallback.
 The working budget is `max_input_tokens × (1 - GEN_AI_INPUT_TOKEN_SAFETY_MARGIN)`.
 Compaction triggers when a request reaches 85% of that budget. The runtime summarizes the oldest completed history into a
 `CompactionCheckpoint` and keeps a recent tail of roughly 20% of the budget. Recorded

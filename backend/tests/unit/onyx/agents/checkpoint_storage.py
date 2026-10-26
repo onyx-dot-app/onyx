@@ -38,8 +38,8 @@ class CheckpointStorage:
         run_state = run_state.model_copy(deep=True, update={"child_runs": []})
         response = response_record(run_state)
         with patch(
-            "onyx.chat.checkpoint._checkpoint_model_types",
-            return_value=self.payload_types,
+            "onyx.chat.checkpoint.CHECKPOINT_PAYLOAD_TYPES",
+            self.payload_types,
         ):
             checkpoint = (
                 serialize_checkpoint(
@@ -97,8 +97,8 @@ class CheckpointStorage:
                 agent_state=context, run_state=response_snapshot(saved.response)
             )
         with patch(
-            "onyx.chat.checkpoint._checkpoint_model_types",
-            return_value=self.payload_types,
+            "onyx.chat.checkpoint.CHECKPOINT_PAYLOAD_TYPES",
+            self.payload_types,
         ):
             return deserialize_checkpoint(
                 saved.checkpoint,

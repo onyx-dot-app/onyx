@@ -1052,7 +1052,11 @@ def test_coding_cancellation_keeps_sandbox_until_child_work_finishes(
         128000,
     )
     coordinator = AgentCoordinator()
-    parent = Agent(parent_llm, tools=[coding.bind(lambda: ToolContext())])
+    parent = Agent(
+        parent_llm,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[coding.bind(lambda: ToolContext())],
+    )
     run = parent.start(max_steps=2, coordinator=coordinator)
     try:
         assert entered.wait(5)

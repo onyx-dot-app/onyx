@@ -2,9 +2,10 @@
 
 import hashlib
 from io import BytesIO
+from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, JsonValue, TypeAdapter
 
 from onyx.agents.models import ExecutionCheckpoint, RunState
 from onyx.agents.runtime import Agent
@@ -21,6 +22,14 @@ from onyx.llm.models import Message, ToolResult
 from onyx.tools.file_snapshot import SavedChatFile
 from onyx.tools.interface import Tool
 
+_FEATURE_STATE = TypeAdapter(
+    Annotated[
+        ChatFeatureState | ResearchFeatureState | DeepResearchFeatureState,
+        Field(discriminator="kind"),
+    ]
+)
+_JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
+
 
 def restore_chat_agent(
     checkpoint: ExecutionCheckpoint,
@@ -33,7 +42,9 @@ def restore_chat_agent(
     snapshot = checkpoint.run_state
     if snapshot.progress is None:
         raise ValueError("Agent restoration requires saved execution progress")
-    state = snapshot.progress.feature_state
+    if snapshot.progress.feature_state is None:
+        raise ValueError("Checkpoint has no supported chat feature state")
+    state = _FEATURE_STATE.validate_python(snapshot.progress.feature_state)
     context = checkpoint.agent_state
     token_counter = get_llm_token_counter(llm)
     if isinstance(state, ChatFeatureState):
@@ -71,22 +82,20 @@ def restore_chat_agent(
             previous_run_id=snapshot.previous_run_id,
             agent_id=snapshot.agent_id,
         )
-    if isinstance(state, DeepResearchFeatureState):
-        return DeepResearchAgent(
-            messages=context.messages,
-            allowed_tools=tools,
-            llm=llm,
-            token_counter=token_counter,
-            user_identity=user_identity,
-            language_section=state.language_section,
-            reasoning_effort=state.reasoning_effort,
-            all_injected_file_metadata=state.file_metadata,
-            skip_clarification=state.skip_clarification,
-            checkpoint=context.checkpoint,
-            previous_run_id=snapshot.previous_run_id,
-            agent_id=snapshot.agent_id,
-        )
-    raise ValueError("Checkpoint has no supported chat feature state")
+    return DeepResearchAgent(
+        messages=context.messages,
+        allowed_tools=tools,
+        llm=llm,
+        token_counter=token_counter,
+        user_identity=user_identity,
+        language_section=state.language_section,
+        reasoning_effort=state.reasoning_effort,
+        all_injected_file_metadata=state.file_metadata,
+        skip_clarification=state.skip_clarification,
+        checkpoint=context.checkpoint,
+        previous_run_id=snapshot.previous_run_id,
+        agent_id=snapshot.agent_id,
+    )
 
 
 def persist_checkpoint_files(
@@ -116,10 +125,7 @@ def persist_checkpoint_files(
         file.content = None
 
     def payload(value: BaseModel | None) -> None:
-        if isinstance(value, ChatFeatureState):
-            for file in value.chat_files:
-                save(file)
-        elif isinstance(value, ChatSearchResult):
+        if isinstance(value, ChatSearchResult):
             for staged in value.staged_files:
                 file = SavedChatFile.capture(staged)
                 save(file)
@@ -136,7 +142,14 @@ def persist_checkpoint_files(
         messages(record.messages)
         if record.progress is not None:
             progress = record.progress
-            payload(progress.feature_state)
+            if progress.feature_state is not None:
+                state = _FEATURE_STATE.validate_python(progress.feature_state)
+                if isinstance(state, ChatFeatureState) and state.chat_files:
+                    for file in state.chat_files:
+                        save(file)
+                    progress.feature_state = _JSON_OBJECT.validate_python(
+                        state.model_dump(mode="json")
+                    )
             for answer in progress.human_tool_answers.values():
                 if answer.result is not None:
                     payload(answer.result.details)

@@ -2,6 +2,7 @@
 
 from collections.abc import Callable, Mapping
 from functools import lru_cache
+from time import monotonic
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -282,6 +283,10 @@ def compact_history(
     )
     if input_budget <= 0:
         raise ContextLimitError("The model input limit is too small for a summary")
+    deadline = monotonic() + min(
+        generation_context.total_timeout_s or SUMMARY_TIMEOUT_SECONDS,
+        SUMMARY_TIMEOUT_SECONDS,
+    )
     source = _SummaryInput(history[start:cutoff])
     for _ in range(MAX_SUMMARY_BATCHES):
         if source.message is None:
@@ -301,6 +306,9 @@ def compact_history(
             )
         if generation_context.cancellation:
             generation_context.cancellation.check()
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            raise ContextLimitError("Compaction exceeded its time budget")
         response = model.invoke(
             GenerationRequest(
                 system_prompt=AGENT_COMPACTION_PROMPT,
@@ -318,10 +326,7 @@ def compact_history(
             generation_context.model_copy(
                 update={
                     "flow": LLMFlow.CHAT_HISTORY_SUMMARIZATION,
-                    "total_timeout_s": min(
-                        generation_context.total_timeout_s or SUMMARY_TIMEOUT_SECONDS,
-                        SUMMARY_TIMEOUT_SECONDS,
-                    ),
+                    "total_timeout_s": remaining,
                 }
             ),
         )

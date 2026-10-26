@@ -62,7 +62,7 @@ from onyx.llm.cancellation import (
     current_cancellation,
 )
 from onyx.llm.exceptions import ClassifiedLLMError
-from onyx.llm.interfaces import LLM, LLMConfig, LLMUserIdentity
+from onyx.llm.interfaces import LLM, GenerationContext, LLMConfig, LLMUserIdentity
 from onyx.llm.models import (
     AssistantMessage,
     GenerationRequest,
@@ -87,6 +87,7 @@ from onyx.server.query_and_chat.streaming_models import (
     ReasoningStart,
 )
 from onyx.server.utils import get_json_line
+from onyx.tracing.flows import LLMFlow
 from onyx.utils.threadpool_concurrency import (
     start_thread_future,
 )
@@ -1313,7 +1314,10 @@ def mock_model_execution(
             model(setup, user, index, response_future, emitter, signal, auto_filters)
             return AssistantMessage(content=[TextContent(text="Partial answer")])
 
-        agent = Agent(FakeModelClient(generate))
+        agent = Agent(
+            FakeModelClient(generate),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        )
         return _chat_agent(agent)
 
     with (
@@ -1767,7 +1771,12 @@ def test_full_response_waits_for_execution_after_delivery_ends() -> None:
         assert release.wait(5)
         return AssistantMessage(content=[TextContent(text="Finished answer")])
 
-    chat_agent = _chat_agent(Agent(FakeModelClient(reply)))
+    chat_agent = _chat_agent(
+        Agent(
+            FakeModelClient(reply),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        )
+    )
 
     with (
         patch("onyx.chat.execution.create_chat_agent", return_value=chat_agent),
@@ -2038,6 +2047,7 @@ def test_api_execution_uses_threads_and_preserves_tenant_after_reader_closes() -
         )
         agent = Agent(
             FakeModelClient(lambda *_: next(replies)),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
             tools=[
                 AgentTool(
                     definition=ToolDefinition(
@@ -2102,7 +2112,8 @@ def test_stop_retains_turn_while_preparation_drains() -> None:
     agent = Agent(
         FakeModelClient(
             lambda *_: pytest.fail("Cancelled preparation must not run the model")
-        )
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
     )
     prepared = _chat_agent(agent)
 
@@ -2156,7 +2167,15 @@ def test_model_failure_does_not_cancel_comparison_response() -> None:
         signal.check()
         return AssistantMessage(content=[TextContent(text="Independent answer")])
 
-    prepared = [_chat_agent(Agent(FakeModelClient(reply))) for reply in (fail, succeed)]
+    prepared = [
+        _chat_agent(
+            Agent(
+                FakeModelClient(reply),
+                generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            )
+        )
+        for reply in (fail, succeed)
+    ]
 
     def prepare(
         _setup: ChatTurnSetup,
@@ -2188,7 +2207,8 @@ def test_model_failure_does_not_cancel_comparison_response() -> None:
 
 def test_renderer_attachment_failure_cancels_run_before_saving() -> None:
     agent = Agent(
-        FakeModelClient(lambda *_: pytest.fail("Unbound response must not generate"))
+        FakeModelClient(lambda *_: pytest.fail("Unbound response must not generate")),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
     )
     prepared = _chat_agent(agent)
     setup = _make_setup()
@@ -2351,7 +2371,12 @@ def test_response_workers_track_generations_and_share_one_event_consumer() -> No
             models_entered.wait(timeout=5)
             return AssistantMessage(content=[TextContent(text=f"answer {index}")])
 
-        return _chat_agent(Agent(FakeModelClient(generate)))
+        return _chat_agent(
+            Agent(
+                FakeModelClient(generate),
+                generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            )
+        )
 
     def observe(_event: AgentEvent) -> None:
         with lock:
@@ -2396,6 +2421,7 @@ def test_stop_after_suspension_retains_root_cancellation_and_saves_once() -> Non
                 content=[ToolCall(id="question", name="question", arguments={})]
             )
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(
@@ -2481,7 +2507,12 @@ def test_stop_cache_failure_retries_and_keeps_polling_ownership() -> None:
     with (
         patch(
             "onyx.chat.execution.create_chat_agent",
-            return_value=_chat_agent(Agent(FakeModelClient(generate))),
+            return_value=_chat_agent(
+                Agent(
+                    FakeModelClient(generate),
+                    generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+                )
+            ),
         ),
         patch("onyx.chat.history_store.save_chat_response_to_db") as save,
         patch("onyx.chat.execution._CANCEL_POLL_INTERVAL_S", 0.01),
@@ -2743,7 +2774,8 @@ def test_control_failure_retains_turn_and_polls_ownership_until_workers_drain() 
         Agent(
             FakeModelClient(
                 lambda *_: pytest.fail("Cancelled preparation must not generate")
-            )
+            ),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         )
     )
 
@@ -2879,7 +2911,12 @@ def test_stop_waits_for_model_read_and_persistence_before_ending_delivery() -> N
         assert release.wait(5)
         return AssistantMessage(content=[TextContent(text="Late output")])
 
-    agent = _chat_agent(Agent(FakeModelClient(generate)))
+    agent = _chat_agent(
+        Agent(
+            FakeModelClient(generate),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        )
+    )
     turn = ChatTurnExecution(_make_setup(), MagicMock(), outcome)
     with (
         patch.object(turn.setup.admission, "release") as release_admission,

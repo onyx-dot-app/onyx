@@ -20,6 +20,7 @@ from onyx.agents.runtime import Agent
 from onyx.agents.tools import ToolInvocation
 from onyx.image_gen.interfaces import ImageShape
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
+from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import AssistantMessage, ToolCall
 from onyx.tools.interface import ToolContext
 from onyx.tools.models import ToolCallException
@@ -28,6 +29,7 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
 from onyx.tools.tool_implementations.images.models import ImageGenerationResponse
+from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient
 
 
@@ -173,7 +175,11 @@ def test_cancelled_image_run_retains_provider_work_until_idle(
             0.01,
         ),
     ):
-        agent = Agent(llm, tools=[tool.bind(lambda: ToolContext())])
+        agent = Agent(
+            llm,
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            tools=[tool.bind(lambda: ToolContext())],
+        )
         run = agent.start(max_steps=1)
         try:
             assert started.wait(2)

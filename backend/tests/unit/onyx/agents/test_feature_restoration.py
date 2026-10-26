@@ -5,14 +5,17 @@ from contextlib import contextmanager
 from io import BytesIO
 from threading import Event
 from unittest.mock import MagicMock, patch
+from uuid import uuid4
 
 import pytest
+from pydantic import JsonValue, TypeAdapter
 
 from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.execution_records import ExecutionStatus, RunStatus
 from onyx.agents.models import (
     AgentState,
     AgentStep,
+    ExecutionCheckpoint,
     PreparedStep,
     RunProgress,
     RunState,
@@ -29,8 +32,9 @@ from onyx.agents.tools import (
     ToolInvocation,
 )
 from onyx.chat.agent import ChatAgent
-from onyx.chat.checkpoint import _checkpoint_model_types
+from onyx.chat.checkpoint import CHECKPOINT_PAYLOAD_TYPES
 from onyx.chat.models import ChatFeatureState, ChatSearchResult, CheckpointBinding
+from onyx.chat.restoration import persist_checkpoint_files
 from onyx.coding_agent.agent import CodingAgent
 from onyx.coding_agent.tool_definitions import BASH_TOOL_NAME
 from onyx.configs.constants import DocumentSource
@@ -40,7 +44,7 @@ from onyx.deep_research.research_agent import ResearchAgent
 from onyx.deep_research.tool_definitions import GENERATE_REPORT_TOOL_NAME
 from onyx.file_store.models import ChatFileType, ChatLoadedFile, ExtractedContextFiles
 from onyx.llm.cancellation import CancellationSignal
-from onyx.llm.interfaces import LLM, LLMUserIdentity
+from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
 from onyx.llm.model_response import Delta
 from onyx.llm.models import (
     AssistantMessage,
@@ -62,6 +66,7 @@ from onyx.tools.tool_implementations.search.models import SearchToolState
 from onyx.tools.tool_implementations.search.search_tool import (
     SearchTool,
 )
+from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.checkpoint_storage import CheckpointStorage
 from tests.unit.onyx.agents.fakes import EchoTool, FakeModelClient, ScriptedLLM
 from tests.unit.onyx.agents.test_feature_agents import tool_delta
@@ -132,10 +137,10 @@ def test_chat_json_restores_tool_context_from_feature_state() -> None:
         steps=[],
         progress=RunProgress(
             step_limit=3,
-            feature_state=original.capture_state(),
+            feature_state=original.capture_state().model_dump(mode="json"),
         ),
     )
-    encoded = CheckpointStorage(_checkpoint_model_types()).save(
+    encoded = CheckpointStorage(CHECKPOINT_PAYLOAD_TYPES).save(
         snapshot,
         AgentState(),
         CheckpointBinding(tenant_id="tenant", response_id=snapshot.run_id),
@@ -143,9 +148,9 @@ def test_chat_json_restores_tool_context_from_feature_state() -> None:
     del original, snapshot
     tool = CaptureContextTool()
     restored = chat(tool)
-    saved = CheckpointStorage(_checkpoint_model_types()).load(encoded).run_state
+    saved = CheckpointStorage(CHECKPOINT_PAYLOAD_TYPES).load(encoded).run_state
     assert saved.progress is not None
-    assert isinstance(saved.progress.feature_state, ChatFeatureState)
+    assert saved.progress.feature_state is not None
     restored.restore_state(saved.progress.feature_state)
     restored.tools[0].execute(
         ToolInvocation(
@@ -170,13 +175,12 @@ def test_research_json_restores_next_citation_number() -> None:
     original.citation_mapping = {8: "reference"}
     encoded = original.capture_state().model_dump_json()
     restored = ResearchAgent([], model(), len, None, "", ReasoningEffort.LOW)
-    schema = _checkpoint_model_types()["research.state.v1"]
-    restored.restore_state(schema.model_validate_json(encoded))
+    restored.restore_state(TypeAdapter(dict[str, JsonValue]).validate_json(encoded))
     assert restored.citation_processor.get_next_citation_number() == 9
     assert restored.citation_mapping == {8: "reference"}
     changed = ResearchAgent([], model(), len, None, "French", ReasoningEffort.LOW)
     with pytest.raises(ValueError, match="configuration"):
-        changed.restore_state(schema.model_validate_json(encoded))
+        changed.restore_state(TypeAdapter(dict[str, JsonValue]).validate_json(encoded))
 
 
 def test_deep_research_restores_citations_and_control_tools() -> None:
@@ -204,9 +208,7 @@ def test_deep_research_restores_citations_and_control_tools() -> None:
     original.citation_mapping = {4: document()}
     encoded = original.capture_state().model_dump_json()
     restored = feature()
-    restored.restore_state(
-        _checkpoint_model_types()["deep_research.state.v1"].model_validate_json(encoded)
-    )
+    restored.restore_state(TypeAdapter(dict[str, JsonValue]).validate_json(encoded))
     names = {tool.name for tool in prepared.tools}
     tools = [tool for tool in restored.tools if tool.name in names]
     assert restored.citation_mapping[4].document_id == "reference"
@@ -238,7 +240,7 @@ def test_chat_suspends_and_resumes_with_fresh_feature_and_model() -> None:
     assert run.wait_until_settled(timeout=5).status == RunStatus.SUSPENDED
     assert run.wait_for_idle(timeout=5)
     checkpoint = run.capture()
-    encoded = CheckpointStorage(_checkpoint_model_types()).save(
+    encoded = CheckpointStorage(CHECKPOINT_PAYLOAD_TYPES).save(
         checkpoint.run_state,
         checkpoint.agent_state,
         CheckpointBinding(tenant_id="tenant", response_id=checkpoint.run_state.run_id),
@@ -247,7 +249,7 @@ def test_chat_suspends_and_resumes_with_fresh_feature_and_model() -> None:
 
     tool = CaptureContextTool()
     restored = chat(tool)
-    checkpoint = CheckpointStorage(_checkpoint_model_types()).load(encoded)
+    checkpoint = CheckpointStorage(CHECKPOINT_PAYLOAD_TYPES).load(encoded)
     restored = ChatAgent(
         messages=checkpoint.agent_state.messages,
         tools=[tool],
@@ -334,7 +336,7 @@ def test_real_feature_resumes_pending_control_call_after_json(kind: str) -> None
     assert run.wait_until_settled(timeout=5).status == RunStatus.SUSPENDED
     assert run.wait_for_idle(timeout=5)
     checkpoint = run.capture()
-    encoded = CheckpointStorage(_checkpoint_model_types()).save(
+    encoded = CheckpointStorage(CHECKPOINT_PAYLOAD_TYPES).save(
         checkpoint.run_state,
         checkpoint.agent_state,
         CheckpointBinding(tenant_id="tenant", response_id=checkpoint.run_state.run_id),
@@ -344,7 +346,7 @@ def test_real_feature_resumes_pending_control_call_after_json(kind: str) -> None
 
     final_model = ScriptedLLM([Delta(content="Answer [6]")], 128000)
     restored = build(final_model)
-    checkpoint = CheckpointStorage(_checkpoint_model_types()).load(encoded)
+    checkpoint = CheckpointStorage(CHECKPOINT_PAYLOAD_TYPES).load(encoded)
     restored = build(final_model, checkpoint.run_state.agent_id, checkpoint.agent_state)
     resumed = restored.resume(checkpoint.run_state)
     resumed.submit(
@@ -391,9 +393,7 @@ def test_research_restores_search_scope_cache_without_recomputing() -> None:
     encoded = original.capture_state().model_dump_json()
     del original, saved_tool
     restored = ResearchAgent([search()], model(), len, None, "", ReasoningEffort.LOW)
-    restored.restore_state(
-        _checkpoint_model_types()["research.state.v1"].model_validate_json(encoded)
-    )
+    restored.restore_state(TypeAdapter(dict[str, JsonValue]).validate_json(encoded))
     tool = restored.application_tools[0]
     assert isinstance(tool, SearchTool)
     state = tool.capture_state()
@@ -464,7 +464,11 @@ def test_coding_delegation_releases_parent_worker_without_deleting_waiting_works
         128000,
     )
     coordinator = AgentCoordinator()
-    parent = Agent(parent_model, tools=[tool.bind(lambda: ToolContext())])
+    parent = Agent(
+        parent_model,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[tool.bind(lambda: ToolContext())],
+    )
     run = parent.start(max_steps=2, coordinator=coordinator)
     try:
         assert run.wait_until_settled(timeout=5).status == RunStatus.SUSPENDED
@@ -483,6 +487,39 @@ def test_coding_delegation_releases_parent_worker_without_deleting_waiting_works
         assert not children[0].is_sandbox_available
     finally:
         assert coordinator.close(timeout=5)
+
+
+def test_checkpoint_file_storage_preserves_binary_feature_data() -> None:
+    payload = b"\xff\x00\x80generated"
+    original = chat()
+    original.chat_files = [ChatFile(filename="result.bin", content=payload)]
+    checkpoint = ExecutionCheckpoint(
+        agent_state=AgentState(),
+        run_state=RunState(
+            run_id="file-checkpoint",
+            status=RunStatus.SUSPENDED,
+            progress=RunProgress(
+                step_limit=2,
+                feature_state=original.capture_state().model_dump(mode="json"),
+            ),
+        ),
+    )
+    with patch("onyx.chat.restoration.get_default_file_store") as file_store:
+        file_store.return_value.has_file.return_value = False
+        persist_checkpoint_files(checkpoint, session_id=uuid4())
+        written = file_store.return_value.save_file.call_args.kwargs["content"]
+        assert written.getvalue() == payload
+
+    restored = ExecutionCheckpoint.model_validate_json(checkpoint.model_dump_json())
+    assert restored.run_state.progress is not None
+    state = ChatFeatureState.model_validate(restored.run_state.progress.feature_state)
+    saved_file = state.chat_files[0]
+    assert saved_file.filename == "result.bin"
+    assert saved_file.content is None
+    assert saved_file.file_id is not None
+    with patch("onyx.tools.file_snapshot.get_default_file_store") as file_store:
+        file_store.return_value.read_file.return_value = BytesIO(payload)
+        assert saved_file.restore().content == payload
 
 
 def test_chat_checkpoint_preserves_lazy_file_references() -> None:
@@ -542,9 +579,11 @@ def test_chat_checkpoint_preserves_lazy_file_references() -> None:
                 },
             )
         ],
-        progress=RunProgress(step_limit=2, feature_state=original.capture_state()),
+        progress=RunProgress(
+            step_limit=2, feature_state=original.capture_state().model_dump(mode="json")
+        ),
     )
-    codec = CheckpointStorage(_checkpoint_model_types())
+    codec = CheckpointStorage(CHECKPOINT_PAYLOAD_TYPES)
     encoded = codec.save(
         snapshot,
         AgentState(),
@@ -556,8 +595,7 @@ def test_chat_checkpoint_preserves_lazy_file_references() -> None:
     del original, snapshot
     restored = codec.load(encoded).run_state
     assert restored.progress is not None
-    saved = restored.progress.feature_state
-    assert isinstance(saved, ChatFeatureState)
+    saved = ChatFeatureState.model_validate(restored.progress.feature_state)
     assert loads == []
     with patch("onyx.tools.file_snapshot.get_default_file_store") as file_store:
         file_store.return_value.read_file.side_effect = lambda *_args, **_kwargs: (
@@ -599,7 +637,7 @@ def test_chat_binary_checkpoint_resumes_new_execution_in_same_coordinator() -> N
         assert run.wait_until_settled(timeout=5).status == RunStatus.SUSPENDED
         assert run.wait_for_idle(timeout=5)
         checkpoint = run.handoff()
-        codec = CheckpointStorage(_checkpoint_model_types())
+        codec = CheckpointStorage(CHECKPOINT_PAYLOAD_TYPES)
         binding = CheckpointBinding(
             tenant_id="tenant", response_id=checkpoint.run_state.run_id
         )

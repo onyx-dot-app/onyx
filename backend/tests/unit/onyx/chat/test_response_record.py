@@ -37,6 +37,7 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.tools.models import ChatFile, CustomToolCallSummary
+from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
 
 
@@ -70,6 +71,7 @@ def test_result_order_hook_updates_and_durable_details() -> None:
                 ]
             )
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[tool],
         after_tool_call=finalize,
     )
@@ -127,6 +129,7 @@ def test_partial_run_keeps_input_and_replayable_output(cancelled: bool) -> None:
         PartialClient(
             lambda *_: AssistantMessage(content=[TextContent(text="unused")])
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         prepare_step=lambda _input: PreparedStep(output_metadata=ApplicationData()),
     )
     runs: list[Run] = []
@@ -165,6 +168,7 @@ def test_running_snapshot_records_unfinished_calls_without_inventing_results() -
                 content=[ToolCall(id="a", name="work", arguments={})]
             )
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(name="work", description="", parameters={}),
@@ -187,6 +191,7 @@ def test_run_record_is_isolated_from_caller_and_snapshot_mutations() -> None:
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="First answer")])
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         state=AgentState(messages=[UserMessage(content="Earlier question")]),
     )
     runs: list[Run] = []

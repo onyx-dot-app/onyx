@@ -37,7 +37,33 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
+from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient, ScriptedLLM
+
+
+def test_agent_rejects_context_without_operation_tag() -> None:
+    llm = FakeModelClient(lambda *_: AssistantMessage())
+    with pytest.raises(ValueError, match="LLMFlow"):
+        Agent(llm, generation_context=GenerationContext())
+
+
+def test_agent_passes_operation_tag_to_model() -> None:
+    flows: list[LLMFlow | None] = []
+
+    class TaggedModel(FakeModelClient):
+        def stream(
+            self, request: GenerationRequest, context: GenerationContext | None = None
+        ) -> Generator[GenerationEvent, None, None]:
+            assert context is not None
+            flows.append(context.flow)
+            yield from super().stream(request, context)
+
+    run = Agent(
+        TaggedModel(lambda *_: AssistantMessage()),
+        generation_context=GenerationContext(flow=LLMFlow.RESEARCH_AGENT),
+    ).start(max_steps=1, background=False)
+    assert run.result().stop_reason == RunStatus.COMPLETE
+    assert flows == [LLMFlow.RESEARCH_AGENT]
 
 
 def tool() -> AgentTool:
@@ -70,6 +96,7 @@ def test_model_and_agent_share_transcript_and_stream_events() -> None:
     )
     agent = Agent(
         llm,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[tool()],
     )
     events: list[AgentEvent] = []
@@ -108,9 +135,10 @@ def test_partial_message_closes_before_run_completion(cancelled: bool) -> None:
             raise ValueError("Provider disconnected")
 
     events: list[AgentEvent] = []
-    run = Agent(InterruptedModel(lambda _request, _signal: AssistantMessage())).start(
-        max_steps=1, cancellation=signal, on_event=events.append
-    )
+    run = Agent(
+        InterruptedModel(lambda _request, _signal: AssistantMessage()),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+    ).start(max_steps=1, cancellation=signal, on_event=events.append)
     with pytest.raises(AgentCancelled if cancelled else RunFailed):
         run.result()
     assert run.wait_for_idle(2)
@@ -158,7 +186,9 @@ def test_cancelled_argument_stream_retains_partial_snapshot_without_executing() 
         ),
     )
     run = Agent(
-        InterruptedModel(lambda _request, _signal: AssistantMessage()), tools=[echo]
+        InterruptedModel(lambda _request, _signal: AssistantMessage()),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[echo],
     ).start(max_steps=2)
     try:
         assert reached_partial.wait(5)
@@ -194,6 +224,7 @@ def test_tool_recovery_happens_before_events() -> None:
     )
     agent = Agent(
         llm,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[tool()],
         options=GenerationOptions(tool_choice=ToolChoiceOptions.REQUIRED),
     )
@@ -257,7 +288,9 @@ def test_model_honors_cancelled_signal() -> None:
     llm = ScriptedLLM([])
 
     with pytest.raises(AgentCancelled):
-        Agent(llm).start(background=False, max_steps=1, cancellation=signal).result()
+        Agent(
+            llm, generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE)
+        ).start(background=False, max_steps=1, cancellation=signal).result()
     assert not llm.requests
 
 
