@@ -10,7 +10,7 @@
 **Edition:** CE
 **Owns:**
 `backend/onyx/server/query_and_chat/streaming_models.py`, `placement.py`,
-`backend/onyx/chat/emitter.py`, `stream_buffer.py`,
+`backend/onyx/chat/emitter.py`, `stream_buffer.py`, `renderer.py`, `presentation.py`,
 `web/src/app/app/services/streamingModels.ts`, `web/src/lib/search/streamingUtils.ts`,
 `mobile/src/chat/streamingModels.ts`, `mobile/src/chat/ndjson.ts`
 
@@ -59,6 +59,22 @@ one JSON object per line this way.
 resume read.
 
 ---
+
+### Shared runtime presentation
+
+`chat/renderer.py` converts accepted model content and tool results into existing
+browser packets. `chat/presentation.py:ResponsePresenter` consumes shared runtime
+events. `replay_response` uses the same renderers for saved response records.
+The caller supplies saved search documents and tool IDs as detached tool records.
+Neither path runs a model or executes a tool.
+
+`chat/response.py` captures accepted steps before display processing. A display
+failure can therefore leave a complete response record available for saving.
+`chat/response_models.py` separates response content from per-message rendering
+settings, such as citation display and research phase.
+
+These APIs prepare the shared runtime transition. Production chat, research,
+coding, and session reload still use their existing execution and loading paths.
 
 ## 3. Data model
 
