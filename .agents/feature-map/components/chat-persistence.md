@@ -561,3 +561,11 @@ uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit/db/
 Canonical response writers reject content-free sessions before writing content.
 Durable child reservations enforce the same root-session policy. Child sessions
 inherit the root recording mode. Production chat still uses its existing writer.
+
+
+Saved sources include root and child message display metadata, even without a new
+search. Citation links and source cards survive database reloads.
+
+Restored root questions retain `chat:<question-id>` identities. Child instructions
+retain their run-input identities. Compaction boundaries match these identities
+after reload.
