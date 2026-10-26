@@ -406,15 +406,3 @@ launching Playwright ad hoc.
 - **Anonymous access is allowed** on several of these endpoints
   (`allow_anonymous=True`). A change that assumes a logged-in user will break the
   anonymous flow.
-
-
-### Child completion and generation retries
-
-Restoring a terminal child resolves its existing completion future so waiting parents
-resume. Discovery updates only when that child is still the latest run. Conflicting
-terminal records are rejected before changing the retained execution. Cancelling a suspended child can start another worker; parent cleanup waits
-for that worker to release ownership.
-
-Context-limit retries are allowed only before model content arrives. Partial thinking,
-text, or tool calls remain part of the failed generation instead of disappearing during
-a retry.

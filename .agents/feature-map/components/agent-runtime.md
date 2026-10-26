@@ -40,6 +40,21 @@ child results, then resume with its original identity and budget.
 
 See `backend/onyx/agents/README.md` for the public contracts and usage.
 
+### Child completion and generation retries
+
+These rules apply to the shared runtime, which has no production chat caller yet.
+`backend/onyx/agents/agent_coordination.py:AgentCoordinator.restore_completed`
+resolves the existing completion future so waiting parents resume. It updates
+latest-run discovery only for that run and rejects conflicting terminal records.
+
+Cancelling a suspended child can start another worker.
+`backend/onyx/agents/agent_coordination.py:RunCoordination.finish` tracks its new
+cleanup work so the parent waits for ownership release.
+
+`backend/onyx/agents/runtime.py:_advance_step` retries context-limit failures only
+before model content arrives. Partial thinking, text, and calls remain in the
+failed generation.
+
 ## 5. Contracts and invariants
 
 - Cancellation rejects late updates but retains ownership until workers drain.
