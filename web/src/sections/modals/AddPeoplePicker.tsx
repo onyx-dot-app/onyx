@@ -10,6 +10,7 @@ import {
   Text,
 } from "@opal/components";
 import { SvgBubbleText, SvgEdit, SvgUser, SvgUsers, SvgX } from "@opal/icons";
+import { useFocusOnMount } from "@opal/hooks";
 import { cn } from "@opal/utils";
 import type { MinimalUserSnapshot } from "@/lib/types";
 import type { MinimalUserGroupSnapshot } from "@/hooks/useShareableGroups";
@@ -30,6 +31,8 @@ export interface AddPeoplePickerProps {
   disabled?: boolean;
   existingGroupIds: Set<number>;
   existingUserIds: Set<string>;
+  /** Focus the search input when the picker mounts, e.g. when its modal opens */
+  focusOnMount?: boolean;
   groups: MinimalUserGroupSnapshot[];
   onAddGroup: (group: MinimalUserGroupSnapshot) => void;
   onAddUser: (user: MinimalUserSnapshot) => void;
@@ -46,6 +49,7 @@ export function AddPeoplePicker({
   disabled = false,
   existingGroupIds,
   existingUserIds,
+  focusOnMount = false,
   groups,
   onAddGroup,
   onAddUser,
@@ -59,6 +63,7 @@ export function AddPeoplePicker({
 }: AddPeoplePickerProps) {
   const t = useTranslations("chat.modals.share");
   const [query, setQuery] = useState("");
+  const searchInputRef = useFocusOnMount<HTMLInputElement>(focusOnMount);
 
   const stagedUserIds = useMemo(
     () => new Set(stagedUsers.map((user) => user.id)),
@@ -193,6 +198,7 @@ export function AddPeoplePicker({
       <div className="flex items-start gap-2">
         <div className="relative min-w-0 flex-1">
           <InputTypeIn
+            ref={searchInputRef}
             clearButton
             onChange={(event: ChangeEvent<HTMLInputElement>) =>
               setQuery(event.target.value)
