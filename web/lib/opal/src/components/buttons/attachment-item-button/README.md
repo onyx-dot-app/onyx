@@ -30,16 +30,19 @@ When `state="selected"`, the tile swaps its content for a checked `InputCheckbox
 
 ## Interactivity
 
-Three modes, same contract as `LineItemButton`:
+The row is a control only when it does something. The props it gets decide
+the mode:
 
-- **Button** (default) — focusable `role="button"` div with native-style
-  Enter/Space activation. Not a `<button>`, so action buttons in
+- **Button** — pass `onClick`. A focusable `role="button"` div with
+  native-style Enter/Space activation. Not a `<button>`, so action buttons in
   `rightChildren` never nest invalid HTML. Clicks and keystrokes from nested
   interactive children never activate the row — no `stopPropagation` needed
   at call sites.
 - **Anchor** — pass `href` (+ `target`).
-- **Presentational** — pass `presentational`; the row renders no control
-  semantics of its own and defers them to the primitive that owns it.
+- **Static** — pass neither. The row has no control semantics: no role, no
+  tab stop, no Enter/Space activation. An owning control can still pass
+  `role`, `tabIndex` and key handlers, and drive the palette with `state` /
+  `interaction`.
 
 `prominence` sets the intensity at rest: `"primary"` rests on
 `background-tint-00`, `"secondary"` on `background-tint-01`, and
@@ -68,9 +71,8 @@ Content's inline title editing.
   rightChildren={<Button icon={SvgTrash} onClick={remove} prominence="tertiary" size="sm" />}
 />
 
-// Static token row on a page surface
+// Static token row on a page surface (no onClick or href)
 <AttachmentItemButton
-  presentational
   prominence="secondary"
   icon={SvgKey}
   title={token.name}

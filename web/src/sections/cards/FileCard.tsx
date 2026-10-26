@@ -211,7 +211,6 @@ export function FileCard({
       <div className="min-w-0 max-w-48">
         <Interactive.Container border size="fit" width="full">
           <AttachmentItemButton
-            presentational
             icon={isProcessing ? IconLoader : SvgFileText}
             title={file.name}
             description={

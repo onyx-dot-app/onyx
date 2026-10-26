@@ -79,69 +79,59 @@ type AttachmentItemButtonContentProps = {
 };
 
 /**
- * `presentational` and `href` are mutually exclusive. An anchor is a native
- * control — focusable, activated by Enter — which is exactly what the
- * presentational mode promises the row will not be.
+ * The row is a control only when it does something: `onClick` makes it a
+ * button and `href` makes it a link. With neither it is a static row — no
+ * button role, no tab stop, no Enter/Space activation — that keeps its
+ * palette, so an owning control can drive it with `state` / `prominence` /
+ * `interaction`. `role`, `tabIndex` and the key handlers pass through either
+ * way.
  */
-type AttachmentItemButtonModeProps =
-  | {
-      /**
-       * Render the row as plain markup inside another interactive primitive:
-       * no button role, no tab stop, no Enter/Space activation. The row keeps
-       * its interactive palette — drive it with `state` / `prominence` /
-       * `interaction` from the owning control. `role`, `tabIndex` and the key
-       * handlers still pass through, so the owner can substitute its own
-       * semantics.
-       */
-      presentational: true;
-      href?: never;
-      target?: never;
-    }
-  | ({ presentational?: false } & Pick<
-      InteractiveStatefulProps,
-      "href" | "target"
-    >);
-
 type AttachmentItemButtonOwnProps = Pick<
   InteractiveStatefulProps,
-  "state" | "interaction" | "onClick" | "group" | "ref" | "disabled"
-> &
-  AttachmentItemButtonModeProps & {
-    /**
-     * Surface intensity at rest — hover, selected and disabled palettes
-     * stay the same across all three.
-     *
-     * - `"primary"` — rests on `background-tint-00` (elevated rows on a card)
-     * - `"secondary"` — rests on `background-tint-01` (rows on a plain page surface)
-     * - `"tertiary"` — transparent at rest
-     *
-     * @default "tertiary"
-     */
-    prominence?: "primary" | "secondary" | "tertiary";
+  | "state"
+  | "interaction"
+  | "onClick"
+  | "href"
+  | "target"
+  | "group"
+  | "ref"
+  | "disabled"
+> & {
+  /**
+   * Surface intensity at rest — hover, selected and disabled palettes
+   * stay the same across all three.
+   *
+   * - `"primary"` — rests on `background-tint-00` (elevated rows on a card)
+   * - `"secondary"` — rests on `background-tint-01` (rows on a plain page surface)
+   * - `"tertiary"` — transparent at rest
+   *
+   * @default "tertiary"
+   */
+  prominence?: "primary" | "secondary" | "tertiary";
 
-    /** Container width. @default "full" */
-    width?: ExtremaSizeVariants;
+  /** Container width. @default "full" */
+  width?: ExtremaSizeVariants;
 
-    /** Tooltip text shown on hover. */
-    tooltip?: string;
+  /** Tooltip text shown on hover. */
+  tooltip?: string;
 
-    /** Which side the tooltip appears on. @default "top" */
-    tooltipSide?: TooltipSide;
+  /** Which side the tooltip appears on. @default "top" */
+  tooltipSide?: TooltipSide;
 
-    /**
-     * Content rendered between the title group and the action slot. Expands
-     * to fill the free width, so callers place counts, metadata or timestamps
-     * here and align them inside the slot.
-     */
-    centerChildren?: React.ReactNode;
+  /**
+   * Content rendered between the title group and the action slot. Expands
+   * to fill the free width, so callers place counts, metadata or timestamps
+   * here and align them inside the slot.
+   */
+  centerChildren?: React.ReactNode;
 
-    /**
-     * Trailing action slot. Keeps a minimum width of `--spacing-block-36`
-     * even when empty or hover-hidden, so rows with and without actions align
-     * and hover-revealed buttons cause no layout shift.
-     */
-    rightChildren?: React.ReactNode;
-  };
+  /**
+   * Trailing action slot. Keeps a minimum width of `--spacing-block-36`
+   * even when empty or hover-hidden, so rows with and without actions align
+   * and hover-revealed buttons cause no layout shift.
+   */
+  rightChildren?: React.ReactNode;
+};
 
 /**
  * `title` is omitted from the DOM attributes because the row already means
@@ -169,7 +159,6 @@ function AttachmentItemButton({
   group,
   ref,
   disabled,
-  presentational,
 
   // Sizing
   width = "full",
@@ -213,16 +202,14 @@ function AttachmentItemButton({
   const rowButtonProps: Pick<
     React.HTMLAttributes<HTMLDivElement>,
     "role" | "tabIndex" | "onKeyDown" | "onKeyUp"
-  > = presentational
-    ? { role: role ?? "presentation", tabIndex, onKeyDown, onKeyUp }
-    : href
-      ? { role, tabIndex, onKeyDown, onKeyUp }
-      : {
-          role: role ?? "button",
-          tabIndex: tabIndex ?? 0,
-          onKeyDown: composeKeyHandler(onKeyDown, handleRowKeyDown),
-          onKeyUp: composeKeyHandler(onKeyUp, handleRowKeyUp),
-        };
+  > = onClick && !href
+    ? {
+        role: role ?? "button",
+        tabIndex: tabIndex ?? 0,
+        onKeyDown: composeKeyHandler(onKeyDown, handleRowKeyDown),
+        onKeyUp: composeKeyHandler(onKeyUp, handleRowKeyUp),
+      }
+    : { role, tabIndex, onKeyDown, onKeyUp };
 
   const item = (
     <Interactive.Stateful

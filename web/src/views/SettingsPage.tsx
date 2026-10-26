@@ -2409,7 +2409,6 @@ function AccountsAccessSettings() {
                         return (
                           <AttachmentItemButton
                             key={pat.id}
-                            presentational
                             prominence="secondary"
                             icon={SvgKey}
                             title={pat.name}
