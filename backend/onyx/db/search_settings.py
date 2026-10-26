@@ -297,6 +297,10 @@ _ACTIONABLE_RECLAIM_STATUSES = [
     IndexReclaimStatus.SOAKING,
     IndexReclaimStatus.DELETING,
 ]
+# States whose index may still hold data.
+_NOT_RECLAIMED_STATUSES = [
+    status for status in IndexReclaimStatus if status != IndexReclaimStatus.RECLAIMED
+]
 
 
 def set_reclaim_intent_on_current__no_commit(
@@ -428,13 +432,15 @@ def find_unreclaimed_past_by_index_name(
     and several generations can share one physical index.
 
     A NULL reclaim_status counts too — those are rows from before reclamation existed,
-    whose index was never deleted. Only RECLAIMED means the data is confirmed gone."""
+    whose index was never deleted. Only RECLAIMED means the data is confirmed gone.
+    RECLAIMED has two stored forms (see IndexReclaimStatusType), so this lists the
+    other statuses instead of comparing with RECLAIMED."""
     stmt = select(SearchSettings).where(
         SearchSettings.status == IndexModelStatus.PAST,
         SearchSettings.index_name == index_name,
         or_(
             SearchSettings.reclaim_status.is_(None),
-            SearchSettings.reclaim_status != IndexReclaimStatus.RECLAIMED,
+            SearchSettings.reclaim_status.in_(_NOT_RECLAIMED_STATUSES),
         ),
     )
     return list(db_session.scalars(stmt))
