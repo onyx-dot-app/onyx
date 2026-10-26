@@ -28,6 +28,7 @@ import json
 import os
 import re
 import sys
+from collections import deque
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -195,6 +196,7 @@ Fix these problems and try again:
 """
 
 FAILURE_CONTEXT_CHARS = 60_000
+FAILURE_JOB_TAIL_LINES = 50
 # `gh run view --log-failed` prefixes each line with "<job>\t<step>\t<timestamp> ".
 _LOG_LINE_RE = re.compile(r"^(?P<job>[^\t]*)\t[^\t]*\t\S+Z ?(?P<text>.*)$")
 _PYTEST_FAILURES_RE = re.compile(r"^=+ FAILURES =+$")
@@ -205,23 +207,27 @@ def extract_failure_context(log: str, limit: int = FAILURE_CONTEXT_CHARS) -> str
     """Keep the header and pytest failure sections of a failed-run log.
 
     Failed-job logs end with container teardown output, so the tail of the
-    log rarely contains the assertion that failed. Falls back to the tail
-    when the log has no pytest failure section.
+    log rarely contains the assertion that failed. A failed job with no pytest
+    failure section (e.g. a setup error) keeps its last lines. Falls back to
+    the tail when the log has no pytest failure section.
     """
     header: list[str] = []
     blocks: list[str] = []
     block: list[str] | None = None
-    seen_job_line = False
+    job_tails: dict[str, deque[str]] = {}
+    jobs_with_blocks: set[str] = set()
     for line in log.splitlines():
         match = _LOG_LINE_RE.match(line)
         if match is None:
-            if not seen_job_line:
+            if not job_tails:
                 header.append(line)
             continue
-        seen_job_line = True
+        job = match.group("job")
         text = match.group("text")
+        job_tails.setdefault(job, deque(maxlen=FAILURE_JOB_TAIL_LINES)).append(text)
         if _PYTEST_FAILURES_RE.match(text):
-            block = [f"[{match.group('job')}]"]
+            block = [f"[{job}]"]
+            jobs_with_blocks.add(job)
         elif block is not None:
             if _PYTEST_SECTION_END_RE.match(text):
                 blocks.append("\n".join(block))
@@ -234,7 +240,12 @@ def extract_failure_context(log: str, limit: int = FAILURE_CONTEXT_CHARS) -> str
         return log[-limit:]
     # A retried job repeats the same failure.
     unique_blocks = list(dict.fromkeys(blocks))
-    return "\n".join([*header, *unique_blocks])[:limit]
+    other_jobs = [
+        "\n".join([f"[{job}] (no pytest failure; last lines)", *tail])
+        for job, tail in job_tails.items()
+        if job not in jobs_with_blocks
+    ]
+    return "\n".join([*header, *unique_blocks, *other_jobs])[:limit]
 
 
 # Names are provider model ids — anything with braces, spaces, or commas is a

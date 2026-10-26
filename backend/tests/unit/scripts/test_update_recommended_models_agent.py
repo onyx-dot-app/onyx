@@ -50,6 +50,29 @@ def test_extract_failure_context_skips_teardown_tail() -> None:
     assert "setup noise" not in context
 
 
+def test_extract_failure_context_keeps_tail_of_job_without_pytest_failure() -> None:
+    error = "provider=vertex_ai model=gemini-3.8-flash error=400 VALIDATION_ERROR"
+    setup_job = "provider-chat-test / provider-chat-test (anthropic, claude-opus-5-5)"
+    log = "\n".join(
+        [
+            "Failed jobs:",
+            JOB,
+            setup_job,
+            "",
+            *_failed_attempt(error),
+            *[_log_line(f"pull log {i}", job=setup_job) for i in range(500)],
+            _log_line("Error: ANTHROPIC_API_KEY is not set", job=setup_job),
+        ]
+    )
+
+    context = extract_failure_context(log)
+
+    assert error in context
+    assert f"[{setup_job}] (no pytest failure; last lines)" in context
+    assert "Error: ANTHROPIC_API_KEY is not set" in context
+    assert "pull log 0\n" not in context
+
+
 def test_extract_failure_context_falls_back_to_tail() -> None:
     log = "\n".join(_log_line(f"build error {i}") for i in range(10))
 
