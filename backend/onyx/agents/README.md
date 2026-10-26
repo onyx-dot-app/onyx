@@ -324,10 +324,10 @@ Request settings, thinking blocks, and custom event subclasses use this snapshot
 Producers may change their local data after publishing it.
 
 The event queue is unbounded. Slow listeners or replay writes can increase retained memory.
-Pending-event tracking includes queued events and events still being delivered.
+Pending-event tracking includes queued events, active delivery, and buffered output awaiting its flush.
 
 A slow listener does not block execution. Closing is nonblocking; idle tracking includes the remaining event delivery.
-If a listener throws, the runtime sets the run's
+If a listener or its buffered-output flush fails, the runtime sets the affected run's
 `delivery_failed` flag; the recorded state stays correct, and the consumer rebuilds its view
 from the snapshot. Already queued callbacks may still drain.
 

@@ -11,9 +11,11 @@ from onyx.llm.models import (
     TextContent,
     ThinkingBlock,
     ThinkingContent,
+    ThinkingDeltaEvent,
     ToolCall,
     ToolResultMessage,
     UserMessage,
+    apply_generation_event,
 )
 
 
@@ -58,11 +60,38 @@ def test_replay_omits_duplicate_call_ids_with_their_results(
     replay = messages_for_model(messages, copy_messages=copy_messages)
 
     assert replay == [
-        AssistantMessage(content=[narration, thinking, valid]),
+        AssistantMessage(content=[narration, valid]),
         result,
         later,
         later_result,
     ]
+    assert messages == original
+
+
+@pytest.mark.parametrize("copy_messages", [False, True])
+def test_replay_omits_blockless_thinking_without_changing_recorded_output(
+    copy_messages: bool,
+) -> None:
+    partial = AssistantMessage()
+    apply_generation_event(
+        partial, ThinkingDeltaEvent(content_index=0, text="Partial reasoning")
+    )
+    answered = AssistantMessage(
+        content=[ThinkingContent(text="Reasoning"), TextContent(text="Answer")]
+    )
+    messages: list[Message] = [partial, UserMessage(content="Continue"), answered]
+    original = [message.model_copy(deep=True) for message in messages]
+
+    replay = messages_for_model(messages, copy_messages=copy_messages)
+
+    assert replay == [
+        messages[1],
+        AssistantMessage(content=[TextContent(text="Answer")]),
+    ]
+    assert format_provider_message(replay[1]).model_dump(exclude_none=True) == {
+        "role": "assistant",
+        "content": "Answer",
+    }
     assert messages == original
 
 
