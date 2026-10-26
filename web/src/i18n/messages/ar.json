@@ -4865,9 +4865,6 @@
       }
     },
     "costOverrides": {
-      "allProviders": {
-        "label": "جميع الموفرين"
-      },
       "deleteModal": {
         "description": "سيُحتسب استخدام **{model}** ({provider}) بالسعر المدمج مرة أخرى.",
         "submit": {
@@ -16739,8 +16736,7 @@
         "title": "الوكلاء"
       },
       "craft": {
-        "label": "Craft",
-        "businessTag": "الأعمال"
+        "label": "Craft"
       },
       "exploreAgents": {
         "label": "استكشاف الوكلاء"

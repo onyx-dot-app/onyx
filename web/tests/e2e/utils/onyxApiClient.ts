@@ -794,43 +794,61 @@ export class OnyxApiClient {
   }
 
   /**
-   * Creates or updates a per-model cost override.
+   * Creates a cost override for a provider's first model configuration.
    *
-   * @param model - Model id the negotiated rate applies to
-   * @returns The model id, for asserting the row renders
+   * @param providerId - LLM provider whose first model gets the override
+   * @returns The model configuration id (for cleanup) and the display name
+   * the override card shows
    */
-  async upsertCostOverride(model: string): Promise<string> {
-    const response = await this.put("/admin/cost-overrides", {
-      model,
+  async createCostOverride(
+    providerId: number
+  ): Promise<{ modelConfigurationId: number; modelDisplayName: string }> {
+    const providersResponse = await this.get("/admin/llm/provider");
+    const { providers } = await this.handleResponse<{
+      providers: Array<{
+        id: number;
+        model_configurations: Array<{ id: number }>;
+      }>;
+    }>(providersResponse, "Failed to list LLM providers");
+    const modelConfigurationId = providers.find((p) => p.id === providerId)
+      ?.model_configurations[0]?.id;
+    if (modelConfigurationId === undefined) {
+      throw new Error(`Provider ${providerId} has no model configuration`);
+    }
+
+    const response = await this.post("/admin/cost-overrides", {
+      model_configuration_id: modelConfigurationId,
       input_cost_per_mtok: 2.5,
       output_cost_per_mtok: 10,
     });
-
-    await this.handleResponse(
+    const override = await this.handleResponse<{ model_display_name: string }>(
       response,
-      `Failed to upsert cost override ${model}`
+      `Failed to create cost override for model ${modelConfigurationId}`
     );
 
-    this.log(`Upserted cost override: ${model}`);
-    return model;
+    this.log(`Created cost override: ${modelConfigurationId}`);
+    return {
+      modelConfigurationId,
+      modelDisplayName: override.model_display_name,
+    };
   }
 
   /**
-   * Deletes a per-model cost override.
+   * Deletes a model configuration's cost override.
    *
-   * @param model - Model id whose override should be removed
+   * @param modelConfigurationId - Model configuration whose override is removed
    */
-  async deleteCostOverride(model: string): Promise<void> {
+  async deleteCostOverride(modelConfigurationId: number): Promise<void> {
     const response = await this.delete(
-      `/admin/cost-overrides/${encodeURIComponent(model)}`
+      `/admin/cost-overrides/${modelConfigurationId}`
     );
 
     await this.handleResponseSoft(
       response,
-      `Failed to delete cost override ${model}`
+      `Failed to delete cost override ${modelConfigurationId}`
     );
 
-    this.log(`Deleted cost override: ${model}`);
+    this.log(`Deleted cost override: ${modelConfigurationId}`);
   }
 
   /**

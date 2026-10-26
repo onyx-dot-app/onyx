@@ -108,7 +108,8 @@ Every route in this router carries `Depends(_reject_if_multi_tenant)`
 | GET | `/admin/usage/export` | `export_usage` | Company-wide usage by user email. |
 | GET | `/admin/usage/system` | `get_system_usage` | Non-user (system-attributed) usage, e.g. contextual RAG. |
 | POST | `/admin/usage/reset` | `reset_usage` | Clears one user's usage across every active rate-limit window. |
-| GET/PUT/DELETE | `/admin/cost-overrides` | `list_cost_overrides`, `upsert_cost_override`, `delete_cost_override` | Per-model price overrides used by cost computation. |
+| GET/POST | `/admin/cost-overrides` | `list_cost_overrides`, `create_cost_override_endpoint` | Per-model-configuration price overrides used by cost computation. Create returns 409 when the configuration already has one. |
+| PUT/DELETE | `/admin/cost-overrides/{model_configuration_id}` | `update_cost_override_endpoint`, `delete_cost_override_endpoint` | Set or remove one configuration's override. `PUT` can also move it to another configuration (`model_configuration_id` in the body): 404 if that configuration is missing, 409 if it already has an override. |
 
 ### Hooks endpoints (`ee/onyx/server/features/hooks/api.py`, prefix `/admin/hooks`)
 
@@ -353,8 +354,13 @@ questions:
 
 - **LLM cost tracking** (`onyx/llm/cost.py`, surfaced via `UserUsage`): what a
   specific model call cost, computed per-token from the vendored price table (`llm/price_table/`), with
-  admin-configurable overrides (`server/features/usage/api.py:upsert_cost_override`,
-  backed by `llm/cost_overrides.py`). This is what `UserUsageTracingProcessor`
+  admin-configurable overrides, one per model configuration
+  (`model_cost_override.model_configuration_id`, `ON DELETE CASCADE`; queries in
+  `db/cost_override.py`, a per-tenant cache in `llm/cost_overrides.py`). The
+  configuration id travels from `LitellmLLM` to `GenerationSpanData` and the
+  usage record; a call without one gets catalog pricing. Calls outside `LLM`
+  pass it to `traced_llm_call` (the decision client does, from
+  `get_decision_client`). This is what `UserUsageTracingProcessor`
   writes on every priced generation span. When `GenerationSpanData.routed_model`
   is set (a router such as `openrouter/auto` served another model), the span is
   priced by that served model while `UserUsage.model` keeps the router name.

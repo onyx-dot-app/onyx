@@ -4865,9 +4865,6 @@
       }
     },
     "costOverrides": {
-      "allProviders": {
-        "label": "Alle Anbieter"
-      },
       "deleteModal": {
         "description": "Die Nutzung von **{model}** ({provider}) wird wieder zum integrierten Preis berechnet.",
         "submit": {
@@ -16739,8 +16736,7 @@
         "title": "Agenten"
       },
       "craft": {
-        "label": "Craft",
-        "businessTag": "Business"
+        "label": "Craft"
       },
       "exploreAgents": {
         "label": "Agenten erkunden"

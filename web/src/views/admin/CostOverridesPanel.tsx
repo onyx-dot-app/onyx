@@ -34,31 +34,31 @@ import { useProviderNames } from "@/lib/languageModels/useProviderNames";
 import {
   filterModelConfigurations,
   findLlmOptionById,
-  findModelConfigId,
 } from "@/lib/languageModels/options";
 import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import {
+  createCostOverride,
   deleteCostOverride,
   refreshCostOverrides,
-  upsertCostOverride,
+  updateCostOverride,
   useCostOverrides,
 } from "@/lib/languageModels/costOverrides";
 import type { CostOverride } from "@/lib/languageModels/types";
 
 /**
- * The label and resolver are passed in: this function cannot call hooks.
- * `providerNames` is `useProviderNames()`.
+ * The provider's own name, else its brand name, as the provider cards show it.
+ * `providerNames` is `useProviderNames()`; this function cannot call hooks.
  */
-function getProviderDisplayName(
-  provider: string,
-  allProvidersLabel: string,
+function getOverrideProviderName(
+  override: CostOverride,
   providerNames: ReturnType<typeof useProviderNames>
 ): string {
-  return provider
-    ? providerNames(getProvider(provider)).companyName
-    : allProvidersLabel;
+  return (
+    override.llm_provider_name ||
+    providerNames(getProvider(override.provider)).productName
+  );
 }
 
 // Negotiated rates often go below a cent per 1M tokens ($0.075, $0.01875).
@@ -71,14 +71,10 @@ function formatRate(value: number, locale: string): string {
   })}`;
 }
 
-// Shared add/edit modal for the idempotent upsert. Mount it only while open,
-// so each open starts from fresh form state.
+// Shared add/edit modal. Mount it only while open, so each open starts from
+// fresh form state.
 
 interface OverrideFormValues {
-  model: string;
-  provider: string;
-  // The override keys on the model name; the picked config id only lets the
-  // selector highlight the current choice.
   modelConfigId: number | null;
   inputRate: number | null;
   outputRate: number | null;
@@ -87,55 +83,79 @@ interface OverrideFormValues {
 }
 
 const overrideValidationSchema = Yup.object({
-  model: Yup.string().trim().required(),
+  modelConfigId: Yup.number().nullable().required(),
   inputRate: Yup.number().nullable().required(),
   outputRate: Yup.number().nullable().required(),
   cacheRate: Yup.number().nullable(),
 });
 
 interface OverrideModalProps {
-  // Editing an existing row locks the model name (it's the upsert key).
+  // The override being edited; its model can change to one without an override.
   existing?: CostOverride;
   onClose: () => void;
 }
 
 function OverrideModal({ existing, onClose }: OverrideModalProps) {
   const t = useTranslations("admin.costOverrides");
-  const providerNames = useProviderNames();
   const { mutate } = useSWRConfig();
   const { llmProviders, modelPaging } = useAdminLanguageModels();
+  const { costOverrides } = useCostOverrides();
   const { hide_provider_grouping: hideProviderGrouping } = useSettings();
   const isEdit = existing !== undefined;
   // The model list portals into the modal, inside its focus trap, so its
   // search field can take focus.
   const [contentEl, setContentEl] = useState<HTMLDivElement | null>(null);
-  // Editing shows the locked model in the selector. Providers load after
-  // mount, so this resolves on render rather than in the initial values.
-  const editModelConfigId = existing
-    ? findModelConfigId(llmProviders, existing.provider, existing.model)
-    : null;
+
+  // A model has at most one override, so the picker offers only the models
+  // without one, plus the model of the override being edited.
+  const takenIds = new Set(
+    (costOverrides ?? [])
+      .map((o) => o.model_configuration_id)
+      .filter((id) => id !== existing?.model_configuration_id)
+  );
+  const providers = filterModelConfigurations(llmProviders ?? [], {
+    keep: existing?.model_configuration_id ?? null,
+    includeDecisionOnly: true,
+  }).map((provider) => ({
+    ...provider,
+    model_configurations: provider.model_configurations.filter(
+      (mc) => mc.id == null || !takenIds.has(mc.id)
+    ),
+  }));
 
   const initialValues: OverrideFormValues = {
-    model: existing?.model ?? "",
-    provider: existing?.provider ?? "",
-    modelConfigId: null,
+    modelConfigId: existing?.model_configuration_id ?? null,
     inputRate: existing?.input_cost_per_mtok ?? null,
     outputRate: existing?.output_cost_per_mtok ?? null,
     cacheRate: existing?.cache_read_cost_per_mtok ?? null,
   };
 
   async function handleSubmit(values: OverrideFormValues) {
-    // The schema guarantees both rates; this narrows them for the request.
-    if (values.inputRate === null || values.outputRate === null) return;
-    const model = values.model.trim();
+    // The schema guarantees these; this narrows them for the request.
+    if (
+      values.modelConfigId === null ||
+      values.inputRate === null ||
+      values.outputRate === null
+    ) {
+      return;
+    }
+    const rates = {
+      input_cost_per_mtok: values.inputRate,
+      output_cost_per_mtok: values.outputRate,
+      cache_read_cost_per_mtok: values.cacheRate,
+    };
     try {
-      await upsertCostOverride({
-        model,
-        provider: values.provider,
-        input_cost_per_mtok: values.inputRate,
-        output_cost_per_mtok: values.outputRate,
-        cache_read_cost_per_mtok: values.cacheRate,
-      });
+      if (existing) {
+        await updateCostOverride(existing.model_configuration_id, {
+          ...rates,
+          model_configuration_id: values.modelConfigId,
+        });
+      } else {
+        await createCostOverride({
+          model_configuration_id: values.modelConfigId,
+          ...rates,
+        });
+      }
       await refreshCostOverrides(mutate);
       onClose();
     } catch (e) {
@@ -175,38 +195,32 @@ function OverrideModal({ existing, onClose }: OverrideModalProps) {
                   fillInput
                   center
                 >
-                  {isEdit && editModelConfigId === null ? (
-                    // An all-providers override, or a model no provider
-                    // configures any more, has no option to show.
+                  {existing &&
+                  llmProviders !== undefined &&
+                  findLlmOptionById(
+                    llmProviders,
+                    existing.model_configuration_id
+                  ) === null ? (
+                    // The loaded page of models does not hold this one.
                     <InputTypeIn
-                      value={`${getProviderDisplayName(values.provider, t("allProviders.label"), providerNames)} · ${values.model}`}
+                      value={existing.model_display_name}
                       variant="readOnly"
                     />
                   ) : (
                     <SimpleModelSelector
                       includeDecisionOnly
                       nullable={!isEdit}
-                      disabled={isEdit}
-                      providers={filterModelConfigurations(llmProviders ?? [], {
-                        keep: editModelConfigId,
-                        includeDecisionOnly: true,
-                      })}
-                      value={isEdit ? editModelConfigId : values.modelConfigId}
+                      providers={providers}
+                      value={values.modelConfigId}
                       grouped={!hideProviderGrouping}
                       modelPaging={modelPaging}
                       container={contentEl}
-                      onChange={(modelConfigurationId) => {
-                        const opt = findLlmOptionById(
-                          llmProviders,
-                          modelConfigurationId
-                        );
-                        void setFieldValue("model", opt?.modelName ?? "");
-                        void setFieldValue("provider", opt?.provider ?? "");
+                      onChange={(modelConfigurationId) =>
                         void setFieldValue(
                           "modelConfigId",
                           modelConfigurationId
-                        );
-                      }}
+                        )
+                      }
                     />
                   )}
                 </InputHorizontal>
@@ -300,11 +314,7 @@ function OverrideRow({ override }: OverrideRowProps) {
   const { mutate } = useSWRConfig();
   const [editing, setEditing] = useState(false);
   const deleteModal = useCreateModal();
-  const providerDisplayName = getProviderDisplayName(
-    override.provider,
-    t("allProviders.label"),
-    providerNames
-  );
+  const providerDisplayName = getOverrideProviderName(override, providerNames);
   const rateParts = [
     t("row.input", { value: formatRate(override.input_cost_per_mtok, locale) }),
     t("row.output", {
@@ -328,7 +338,7 @@ function OverrideRow({ override }: OverrideRowProps) {
     : providerDisplayName;
   const ariaNames = {
     provider: providerDisplayName,
-    model: override.model,
+    model: override.model_display_name,
   };
 
   // Blocks a second click while the first delete is in flight.
@@ -337,7 +347,7 @@ function OverrideRow({ override }: OverrideRowProps) {
   async function handleDelete() {
     setDeleting(true);
     try {
-      await deleteCostOverride(override.model, override.provider);
+      await deleteCostOverride(override.model_configuration_id);
       await refreshCostOverrides(mutate);
       deleteModal.toggle(false);
     } catch (e) {
@@ -359,7 +369,9 @@ function OverrideRow({ override }: OverrideRowProps) {
         <ConfirmationModalLayout
           icon={SvgTrash}
           title={markdown(
-            t("deleteModal.title", { model: escapeMarkdown(override.model) })
+            t("deleteModal.title", {
+              model: escapeMarkdown(override.model_display_name),
+            })
           )}
           onClose={() => deleteModal.toggle(false)}
           submit={
@@ -371,7 +383,7 @@ function OverrideRow({ override }: OverrideRowProps) {
           <Text font="main-ui-body" color="text-03">
             {markdown(
               t("deleteModal.description", {
-                model: escapeMarkdown(override.model),
+                model: escapeMarkdown(override.model_display_name),
                 provider: escapeMarkdown(providerDisplayName),
               })
             )}
@@ -387,13 +399,13 @@ function OverrideRow({ override }: OverrideRowProps) {
           state="filled"
           padding={2}
           rounding={4}
-          aria-label={override.model}
+          aria-label={override.model_display_name}
           onClick={() => setEditing(true)}
         >
           <Section gap={0} alignItems="stretch" height="fit">
             <ContentAction
-              icon={getModelIcon(override.provider, override.model)}
-              title={override.model}
+              icon={getModelIcon(override.provider, override.model_name)}
+              title={override.model_display_name}
               description={description}
               titleMaxLines={1}
               descriptionMaxLines={1}
@@ -500,7 +512,7 @@ export default function CostOverridesPanel() {
         <div className="flex flex-col gap-2">
           {costOverrides.map((override) => (
             <OverrideRow
-              key={`${override.provider}:${override.model}`}
+              key={override.model_configuration_id}
               override={override}
             />
           ))}

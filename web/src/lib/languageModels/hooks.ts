@@ -216,10 +216,11 @@ function useModelPaging<P extends PageableProvider>(
             : providerIds
                 .map((id) => truncatedProviders.find((p) => p.id === id))
                 .find((p) => p !== undefined);
-        if (provider?.next_model_configuration_offset == null) return;
+        if (provider?.next_model_configuration_offset == null) return false;
         await applyModelPage(provider.id, {
           offset: provider.next_model_configuration_offset,
         });
+        return true;
       },
       search: async (query: string) => {
         const nextOffsets: Record<number, number | null> = {};

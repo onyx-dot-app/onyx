@@ -539,3 +539,92 @@ def test_openrouter_chunk_parser_keeps_served_model() -> None:
     assert parsed.provider_specific_fields == {
         "routed_model": "deepseek/deepseek-v4-flash"
     }
+
+
+def _gemini_thinking_config(model: str, reasoning_effort: str) -> Any:
+    from litellm.llms.vertex_ai.gemini.vertex_and_google_ai_studio_gemini import (
+        VertexGeminiConfig,
+    )
+
+    apply_monkey_patches()
+    config = VertexGeminiConfig()
+    assert "reasoning_effort" in config.get_supported_openai_params(model)
+    params = config.map_openai_params(
+        non_default_params={"reasoning_effort": reasoning_effort},
+        optional_params={},
+        model=model,
+        drop_params=False,
+    )
+    return params["thinkingConfig"]
+
+
+def test_gemini_4_maps_reasoning_to_thinking_level() -> None:
+    assert _gemini_thinking_config("gemini-4-argon", "low") == {
+        "thinkingLevel": "low",
+        "includeThoughts": True,
+    }
+
+
+@pytest.mark.parametrize(
+    "model,level",
+    [
+        ("gemini-4-argon", "medium"),
+        ("gemini-3.1-pro-preview", "medium"),
+        ("gemini-3-pro-preview", "high"),
+    ],
+)
+def test_gemini_medium_effort_thinking_level(model: str, level: str) -> None:
+    assert _gemini_thinking_config(model, "medium")["thinkingLevel"] == level
+
+
+def test_gemini_2_keeps_thinking_budget() -> None:
+    assert "thinkingBudget" in _gemini_thinking_config("gemini-2.5-flash", "low")
+
+
+def test_gemini_candidate_without_content_yields_empty_choice() -> None:
+    from litellm.llms.vertex_ai.gemini.vertex_and_google_ai_studio_gemini import (
+        VertexGeminiConfig,
+    )
+
+    apply_monkey_patches()
+    response = ModelResponse()
+    response.choices = []
+    VertexGeminiConfig._process_candidates(
+        [{"finishReason": "MAX_TOKENS", "index": 0}], response, {}
+    )
+    assert [(c.finish_reason, c.message.content) for c in response.choices] == [
+        ("length", None)
+    ]
+
+
+def test_gemini_candidate_without_content_does_not_inherit_prior_candidate() -> None:
+    from litellm.llms.vertex_ai.gemini.vertex_and_google_ai_studio_gemini import (
+        VertexGeminiConfig,
+    )
+
+    apply_monkey_patches()
+    response = ModelResponse()
+    response.choices = []
+    VertexGeminiConfig._process_candidates(
+        [
+            {
+                "content": {
+                    "role": "model",
+                    "parts": [
+                        {"text": "hi"},
+                        {"functionCall": {"name": "search", "args": {}}},
+                    ],
+                },
+                "finishReason": "STOP",
+            },
+            {"finishReason": "MAX_TOKENS"},
+        ],
+        response,
+        {},
+    )
+    first, second = response.choices
+    assert first.message.content == "hi"
+    assert first.message.tool_calls
+    assert (second.index, second.finish_reason) == (1, "length")
+    assert second.message.content is None
+    assert not second.message.tool_calls
