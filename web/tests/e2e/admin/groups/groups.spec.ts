@@ -287,6 +287,22 @@ test.describe("Groups page: permissions", () => {
       await groupsPage.gotoEdit(groupId);
       await expect(documentSetsSwitch).toHaveAttribute("aria-checked", "true");
       await expect(connectorsSwitch).toHaveAttribute("aria-checked", "false");
+
+      // The same holds the other way: Manage Connectors alone.
+      await groupsPage.togglePermission("Manage Document Sets");
+      await groupsPage.togglePermission("Manage Connectors");
+      await expect(documentSetsSwitch).toHaveAttribute("aria-checked", "false");
+      await expect(connectorsSwitch).toHaveAttribute("aria-checked", "true");
+
+      await groupsPage.submitEdit();
+      await groupsPage.expectOnListPage();
+      expect(await api.getUserGroupPermissions(groupId)).toEqual([
+        Permission.MANAGE_CONNECTORS,
+      ]);
+
+      await groupsPage.gotoEdit(groupId);
+      await expect(documentSetsSwitch).toHaveAttribute("aria-checked", "false");
+      await expect(connectorsSwitch).toHaveAttribute("aria-checked", "true");
     } finally {
       await softCleanup(() => api.deleteUserGroup(groupId));
     }
