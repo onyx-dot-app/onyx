@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { cn } from "@opal/utils";
-import { Divider, Button, Spacer } from "@opal/components";
+import { Divider, Button, Enter, Spacer } from "@opal/components";
 import type { TagProps } from "@opal/components";
 import type {
   IconFunctionComponent,
@@ -259,16 +259,26 @@ function SettingsHeader({
 type SettingsBodyProps = WithoutStyles<HtmlHTMLAttributes<HTMLDivElement>> & {
   /** Space between sections, as a spacing step (`N / 4` rem). @default 8 */
   gap?: Spacing;
+  /**
+   * The body animates in with `Enter` when the page mounts; the header does
+   * not. `false` renders it at once. @default true
+   */
+  animateEnter?: boolean;
 };
 
-function SettingsBody({ gap = 8, ...props }: SettingsBodyProps) {
-  return (
+function SettingsBody({
+  gap = 8,
+  animateEnter = true,
+  ...props
+}: SettingsBodyProps) {
+  const body = (
     <div
       className="pt-6 pb-18 px-4 flex flex-col w-full"
       style={{ gap: spacingToRem(gap) }}
       {...props}
     />
   );
+  return animateEnter ? <Enter>{body}</Enter> : body;
 }
 
 // ---------------------------------------------------------------------------

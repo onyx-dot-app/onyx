@@ -9,7 +9,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import { useAdminDocumentTitle } from "@/lib/app/hooks";
 import { useUser } from "@/providers/UserProvider";
 import { ApplicationStatus } from "@/lib/settings/types";
-import { Button, Enter, Text } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { markdown } from "@opal/utils";
 import useScreenSize from "@/hooks/useScreenSize";
 import { SvgSidebar } from "@opal/icons";
@@ -116,12 +116,7 @@ export default function AdminChrome({
           </RootLayout.Header>
         )}
         <OpenSearchResourceBanner />
-        <RootLayout.MainContent>
-          {/* Keyed on the route, so each admin page animates in. */}
-          <Enter key={pathname} height="full">
-            {content}
-          </Enter>
-        </RootLayout.MainContent>
+        <RootLayout.MainContent>{content}</RootLayout.MainContent>
       </RootLayout.App>
     </RootLayout.Root>
   );

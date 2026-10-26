@@ -43,11 +43,14 @@ Headers are only sticky when `actions` is non-empty.
 
 ### Body
 
-Content container with consistent padding and vertical spacing.
+Content container with consistent padding and vertical spacing. By default it
+animates in with [`Enter`](../../components/enter/README.md) when the page
+mounts; the header stays still.
 
-| Prop  | Type      | Default | Description                                        |
-| ----- | --------- | ------- | -------------------------------------------------- |
-| `gap` | `Spacing` | `8`     | Space between sections, as a spacing step (N/4 rem) |
+| Prop    | Type      | Default | Description                                                    |
+| ------- | --------- | ------- | -------------------------------------------------------------- |
+| `gap`   | `Spacing` | `8`     | Space between sections, as a spacing step (N/4 rem)            |
+| `animateEnter` | `boolean` | `true` | Animate the body in when the page mounts; `false` renders it at once |
 
 ## Usage
 
