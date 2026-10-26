@@ -30,6 +30,7 @@ from onyx.agents.tools import (
     DEFAULT_AGENT_WAIT_SECONDS,
     AgentControl,
     AgentLifetime,
+    ChildRunCancelled,
     SpawnResult,
 )
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
@@ -195,8 +196,12 @@ class AgentCoordinator:
             )
         if binding is not None:
             binding.close(released_run_ids=binding.children)
-        if has_waiters:
-            self.observe_completion(run.id, agent_id=run.agent_id)
+        try:
+            if self._ownership is not None:
+                self._ownership.release(run.id)
+        finally:
+            if has_waiters:
+                self.observe_completion(run.id, agent_id=run.agent_id)
 
     def observe_completion(self, run_id: str, *, agent_id: str) -> None:
         """Resolve a remote dependency from storage without retaining its execution."""
@@ -1203,23 +1208,24 @@ class _ToolControl(AgentControl):
                 state = wait_operation(
                     completion, self.owner.run.cancellation_signal, timeout
                 )
-                result = result_from_snapshot(state)
             except TimeoutError:
                 if completion.done():
                     completion.result()
                 return None
-            except (RunFailed, AgentCancelled):
+            except AgentCancelled as error:
+                self.owner.observe_children([run_id])
+                self.owner.check_tool_active(self.active)
+                raise ChildRunCancelled(f"Child run {run_id} was cancelled") from error
+            except RunFailed:
                 self.owner.observe_children([run_id])
                 raise
-            self.owner.observe_children([run_id])
-            return result
+            return self._result_from_child(state)
         coordinator = self.owner.coordinator
         latest = coordinator.saved_run(
             run_id, self.owner.run.agent_id, load_archive=False
         )
         if latest is not None and latest.status.is_terminal:
-            self.owner.observe_children([run_id])
-            return result_from_snapshot(latest)
+            return self._result_from_child(latest)
 
         if timeout == 0:
             return None
@@ -1234,10 +1240,7 @@ class _ToolControl(AgentControl):
                     state = coordinator.read_visible_run(
                         run_id, self.owner.run.agent_id
                     )
-                    self.owner.observe_children([run_id])
-                    result = result_from_snapshot(state)
-                    self.owner.check_tool_active(self.active)
-                    return result
+                    return self._result_from_child(state)
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     self.owner.check_tool_active(self.active)
@@ -1253,6 +1256,13 @@ class _ToolControl(AgentControl):
 
         except TimeoutError:
             return None
+
+    def _result_from_child(self, state: RunState) -> RunResult:
+        self.owner.observe_children([state.run_id])
+        self.owner.check_tool_active(self.active)
+        if state.status == RunStatus.CANCELLED:
+            raise ChildRunCancelled(f"Child run {state.run_id} was cancelled")
+        return result_from_snapshot(state)
 
     def cancel_run(self, run_id: str) -> None:
         self.owner.check_tool_active(self.active)

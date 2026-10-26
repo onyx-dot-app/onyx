@@ -247,6 +247,8 @@ class Agent:
     ) -> None:
         if generation_context.flow is None:
             raise ValueError("Agent generation context requires an LLMFlow")
+        if len({tool.name for tool in tools}) != len(tools):
+            raise ValueError("Tool names must be unique")
         self._id = agent_id or str(uuid4())
         self.llm = llm
         self.tools = list(tools)
@@ -326,11 +328,10 @@ class Agent:
                         raise RuntimeError("Agent is already running or draining")
                     previous._reusable.result(timeout=0)
             history = self.state
-            cancellation_signal = (
+            external_cancellation = (
                 cancellation
                 or current_cancellation()
                 or self.generation_context.cancellation
-                or CancellationSignal()
             )
             previous_run_id = previous.id if previous else self._previous_run_id
             if _snapshot is not None:
@@ -375,7 +376,7 @@ class Agent:
                         ],
                         checkpoint=history.checkpoint,
                     ),
-                    cancellation_signal,
+                    CancellationSignal(),
                     event_dispatcher,
                     history=history,
                     event_parent=_event_parent,
@@ -395,6 +396,7 @@ class Agent:
                 self,
                 coordinator=coordinator,
                 background=background,
+                external_cancellation=external_cancellation,
             )
         except BaseException:
             with self._lock:
@@ -721,7 +723,8 @@ class Run:
                         step_index=self._progress.step_index,
                         tool_call=call,
                         progress=ToolProgress(
-                            content=result.text, details=result.details
+                            content="" if result.is_error else result.text,
+                            details=result.details,
                         ),
                     )
                 )
@@ -831,12 +834,17 @@ class Run:
         *,
         coordinator: "AgentCoordinator | None",
         background: bool,
+        external_cancellation: CancellationSignal | None,
     ) -> None:
         state = self._state
         is_resuming = state.status == RunStatus.SUSPENDED
         with self.execution_lock:
             self._state.status = RunStatus.RUNNING
         try:
+            if external_cancellation is not None:
+                self._cancellation_link.enter_context(
+                    external_cancellation.on_cancel(self.cancellation_signal.cancel)
+                )
             if state.progress is not None:
                 feature_state = state.progress.feature_state
                 if feature_state is not None:
@@ -1238,13 +1246,21 @@ class Run:
             self.coordination = None
             delivery = self.event_delivery
             self.event_delivery = None
-        self._cancellation_link.close()
-        if delivery is not None:
-            delivery.close()
-        if coordination is not None:
-            coordination.coordinator.release_execution(self)
-        self._reusable.set_result(None)
-        self._completed.set_exception(RunReleased("Local execution has been released"))
+        try:
+            self._cancellation_link.close()
+            if delivery is not None:
+                delivery.close()
+            if coordination is not None:
+                coordination.coordinator.release_execution(self)
+        except BaseException as error:
+            self._reusable.set_exception(error)
+            self._completed.set_exception(error)
+            raise
+        else:
+            self._reusable.set_result(None)
+            self._completed.set_exception(
+                RunReleased("Local execution has been released")
+            )
         return checkpoint
 
     def publish_event(self, event: AgentEvent) -> None:
@@ -1310,6 +1326,12 @@ def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -
     cancellation_signal = run.cancellation_signal
     if len({tool.name for tool in prepared.tools}) != len(prepared.tools):
         raise ValueError("Tool names must be unique")
+    registered_tools = {tool.name: tool for tool in run._defaults.tools}
+    for tool in prepared.tools:
+        if registered_tools.get(tool.name) is not tool:
+            raise ValueError(
+                f"Prepared tool {tool.name!r} must be registered in Agent.tools"
+            )
     prepared = prepared.model_copy(
         update={
             "tools": [tool.snapshot() for tool in prepared.tools],

@@ -328,9 +328,12 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
         if scenario == "release":
             with patch.object(
                 owner.cache, "delete", side_effect=RuntimeError("cache unavailable")
-            ):
+            ) as delete_owner:
                 with pytest.raises(RuntimeError, match="cache unavailable"):
                     owner.handoff(run.id)
+                assert delete_owner.call_count == 1
+                with pytest.raises(RuntimeError, match="cache unavailable"):
+                    run.result(0)
             assert remote.resume(run.id, context=context) is None
             owner.cache.delete(owner._owner_key(int(run.id)))
         elif scenario == "ownership_lock":
@@ -352,7 +355,11 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
             ):
                 owner.handoff(run.id)
         else:
-            owner.handoff(run.id)
+            with patch.object(
+                owner, "_release_owner", wraps=owner._release_owner
+            ) as release_owner:
+                owner.handoff(run.id)
+            assert release_owner.call_count == 1
         assert coordinator.active_run(agent.id) is None
         db_session.expire_all()
         row = db_session.get(ChatResponseCheckpoint, branch[1])
@@ -726,8 +733,9 @@ def test_checkpoint_files_use_durable_references_and_session_cleanup(
             )
             restored = codec.load(encoded)
             assert restored.run_state.progress is not None
-            state = restored.run_state.progress.feature_state
-            assert isinstance(state, ChatFeatureState)
+            state = ChatFeatureState.model_validate(
+                restored.run_state.progress.feature_state
+            )
             assert all(file.content is None for file in state.chat_files)
             assert state.chat_files[0].file_id == original_id
             assert state.chat_files[0].restore().content == original_bytes
