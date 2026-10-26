@@ -300,7 +300,8 @@ It cannot replace a running or suspended child with another owner.
 Call `Run.handoff` after suspension to release local execution. Resume the saved state with a new `Agent`.
 Resumption creates a new `Run` object with the same ID, accepted input, and remaining step budget.
 Parent dependencies use run IDs and completion records. Local resource cleanup waits for workers after execution is released.
-A coordinator rejects competing local owners. The application uses an atomic storage claim to exclude other API pods.
+A coordinator rejects competing local owners, including while ownership release is in progress.
+The application uses an atomic storage claim to exclude other API pods.
 A new coordinator can load terminal child states through `read_run`.
 Foreground children must finish before the parent can transfer. Rejected transfers leave the local owner intact.
 
@@ -433,7 +434,7 @@ The fields survive a direct `ExecutionCheckpoint` JSON round trip without a feat
 for another run. Chat stores `ResearchConfiguration` directly; the SDK passes these settings to the application.
 Handoff releases the ownership adapter's reservation after saving suspended state.
 The SDK invokes release once; applications implement the storage operation.
-If release fails, handoff and local completion waiters report the cleanup error.
+If release fails, handoff, local waiters, and pending parent dependencies report the cleanup error.
 A new execution owner can register the same run ID once ownership is released.
 
 Register executable tools on `Agent.tools`; the runtime restores the saved step's selection.

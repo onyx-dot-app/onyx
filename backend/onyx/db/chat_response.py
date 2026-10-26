@@ -1,7 +1,6 @@
 import json
 from uuid import UUID
 
-from pydantic import BaseModel
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, aliased, joinedload, object_session, selectinload
 
@@ -12,7 +11,10 @@ from onyx.chat.models import (
     ChatExecutionRecord,
     ChatResponseSnapshot,
     MessageRendering,
+    ResponseAncestry,
     ResponseRecord,
+    ResponseStatus,
+    SavedResponse,
     ToolRecordReference,
 )
 from onyx.configs.constants import DocumentSource, MessageType
@@ -215,8 +217,6 @@ def save_chat_turn(
                 set(search_doc_ids_for_tool)
             )
 
-    all_search_doc_ids_set: set[int] = set(search_doc_key_to_id.values())
-
     citation_number_to_search_doc_id: dict[int, int] = {}
 
     for citation_num, search_doc_py in citation_to_doc.items():
@@ -257,14 +257,11 @@ def save_chat_turn(
             db_search_doc_id = db_search_doc.id
             search_doc_key_to_id[search_doc_key] = db_search_doc_id
 
-            # Link project files to ChatMessage to enable frontend preview
-            if is_project_file:
-                all_search_doc_ids_set.add(db_search_doc_id)
-
         # Build mapping from citation number to search doc ID
         citation_number_to_search_doc_id[citation_num] = db_search_doc_id
 
-    final_search_doc_ids: list[int] = list(all_search_doc_ids_set)
+    # History restoration resolves citations through the response's sources.
+    final_search_doc_ids = list(set(search_doc_key_to_id.values()))
     if final_search_doc_ids:
         add_search_docs_to_chat_message(
             chat_message_id=assistant_message.id,
@@ -1030,34 +1027,9 @@ def finish_checkpoint__no_commit(session: Session, message_id: int) -> None:
         session.delete(row)
 
 
-class SavedResponse(BaseModel):
-    message_id: int
-    root_message_id: int
-    root_session_id: UUID
-    agent: AgentInfo
-    response: ResponseRecord
-
-
-class ResponseStatus(BaseModel):
-    message_id: int
-    root_message_id: int
-    root_session_id: UUID
-    parent_agent_id: str | None
-    status: RunStatus
-
-
-class _ResponseAncestry(BaseModel):
-    message_id: int
-    session_id: UUID
-    status: RunStatus | None
-    spawned_by_message_id: int | None
-    parent_session_id: UUID | None
-    parent_response_id: int | None
-
-
 def _read_response_ancestry(
     session: Session, response_id: int
-) -> _ResponseAncestry | None:
+) -> ResponseAncestry | None:
     question = aliased(ChatMessage)
     spawning_response = aliased(ChatMessage)
     row = (
@@ -1082,7 +1054,7 @@ def _read_response_ancestry(
         .mappings()
         .one_or_none()
     )
-    return _ResponseAncestry.model_validate(row) if row is not None else None
+    return ResponseAncestry.model_validate(row) if row is not None else None
 
 
 def read_response_status__no_commit(
