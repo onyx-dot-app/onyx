@@ -565,6 +565,18 @@ def test_gemini_4_maps_reasoning_to_thinking_level() -> None:
     }
 
 
+@pytest.mark.parametrize(
+    "model,level",
+    [
+        ("gemini-4-argon", "medium"),
+        ("gemini-3.1-pro-preview", "medium"),
+        ("gemini-3-pro-preview", "high"),
+    ],
+)
+def test_gemini_medium_effort_thinking_level(model: str, level: str) -> None:
+    assert _gemini_thinking_config(model, "medium")["thinkingLevel"] == level
+
+
 def test_gemini_2_keeps_thinking_budget() -> None:
     assert "thinkingBudget" in _gemini_thinking_config("gemini-2.5-flash", "low")
 

@@ -118,6 +118,8 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
      which Gemini 4 rejects. get_supported_openai_params also looks the bare name
      up in the registry, which lists gemini-4-argon only as vertex_ai/gemini-4-argon,
      so reasoning_effort is reported unsupported and dropped
+   - _map_reasoning_effort_to_thinking_level maps medium to high outside Gemini
+     3 Flash and 3.1 Pro; Gemini 4 supports medium
    - _process_candidates skips a candidate with a finishReason but no content,
      e.g. a reply whose whole output budget went to thinking. A non-streamed
      response then has no choices; streaming adds an empty choice for the same reply
@@ -139,6 +141,7 @@ from litellm.llms.ollama.common_utils import OllamaError
 from litellm.llms.openrouter.chat.transformation import (
     OpenRouterChatCompletionStreamingHandler,
 )
+from litellm.types.llms.vertex_ai import GeminiThinkingConfig
 from litellm.types.utils import ChatCompletionUsageBlock, ModelResponseStream
 
 # Original upstream chunk_parser, saved before any patching for fallback use
@@ -972,6 +975,11 @@ def _is_gemini_3_or_newer(model: str) -> bool:
     return _GEMINI_PRE_3_PATTERN.match(model_name) is None
 
 
+def _gemini_major_version(model: str) -> int | None:
+    match = re.match(r"gemini-(\d+)", model.split("/")[-1].lower())
+    return int(match.group(1)) if match else None
+
+
 def _patch_vertex_gemini_newer_models() -> None:
     from litellm.llms.vertex_ai.gemini.vertex_and_google_ai_studio_gemini import (
         VertexGeminiConfig,
@@ -987,6 +995,9 @@ def _patch_vertex_gemini_newer_models() -> None:
         VertexGeminiConfig.get_supported_openai_params
     )
     original_process_candidates = VertexGeminiConfig._process_candidates
+    original_map_thinking_level = (
+        VertexGeminiConfig._map_reasoning_effort_to_thinking_level
+    )
 
     def _patched_gemini_get_supported_openai_params(self: Any, model: str) -> list[str]:
         params: list[str] = original_get_supported_openai_params(self, model)
@@ -1007,9 +1018,21 @@ def _patch_vertex_gemini_newer_models() -> None:
         ]
         return original_process_candidates(cast(Any, candidates), *args, **kwargs)
 
+    def _patched_gemini_map_thinking_level(
+        reasoning_effort: str, model: Optional[str] = None
+    ) -> GeminiThinkingConfig:
+        config = original_map_thinking_level(reasoning_effort, model)
+        major = _gemini_major_version(model) if model else None
+        if reasoning_effort == "medium" and major is not None and major >= 4:
+            config["thinkingLevel"] = "medium"
+        return config
+
     VertexGeminiConfig._is_gemini_3_or_newer = staticmethod(_is_gemini_3_or_newer)  # ty: ignore[invalid-assignment]
     VertexGeminiConfig.get_supported_openai_params = (  # type: ignore[method-assign]
         _patched_gemini_get_supported_openai_params
+    )
+    VertexGeminiConfig._map_reasoning_effort_to_thinking_level = staticmethod(  # ty: ignore[invalid-assignment]
+        _patched_gemini_map_thinking_level
     )
     VertexGeminiConfig._process_candidates = staticmethod(  # ty: ignore[invalid-assignment]
         _patched_gemini_process_candidates
