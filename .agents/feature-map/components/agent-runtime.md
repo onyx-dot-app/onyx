@@ -2,7 +2,7 @@
 
 > Executes model and tool steps with explicit cancellation, ownership, and restoration boundaries.
 
-**Verified against:** `c5a66d2465` (2026-10-26)
+**Verified against:** `f72c2c44b6` (2026-10-26)
 **Domain:** core-loop
 **Edition:** CE
 **Owns:** `backend/onyx/agents/`
@@ -54,6 +54,39 @@ cleanup work so the parent waits for ownership release.
 `backend/onyx/agents/runtime.py:_advance_step` retries context-limit failures only
 before model content arrives. Partial thinking, text, and calls remain in the
 failed generation.
+
+### Ownership and restoration
+
+Each run owns its cancellation signal. Caller cancellation reaches the run;
+run cancellation does not cancel the caller's signal.
+
+`Agent.tools` registers executable tools. `PreparedStep.tools` selects those same
+instances. Invalid selections fail before generation. Restored selections must
+match the saved declarations.
+
+Waiting for a cancelled child raises `ChildRunCancelled`. A tool can handle this
+exception; otherwise, it becomes a tool error. Parent cancellation still interrupts
+the wait with `AgentCancelled`.
+
+Handoff saves suspended state and releases the ownership adapter's reservation
+once. Release failure reports the cleanup error to local completion waiters.
+
+Tool progress omits failed results' model-facing text. Structured result details
+carry explicit public errors. Recorded results retain the model-facing text.
+
+Compaction validates its source message ID before it calls the summary model.
+
+### Model-history replay
+
+`backend/onyx/agents/execution_records.py` supplies stable input-message IDs and model-history replay.
+Its `messages_for_model` function creates model context from recorded messages.
+It retains partial text and signed thinking, but omits tool calls without adjacent results.
+Thinking without provider blocks and unsigned provider thinking blocks cannot be replayed.
+Signed and redacted blocks remain intact.
+It also removes orphaned or duplicate tool results and copies messages by default.
+Calls with duplicate IDs in one assistant message are ambiguous; replay omits them and their results.
+This helper prepares history without deleting the recorded output.
+Production chat does not call this module yet.
 
 ## 5. Contracts and invariants
 
