@@ -141,7 +141,7 @@ Selection rules:
 - Do not recommend models released more than ~12 months ago unless the vendor
   still sells them as the current model for that tier.
 - default_model is the vendor's balanced general-purpose tier: strong, current,
-  and mid-priced (e.g. OpenAI Sol, Anthropic Opus, Gemini Pro, GLM). It MUST
+  and mid-priced (e.g. OpenAI Sol, Anthropic Opus, Gemini Pro/Argon, GLM). It MUST
   fall in the family the curation rules below mark `is_default_source`. Never
   make a premium tier (OpenAI Astra, Anthropic Fable, "-pro" variants, anything
   priced several times the balanced tier) the default: it becomes the default
@@ -189,6 +189,49 @@ Fix these problems and try again:
 
 {errors}
 """
+
+FAILURE_CONTEXT_CHARS = 60_000
+# `gh run view --log-failed` prefixes each line with "<job>\t<step>\t<timestamp> ".
+_LOG_LINE_RE = re.compile(r"^(?P<job>[^\t]*)\t[^\t]*\t\S+Z ?(?P<text>.*)$")
+_PYTEST_FAILURES_RE = re.compile(r"^=+ FAILURES =+$")
+_PYTEST_SECTION_END_RE = re.compile(r"^(-+ Captured |=+ )")
+
+
+def extract_failure_context(log: str, limit: int = FAILURE_CONTEXT_CHARS) -> str:
+    """Keep the header and pytest failure sections of a failed-run log.
+
+    Failed-job logs end with container teardown output, so the tail of the
+    log rarely contains the assertion that failed. Falls back to the tail
+    when the log has no pytest failure section.
+    """
+    header: list[str] = []
+    blocks: list[str] = []
+    block: list[str] | None = None
+    seen_job_line = False
+    for line in log.splitlines():
+        match = _LOG_LINE_RE.match(line)
+        if match is None:
+            if not seen_job_line:
+                header.append(line)
+            continue
+        seen_job_line = True
+        text = match.group("text")
+        if _PYTEST_FAILURES_RE.match(text):
+            block = [f"[{match.group('job')}]"]
+        elif block is not None:
+            if _PYTEST_SECTION_END_RE.match(text):
+                blocks.append("\n".join(block))
+                block = None
+            else:
+                block.append(text)
+    if block is not None:
+        blocks.append("\n".join(block))
+    if not blocks:
+        return log[-limit:]
+    # A retried job repeats the same failure.
+    unique_blocks = list(dict.fromkeys(blocks))
+    return "\n".join([*header, *unique_blocks])[:limit]
+
 
 # Names are provider model ids — anything with braces, spaces, or commas is a
 # formatting glitch, not a pick.
@@ -593,7 +636,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     if args.failure_context_file and args.failure_context_file.exists():
         prompt += FAILURE_CONTEXT_TEMPLATE.format(
-            failure_context=args.failure_context_file.read_text()[-60_000:]
+            failure_context=extract_failure_context(
+                args.failure_context_file.read_text()
+            )
         )
 
     schema: dict[str, Any] = _output_schema(list(previous.providers))
