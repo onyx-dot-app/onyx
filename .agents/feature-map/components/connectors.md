@@ -309,6 +309,23 @@ it to fleet telemetry ([[indexing-pipeline]] §4.10). A source that lists in par
 with `threadpool_concurrency.py:AdaptiveConcurrency`, fed by the pushback its retry
 wrappers record through `PUSHBACK_OBSERVER`.
 
+Google Drive implements it in `google_drive/corpus_estimate.py`: the same partitions
+the run walks (shared drives, My Drives, files shared with each user, requested
+folders) listed in one `AdaptiveTaskPool` with `COUNT_FILE_FIELDS` at
+`COUNT_PAGE_SIZE`. Each partition reads its newest file first, lists in
+`modifiedTime` order one page at a time, and after each page cuts the range ahead
+into as many shards as that page's density says it holds, so a big drive fans out
+across the pool within a few pages and nothing is counted twice. The rate limits and
+server errors `google_utils.py` waits out are the pushback the pool's limit follows.
+The connector resolves what to count (`DriveCountScope`) with the same methods the
+run uses: the user per shared drive (`_choose_drive_principal`, a drive nobody can
+list is reported in `detail`, one only a reader can list is a lower bound), the
+users, and the principals per requested folder, skipping a folder inside a drive
+listed in full. A file
+that can turn up on several paths (shared with a user, in a requested folder, or
+behind a shortcut) is claimed by id up to `MAX_DEDUP_DRIVE_FILE_IDS`, as the run's
+dedup set does, so it counts once.
+
 ### 4.5 Pruning: the slim diff
 
 `backend/onyx/background/celery/tasks/pruning/tasks.py:connector_pruning_generator_task`
