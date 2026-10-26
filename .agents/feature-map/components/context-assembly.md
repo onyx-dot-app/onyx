@@ -134,7 +134,7 @@ once per turn. A turn that runs three tool cycles calls
 The file helpers in `chat/files.py` serve the existing chat engines.
 `chat/prompt_formatting.py` prepares shared runtime messages: it selects images,
 wraps reminders, and sets cache metadata. The existing engines still use
-`translate_history_to_basemessages`; switching engines is a separate change.
+`translate_history_to_llm_format`; switching engines is a separate change.
 
 ### 4.1 System prompt
 
