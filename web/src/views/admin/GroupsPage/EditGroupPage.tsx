@@ -282,11 +282,6 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       try {
         await setGroupManager(groupId, userId, makeManager);
         await refreshGroupLists(mutate);
-        toast.success(
-          makeManager
-            ? t("edit.toasts.managerAssigned")
-            : t("edit.toasts.managerRevoked")
-        );
       } catch (err) {
         console.error("Failed to update manager:", err);
         toast.error(

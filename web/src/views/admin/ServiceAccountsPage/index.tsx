@@ -12,6 +12,7 @@ import {
   BasicModalFooter,
   Button,
   Code,
+  CopyButton,
   Dropdown,
   MessageCard,
   Modal,
@@ -329,17 +330,12 @@ export default function ServiceAccountsPage() {
                 </Button>
               }
               submit={
-                // TODO(@raunakab): Create an opalified copy-button and replace it here
-                <Button
-                  onClick={() => {
-                    if (fullApiKey) {
-                      navigator.clipboard.writeText(fullApiKey);
-                      toast.success(t("toasts.keyCopied"));
-                    }
-                  }}
+                <CopyButton
+                  prominence="primary"
+                  getCopyText={() => fullApiKey ?? ""}
                 >
                   {t("keyModal.copyButton.label")}
-                </Button>
+                </CopyButton>
               }
             />
           </Modal.Footer>

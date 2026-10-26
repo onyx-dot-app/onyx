@@ -100,9 +100,6 @@ export default function ImageGenerationContent() {
     if (config) {
       try {
         await setDefaultImageGenerationConfig(config.image_provider_id);
-        toast.success(
-          t("setDefaultSuccess.message", { title: provider.title })
-        );
         refetchConfigs();
       } catch (error) {
         toast.error(
@@ -119,7 +116,6 @@ export default function ImageGenerationContent() {
     if (config) {
       try {
         await unsetDefaultImageGenerationConfig(config.image_provider_id);
-        toast.success(t("deselectSuccess.message", { title: provider.title }));
         refetchConfigs();
       } catch (error) {
         toast.error(

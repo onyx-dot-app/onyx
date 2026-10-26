@@ -2,15 +2,14 @@
  * Page Object Model for the Security & Hardening admin page (/admin/security).
  *
  * Encapsulates the toggle rows (each rendered as an Opal <Switch> inside an
- * InputHorizontal <label>) and the save-confirmation toast so specs stay
- * declarative and locator churn is confined to this file.
+ * InputHorizontal <label>) and the save request so specs stay declarative and
+ * locator churn is confined to this file.
  */
 
 import { type Page, type Locator, expect } from "@playwright/test";
 
 export class AdminSecurityPage {
   readonly page: Page;
-  readonly savedToast: Locator;
 
   // A stable, always-present, tenant-editable toggle — used as the subject for
   // round-trip persistence checks (visible in both single- and multi-tenant).
@@ -19,7 +18,6 @@ export class AdminSecurityPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.savedToast = page.getByText("Security settings updated");
   }
 
   // ---------------------------------------------------------------------------
@@ -62,10 +60,16 @@ export class AdminSecurityPage {
     return (await this.toggle(title).getAttribute("aria-checked")) === "true";
   }
 
-  /** Flip the named toggle and wait for the save-confirmation toast. */
+  /** Flip the named toggle and wait for the save request to succeed. */
   async clickToggleAndSave(title: string): Promise<void> {
+    const saved = this.page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/admin/security") &&
+        response.request().method() === "PUT",
+      { timeout: 5000 }
+    );
     await this.toggle(title).click();
-    await expect(this.savedToast).toBeVisible({ timeout: 5000 });
+    expect((await saved).ok()).toBe(true);
   }
 
   /** Assert the named toggle is in the expected on/off state. */

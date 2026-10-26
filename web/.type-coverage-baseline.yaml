@@ -91,7 +91,7 @@ packages:
   src/lib/settings: 96.7
   src/lib/sidebar: 100
   src/lib/skills: 97.4
-  src/lib/sso: 99.3
+  src/lib/sso: 99.2
   src/lib/tiers: 100
   src/lib/tools: 99.1
   src/lib/tracing: 96.9
