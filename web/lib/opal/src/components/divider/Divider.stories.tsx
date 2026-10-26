@@ -80,3 +80,33 @@ export const FoldableDefaultOpen: Story = {
     </Divider>
   ),
 };
+
+export const FoldableChevronStart: Story = {
+  render: () => (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <Divider title="Hierarchy" foldable chevronPosition="start" defaultOpen>
+        <div style={{ padding: "0.5rem 0" }}>
+          <p>Open: the chevron points down.</p>
+        </div>
+      </Divider>
+      <Divider title="Folded" foldable chevronPosition="start">
+        <div style={{ padding: "0.5rem 0" }}>
+          <p>Hidden content.</p>
+        </div>
+      </Divider>
+    </div>
+  ),
+};
+
+export const FoldableChevronStartDown: Story = {
+  render: () => (
+    <Divider
+      title="Full Activity History"
+      foldable
+      chevronPosition="start"
+      foldedChevron="down"
+      open={false}
+      onOpenChange={() => undefined}
+    />
+  ),
+};

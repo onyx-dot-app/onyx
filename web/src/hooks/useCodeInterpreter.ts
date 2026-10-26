@@ -35,9 +35,9 @@ export default function useCodeInterpreter() {
     mutate: refetchStatus,
   } = useSWR<CodeInterpreterStatus>(STATUS_ENDPOINT, errorHandlingFetcher);
 
-  function refetch() {
-    refetchHealth();
-    refetchStatus();
+  /** Fetches health and status again; resolves when both have answered. */
+  async function refetch(): Promise<void> {
+    await Promise.all([refetchHealth(), refetchStatus()]);
   }
 
   const status: CodeInterpreterHealthStatus = healthFetchError

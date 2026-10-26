@@ -8,15 +8,13 @@ from pydantic import ValidationError
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
 from onyx.connectors.capability_checks.draft_runs import (
-    CachedDraftResult,
-    DraftCheckState,
-    DraftCheckStateKind,
     apply_cached_result,
     apply_check_result,
     cached_check_result,
 )
 from onyx.connectors.capability_checks.models import (
     MAX_FINDING_OPTIONS,
+    CachedDraftResult,
     CapabilityCheck,
     CapabilityCheckContext,
     CapabilityCheckResult,
@@ -26,6 +24,8 @@ from onyx.connectors.capability_checks.models import (
     CheckOutput,
     CountFinding,
     CredentialCapabilityReport,
+    DraftCheckState,
+    DraftCheckStateKind,
     FindingOption,
     OptionsFinding,
 )

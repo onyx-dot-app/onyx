@@ -19,6 +19,7 @@ import * as panelPreferences from "@/app/craft/services/outputPanelPreferences";
 import type {
   OutputInventory,
   ApiDetailedSessionResponse,
+  ApiSessionResponse,
   BuildMessageAttachment,
 } from "@/app/craft/types/streamingTypes";
 
@@ -3536,6 +3537,66 @@ describe("session history races and discarded queued starts", () => {
   });
   afterEach(() => jest.useRealTimers());
 
+  it.each([1, 2])(
+    "keeps a failed active-turn read %s retryable instead of loading an idle session",
+    async (failedRead) => {
+      const fetchActive = jest.mocked(api.fetchActiveTurn);
+      if (failedRead === 2) fetchActive.mockResolvedValueOnce(null);
+      fetchActive.mockRejectedValueOnce(new Error("Turn status unavailable"));
+      const store = useBuildSessionStore.getState();
+      await store.loadSession(sessionId);
+      expect(
+        useBuildSessionStore.getState().sessions.get(sessionId)
+      ).toMatchObject({
+        isLoaded: false,
+        loadError: "Turn status unavailable",
+        activeTurnId: null,
+      });
+      fetchActive.mockResolvedValue(active);
+      await store.loadSession(sessionId, { force: true });
+      expect(
+        useBuildSessionStore.getState().sessions.get(sessionId)
+      ).toMatchObject({
+        isLoaded: true,
+        loadError: null,
+        status: "running",
+        activeTurnId: active.turn_id,
+      });
+    }
+  );
+
+  it.each([1, 2])(
+    "ignores a failed status read %s after a newer turn takes ownership",
+    async (failedRead) => {
+      const pendingRead =
+        deferred<Awaited<ReturnType<typeof api.fetchActiveTurn>>>();
+      const fetchActive = jest.mocked(api.fetchActiveTurn);
+      if (failedRead === 2) fetchActive.mockResolvedValueOnce(null);
+      fetchActive.mockReturnValueOnce(pendingRead.promise);
+      const store = useBuildSessionStore.getState();
+      const loading = store.loadSession(sessionId);
+      await waitFor(() =>
+        expect(fetchActive).toHaveBeenCalledTimes(failedRead)
+      );
+      store.updateSessionData(sessionId, {
+        turnGeneration: 1,
+        status: "running",
+        activeTurnId: "new-turn",
+        activeTurnLocalOwner: true,
+      });
+      pendingRead.reject(new Error("Old status read failed"));
+      await loading;
+      expect(
+        useBuildSessionStore.getState().sessions.get(sessionId)
+      ).toMatchObject({
+        loadError: null,
+        status: "running",
+        activeTurnId: "new-turn",
+        activeTurnLocalOwner: true,
+      });
+    }
+  );
+
   it.each(["lookup", "stream"] as const)(
     "adopts a successor after %s completion and keeps its partial answer active",
     async (source) => {
@@ -3985,4 +4046,109 @@ describe("deleting a live session", () => {
       }
     }
   );
+});
+
+// --- Session naming ---
+describe("Session naming", () => {
+  const sessionId = "naming-session";
+  const response: ApiSessionResponse = {
+    id: sessionId,
+    user_id: "user",
+    name: "Saved name",
+    status: "active",
+    created_at: "2026-10-15T00:00:00Z",
+    last_activity_at: "2026-10-15T00:00:00Z",
+    nextjs_port: null,
+    sandbox: null,
+    artifacts: [],
+    sharing_scope: "private",
+    origin: "INTERACTIVE",
+    agent_provider: null,
+    agent_model: null,
+    skills_stale: false,
+  };
+  beforeEach(() => {
+    useBuildSessionStore.setState({
+      sessionHistory: [
+        { id: sessionId, title: "Fresh Craft", createdAt: new Date() },
+      ],
+    });
+  });
+
+  it("uses the name saved by the server in one request", async () => {
+    jest.mocked(api.updateSessionName).mockResolvedValue(response);
+    await useBuildSessionStore.getState().nameBuildSession(sessionId);
+    expect(api.updateSessionName).toHaveBeenCalledTimes(1);
+    expect(api.updateSessionName).toHaveBeenCalledWith(sessionId, null);
+    expect(useBuildSessionStore.getState().sessionHistory[0]?.title).toBe(
+      "Saved name"
+    );
+  });
+
+  it.each(["My name", "Fresh Craft"])(
+    "does not replace a manual rename to %s with a delayed automatic response",
+    async (name) => {
+      const automatic = deferred<ApiSessionResponse>();
+      jest
+        .mocked(api.updateSessionName)
+        .mockReturnValueOnce(automatic.promise)
+        .mockResolvedValueOnce({ ...response, name });
+      const naming = useBuildSessionStore
+        .getState()
+        .nameBuildSession(sessionId);
+      await useBuildSessionStore.getState().renameBuildSession(sessionId, name);
+      automatic.resolve(response);
+      await naming;
+      expect(useBuildSessionStore.getState().sessionHistory[0]?.title).toBe(
+        name
+      );
+    }
+  );
+  it("applies automatic naming after a failed manual rename refreshes history", async () => {
+    const automatic = deferred<ApiSessionResponse>();
+    const failure = new Error("Rename failed");
+    jest
+      .mocked(api.updateSessionName)
+      .mockReturnValueOnce(automatic.promise)
+      .mockRejectedValueOnce(failure);
+    jest
+      .mocked(api.fetchSessionHistory)
+      .mockResolvedValue([
+        { id: sessionId, title: "Fresh Craft", createdAt: new Date() },
+      ]);
+    const errorLog = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const naming = useBuildSessionStore
+        .getState()
+        .nameBuildSession(sessionId);
+      await expect(
+        useBuildSessionStore.getState().renameBuildSession(sessionId, "My name")
+      ).rejects.toBe(failure);
+      expect(api.fetchSessionHistory).toHaveBeenCalled();
+      automatic.resolve(response);
+      await naming;
+      expect(useBuildSessionStore.getState().sessionHistory[0]?.title).toBe(
+        "Saved name"
+      );
+    } finally {
+      errorLog.mockRestore();
+    }
+  });
+
+  it("updates the saved title after history refresh replaces the placeholder", async () => {
+    const automatic = deferred<ApiSessionResponse>();
+    jest.mocked(api.updateSessionName).mockReturnValueOnce(automatic.promise);
+    jest
+      .mocked(api.fetchSessionHistory)
+      .mockResolvedValue([
+        { id: sessionId, title: "Session naming...", createdAt: new Date() },
+      ]);
+    const naming = useBuildSessionStore.getState().nameBuildSession(sessionId);
+    await useBuildSessionStore.getState().refreshSessionHistory();
+    automatic.resolve(response);
+    await naming;
+    expect(useBuildSessionStore.getState().sessionHistory[0]?.title).toBe(
+      "Saved name"
+    );
+  });
 });

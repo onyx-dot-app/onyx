@@ -3,6 +3,7 @@ after includes, exact entries match a channel id or name, regex entries match
 the name in full, and excludes never fail on entries absent from the
 workspace."""
 
+import time
 from typing import Any, cast
 
 import pytest
@@ -175,3 +176,29 @@ def test_validate_channel_regexes_rejects_invalid_pattern() -> None:
 
 def test_validate_channel_regexes_handles_none() -> None:
     validate_channel_regexes(None, "channel")
+
+
+_BACKTRACKING_PATTERN = r"^(a|a)+$"
+_SLOW_NAME = "a" * 79 + "b"
+
+
+def test_backtracking_include_regex_times_out_as_no_match() -> None:
+    channels = [_channel(_SLOW_NAME), _channel("general")]
+    start = time.monotonic()
+    result = filter_channels(channels, [_BACKTRACKING_PATTERN, "general"], True)
+    assert time.monotonic() - start < 2
+    assert _names(result) == ["general"]
+
+
+def test_backtracking_exclude_regex_times_out_as_match() -> None:
+    channels = [_channel(_SLOW_NAME), _channel("general")]
+    start = time.monotonic()
+    result = filter_channels(
+        channels,
+        None,
+        False,
+        channels_to_exclude=[_BACKTRACKING_PATTERN],
+        exclude_regex_enabled=True,
+    )
+    assert time.monotonic() - start < 2
+    assert _names(result) == ["general"]

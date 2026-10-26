@@ -126,7 +126,12 @@ def upgrade() -> None:
     with bind.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
         if _index_state(conn, schema) is True:
             return
-        _build_index(conn, schema)
+        # _build_index's plain SET outlives the transaction on this connection.
+        # Reset it so a pooled connection does not carry the timeout to its next user.
+        try:
+            _build_index(conn, schema)
+        finally:
+            conn.exec_driver_sql("RESET lock_timeout")
 
 
 def downgrade() -> None:

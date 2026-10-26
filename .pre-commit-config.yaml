@@ -273,6 +273,15 @@ repos:
 
   - repo: local
     hooks:
+      - id: helm-release
+        name: Helm chart version and release descriptions
+        language: python
+        entry: python tools/helm/check_release.py
+        additional_dependencies: [PyYAML==6.0.3, semver==3.0.4]
+        pass_filenames: false
+        # Deleted chart files must also trigger the check.
+        always_run: true
+        stages: [pre-commit]
       - id: i18n-copy-changes
         name: translation updates for English copy changes
         language: system

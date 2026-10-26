@@ -18,6 +18,14 @@ import { useSendChatMessageFromURL } from "@/lib/chat/hooks";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
 import { useToolConfiguration } from "@/lib/tools/hooks";
+import { useMemberPlugins } from "@/lib/plugins/member";
+import {
+  applyChatPluginIntent,
+  chatPluginIntentLoadState,
+  chatPluginsForAgent,
+  parseChatPluginIntent,
+  withoutChatPluginIntent,
+} from "@/lib/plugins/chat";
 import { useSettings } from "@/lib/settings/hooks";
 import Dropzone from "react-dropzone";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
@@ -62,7 +70,7 @@ import {
   ProjectContextPanel,
   ProjectChatSessionList,
 } from "@/lib/projects/components";
-import { useProjectsContext } from "@/lib/projects/providers";
+import { type ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import { useActiveProject, useProjects } from "@/lib/projects/hooks";
 import { getProjectTokenCount } from "@/lib/projects/svc";
 import { cn } from "@opal/utils";
@@ -200,6 +208,64 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   }, [searchParams, router]);
 
   const toolConfiguration = useToolConfiguration();
+  const pluginCopy = useTranslations("actions.memberPlugins");
+  const memberPlugins = useMemberPlugins({
+    agentId: activeAgent?.id,
+    surface: "chat",
+  });
+  const handledPluginIntent = useRef<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    if (!params.has("pluginKind") && !params.has("pluginId")) {
+      handledPluginIntent.current = null;
+      return;
+    }
+    const reference = parseChatPluginIntent(params);
+    const intentLoadState = reference
+      ? chatPluginIntentLoadState(reference, memberPlugins)
+      : null;
+    if (!toolConfiguration.ready) return;
+    if (
+      reference &&
+      (!activeAgent ||
+        isLoadingAgents ||
+        isLoadingChatSessions ||
+        intentLoadState === "loading")
+    ) {
+      return;
+    }
+    const intentKey = `${pathname}?${params}`;
+    if (handledPluginIntent.current === intentKey) return;
+    handledPluginIntent.current = intentKey;
+    if (!reference) {
+      toast.error(pluginCopy("chat.intent.invalid"));
+    } else if (
+      !activeAgent ||
+      intentLoadState === "error" ||
+      !applyChatPluginIntent(
+        reference,
+        chatPluginsForAgent(memberPlugins.plugins, activeAgent),
+        toolConfiguration
+      )
+    ) {
+      toast.error(pluginCopy("chat.intent.unavailable"));
+    }
+    const remaining = withoutChatPluginIntent(params).toString();
+    router.replace(remaining ? `/app?${remaining}` : "/app", {
+      scroll: false,
+    });
+  }, [
+    activeAgent,
+    isLoadingAgents,
+    isLoadingChatSessions,
+    memberPlugins,
+    pathname,
+    pluginCopy,
+    router,
+    searchParams,
+    toolConfiguration,
+  ]);
 
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
     chatSessionId: currentChatSessionId,
@@ -282,6 +348,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     chatInputBarRef.current?.reset();
     setCurrentMessageFiles([]);
   }, [setCurrentMessageFiles]);
+
+  const restoreInputBar = useCallback(
+    (message: string, files: ProjectFile[]) => {
+      chatInputBarRef.current?.restore(message, files);
+    },
+    []
+  );
 
   // Add refs needed by useChatSessionController
   const chatSessionIdRef = useRef<string | null>(currentChatSessionId);
@@ -390,7 +463,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       setFolded(preMultiModelFoldedRef.current);
       preMultiModelFoldedRef.current = null;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [multiModel.isMultiModelActive]);
 
   // Sync single-model selection to llmManager so the submission path uses
@@ -430,10 +502,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     toolConfiguration,
     availableAgents: agents,
     activeAgent,
+    memberPlugins: memberPlugins.plugins,
     existingChatSessionId: currentChatSessionId,
     selectedDocuments,
     searchParams,
     resetInputBar,
+    restoreInputBar,
   });
 
   const { onMessageSelection, sessionFetchError } = useChatSessionController({
@@ -1009,6 +1083,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       )}
                       <AppInputBar
                         toolConfiguration={toolConfiguration}
+                        memberPlugins={memberPlugins.plugins}
                         ref={chatInputBarRef}
                         deepResearchEnabled={
                           deepResearchEnabledForCurrentWorkflow

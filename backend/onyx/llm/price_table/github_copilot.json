@@ -290,6 +290,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Sonnet 4.6",
       "open_weights": false,
       "reasoning": true,
@@ -486,6 +487,39 @@
       "temperature": true,
       "tool_call": true
     },
+    "gemini-4-argon": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.1,
+        "input": 2,
+        "output": 10
+      },
+      "family": "gemini",
+      "limit": {
+        "context": 1048576,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "audio",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Gemini 4 Argon",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-13",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
     "gpt-5-mini": {
       "attachment": true,
       "cost": {
@@ -650,6 +684,7 @@
           "text"
         ]
       },
+      "mode": "responses",
       "name": "GPT-5.4 nano",
       "open_weights": false,
       "reasoning": true,
@@ -1101,6 +1136,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Grok 4.5",
       "open_weights": false,
       "reasoning": true,
@@ -1147,6 +1183,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Grok 4.6",
       "open_weights": false,
       "reasoning": true,
@@ -1194,6 +1231,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Grok 4.7",
       "open_weights": false,
       "reasoning": true,

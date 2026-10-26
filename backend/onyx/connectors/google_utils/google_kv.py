@@ -14,15 +14,17 @@ from onyx.connectors.credential_families import (
     to_source_credential_json,
 )
 from onyx.connectors.credential_family_base import CredentialFamily
-from onyx.connectors.google_utils.resources import get_drive_service, get_gmail_service
+from onyx.connectors.google_utils.resources import GoogleService, get_google_service
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_AUTHENTICATION_METHOD,
     DB_CREDENTIALS_DICT_APP_CREDENTIAL_KEY,
     DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
     DB_CREDENTIALS_DICT_TOKEN_KEY,
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
+    GOOGLE_AUTH_URI,
     GOOGLE_FAMILY_SCOPES,
     GOOGLE_SCOPES,
+    GOOGLE_TOKEN_URI,
     MISSING_SCOPES_ERROR_STR,
     ONYX_SCOPE_INSTRUCTIONS,
     GoogleOAuthAuthenticationMethod,
@@ -73,7 +75,7 @@ def _build_frontend_google_drive_redirect(source: DocumentSource) -> str:
 
 def _get_current_oauth_user(creds: OAuthCredentials, source: DocumentSource) -> str:
     if source == DocumentSource.GOOGLE_DRIVE:
-        drive_service = get_drive_service(creds)
+        drive_service = get_google_service(GoogleService.DRIVE, creds)
         user_info = (
             drive_service.about()  # ty: ignore[unresolved-attribute]
             .get(
@@ -83,7 +85,7 @@ def _get_current_oauth_user(creds: OAuthCredentials, source: DocumentSource) -> 
         )
         email = user_info.get("user", {}).get("emailAddress")
     elif source == DocumentSource.GMAIL:
-        gmail_service = get_gmail_service(creds)
+        gmail_service = get_google_service(GoogleService.GMAIL, creds)
         user_info = (
             gmail_service.users()  # ty: ignore[unresolved-attribute]
             .getProfile(
@@ -242,6 +244,19 @@ def _stored_credential_json(
     )
 
 
+def _pin_google_endpoints(app_cred: dict[str, Any]) -> dict[str, Any]:
+    pinned = dict(app_cred)
+    for section in ("web", "installed"):
+        client_config = pinned.get(section)
+        if isinstance(client_config, dict):
+            pinned[section] = {
+                **client_config,
+                "auth_uri": GOOGLE_AUTH_URI,
+                "token_uri": GOOGLE_TOKEN_URI,
+            }
+    return pinned
+
+
 def _app_cred_on_row(
     credential_id: int,
     source: DocumentSource,
@@ -254,7 +269,7 @@ def _app_cred_on_row(
     existing_json = to_source_credential_json(source, stored_json)
     existing = existing_json.get(DB_CREDENTIALS_DICT_APP_CREDENTIAL_KEY)
     if existing is not None:
-        return _load_google_json(existing)
+        return _pin_google_endpoints(_load_google_json(existing))
 
     token_raw = existing_json.get(DB_CREDENTIALS_DICT_TOKEN_KEY)
     if token_raw is None:
@@ -272,10 +287,8 @@ def _app_cred_on_row(
         "web": {
             "client_id": token_dict["client_id"],
             "client_secret": token_dict["client_secret"],
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": token_dict.get(
-                "token_uri", "https://oauth2.googleapis.com/token"
-            ),
+            "auth_uri": GOOGLE_AUTH_URI,
+            "token_uri": GOOGLE_TOKEN_URI,
         }
     }
     # get_value returns SensitiveValue's cached dict, so build a new one rather

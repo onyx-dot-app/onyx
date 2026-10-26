@@ -33,7 +33,7 @@ func TestRunDBRestore_picksTheToolFromTheExtension(t *testing.T) {
 		{"custom dump", "backup.dump", false, []string{"pg_restore", "-U", "alice", "-d", "onyx", "/tmp/onyx_restore_tmp"}},
 		{"custom dump with clean", "backup.DUMP", true, []string{"pg_restore", "-U", "alice", "-d", "onyx", "--clean", "--if-exists", "/tmp/onyx_restore_tmp"}},
 		// --clean only applies to pg_restore.
-		{"plain SQL", "backup.sql", true, []string{"psql", "-U", "alice", "-d", "onyx", "-f", "/tmp/onyx_restore_tmp"}},
+		{"plain SQL", "backup.sql", true, []string{"psql", "-U", "alice", "-d", "onyx", "-v", "ON_ERROR_STOP=1", "-f", "/tmp/onyx_restore_tmp"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -58,19 +58,20 @@ func TestRunDBRestore_picksTheToolFromTheExtension(t *testing.T) {
 	}
 }
 
-func TestRunDBRestore_toleratesPgRestoreWarnings(t *testing.T) {
+func TestRunDBRestore_failsOnPgRestoreErrorsAndCleansUp(t *testing.T) {
 	binDir := dbSetup(t)
 	_, calls := dbFakeDocker(t, binDir, `if [ "$1" = exec ] && [ "$6" = pg_restore ]; then exit 1; fi`)
 	logs := dbCaptureLog(t)
 	input := filepath.Join(t.TempDir(), "backup.dump")
 	dbWriteSnapshot(t, input)
 
-	if err := runDBRestore(input, &DBRestoreOptions{Yes: true}); err != nil {
-		t.Fatalf("expected pg_restore errors to be warnings, got %v", err)
+	err := runDBRestore(input, &DBRestoreOptions{Yes: true})
+	if err == nil || !strings.Contains(err.Error(), "pg_restore") {
+		t.Fatalf("expected a pg_restore error, got %v", err)
 	}
 
-	if !strings.Contains(logs.String(), "pg_restore completed with warnings or errors: exit status 1") {
-		t.Fatalf("expected a pg_restore warning, got %q", logs.String())
+	if strings.Contains(logs.String(), "Restore completed successfully") {
+		t.Fatalf("failed restore reported success: %q", logs.String())
 	}
 	execs := dbDockerExecs(calls())
 	if last := execs[len(execs)-1]; !slices.Contains(last, "rm") {
@@ -85,9 +86,8 @@ func TestRunDBRestore_reportsFailures(t *testing.T) {
 		wantErr   string
 		wantExecs int
 	}{
-		{"copy fails", `if [ "$1" = cp ]; then exit 4; fi`, "Failed to copy file to container: exit status 4", 1},
-		// The temporary file stays in the container for inspection.
-		{"psql fails", `if [ "$1" = exec ] && [ "$6" = psql ]; then exit 3; fi`, "Failed to restore from SQL file: exit status 3", 2},
+		{"copy fails", `if [ "$1" = cp ]; then exit 4; fi`, "Failed to copy file to container: exit status 4", 2},
+		{"psql fails", `if [ "$1" = exec ] && [ "$6" = psql ]; then exit 3; fi`, "Failed to restore from SQL file: exit status 3", 3},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -101,8 +101,12 @@ func TestRunDBRestore_reportsFailures(t *testing.T) {
 			if err == nil || err.Error() != c.wantErr {
 				t.Fatalf("expected %q, got %v", c.wantErr, err)
 			}
-			if execs := dbDockerExecs(calls()); len(execs) != c.wantExecs {
+			execs := dbDockerExecs(calls())
+			if len(execs) != c.wantExecs {
 				t.Fatalf("expected %d docker calls, got:\n%s", c.wantExecs, dbFormatCalls(execs))
+			}
+			if last := execs[len(execs)-1]; !slices.Contains(last, "rm") {
+				t.Fatalf("expected temporary restore file cleanup, got %v", last)
 			}
 		})
 	}

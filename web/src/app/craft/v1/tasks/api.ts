@@ -13,7 +13,7 @@ import type {
   ScheduledTaskPatchBody,
   ScheduledRunListResponse,
   RunNowResponse,
-} from "@/app/craft/v1/tasks/interfaces";
+} from "@/app/craft/v1/tasks/types";
 import { BUILD_API_BASE } from "@/app/craft/v1/constants";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 

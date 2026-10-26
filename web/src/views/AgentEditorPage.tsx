@@ -50,7 +50,7 @@ import {
 } from "@/lib/tools/constants";
 import Text from "@/refresh-components/texts/Text";
 import { Collapsible } from "@opal/components";
-import SwitchField from "@/refresh-components/form/SwitchField";
+import { InputSwitchField } from "@opal/form";
 import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
 import { useProjectsContext } from "@/lib/projects/providers";
 import UserFilesModal from "@/sections/modals/UserFilesModal";
@@ -325,7 +325,7 @@ function OpenApiToolCard({ tool }: OpenApiToolCardProps) {
         description={tool.description}
         withLabel={toolFieldName}
       >
-        <SwitchField name={toolFieldName} />
+        <InputSwitchField name={toolFieldName} />
       </InputHorizontal>
     </Card>
   );
@@ -1460,7 +1460,7 @@ export default function AgentEditorPage({
                                     "editor.share.feature.description"
                                   )}
                                 >
-                                  <SwitchField name="is_featured" />
+                                  <InputSwitchField name="is_featured" />
                                 </InputHorizontal>
                                 {values.is_featured &&
                                   sharingStatus === "PRIVATE" && (
@@ -1547,7 +1547,7 @@ export default function AgentEditorPage({
                                 )}
                                 disabled={!isImageGenerationAvailable}
                               >
-                                <SwitchField
+                                <InputSwitchField
                                   name="image_generation"
                                   disabled={!isImageGenerationAvailable}
                                 />
@@ -1565,7 +1565,7 @@ export default function AgentEditorPage({
                                 )}
                                 disabled={!webSearchTool}
                               >
-                                <SwitchField
+                                <InputSwitchField
                                   name="web_search"
                                   disabled={!webSearchTool}
                                 />
@@ -1583,7 +1583,7 @@ export default function AgentEditorPage({
                                 )}
                                 disabled={!openURLTool}
                               >
-                                <SwitchField
+                                <InputSwitchField
                                   name="open_url"
                                   disabled={!openURLTool}
                                 />
@@ -1603,7 +1603,7 @@ export default function AgentEditorPage({
                                 )}
                                 disabled={!codeInterpreterTool}
                               >
-                                <SwitchField
+                                <InputSwitchField
                                   name="code_interpreter"
                                   disabled={!codeInterpreterTool}
                                 />
@@ -1621,7 +1621,7 @@ export default function AgentEditorPage({
                                 )}
                                 disabled={!codingAgentTool}
                               >
-                                <SwitchField
+                                <InputSwitchField
                                   name="coding_agent"
                                   disabled={!codingAgentTool}
                                 />
@@ -1744,7 +1744,7 @@ export default function AgentEditorPage({
                                   "modals.viewer.overwritePrompts.description"
                                 )}
                               >
-                                <SwitchField name="replace_base_system_prompt" />
+                                <InputSwitchField name="replace_base_system_prompt" />
                               </InputHorizontal>
                             </GeneralLayouts.Section>
                           </Card>

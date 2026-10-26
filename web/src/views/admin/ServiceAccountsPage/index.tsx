@@ -246,7 +246,7 @@ export default function ServiceAccountsPage() {
         ),
       },
     ],
-    [t] // eslint-disable-line react-hooks/exhaustive-deps
+    [t]
   );
 
   if (error) {

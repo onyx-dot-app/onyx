@@ -31,6 +31,7 @@ function githubPair(
       connector_specific_config: config,
       refresh_freq: 1800,
       prune_freq: 86400,
+      check_freq: null,
       // The API sends a naive UTC string.
       indexing_start: null,
       access_type: "public",
@@ -62,14 +63,19 @@ function githubPair(
     last_indexed: null,
     last_pruned: null,
     last_full_permission_sync: null,
+    last_time_perm_sync: null,
+    last_time_external_group_sync: null,
     overall_indexing_speed: null,
     latest_checkpoint_description: null,
     last_permission_sync_attempt_status: null,
     permission_syncing: false,
+    supports_doc_permission_sync: false,
     last_permission_sync_attempt_finished: null,
     last_permission_sync_attempt_error_message: null,
     supports_targeted_reindex: false,
     pending_backfills: [],
+    has_named_checks: false,
+    indexing_hold: null,
     ...overrides,
   };
 }
@@ -108,7 +114,7 @@ describe("buildEditProposal", () => {
     const ccPair = githubPair(config, {
       connector: {
         ...githubPair(config).connector,
-        indexing_start: new Date("2025-03-04T05:06:07Z"),
+        indexing_start: "2025-03-04T05:06:07.000Z",
       },
     });
 
@@ -121,6 +127,7 @@ describe("buildEditProposal", () => {
       name: "Docs repos",
       refresh_freq: 1800,
       prune_freq: 86400,
+      check_freq: null,
     });
   });
 
@@ -165,7 +172,7 @@ describe("buildEditProposal", () => {
 
     const proposal = proposalFor(ccPair, [], (values) => ({
       ...values,
-      repositories: "onyx,docs",
+      repositories: ["onyx", "docs"],
       name: "Renamed",
       refreshFreq: 60,
     }));

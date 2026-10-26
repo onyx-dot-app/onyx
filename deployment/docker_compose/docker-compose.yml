@@ -593,7 +593,8 @@ services:
       # A .env without MINIO_ROOT_* falls back to the S3_AWS_* pair.
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-${S3_AWS_ACCESS_KEY_ID:-minioadmin}}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}}
-    # 0 stops MinIO once it is retired, without touching the app.
+    # Unset means 1, since a .env from a release before v5.0 lacks it and its MinIO
+    # still holds files. 0 on a fresh install or once MinIO is retired.
     deploy:
       replicas: ${MINIO_REPLICAS:-1}
     volumes:
@@ -613,6 +614,9 @@ services:
     profiles: ["s3-filestore"]
     restart: unless-stopped
     init: true
+    # Shares MinIO's replica count, since it has no work once MinIO is retired or was never used.
+    deploy:
+      replicas: ${MINIO_REPLICAS:-1}
     depends_on:
       object-store:
         condition: service_healthy

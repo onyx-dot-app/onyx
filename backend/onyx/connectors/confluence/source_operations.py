@@ -382,7 +382,11 @@ class _OnyxConfluence:
 
         params = [f"limit={limit}"]
         if space_keys:
-            params.append(f"{key_param}={','.join(space_keys)}")
+            # v2 takes a comma-separated list; v1 repeats the parameter.
+            if is_v2:
+                params.append(f"{key_param}={','.join(space_keys)}")
+            else:
+                params.extend(f"{key_param}={key}" for key in space_keys)
         if start is not None and not is_v2:
             params.append(f"start={start}")
 
@@ -1590,8 +1594,10 @@ class ConfluenceSourceOperations(SourceOperations):
                 f"probe_site variant {variant.value!r} does not match "
                 f"scoped_token={scoped}."
             )
+        # A new client: the probe swaps the client's connection settings, and
+        # other threads may be calling the cached one.
         with self._client_build_lock():
-            client = self._cached_client or self._build_client(fast=False)
+            client = self._build_client(fast=False)
             client._probe_connection(**_PROBE_KWARGS)
             client._initialize_connection(**_FINAL_KWARGS)
             self._cached_client = client
@@ -2169,6 +2175,29 @@ def read_dc_jsonrpc_space_subjects(
         groups=groups,
         has_anonymous_entry=has_anonymous_entry,
         raw_permissions=categories,
+    )
+
+
+def has_anonymous_space_read(anonymous_permissions: list[dict[str, Any]]) -> bool:
+    """Whether the anonymous role has 'read' on the space.
+
+    The DC 9.1+ anonymous-permissions endpoint returns either a flat list of
+    {operation: {operationKey, targetType}} entries or a nested
+    {operations: [...]} envelope, depending on patch version. Accept both.
+    """
+    candidates: list[dict[str, Any]] = []
+    for entry in anonymous_permissions:
+        if not isinstance(entry, dict):
+            continue
+        if isinstance(operations := entry.get("operations"), list):
+            candidates.extend(op for op in operations if isinstance(op, dict))
+        if isinstance(operation := entry.get("operation"), dict):
+            candidates.append(operation)
+
+    return any(
+        op.get("operationKey") == SPACE_PERMISSION_OPERATION_READ
+        and op.get("targetType") == SPACE_PERMISSION_TARGET_TYPE_SPACE
+        for op in candidates
     )
 
 

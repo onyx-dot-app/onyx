@@ -95,7 +95,11 @@ def build_gateway_model_catalog(
         (provider, model)
         for provider in ordered_gateway_providers(providers)
         for model in sorted(
-            (model for model in provider.model_configurations if model.is_visible),
+            (
+                model
+                for model in provider.model_configurations
+                if model.is_visible and model.supports_chat
+            ),
             key=lambda model: model.name,
         )
     ]

@@ -75,7 +75,8 @@ export interface UserContextType {
   updateUserThemePreference: (
     themePreference: ThemePreference
   ) => Promise<void>;
-  updateUserLanguage: (language: Locale) => Promise<void>;
+  // null clears the preference so the user follows the workspace default.
+  updateUserLanguage: (language: Locale | null) => Promise<void>;
   updateUserChatBackground: (chatBackground: string | null) => Promise<void>;
   updateUserDefaultModel: (defaultModel: string | null) => Promise<void>;
   updateUserDefaultAppMode: (mode: "CHAT" | "SEARCH") => Promise<void>;
@@ -232,20 +233,30 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     setTheme,
   ]);
 
-  // The backend owns the NEXT_LOCALE cookie (set on PATCH /user/language,
-  // reconciled on GET /me). This effect only closes the SSR gap: when the
-  // rendered locale lags the signed-in user's stored preference — e.g. right
-  // after login on a fresh browser, where the page was rendered before /me's
-  // Set-Cookie arrived — one refresh re-renders with the reconciled cookie.
+  // The backend owns NEXT_LOCALE (set on PATCH /user/language, reconciled on
+  // GET /me). This effect is the one place the UI catches up: whenever
+  // <html lang> lags the effective language, re-fetch /me so the cookie and
+  // the cached user are current, then re-render the server layout.
   const router = useRouter();
 
+  // A user without a stored language follows the workspace default, which is
+  // unknown until settings load.
+  const workspaceLanguage: Locale | undefined = updatedSettingsData.isLoading
+    ? undefined
+    : updatedSettingsData.default_language;
+  const effectiveLanguage: Locale | undefined =
+    upToDateUser?.preferences?.language ?? workspaceLanguage;
+
   useEffect(() => {
-    const language = upToDateUser?.preferences?.language;
-    if (!isSupportedLocale(language)) return;
-    if (document.documentElement.lang !== language) {
-      router.refresh();
-    }
-  }, [upToDateUser?.id, upToDateUser?.preferences?.language, router]);
+    if (!isSupportedLocale(effectiveLanguage)) return;
+    if (document.documentElement.lang === effectiveLanguage) return;
+    mutateUser()
+      .then(() => router.refresh())
+      .catch((error: unknown) => {
+        // The next successful /me resolves the drift.
+        console.error("Error reconciling the UI language:", error);
+      });
+  }, [upToDateUser?.id, effectiveLanguage, router, mutateUser]);
 
   const updateUserTemperatureOverrideEnabled = async (enabled: boolean) => {
     try {
@@ -555,21 +566,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const updateUserLanguage = async (language: Locale) => {
+  const updateUserLanguage = async (language: Locale | null) => {
     try {
-      setUpToDateUser((prevUser) => {
-        if (prevUser) {
-          return {
-            ...prevUser,
-            preferences: {
-              ...prevUser.preferences,
-              language,
-            },
-          };
-        }
-        return prevUser;
-      });
-
       const response = await fetch(`/api/user/language`, {
         method: "PATCH",
         headers: {
@@ -582,9 +580,20 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         throw new Error("Failed to update language preference");
       }
 
-      // The response's Set-Cookie carries the new locale; re-render the
-      // server layout with it.
-      router.refresh();
+      // Applied after the PATCH so the reconcile effect never sees a value the
+      // server does not hold yet. The effect then re-renders the layout.
+      setUpToDateUser((prevUser) => {
+        if (prevUser) {
+          return {
+            ...prevUser,
+            preferences: {
+              ...prevUser.preferences,
+              language,
+            },
+          };
+        }
+        return prevUser;
+      });
     } catch (error) {
       // Restore server truth on any failure path (bad status or network
       // error); the stored preference is unchanged server-side.

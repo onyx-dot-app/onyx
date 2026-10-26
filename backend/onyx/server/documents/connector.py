@@ -6,7 +6,7 @@ import os
 import zipfile
 from datetime import datetime
 from io import BytesIO
-from typing import IO, Any, cast
+from typing import IO, Annotated, Any, cast
 
 from fastapi import (
     APIRouter,
@@ -59,7 +59,10 @@ from onyx.connectors.factory import (
     validate_connector_config,
     validate_connector_credential_bindings,
 )
-from onyx.connectors.google_utils.google_auth import get_google_oauth_creds
+from onyx.connectors.google_utils.google_auth import (
+    GoogleUnreachableError,
+    get_google_oauth_creds,
+)
 from onyx.connectors.google_utils.google_kv import (
     build_service_account_creds,
     get_auth_url,
@@ -152,6 +155,9 @@ from onyx.file_store.file_store import (
 )
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
+from onyx.server.documents.capability_check_runs import (
+    start_capability_checks_for_new_credential,
+)
 from onyx.server.documents.cc_pair import authorize_pairing
 from onyx.server.documents.credential import (
     assert_credential_sharing_allowed,
@@ -300,10 +306,14 @@ def check_drive_tokens(
     if DB_CREDENTIALS_DICT_TOKEN_KEY not in credential_json:
         return AuthStatus(authenticated=False)
     token_json_str = str(credential_json[DB_CREDENTIALS_DICT_TOKEN_KEY])
-    google_drive_creds = get_google_oauth_creds(
-        token_json_str=token_json_str,
-        source=DocumentSource.GOOGLE_DRIVE,
-    )
+    try:
+        google_drive_creds = get_google_oauth_creds(
+            token_json_str=token_json_str,
+            source=DocumentSource.GOOGLE_DRIVE,
+        )
+    except GoogleUnreachableError as e:
+        # No answer from Google says nothing about the token.
+        raise OnyxError(OnyxErrorCode.BAD_GATEWAY, str(e)) from e
     if google_drive_creds is None:
         return AuthStatus(authenticated=False)
     return AuthStatus(authenticated=True)
@@ -424,8 +434,8 @@ def upload_files(
 
                 # Validate the zip by opening it (catches corrupt/non-zip files)
                 with zipfile.ZipFile(file.file, "r") as zf:
+                    assert_zip_within_limits(zf, max_total_bytes=MAX_UNZIPPED_BYTES)
                     if unzip:
-                        assert_zip_within_limits(zf, max_total_bytes=MAX_UNZIPPED_BYTES)
                         unzipped_bytes: int
                         zip_metadata_file_id, unzipped_bytes = (
                             save_zip_metadata_to_file_store(
@@ -508,6 +518,11 @@ def upload_files(
     )
 
 
+# A page of the file list. The ceiling bounds the record lookup and the
+# legacy size backfill that resolving a page costs.
+_FILES_MAX_PAGE_SIZE = 200
+
+
 def _normalize_file_names_for_backwards_compatibility(
     file_locations: list[str], file_names: list[str]
 ) -> list[str]:
@@ -563,12 +578,19 @@ def upload_files_api(
 @router.get("/admin/connector/{connector_id}/files", tags=PUBLIC_API_TAGS)
 def list_connector_files(
     connector_id: int,
+    page_num: Annotated[int, Query(ge=0)] = 0,
+    page_size: Annotated[int | None, Query(ge=1, le=_FILES_MAX_PAGE_SIZE)] = None,
     user: User = Depends(
         require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
     ),
     db_session: Session = Depends(get_session),
 ) -> ConnectorFilesResponse:
-    """List all files in a file connector."""
+    """One page of a file connector's files, in config order.
+
+    ``total_items`` always counts every file. Without ``page_size`` the
+    response holds all of them, which is what callers of the unpaginated
+    endpoint still expect; a zip of thousands of files needs a page size.
+    """
     connector = fetch_connector_by_id(connector_id, db_session)
     if connector is None:
         raise HTTPException(status_code=404, detail="Connector not found")
@@ -587,13 +609,24 @@ def list_connector_files(
         access_level=CCPairAccessLevel.OPERATE,
     )
 
-    file_locations = connector.connector_specific_config.get("file_locations", [])
+    all_file_locations = connector.connector_specific_config.get("file_locations", [])
     file_names = connector.connector_specific_config.get("file_names", [])
 
     # Normalize file_names for backwards compatibility with legacy data
     file_names = _normalize_file_names_for_backwards_compatibility(
-        file_locations, file_names
+        all_file_locations, file_names
     )
+
+    # Only the page is resolved below, so the record query and the size
+    # backfill stay bounded however many files the connector holds.
+    total_items = len(all_file_locations)
+    if page_size is None:
+        page_start, page_end = 0, total_items
+    else:
+        page_start = page_num * page_size
+        page_end = page_start + page_size
+    file_locations = all_file_locations[page_start:page_end]
+    file_names = file_names[page_start:page_end]
 
     # Single batched query — per-file record + object-store size lookups made
     # this endpoint O(N) round-trips and unusably slow for large connectors.
@@ -678,7 +711,7 @@ def list_connector_files(
             )
         )
 
-    return ConnectorFilesResponse(files=files)
+    return ConnectorFilesResponse(files=files, total_items=total_items)
 
 
 @router.post("/admin/connector/{connector_id}/files/update", tags=PUBLIC_API_TAGS)
@@ -847,6 +880,7 @@ def update_connector_files(
         connector_specific_config=updated_config,
         refresh_freq=connector.refresh_freq,
         prune_freq=connector.prune_freq,
+        check_freq=connector.check_freq,
         indexing_start=connector.indexing_start,
     )
 
@@ -1875,6 +1909,10 @@ def create_connector_with_credential(
         )
         raise
 
+    if promoted_draft_id is not None:
+        # Draft runs write no reports, so the new account gets its own run.
+        start_capability_checks_for_new_credential(db_session, credential)
+
     maybe_mark_tenant_active(tenant_id, caller="cc_pair_lifecycle")
     client_app.send_task(
         OnyxCeleryTask.CHECK_FOR_INDEXING,
@@ -1997,6 +2035,7 @@ def update_connector_from_model(
         connector_specific_config=updated_connector.connector_specific_config,
         refresh_freq=updated_connector.refresh_freq,
         prune_freq=updated_connector.prune_freq,
+        check_freq=updated_connector.check_freq,
         credential_ids=[
             association.credential.id for association in updated_connector.credentials
         ],
@@ -2272,6 +2311,7 @@ def get_connector_by_id(
         connector_specific_config=connector.connector_specific_config,
         refresh_freq=connector.refresh_freq,
         prune_freq=connector.prune_freq,
+        check_freq=connector.check_freq,
         credential_ids=[
             association.credential.id for association in connector.credentials
         ],

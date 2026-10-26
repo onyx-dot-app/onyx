@@ -86,6 +86,22 @@ export function isOwnSetupMethod(
   );
 }
 
+/**
+ * `spec` as the add-connector page shows it for these connector form values:
+ * the first form variant they match replaces its fields.
+ */
+export function specForConnectorValues(
+  spec: CredentialSpec,
+  values: Readonly<Record<string, unknown>>
+): CredentialSpec {
+  const variant = spec.formVariants?.find((candidate) =>
+    Object.entries(candidate.when).every(
+      ([key, value]) => values[key] === value
+    )
+  );
+  return variant ? { ...spec, fields: variant.fields } : spec;
+}
+
 /** The value a form starts a field at. */
 export function initialFieldValue(
   field: CredentialSpecField
@@ -323,7 +339,10 @@ function getStoredAuthMethod(
 ): string | undefined {
   // Google stores "uploaded" for an uploaded OAuth app as well as for a
   // service account, so its keys say which tab the account belongs to.
-  if (sourceType === ValidSources.GoogleDrive) {
+  if (
+    sourceType === ValidSources.GoogleDrive ||
+    sourceType === ValidSources.Gmail
+  ) {
     const kind = googleCredentialKind({ credential_json: credentialJson });
     if (kind === "service_account") return "uploaded";
     if (kind === "oauth") return "oauth";
@@ -488,19 +507,6 @@ export function getCredentialCreationMethods(
     methods.push(CredentialCreationMethod.Manual);
   }
   return methods;
-}
-
-export function getCredentialCreationActionLabel(
-  method: CredentialCreationMethod,
-  sourceDisplayName: string,
-  explicitMethod: boolean
-): string {
-  if (!explicitMethod) {
-    return "Create New";
-  }
-  return method === CredentialCreationMethod.OAuth
-    ? `Connect with ${sourceDisplayName}`
-    : "Enter credentials manually";
 }
 
 export function shouldRedirectToOAuth(details: OAuthDetails): boolean {

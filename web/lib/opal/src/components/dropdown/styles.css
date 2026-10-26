@@ -24,13 +24,14 @@
 
 /* The card: the bordered box with the search field and the rows. */
 .opal-dropdown-card {
-  @apply relative overflow-hidden border bg-background-neutral-00 rounded-12 shadow-box-01;
+  @apply relative flex flex-col overflow-hidden border bg-background-neutral-00 rounded-12 shadow-box-01;
+  max-height: var(--opal-dropdown-available-height);
 }
 
 /* The search field pinned above the rows: a borderless input on its own
    row, with a 4px inset on every side. */
 .opal-dropdown-search {
-  @apply p-1;
+  @apply shrink-0 p-1;
 }
 
 /* The inner padding sits inside the ShadowDiv, so its scroll gradients span
@@ -146,6 +147,10 @@
    the fold, so a closed group collapses to its title with no stray gap. */
 .opal-dropdown-group {
   @apply flex flex-col;
+}
+/* A titled group's divider gets 4px more room above it than a plain one. */
+.opal-dropdown-titled {
+  @apply pt-1;
 }
 .opal-dropdown-group-rows {
   @apply flex flex-col gap-1 pt-1;

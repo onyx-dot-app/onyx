@@ -27,14 +27,13 @@ def explicit_tool_calling_supported(model_provider: str, model_name: str) -> boo
     return bool(model_obj.get("supports_function_calling"))
 
 
-def compute_tool_tokens(tool: Tool, token_counter: Callable[[str], int]) -> int:
-    return compute_tool_definition_tokens([tool.tool_definition()], token_counter)
-
-
 def compute_all_tool_tokens(
     tools: list[Tool], token_counter: Callable[[str], int]
 ) -> int:
-    return sum(compute_tool_tokens(tool, token_counter) for tool in tools)
+    return sum(
+        compute_tool_definition_tokens([tool.tool_definition()], token_counter)
+        for tool in tools
+    )
 
 
 def compute_tool_definition_tokens(

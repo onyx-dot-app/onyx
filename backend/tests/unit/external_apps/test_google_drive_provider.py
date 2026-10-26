@@ -4,7 +4,7 @@ calls. Reads are auto-approved (ALWAYS); mutations default to ASK."""
 
 from __future__ import annotations
 
-from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.enums import ActionPolicy, ExternalAppType
 from onyx.external_apps.providers.actions import RestRoute, path_matches
 from onyx.external_apps.providers.base import OnyxManagedExtApp
 from onyx.external_apps.providers.google_drive import (
@@ -59,10 +59,10 @@ def test_reads_always_writes_ask() -> None:
     for endpoint in _provider().spec.endpoint_catalog:
         methods = {r.method for r in endpoint.matches if isinstance(r, RestRoute)}
         if endpoint.id in _READ_ACTIONS:
-            assert endpoint.default_policy == EndpointPolicy.ALWAYS
+            assert endpoint.default_policy == ActionPolicy.ALWAYS
             assert methods == {"GET"}
         else:
-            assert endpoint.default_policy == EndpointPolicy.ASK
+            assert endpoint.default_policy == ActionPolicy.ASK
             assert "GET" not in methods
 
 

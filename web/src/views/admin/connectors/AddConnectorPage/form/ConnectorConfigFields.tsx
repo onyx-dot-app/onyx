@@ -18,6 +18,30 @@ export interface ConnectorConfigFieldsProps {
   reportScope: StoredReportScope | null;
 }
 
+/**
+ * The config fields the form shows for these values. Advanced fields are all
+ * optional, so they sit in the same flat list instead of behind a toggle; a
+ * field's own visibleCondition still applies.
+ */
+export function visibleConnectorFields(
+  config: ConnectionConfiguration,
+  values: Record<string, unknown>,
+  currentCredential: CredentialValues | null
+): ConnectorField[] {
+  const showAdvanced: boolean =
+    !config.advancedValuesVisibleCondition ||
+    config.advancedValuesVisibleCondition(values, currentCredential);
+  return [
+    ...config.values,
+    ...(showAdvanced ? config.advanced_values : []),
+  ].filter(
+    (field) =>
+      !field.hidden &&
+      (!field.visibleCondition ||
+        field.visibleCondition(values, currentCredential))
+  );
+}
+
 export default function ConnectorConfigFields({
   config,
   values,
@@ -44,19 +68,10 @@ export default function ConnectorConfigFields({
     }
   }, [initialConnectorName, setFieldValue, values]);
 
-  // Advanced fields are all optional, so they sit in the same flat list
-  // instead of behind a toggle. A field's own visibleCondition still applies.
-  const showAdvanced: boolean =
-    !config.advancedValuesVisibleCondition ||
-    config.advancedValuesVisibleCondition(values, currentCredential);
-  const visibleFields: ConnectorField[] = [
-    ...config.values,
-    ...(showAdvanced ? config.advanced_values : []),
-  ].filter(
-    (field) =>
-      !field.hidden &&
-      (!field.visibleCondition ||
-        field.visibleCondition(values, currentCredential))
+  const visibleFields: ConnectorField[] = visibleConnectorFields(
+    config,
+    values,
+    currentCredential
   );
 
   return (

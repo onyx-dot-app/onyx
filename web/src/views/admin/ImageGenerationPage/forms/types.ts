@@ -1,6 +1,5 @@
 import { FormikProps } from "formik";
 import { ImageProvider } from "@/views/admin/ImageGenerationPage/constants";
-import { LLMProviderView } from "@/lib/languageModels/types";
 import {
   ImageGenerationConfigView,
   ImageGenerationCredentials,
@@ -12,13 +11,11 @@ import { APIFormFieldState } from "@/refresh-components/form/types";
 export interface ImageGenFormBaseProps {
   modal: ModalCreationInterface;
   imageProvider: ImageProvider;
-  existingProviders: LLMProviderView[];
   existingConfig?: ImageGenerationConfigView;
   onSuccess: () => void;
 }
 
 // Base type for form values - allows any object structure
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type FormValues = Record<string, any>;
 
 // Props for the generic wrapper component
@@ -50,7 +47,6 @@ export interface ImageGenFormChildProps<T extends FormValues> {
   disabled: boolean;
   isEditMode: boolean;
   isLoadingCredentials: boolean;
-  apiKeyOptions: { value: string; title: string }[];
   resetApiState: () => void;
   imageProvider: ImageProvider;
 }
@@ -61,10 +57,6 @@ export interface ImageGenSubmitPayload {
   imageProviderId: string;
   isDefault?: boolean;
 
-  // Clone mode - reuse credentials from existing LLM provider
-  sourceLlmProviderId?: number;
-
-  // New credentials mode
   provider?: string;
   apiKey?: string;
   apiBase?: string;

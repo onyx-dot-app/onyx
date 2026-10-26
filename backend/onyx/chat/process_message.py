@@ -109,13 +109,18 @@ from onyx.hooks.points.query_processing import (
     QueryProcessingResponse,
 )
 from onyx.llm.exceptions import litellm_exception_to_safe_error
-from onyx.llm.factory import get_llm_for_persona, get_llm_token_counter
+from onyx.llm.factory import (
+    get_llm_for_persona,
+    get_llm_token_counter,
+    get_search_selection_llm,
+)
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.models import LLMErrorInfo, ReasoningEffort
 from onyx.llm.override_models import LLMOverride
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.prompts.prompt_utils import substitute_user_placeholders
+from onyx.server.features.tool.tool_visibility import is_tool_available_for_persona
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.server.query_and_chat.models import (
     AUTO_PLACE_AFTER_LATEST_MESSAGE,
@@ -909,7 +914,11 @@ def build_chat_turn(
     # construct_tools skips disabled tools, and a forced id it did not build fails
     # the whole message. Callers name the forced tool from the persona's attached
     # tools, which stay attached when an admin disables one.
-    if forced_tool_id in {tool.id for tool in all_tools if not tool.enabled}:
+    if forced_tool_id in {
+        tool.id
+        for tool in all_tools
+        if not is_tool_available_for_persona(tool, persona.id)
+    }:
         forced_tool_id = None
 
     # TODO(nmgarza5): Once summarization is done, we don't need to load all files from the beginning.
@@ -1086,6 +1095,7 @@ def build_chat_turn(
         slack_context=slack_context,
         custom_tool_additional_headers=custom_tool_additional_headers,
         mcp_headers=mcp_headers,
+        litellm_additional_headers=litellm_additional_headers,
     )
 
 
@@ -1323,6 +1333,14 @@ def _run_models(
                 emitter=model_emitter,
                 user=user,
                 llm=model_llm,
+                selection_llm_factory=partial(
+                    get_search_selection_llm,
+                    fallback=model_llm,
+                    additional_headers=setup.litellm_additional_headers,
+                    policy_fn=partial(
+                        incognito_llm_request_policy, setup.incognito_record_mode
+                    ),
+                ),
                 search_tool_config=SearchToolConfig(
                     user_selected_filters=setup.new_msg_req.internal_search_filters,
                     project_id_filter=setup.search_params.project_id_filter,

@@ -232,7 +232,7 @@ async def test_model_rejection_is_raised_once_with_the_gateway_reason() -> None:
                 "is_bifrost_error": False,
                 "status_code": 404,
                 "error": {
-                    "message": "The model `gpt-5-mini` does not support embeddings."
+                    "message": "The model `gpt-6-luna` does not support embeddings."
                 },
             },
         )
@@ -245,7 +245,7 @@ async def test_model_rejection_is_raised_once_with_the_gateway_reason() -> None:
             await embedding.embed(
                 texts=["a"],
                 text_type=EmbedTextType.QUERY,
-                model_name="openai/gpt-5-mini",
+                model_name="openai/gpt-6-luna",
             )
 
     assert len(gateway.requests) == 1

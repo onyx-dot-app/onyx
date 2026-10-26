@@ -354,7 +354,7 @@ module "eks_blueprints_addons" {
 resource "kubernetes_cluster_role" "cluster_autoscaler_volumeattachments" {
   metadata {
     name   = "onyx-cluster-autoscaler-volumeattachments"
-    labels = { "app.kubernetes.io/managed-by" = "onyx-infra" }
+    labels = { "app.kubernetes.io/managed-by" = "terraform" }
   }
 
   rule {
@@ -369,7 +369,7 @@ resource "kubernetes_cluster_role" "cluster_autoscaler_volumeattachments" {
 resource "kubernetes_cluster_role_binding" "cluster_autoscaler_volumeattachments" {
   metadata {
     name   = "onyx-cluster-autoscaler-volumeattachments"
-    labels = { "app.kubernetes.io/managed-by" = "onyx-infra" }
+    labels = { "app.kubernetes.io/managed-by" = "terraform" }
   }
 
   role_ref {

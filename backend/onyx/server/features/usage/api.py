@@ -13,10 +13,10 @@ from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_user, scope_exempt
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import Permission, SystemUsageAttribution
+from onyx.db.enums import LLMModelFlowType, Permission, SystemUsageAttribution
 from onyx.db.llm import (
     fetch_all_llm_providers_accessible_in_any_context,
-    fetch_default_llm_model,
+    fetch_default_model,
 )
 from onyx.db.models import TokenRateLimit, User
 from onyx.db.system_usage import (
@@ -280,7 +280,7 @@ def get_my_usage(
                 available_model_prices.append(price)
     available_model_prices.sort(key=lambda p: (p.input_per_mtok or 0.0, p.model))
 
-    default_model = fetch_default_llm_model(db_session)
+    default_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
     selected_model_price: ModelPrice | None = None
     if (
         default_model is not None

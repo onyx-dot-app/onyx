@@ -223,6 +223,10 @@ def job_data(row: dict[str, Any]) -> dict[str, Any]:
         data["cc_pair_id"] = row["cc_pair_id"]
     data["started_at"] = _iso(row["started_at"])
     data["ended_at"] = _iso(row["ended_at"])
+    # Only permission and group sync attempts track these.
+    for key in ("last_progress_at", "last_heartbeat_at"):
+        if row[key] is not None:
+            data[key] = _iso(row[key])
     data["error_count"] = max(row["error_count"], int(row["state"] == "failed"))
     if row["started_at"] and row["ended_at"]:
         data["duration_ms"] = max(

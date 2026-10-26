@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from onyx.configs.app_configs import (
     DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS,
     DEFAULT_PRUNING_FREQ,
+    DEFAULT_REFRESH_FREQ,
     DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB,
     DISABLE_VECTOR_DB,
     MAX_ALLOWED_UPLOAD_SIZE_MB,
@@ -12,6 +13,7 @@ from onyx.configs.app_configs import (
     MAX_EMBEDDING_RATE_LIMIT_REQUESTS,
 )
 from onyx.configs.constants import QueryHistoryType
+from onyx.db.enums import SupportedLanguage
 from onyx.server.features.notifications.models import NotificationResponse
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
@@ -115,6 +117,9 @@ class Settings(BaseModel):
     # overrides win. The deployment-level Craft gate still applies on top.
     craft_default_enabled: bool = True
 
+    # Workspace UI language for users without a stored User.language.
+    default_language: SupportedLanguage = SupportedLanguage.EN
+
     # Workspace-wide switch for the LLM gateway (/api/gateway — direct model
     # API access for external tools like Claude Code or Cursor). When False,
     # every gateway route rejects requests. Default on.
@@ -165,6 +170,8 @@ class UserSettings(Settings):
     max_allowed_upload_size_mb: int = MAX_ALLOWED_UPLOAD_SIZE_MB
     # Factory defaults so the frontend can show a "restore default" button.
     default_pruning_freq: int = DEFAULT_PRUNING_FREQ
+    # A new connector's schedule as the create form fills it in, in seconds.
+    default_refresh_freq: int = DEFAULT_REFRESH_FREQ
     default_user_file_max_upload_size_mb: int = DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB
     default_file_token_count_threshold_k: int = Field(
         default_factory=lambda: (

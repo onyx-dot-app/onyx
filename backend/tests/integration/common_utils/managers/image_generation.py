@@ -28,7 +28,7 @@ class ImageGenerationConfigManager:
     def create(
         user_performing_action: DATestUser,
         image_provider_id: str | None = None,
-        model_name: str = "gpt-image-1",
+        model_name: str = "gpt-image-2.5-flare",
         provider: str = "openai",
         api_key: str | None = None,
         api_base: str | None = None,
@@ -51,45 +51,6 @@ class ImageGenerationConfigManager:
                 "api_version": api_version,
                 "deployment_name": deployment_name,
                 "custom_config": _serialize_custom_config(custom_config),
-                "is_default": is_default,
-            },
-            headers=user_performing_action.headers,
-        )
-        response.raise_for_status()
-        data = response.json()
-
-        return DATestImageGenerationConfig(
-            image_provider_id=data["image_provider_id"],
-            model_configuration_id=data["model_configuration_id"],
-            model_name=data["model_name"],
-            llm_provider_id=data["llm_provider_id"],
-            llm_provider_name=data["llm_provider_name"],
-            is_default=data["is_default"],
-        )
-
-    @staticmethod
-    def create_from_provider(
-        source_llm_provider_id: int,
-        user_performing_action: DATestUser,
-        image_provider_id: str | None = None,
-        model_name: str = "gpt-image-1",
-        api_base: str | None = None,
-        api_version: str | None = None,
-        deployment_name: str | None = None,
-        is_default: bool = False,
-    ) -> DATestImageGenerationConfig:
-        """Create a new image generation config by cloning from an existing LLM provider."""
-        image_provider_id = image_provider_id or f"test-provider-{uuid4()}"
-
-        response = client.post(
-            f"{API_SERVER_URL}/admin/image-generation/config",
-            json={
-                "image_provider_id": image_provider_id,
-                "model_name": model_name,
-                "source_llm_provider_id": source_llm_provider_id,
-                "api_base": api_base,
-                "api_version": api_version,
-                "deployment_name": deployment_name,
                 "is_default": is_default,
             },
             headers=user_performing_action.headers,
@@ -138,7 +99,6 @@ class ImageGenerationConfigManager:
         user_performing_action: DATestUser,
         provider: str | None = None,
         api_key: str | None = None,
-        source_llm_provider_id: int | None = None,
         api_base: str | None = None,
         api_version: str | None = None,
         deployment_name: str | None = None,
@@ -151,16 +111,10 @@ class ImageGenerationConfigManager:
             "deployment_name": deployment_name,
         }
 
-        if source_llm_provider_id is not None:
-            payload["source_llm_provider_id"] = source_llm_provider_id
-        elif api_key is not None and provider is not None:
-            payload["provider"] = provider
-            payload["api_key"] = api_key
-        else:
-            raise ValueError(
-                f"Either source_llm_provider_id or (api_key + provider) must be provided. "
-                f"Got: source_llm_provider_id={source_llm_provider_id}, provider={provider}, api_key={'***' if api_key else None}"
-            )
+        if api_key is None or provider is None:
+            raise ValueError("Both api_key and provider must be provided.")
+        payload["provider"] = provider
+        payload["api_key"] = api_key
 
         response = client.put(
             f"{API_SERVER_URL}/admin/image-generation/config/{image_provider_id}",

@@ -53,7 +53,6 @@ export function useInitialValues(
   const testModelName =
     modelConfigurations.find((m) => m.is_visible)?.name ??
     wellKnownLLMProvider?.recommended_default_model?.name;
-
   return {
     id: existingLlmProvider?.id,
     provider: existingLlmProvider?.provider ?? providerName,

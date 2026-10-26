@@ -231,7 +231,13 @@ export async function submitProvider<T extends BaseLLMFormValues>({
   if (shouldMarkAsDefault && testModelName) {
     try {
       const newLlmProvider: LLMProviderView = await response.json();
-      if (newLlmProvider?.id != null) {
+      if (
+        newLlmProvider?.id != null &&
+        !newLlmProvider.model_configurations.some(
+          (model) =>
+            model.name === testModelName && model.supports_chat === false
+        )
+      ) {
         const setDefaultResponse = await fetch("/api/admin/llm/default", {
           method: "POST",
           headers: { "Content-Type": "application/json" },

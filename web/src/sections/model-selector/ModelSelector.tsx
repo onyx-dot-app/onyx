@@ -195,7 +195,7 @@ export default function ModelSelector({
         </Popover.Trigger>
       </div>
 
-      <Popover.Content side={side} align="end" width="xl" sticky="partial">
+      <Popover.Content side={side} align="end" width={70} sticky="partial">
         <ModelSelectorContent
           currentModelName={currentOption?.modelName}
           providerOptions={llmProviders}

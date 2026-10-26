@@ -266,8 +266,9 @@ def test_chat_file_check_follows_cc_pair_rule(
         with patch("onyx.access.access.get_cc_pair_access_mode", return_value=mode):
             return user_can_access_chat_file(file_id, user, db_session)
 
-    # Public in the source, but the private pair limits it to its groups.
-    assert can_access(world.outsider, None)
+    # Public in the source, but no perm-synced pair, so the private pair's
+    # groups limit it in every mode.
+    assert not can_access(world.outsider, None)
     assert not can_access(world.outsider, CCPairAccessMode.ENFORCE)
     assert can_access(world.member, CCPairAccessMode.ENFORCE)
     assert can_access(world.owner, CCPairAccessMode.ENFORCE)
@@ -297,6 +298,31 @@ def _write_chunk(
     index.index(
         chunks=[chunk], indexing_metadata=make_indexing_metadata([doc_id], [0], [1])
     )
+
+
+def _write_stale_public_chunk(
+    db_session: Session,
+    index: OpenSearchDocumentIndex,
+    test_index_name: str,
+    doc_id: str,
+) -> None:
+    """Writes a public chunk, as indexing did before source ACLs needed a
+    perm-synced pair."""
+    cc_pair_ids = get_cc_pair_ids_for_documents(db_session, [doc_id]).get(doc_id)
+    access = DocumentAccess.build(
+        user_emails=[],
+        user_groups=[],
+        external_user_emails=[],
+        external_user_group_ids=[],
+        is_public=True,
+    )
+    chunk = make_chunk(doc_id).model_copy(
+        update={"access": access, "cc_pair_ids": cc_pair_ids}
+    )
+    index.index(
+        chunks=[chunk], indexing_metadata=make_indexing_metadata([doc_id], [0], [1])
+    )
+    OpenSearchIndexClient(index_name=test_index_name).refresh_index()
 
 
 def _add_document(
@@ -442,10 +468,9 @@ def test_cc_pair_filter_visibility(
             )
             == expected
         ), user.email
-        # The old filter also shows a public-in-source doc of a private pair
-        # to everyone. That is the one intended difference.
-        assert _visible_docs(db_session, opensearch_index, user, None, docs) == (
-            expected | {docs.private_public_in_source}
+        # Source ACLs count only on perm-synced pairs, so the old filter agrees.
+        assert (
+            _visible_docs(db_session, opensearch_index, user, None, docs) == expected
         ), user.email
 
 
@@ -455,6 +480,7 @@ def test_shadow_mode_keeps_old_results_and_logs_disagreement(
     world: _World,
     docs: _Docs,
     opensearch_index: OpenSearchDocumentIndex,
+    test_index_name: str,
 ) -> None:
     expected_chunk_id = get_opensearch_doc_chunk_id(
         tenant_state=TenantState(
@@ -462,6 +488,9 @@ def test_shadow_mode_keeps_old_results_and_logs_disagreement(
         ),
         document_id=docs.private_public_in_source,
         chunk_index=0,
+    )
+    _write_stale_public_chunk(
+        db_session, opensearch_index, test_index_name, docs.private_public_in_source
     )
     # Run the background comparison inline so the test can read its log.
     with (

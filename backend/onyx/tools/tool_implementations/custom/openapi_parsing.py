@@ -174,6 +174,8 @@ def openapi_to_url(openapi_schema: dict[str, dict | str]) -> str:
     servers = cast(list[dict[str, Any]], openapi_schema.get("servers", []))
     for server in servers:
         url = server.get("url")
+        if url is not None and not isinstance(url, str):
+            raise ValueError("`servers[].url` must be a string")
         if url:
             urls.append(url)
 

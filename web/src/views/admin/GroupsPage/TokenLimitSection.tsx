@@ -187,7 +187,7 @@ function TokenLimitSection({
                       value={limit.periodDays}
                       onChange={(v) => updateLimit(i, "periodDays", v)}
                       min={1}
-                      placeholder="1"
+                      placeholder={t("placeholders.tokenBudget")}
                     />
                   </div>
                   <Button

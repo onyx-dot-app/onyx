@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import LLMModelFlowType
 from onyx.db.models import BuildSession, Sandbox, User
 from onyx.llm.well_known_providers.auto_update_models import (
     LLMProviderRecommendation,
@@ -78,7 +79,7 @@ _TEST_RECOMMENDATIONS = LLMRecommendations(
             default_model=SimpleKnownModel(name="bedrock-pro")
         ),
         "openai": LLMProviderRecommendation(
-            default_model=SimpleKnownModel(name="gpt-5.6-sol")
+            default_model=SimpleKnownModel(name="gpt-6.1-sol")
         ),
     },
 )
@@ -92,6 +93,36 @@ def _mock_recommendations() -> Iterator[None]:
         llm_config, "get_recommendations", return_value=_TEST_RECOMMENDATIONS
     ):
         yield
+
+
+@pytest.mark.parametrize("supports_chat", [False, True])
+def test_decision_models_require_chat_capability_for_craft(supports_chat: bool) -> None:
+    provider = _provider(
+        3,
+        "openai",
+        [
+            ModelConfigurationView(
+                name="gpt-6-luna",
+                is_visible=True,
+                supports_image_input=False,
+                supports_chat=supports_chat,
+                supports_decisions=True,
+            )
+        ],
+    )
+    selection = llm_config.GatewaySelection(3, "gpt-6-luna")
+    expected = (3, "gpt-6-luna") if supports_chat else None
+
+    assert llm_config._select_gateway_default([provider], selection) == expected
+    assert llm_config._select_gateway_default([provider], None, [selection]) == expected
+    assert llm_config._select_gateway_default([provider], None) == expected
+    with patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test/api"):
+        config = llm_config.build_onyx_gateway_config([provider], selection)
+    if supports_chat:
+        assert config is not None
+        assert config.model_name == "3/gpt-6-luna"
+    else:
+        assert config is None
 
 
 def test_gateway_config_qualifies_collisions_and_selects_exact_default() -> None:
@@ -207,16 +238,16 @@ def test_custom_azure_alias_renders_deployment_limits_for_opencode() -> None:
         "azure",
         [
             _model(
-                "GPT-5.6-SOL",
+                "GPT-6.1-SOL",
                 # This is the misleading fallback produced when the alias itself
                 # is absent from LiteLLM, matching the production regression.
                 max_input_tokens=30_976,
             )
         ],
-        deployment_name="gpt-5",
+        deployment_name="gpt-6-sol",
     )
     model_map = {
-        "azure/gpt-5": {
+        "azure/gpt-6-sol": {
             "max_input_tokens": 272_000,
             "max_output_tokens": 128_000,
         }
@@ -230,7 +261,7 @@ def test_custom_azure_alias_renders_deployment_limits_for_opencode() -> None:
 
     assert gateway_config is not None
     opencode_config = build_provider_opencode_config(gateway_config)
-    assert opencode_config["provider"]["onyx"]["models"]["300/GPT-5.6-SOL"][
+    assert opencode_config["provider"]["onyx"]["models"]["300/GPT-6.1-SOL"][
         "limit"
     ] == {
         "context": 272_000,
@@ -250,10 +281,10 @@ def test_gateway_config_preserves_explicit_context_override() -> None:
                 configured_max_input_tokens=200_000,
             )
         ],
-        deployment_name="gpt-5",
+        deployment_name="gpt-6-sol",
     )
     model_map = {
-        "azure/gpt-5": {
+        "azure/gpt-6-sol": {
             "max_input_tokens": 272_000,
             "max_output_tokens": 128_000,
         }
@@ -305,10 +336,10 @@ def test_small_input_override_does_not_reduce_provider_output() -> None:
                 configured_max_input_tokens=25_000,
             )
         ],
-        deployment_name="gpt-5",
+        deployment_name="gpt-6-sol",
     )
     model_map = {
-        "azure/gpt-5": {
+        "azure/gpt-6-sol": {
             "max_input_tokens": 272_000,
             "max_output_tokens": 128_000,
         }
@@ -360,8 +391,11 @@ def test_manager_prefers_provider_recommended_default_in_provider_order() -> Non
             "fetch_all_accessible_llm_providers",
             return_value=[anthropic, bedrock],
         ) as fetch_providers,
-        patch.object(manager_module, "fetch_default_llm_model", return_value=None),
-        patch.object(manager_module, "fetch_default_craft_model", return_value=None),
+        patch.object(
+            manager_module,
+            "fetch_default_model",
+            return_value=None,
+        ),
     ):
         config = manager.build_llm_configs(user)
 
@@ -399,9 +433,13 @@ def test_manager_prefers_configured_default_over_recommendation() -> None:
             return_value=[anthropic, bedrock],
         ),
         patch.object(
-            manager_module, "fetch_default_llm_model", return_value=configured_default
+            manager_module,
+            "fetch_default_model",
+            side_effect=lambda _db, flow: {
+                LLMModelFlowType.CHAT: configured_default,
+                LLMModelFlowType.CRAFT: None,
+            }.get(flow),
         ),
-        patch.object(manager_module, "fetch_default_craft_model", return_value=None),
     ):
         config = manager.build_llm_configs(user)
 
@@ -437,9 +475,13 @@ def test_manager_falls_back_to_recommendation_when_configured_default_not_visibl
             return_value=[anthropic, bedrock],
         ),
         patch.object(
-            manager_module, "fetch_default_llm_model", return_value=configured_default
+            manager_module,
+            "fetch_default_model",
+            side_effect=lambda _db, flow: {
+                LLMModelFlowType.CHAT: configured_default,
+                LLMModelFlowType.CRAFT: None,
+            }.get(flow),
         ),
-        patch.object(manager_module, "fetch_default_craft_model", return_value=None),
     ):
         config = manager.build_llm_configs(user)
 
@@ -465,10 +507,12 @@ def test_manager_prefers_craft_default_over_chat_default() -> None:
             return_value=[anthropic, bedrock],
         ),
         patch.object(
-            manager_module, "fetch_default_llm_model", return_value=chat_default
-        ),
-        patch.object(
-            manager_module, "fetch_default_craft_model", return_value=craft_default
+            manager_module,
+            "fetch_default_model",
+            side_effect=lambda _db, flow: {
+                LLMModelFlowType.CHAT: chat_default,
+                LLMModelFlowType.CRAFT: craft_default,
+            }.get(flow),
         ),
     ):
         config = manager.build_llm_configs(user)
@@ -492,9 +536,13 @@ def test_manager_stored_selection_outranks_craft_default() -> None:
             "fetch_all_accessible_llm_providers",
             return_value=[anthropic, bedrock],
         ),
-        patch.object(manager_module, "fetch_default_llm_model", return_value=None),
         patch.object(
-            manager_module, "fetch_default_craft_model", return_value=craft_default
+            manager_module,
+            "fetch_default_model",
+            side_effect=lambda _db, flow: {
+                LLMModelFlowType.CHAT: None,
+                LLMModelFlowType.CRAFT: craft_default,
+            }.get(flow),
         ),
     ):
         config = manager.build_llm_configs(
@@ -535,10 +583,12 @@ def test_manager_craft_default_not_visible_falls_through_to_chat_default() -> No
             return_value=[anthropic, bedrock],
         ),
         patch.object(
-            manager_module, "fetch_default_llm_model", return_value=chat_default
-        ),
-        patch.object(
-            manager_module, "fetch_default_craft_model", return_value=craft_default
+            manager_module,
+            "fetch_default_model",
+            side_effect=lambda _db, flow: {
+                LLMModelFlowType.CHAT: chat_default,
+                LLMModelFlowType.CRAFT: craft_default,
+            }.get(flow),
         ),
     ):
         config = manager.build_llm_configs(user)
@@ -581,13 +631,13 @@ def test_stale_selection_falls_through_to_configured_default() -> None:
 def _gateway_config() -> CraftLLMProviderConfig:
     return CraftLLMProviderConfig(
         provider="onyx",
-        model_name="13/gpt-5-mini",
+        model_name="13/gpt-6-astra",
         api_key="proxy-placeholder",
         api_base="https://onyx.test/gateway/v1",
         models=[
             GatewayModelDescriptor(
-                id="13/gpt-5-mini",
-                display_name="GPT-5 Mini",
+                id="13/gpt-6-astra",
+                display_name="GPT-6 Astra",
                 provider="openai",
             )
         ],

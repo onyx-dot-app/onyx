@@ -1,3 +1,4 @@
+import englishMessages from "@/i18n/messages/en.json";
 import { connectorConfigs } from "@/lib/connectors/connectors";
 import {
   getSourceDocLink,
@@ -100,8 +101,15 @@ describe("OneDrive connector metadata", () => {
       throw new Error("SharePoint sites field is required");
     }
 
-    expect(sitesField.description).toContain(
-      "[OneDrive connector](https://docs.onyx.app/admins/connectors/official/onedrive)"
+    // The config holds the message key; the message links the OneDrive docs.
+    expect(sitesField.description).toBe(
+      "connectors.sharepoint.fields.sites.description"
+    );
+    expect(
+      englishMessages.admin.connectorsList.connectors.sharepoint.fields.sites
+        .description
+    ).toContain(
+      "[OneDrive connector]({docsAdminsPath}/connectors/official/onedrive)"
     );
   });
 });

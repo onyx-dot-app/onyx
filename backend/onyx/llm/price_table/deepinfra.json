@@ -753,6 +753,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-08-12",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -973,6 +974,36 @@
       "release_date": "2026-09-22",
       "structured_output": true,
       "temperature": true,
+      "tool_call": true
+    },
+    "anthropic/claude-fable-5": {
+      "attachment": true,
+      "cost": {
+        "input": 10,
+        "output": 50
+      },
+      "family": "claude-fable",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Claude Fable 5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-06-09",
+      "structured_output": true,
+      "temperature": false,
       "tool_call": true
     },
     "deepseek-ai/DeepSeek-R1-0528": {
@@ -1284,10 +1315,41 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "DeepSeek V4.1 Flash",
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-09-10",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "deepseek-ai/DeepSeek-V4.1-Flash-1017": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.006,
+        "input": 0.2,
+        "output": 0.6
+      },
+      "family": "deepseek-flash",
+      "limit": {
+        "context": 1048576,
+        "output": 384000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "DeepSeek V4.1 Flash 1017",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-17",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -1552,6 +1614,34 @@
       "release_date": "2025-04-05",
       "structured_output": true,
       "tool_call": true
+    },
+    "mistralai/Mistral-Small-24B-Instruct-2501": {
+      "attachment": false,
+      "cost": {
+        "input": 0.05,
+        "output": 0.08
+      },
+      "family": "mistral-small",
+      "limit": {
+        "context": 32768,
+        "output": 16384
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Mistral Small 3",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-01-30",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": false
     },
     "moonshotai/Kimi-K2.5": {
       "attachment": true,
@@ -1851,6 +1941,34 @@
       "release_date": "2026-05-29",
       "status": "deprecated",
       "temperature": true,
+      "tool_call": true
+    },
+    "stepfun-ai/Step-5-Preview": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.1,
+        "input": 1,
+        "output": 2.7
+      },
+      "limit": {
+        "context": 1048576,
+        "output": 1000000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Step 5 Preview",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-09-16",
+      "structured_output": true,
       "tool_call": true
     },
     "tencent/Hy3": {

@@ -9,8 +9,16 @@ import {
   useAdminLanguageModel,
   useAdminLanguageModels,
 } from "@/lib/languageModels/hooks";
-import { PageLoader } from "@opal/loaders";
-import { Content, ContentAction, InputHorizontal, toast } from "@opal/layouts";
+import { useProviderNames } from "@/lib/languageModels/useProviderNames";
+import { DropdownLoader, PageLoader } from "@opal/loaders";
+import {
+  CardGrid,
+  Content,
+  ContentAction,
+  InputHorizontal,
+  toast,
+  useErrorToast,
+} from "@opal/layouts";
 import {
   Button,
   Divider,
@@ -19,7 +27,7 @@ import {
   InputSwitch,
   Text,
   Card,
-  OnyxLoader,
+  Tooltip,
 } from "@opal/components";
 import { Hoverable, Disabled } from "@opal/core";
 import { SvgArrowExchange, SvgSettings, SvgTrash } from "@opal/icons";
@@ -53,11 +61,12 @@ import { markdown } from "@opal/utils";
 import { usePHFeatureFlag, PHFeatureFlag } from "@/lib/analytics/hooks";
 import CostOverridesPanel from "@/views/admin/CostOverridesPanel";
 
-const route = ADMIN_ROUTES.LLM_MODELS;
+// Settings toggles that gate per-chat model controls in the model picker.
+type ChatControlKey =
+  | "reasoning_override_enabled"
+  | "temperature_override_enabled";
 
-function providerDisplayName(provider: LLMProviderView): string {
-  return provider.name || getProvider(provider.provider, provider).productName;
-}
+const route = ADMIN_ROUTES.LLM_MODELS;
 
 // ============================================================================
 // Provider grouping (keyed by provider name from the API)
@@ -126,14 +135,17 @@ function ExistingProviderCard({
       await deleteLlmProvider(provider.id, isLastProvider);
       await refreshLlmProviderCaches(mutate);
       deleteModal.toggle(false);
-      toast.success(t("toasts.providerDeleted"));
     } catch (e) {
       const message = e instanceof Error ? e.message : t("toasts.unknownError");
       toast.error(t("toasts.providerDeleteFailed", { message }));
     }
   };
 
-  const { icon, companyName, Modal } = getProvider(provider.provider, provider);
+  const providerEntry = getProvider(provider.provider, provider);
+  const { icon, Modal } = providerEntry;
+  const providerNames = useProviderNames()(providerEntry);
+  const { companyName } = providerNames;
+  const displayName = provider.name || providerNames.productName;
 
   return (
     <>
@@ -144,9 +156,7 @@ function ExistingProviderCard({
       {deleteModal.isOpen && (
         <ConfirmationModalLayout
           icon={SvgTrash}
-          title={markdown(
-            t("deleteModal.title", { provider: providerDisplayName(provider) })
-          )}
+          title={markdown(t("deleteModal.title", { provider: displayName }))}
           onClose={() => deleteModal.toggle(false)}
           submit={
             <Button
@@ -168,7 +178,7 @@ function ExistingProviderCard({
                 <Text font="main-ui-body" color="text-03">
                   {markdown(
                     t("deleteModal.description", {
-                      provider: providerDisplayName(provider),
+                      provider: displayName,
                     })
                   )}
                 </Text>
@@ -194,13 +204,15 @@ function ExistingProviderCard({
           // A name to select the card by. The Edit and Delete buttons inside
           // are labelled "Edit <name>" / "Delete <name>", so an exact match on
           // the bare name reaches the card alone.
-          aria-label={providerDisplayName(provider)}
+          aria-label={displayName}
           onClick={() => setIsOpen(true)}
         >
           <ContentAction
             icon={icon}
-            title={providerDisplayName(provider)}
+            title={displayName}
             description={companyName}
+            titleMaxLines={1}
+            descriptionMaxLines={1}
             sizePreset="main-ui"
             variant="section"
             padding={2}
@@ -219,7 +231,7 @@ function ExistingProviderCard({
                     icon={SvgTrash}
                     prominence="tertiary"
                     aria-label={t("providerCard.deleteButton.ariaLabel", {
-                      provider: providerDisplayName(provider),
+                      provider: displayName,
                     })}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -231,7 +243,7 @@ function ExistingProviderCard({
                   icon={SvgSettings}
                   prominence="tertiary"
                   aria-label={t("providerCard.editButton.ariaLabel", {
-                    provider: providerDisplayName(provider),
+                    provider: displayName,
                   })}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -262,7 +274,9 @@ function NewProviderCard({
 }: NewProviderCardProps) {
   const t = useTranslations("admin.languageModels");
   const [isOpen, setIsOpen] = useState(false);
-  const { icon, productName, companyName, Modal } = getProvider(providerName);
+  const providerEntry = getProvider(providerName);
+  const { icon, Modal } = providerEntry;
+  const { productName, companyName } = useProviderNames()(providerEntry);
 
   return (
     <SelectCard
@@ -282,6 +296,8 @@ function NewProviderCard({
         icon={icon}
         title={productName}
         description={companyName}
+        titleMaxLines={1}
+        descriptionMaxLines={1}
         sizePreset="main-ui"
         variant="section"
         padding={2}
@@ -294,7 +310,11 @@ function NewProviderCard({
               setIsOpen(true);
             }}
           >
-            {t("newProviderCard.connectButton.label")}
+            {/* A provider without a brand (OpenAI-compatible) is set up,
+                like the custom card, rather than connected. */}
+            {providerEntry.copyKey
+              ? t("newCustomProviderCard.setUpButton.label")
+              : t("newProviderCard.connectButton.label")}
           </Button>
         }
       />
@@ -318,7 +338,9 @@ function NewCustomProviderCard({
 }: NewCustomProviderCardProps) {
   const t = useTranslations("admin.languageModels");
   const [isOpen, setIsOpen] = useState(false);
-  const { icon, productName, companyName, Modal } = getProvider("custom");
+  const providerEntry = getProvider("custom");
+  const { icon, Modal } = providerEntry;
+  const { productName, companyName } = useProviderNames()(providerEntry);
 
   return (
     <>
@@ -336,6 +358,8 @@ function NewCustomProviderCard({
           icon={icon}
           title={productName}
           description={companyName}
+          titleMaxLines={1}
+          descriptionMaxLines={1}
           sizePreset="main-ui"
           variant="section"
           padding={2}
@@ -374,9 +398,13 @@ export default function LanguageModelsPage() {
   const [pendingRoutingEnabled, setPendingRoutingEnabled] = useState<
     boolean | null
   >(null);
-  const [pendingRoutingTarget, setPendingRoutingTarget] = useState<
-    number | null
-  >(null);
+  // The router being saved, wrapped so clearing it (id null) still counts.
+  const [pendingRoutingTarget, setPendingRoutingTarget] = useState<{
+    id: number | null;
+  } | null>(null);
+  const [pendingChatControls, setPendingChatControls] = useState<
+    Partial<Record<ChatControlKey, boolean>>
+  >({});
   const {
     llmProviders: existingLlmProviders,
     defaultText,
@@ -412,6 +440,17 @@ export default function LanguageModelsPage() {
       }));
     }
   );
+
+  const routerProvidersLoading =
+    routerProviders === undefined && !routerProvidersError;
+  useErrorToast(routerProvidersError, {
+    id: "router-models-load-failed",
+    message: t("modelRouting.target.error"),
+    retry: {
+      label: t("modelRouting.target.retry"),
+      onRetry: () => void mutateRouterProviders(),
+    },
+  });
 
   // Resolve the current default to a model_configuration_id for the select
   const defaultModelConfigId = useMemo(() => {
@@ -473,11 +512,15 @@ export default function LanguageModelsPage() {
     return <PageLoader />;
   }
 
-  const hasProviders = existingLlmProviders.length > 0;
-  const isFirstProvider = !hasProviders;
+  const chatProviders = existingLlmProviders.filter(
+    (provider) => !getProvider(provider.provider).decisionOnly
+  );
+  const hasProviders = chatProviders.length > 0;
+  const chatProviderCount = chatProviders.length;
+  const isFirstProvider = chatProviderCount === 0;
 
   // Pre-sort providers so the default appears first
-  const sortedProviders = [...existingLlmProviders].sort((a, b) => {
+  const sortedProviders = [...chatProviders].sort((a, b) => {
     const aIsDefault = defaultText?.provider_id === a.id;
     const bIsDefault = defaultText?.provider_id === b.id;
     if (aIsDefault && !bIsDefault) return -1;
@@ -486,7 +529,7 @@ export default function LanguageModelsPage() {
   });
 
   // Pre-filter to providers that have at least one visible model
-  const providersWithVisibleModels = existingLlmProviders
+  const providersWithVisibleModels = chatProviders
     .map((provider) => ({
       provider,
       visibleModels: provider.model_configurations.filter((m) => m.is_visible),
@@ -511,7 +554,6 @@ export default function LanguageModelsPage() {
     try {
       await updateAdminSettings({ hide_provider_grouping: checked });
       await mutate(SWR_KEYS.settings);
-      toast.success(t("toasts.settingsUpdated"));
     } catch (e) {
       toast.error(
         e instanceof Error ? e.message : t("toasts.settingsUpdateFailed")
@@ -521,8 +563,49 @@ export default function LanguageModelsPage() {
     }
   }
 
+  async function handleChatControlChange(
+    key: ChatControlKey,
+    checked: boolean
+  ) {
+    if (pendingChatControls[key] !== undefined) return;
+    setPendingChatControls((prev) => ({ ...prev, [key]: checked }));
+    try {
+      await updateAdminSettings({ [key]: checked });
+      await mutate(SWR_KEYS.settings);
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : t("toasts.settingsUpdateFailed")
+      );
+    } finally {
+      setPendingChatControls((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    }
+  }
+
   const routingEnabled =
     pendingRoutingEnabled ?? settings.model_routing_enabled ?? false;
+  // Auto Mode needs a router. Turning it off stays possible, so a router
+  // removed after the fact cannot lock it on.
+  const noRouterModels = routerProviders?.length === 0;
+  // Turning Auto Mode on waits for a router list that has one. Turning it
+  // off stays possible, so a router removed after the fact cannot lock it on.
+  const routersUnknown =
+    routerProviders === undefined || !!routerProvidersError;
+  const autoModeLocked = (routersUnknown || noRouterModels) && !routingEnabled;
+  const routingTargetId: number | null = pendingRoutingTarget
+    ? pendingRoutingTarget.id
+    : (settings.model_routing_model_configuration_id ?? null);
+  // On without a router that exists (none chosen, cleared, or deleted since):
+  // the chat picker offers no Auto option, so the admin is told.
+  const routingTargetMissing =
+    routingEnabled &&
+    routerProviders !== undefined &&
+    !routerProviders.some((provider) =>
+      provider.model_configurations.some((mc) => mc.id === routingTargetId)
+    );
 
   async function handleRoutingEnabledChange(checked: boolean) {
     if (pendingRoutingEnabled !== null) return;
@@ -530,7 +613,6 @@ export default function LanguageModelsPage() {
     try {
       await updateModelRouting({ model_routing_enabled: checked });
       await mutate(SWR_KEYS.settings);
-      toast.success(t("toasts.settingsUpdated"));
     } catch (e) {
       toast.error(
         e instanceof Error ? e.message : t("toasts.settingsUpdateFailed")
@@ -540,9 +622,11 @@ export default function LanguageModelsPage() {
     }
   }
 
-  async function handleRoutingTargetChange(modelConfigurationId: number) {
+  async function handleRoutingTargetChange(
+    modelConfigurationId: number | null
+  ) {
     if (pendingRoutingTarget !== null) return;
-    setPendingRoutingTarget(modelConfigurationId);
+    setPendingRoutingTarget({ id: modelConfigurationId });
     try {
       await updateModelRouting({
         model_routing_model_configuration_id: modelConfigurationId,
@@ -552,7 +636,6 @@ export default function LanguageModelsPage() {
         mutate(SWR_KEYS.settings),
         refreshLlmProviderCaches(mutate),
       ]);
-      toast.success(t("toasts.settingsUpdated"));
     } catch (e) {
       toast.error(
         e instanceof Error ? e.message : t("toasts.settingsUpdateFailed")
@@ -576,9 +659,7 @@ export default function LanguageModelsPage() {
             <Section alignItems="stretch">
               <InputHorizontal
                 title={t("defaultModel.title")}
-                description={t("defaultModel.description", {
-                  appName: settings.appName,
-                })}
+                description={t("defaultModel.description")}
                 center
                 withLabel
               >
@@ -618,46 +699,66 @@ export default function LanguageModelsPage() {
               <InputHorizontal
                 title={t("modelRouting.autoMode.title")}
                 description={t("modelRouting.autoMode.description")}
+                // On with no router model at all: the Router Model row is
+                // hidden, so the error sits here.
+                error={
+                  routingEnabled && noRouterModels
+                    ? t("modelRouting.autoMode.noRoutersError")
+                    : undefined
+                }
                 withLabel
               >
-                <InputSwitch
-                  checked={routingEnabled}
-                  disabled={pendingRoutingEnabled !== null}
-                  onCheckedChange={(checked) => {
-                    void handleRoutingEnabledChange(checked);
-                  }}
-                />
+                <Tooltip
+                  tooltip={
+                    // Only once the list is known to be empty; while it loads
+                    // the switch is locked without a reason to give.
+                    autoModeLocked && noRouterModels
+                      ? t("modelRouting.autoMode.noRoutersTooltip")
+                      : undefined
+                  }
+                >
+                  <div>
+                    <InputSwitch
+                      checked={routingEnabled}
+                      disabled={
+                        pendingRoutingEnabled !== null || autoModeLocked
+                      }
+                      onCheckedChange={(checked) => {
+                        void handleRoutingEnabledChange(checked);
+                      }}
+                    />
+                  </div>
+                </Tooltip>
               </InputHorizontal>
-              {routingEnabled && (
+              {routingEnabled && !noRouterModels && (
                 <InputHorizontal
                   title={t("modelRouting.target.title")}
                   description={t("modelRouting.target.description")}
+                  error={
+                    routingTargetMissing
+                      ? t("modelRouting.target.missing")
+                      : undefined
+                  }
                   withLabel
+                  // The loader spans the input column; the select hugs.
+                  fillInput={routerProvidersLoading}
                 >
-                  {routerProvidersError ? (
-                    <Section flexDirection="row" alignItems="center" gap={2}>
-                      <Text font="secondary-body" color="text-03">
-                        {t("modelRouting.target.error")}
-                      </Text>
-                      <Button
-                        prominence="tertiary"
-                        size="sm"
-                        onClick={() => void mutateRouterProviders()}
-                      >
-                        {t("modelRouting.target.retry")}
-                      </Button>
-                    </Section>
-                  ) : routerProviders === undefined ? (
-                    <OnyxLoader size={24} />
-                  ) : routerProviders.length > 0 ? (
+                  {routerProvidersLoading ? (
+                    <DropdownLoader />
+                  ) : (
                     <SimpleModelSelector
-                      providers={routerProviders}
-                      value={
-                        pendingRoutingTarget ??
-                        settings.model_routing_model_configuration_id ??
-                        null
+                      // Clearable: re-picking the chosen router unsets it.
+                      nullable
+                      providers={routerProviders ?? []}
+                      isError={
+                        routerProvidersError || routingTargetMissing
+                          ? true
+                          : undefined
                       }
-                      disabled={pendingRoutingTarget !== null}
+                      value={routingTargetId}
+                      disabled={
+                        pendingRoutingTarget !== null || !!routerProvidersError
+                      }
                       grouped={
                         !(
                           pendingHideGrouping ?? settings.hide_provider_grouping
@@ -667,13 +768,56 @@ export default function LanguageModelsPage() {
                         void handleRoutingTargetChange(modelConfigurationId);
                       }}
                     />
-                  ) : (
-                    <Text font="secondary-body" color="text-03">
-                      {t("modelRouting.target.empty")}
-                    </Text>
                   )}
                 </InputHorizontal>
               )}
+              <Divider paddingParallel={0} paddingPerpendicular={0} />
+              <InputHorizontal
+                title={t("reasoning.title")}
+                description={t("reasoning.description")}
+                withLabel
+              >
+                <InputSwitch
+                  id="reasoning_override_enabled"
+                  checked={
+                    pendingChatControls.reasoning_override_enabled ??
+                    settings.reasoning_override_enabled ??
+                    true
+                  }
+                  disabled={
+                    pendingChatControls.reasoning_override_enabled !== undefined
+                  }
+                  onCheckedChange={(checked) => {
+                    void handleChatControlChange(
+                      "reasoning_override_enabled",
+                      checked
+                    );
+                  }}
+                />
+              </InputHorizontal>
+              <InputHorizontal
+                title={t("temperature.title")}
+                description={t("temperature.description")}
+                withLabel
+              >
+                <InputSwitch
+                  checked={
+                    pendingChatControls.temperature_override_enabled ??
+                    settings.temperature_override_enabled ??
+                    true
+                  }
+                  disabled={
+                    pendingChatControls.temperature_override_enabled !==
+                    undefined
+                  }
+                  onCheckedChange={(checked) => {
+                    void handleChatControlChange(
+                      "temperature_override_enabled",
+                      checked
+                    );
+                  }}
+                />
+              </InputHorizontal>
               {hasProviderGrouping && (
                 <InputHorizontal
                   title={t("hideProviderGrouping.title")}
@@ -720,7 +864,7 @@ export default function LanguageModelsPage() {
                     key={provider.id}
                     provider={provider}
                     isDefault={defaultText?.provider_id === provider.id}
-                    isLastProvider={sortedProviders.length === 1}
+                    isLastProvider={chatProviderCount === 1}
                   />
                 ))}
               </div>
@@ -740,7 +884,7 @@ export default function LanguageModelsPage() {
 
         {/* ── Add Provider groups (always visible) ── */}
         <Disabled disabled={isConfigurationDisabled}>
-          <div className="@container/providercards flex flex-col gap-8">
+          <div className="flex flex-col gap-8">
             {providerGroups.map((group) => (
               <GeneralLayouts.Section
                 key={group.id}
@@ -762,7 +906,7 @@ export default function LanguageModelsPage() {
                   </Text>
                 )}
 
-                <div className="grid grid-cols-1 @xl/providercards:grid-cols-2 gap-2">
+                <CardGrid>
                   {group.providerNames.map((name) => (
                     <NewProviderCard
                       key={name}
@@ -773,7 +917,7 @@ export default function LanguageModelsPage() {
                   {group.includeCustom && (
                     <NewCustomProviderCard isFirstProvider={isFirstProvider} />
                   )}
-                </div>
+                </CardGrid>
               </GeneralLayouts.Section>
             ))}
           </div>

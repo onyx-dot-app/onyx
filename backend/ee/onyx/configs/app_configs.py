@@ -165,6 +165,20 @@ LINEAR_PERMISSION_DOC_SYNC_FREQUENCY = int(
 )
 
 #####
+# YouTrack
+#####
+
+# In seconds, default 30 minutes. Each run walks every issue in scope.
+YOUTRACK_PERMISSION_GROUP_SYNC_FREQUENCY = int(
+    os.environ.get("YOUTRACK_PERMISSION_GROUP_SYNC_FREQUENCY") or 30 * 60
+)
+# In seconds, default 30 minutes. Bounds how long an issue whose visibility
+# or project changed keeps its old readers.
+YOUTRACK_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("YOUTRACK_PERMISSION_DOC_SYNC_FREQUENCY") or 30 * 60
+)
+
+#####
 # Zoom
 #####
 # In seconds, default is 5 minutes

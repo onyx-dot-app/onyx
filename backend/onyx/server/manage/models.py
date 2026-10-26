@@ -86,6 +86,9 @@ class AuthConfigResponse(BaseModel):
     # on instances with no provider rows, so the page falls back to the built-in
     # password (and Google when oauth_enabled) login.
     sso_providers: list[SSOProviderOption] = []
+    # Workspace UI language for signed-out pages, which cannot read GET /settings
+    # unless anonymous access is on. None on cloud, which has no tenant yet.
+    default_language: SupportedLanguage | None = None
 
 
 class UserSpecificAssistantPreference(BaseModel):
@@ -296,7 +299,8 @@ class ThemePreferenceRequest(BaseModel):
 
 
 class LanguageRequest(BaseModel):
-    language: SupportedLanguage
+    # None clears the preference so the user follows the workspace default.
+    language: SupportedLanguage | None
 
 
 class DefaultAppModeRequest(BaseModel):

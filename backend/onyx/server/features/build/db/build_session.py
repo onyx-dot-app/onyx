@@ -319,6 +319,7 @@ def update_sandbox_heartbeat(
     sandbox = db_session.query(Sandbox).filter(Sandbox.id == sandbox_id).one_or_none()
     if sandbox:
         sandbox.last_heartbeat = datetime.now(tz=timezone.utc)
+        sandbox.cleanup_checkpoint = None
         db_session.commit()
 
 

@@ -271,6 +271,12 @@ def _merge_choices_into_one(
 
 
 def _usage_from_usage_data(usage_data: dict[str, Any]) -> Usage:
+    cache_read_input_tokens = usage_data.get("cache_read_input_tokens")
+    if cache_read_input_tokens is None:
+        cache_read_input_tokens = (usage_data.get("prompt_tokens_details") or {}).get(
+            "cached_tokens"
+        )
+
     # NOTE: sometimes the usage data dictionary has these keys and the values are None
     # hence the "or 0" instead of just using default values
     return Usage(
@@ -278,11 +284,7 @@ def _usage_from_usage_data(usage_data: dict[str, Any]) -> Usage:
         prompt_tokens=usage_data.get("prompt_tokens") or 0,
         total_tokens=usage_data.get("total_tokens") or 0,
         cache_creation_input_tokens=usage_data.get("cache_creation_input_tokens") or 0,
-        cache_read_input_tokens=usage_data.get(
-            "cache_read_input_tokens",
-            (usage_data.get("prompt_tokens_details") or {}).get("cached_tokens"),
-        )
-        or 0,
+        cache_read_input_tokens=cache_read_input_tokens or 0,
     )
 
 

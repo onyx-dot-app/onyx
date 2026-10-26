@@ -2,6 +2,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
+from onyx.connectors.models import CheckRowText
+
 
 class SharepointCredentials(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -12,12 +14,6 @@ class SharepointCredentials(BaseModel):
     authentication_method: str | None = None
     sp_private_key: str | None = None
     sp_certificate_password: str | None = None
-
-
-class SharepointTokenInfo(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    expires_in: int | None
 
 
 class SharepointDrive(BaseModel):
@@ -40,3 +36,29 @@ class SitePagesPage(BaseModel):
 
     pages: list[dict[str, Any]]
     next_link: str | None = None
+
+
+class SiteUrlListing(BaseModel):
+    """The tenant's site listing, by web URL. ``complete`` is False when a
+    page cap stopped the read before the last page."""
+
+    site_urls: list[str]
+    complete: bool
+
+
+class EntraGroupRef(BaseModel):
+    id: str
+    name: str
+
+
+class SiteProblem(BaseModel):
+    site_url: str
+    row: CheckRowText
+    message: str
+    denied: bool
+
+
+class LibraryProblem(BaseModel):
+    row: CheckRowText
+    message: str
+    name: str

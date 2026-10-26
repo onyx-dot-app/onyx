@@ -9,6 +9,7 @@ import type {
   StatusVariants,
 } from "@opal/types";
 import { roundingToRem, spacingToRem } from "@opal/shared";
+import { cn } from "@opal/utils";
 import {
   CardFold,
   type CardFoldHeight,
@@ -24,7 +25,10 @@ type DataAttributeValue = string | number | boolean | null | undefined;
 /**
  * Props shared by both plain and expandable Card modes.
  */
-type CardBaseProps = {
+type CardBaseProps = Omit<
+  React.HTMLAttributes<HTMLDivElement>,
+  "color" | "style"
+> & {
   /**
    * Padding.
    *
@@ -131,6 +135,16 @@ type CardPlainProps = CardBaseProps & {
    * @default false
    */
   expandable?: false;
+
+  /**
+   * Height mode.
+   * - `"fit"`: the content's height.
+   * - `"full"`: fills the parent and shrinks to a capped one, laying the
+   *   children out as a column so one of them can scroll.
+   *
+   * @default "fit"
+   */
+  height?: "fit" | "full";
 };
 
 type CardExpandableProps = CardBaseProps & {
@@ -215,26 +229,6 @@ type CardProps = CardPlainProps | CardExpandableProps;
  * </Card>
  * ```
  */
-/**
- * The `data-*` entries a caller passed in.
- *
- * A card owns how it looks, not what the surrounding app calls it — `data-*` is
- * the app's namespace, used for test hooks and analytics, and silently dropping
- * it is worse than either forwarding or rejecting it. Only `data-*` is picked
- * up: `className` and `style` stay out by design, and behavioural props like
- * `onClick` are a deliberate API decision rather than something to inherit.
- */
-function dataAttributes(props: CardProps): Record<string, DataAttributeValue> {
-  const attributes: Record<string, DataAttributeValue> = {};
-  for (const key of Object.keys(props)) {
-    if (!key.startsWith("data-")) continue;
-    // SAFETY: the prefix check above proves `key` matches the `data-${string}`
-    // index signature, which is the only shape that reads back as a value.
-    attributes[key] = props[key as `data-${string}`];
-  }
-  return attributes;
-}
-
 function Card(props: CardProps) {
   const {
     padding: paddingProp = 4,
@@ -246,18 +240,21 @@ function Card(props: CardProps) {
     disabled = false,
     ref,
     children,
+    className,
+    ...rest
   } = props;
 
   const paddingStyle = { padding: spacingToRem(paddingProp) };
   const radius = roundingToRem(roundingProp);
-  // Plain mode — unchanged behavior
-  if (!props.expandable) {
+  if (!rest.expandable) {
+    const { expandable: _expandable, height = "fit", ...domProps } = rest;
     return (
       <div
         ref={ref}
-        className="opal-card"
+        {...domProps}
+        className={cn("opal-card", className)}
         style={{ ...paddingStyle, borderRadius: radius }}
-        {...dataAttributes(props)}
+        data-height={height}
         data-color={color}
         data-border={border}
         data-opal-status-border={borderColor}
@@ -271,11 +268,13 @@ function Card(props: CardProps) {
 
   // Expandable mode
   const {
+    expandable: _expandable,
     expanded = false,
     expandedContent,
     expandableContentHeight = 80,
     expandableKeepMounted = false,
-  } = props;
+    ...domProps
+  } = rest;
   const showContent = expanded && expandedContent !== undefined;
   // The stylesheet rounds the header, and squares its bottom corners while
   // the fold has any height, so the two halves stay joined as it closes.
@@ -288,8 +287,8 @@ function Card(props: CardProps) {
   return (
     <div
       ref={ref}
-      className="opal-card-expandable"
-      {...dataAttributes(props)}
+      {...domProps}
+      className={cn("opal-card-expandable", className)}
       data-shadow={shadow}
       data-disabled={disabled || undefined}
     >

@@ -72,7 +72,7 @@ def test_upsert_creates_then_updates_and_lists(db_session: Session) -> None:
     create = client.put(
         "/admin/cost-overrides",
         json={
-            "model": "gpt-4o",
+            "model": "gpt-6-sol",
             "input_cost_per_mtok": 2.5,
             "output_cost_per_mtok": 10.0,
         },
@@ -84,7 +84,7 @@ def test_upsert_creates_then_updates_and_lists(db_session: Session) -> None:
     update = client.put(
         "/admin/cost-overrides",
         json={
-            "model": "gpt-4o",
+            "model": "gpt-6-sol",
             "input_cost_per_mtok": 1.0,
             "output_cost_per_mtok": 4.0,
         },
@@ -96,7 +96,7 @@ def test_upsert_creates_then_updates_and_lists(db_session: Session) -> None:
     assert listing.status_code == 200
     rows = listing.json()
     assert len(rows) == 1
-    assert rows[0]["model"] == "gpt-4o"
+    assert rows[0]["model"] == "gpt-6-sol"
     assert rows[0]["input_cost_per_mtok"] == 1.0
 
 
@@ -130,7 +130,7 @@ def test_callers_without_manage_llms_rejected(
     resp = client.put(
         "/admin/cost-overrides",
         json={
-            "model": "gpt-4o",
+            "model": "gpt-6-sol",
             "input_cost_per_mtok": 2.5,
             "output_cost_per_mtok": 10.0,
         },
@@ -146,7 +146,7 @@ def test_manage_llms_holder_admitted(db_session: Session) -> None:
     resp = client.put(
         "/admin/cost-overrides",
         json={
-            "model": "gpt-4o",
+            "model": "gpt-6-sol",
             "input_cost_per_mtok": 2.5,
             "output_cost_per_mtok": 10.0,
         },
@@ -168,14 +168,14 @@ def test_writes_invalidate_cache(
     client.put(
         "/admin/cost-overrides",
         json={
-            "model": "gpt-4o",
+            "model": "gpt-6-sol",
             "input_cost_per_mtok": 2.5,
             "output_cost_per_mtok": 10.0,
         },
     )
     assert len(calls) == 1
 
-    client.delete("/admin/cost-overrides/gpt-4o")
+    client.delete("/admin/cost-overrides/gpt-6-sol")
     assert len(calls) == 2
 
 
@@ -186,17 +186,17 @@ def test_db_helpers_upsert_list_delete(
         cost_overrides, "get_current_tenant_id", lambda: "public", raising=False
     )
 
-    upsert_override(db_session, "gpt-4o", 2.5, 10.0)
+    upsert_override(db_session, "gpt-6-sol", 2.5, 10.0)
     upsert_override(db_session, "claude-haiku-4-5", 0.8, 4.0)
-    upsert_override(db_session, "gpt-4o", 1.0, 4.0)  # update, not insert
+    upsert_override(db_session, "gpt-6-sol", 1.0, 4.0)  # update, not insert
 
     rows = list_overrides(db_session)
-    assert [r.model for r in rows] == ["claude-haiku-4-5", "gpt-4o"]  # name-ordered
-    gpt = next(r for r in rows if r.model == "gpt-4o")
+    assert [r.model for r in rows] == ["claude-haiku-4-5", "gpt-6-sol"]  # name-ordered
+    gpt = next(r for r in rows if r.model == "gpt-6-sol")
     assert gpt.input_cost_per_mtok == 1.0
 
-    assert delete_override(db_session, "gpt-4o") is True
-    assert delete_override(db_session, "gpt-4o") is False
+    assert delete_override(db_session, "gpt-6-sol") is True
+    assert delete_override(db_session, "gpt-6-sol") is False
     assert [r.model for r in list_overrides(db_session)] == ["claude-haiku-4-5"]
 
 
@@ -205,7 +205,7 @@ def test_negative_rate_rejected_by_api(db_session: Session) -> None:
     res = client.put(
         "/admin/cost-overrides",
         json={
-            "model": "gpt-4o",
+            "model": "gpt-6-sol",
             "input_cost_per_mtok": -1.0,
             "output_cost_per_mtok": 4.0,
         },
@@ -216,4 +216,4 @@ def test_negative_rate_rejected_by_api(db_session: Session) -> None:
 
 def test_db_helper_rejects_negative_rate(db_session: Session) -> None:
     with pytest.raises(ValueError):
-        upsert_override(db_session, "gpt-4o", -1.0, 4.0)
+        upsert_override(db_session, "gpt-6-sol", -1.0, 4.0)

@@ -21,6 +21,7 @@ import {
 } from "@/lib/connectors/bindingGate";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import type { CCPairHierarchyBreakdown } from "@/lib/connectors/types";
 import type { FederatedConnectorDetail } from "@/lib/types";
 import type { CredentialSchemaResponse } from "@/lib/credentials/types";
 import type {
@@ -425,8 +426,23 @@ export function useBindingGateMessage(
             detail: reason.error.detail,
           });
     case "rejected":
-      return t("bindingGate.rejected", { detail: reason.rejection.detail });
+      return reason.rejection.code === "shared_credential_settings"
+        ? reason.rejection.detail
+        : t("bindingGate.rejected", { detail: reason.rejection.detail });
     case "custom":
       return reason.message;
   }
+}
+
+/** The pair's document breakdown: `null` until its first successful run. It reads every document of the pair, so it loads once per visit and gives up early. */
+export function useHierarchyBreakdown(ccPairId: number) {
+  return useSWR<CCPairHierarchyBreakdown | null>(
+    SWR_KEYS.ccPairHierarchyBreakdown(ccPairId),
+    errorHandlingFetcher,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      errorRetryCount: 1,
+    }
+  );
 }

@@ -8,10 +8,13 @@
   /* Interactive overlays */
   --z-modal-overlay: 900;
   --z-modal: 1000;
-  --z-toast: 1100;
 
-  /* System-level banners — above everything, including toasts */
+  /* System-level banners, above the app and modals */
   --z-banner: 1200;
+
+  /* Toasts sit above banners, popovers and modals, below only tooltips
+     (kept in step with @opal/z-index). */
+  --z-toast: 1250;
 }
 
 /* Base layers */

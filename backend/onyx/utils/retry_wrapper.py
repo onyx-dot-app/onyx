@@ -101,6 +101,7 @@ def request_with_retries(
     delay: float = 1,
     backoff: float = 2,
     log_request_data: bool = False,
+    retry_if: Callable[[BaseException], bool] | None = None,
 ) -> requests.Response:
     # jitter=0 + max_delay=None preserves the exact wait curve this function
     # had on the legacy `retry` package: delay * backoff**n, uncapped
@@ -111,6 +112,7 @@ def request_with_retries(
         backoff=backoff,
         jitter=0,
         log_errors=False,
+        retry_if=retry_if,
     )
     def _make_request() -> requests.Response:
         try:

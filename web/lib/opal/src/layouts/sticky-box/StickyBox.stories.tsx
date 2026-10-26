@@ -2,15 +2,15 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { MessageCard } from "@opal/components";
 import { StickyBox } from "@opal/layouts/sticky-box/components";
 
-const meta: Meta<typeof StickyBox> = {
+const meta: Meta<typeof StickyBox.Item> = {
   title: "Layouts/StickyBox",
-  component: StickyBox,
+  component: StickyBox.Item,
   tags: ["autodocs"],
   parameters: { layout: "fullscreen" },
 };
 
 export default meta;
-type Story = StoryObj<typeof StickyBox>;
+type Story = StoryObj<typeof StickyBox.Item>;
 
 function Filler({ rows }: { rows: number }) {
   return (
@@ -32,13 +32,13 @@ export const Top: Story = {
   render: () => (
     <div className="h-96 overflow-y-auto p-4 flex flex-col gap-4">
       <Filler rows={3} />
-      <StickyBox stick="top" inset={2} shadow>
+      <StickyBox.Item stick="top" inset={2} shadow>
         <MessageCard
           variant="warning"
           title="Changes require a full re-index."
           description="Scroll to see the box pin and cast its shadow."
         />
-      </StickyBox>
+      </StickyBox.Item>
       <Filler rows={30} />
     </div>
   ),
@@ -49,9 +49,9 @@ export const Bottom: Story = {
   render: () => (
     <div className="h-96 overflow-y-auto p-4 flex flex-col gap-4">
       <Filler rows={30} />
-      <StickyBox stick="bottom" inset={2} shadow>
+      <StickyBox.Item stick="bottom" inset={2} shadow>
         <MessageCard variant="info" title="Pinned to the bottom." />
-      </StickyBox>
+      </StickyBox.Item>
       <Filler rows={3} />
     </div>
   ),
@@ -62,9 +62,9 @@ export const Inactive: Story = {
   render: () => (
     <div className="h-96 overflow-y-auto p-4 flex flex-col gap-4">
       <Filler rows={3} />
-      <StickyBox active={false} shadow>
+      <StickyBox.Item active={false} shadow>
         <MessageCard title="Nothing staged, so nothing pins." />
-      </StickyBox>
+      </StickyBox.Item>
       <Filler rows={30} />
     </div>
   ),

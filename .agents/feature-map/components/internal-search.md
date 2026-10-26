@@ -53,7 +53,7 @@ downstream, so it should not hand-craft time or source scoping into the query te
 
 | Method | Path | Handler | Notes |
 |---|---|---|---|
-| POST | `/search` | `search` (`server/features/search/api.py`) | Runs the same `SearchTool.run()` pipeline as chat, for programmatic callers (onyx-cli, Craft sandbox, integrations). Returns the LLM-selected and expanded sections, no LLM answer. |
+| POST | `/search` | `search` (`server/features/search/api.py`) | Runs the same `SearchTool.run()` pipeline as chat, for programmatic callers (onyx-cli, Craft sandbox, integrations). Returns the LLM-selected and expanded sections, no LLM answer. Opens its own `search_api` trace and `internal_search` function span, because it does not pass through the chat loop or `tool_runner.py`; see [[observability]]. |
 | POST | `/admin/search` | `admin_search` (`server/query_and_chat/query_backend.py`) | Admin-only. Calls `document_index.keyword_retrieval` or `random_retrieval` directly, bypassing this whole pipeline. Used for admin document inspection, not for chat. |
 | GET | `/query/valid-tags` | `get_tags` (`server/query_and_chat/query_backend.py`) | Tag autocomplete for the filter UI. |
 
@@ -163,7 +163,10 @@ rather than applied.
 When the scope narrows to a subset of sources, `run` appends a note to the
 response (`_build_scope_note`) that names the sources covered and the queries run, so a repeat
 call can vary its terms. Each call also records a `SearchCycle`, which
-`decide_search_scope` reads on later calls in the same turn.
+`decide_search_scope` reads on later calls in the same turn. It also passes the
+deduplicated `searched_sources` of those cycles as a separate prompt field, so a
+BACKOFF directive ("check A first, then B") advances to the next unsearched source
+while the subject stays the same.
 
 ### 4.3 Parallel retrieval lanes
 
@@ -231,6 +234,23 @@ The merged list is capped to `override_kwargs.num_hits`.
 
 ### 4.5 LLM selection
 
+Chat constructs search tools with the session client and a lazy
+SEARCH_SELECTION resolver. Query rewrites, source/time filters, and Slack query
+processing keep the session client. Selection resolves only after retrieval
+returns sections, so offering search or finding no results never checks the
+selection provider. An unset SEARCH_SELECTION returns the same session client,
+never CHAT_NAMING. The public Search API honors explicit provider/model requests for
+both clients; otherwise only selection uses SEARCH_SELECTION. The EE Search UI
+likewise keeps rewrites on the default chat client and resolves selection lazily.
+If EE selection resolution fails, for example on a cost limit, the endpoint still
+returns the documents with `llm_selected_doc_ids` unset.
+If the chat or API selection factory fails, `SearchTool` logs a warning and selects
+with the primary client. Chat checks the primary provider's cost limit at turn
+start. The public Search API skips that check when query expansion and automatic
+filters are off and passes `primary_llm_cost_checked=False`. The tool then checks
+the primary provider before the first Slack lane or selection call that uses it.
+If the check fails before a Slack lane, search skips only that lane.
+
 `_trim_sections_by_tokens` (`search_tool.py`) first drops sections once a token
 budget (`max_llm_chunks * DOC_EMBEDDING_CONTEXT_SIZE * SELECTION_TOKEN_BUDGET_MULTIPLIER`,
 `SELECTION_TOKEN_BUDGET_MULTIPLIER = 2`) is exhausted, counting at most
@@ -239,6 +259,14 @@ cannot starve the budget. `select_sections_for_expansion`
 (`secondary_llm_flows/document_filter.py`) then makes one LLM call over all
 surviving sections together (so the model can compare across documents, not just
 within one) and returns the sections it picked plus any `best_doc_ids` it flagged.
+
+When SEARCH_SELECTION is configured, `backend/onyx/secondary_llm_flows/search_prompt_budget.py` also
+bounds serialized prompts against the selection model's input and context limits,
+with an output allowance and safety margin. Selection drops trailing candidates
+until the actual prompt fits. Expansion classification bounds its own input
+without changing the original evidence. Rewrites retain their primary-model limits.
+An oversized fixed prompt takes the flow's local fallback without a provider
+call. The final answer's evidence allowance remains independent.
 
 ### 4.6 Context expansion
 
@@ -338,9 +366,9 @@ the LLM, assigning one citation number per unique `document_id` starting at
   citation-tagged string and mapping this component hands back.
 - [[tools-framework]]: `SearchTool` implements `Tool`; `tool_runner.py` merges
   repeated calls and allocates the citation range.
-- [[llm-providers]]: every secondary flow (`query_expansion`, `source_filter`,
-  `time_filter`, `document_filter`) and the selection/expansion stages make
-  their own LLM calls through the persona's resolved `LLM`.
+- [[llm-providers]]: section selection and relevance classification use the
+  optional SEARCH_SELECTION default, falling back directly to the persona's
+  resolved `LLM`. Rewrites and filters keep that primary client. CHAT_NAMING is separate.
 
 **Depended on by**
 - [[core-chat-loop]]: `construct_tools` attaches `SearchTool` per turn; the loop
@@ -437,3 +465,29 @@ than launching Playwright ad hoc.
 - **The Slack lane is not ACL-filtered the same way as every other lane.** Its
   `IndexFilters.access_control_list` is `None` by construction; access is
   whatever the pre-fetched Slack token can see. See §5.8.
+
+### Synthetic load-test helper responses
+
+`tools/loadtest/mock_llm/search_workload.py` supplies valid selection, classification,
+and neutral scope responses. Its sanitized `search_calibration.json` records weighted
+selection ranks and classification labels from a single ERAG sample. It models
+application work, not answer quality. `tools/loadtest/tests/test_mock_llm.py` reads
+production prompt constants without importing backend runtime dependencies.
+See `tools/loadtest/README.md` for calibration limits and explicit stress knobs.
+
+
+The representative load profiles in `tools/loadtest/mock_llm/profiles.py` add a
+seeded mix of search rounds, query counts, answer sizes, and reasoning. The mock
+uses current-turn result document numbers for citations. Helpers retain valid
+selection/classification responses. `tools/loadtest/mock_llm/response_plan.py` owns
+content, tool selection, timing, and usage; the HTTP handler delivers its plan. Shared response deadlines and tokenizer-based
+usage keep streaming and non-streaming workloads consistent. These are synthetic
+capacity profiles, not answer-quality evaluation. The default search scenario uses
+`mock-profile-search-v1`; explicit numeric stress models remain available.
+
+`tools/loadtest/workload_manifest.py` records the input hash and planned mix.
+`tools/loadtest/capacity_report.py` evaluates one measured plateau against explicit
+latency and failure thresholds. The load client supports ERAG question JSONL,
+seeded question order, startup staggering, and think-time jitter. Workload metrics
+report active turns and actual stream/search event counts. See the load-test README
+for calibration assumptions, distributed reproducibility limits, and fault modes.

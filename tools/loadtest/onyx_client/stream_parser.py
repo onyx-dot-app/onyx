@@ -40,6 +40,9 @@ class StreamSummary:
     heartbeats: int = 0
     answer_chars: int = 0
     search_doc_count: int = 0
+    search_calls: int = 0
+    reasoning_packets: int = 0
+    citations: int = 0
     saw_message_start: bool = False
     saw_stop: bool = False
     error: str | None = None
@@ -92,6 +95,9 @@ class ChatStreamAnalyzer:
             return hit
 
         packet_type = obj.get("type")
+        self.summary.search_calls += packet_type == SEARCH_TOOL_START
+        self.summary.reasoning_packets += packet_type == "reasoning_delta"
+        self.summary.citations += packet_type == "citation_info"
         if packet_type == ERROR or obj.get("error"):
             self.summary.error = str(obj.get("error") or "streaming error packet")
         elif packet_type == CHAT_HEARTBEAT:

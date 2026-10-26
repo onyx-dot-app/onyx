@@ -2,7 +2,7 @@
 
 import useSWR from "swr";
 import type { ScopedMutator } from "swr";
-import { errorHandlingFetcher, type ErrorResponseBody } from "@/lib/fetcher";
+import { errorHandlingFetcher, parseErrorDetail } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type {
   CostOverride,
@@ -43,7 +43,7 @@ export async function upsertCostOverride(
   });
 
   if (!response.ok) {
-    throw new Error(await extractError(response));
+    throw new Error(await parseErrorDetail(response, response.statusText));
   }
 
   return response.json();
@@ -74,7 +74,7 @@ export async function deleteCostOverride(
     return;
   }
 
-  throw new Error(await extractError(response));
+  throw new Error(await parseErrorDetail(response, response.statusText));
 }
 
 /** Revalidate the overrides list after a mutation. */
@@ -82,14 +82,4 @@ export async function refreshCostOverrides(
   mutate: ScopedMutator
 ): Promise<void> {
   await mutate(SWR_KEYS.costOverrides);
-}
-
-/** Pull the backend's `detail`/`error_code`, falling back to the status text. */
-async function extractError(response: Response): Promise<string> {
-  try {
-    const data: ErrorResponseBody = await response.json();
-    return data.detail || data.error_code || response.statusText;
-  } catch {
-    return response.statusText;
-  }
 }

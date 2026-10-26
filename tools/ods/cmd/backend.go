@@ -1,20 +1,22 @@
 package cmd
 
 import (
-	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/devstack"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
-	"github.com/onyx-dot-app/onyx/tools/ods/internal/portutil"
 )
 
 // devLicenseEnv names the variable that holds the license internal developers
@@ -27,7 +29,7 @@ const devLicenseEnv = "ONYX_DEV_LICENSE"
 func NewBackendCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "backend",
-		Short: "Run backend services (api, model_server)",
+		Short: "Run backend services (api, model-server)",
 		Long: `Run backend services with environment from .vscode/.env.
 
 On first run, copies .vscode/env_template.txt to .vscode/.env if the
@@ -39,7 +41,7 @@ With no license in the database the backend runs as Community Edition.
 
 Available subcommands:
   api            Start the FastAPI backend server
-  model_server   Start the model server`,
+  model-server   Start the model server`,
 	}
 
 	cmd.AddCommand(newBackendAPICommand())
@@ -60,13 +62,13 @@ Examples:
   ods backend api
   ods backend api --port 9090`,
 		Run: func(cmd *cobra.Command, args []string) {
-			if err := runBackendService("api", "onyx.main:app", port); err != nil {
+			if err := runBackendService("api", port, args...); err != nil {
 				exitBackendService(err)
 			}
 		},
 	}
 
-	cmd.Flags().StringVar(&port, "port", "8080", "Port to listen on")
+	cmd.Flags().StringVar(&port, "port", "", "Port to listen on (default: saved project port, otherwise 8080)")
 
 	return cmd
 }
@@ -75,35 +77,24 @@ func newBackendModelServerCommand() *cobra.Command {
 	var port string
 
 	cmd := &cobra.Command{
-		Use:   "model_server",
-		Short: "Start the model server (uvicorn with hot-reload)",
+		Use:     "model-server",
+		Aliases: []string{"model_server"},
+		Short:   "Start the model server (uvicorn with hot-reload)",
 		Long: `Start the model server using uvicorn with hot-reload.
 
 Examples:
-  ods backend model_server
-  ods backend model_server --port 9001`,
+  ods backend model-server
+  ods backend model-server --port 9001`,
 		Run: func(cmd *cobra.Command, args []string) {
-			if err := runBackendService("model_server", "model_server.main:app", port); err != nil {
+			if err := runBackendService("model", port, args...); err != nil {
 				exitBackendService(err)
 			}
 		},
 	}
 
-	cmd.Flags().StringVar(&port, "port", "9000", "Port to listen on")
+	cmd.Flags().StringVar(&port, "port", "", "Port to listen on (default: saved project port, otherwise 9000)")
 
 	return cmd
-}
-
-func resolvePort(port string) (string, error) {
-	portNum, err := strconv.Atoi(port)
-	if err != nil {
-		return "", fatalErrorf("Invalid port %q: %v", port, err)
-	}
-	resolved, err := portutil.FindAvailable(portNum, 65535-portNum, nil)
-	if err != nil {
-		return "", fatalErrorf("No available ports found starting from %d", portNum)
-	}
-	return strconv.Itoa(resolved), nil
 }
 
 // exitBackendService ends the process after a command's child process fails. A
@@ -119,84 +110,79 @@ func exitBackendService(err error) {
 	log.Fatal(err)
 }
 
-// runBackendService runs the service with uv. Only the service's own failure
-// wraps its *exec.ExitError. Setup errors format theirs with %v, so a failing
-// git call is logged rather than passed through as an exit code.
-func runBackendService(name, module, port string) error {
+func runBackendService(name, port string, args ...string) error {
+	for _, arg := range args {
+		if arg == "--port" || strings.HasPrefix(arg, "--port=") || arg == "-p" {
+			return fatalErrorf("Set the backend port with --port before the -- separator")
+		}
+	}
 	root, err := paths.GitRoot()
 	if err != nil {
 		return fatalErrorf("Failed to find git root: %v", err)
 	}
 
-	port, err = resolvePort(port)
-	if err != nil {
-		return err
-	}
-
-	envFile, err := ensureBackendEnvFile(root)
-	if err != nil {
-		return err
-	}
-	fileVars, err := loadBackendEnvFile(envFile)
-	if err != nil {
-		return err
-	}
-
-	backendDir := filepath.Join(root, "backend")
-	mergedEnv := mergeEnv(os.Environ(), fileVars)
-	log.Debugf("Applied %d env vars from %s (shell takes precedence)", len(fileVars), envFile)
-
-	if name == "api" {
-		if err := seedDevLicense(backendDir, mergedEnv); err != nil {
-			return err
+	preferred := 0
+	if port != "" {
+		preferred, err = strconv.Atoi(port)
+		if err != nil || preferred < 1 || preferred > 65535 {
+			return fatalErrorf("Invalid port %q", port)
 		}
 	}
-
-	uvicornArgs := []string{
-		"run", "uvicorn", module,
-		"--reload",
-		"--port", port,
+	if _, _, err := devstack.PrepareEnvFiles(root); err != nil {
+		return err
 	}
-	log.Infof("Starting %s on port %s...", name, port)
-	log.Debugf("Running in %s: uv %v", backendDir, uvicornArgs)
-
-	svcCmd := exec.Command("uv", uvicornArgs...)
-	svcCmd.Dir = backendDir
-	svcCmd.Stdout = os.Stdout
-	svcCmd.Stderr = os.Stderr
-	svcCmd.Stdin = os.Stdin
-	svcCmd.Env = mergedEnv
-
-	if err := svcCmd.Run(); err != nil {
+	target, err := resolveRuntimeTarget()
+	if err != nil {
+		return fmt.Errorf("resolve backend target: %v", err)
+	}
+	launch, err := devstack.LoadLaunch(filepath.Join(root, ".vscode", "launch.json"))
+	if err != nil {
+		return fmt.Errorf("load backend launch configuration: %v", err)
+	}
+	options := devstack.ServiceOptions{
+		PreferredPort: preferred, Args: args,
+		BeforeStart: func(ctx context.Context, sp devstack.Spec) error {
+			if err := runInDir(ctx, root, "uv", "sync", "--frozen"); err != nil {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				return fatalErrorf("Failed to sync Python dependencies: %v", err)
+			}
+			return prepareAPIService(ctx, sp)
+		},
+		IO:       devstack.ServiceIO{Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr},
+		LockWait: 30 * time.Second, StopTimeout: 20 * time.Second,
+	}
+	if runtime.GOOS == "windows" {
+		return devstack.RunForegroundService(context.Background(), target, launch, name, options)
+	}
+	if err := stackForTarget(target).RunService(context.Background(), target, launch, name, options); err != nil {
 		return fatalErrorf("Failed to run %s: %w", name, err)
 	}
 	return nil
 }
 
-// envValue returns the value of key in env, or "" when it is unset.
-func envValue(env []string, key string) string {
-	for _, entry := range env {
-		if value, found := strings.CutPrefix(entry, key+"="); found {
-			return value
-		}
+func prepareAPIService(ctx context.Context, sp devstack.Spec) error {
+	if sp.Slug != "api" {
+		return nil
 	}
-	return ""
+	return seedDevLicense(ctx, sp.Dir, sp.Env)
 }
 
 // seedDevLicense installs the dev license so paid features unlock. It does
 // nothing when the variable is unset or empty. Multi-tenant mode takes its
 // tier from the control plane, and the seed has no tenant to write to.
-func seedDevLicense(backendDir string, env []string) error {
-	if envValue(env, devLicenseEnv) == "" {
+func seedDevLicense(ctx context.Context, backendDir string, env []string) error {
+	if devstack.EnvValue(env, devLicenseEnv) == "" {
 		return nil
 	}
-	if strings.EqualFold(envValue(env, "MULTI_TENANT"), "true") {
+	if strings.EqualFold(devstack.EnvValue(env, "MULTI_TENANT"), "true") {
 		log.Infof("Not seeding the dev license from %s in multi-tenant mode", devLicenseEnv)
 		return nil
 	}
 
 	log.Infof("Seeding the dev license from %s...", devLicenseEnv)
-	seedCmd := exec.Command("uv", "run", "python", "-m", "scripts.seed_dev_license")
+	seedCmd := exec.CommandContext(ctx, "uv", "run", "python", "-m", "scripts.seed_dev_license")
 	seedCmd.Dir = backendDir
 	seedCmd.Stdout = os.Stdout
 	seedCmd.Stderr = os.Stderr
@@ -205,92 +191,4 @@ func seedDevLicense(backendDir string, env []string) error {
 		return fatalErrorf("Failed to seed the dev license: %v", err)
 	}
 	return nil
-}
-
-// ensureBackendEnvFile copies env_template.txt to .env if .env doesn't exist.
-func ensureBackendEnvFile(root string) (string, error) {
-	vscodeDir := filepath.Join(root, ".vscode")
-	envFile := filepath.Join(vscodeDir, ".env")
-	templateFile := filepath.Join(vscodeDir, "env_template.txt")
-
-	if _, err := os.Stat(envFile); err != nil {
-		if !errors.Is(err, os.ErrNotExist) {
-			return "", fatalErrorf("Failed to stat env file %s: %v", envFile, err)
-		}
-	} else {
-		log.Debugf("Using existing env file: %s", envFile)
-		return envFile, nil
-	}
-
-	templateData, err := os.ReadFile(templateFile)
-	if err != nil {
-		return "", fatalErrorf("Failed to read env template %s: %v", templateFile, err)
-	}
-
-	if err := os.MkdirAll(vscodeDir, 0755); err != nil {
-		return "", fatalErrorf("Failed to create .vscode directory: %v", err)
-	}
-
-	if err := os.WriteFile(envFile, templateData, 0644); err != nil {
-		return "", fatalErrorf("Failed to write env file %s: %v", envFile, err)
-	}
-
-	log.Infof("Created %s from template (review and fill in <REPLACE THIS> values)", envFile)
-	return envFile, nil
-}
-
-// mergeEnv combines shell environment with file-based defaults. Shell values
-// take precedence — file entries are only added for keys not already present.
-func mergeEnv(shellEnv, fileVars []string) []string {
-	existing := make(map[string]bool, len(shellEnv))
-	for _, entry := range shellEnv {
-		if idx := strings.Index(entry, "="); idx > 0 {
-			existing[entry[:idx]] = true
-		}
-	}
-
-	merged := make([]string, len(shellEnv))
-	copy(merged, shellEnv)
-	for _, entry := range fileVars {
-		if idx := strings.Index(entry, "="); idx > 0 {
-			key := entry[:idx]
-			if !existing[key] {
-				merged = append(merged, entry)
-			} else {
-				log.Debugf("Env var %s already set in shell, skipping .env value", key)
-			}
-		}
-	}
-	return merged
-}
-
-// loadBackendEnvFile parses a .env file into KEY=VALUE entries suitable for
-// appending to os.Environ(). Blank lines and comments are skipped.
-func loadBackendEnvFile(path string) ([]string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, fatalErrorf("Failed to open env file %s: %v", path, err)
-	}
-	defer func() { _ = f.Close() }()
-
-	var envVars []string
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		if idx := strings.Index(line, "="); idx > 0 {
-			key := strings.TrimSpace(line[:idx])
-			value := strings.TrimSpace(line[idx+1:])
-			value = strings.Trim(value, `"'`)
-			envVars = append(envVars, fmt.Sprintf("%s=%s", key, value))
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, fatalErrorf("Failed to read env file %s: %v", path, err)
-	}
-
-	return envVars, nil
 }

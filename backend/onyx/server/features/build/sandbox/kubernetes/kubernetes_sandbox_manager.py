@@ -50,7 +50,6 @@ import tarfile
 import tempfile
 import time
 from collections.abc import Iterator, Sequence
-from contextlib import contextmanager
 from pathlib import Path
 from typing import cast
 from uuid import UUID
@@ -59,8 +58,6 @@ from kubernetes import client, watch
 from kubernetes.client.rest import ApiException
 from kubernetes.stream import stream as k8s_stream
 
-from onyx.cache.factory import get_cache_backend
-from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.db.enums import SandboxStatus
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import (
@@ -92,7 +89,10 @@ from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     SnapshotCreateRequest,
     sidecar_snapshot_restore_path,
 )
-from onyx.server.features.build.sandbox.kubernetes.k8s_client import load_kube_config
+from onyx.server.features.build.sandbox.kubernetes.k8s_client import (
+    build_runtime_api_client,
+    load_kube_config,
+)
 from onyx.server.features.build.sandbox.kubernetes.sidecar_client import (
     SidecarClient,
     SidecarRequestError,
@@ -101,6 +101,7 @@ from onyx.server.features.build.sandbox.kubernetes.sidecar_client import (
 )
 from onyx.server.features.build.sandbox.labels import (
     LABEL_K8S_COMPONENT,
+    LABEL_K8S_COMPONENT_AUTH,
     LABEL_K8S_COMPONENT_SANDBOX,
     LABEL_K8S_MANAGED_BY,
     LABEL_K8S_MANAGED_BY_ONYX,
@@ -108,6 +109,7 @@ from onyx.server.features.build.sandbox.labels import (
     LABEL_SANDBOX_ID,
     LABEL_TENANT_ID,
 )
+from onyx.server.features.build.sandbox.locks import sandbox_provision_lock
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
     CraftMCPServerConfig,
@@ -115,7 +117,8 @@ from onyx.server.features.build.sandbox.models import (
     FileSet,
     RetriableWriteError,
     SandboxInfo,
-    SandboxProvisionContentionError,
+    SandboxResource,
+    SandboxResourceKind,
     SnapshotResult,
 )
 from onyx.server.features.build.sandbox.nextjs_dev import (
@@ -123,6 +126,10 @@ from onyx.server.features.build.sandbox.nextjs_dev import (
     WEBAPP_AUTOSTART_SENTINEL,
     allowed_dev_origins,
     build_webapp_restore_script,
+)
+from onyx.server.features.build.sandbox.resources import (
+    remaining_request_timeout,
+    sandbox_resource_from_labels,
 )
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 from onyx.server.features.build.sandbox.session_workspace import (
@@ -147,6 +154,7 @@ from onyx.server.features.build.sandbox.util.opencode_config import (
 )
 from onyx.server.features.build.timeouts import (
     BULK_TRANSFER_TIMEOUT_SECONDS,
+    CONNECT_TIMEOUT_SECONDS,
     POLL_INTERVAL_SECONDS,
     PROVISION_DEADLINE_SECONDS,
     RPC_TIMEOUT_SECONDS,
@@ -190,54 +198,6 @@ _OPENCODE_WEBAPP_PLUGIN_PATH = "/workspace/opencode-plugins/webapp.ts"
 
 _PROXY_RESOLVE_RETRY_ATTEMPTS = 5
 _PROXY_RESOLVE_RETRY_BACKOFF_S = 0.5
-
-
-def _provisioning_lock_key(sandbox_id: UUID) -> str:
-    return f"sandbox_provision_{sandbox_id}"
-
-
-@contextmanager
-def _provisioning_lock(sandbox_id: UUID, tenant_id: str) -> Iterator[None]:
-    """Serialize pod creation + startup restore for one sandbox across
-    api-server replicas. Acquisition is non-blocking: the numbered-attempt
-    reservation already guarantees at most one live attempt per sandbox, so a
-    held lock means a superseded attempt's tail — the caller retries rather
-    than waiting it out.
-    TTL equals the provision deadline (the lock never outlives the work it
-    guards); expiry falls open to provision()'s 409/pod-exists fallbacks.
-    Fails open on cache outages."""
-    try:
-        lock = get_cache_backend(tenant_id=tenant_id).lock(
-            _provisioning_lock_key(sandbox_id),
-            timeout=PROVISION_DEADLINE_SECONDS,
-        )
-        acquired = lock.acquire(blocking=False)
-    except CACHE_TRANSIENT_ERRORS as e:
-        logger.warning(
-            "Provisioning lock unavailable for sandbox %s (%s); "
-            "proceeding without cross-replica serialization",
-            sandbox_id,
-            e,
-        )
-        yield
-        return
-
-    if not acquired:
-        raise SandboxProvisionContentionError(
-            f"A concurrent provisioner holds the lock for sandbox {sandbox_id}"
-        )
-    try:
-        yield
-    finally:
-        try:
-            if lock.owned():
-                lock.release()
-        except CACHE_TRANSIENT_ERRORS:
-            logger.warning(
-                "Provisioning lock release failed for sandbox %s; relying on TTL",
-                sandbox_id,
-                exc_info=True,
-            )
 
 
 _MAX_BUNDLE_BYTES = 100 * 1024 * 1024  # 100 MiB
@@ -290,8 +250,8 @@ class KubernetesSandboxManager(SandboxManager):
         # method to use WebSocket. If we share the same ApiClient for both REST and
         # streaming, the patching can leak, causing REST calls to erroneously use
         # WebSocket (resulting in "Handshake status 200 OK" errors).
-        self._rest_api_client = client.ApiClient()
-        self._stream_api_client = client.ApiClient()
+        self._rest_api_client = build_runtime_api_client()
+        self._stream_api_client = build_runtime_api_client()
 
         # Use the REST client for standard CRUD operations
         self._core_api = client.CoreV1Api(api_client=self._rest_api_client)
@@ -335,7 +295,13 @@ class KubernetesSandboxManager(SandboxManager):
     _OPENCODE_CONFIG_SECRET_KEY = "config"
 
     @time_provision_phase(SandboxProvisionPhase.OPENCODE_SECRET)
-    def _provision_opencode_secret(self, sandbox_id: str, config_json: str) -> None:
+    def _provision_opencode_secret(
+        self,
+        sandbox_id: str,
+        config_json: str,
+        tenant_id: str,
+        provisioning_attempt_number: int,
+    ) -> None:
         """Per-pod Secret with ``password`` (HTTP Basic) + ``config``
         (full opencode.json, surfaced as ``OPENCODE_CONFIG_CONTENT``).
 
@@ -350,8 +316,11 @@ class KubernetesSandboxManager(SandboxManager):
                     name=secret_name,
                     namespace=self._namespace,
                     labels={
-                        "app.kubernetes.io/component": "sandbox-opencode-auth",
-                        "onyx.app/sandbox-id": str(sandbox_id),
+                        LABEL_K8S_COMPONENT: LABEL_K8S_COMPONENT_AUTH,
+                        LABEL_K8S_MANAGED_BY: LABEL_K8S_MANAGED_BY_ONYX,
+                        LABEL_SANDBOX_ID: str(sandbox_id),
+                        LABEL_TENANT_ID: tenant_id,
+                        LABEL_PROVISIONING_ATTEMPT: str(provisioning_attempt_number),
                     },
                 ),
                 type="Opaque",
@@ -415,22 +384,6 @@ class KubernetesSandboxManager(SandboxManager):
         if not raw:
             return None
         return base64.b64decode(raw).decode("utf-8")
-
-    def _delete_opencode_password_secret(self, sandbox_id: str | UUID) -> None:
-        """Delete the per-pod opencode-serve auth Secret. Idempotent."""
-        secret_name = self._get_opencode_secret_name(sandbox_id)
-        try:
-            self._core_api.delete_namespaced_secret(
-                name=secret_name, namespace=self._namespace
-            )
-            logger.info("Deleted opencode auth secret %s", secret_name)
-        except ApiException as e:
-            if e.status not in (404, 410):
-                logger.warning(
-                    "Failed to delete opencode auth secret %s: %s",
-                    secret_name,
-                    e,
-                )
 
     def _get_nextjs_url(self, sandbox_id: str, port: int) -> str:
         """Get the internal cluster URL for a session's Next.js server.
@@ -720,6 +673,7 @@ class KubernetesSandboxManager(SandboxManager):
                 follow=True,
                 tail_lines=tail_lines,
                 _preload_content=False,  # required for streaming response
+                _request_timeout=(CONNECT_TIMEOUT_SECONDS, None),
             )
         except ApiException as e:
             logger.warning(
@@ -895,6 +849,7 @@ class KubernetesSandboxManager(SandboxManager):
                     field_selector=field_selector,
                     resource_version=resource_version,
                     timeout_seconds=max(1, int(remaining)),
+                    _request_timeout=remaining,
                 )
                 for event in stream:
                     event_type = event.get("type")
@@ -1052,7 +1007,7 @@ class KubernetesSandboxManager(SandboxManager):
                 "SANDBOX_PROXY_HOST must be set for Kubernetes sandbox provisioning"
             )
 
-        with _provisioning_lock(sandbox_id, tenant_id):
+        with sandbox_provision_lock(sandbox_id, tenant_id):
             # Every phase below (service churn, scheduling + image pull,
             # history restore, readiness, opencode-serve bind) draws from this
             # one deadline: slow phases leave less budget for later ones
@@ -1122,7 +1077,12 @@ class KubernetesSandboxManager(SandboxManager):
                     ],
                 )
                 opencode_config_json = json.dumps(opencode_config)
-                self._provision_opencode_secret(str(sandbox_id), opencode_config_json)
+                self._provision_opencode_secret(
+                    str(sandbox_id),
+                    opencode_config_json,
+                    tenant_id,
+                    provisioning_attempt_number,
+                )
 
                 # 1. Create Pod (user-level only, no session setup)
                 logger.debug("Creating Pod %s", pod_name)
@@ -1248,16 +1208,16 @@ class KubernetesSandboxManager(SandboxManager):
         polls until the resource returns 404 (not found).
 
         Args:
-            resource_type: Type of resource ("pod" or "service")
+            resource_type: Type of resource ("pod", "service", or "secret")
             name: Name of the resource
             timeout: Maximum time to wait in seconds
 
         Returns:
             True if resource was deleted, False if timeout
         """
-        start_time = time.time()
+        start_time = time.monotonic()
 
-        while time.time() - start_time < timeout:
+        while True:
             try:
                 if resource_type == "pod":
                     self._core_api.read_namespaced_pod(
@@ -1269,13 +1229,16 @@ class KubernetesSandboxManager(SandboxManager):
                         name=name,
                         namespace=self._namespace,
                     )
+                elif resource_type == "secret":
+                    self._core_api.read_namespaced_secret(
+                        name=name,
+                        namespace=self._namespace,
+                    )
                 else:
                     raise ValueError(f"Unknown resource type: {resource_type}")
 
                 # Resource still exists, wait and retry
                 logger.debug("Waiting for %s %s to be deleted...", resource_type, name)
-                time.sleep(POLL_INTERVAL_SECONDS)
-
             except ApiException as e:
                 if e.status == 404:
                     # Resource is gone
@@ -1287,7 +1250,10 @@ class KubernetesSandboxManager(SandboxManager):
                 logger.warning(
                     "Error checking %s %s status: %s", resource_type, name, e
                 )
-                time.sleep(POLL_INTERVAL_SECONDS)
+            remaining = timeout - (time.monotonic() - start_time)
+            if remaining <= 0:
+                break
+            time.sleep(min(POLL_INTERVAL_SECONDS, remaining))
 
         logger.warning(
             "Timeout waiting for %s %s to be deleted after %ss",
@@ -1316,61 +1282,185 @@ class KubernetesSandboxManager(SandboxManager):
         pod_name = self._get_pod_name(sandbox_id)
         service_name = self._get_pod_name(sandbox_id)
 
-        # Delete in reverse order of creation
-        service_deleted = False
-        try:
-            self._core_api.delete_namespaced_service(
-                name=service_name,
-                namespace=self._namespace,
-            )
-            logger.debug("Deleted Service %s", service_name)
-            service_deleted = True
-        except ApiException as e:
-            if e.status == 404:
-                # Already deleted
-                service_deleted = True
-            else:
-                logger.error("Error deleting Service %s: %s", service_name, e)
-                raise
+        errors: list[Exception] = []
+        deletions = (
+            ("service", service_name, self._core_api.delete_namespaced_service),
+            ("pod", pod_name, self._core_api.delete_namespaced_pod),
+            (
+                "secret",
+                self._get_opencode_secret_name(sandbox_id),
+                self._core_api.delete_namespaced_secret,
+            ),
+        )
+        for _resource_type, name, delete in deletions:
+            try:
+                delete(name=name, namespace=self._namespace)
+            except ApiException as e:
+                if e.status != 404:
+                    errors.append(e)
+            except Exception as e:
+                errors.append(e)
 
-        pod_deleted = False
-        try:
-            self._core_api.delete_namespaced_pod(
-                name=pod_name,
-                namespace=self._namespace,
-            )
-            logger.debug("Deleted Pod %s", pod_name)
-            pod_deleted = True
-        except ApiException as e:
-            if e.status == 404:
-                # Already deleted
-                pod_deleted = True
-            else:
-                logger.error("Error deleting Pod %s: %s", pod_name, e)
-                raise
-
-        # Delete the per-pod opencode-serve auth Secret. Idempotent.
-        # Done after the Pod is being torn down so no live container is
-        # still trying to resolve the secretKeyRef.
-        self._delete_opencode_password_secret(sandbox_id)
-
-        # Wait for resources to be fully deleted to prevent 409 conflicts
-        # on immediate re-provisioning
         if wait_for_deletion:
-            if service_deleted:
-                self._wait_for_resource_deletion(
-                    "service", service_name, RUNTIME_TEARDOWN_SECONDS
-                )
-            if pod_deleted:
-                self._wait_for_resource_deletion(
-                    "pod", pod_name, RUNTIME_TEARDOWN_SECONDS
-                )
+            deadline = time.monotonic() + RUNTIME_TEARDOWN_SECONDS
+            for resource_type, name, _delete in deletions:
+                try:
+                    if not self._wait_for_resource_deletion(
+                        resource_type, name, max(0.0, deadline - time.monotonic())
+                    ):
+                        errors.append(RuntimeError(f"{resource_type} {name} remains"))
+                except Exception as e:
+                    errors.append(e)
+        if errors:
+            raise RuntimeError(
+                f"Sandbox {sandbox_id} cleanup incomplete: {errors}"
+            ) from errors[0]
 
     def terminate(self, sandbox_id: UUID) -> None:
         """Tear down event buses, then delete Service + Pod."""
         self._close_all_sandbox_buses(sandbox_id)
         self._cleanup_kubernetes_resources(str(sandbox_id))
         logger.info("Terminated Kubernetes sandbox %s", sandbox_id)
+
+    def iter_resources(
+        self, tenant_id: str, deadline: float, sandbox_id: UUID | None = None
+    ) -> Iterator[SandboxResource]:
+        selector = (
+            f"{LABEL_K8S_MANAGED_BY}={LABEL_K8S_MANAGED_BY_ONYX},"
+            f"{LABEL_TENANT_ID}={tenant_id},"
+            f"{LABEL_K8S_COMPONENT} in ({LABEL_K8S_COMPONENT_SANDBOX},{LABEL_K8S_COMPONENT_AUTH})"
+        )
+        legacy_secret_selector = (
+            f"{LABEL_K8S_COMPONENT}={LABEL_K8S_COMPONENT_AUTH},!{LABEL_TENANT_ID}"
+        )
+        if sandbox_id is not None:
+            selector += f",{LABEL_SANDBOX_ID}={sandbox_id}"
+            legacy_secret_selector += f",{LABEL_SANDBOX_ID}={sandbox_id}"
+        for kind, list_resources, resource_selector in (
+            (SandboxResourceKind.POD, self._core_api.list_namespaced_pod, selector),
+            (
+                SandboxResourceKind.SERVICE,
+                self._core_api.list_namespaced_service,
+                selector,
+            ),
+            (
+                SandboxResourceKind.SECRET,
+                self._core_api.list_namespaced_secret,
+                selector,
+            ),
+            (
+                SandboxResourceKind.SECRET,
+                self._core_api.list_namespaced_secret,
+                legacy_secret_selector,
+            ),
+        ):
+            continuation = None
+            while True:
+                page = list_resources(
+                    namespace=self._namespace,
+                    label_selector=resource_selector,
+                    limit=100,
+                    _continue=continuation,
+                    _request_timeout=remaining_request_timeout(deadline),
+                )
+                for item in page.items:
+                    metadata = item.metadata
+                    labels = metadata.labels or {}
+                    legacy = (
+                        kind == SandboxResourceKind.SECRET
+                        and LABEL_TENANT_ID not in labels
+                    )
+                    resource_labels = (
+                        {**labels, LABEL_TENANT_ID: tenant_id} if legacy else labels
+                    )
+                    resource = sandbox_resource_from_labels(
+                        kind=kind,
+                        name=metadata.name,
+                        instance_id=metadata.uid,
+                        created_at=metadata.creation_timestamp,
+                        labels=resource_labels,
+                        tenant_id=tenant_id,
+                    )
+                    if resource is not None:
+                        yield resource.model_copy(update={"legacy_ownership": legacy})
+                continuation = page.metadata._continue
+                if not continuation:
+                    break
+
+    def delete_resource(self, resource: SandboxResource, deadline: float) -> None:
+        operations = {
+            SandboxResourceKind.POD: (
+                self._core_api.read_namespaced_pod,
+                self._core_api.delete_namespaced_pod,
+            ),
+            SandboxResourceKind.SERVICE: (
+                self._core_api.read_namespaced_service,
+                self._core_api.delete_namespaced_service,
+            ),
+            SandboxResourceKind.SECRET: (
+                self._core_api.read_namespaced_secret,
+                self._core_api.delete_namespaced_secret,
+            ),
+        }
+        read, delete = operations[resource.kind]
+        try:
+            current = read(
+                name=resource.name,
+                namespace=self._namespace,
+                _request_timeout=remaining_request_timeout(deadline),
+            )
+            labels = current.metadata.labels or {}
+            legacy_auth = (
+                resource.legacy_ownership
+                and resource.kind == SandboxResourceKind.SECRET
+                and labels.get(LABEL_K8S_COMPONENT) == LABEL_K8S_COMPONENT_AUTH
+                and LABEL_TENANT_ID not in labels
+            )
+            if (
+                current.metadata.uid != resource.instance_id
+                or labels.get(LABEL_SANDBOX_ID) != str(resource.sandbox_id)
+                or (
+                    not legacy_auth
+                    and labels.get(LABEL_TENANT_ID) != resource.tenant_id
+                )
+                or (
+                    not legacy_auth
+                    and labels.get(LABEL_K8S_MANAGED_BY) != LABEL_K8S_MANAGED_BY_ONYX
+                )
+                or (
+                    resource.provisioning_attempt_number is not None
+                    and labels.get(LABEL_PROVISIONING_ATTEMPT)
+                    != str(resource.provisioning_attempt_number)
+                )
+                or labels.get(LABEL_K8S_COMPONENT)
+                not in {LABEL_K8S_COMPONENT_SANDBOX, LABEL_K8S_COMPONENT_AUTH}
+            ):
+                raise RuntimeError(f"Resource ownership changed: {resource.name}")
+            delete(
+                name=resource.name,
+                namespace=self._namespace,
+                body=client.V1DeleteOptions(
+                    preconditions=client.V1Preconditions(
+                        uid=resource.instance_id,
+                        resource_version=current.metadata.resource_version,
+                    )
+                ),
+                _request_timeout=remaining_request_timeout(deadline),
+            )
+            while True:
+                current = read(
+                    name=resource.name,
+                    namespace=self._namespace,
+                    _request_timeout=remaining_request_timeout(deadline),
+                )
+                if current.metadata.uid != resource.instance_id:
+                    return
+                time.sleep(
+                    min(POLL_INTERVAL_SECONDS, remaining_request_timeout(deadline))
+                )
+        except ApiException as e:
+            if e.status != 404:
+                raise
 
     def setup_session_workspace(
         self,
@@ -1742,6 +1832,33 @@ echo "Session cleanup complete"
             )
             return False
 
+    def workspace_storage_identity(
+        self, sandbox_id: UUID, tenant_id: str
+    ) -> str | None:
+        try:
+            pod = self._core_api.read_namespaced_pod(
+                name=self._get_pod_name(sandbox_id), namespace=self._namespace
+            )
+        except ApiException as e:
+            if e.status == 404:
+                return None
+            raise
+        labels = pod.metadata.labels or {}
+        if (
+            labels.get(LABEL_SANDBOX_ID) != str(sandbox_id)
+            or labels.get(LABEL_TENANT_ID) != tenant_id
+        ):
+            raise RuntimeError("Workspace storage ownership mismatch")
+        if not pod.metadata.uid:
+            raise RuntimeError("Workspace storage identity missing")
+        return pod.metadata.uid
+
+    def runtime_exists(self, sandbox_id: UUID, tenant_id: str) -> bool:
+        return self.workspace_storage_identity(sandbox_id, tenant_id) is not None
+
+    def workspace_storage_exists(self, sandbox_id: UUID, tenant_id: str) -> bool:
+        return self.runtime_exists(sandbox_id, tenant_id)
+
     def list_session_workspaces(self, sandbox_id: UUID) -> list[UUID]:
         """List UUID session directories under /workspace/sessions/ in the pod.
 
@@ -1753,7 +1870,7 @@ echo "Session cleanup complete"
         exec_command = [
             "/bin/sh",
             "-c",
-            'ls -1 /workspace/sessions/ 2>/dev/null || echo ""',
+            "ls -1 /workspace/sessions/ && printf '\\nONYX_WORKSPACE_LIST_COMPLETE\\n'",
         ]
 
         try:
@@ -1767,6 +1884,7 @@ echo "Session cleanup complete"
                 stdin=False,
                 stdout=True,
                 tty=False,
+                _request_timeout=RPC_TIMEOUT_SECONDS,
             )
         except ApiException as e:
             logger.warning(
@@ -1774,10 +1892,18 @@ echo "Session cleanup complete"
                 sandbox_id,
                 e,
             )
-            return []
+            raise RuntimeError(
+                f"Workspace discovery failed for sandbox {sandbox_id}"
+            ) from e
+
+        lines = resp.strip().splitlines()
+        if not lines or lines[-1] != "ONYX_WORKSPACE_LIST_COMPLETE":
+            raise RuntimeError(
+                f"Incomplete workspace discovery for sandbox {sandbox_id}"
+            )
 
         result: list[UUID] = []
-        for raw_line in resp.strip().split("\n"):
+        for raw_line in lines[:-1]:
             line = raw_line.strip()
             if not line:
                 continue

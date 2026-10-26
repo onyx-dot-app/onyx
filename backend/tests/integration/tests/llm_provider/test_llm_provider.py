@@ -13,6 +13,7 @@ from onyx.llm.model_capabilities import (
     model_is_reasoning_model,
     supported_reasoning_efforts,
 )
+from onyx.llm.model_catalog import model_supports_chat, model_supports_decisions
 from onyx.llm.model_name_parser import parse_litellm_model_name
 from onyx.llm.well_known_providers.llm_provider_options import (
     fetch_default_model_for_provider,
@@ -75,6 +76,8 @@ def assert_response_is_equivalent(
         )
         return {
             **filled_with_max_input_tokens.model_dump(),
+            "supports_chat": model_supports_chat(provider_name, req.name),
+            "supports_decisions": model_supports_decisions(provider_name, req.name),
             "supports_image_input": catalog_model_supports_image_input(
                 req.name, provider_name
             ),
@@ -145,11 +148,11 @@ def assert_response_is_equivalent(
         (
             [
                 ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
-                ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
+                ModelConfigurationUpsertRequest(name="gpt-6-sol", is_visible=True),
             ],
             [
                 ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
-                ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
+                ModelConfigurationUpsertRequest(name="gpt-6-sol", is_visible=True),
             ],
         ),
         # Test the case in which duplicate model-configuration are passed.
@@ -223,14 +226,14 @@ def test_create_llm_provider(
                 [
                     ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
                     ModelConfigurationUpsertRequest(
-                        name="gpt-4o", is_visible=True, max_input_tokens=4096
+                        name="gpt-6-sol", is_visible=True, max_input_tokens=4096
                     ),
                 ],
             ),
             [
                 ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
                 ModelConfigurationUpsertRequest(
-                    name="gpt-4o", is_visible=True, max_input_tokens=4096
+                    name="gpt-6-sol", is_visible=True, max_input_tokens=4096
                 ),
             ],
             (
@@ -363,7 +366,7 @@ def test_update_model_configurations(
             )
         ],
         [
-            ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
+            ModelConfigurationUpsertRequest(name="gpt-6-sol", is_visible=True),
             ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
         ],
     ],
@@ -421,7 +424,7 @@ def test_delete_default_llm_provider_rejected(
             "api_key": "sk-000000000000000000000000000000000000000000000000",
             "model_configurations": [
                 ModelConfigurationUpsertRequest(
-                    name="gpt-4o-mini", is_visible=True
+                    name="gpt-6-luna", is_visible=True
                 ).model_dump()
             ],
             "is_public": True,
@@ -437,7 +440,7 @@ def test_delete_default_llm_provider_rejected(
         headers=admin_user.headers,
         json={
             "provider_id": created_provider["id"],
-            "model_name": "gpt-4o-mini",
+            "model_name": "gpt-6-luna",
         },
     )
     assert set_default_response.status_code == 200
@@ -471,7 +474,7 @@ def test_delete_non_default_llm_provider_with_default_set(
             "api_key": "sk-000000000000000000000000000000000000000000000000",
             "model_configurations": [
                 ModelConfigurationUpsertRequest(
-                    name="gpt-4o-mini", is_visible=True
+                    name="gpt-6-luna", is_visible=True
                 ).model_dump()
             ],
             "is_public": True,
@@ -490,7 +493,7 @@ def test_delete_non_default_llm_provider_with_default_set(
             "api_key": "sk-000000000000000000000000000000000000000000000000",
             "model_configurations": [
                 ModelConfigurationUpsertRequest(
-                    name="gpt-4o", is_visible=True
+                    name="gpt-6-sol", is_visible=True
                 ).model_dump()
             ],
             "is_public": True,
@@ -506,7 +509,7 @@ def test_delete_non_default_llm_provider_with_default_set(
         headers=admin_user.headers,
         json={
             "provider_id": default_provider["id"],
-            "model_name": "gpt-4o-mini",
+            "model_name": "gpt-6-luna",
         },
     )
     assert set_default_response.status_code == 200
@@ -543,7 +546,7 @@ def test_force_delete_default_llm_provider(
             "api_key": "sk-000000000000000000000000000000000000000000000000",
             "model_configurations": [
                 ModelConfigurationUpsertRequest(
-                    name="gpt-4o-mini", is_visible=True
+                    name="gpt-6-luna", is_visible=True
                 ).model_dump()
             ],
             "is_public": True,
@@ -559,7 +562,7 @@ def test_force_delete_default_llm_provider(
         headers=admin_user.headers,
         json={
             "provider_id": created_provider["id"],
-            "model_name": "gpt-4o-mini",
+            "model_name": "gpt-6-luna",
         },
     )
     assert set_default_response.status_code == 200
@@ -599,7 +602,7 @@ def test_delete_default_vision_provider_clears_vision_default(
             "api_key": "sk-000000000000000000000000000000000000000000000001",
             "model_configurations": [
                 ModelConfigurationUpsertRequest(
-                    name="gpt-4o-mini", is_visible=True
+                    name="gpt-6-luna", is_visible=True
                 ).model_dump()
             ],
             "is_public": True,
@@ -608,7 +611,7 @@ def test_delete_default_vision_provider_clears_vision_default(
     )
     assert text_response.status_code == 200
     text_provider = text_response.json()
-    _set_default_provider(admin_user, text_provider["id"], "gpt-4o-mini")
+    _set_default_provider(admin_user, text_provider["id"], "gpt-6-luna")
 
     # Create a vision provider and set it as default vision
     vision_response = client.put(
@@ -620,7 +623,7 @@ def test_delete_default_vision_provider_clears_vision_default(
             "api_key": "sk-000000000000000000000000000000000000000000000002",
             "model_configurations": [
                 ModelConfigurationUpsertRequest(
-                    name="gpt-4o",
+                    name="gpt-6-sol",
                     is_visible=True,
                     supports_image_input=True,
                 ).model_dump()
@@ -631,7 +634,9 @@ def test_delete_default_vision_provider_clears_vision_default(
     )
     assert vision_response.status_code == 200
     vision_provider = vision_response.json()
-    LLMProviderManager.set_default_vision(vision_provider["id"], admin_user, "gpt-4o")
+    LLMProviderManager.set_default_vision(
+        vision_provider["id"], admin_user, "gpt-6-sol"
+    )
 
     # Verify vision default is set
     data = _get_providers_admin(admin_user)
@@ -676,7 +681,7 @@ def test_duplicate_provider_name_allowed(reset: None) -> None:  # noqa: ARG001
         "api_key": "sk-000000000000000000000000000000000000000000000000",
         "model_configurations": [
             ModelConfigurationUpsertRequest(
-                name="gpt-4o-mini", is_visible=True
+                name="gpt-6-luna", is_visible=True
             ).model_dump()
         ],
         "is_public": True,
@@ -716,7 +721,7 @@ def test_rename_provider_allowed(reset: None) -> None:  # noqa: ARG001
         "api_key": "sk-000000000000000000000000000000000000000000000000",
         "model_configurations": [
             ModelConfigurationUpsertRequest(
-                name="gpt-4o-mini", is_visible=True
+                name="gpt-6-luna", is_visible=True
             ).model_dump()
         ],
         "is_public": True,
@@ -768,13 +773,13 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG00
     # Initial model configurations: 2 visible, 1 hidden
     model_configs = [
         ModelConfigurationUpsertRequest(
-            name="gpt-4o",
+            name="gpt-6-sol",
             is_visible=True,
             max_input_tokens=None,
             supports_image_input=None,
         ),
         ModelConfigurationUpsertRequest(
-            name="gpt-4o-mini",
+            name="gpt-6-luna",
             is_visible=True,
             max_input_tokens=None,
             supports_image_input=None,
@@ -811,19 +816,19 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG00
         model for model in provider_data["model_configurations"] if model["is_visible"]
     ]
     assert len(visible_models) == 2
-    assert any(m["name"] == "gpt-4o" for m in visible_models)
-    assert any(m["name"] == "gpt-4o-mini" for m in visible_models)
+    assert any(m["name"] == "gpt-6-sol" for m in visible_models)
+    assert any(m["name"] == "gpt-6-luna" for m in visible_models)
 
     # Edit 1: Make all 3 models visible
     edit_configs_all_visible = [
         ModelConfigurationUpsertRequest(
-            name="gpt-4o",
+            name="gpt-6-sol",
             is_visible=True,
             max_input_tokens=None,
             supports_image_input=None,
         ),
         ModelConfigurationUpsertRequest(
-            name="gpt-4o-mini",
+            name="gpt-6-luna",
             is_visible=True,
             max_input_tokens=None,
             supports_image_input=None,
@@ -865,13 +870,13 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG00
     # Edit 2: Make only 1 model visible
     edit_configs_one_visible = [
         ModelConfigurationUpsertRequest(
-            name="gpt-4o",
+            name="gpt-6-sol",
             is_visible=True,  # Only this one visible
             max_input_tokens=None,
             supports_image_input=None,
         ),
         ModelConfigurationUpsertRequest(
-            name="gpt-4o-mini",
+            name="gpt-6-luna",
             is_visible=False,
             max_input_tokens=None,
             supports_image_input=None,
@@ -909,18 +914,18 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG00
         model for model in provider_data["model_configurations"] if model["is_visible"]
     ]
     assert len(visible_models) == 1
-    assert visible_models[0]["name"] == "gpt-4o"
+    assert visible_models[0]["name"] == "gpt-6-sol"
 
     # Make none visible
     edit_configs_none_visible = [
         ModelConfigurationUpsertRequest(
-            name="gpt-4o",
+            name="gpt-6-sol",
             is_visible=False,
             max_input_tokens=None,
             supports_image_input=None,
         ),
         ModelConfigurationUpsertRequest(
-            name="gpt-4o-mini",
+            name="gpt-6-luna",
             is_visible=False,
             max_input_tokens=None,
             supports_image_input=None,
@@ -958,17 +963,17 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG00
     ]
     assert len(visible_models) == 0
 
-    # Make gpt-4o the default
-    _set_default_provider(admin_user, created_provider["id"], "gpt-4o")
+    # Make gpt-6-sol the default
+    _set_default_provider(admin_user, created_provider["id"], "gpt-6-sol")
 
-    # Verify gpt-4o is the default
+    # Verify gpt-6-sol is the default
     provider_data = _get_provider_by_id(admin_user, created_provider["id"])
     assert provider_data is not None
     visible_models = [
         model for model in provider_data["model_configurations"] if model["is_visible"]
     ]
     assert len(visible_models) == 1
-    assert visible_models[0]["name"] == "gpt-4o"
+    assert visible_models[0]["name"] == "gpt-6-sol"
 
 
 def _get_provider_by_name(providers: list[dict], provider_name: str) -> dict | None:
@@ -1156,7 +1161,7 @@ def test_default_model_persistence_and_update(
     assert not basic_user.is_admin
 
     provider_name = f"test-default-model-{uuid.uuid4()}"
-    updated_default_model = "gpt-4o"
+    updated_default_model = "gpt-6-sol"
 
     # Model configurations including all models we'll use
     model_configs = [
@@ -1165,14 +1170,14 @@ def test_default_model_persistence_and_update(
             is_visible=True,
         ),
         ModelConfigurationUpsertRequest(
-            name="gpt-4o",
+            name="gpt-6-sol",
             is_visible=True,
         ),
     ]
 
     # Expected model names and visibility
-    expected_model_names = ["gpt-4", "gpt-4o"]
-    expected_visible = {"gpt-4": True, "gpt-4o": True}
+    expected_model_names = ["gpt-4", "gpt-6-sol"]
+    expected_visible = {"gpt-4": True, "gpt-6-sol": True}
 
     # Step 1: Admin creates the provider with initial default model
     create_response = client.put(
@@ -1405,7 +1410,7 @@ def test_multiple_providers_default_switching(
 
     # Both providers will have "gpt-4" as a model
     shared_model_name = "gpt-4"
-    provider_1_unique_model = "gpt-4o"
+    provider_1_unique_model = "gpt-6-sol"
     provider_2_unique_model = "gpt-4-turbo"
 
     # Model configurations for provider 1
@@ -1762,11 +1767,11 @@ def test_default_provider_and_vision_provider_selection(
     # Provider 1: Mixed models - some with vision support, some without
     # Using real model names that litellm recognizes for vision support
     provider_1_non_vision_model = "gpt-4"  # No vision support
-    provider_1_vision_model = "gpt-4o"  # Has vision support
+    provider_1_vision_model = "gpt-6-sol"  # Has vision support
 
     # Provider 2: Only vision-capable models
     provider_2_vision_model_1 = "gpt-4-vision-preview"  # Vision model
-    provider_2_vision_model_2 = "gpt-4o-mini"  # Also has vision support
+    provider_2_vision_model_2 = "gpt-6-luna"  # Also has vision support
 
     # Model configurations for provider 1 (mixed)
     provider_1_configs = [
@@ -1991,13 +1996,13 @@ def test_default_provider_is_not_default_vision_provider(
             is_visible=True,
         ),
         ModelConfigurationUpsertRequest(
-            name="gpt-4o",
+            name="gpt-6-sol",
             is_visible=True,
         ),
     ]
 
-    expected_model_names = ["gpt-4", "gpt-4o"]
-    expected_visible = {"gpt-4": True, "gpt-4o": True}
+    expected_model_names = ["gpt-4", "gpt-6-sol"]
+    expected_visible = {"gpt-4": True, "gpt-6-sol": True}
 
     # Step 1: Create the provider
     create_response = client.put(
@@ -2074,17 +2079,17 @@ def _create_image_gen_config(
     admin_user: DATestUser,
     image_provider_id: str,
     model_name: str,
-    source_llm_provider_id: int,
     is_default: bool = False,
 ) -> dict:
-    """Utility function to create an image generation config using clone mode."""
+    """Utility function to create an image generation config."""
     response = client.post(
         f"{API_SERVER_URL}/admin/image-generation/config",
         headers=admin_user.headers,
         json={
             "image_provider_id": image_provider_id,
             "model_name": model_name,
-            "source_llm_provider_id": source_llm_provider_id,
+            "provider": "openai",
+            "api_key": "sk-test-image-gen-key",
             "is_default": is_default,
         },
     )
@@ -2146,7 +2151,7 @@ def test_all_three_provider_types_no_mixup(reset: None) -> None:  # noqa: ARG001
     # Model configurations
     regular_model_configs = [
         ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
-        ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
+        ModelConfigurationUpsertRequest(name="gpt-6-sol", is_visible=True),
     ]
 
     vision_model_configs = [
@@ -2154,7 +2159,7 @@ def test_all_three_provider_types_no_mixup(reset: None) -> None:  # noqa: ARG001
             name="gpt-4-vision-preview", is_visible=True, supports_image_input=True
         ),
         ModelConfigurationUpsertRequest(
-            name="gpt-4o", is_visible=True, supports_image_input=True
+            name="gpt-6-sol", is_visible=True, supports_image_input=True
         ),
     ]
 
@@ -2201,12 +2206,11 @@ def test_all_three_provider_types_no_mixup(reset: None) -> None:  # noqa: ARG001
         vision_provider["id"], admin_user, "gpt-4-vision-preview"
     )
 
-    # Step 3: Create image generation config using clone mode from regular provider
+    # Step 3: Create image generation config
     _create_image_gen_config(
         admin_user=admin_user,
         image_provider_id=image_gen_provider_id,
-        model_name="gpt-image-1",
-        source_llm_provider_id=regular_provider["id"],
+        model_name="gpt-image-2.5-flare",
         is_default=True,
     )
 
@@ -2267,7 +2271,7 @@ def test_all_three_provider_types_no_mixup(reset: None) -> None:  # noqa: ARG001
     assert image_gen_config_data["is_default"] is True, (
         "Image gen config should be the default"
     )
-    assert image_gen_config_data["model_name"] == "gpt-image-1", (
+    assert image_gen_config_data["model_name"] == "gpt-image-2.5-flare", (
         "Image gen config should have correct model name"
     )
 
@@ -2372,7 +2376,7 @@ def test_keep_existing_models_preserves_unsent_models(
             "api_key": "sk-000000000000000000000000000000000000000000000000",
             "model_configurations": [
                 {"name": "gpt-4", "is_visible": True},
-                {"name": "gpt-4o", "is_visible": True},
+                {"name": "gpt-6-sol", "is_visible": True},
             ],
             "is_public": True,
             "groups": [],
@@ -2398,7 +2402,7 @@ def test_keep_existing_models_preserves_unsent_models(
         assert response.status_code == 200
         return sorted(mc["name"] for mc in response.json()["model_configurations"])
 
-    # Sending only gpt-4 keeps gpt-4o.
-    assert _update(keep=True) == ["gpt-4", "gpt-4o"]
+    # Sending only gpt-4 keeps gpt-6-sol.
+    assert _update(keep=True) == ["gpt-4", "gpt-6-sol"]
     # The default is still a full replace.
     assert _update(keep=False) == ["gpt-4"]

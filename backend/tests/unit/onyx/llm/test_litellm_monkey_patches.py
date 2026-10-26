@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Any, cast
 from unittest import mock
 
+import pytest
 from litellm.completion_extras.litellm_responses_transformation.transformation import (
     LiteLLMResponsesTransformationHandler,
     OpenAiResponsesToChatCompletionStreamIterator,
@@ -360,11 +361,11 @@ def test_bridge_check_delegates_without_prefix() -> None:
 
     apply_monkey_patches()
     model_info, model = litellm_main.responses_api_bridge_check(
-        model="gpt-4o",
+        model="gpt-6-sol",
         custom_llm_provider="openai",
     )
     assert model_info.get("mode") != "responses"
-    assert model == "gpt-4o"
+    assert model == "gpt-6-sol"
 
 
 def test_openai_should_fake_stream_streams_natively_on_registry_miss() -> None:
@@ -378,7 +379,7 @@ def test_openai_should_fake_stream_streams_natively_on_registry_miss() -> None:
         side_effect=Exception("This model isn't mapped yet"),
     ) as get_model_info_mock:
         result = config.should_fake_stream(
-            model="bedrock_mantle/openai.gpt-5.6-sol",
+            model="bedrock_mantle/openai.gpt-6.1-sol",
             stream=True,
             custom_llm_provider="openai",
         )
@@ -474,12 +475,13 @@ _TOOL_HISTORY: list[Any] = [
 ]
 
 
-def test_disabled_thinking_survives_tool_call_history() -> None:
+@pytest.mark.parametrize("off_type", ["disabled", "between_tools"])
+def test_disabled_thinking_survives_tool_call_history(off_type: str) -> None:
     """Upstream drops any thinking param once tool calls arrive without thinking
-    blocks. Disabled thinking cannot cause the error that guard exists for, and
+    blocks. Off thinking cannot cause the error that guard exists for, and
     dropping it hands the Claude 5 line back its default effort."""
-    body = _anthropic_body({"type": "disabled"}, list(_TOOL_HISTORY))
-    assert body["thinking"] == {"type": "disabled"}
+    body = _anthropic_body({"type": off_type}, list(_TOOL_HISTORY))
+    assert body["thinking"] == {"type": off_type}
 
 
 def test_enabled_thinking_still_dropped_after_tool_calls() -> None:
@@ -503,11 +505,12 @@ def _converse_fields(thinking: dict[str, str], messages: list[Any]) -> Any:
     return data.get("additionalModelRequestFields")
 
 
-def test_converse_keeps_disabled_thinking_after_tool_calls() -> None:
+@pytest.mark.parametrize("off_type", ["disabled", "between_tools"])
+def test_converse_keeps_disabled_thinking_after_tool_calls(off_type: str) -> None:
     """Converse carries its own copy of the upstream drop, and puts thinking
     under additionalModelRequestFields rather than at the top level."""
-    fields = _converse_fields({"type": "disabled"}, list(_TOOL_HISTORY))
-    assert fields == {"thinking": {"type": "disabled"}}
+    fields = _converse_fields({"type": off_type}, list(_TOOL_HISTORY))
+    assert fields == {"thinking": {"type": off_type}}
 
 
 def test_converse_still_drops_enabled_thinking_after_tool_calls() -> None:

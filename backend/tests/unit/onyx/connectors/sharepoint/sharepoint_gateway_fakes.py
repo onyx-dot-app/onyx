@@ -12,6 +12,7 @@ from unittest.mock import MagicMock
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
 from onyx.connectors.microsoft_utils.graph_gateway import MicrosoftGraphGateway
+from onyx.connectors.microsoft_utils.models import MicrosoftTokenInfo
 from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.connectors.sharepoint.source_operations import (
     CONFIG_SITES,
@@ -74,6 +75,7 @@ def fake_gateway(
             "access_token": FAKE_TOKEN,
             "expires_in": 3600,
         }
+        graph.token_info.return_value = MicrosoftTokenInfo(expires_in=3600)
         gateway._graph_gateway = graph
     if sdk_client is not None:
         gateway._sdk_client = sdk_client

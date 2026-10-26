@@ -1,8 +1,7 @@
 """Auto-generation of human-readable build-session names.
 
 Given a session, pull its first user message and ask the default LLM to
-condense it into a short label. Falls back to a deterministic
-``"Build Session <prefix>"`` if anything goes wrong.
+condense it into a short label. Falls back to the first message.
 """
 
 from typing import Any
@@ -11,6 +10,8 @@ from uuid import UUID
 from sqlalchemy.orm import Session as DBSession
 
 from onyx.configs.constants import MessageType
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.factory import get_default_llm
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
@@ -44,10 +45,6 @@ _NAMING_USER_PROMPT = (
 )
 
 
-def _fallback_name(session_id: UUID) -> str:
-    return f"Build Session {str(session_id)[:8]}"
-
-
 def _extract_text(metadata: Any) -> str:
     """Pull the user-message text out of a BuildMessage's ``message_metadata``.
 
@@ -70,7 +67,7 @@ def first_user_message_text(db_session: DBSession, session_id: UUID) -> str | No
     first_user = next((m for m in messages if m.type == MessageType.USER), None)
     if first_user is None:
         return None
-    text = _extract_text(first_user.message_metadata)
+    text = _extract_text(first_user.message_metadata).strip()
     return text or None
 
 
@@ -81,11 +78,13 @@ def generate_session_name(db_session: DBSession, session_id: UUID) -> str:
     Fallback order:
     1. LLM-generated name (truncated to 50 chars).
     2. First-message text truncated to 40 chars.
-    3. ``Build Session <prefix>`` if the session has no user messages.
+    Empty sessions cannot be named.
     """
     user_message = first_user_message_text(db_session, session_id)
     if not user_message:
-        return _fallback_name(session_id)
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, "Send a message before naming this session."
+        )
 
     try:
         llm = get_default_llm()
@@ -97,7 +96,6 @@ def generate_session_name(db_session: DBSession, session_id: UUID) -> str:
                 )
             ),
         ]
-        generated = ""
         with ensure_trace(
             "build_session_naming",
             group_id=str(session_id),
@@ -110,14 +108,14 @@ def generate_session_name(db_session: DBSession, session_id: UUID) -> str:
                 ),
                 context=GenerationContext(flow=LLMFlow.BUILD_SESSION_NAMING),
             )
-            generated = response.text.strip().strip('"')
+            generated = response.text.strip().strip('"').strip()
 
-        if not generated:
-            return _fallback_name(session_id)
-        if len(generated) > _MAX_NAME_LENGTH:
-            generated = generated[: _MAX_NAME_LENGTH - 3] + "..."
-        return generated
+        if generated:
+            if len(generated) > _MAX_NAME_LENGTH:
+                generated = generated[: _MAX_NAME_LENGTH - 3] + "..."
+            return generated
     except Exception as e:
         logger.warning("Failed to generate session name with LLM: %s", e)
-        truncated = user_message[:40].strip()
-        return truncated + ("..." if len(user_message) > 40 else "")
+
+    truncated = user_message[:40].strip()
+    return truncated + ("..." if len(user_message) > 40 else "")

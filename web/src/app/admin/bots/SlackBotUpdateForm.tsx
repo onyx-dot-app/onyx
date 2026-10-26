@@ -11,7 +11,7 @@ import { SlackTokensForm } from "./SlackTokensForm";
 import { EditableStringFieldDisplay } from "@/components/EditableStringFieldDisplay";
 import { deleteSlackBot } from "./new/lib";
 import GenericConfirmModal from "@/sections/modals/GenericConfirmModal";
-import { Button } from "@opal/components";
+import { Button, InputCheckbox as OpalInputCheckbox } from "@opal/components";
 import { cn } from "@opal/utils";
 import { SvgChevronDownSmall, SvgTrash } from "@opal/icons";
 
@@ -25,12 +25,11 @@ function InputCheckbox({
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
   return (
-    <label className="flex text-xs cursor-pointer">
-      <input
+    <label className="flex items-center gap-2 text-xs cursor-pointer">
+      <OpalInputCheckbox
         checked={checked}
         onChange={onChange}
-        type="checkbox"
-        className="me-2 w-3.5 h-3.5 my-auto"
+        aria-label={label}
       />
       <span className="block font-medium text-text-700 text-sm">{label}</span>
     </label>

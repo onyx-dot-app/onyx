@@ -2,7 +2,7 @@ from typing import Annotated, Any
 
 from pydantic import field_validator
 
-from onyx.connectors.connector_config import ConnectorConfig
+from onyx.connectors.connector_config import ConnectorConfig, field_format_error
 from onyx.connectors.field_policy import (
     FieldClass,
     FieldPolicy,
@@ -11,6 +11,8 @@ from onyx.connectors.field_policy import (
     ScopeToggle,
 )
 from onyx.connectors.github.utils import parse_repository_names
+
+REPOSITORY_OWNER_ERROR = "Enter the name without the owner, e.g. onyx."
 
 _DOCUMENT_TYPE_TOGGLE = FieldPolicy(
     FieldClass.SCOPE, scope=ScopeToggle(widens_when=True)
@@ -45,6 +47,15 @@ class GithubConnectorConfig(ConnectorConfig):
         if not isinstance(value, str):
             return value
         return value.strip() if parse_repository_names(value) else None
+
+    # The connector reads repo_owner/name, so a name with an owner reads
+    # owner/owner/name, which GitHub never finds.
+    @field_validator("repositories")
+    @classmethod
+    def _names_have_no_owner(cls, value: str | None) -> str | None:
+        if any("/" in name for name in parse_repository_names(value)):
+            raise field_format_error(REPOSITORY_OWNER_ERROR)
+        return value
 
     # A blank value means the default branch, as in the connector.
     @field_validator("branch", mode="before")

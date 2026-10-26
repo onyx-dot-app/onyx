@@ -8,15 +8,14 @@ including creation, status updates, progress tracking, and querying.
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import DocumentSource
 from onyx.db.enums import (
     PermissionSyncStatus,
 )
 from onyx.db.permission_sync_attempt import (
+    PermissionSyncAttemptLostError,
     complete_doc_permission_sync_attempt,
     create_doc_permission_sync_attempt,
     get_doc_permission_sync_attempt,
-    get_recent_doc_permission_sync_attempts_for_cc_pair,
     mark_doc_permission_sync_attempt_failed,
     mark_doc_permission_sync_attempt_in_progress,
 )
@@ -174,48 +173,6 @@ class TestDocPermissionSyncAttempt:
         assert attempt.total_docs_synced == 5
         assert attempt.docs_with_permission_errors == 1
 
-    def test_get_recent_doc_permission_sync_attempts_for_cc_pair(
-        self, db_session: Session
-    ) -> None:
-        """Test retrieving recent doc permission sync attempts for a connector credential pair."""
-        cc_pair = create_test_connector_credential_pair(db_session)
-
-        # Create multiple attempts
-        attempt_ids = []
-        for _ in range(5):
-            attempt_id = create_doc_permission_sync_attempt(cc_pair.id, db_session)
-            attempt_ids.append(attempt_id)
-
-        # Get recent attempts
-        recent_attempts = get_recent_doc_permission_sync_attempts_for_cc_pair(
-            cc_pair_id=cc_pair.id,
-            limit=3,
-            db_session=db_session,
-        )
-
-        assert len(recent_attempts) == 3
-
-        # Verify they are ordered by time_created descending (most recent first)
-        for i in range(len(recent_attempts) - 1):
-            assert (
-                recent_attempts[i].time_created >= recent_attempts[i + 1].time_created
-            )
-
-        # Verify they all belong to the correct cc_pair
-        for attempt in recent_attempts:
-            assert attempt.connector_credential_pair_id == cc_pair.id
-
-        # Test with different cc_pair (should return empty)
-        other_cc_pair = create_test_connector_credential_pair(
-            db_session, source=DocumentSource.SLACK
-        )
-        other_attempts = get_recent_doc_permission_sync_attempts_for_cc_pair(
-            cc_pair_id=other_cc_pair.id,
-            limit=10,
-            db_session=db_session,
-        )
-        assert len(other_attempts) == 0
-
     def test_status_enum_methods(self, db_session: Session) -> None:
         """Test the status enum helper methods."""
         cc_pair = create_test_connector_credential_pair(db_session)
@@ -318,40 +275,28 @@ class TestDocPermissionSyncAttempt:
         assert completed_attempt.docs_with_permission_errors == 15
         assert completed_attempt.time_finished is not None
 
-    def test_complete_doc_permission_sync_attempt_can_be_called_multiple_times(
+    def test_complete_doc_permission_sync_attempt_rejects_second_call(
         self, db_session: Session
     ) -> None:
-        """Test that complete can be called multiple times if needed (accumulates correctly)."""
+        """A finished attempt is no longer IN_PROGRESS, so a second complete
+        (e.g. from a worker that lost the attempt) is rejected."""
         cc_pair = create_test_connector_credential_pair(db_session)
         attempt_id = create_doc_permission_sync_attempt(cc_pair.id, db_session)
-
-        # Mark as in progress
         mark_doc_permission_sync_attempt_in_progress(attempt_id, db_session)
 
-        # Complete once
         first_complete = complete_doc_permission_sync_attempt(
             db_session=db_session,
             attempt_id=attempt_id,
             total_docs_synced=50,
             docs_with_permission_errors=5,
         )
-
-        # Verify first completion
         assert first_complete.status == PermissionSyncStatus.COMPLETED_WITH_ERRORS
         assert first_complete.total_docs_synced == 50
-        assert first_complete.docs_with_permission_errors == 5
-        assert first_complete.time_finished is not None
 
-        # Call complete again (simulating additional batch processing)
-        second_complete = complete_doc_permission_sync_attempt(
-            db_session=db_session,
-            attempt_id=attempt_id,
-            total_docs_synced=50,
-            docs_with_permission_errors=10,
-        )
-
-        # Should accumulate progress from both calls
-        assert second_complete.status == PermissionSyncStatus.COMPLETED_WITH_ERRORS
-        assert second_complete.total_docs_synced == 100
-        assert second_complete.docs_with_permission_errors == 15
-        assert second_complete.time_finished is not None
+        with pytest.raises(PermissionSyncAttemptLostError):
+            complete_doc_permission_sync_attempt(
+                db_session=db_session,
+                attempt_id=attempt_id,
+                total_docs_synced=50,
+                docs_with_permission_errors=10,
+            )

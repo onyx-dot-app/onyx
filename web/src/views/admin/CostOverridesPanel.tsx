@@ -1,19 +1,40 @@
 "use client";
 
-import { ChangeEvent, useState } from "react";
-import { useLocale, useTranslations } from "next-intl";
+import { useState } from "react";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
-import { ContentAction, toast } from "@opal/layouts";
+import { Form, Formik } from "formik";
+import * as Yup from "yup";
+import {
+  ConfirmationModalLayout,
+  ContentAction,
+  InputHorizontal,
+  Section,
+  toast,
+} from "@opal/layouts";
 import { PageLoader } from "@opal/loaders";
-import { Button, Card, InputTypeIn, MessageCard, Text } from "@opal/components";
+import {
+  BasicModalFooter,
+  Button,
+  InputCurrency,
+  InputTypeIn,
+  MessageCard,
+  Modal,
+  SelectCard,
+  Text,
+  useCreateModal,
+} from "@opal/components";
 import { Hoverable } from "@opal/core";
-import { SvgCheck, SvgEdit, SvgPlus, SvgTrash, SvgX } from "@opal/icons";
-import { markdown } from "@opal/utils";
+import { SvgPlus, SvgSettings, SvgTrash, SvgWallet, SvgX } from "@opal/icons";
+import { escapeMarkdown, markdown } from "@opal/utils";
+import type { CurrencyPrecision } from "@opal/types";
 import { SimpleModelSelector } from "@/lib/languageModels/components";
-import { getProvider } from "@/lib/languageModels/utils";
+import { getModelIcon, getProvider } from "@/lib/languageModels/utils";
+import { useProviderNames } from "@/lib/languageModels/useProviderNames";
 import {
   filterModelConfigurations,
   findLlmOptionById,
+  findModelConfigId,
 } from "@/lib/languageModels/options";
 import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
 import { useSettings } from "@/lib/settings/hooks";
@@ -26,21 +47,22 @@ import {
 } from "@/lib/languageModels/costOverrides";
 import type { CostOverride } from "@/lib/languageModels/types";
 
-/** `allProvidersLabel` is passed in: this module cannot call translation hooks. */
+/**
+ * The label and resolver are passed in: this function cannot call hooks.
+ * `providerNames` is `useProviderNames()`.
+ */
 function getProviderDisplayName(
   provider: string,
-  allProvidersLabel: string
+  allProvidersLabel: string,
+  providerNames: ReturnType<typeof useProviderNames>
 ): string {
-  return provider ? getProvider(provider).companyName : allProvidersLabel;
+  return provider
+    ? providerNames(getProvider(provider)).companyName
+    : allProvidersLabel;
 }
 
-// Accepts integers/decimals only; "" is allowed mid-edit, validated on submit.
-function parseRate(raw: string): number | null {
-  if (raw.trim() === "") return null;
-  if (!/^\d*\.?\d+$/.test(raw.trim())) return null;
-  const value = Number(raw);
-  return Number.isFinite(value) && value >= 0 ? value : null;
-}
+// Negotiated rates often go below a cent per 1M tokens ($0.075, $0.01875).
+const RATE_PRECISION: CurrencyPrecision = "unlimited";
 
 function formatRate(value: number, locale: string): string {
   return `$${value.toLocaleString(locale, {
@@ -49,178 +71,222 @@ function formatRate(value: number, locale: string): string {
   })}`;
 }
 
-// Shared add/edit form for the idempotent upsert.
+// Shared add/edit modal for the idempotent upsert. Mount it only while open,
+// so each open starts from fresh form state.
 
-interface OverrideFormProps {
-  // Editing an existing row locks the model name (it's the upsert key).
-  existing?: CostOverride;
-  onDone: () => void;
+interface OverrideFormValues {
+  model: string;
+  provider: string;
+  // The override keys on the model name; the picked config id only lets the
+  // selector highlight the current choice.
+  modelConfigId: number | null;
+  inputRate: number | null;
+  outputRate: number | null;
+  // Empty (null) bills cache reads at the input rate.
+  cacheRate: number | null;
 }
 
-function OverrideForm({ existing, onDone }: OverrideFormProps) {
+const overrideValidationSchema = Yup.object({
+  model: Yup.string().trim().required(),
+  inputRate: Yup.number().nullable().required(),
+  outputRate: Yup.number().nullable().required(),
+  cacheRate: Yup.number().nullable(),
+});
+
+interface OverrideModalProps {
+  // Editing an existing row locks the model name (it's the upsert key).
+  existing?: CostOverride;
+  onClose: () => void;
+}
+
+function OverrideModal({ existing, onClose }: OverrideModalProps) {
   const t = useTranslations("admin.costOverrides");
+  const providerNames = useProviderNames();
   const { mutate } = useSWRConfig();
   const { llmProviders, modelPaging } = useAdminLanguageModels();
   const { hide_provider_grouping: hideProviderGrouping } = useSettings();
-  const [model, setModel] = useState(existing?.model ?? "");
-  const [provider, setProvider] = useState(existing?.provider ?? "");
-  const [inputRate, setInputRate] = useState(
-    existing ? String(existing.input_cost_per_mtok) : ""
-  );
-  const [outputRate, setOutputRate] = useState(
-    existing ? String(existing.output_cost_per_mtok) : ""
-  );
-  const [cacheRate, setCacheRate] = useState(
-    existing?.cache_read_cost_per_mtok != null
-      ? String(existing.cache_read_cost_per_mtok)
-      : ""
-  );
-  const [submitting, setSubmitting] = useState(false);
-
-  // The override keys on the model name; track the picked config id too so the
-  // selector can highlight the current choice.
-  const [modelConfigId, setModelConfigId] = useState<number | null>(null);
-
   const isEdit = existing !== undefined;
-  const parsedInput = parseRate(inputRate);
-  const parsedOutput = parseRate(outputRate);
-  // Empty cache rate is valid (bill cache reads at the input rate); a non-empty
-  // but unparseable value must block submit, not silently drop to null.
-  const parsedCache = parseRate(cacheRate);
-  const cacheValid = cacheRate.trim() === "" || parsedCache !== null;
-  const modelLabel = model
-    ? `${getProviderDisplayName(provider, t("allProviders.label"))} · ${model}`
-    : "";
-  const canSubmit =
-    model.trim() !== "" &&
-    parsedInput !== null &&
-    parsedOutput !== null &&
-    cacheValid;
+  // The model list portals into the modal, inside its focus trap, so its
+  // search field can take focus.
+  const [contentEl, setContentEl] = useState<HTMLDivElement | null>(null);
+  // Editing shows the locked model in the selector. Providers load after
+  // mount, so this resolves on render rather than in the initial values.
+  const editModelConfigId = existing
+    ? findModelConfigId(llmProviders, existing.provider, existing.model)
+    : null;
 
-  async function handleSubmit() {
-    if (!canSubmit || parsedInput === null || parsedOutput === null) return;
-    setSubmitting(true);
+  const initialValues: OverrideFormValues = {
+    model: existing?.model ?? "",
+    provider: existing?.provider ?? "",
+    modelConfigId: null,
+    inputRate: existing?.input_cost_per_mtok ?? null,
+    outputRate: existing?.output_cost_per_mtok ?? null,
+    cacheRate: existing?.cache_read_cost_per_mtok ?? null,
+  };
+
+  async function handleSubmit(values: OverrideFormValues) {
+    // The schema guarantees both rates; this narrows them for the request.
+    if (values.inputRate === null || values.outputRate === null) return;
+    const model = values.model.trim();
     try {
       await upsertCostOverride({
-        model: model.trim(),
-        provider,
-        input_cost_per_mtok: parsedInput,
-        output_cost_per_mtok: parsedOutput,
-        // Empty cache rate => null (cache reads bill at the input rate).
-        cache_read_cost_per_mtok: parsedCache,
+        model,
+        provider: values.provider,
+        input_cost_per_mtok: values.inputRate,
+        output_cost_per_mtok: values.outputRate,
+        cache_read_cost_per_mtok: values.cacheRate,
       });
       await refreshCostOverrides(mutate);
-      toast.success(t("toasts.saved", { model: model.trim() }));
-      onDone();
+      onClose();
     } catch (e) {
       console.error("Failed to save cost override", e);
       const message = e instanceof Error ? e.message : t("toasts.unknownError");
       toast.error(t("toasts.saveFailed", { message }));
-    } finally {
-      setSubmitting(false);
     }
   }
 
   return (
-    <Card border="solid" rounding={4}>
-      <GeneralLayouts.Section
-        gap={3}
-        height="fit"
-        alignItems="stretch"
-        justifyContent="start"
-      >
-        <div className="flex flex-col gap-1">
-          <Text font="secondary-action" color="text-03">
-            {t("form.model.label")}
-          </Text>
-          {isEdit ? (
-            <InputTypeIn value={modelLabel} variant="readOnly" />
-          ) : (
-            <SimpleModelSelector
-              nullable
-              providers={filterModelConfigurations(llmProviders ?? [], {
-                visibleOnly: false,
-              })}
-              value={modelConfigId}
-              grouped={!hideProviderGrouping}
-              modelPaging={modelPaging}
-              onChange={(modelConfigurationId) => {
-                const opt = findLlmOptionById(
-                  llmProviders,
-                  modelConfigurationId
-                );
-                setModel(opt?.modelName ?? "");
-                setProvider(opt?.provider ?? "");
-                setModelConfigId(modelConfigurationId);
-              }}
-            />
+    <Modal
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <Modal.Content width="md" ref={setContentEl}>
+        <Formik
+          initialValues={initialValues}
+          validationSchema={overrideValidationSchema}
+          validateOnMount
+          onSubmit={handleSubmit}
+        >
+          {({ values, setFieldValue, isValid, dirty, isSubmitting }) => (
+            <Form>
+              <Modal.Header
+                icon={SvgWallet}
+                title={isEdit ? t("form.editTitle") : t("form.newTitle")}
+                description={t("form.description")}
+                onClose={onClose}
+              />
+              <Modal.Body alignItems="stretch">
+                <InputHorizontal
+                  withLabel
+                  title={t("form.model.label")}
+                  description={t("form.model.description")}
+                  fillInput
+                  center
+                >
+                  {isEdit && editModelConfigId === null ? (
+                    // An all-providers override, or a model no provider
+                    // configures any more, has no option to show.
+                    <InputTypeIn
+                      value={`${getProviderDisplayName(values.provider, t("allProviders.label"), providerNames)} · ${values.model}`}
+                      variant="readOnly"
+                    />
+                  ) : (
+                    <SimpleModelSelector
+                      includeDecisionOnly
+                      nullable={!isEdit}
+                      disabled={isEdit}
+                      providers={filterModelConfigurations(llmProviders ?? [], {
+                        keep: editModelConfigId,
+                        includeDecisionOnly: true,
+                      })}
+                      value={isEdit ? editModelConfigId : values.modelConfigId}
+                      grouped={!hideProviderGrouping}
+                      modelPaging={modelPaging}
+                      container={contentEl}
+                      onChange={(modelConfigurationId) => {
+                        const opt = findLlmOptionById(
+                          llmProviders,
+                          modelConfigurationId
+                        );
+                        void setFieldValue("model", opt?.modelName ?? "");
+                        void setFieldValue("provider", opt?.provider ?? "");
+                        void setFieldValue(
+                          "modelConfigId",
+                          modelConfigurationId
+                        );
+                      }}
+                    />
+                  )}
+                </InputHorizontal>
+
+                <InputHorizontal
+                  withLabel
+                  title={t("form.inputRate.label")}
+                  description={t("form.units.description")}
+                  fillInput
+                  center
+                >
+                  <InputCurrency
+                    value={values.inputRate}
+                    onChange={(rate) => void setFieldValue("inputRate", rate)}
+                    precision={RATE_PRECISION}
+                  />
+                </InputHorizontal>
+
+                <InputHorizontal
+                  withLabel
+                  title={t("form.outputRate.label")}
+                  description={t("form.units.description")}
+                  fillInput
+                  center
+                >
+                  <InputCurrency
+                    value={values.outputRate}
+                    onChange={(rate) => void setFieldValue("outputRate", rate)}
+                    precision={RATE_PRECISION}
+                  />
+                </InputHorizontal>
+
+                <InputHorizontal
+                  withLabel
+                  title={t("form.cacheRate.label")}
+                  description={t("form.cacheRate.description")}
+                  suffix="optional"
+                  fillInput
+                  center
+                >
+                  <InputCurrency
+                    value={values.cacheRate}
+                    onChange={(rate) => void setFieldValue("cacheRate", rate)}
+                    precision={RATE_PRECISION}
+                  />
+                </InputHorizontal>
+              </Modal.Body>
+              <Modal.Footer>
+                <BasicModalFooter
+                  cancel={
+                    <Button
+                      prominence="secondary"
+                      onClick={onClose}
+                      disabled={isSubmitting}
+                    >
+                      {t("form.cancelButton.label")}
+                    </Button>
+                  }
+                  submit={
+                    <Button
+                      type="submit"
+                      disabled={!isValid || !dirty || isSubmitting}
+                    >
+                      {isEdit
+                        ? t("form.saveButton.label")
+                        : t("form.addButton.label")}
+                    </Button>
+                  }
+                />
+              </Modal.Footer>
+            </Form>
           )}
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          <div className="flex flex-col gap-1">
-            <Text font="secondary-action" color="text-03">
-              {t("form.inputRate.label")}
-            </Text>
-            <InputTypeIn
-              value={inputRate}
-              prefixText="$"
-              inputMode="decimal"
-              placeholder="3.00"
-              onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                setInputRate(e.target.value)
-              }
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <Text font="secondary-action" color="text-03">
-              {t("form.outputRate.label")}
-            </Text>
-            <InputTypeIn
-              value={outputRate}
-              prefixText="$"
-              inputMode="decimal"
-              placeholder="15.00"
-              onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                setOutputRate(e.target.value)
-              }
-            />
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-1">
-          <Text font="secondary-action" color="text-03">
-            {t("form.cacheRate.label")}
-          </Text>
-          <InputTypeIn
-            value={cacheRate}
-            prefixText="$"
-            inputMode="decimal"
-            placeholder={t("form.cacheRate.placeholder")}
-            onChange={(e: ChangeEvent<HTMLInputElement>) =>
-              setCacheRate(e.target.value)
-            }
-          />
-        </div>
-
-        <div className="flex flex-row gap-2 justify-end">
-          <Button prominence="tertiary" onClick={onDone} disabled={submitting}>
-            {t("form.cancelButton.label")}
-          </Button>
-          <Button
-            icon={SvgCheck}
-            onClick={handleSubmit}
-            disabled={!canSubmit || submitting}
-          >
-            {isEdit ? t("form.saveButton.label") : t("form.addButton.label")}
-          </Button>
-        </div>
-      </GeneralLayouts.Section>
-    </Card>
+        </Formik>
+      </Modal.Content>
+    </Modal>
   );
 }
 
-// One configured override with edit and delete actions.
+// One configured override, styled like the provider cards above it: the card
+// opens the edit modal, and delete asks for confirmation first.
 
 interface OverrideRowProps {
   override: CostOverride;
@@ -228,100 +294,165 @@ interface OverrideRowProps {
 
 function OverrideRow({ override }: OverrideRowProps) {
   const t = useTranslations("admin.costOverrides");
+  const providerNames = useProviderNames();
   const locale = useLocale();
+  const format = useFormatter();
   const { mutate } = useSWRConfig();
   const [editing, setEditing] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const deleteModal = useCreateModal();
   const providerDisplayName = getProviderDisplayName(
     override.provider,
-    t("allProviders.label")
+    t("allProviders.label"),
+    providerNames
   );
+  const rateParts = [
+    t("row.input", { value: formatRate(override.input_cost_per_mtok, locale) }),
+    t("row.output", {
+      value: formatRate(override.output_cost_per_mtok, locale),
+    }),
+    ...(override.cache_read_cost_per_mtok != null
+      ? [
+          t("row.cache", {
+            value: formatRate(override.cache_read_cost_per_mtok, locale),
+          }),
+        ]
+      : []),
+  ];
+  const description = override.updated_at
+    ? t("row.description", {
+        provider: providerDisplayName,
+        time: format.dateTime(new Date(override.updated_at), {
+          dateStyle: "medium",
+        }),
+      })
+    : providerDisplayName;
+  const ariaNames = {
+    provider: providerDisplayName,
+    model: override.model,
+  };
+
+  // Blocks a second click while the first delete is in flight.
+  const [deleting, setDeleting] = useState(false);
 
   async function handleDelete() {
     setDeleting(true);
     try {
       await deleteCostOverride(override.model, override.provider);
       await refreshCostOverrides(mutate);
-      toast.success(t("toasts.removed", { model: override.model }));
+      deleteModal.toggle(false);
     } catch (e) {
       console.error("Failed to remove cost override", e);
       const message = e instanceof Error ? e.message : t("toasts.unknownError");
       toast.error(t("toasts.removeFailed", { message }));
+    } finally {
       setDeleting(false);
     }
   }
 
-  if (editing) {
-    return (
-      <OverrideForm existing={override} onDone={() => setEditing(false)} />
-    );
-  }
-
   return (
-    <Hoverable.Root group="OverrideRow">
-      <Card border="solid" rounding={4} padding={2}>
-        <div className="flex flex-row items-center justify-between gap-2 p-2">
-          <div className="flex flex-col gap-0.5 min-w-0">
-            <Text
-              font="main-ui-action"
-              color="text-04"
-              wordWrap="whitespace-nowrap"
-            >
-              {override.model}
-            </Text>
-            <Text font="secondary-body" color="text-03">
-              {override.cache_read_cost_per_mtok != null
-                ? t("row.ratesWithCache", {
-                    provider: providerDisplayName,
-                    input: formatRate(override.input_cost_per_mtok, locale),
-                    output: formatRate(override.output_cost_per_mtok, locale),
-                    cache: formatRate(
-                      override.cache_read_cost_per_mtok,
-                      locale
-                    ),
-                  })
-                : t("row.rates", {
-                    provider: providerDisplayName,
-                    input: formatRate(override.input_cost_per_mtok, locale),
-                    output: formatRate(override.output_cost_per_mtok, locale),
-                  })}
-            </Text>
-            {override.updated_at && (
-              <Text font="secondary-body" color="text-02">
-                {t("row.updated", {
-                  time: new Date(override.updated_at).toLocaleString(locale),
-                })}
-              </Text>
-            )}
-          </div>
+    <>
+      {editing && (
+        <OverrideModal existing={override} onClose={() => setEditing(false)} />
+      )}
 
-          <div className="flex flex-row">
-            <Button
-              icon={SvgEdit}
-              prominence="tertiary"
-              aria-label={t("row.editButton.ariaLabel", {
-                provider: providerDisplayName,
-                model: override.model,
-              })}
-              disabled={deleting}
-              onClick={() => setEditing(true)}
+      {deleteModal.isOpen && (
+        <ConfirmationModalLayout
+          icon={SvgTrash}
+          title={markdown(
+            t("deleteModal.title", { model: escapeMarkdown(override.model) })
+          )}
+          onClose={() => deleteModal.toggle(false)}
+          submit={
+            <Button variant="danger" onClick={handleDelete} disabled={deleting}>
+              {t("deleteModal.submit.label")}
+            </Button>
+          }
+        >
+          <Text font="main-ui-body" color="text-03">
+            {markdown(
+              t("deleteModal.description", {
+                model: escapeMarkdown(override.model),
+                provider: escapeMarkdown(providerDisplayName),
+              })
+            )}
+          </Text>
+        </ConfirmationModalLayout>
+      )}
+
+      <Hoverable.Root
+        group="OverrideRow"
+        interaction={deleteModal.isOpen ? "hover" : "rest"}
+      >
+        <SelectCard
+          state="filled"
+          padding={2}
+          rounding={4}
+          aria-label={override.model}
+          onClick={() => setEditing(true)}
+        >
+          <Section gap={0} alignItems="stretch" height="fit">
+            <ContentAction
+              icon={getModelIcon(override.provider, override.model)}
+              title={override.model}
+              description={description}
+              titleMaxLines={1}
+              descriptionMaxLines={1}
+              sizePreset="main-ui"
+              variant="section"
+              padding={2}
+              rightChildren={
+                <Section
+                  flexDirection="row"
+                  alignItems="stretch"
+                  width="fit"
+                  height="fit"
+                  gap={0}
+                >
+                  <Hoverable.Item group="OverrideRow" variant="appear-on-hover">
+                    <Button
+                      icon={SvgTrash}
+                      prominence="tertiary"
+                      aria-label={t("row.deleteButton.ariaLabel", ariaNames)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteModal.toggle(true);
+                      }}
+                    />
+                  </Hoverable.Item>
+                  <Button
+                    icon={SvgSettings}
+                    prominence="tertiary"
+                    aria-label={t("row.editButton.ariaLabel", ariaNames)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditing(true);
+                    }}
+                  />
+                </Section>
+              }
             />
-            <Hoverable.Item group="OverrideRow" variant="appear-on-hover">
-              <Button
-                icon={SvgTrash}
-                prominence="tertiary"
-                aria-label={t("row.deleteButton.ariaLabel", {
-                  provider: providerDisplayName,
-                  model: override.model,
-                })}
-                disabled={deleting}
-                onClick={handleDelete}
-              />
-            </Hoverable.Item>
-          </div>
-        </div>
-      </Card>
-    </Hoverable.Root>
+            {/* Lines up under the description: ContentAction padding (0.5rem) plus
+                the main-ui description indent (1.375rem). */}
+            <div className="ps-[1.875rem] pb-2">
+              <Section
+                flexDirection="row"
+                justifyContent="start"
+                alignItems="center"
+                width="fit"
+                height="fit"
+                gap={3}
+              >
+                {rateParts.map((part) => (
+                  <Text key={part} font="secondary-mono" color="text-03">
+                    {part}
+                  </Text>
+                ))}
+              </Section>
+            </div>
+          </Section>
+        </SelectCard>
+      </Hoverable.Root>
+    </>
   );
 }
 
@@ -348,7 +479,6 @@ export default function CostOverridesPanel() {
           <Button
             icon={SvgPlus}
             prominence="secondary"
-            disabled={adding}
             onClick={() => setAdding(true)}
           >
             {t("panel.addButton.label")}
@@ -356,7 +486,7 @@ export default function CostOverridesPanel() {
         }
       />
 
-      {adding && <OverrideForm onDone={() => setAdding(false)} />}
+      {adding && <OverrideModal onClose={() => setAdding(false)} />}
 
       {error ? (
         <MessageCard
@@ -376,13 +506,11 @@ export default function CostOverridesPanel() {
           ))}
         </div>
       ) : (
-        !adding && (
-          <MessageCard
-            variant="info"
-            title={t("empty.title")}
-            description={t("empty.description")}
-          />
-        )
+        <MessageCard
+          variant="info"
+          title={t("empty.title")}
+          description={t("empty.description")}
+        />
       )}
     </GeneralLayouts.Section>
   );

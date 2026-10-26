@@ -61,7 +61,12 @@ function SingleSelectField(props: WithoutStyles<SingleSelectFieldProps>) {
   const fieldId = fieldContext?.baseId || props.name || `combo-box-${autoId}`;
   return (
     // Tab walks the rows from either trigger: the field keeps focus.
-    <Dropdown id={fieldId} disabled={props.disabled ?? false} tabKey="walk">
+    <Dropdown
+      id={fieldId}
+      disabled={props.disabled ?? false}
+      tabKey="walk"
+      container={props.container}
+    >
       <SingleSelectFieldInner {...props} fieldId={fieldId} />
     </Dropdown>
   );
@@ -89,6 +94,8 @@ function SingleSelectFieldInner({
   search = false,
   onSearchChange,
   onReachEnd,
+  // Read by the Dropdown root above; kept off the trigger input.
+  container: _container,
   ...rest
 }: WithoutStyles<SingleSelectFieldProps> & { fieldId: string }) {
   const typeIn = trigger === "type-in";
@@ -146,7 +153,6 @@ function SingleSelectFieldInner({
       setInputValue(selectedLabel);
     }
     // Only react to value prop changes while open, not inputValue changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
   // A committed free-form value (open mode, outside the set) appears in the
@@ -351,6 +357,7 @@ function SingleSelectFieldInner({
             aria-invalid={!isValid}
             aria-describedby={!isValid ? `${fieldId}-error` : undefined}
             readOnly={!typeIn}
+            open={isOpen}
             // A Select shows the chosen option's icon; a ComboBox's text is
             // typed, so it shows none.
             icon={typeIn ? undefined : selectedOption?.icon}

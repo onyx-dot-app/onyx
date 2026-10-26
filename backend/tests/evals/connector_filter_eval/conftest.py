@@ -8,7 +8,7 @@ from onyx.db.enums import LLMModelFlowType
 from onyx.db.llm import (
     fetch_existing_llm_providers,
     fetch_llm_provider_view,
-    update_default_provider,
+    update_default_model,
     upsert_llm_provider,
 )
 from onyx.llm.constants import LlmProviderNames
@@ -18,6 +18,7 @@ from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     ModelConfigurationUpsertRequest,
 )
+from tests.common.models import CI_OPENAI_MODEL
 
 # This suite lives outside tests/external_dependency_unit (so the EDU CI
 # matrix doesn't discover it) but runs against the same live dependencies,
@@ -41,7 +42,7 @@ _PACKAGE_DIR = Path(__file__).parent
 # Provider auto-provisioned (from OPENAI_API_KEY) when the database has none,
 # so the eval can run against a fresh CI database. Cheap tier per repo policy.
 _FALLBACK_PROVIDER_NAME = "connector-filter-eval"
-_FALLBACK_MODEL = "gpt-5-mini"
+_FALLBACK_MODEL = CI_OPENAI_MODEL
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
@@ -73,7 +74,12 @@ def _ensure_llm_provider(db_session: Session) -> None:  # noqa: F811
         ),
         db_session=db_session,
     )
-    update_default_provider(provider.id, _FALLBACK_MODEL, db_session)
+    update_default_model(
+        provider_id=provider.id,
+        model=_FALLBACK_MODEL,
+        db_session=db_session,
+        flow_type=LLMModelFlowType.CHAT,
+    )
     db_session.commit()
 
 

@@ -39,7 +39,7 @@ def _fake_span(span_data: SpanData) -> Span[Any]:
 
 
 def _generation_span(
-    model: str = "gpt-4o",
+    model: str = "gpt-6-sol",
     provider: str = "openai",
     flow: str = "chat_response",
     usage: dict[str, Any] | None = None,
@@ -112,7 +112,7 @@ def test_records_usage_when_user_id_set(
     assert usage.input_tokens == 100
     assert usage.output_tokens == 50
     assert usage.cache_read_tokens == 20
-    assert usage.model == "gpt-4o"
+    assert usage.model == "gpt-6-sol"
     assert usage.provider == "openai"
     assert usage.flow == "chat_response"
     assert usage.cost_cents == pytest.approx(3.0)  # 1.0 input + 2.0 output
@@ -296,7 +296,7 @@ def test_ignores_generation_span_without_usage(
     token = CURRENT_USER_ID_CONTEXTVAR.set(str(uuid4()))
     try:
         processor.on_span_end(
-            _fake_span(GenerationSpanData(model="gpt-4o", usage=None))
+            _fake_span(GenerationSpanData(model="gpt-6-sol", usage=None))
         )
     finally:
         CURRENT_USER_ID_CONTEXTVAR.reset(token)

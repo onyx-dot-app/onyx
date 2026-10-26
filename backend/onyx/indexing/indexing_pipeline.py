@@ -21,6 +21,9 @@ from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
 )
+from onyx.connectors.cross_connector_utils.tabular_section_utils import (
+    CONTENT_SKIPPED_PLACEHOLDER,
+)
 from onyx.connectors.models import (
     ConnectorFailure,
     ConnectorStopSignal,
@@ -31,6 +34,7 @@ from onyx.connectors.models import (
     IndexingDocument,
     Section,
     SectionType,
+    TabularSection,
     TextSection,
 )
 from onyx.db.connector_credential_pair import get_connector_credential_pair
@@ -213,6 +217,14 @@ def _upsert_documents_in_db(
     index_attempt_metadata: IndexAttemptMetadata,
     db_session: Session,
 ) -> None:
+    cc_pair = get_connector_credential_pair(
+        db_session,
+        index_attempt_metadata.connector_id,
+        index_attempt_metadata.credential_id,
+    )
+    # Only perm-synced pairs may write source ACLs.
+    keep_external_access = cc_pair is not None and cc_pair.access_type.is_perm_synced()
+
     # Metadata here refers to basic document info, not metadata about the actual content
     document_metadata_list: list[DocumentMetadata] = []
     for doc in documents:
@@ -228,7 +240,7 @@ def _upsert_documents_in_db(
             primary_owners=get_experts_stores_representations(doc.primary_owners),
             secondary_owners=get_experts_stores_representations(doc.secondary_owners),
             from_ingestion_api=doc.from_ingestion_api,
-            external_access=doc.external_access,
+            external_access=doc.external_access if keep_external_access else None,
             doc_metadata=doc.doc_metadata,
             # parent_hierarchy_node_id is resolved in docfetching using Redis cache
             parent_hierarchy_node_id=doc.parent_hierarchy_node_id,
@@ -497,6 +509,9 @@ def index_doc_batch_with_handler(
     llm_enrichment_allowed: bool = True,
     image_summarization_llm: LLM | None = None,
     llm: LLM | None = None,
+    force_update: bool = False,
+    skip_document_row_writes: bool = False,
+    skip_spreadsheet_content: bool = False,
 ) -> IndexingPipelineResult:
     # Documents whose prepare() committed before the batch raised. Their change
     # gates would now see nothing to do, so a retry of them forces the update.
@@ -524,7 +539,9 @@ def index_doc_batch_with_handler(
                 image_summarization_llm=image_summarization_llm,
                 llm=llm,
                 force_update=force_update,
+                skip_document_row_writes=skip_document_row_writes,
                 on_prepared=prepared.update,
+                skip_spreadsheet_content=skip_spreadsheet_content,
             )
         except ConnectorStopSignal as e:
             logger.warning(
@@ -575,7 +592,7 @@ def index_doc_batch_with_handler(
         )
 
     batch_result: IndexingPipelineResult | Exception = _index(
-        document_batch, force_update=False
+        document_batch, force_update=force_update
     )
     if not isinstance(batch_result, Exception):
         return batch_result
@@ -588,7 +605,7 @@ def index_doc_batch_with_handler(
     results: list[IndexingPipelineResult] = []
     for document in document_batch:
         result: IndexingPipelineResult | Exception = _index(
-            [document], force_update=document.id in prepared
+            [document], force_update=force_update or document.id in prepared
         )
         if isinstance(result, Exception):
             result = _failure_result([document], result)
@@ -647,11 +664,19 @@ def index_doc_batch_prepare(
     ignore_time_skip: bool = False,
     index_to_secondary: bool = False,
     force_update: bool = False,
+    skip_document_row_writes: bool = False,
 ) -> DocumentBatchPrepareContext | None:
     """Sets up the documents in the relational DB (source of truth) for permissions, metadata, etc.
     This preceeds indexing it into the actual document index. `force_update`
     skips both change gates: a retry of a batch whose prepare already committed
-    new readers would otherwise see nothing to do."""
+    new readers would otherwise see nothing to do.
+
+    `skip_document_row_writes` leaves the upsert below, its staged-file
+    promotion and its replaced-blob deletes alone. ONLY for a caller that
+    re-processes content it did not fetch and so has nothing newer to write -
+    a connector path passing this would silently stop documents updating.
+    `post_index` still writes the row's timestamps and chunk count, and chunk
+    enrichment still reads the live rows, so chunks stay correct."""
     documents = sanitize_documents_for_postgres(documents)
 
     # Create a trimmed list of docs that don't have a newer updated at
@@ -686,7 +711,7 @@ def index_doc_batch_prepare(
 
     # for all updatable docs, upsert into the DB
     # Does not include doc_updated_at which is also used to indicate a successful update
-    if updatable_docs:
+    if updatable_docs and not skip_document_row_writes:
         # Queue the STAGING → CONNECTOR origin flips BEFORE the Document upsert
         # so `upsert_documents`' commit flushes Document.file_id and the origin
         # flip atomically
@@ -741,6 +766,34 @@ def index_doc_batch_prepare(
         id_to_boost_map=id_to_boost_map,
         doc_id_to_content_hash=doc_id_to_content_hash,
     )
+
+
+def skip_tabular_content(documents: list[Document]) -> list[Document]:
+    """Replace each document's tabular sections with one placeholder text
+    section, so a spreadsheet indexes as its title plus the placeholder. Other
+    sections stay. Connectors already skip tabular content at extraction; this
+    catches sections that still reach docprocessing (batches staged before
+    SKIP_SPREADSHEET_CONTENT was set, or a connector that builds them itself).
+    The result matches extraction, so both give the same content hash."""
+    result: list[Document] = []
+    for document in documents:
+        if not any(isinstance(s, TabularSection) for s in document.sections):
+            result.append(document)
+            continue
+
+        sections: list[TextSection | ImageSection | TabularSection] = []
+        placeholder_added: bool = False
+        for section in document.sections:
+            if not isinstance(section, TabularSection):
+                sections.append(section)
+            elif not placeholder_added:
+                sections.append(
+                    TextSection(text=CONTENT_SKIPPED_PLACEHOLDER, link=section.link)
+                )
+                placeholder_added = True
+        logger.info("Skipped tabular content of document %s", document.id)
+        result.append(document.model_copy(update={"sections": sections}))
+    return result
 
 
 def filter_documents(
@@ -1453,6 +1506,7 @@ def index_doc_batch(
     image_summarization_llm: LLM | None = None,
     llm: LLM | None = None,
     force_update: bool = False,
+    skip_document_row_writes: bool = False,
     on_prepared: Callable[[set[str]], None] | None = None,
     ignore_time_skip: bool = False,
     index_to_secondary: bool = False,
@@ -1460,6 +1514,7 @@ def index_doc_batch(
     filter_fnc: Callable[
         [list[Document]], tuple[list[Document], list[ConnectorFailure]]
     ] = filter_documents,
+    skip_spreadsheet_content: bool = False,
 ) -> IndexingPipelineResult:
     """End-to-end indexing for a pre-batched set of documents."""
     """Takes different pieces of the indexing pipeline and applies it to a batch of documents
@@ -1492,11 +1547,17 @@ def index_doc_batch(
         _attempt_metadata.attempt_id if _attempt_metadata is not None else None
     )
 
+    if skip_spreadsheet_content:
+        document_batch = skip_tabular_content(document_batch)
     filtered_documents, filter_failures = filter_fnc(document_batch)
     filtered_documents = _apply_document_ingestion_hook(filtered_documents)
     with time_stage_if_set(IndexAttemptStage.DOC_DB_PREPARE, attempt_id):
         context = adapter.prepare(
-            filtered_documents, ignore_time_skip, index_to_secondary, force_update
+            filtered_documents,
+            ignore_time_skip,
+            index_to_secondary,
+            force_update,
+            skip_document_row_writes,
         )
     if not context:
         result = IndexingPipelineResult.empty(len(filtered_documents))
@@ -1668,6 +1729,8 @@ def index_doc_batch(
                     enrichment=enricher,
                     db_session=db_session,
                     index_to_secondary=index_to_secondary,
+                    failed_document_ids=embedding_failed_doc_ids
+                    | _get_failed_doc_ids(write_failures),
                 )
 
             # Persist content hash only for documents confirmed written to the
@@ -1721,11 +1784,23 @@ def run_indexing_pipeline(
     ignore_time_skip: bool = False,
     index_to_secondary: bool = False,
     from_beginning: bool = False,
+    force_update: bool = False,
+    skip_document_row_writes: bool = False,
+    skip_spreadsheet_content: bool = False,
 ) -> IndexingPipelineResult:
     """Builds a pipeline which takes in a list (batch) of docs and indexes them.
 
     index_to_secondary disables the content-hash gate + stamp for FUTURE writes so
     they don't cross-suppress the PRESENT index's shared hash.
+
+    force_update bypasses both change gates. Needed when the document is
+    unchanged at the source but must be re-chunked anyway (see
+    run_tabular_rechunk): a tabular document's content_hash never moves,
+    because content_hash() ignores TabularSections.
+
+    skip_spreadsheet_content indexes each tabular file as its title plus a
+    placeholder (see skip_tabular_content). Only connector indexing sets it:
+    user files and the ingestion API need the content they were given.
     """
     if db_session is not None:
         all_search_settings = get_active_search_settings(db_session)
@@ -1791,4 +1866,7 @@ def run_indexing_pipeline(
             ignore_time_skip=ignore_time_skip,
             index_to_secondary=index_to_secondary,
             from_beginning=from_beginning,
+            force_update=force_update,
+            skip_document_row_writes=skip_document_row_writes,
+            skip_spreadsheet_content=skip_spreadsheet_content,
         )

@@ -69,7 +69,7 @@ import shlex
 import tarfile
 import threading
 import time
-from collections.abc import Generator, Sequence
+from collections.abc import Generator, Iterator, Sequence
 from pathlib import Path
 from typing import Any, TypedDict
 from uuid import UUID
@@ -123,12 +123,14 @@ from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     OutputsManifestResponse,
 )
 from onyx.server.features.build.sandbox.labels import (
+    LABEL_DOCKER_NETWORK,
     LABEL_K8S_MANAGED_BY,
     LABEL_K8S_MANAGED_BY_ONYX,
     LABEL_PROVISIONING_ATTEMPT,
     LABEL_SANDBOX_ID,
     LABEL_TENANT_ID,
 )
+from onyx.server.features.build.sandbox.locks import sandbox_provision_lock
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
     CraftMCPServerConfig,
@@ -136,11 +138,17 @@ from onyx.server.features.build.sandbox.models import (
     FileSet,
     RetriableWriteError,
     SandboxInfo,
+    SandboxResource,
+    SandboxResourceKind,
     SnapshotResult,
 )
 from onyx.server.features.build.sandbox.nextjs_dev import (
     allowed_dev_origins,
     build_webapp_restore_script,
+)
+from onyx.server.features.build.sandbox.resources import (
+    remaining_request_timeout,
+    sandbox_resource_from_labels,
 )
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 from onyx.server.features.build.sandbox.session_workspace import (
@@ -413,6 +421,7 @@ def build_sandbox_labels(
     volume, which persists across generations) for attribution.
     """
     labels: dict[str, str] = {
+        LABEL_DOCKER_NETWORK: SANDBOX_DOCKER_NETWORK,
         LABEL_COMPONENT: LABEL_COMPONENT_VALUE,
         LABEL_SANDBOX_ID: str(sandbox_id),
         LABEL_TENANT_ID: tenant_id,
@@ -718,6 +727,9 @@ class DockerSandboxManager(SandboxManager):
             )
 
         self._docker = DockerClient(base_url=f"unix://{SANDBOX_DOCKER_SOCKET}")
+        self._cleanup_docker = DockerClient(
+            base_url=f"unix://{SANDBOX_DOCKER_SOCKET}", timeout=15
+        )
         self._image = SANDBOX_CONTAINER_IMAGE
         self._image_checked = False
         self._image_check_lock = threading.Lock()
@@ -859,6 +871,19 @@ class DockerSandboxManager(SandboxManager):
         return False
 
     def provision(
+        self,
+        sandbox_id: UUID,
+        user_id: UUID,
+        tenant_id: str,
+        onyx_pat: str | None,
+        provisioning_attempt_number: int,
+    ) -> SandboxInfo:
+        with sandbox_provision_lock(sandbox_id, tenant_id):
+            return self._provision(
+                sandbox_id, user_id, tenant_id, onyx_pat, provisioning_attempt_number
+            )
+
+    def _provision(
         self,
         sandbox_id: UUID,
         user_id: UUID,
@@ -1079,15 +1104,18 @@ class DockerSandboxManager(SandboxManager):
     def terminate(self, sandbox_id: UUID) -> None:
         self._close_all_sandbox_buses(sandbox_id)
 
+        errors: list[Exception] = []
         container = self._get_container(sandbox_id)
         if container is not None:
             try:
                 container.remove(force=True, v=False)
                 logger.info("Removed sandbox container %s.", container.name)
-            except (APIError, NotFound) as e:
+            except NotFound:
                 logger.warning(
-                    "Error removing sandbox container %s: %s", container.name, e
+                    "Sandbox container %s disappeared during removal.", container.name
                 )
+            except Exception as e:
+                errors.append(e)
 
         # Volume removal is separate so terminate works after manual container
         # rm.
@@ -1098,8 +1126,13 @@ class DockerSandboxManager(SandboxManager):
             logger.info("Removed sandbox volume %s.", volume_name)
         except NotFound:
             pass
-        except APIError as e:
-            logger.warning("Error removing sandbox volume %s: %s", volume_name, e)
+        except Exception as e:
+            errors.append(e)
+
+        if errors:
+            raise RuntimeError(
+                f"Sandbox {sandbox_id} cleanup incomplete: {errors}"
+            ) from errors[0]
 
         logger.info("Terminated Docker sandbox %s.", sandbox_id)
 
@@ -1113,6 +1146,114 @@ class DockerSandboxManager(SandboxManager):
             return False
         state = (container.attrs or {}).get("State") or {}
         return state.get("Status") == "running"
+
+    def iter_resources(
+        self, tenant_id: str, deadline: float, sandbox_id: UUID | None = None
+    ) -> Iterator[SandboxResource]:
+        labels = [
+            f"{LABEL_COMPONENT}={LABEL_COMPONENT_VALUE}",
+            f"{LABEL_K8S_MANAGED_BY}={LABEL_K8S_MANAGED_BY_ONYX}",
+            f"{LABEL_TENANT_ID}={tenant_id}",
+        ]
+        if sandbox_id is not None:
+            labels.append(f"{LABEL_SANDBOX_ID}={sandbox_id}")
+        filters: dict[str, str | list[str] | bool] = {"label": labels}
+        verified_volumes: dict[str, str] = {}
+        for kind in (
+            SandboxResourceKind.CONTAINER,
+            SandboxResourceKind.VOLUME,
+        ):
+            remaining_request_timeout(deadline)
+            items = (
+                self._cleanup_docker.containers.list(all=True, filters=filters)
+                if kind == SandboxResourceKind.CONTAINER
+                else self._cleanup_docker.volumes.list(filters=filters)
+            )
+            remaining_request_timeout(deadline)
+            for item in items:
+                remaining_request_timeout(deadline)
+                labels = (
+                    item.attrs.get("Labels")
+                    if kind == SandboxResourceKind.VOLUME
+                    else item.labels
+                )
+                labels = labels or {}
+                resource_network = labels.get(LABEL_DOCKER_NETWORK)
+                if (
+                    resource_network is not None
+                    and resource_network != self._network_name
+                ):
+                    continue
+                if resource_network is None:
+                    project_matches = (
+                        bool(self._compose_project)
+                        and labels.get("com.docker.compose.project")
+                        == self._compose_project
+                    )
+                    network_matches = (
+                        kind == SandboxResourceKind.CONTAINER
+                        and self._network_name
+                        in (item.attrs.get("NetworkSettings", {}).get("Networks") or {})
+                    )
+                    volume_matches = kind == SandboxResourceKind.VOLUME and (
+                        verified_volumes.get(item.name) == labels.get(LABEL_SANDBOX_ID)
+                    )
+                    if not (project_matches or network_matches or volume_matches):
+                        logger.warning(
+                            "Retaining Docker resource %s without verified deployment ownership",
+                            item.name,
+                        )
+                        continue
+                resource = sandbox_resource_from_labels(
+                    kind=kind,
+                    name=item.name,
+                    instance_id=item.id
+                    if kind == SandboxResourceKind.CONTAINER
+                    else item.attrs["CreatedAt"],
+                    created_at=item.attrs["Created"]
+                    if kind == SandboxResourceKind.CONTAINER
+                    else item.attrs["CreatedAt"],
+                    labels=labels,
+                    tenant_id=tenant_id,
+                )
+                if resource is not None:
+                    if kind == SandboxResourceKind.CONTAINER:
+                        for mount in item.attrs.get("Mounts") or []:
+                            if mount.get("Type") == "volume" and mount.get("Name"):
+                                verified_volumes[mount["Name"]] = str(
+                                    resource.sandbox_id
+                                )
+                    yield resource
+
+    def delete_resource(self, resource: SandboxResource, deadline: float) -> None:
+        remaining_request_timeout(deadline)
+        container = None
+        volume = None
+        try:
+            if resource.kind == SandboxResourceKind.CONTAINER:
+                container = self._cleanup_docker.containers.get(resource.instance_id)
+                labels = container.labels or {}
+            elif resource.kind == SandboxResourceKind.VOLUME:
+                volume = self._cleanup_docker.volumes.get(resource.name)
+                if volume.attrs["CreatedAt"] != resource.instance_id:
+                    raise RuntimeError(f"Volume identity changed: {resource.name}")
+                labels = volume.attrs.get("Labels") or {}
+            else:
+                raise ValueError(f"Unsupported Docker resource: {resource.kind}")
+            if (
+                labels.get(LABEL_SANDBOX_ID) != str(resource.sandbox_id)
+                or labels.get(LABEL_TENANT_ID) != resource.tenant_id
+                or labels.get(LABEL_K8S_MANAGED_BY) != LABEL_K8S_MANAGED_BY_ONYX
+            ):
+                raise RuntimeError(f"Resource ownership changed: {resource.name}")
+            remaining_request_timeout(deadline)
+            if container is not None:
+                container.remove(force=True, v=False)
+            elif volume is not None:
+                # Docker rejects removal while any container still uses the volume.
+                volume.remove(force=False)
+        except NotFound:
+            return
 
     def _build_agents_md(
         self,
@@ -1247,15 +1388,51 @@ echo "Session cleanup complete"
             return False
         return "WORKSPACE_FOUND" in result.stdout_text
 
+    def runtime_exists(self, sandbox_id: UUID, tenant_id: str) -> bool:
+        container = self._get_container(sandbox_id)
+        if container is not None:
+            labels = container.labels or {}
+            if (
+                labels.get(LABEL_SANDBOX_ID) != str(sandbox_id)
+                or labels.get(LABEL_TENANT_ID) != tenant_id
+            ):
+                raise RuntimeError("Workspace storage ownership mismatch")
+            return True
+        return False
+
+    def workspace_storage_identity(
+        self, sandbox_id: UUID, tenant_id: str
+    ) -> str | None:
+        try:
+            volume = self._docker.volumes.get(_sandbox_volume_name(sandbox_id))
+        except NotFound:
+            return None
+        labels = volume.attrs.get("Labels") or {}
+        if (
+            labels.get(LABEL_SANDBOX_ID) != str(sandbox_id)
+            or labels.get(LABEL_TENANT_ID) != tenant_id
+        ):
+            raise RuntimeError("Workspace storage ownership mismatch")
+        created_at = volume.attrs["CreatedAt"]
+        if not isinstance(created_at, str) or not created_at:
+            raise RuntimeError("Workspace storage identity missing")
+        return f"{volume.name}:{created_at}"
+
+    def workspace_storage_exists(self, sandbox_id: UUID, tenant_id: str) -> bool:
+        return self.runtime_exists(sandbox_id, tenant_id) or (
+            self.workspace_storage_identity(sandbox_id, tenant_id) is not None
+        )
+
     def list_session_workspaces(self, sandbox_id: UUID) -> list[UUID]:
         container = self._get_container(sandbox_id)
         if container is None:
-            return []
+            raise RuntimeError(
+                f"Cannot discover workspaces without sandbox {sandbox_id}"
+            )
         try:
             result = _run_in_container_as_sandbox_user(
                 container,
-                ["/bin/sh", "-c", f"ls -1 {SESSIONS_ROOT}/ 2>/dev/null || true"],
-                check=False,
+                ["/bin/sh", "-c", f"ls -1 {SESSIONS_ROOT}/"],
             )
         except ExecError as e:
             logger.warning(
@@ -1263,7 +1440,9 @@ echo "Session cleanup complete"
                 sandbox_id,
                 e,
             )
-            return []
+            raise RuntimeError(
+                f"Workspace discovery failed for sandbox {sandbox_id}"
+            ) from e
         out: list[UUID] = []
         for line in result.stdout_text.strip().split("\n"):
             line = line.strip()
@@ -1283,8 +1462,7 @@ echo "Session cleanup complete"
     ) -> SnapshotResult | None:
         container = self._get_container(sandbox_id)
         if container is None:
-            logger.info("create_snapshot: sandbox %s has no container.", sandbox_id)
-            return None
+            raise RuntimeError(f"Cannot snapshot missing sandbox {sandbox_id}")
 
         session_path = f"{SESSIONS_ROOT}/{session_id}"
         # Bail out if there's nothing worth snapshotting.
@@ -1294,14 +1472,20 @@ echo "Session cleanup complete"
                 [
                     "/bin/sh",
                     "-c",
-                    f'[ -d "{session_path}/outputs" ] && echo OK || echo EMPTY',
+                    f'if [ -d "{session_path}/outputs" ] || [ -d "{session_path}/attachments" ]; '
+                    "then printf OK; else printf EMPTY; fi",
                 ],
-                check=False,
             )
-        except ExecError:
+        except ExecError as e:
+            raise RuntimeError(
+                f"Snapshot discovery failed for session {session_id}"
+            ) from e
+        if probe.stdout_text.strip() == "EMPTY":
             return None
-        if "OK" not in probe.stdout_text:
-            return None
+        if probe.stdout_text.strip() != "OK":
+            raise RuntimeError(
+                f"Incomplete snapshot discovery for session {session_id}"
+            )
 
         # Stream tar bytes out of the container through FileStore.
         tar_cmd = [

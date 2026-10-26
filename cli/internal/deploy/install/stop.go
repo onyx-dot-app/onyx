@@ -16,7 +16,11 @@ func RunStop(ctx context.Context, deps Deps, opts Options) error {
 }
 
 func (in *installer) runStop(ctx context.Context) error {
-	in.root = paths.Resolve(in.opts.Dir)
+	root, err := paths.Resolve(in.opts.Dir)
+	if err != nil {
+		return exitcodes.New(exitcodes.BadRequest, err.Error())
+	}
+	in.root = root
 	if !in.hasComposeFile() {
 		in.warnf("No Onyx deployment found at %s. Nothing to shut down.", in.root.Dir)
 		return nil

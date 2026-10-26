@@ -2,13 +2,19 @@
  * Page Object Model for the admin "Chat Preferences" page
  * (/admin/chat-preferences).
  *
- * Covers attaching an MCP server's tools to the default agent, toggling
- * individual tools (with persistence), editing the default system prompt, and
- * the "Keep Chat History" retention control.
+ * Covers editing the default system prompt and the "Keep Chat History"
+ * retention control.
  */
 
-import { type Page, type Locator, expect } from "@playwright/test";
+import {
+  type Page,
+  type Locator,
+  type Response,
+  expect,
+} from "@playwright/test";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
+
+const SETTINGS_PATH = "/api/admin/settings";
 
 export class ChatPreferencesPage {
   readonly page: Page;
@@ -35,77 +41,6 @@ export class ChatPreferencesPage {
     await expect(this.title).toBeVisible();
   }
 
-  private async scrollToBottom(): Promise<void> {
-    await this.page
-      .evaluate(() => window.scrollTo(0, document.body.scrollHeight))
-      .catch(() => {});
-  }
-
-  // ---------------------------------------------------------------------------
-  // Server card + tools
-  // ---------------------------------------------------------------------------
-
-  serverCard(serverName: string): Locator {
-    return this.page
-      .locator(".opal-card-expandable")
-      .filter({ hasText: serverName })
-      .first();
-  }
-
-  serverSwitch(serverName: string): Locator {
-    return this.serverCard(serverName).getByRole("switch").first();
-  }
-
-  /** Turn the server-level switch on (enables all its tools) and await the save. */
-  async enableServerTools(serverName: string): Promise<void> {
-    await this.scrollToBottom();
-    const card = this.serverCard(serverName);
-    await expect(card).toBeVisible();
-    await card.scrollIntoViewIfNeeded();
-
-    const toggle = this.serverSwitch(serverName);
-    await expect(toggle).toBeVisible();
-    if ((await toggle.getAttribute("aria-checked")) !== "true") {
-      await toggle.click();
-      await this.expectToast("Tools updated");
-    }
-  }
-
-  async expandServerCard(serverName: string): Promise<void> {
-    await this.scrollToBottom();
-    const card = this.serverCard(serverName);
-    await expect(card).toBeVisible();
-    await card.scrollIntoViewIfNeeded();
-
-    // Scope the Expand control to this server's card so it can't toggle a
-    // different expandable card on the page.
-    const expandButton = card.getByRole("button", { name: "Expand" }).first();
-    if (await expandButton.isVisible().catch(() => false)) {
-      await expandButton.click();
-    }
-  }
-
-  toolSwitch(toolName: string): Locator {
-    return this.page
-      .locator(".opal-card")
-      .filter({ hasText: toolName })
-      .first()
-      .getByRole("switch")
-      .first();
-  }
-
-  /** Toggle an individual tool switch and await the auto-save toast. */
-  async toggleTool(toolName: string): Promise<void> {
-    const toggle = this.toolSwitch(toolName);
-    await expect(toggle).toBeVisible();
-    await toggle.scrollIntoViewIfNeeded();
-    // Force the click: the switch is actionable, but the card's expand
-    // animation (a clipping/height-transition wrapper) can intercept the
-    // hit-test on slower runners, leaving a plain click retrying until timeout.
-    await toggle.click({ force: true });
-    await this.expectToast("Tools updated");
-  }
-
   // ---------------------------------------------------------------------------
   // System prompt modal
   // ---------------------------------------------------------------------------
@@ -129,8 +64,9 @@ export class ChatPreferencesPage {
   }
 
   async saveSystemPrompt(): Promise<void> {
+    const saved = this.waitForPatch("/api/admin/default-assistant");
     await this.promptDialog.getByRole("button", { name: "Save" }).click();
-    await this.expectToast("System prompt updated");
+    expect((await saved).ok()).toBeTruthy();
     await expect(this.promptDialog).not.toBeVisible();
   }
 
@@ -228,8 +164,9 @@ export class ChatPreferencesPage {
 
   async confirmRetentionReduction(): Promise<void> {
     await expect(this.reduceRetentionModal).toBeVisible();
+    const saved = this.waitForPatch(SETTINGS_PATH);
     await this.page.getByRole("button", { name: "Reduce retention" }).click();
-    await this.expectToast("Settings updated");
+    expect((await saved).ok()).toBeTruthy();
   }
 
   async cancelRetentionReduction(): Promise<void> {
@@ -251,29 +188,41 @@ export class ChatPreferencesPage {
   }
 
   async restoreRetentionDefault(): Promise<void> {
+    const saved = this.waitForPatch(SETTINGS_PATH);
     await this.retentionRestoreDefaultButton.click();
-    await this.expectToast("Settings updated");
+    expect((await saved).ok()).toBeTruthy();
   }
 
   /** Best-effort reset so shared state is left at the safe "Forever" default. */
   async resetRetentionToForever(): Promise<void> {
     await this.gotoAdvancedOptions();
     if (await this.retentionCustomInput.isVisible().catch(() => false)) {
+      const saved = this.waitForPatch(SETTINGS_PATH);
       await this.retentionRestoreDefaultButton.click();
-      await this.expectToast("Settings updated").catch(() => {});
+      await saved.catch(() => {});
       return;
     }
     // The trigger is a read-only input: its text is its value.
     if ((await this.retentionTrigger.inputValue()).includes("Forever")) {
       return;
     }
+    const saved = this.waitForPatch(SETTINGS_PATH);
     await this.selectRetentionPreset("Forever");
-    await this.expectToast("Settings updated");
+    expect((await saved).ok()).toBeTruthy();
   }
 
   // ---------------------------------------------------------------------------
   // Misc
   // ---------------------------------------------------------------------------
+
+  /** Resolves with the next PATCH to `pathname`; start it before the action. */
+  waitForPatch(pathname: string): Promise<Response> {
+    return this.page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === pathname &&
+        response.request().method() === "PATCH"
+    );
+  }
 
   async expectToast(message: string | RegExp): Promise<void> {
     await expect(this.page.getByText(message).first()).toBeVisible();

@@ -23,7 +23,6 @@ export interface Option {
   description?:
     | string
     | ((currentCredential: CredentialValues | null) => string);
-  query?: string;
   optional?: boolean;
   hidden?: boolean;
   visibleCondition?: (
@@ -51,11 +50,25 @@ export interface MultiSelectOption extends Option {
 export interface ListOption extends Option {
   type: "list";
   default?: string[];
-  transform?: (values: string[]) => string[];
+  /** Runs on the entries before they are sent, e.g. to join them into the
+   * one string the config stores. */
+  transform?: (values: string[]) => string[] | string;
+  /** Example entry shown in each empty input. */
+  placeholder?: string;
   /** Discovery finding whose options the field offers: stores the value, shows the label. Typed entries stay allowed. */
   optionsFinding?: CheckFindingKey;
   /** When true the field takes typed entries only, such as regex patterns. */
   plainListCondition?: (values: Record<string, unknown>) => boolean;
+  /**
+   * Beside the title: how many options a discovery check found, and a button
+   * that lists them again. `label` is a key formatted with `count` and
+   * `more` ("true" when the listing stopped at the backend's cap).
+   */
+  availableCount?: {
+    finding: CheckFindingKey;
+    checkId: string;
+    label: string;
+  };
 }
 
 export interface StringPairListOption extends Option {
@@ -78,8 +91,16 @@ export interface TextOption extends Option {
   default?: string;
   initial?: string | ((currentCredential: CredentialValues | null) => string);
   isTextArea?: boolean;
-  /** Example value shown in the empty input. */
-  placeholder?: string;
+  /** Monospace text, for code or queries. Text areas only. */
+  mono?: boolean;
+  /**
+   * A button under the field that runs this capability check now, beside
+   * the description. The description's lines show one per row.
+   */
+  testCheck?: { checkId: string; label: string };
+  /** Example value shown in the empty input: a message key, or one picked by
+   * the form's values (e.g. Confluence's site URL per Cloud or Data Center). */
+  placeholder?: string | ((values: Record<string, unknown>) => string);
   /** Text below the input. It gets the connector's name as `connectorName`. */
   subDescription?: TextSubDescriptionKey;
 }
@@ -115,6 +136,11 @@ export interface FileOption extends Option {
 export interface StringTabOption extends Option {
   type: "string_tab";
   default?: string;
+  /** The description's arguments, read from the form; null hides the
+   * description. With it, the description key is formatted when shown. */
+  descriptionValues?: (
+    values: Record<string, unknown>
+  ) => Record<string, string> | null;
 }
 
 export type ConnectorValueField =

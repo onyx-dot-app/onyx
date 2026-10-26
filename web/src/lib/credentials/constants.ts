@@ -3,6 +3,7 @@ import { FileTypeCategory } from "@/lib/connectors/types/fileTypes";
 import type {
   CredentialDisplayName,
   CredentialFieldOptions,
+  CredentialFormVariant,
   CredentialJsonOf,
   CredentialMethodDescription,
   CredentialMethodLabel,
@@ -21,6 +22,7 @@ function defineCredentialSpec<
   brandName: string;
   fields: TFields;
   methods?: TMethods;
+  formVariants?: readonly CredentialFormVariant[];
 }): DefinedCredentialSpec<TFields, TMethods> {
   // SAFETY: an omitted `methods` leaves TMethods at its `undefined` default.
   return { ...spec, methods: spec.methods as TMethods };
@@ -179,6 +181,29 @@ function microsoftAppSpec<const TPrefix extends string>(
 }
 
 /**
+ * A Google account (Gmail, Google Drive): a service account typed in, or an
+ * OAuth sign-in, which saves the account itself.
+ */
+const GOOGLE_ACCOUNT_SPEC = defineCredentialSpec({
+  brandName: "Google",
+  fields: {
+    google_primary_admin: email("primaryAdminEmail"),
+    google_service_account_key: jsonFile("serviceAccountKey", {
+      hint: { key: "googleServiceAccountKey" },
+    }),
+  },
+  methods: [
+    {
+      // The stored value for an uploaded key.
+      value: "uploaded",
+      label: "serviceAccount",
+      fields: ["google_primary_admin", "google_service_account_key"],
+    },
+    { value: "oauth", label: "oauth", fields: [], ownSetup: true },
+  ],
+});
+
+/**
  * The credential each source asks for. Field keys are the exact
  * `credential_json` keys the backend reads. A source with no credential, or
  * one whose credential is set up elsewhere, maps to `null`.
@@ -211,6 +236,12 @@ export const CREDENTIAL_SPECS = {
       lumapps_service_user: email("serviceUserEmail", {
         hint: { key: "lumappsServiceUser" },
       }),
+    },
+  }),
+  youtrack: defineCredentialSpec({
+    brandName: "YouTrack",
+    fields: {
+      youtrack_token: secret("apiToken", { hint: { key: "youtrackToken" } }),
     },
   }),
   bitbucket: defineCredentialSpec({
@@ -248,6 +279,17 @@ export const CREDENTIAL_SPECS = {
       confluence_username: email("accountEmail"),
       confluence_access_token: secret("apiToken"),
     },
+    // Data Center signs in with a personal access token alone.
+    formVariants: [
+      {
+        when: { is_cloud: false },
+        fields: {
+          confluence_access_token: secret("personalAccessToken", {
+            hint: { key: "confluencePersonalAccessToken" },
+          }),
+        },
+      },
+    ],
   }),
   jira: defineCredentialSpec({
     brandName: "Jira",
@@ -530,30 +572,8 @@ export const CREDENTIAL_SPECS = {
     brandName: "Discord",
     fields: { discord_bot_token: secret("botToken") },
   }),
-  // The OAuth tab signs in with Google, which saves the account itself.
-  google_drive: defineCredentialSpec({
-    brandName: "Google",
-    fields: {
-      google_primary_admin: email("primaryAdminEmail"),
-      google_service_account_key: jsonFile("serviceAccountKey", {
-        hint: { key: "googleServiceAccountKey" },
-      }),
-    },
-    methods: [
-      {
-        // The stored value for an uploaded key.
-        value: "uploaded",
-        label: "serviceAccount",
-        fields: ["google_primary_admin", "google_service_account_key"],
-      },
-      { value: "oauth", label: "oauth", fields: [], ownSetup: true },
-    ],
-  }),
-  // Gmail sets up its credentials on its own page.
-  gmail: defineCredentialSpec({
-    brandName: "Google",
-    fields: { google_tokens: secret("oauthTokens") },
-  }),
+  google_drive: GOOGLE_ACCOUNT_SPEC,
+  gmail: GOOGLE_ACCOUNT_SPEC,
   gitbook: defineCredentialSpec({
     brandName: "GitBook",
     fields: { gitbook_api_key: secret("apiToken") },

@@ -55,38 +55,38 @@ function UsersTable({ users }: { users: User[] }) {
 
 ## Props
 
-| Prop                      | Type                                  | Default       | Description                                                     |
-| ------------------------- | ------------------------------------- | ------------- | --------------------------------------------------------------- |
-| `items`                   | `TData[]`                             | required      | The rows                                                        |
-| `columns`                 | `TableColumn<TData>[]`                | required      | The columns, in order (see [Columns](#columns))                 |
-| `getRowId`                | `(row: TData) => string`              | required      | Unique row identifier                                           |
-| `label`                   | `string`                              | —             | The table's accessible name                                     |
-| `pageSize`                | `number \| false`                     | `10` with a footer, else every row | Rows per page; `false` shows every row. Paging always brings the footer |
-| `size`                    | `2.25 \| 2.75`                       | `2.75`        | Each body row's height in rem: 36px or 44px                     |
-| `footer`                  | `boolean \| DataTableFooterConfig`   | —             | `true` for the default footer, or its configuration (mode is derived from `selectionBehavior`) |
-| `selectionBehavior`       | `"no-select" \| "single-select" \| "multi-select"` | `"no-select"` | Row selection behavior                       |
-| `values`                  | `ReadonlySet<string>`                 | —             | The selected row IDs. Given, the selection is controlled        |
-| `onSelectionChange`       | `(values: ReadonlySet<string>) => void` | —           | Called with the next selection                                  |
-| `initialViewSelected`     | `boolean`                             | `false`       | Start filtered to `values`, when it is non-empty at mount       |
-| `initialSorting`          | `SortingState`                        | —             | Initial sort state                                              |
-| `initialColumnVisibility` | `VisibilityState`                     | —             | Initial column visibility                                       |
-| `draggable`               | `DataTableDraggableConfig`            | —             | Enable drag-and-drop reordering                                 |
-| `onRowClick`              | `(row: TData) => void`                | —             | Row click handler                                               |
-| `getRowLabel`             | `(row: TData) => string`              | —             | Accessible action label for clickable rows                      |
-| `query`                   | `string`                              | —             | Filters rows to data-column values that contain it              |
-| `height`                  | `number \| string`                    | —             | Max scrollable height                                           |
-| `serverSide`              | `ServerSideConfig`                    | —             | Server-side pagination/sorting/filtering (`onQueryChange` for `query`) |
-| `emptyState`              | `ReactNode`                           | —             | Empty state content                                             |
-| `header`                  | `boolean`                             | `true`        | Show the header row. Hiding it also hides header sorting, resizing, select-all and the actions popovers |
+| Prop                      | Type                                               | Default                            | Description                                                                                             |
+| ------------------------- | -------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `items`                   | `TData[]`                                          | required                           | The rows                                                                                                |
+| `columns`                 | `TableColumn<TData>[]`                             | required                           | The columns, in order (see [Columns](#columns))                                                         |
+| `getRowId`                | `(row: TData) => string`                           | required                           | Unique row identifier                                                                                   |
+| `label`                   | `string`                                           | —                                  | The table's accessible name                                                                             |
+| `pageSize`                | `number \| false`                                  | `10` with a footer, else every row | Rows per page; `false` shows every row. Paging always brings the footer                                 |
+| `size`                    | `2.25 \| 2.75`                                     | `2.75`                             | Each body row's height in rem: 36px or 44px                                                             |
+| `footer`                  | `boolean \| DataTableFooterConfig`                 | —                                  | `true` for the default footer, or its configuration (mode is derived from `selectionBehavior`)          |
+| `selectionBehavior`       | `"no-select" \| "single-select" \| "multi-select"` | `"no-select"`                      | Row selection behavior                                                                                  |
+| `values`                  | `ReadonlySet<string>`                              | —                                  | The selected row IDs. Given, the selection is controlled                                                |
+| `onSelectionChange`       | `(values: ReadonlySet<string>) => void`            | —                                  | Called with the next selection                                                                          |
+| `initialViewSelected`     | `boolean`                                          | `false`                            | Start filtered to `values`, when it is non-empty at mount                                               |
+| `initialSorting`          | `SortingState`                                     | —                                  | Initial sort state                                                                                      |
+| `initialColumnVisibility` | `VisibilityState`                                  | —                                  | Initial column visibility                                                                               |
+| `draggable`               | `DataTableDraggableConfig`                         | —                                  | Enable drag-and-drop reordering                                                                         |
+| `onRowClick`              | `(row: TData) => void`                             | —                                  | Row click handler                                                                                       |
+| `getRowLabel`             | `(row: TData) => string`                           | —                                  | Accessible action label for clickable rows                                                              |
+| `query`                   | `string`                                           | —                                  | Filters rows to data-column values that contain it                                                      |
+| `height`                  | `number \| string`                                 | —                                  | Max scrollable height                                                                                   |
+| `serverSide`              | `ServerSideConfig`                                 | —                                  | Server-side pagination/sorting/filtering (`onQueryChange` for `query`)                                  |
+| `emptyState`              | `ReactNode`                                        | —                                  | Empty state content                                                                                     |
+| `header`                  | `boolean`                                          | `true`                             | Show the header row. Hiding it also hides header sorting, resizing, select-all and the actions popovers |
 
 ## Columns
 
-| `kind`        | Fields                                                                                                   |
-| ------------- | -------------------------------------------------------------------------------------------------------- |
-| `"qualifier"` | `content?` (`"checkbox" \| "icon" \| "image"`), `icon?(row)`, `imageSrc?(row)`, `imageAlt?(row)`, `background?`, `avatar?` |
-| `"data"`      | `field` (a key of the row) or `id` + `value(row)`; `title`, `cell?(value, row)`, `sortable?`, `resizable?`, `hideable?`, `sortIcon?`, `weight?`, `alignment?` |
-| `"display"`   | `id`, `title?`, `cell(row)`, `width` (`{ weight, minWidth? }` or `{ fixed }`), `hideable?`, `alignment?` |
-| `"actions"`   | `cell?(row)`, `showColumnVisibility?`, `showSorting?`, `sortingFooterText?`                              |
+| `kind`        | Fields                                                                                                                                                                     |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `"qualifier"` | `content?` (`"checkbox" \| "icon" \| "image"`), `icon?(row)`, `imageSrc?(row)`, `imageAlt?(row)`, `background?`, `avatar?`                                                 |
+| `"data"`      | `field` (a key of the row) or `id` + `value(row)`; `title`, `cell?(value, row)`, `sortable?`, `resizable?`, `hideable?`, `sortIcon?`, `weight?`, `alignment?`, `truncate?` |
+| `"display"`   | `id`, `title?`, `cell(row)`, `width` (`{ weight, minWidth? }` or `{ fixed }`), `hideable?`, `alignment?`                                                                   |
+| `"actions"`   | `cell?(row)`, `showColumnVisibility?`, `showSorting?`, `sortingFooterText?`                                                                                                |
 
 A `field` column's value is that field; a `value` column's is whatever `value`
 returns (a string, number, boolean, null or undefined). Either way the value
