@@ -26,7 +26,8 @@ identity and remaining step budget.
 
 `Agent.state` and `Run.snapshot()` return independent copies. Recorded steps retain
 accepted output, including partial output after cancellation. Model-history replay
-omits incomplete tool exchanges; it does not remove them from the recorded output.
+omits incomplete tool exchanges and unsigned provider thinking blocks. Recorded
+output stays intact, including partial thinking after cancellation.
 
 ## Start a run
 
@@ -121,7 +122,8 @@ Event delivery uses an unbounded queue. Slow listeners can increase retained mem
 Text, thinking-text, and tool-argument deltas without mutable attachments are shared
 between listeners. Other events are copied to preserve listener isolation.
 Closing delivery rejects new events and releases listeners after accepted events
-drain. Close does not wait; idle tracking includes pending delivery. Listener
+drain. Close does not wait; idle tracking includes pending delivery and buffered-output
+flushes. Listener
 failures do not fail execution or storage. Inspect `run.delivery_failed` when
 delivery matters. Listeners must not wait for their own run to become idle.
 
@@ -135,6 +137,9 @@ result. The parent suspends while waiting; resumption does not repeat the spawn.
 Tool-facing child waits use saved completion and propagate storage failures.
 Parent history receives detached child records. The public completion future
 shares one result between consumers; consumers must not mutate it.
+
+Restored parents can observe authorized children that are still running remotely.
+Completing an older child run does not replace a newer run for that agent.
 
 Foreground children hold parent completion open. Parent cancellation reaches them.
 Background children can outlive the parent; the application must retain their
@@ -204,7 +209,7 @@ lifecycle guarantees.
 
 | File | Responsibility |
 | --- | --- |
-| `execution_records.py` | Outcomes, compaction checkpoints, and model-history replay. |
+| `execution_records.py` | Model-history replay and stable input-message identities. |
 | `models.py`, `tools.py`, `events.py` | Execution state, tool contracts, and events. |
 | `concurrency.py` | Worker tracking, cancellation waits, and event delivery. |
 | `compaction.py` | Context budgets and history summarization. |

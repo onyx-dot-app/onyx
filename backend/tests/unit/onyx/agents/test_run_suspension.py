@@ -11,10 +11,11 @@ from pydantic import BaseModel, Field, JsonValue
 import onyx.agents.runtime as runtime
 from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent, AgentSuspendedEvent, InputRequiredEvent
-from onyx.agents.execution_records import RunFailureKind, RunStatus
 from onyx.agents.models import (
     AgentState,
     ExecutionCheckpoint,
+    RunFailureKind,
+    RunStatus,
     StepResult,
     ToolCallContext,
 )

@@ -2,7 +2,7 @@
 
 > Executes model and tool steps with explicit cancellation, ownership, and restoration boundaries.
 
-**Verified against:** `62a362f5e4` (2026-10-26)
+**Verified against:** `bed5f3500f` (2026-10-26)
 **Domain:** core-loop
 **Edition:** CE
 **Owns:** `backend/onyx/agents/`
@@ -44,7 +44,7 @@ See `backend/onyx/agents/README.md` for the public contracts and usage.
 
 - Cancellation rejects late updates but retains ownership until workers drain.
 - Result readiness, saved completion, suspension, and idle state have distinct meanings.
-- Recorded partial output survives even when model-history replay excludes incomplete tool exchanges.
+- Recorded partial output survives even when replay excludes incomplete exchanges or unsigned thinking.
 - Tool results and completion callbacks follow the original model-call order.
 - Run owns recorded mutations; tool scheduling receives explicit borrowed step data.
 - Collaborators lock borrowed step data with execution_lock and use recording methods for changes.
@@ -55,11 +55,13 @@ See `backend/onyx/agents/README.md` for the public contracts and usage.
 - Every Agent requires an explicit tracing flow.
 - Feature state is stored as JSON; restoration validates it into a feature model.
 - Tool-facing child waits observe saved completion; parent records are detached.
+- Restored parents can wait for authorized remote children without treating them as completed.
+- Completing an older remote run does not replace a newer latest run for that agent.
 - Handoff requires suspended, idle execution and terminal foreground children.
 - A failed handoff save leaves the existing local owner intact.
 - Application directories authorize saved-run access, including cached results across views.
 - Listener failure does not fail execution or storage; event delivery can fail independently.
-- Closing delivery rejects new events and drains accepted events before releasing listeners.
+- Closing delivery rejects new events; accepted events remain pending through buffered-output flushes.
 - Immutable deltas can be shared; mutable event payloads remain isolated between listeners.
 - Token-count caches belong to one run and retain only the current request text.
 

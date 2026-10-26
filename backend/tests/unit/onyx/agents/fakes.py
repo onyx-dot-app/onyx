@@ -11,8 +11,7 @@ from onyx.agents.agent_coordination import (
     RunStore,
 )
 from onyx.agents.events import AgentEvent
-from onyx.agents.execution_records import RunStatus
-from onyx.agents.models import AgentInfo, RunResult, RunState
+from onyx.agents.models import AgentInfo, RunResult, RunState, RunStatus
 from onyx.agents.runtime import Agent, Run
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import LLM, GenerationContext, LLMConfig
