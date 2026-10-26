@@ -1,41 +1,8 @@
 import os
-from urllib.parse import urlparse
-
-from onyx.utils.logger import setup_logger
-
-logger = setup_logger()
-
-_DEFAULT_SLACK_API_URL = "https://slack.com/api/"
-# Slack clouds the bot may send its tokens to. GovSlack is Slack's FedRAMP
-# cloud on slack-gov.com. Any other host is rejected, so a typo cannot send a
-# bot token to an arbitrary server.
-_TRUSTED_SLACK_API_HOSTS = frozenset({"slack.com", "slack-gov.com"})
-
-
-def _load_slack_api_url() -> str:
-    raw = (os.environ.get("SLACK_API_URL") or "").strip()
-    if not raw:
-        return _DEFAULT_SLACK_API_URL
-    parsed = urlparse(raw)
-    if parsed.scheme != "https" or parsed.hostname not in _TRUSTED_SLACK_API_HOSTS:
-        logger.error(
-            "Ignoring SLACK_API_URL=%r: expected https on one of %s. "
-            "Falling back to %s.",
-            raw,
-            sorted(_TRUSTED_SLACK_API_HOSTS),
-            _DEFAULT_SLACK_API_URL,
-        )
-        return _DEFAULT_SLACK_API_URL
-    return f"https://{parsed.hostname}/api/"
-
 
 #####
 # Onyx Slack Bot Configs
 #####
-# Slack Web API base the bot calls. Set to https://slack-gov.com/api/ for
-# GovSlack. Socket Mode follows it, since apps.connections.open is a Web API
-# call.
-SLACK_API_URL = _load_slack_api_url()
 ONYX_BOT_NUM_RETRIES = int(os.environ.get("ONYX_BOT_NUM_RETRIES", "5"))
 # Number of docs to display in "Reference Documents"
 ONYX_BOT_NUM_DOCS_TO_DISPLAY = int(os.environ.get("ONYX_BOT_NUM_DOCS_TO_DISPLAY", "5"))

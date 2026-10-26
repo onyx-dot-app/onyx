@@ -104,6 +104,7 @@ The `__main__` block starts the process's fleet telemetry sender
 | `ONYX_BOT_FEEDBACK_REMINDER` | 0 (off) | Minutes until a scheduled DM reminder to leave feedback. |
 | `ONYX_BOT_REACT_EMOJI` / `ONYX_BOT_FOLLOWUP_EMOJI` | `eyes` / `sos` | Reaction emoji while thinking / for follow-up requests. |
 | `MAX_TENANTS_PER_POD` | 50 | Cloud scaling knob, `onyxbot/slack/config.py`. |
+| `SLACK_API_URL` | `https://slack.com/api/` | Slack cloud for all Slack features, in `configs/slack_configs.py`. `https://slack-gov.com/api/` selects GovSlack. The bot's Web API calls, the Socket Mode handshake (`apps.connections.open`), and token validation follow it. Hosts other than `slack.com` and `slack-gov.com` are ignored. |
 
 ---
 

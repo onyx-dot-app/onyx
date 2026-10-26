@@ -28,7 +28,8 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DEV_MODE, POD_NAME, POD_NAMESPACE
 from onyx.configs.constants import MessageType, OnyxRedisLocks
-from onyx.configs.onyxbot_configs import NOTIFY_SLACKBOT_NO_ANSWER, SLACK_API_URL
+from onyx.configs.onyxbot_configs import NOTIFY_SLACKBOT_NO_ANSWER
+from onyx.configs.slack_configs import SLACK_API_URL
 from onyx.connectors.slack.utils import expert_info_from_slack_id
 from onyx.db.engine.sql_engine import (
     SqlEngine,

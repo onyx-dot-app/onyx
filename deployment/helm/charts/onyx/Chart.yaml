@@ -21,8 +21,8 @@ annotations:
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
     - kind: added
-      description: Add SLACK_API_URL to set the Slack Web API base for the
-        Slack bot. Set it to https://slack-gov.com/api/ for GovSlack.
+      description: Add SLACK_API_URL to select the Slack cloud for all Slack
+        features. Set it to https://slack-gov.com/api/ for GovSlack.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

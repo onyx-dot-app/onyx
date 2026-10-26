@@ -2,7 +2,7 @@ import requests
 from fastapi import HTTPException
 
 from onyx.configs.constants import SLACK_USER_TOKEN_PREFIX
-from onyx.configs.onyxbot_configs import SLACK_API_URL as SLACK_API_BASE_URL
+from onyx.configs.slack_configs import SLACK_API_URL as SLACK_API_BASE_URL
 
 SLACK_API_URL = f"{SLACK_API_BASE_URL}auth.test"
 SLACK_CONNECTIONS_OPEN_URL = f"{SLACK_API_BASE_URL}apps.connections.open"
