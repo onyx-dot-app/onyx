@@ -2,7 +2,7 @@
 
 > Executes model and tool steps with explicit cancellation, ownership, and restoration boundaries.
 
-**Verified against:** `bc631659eb` (2026-10-21)
+**Verified against:** `8af1ae5828` (2026-10-26)
 **Domain:** core-loop
 **Edition:** CE
 **Owns:** `backend/onyx/agents/`
@@ -46,12 +46,16 @@ See `backend/onyx/agents/README.md` for the public contracts and usage.
 - Result readiness, saved completion, suspension, and idle state have distinct meanings.
 - Recorded partial output survives even when model-history replay excludes incomplete tool exchanges.
 - Tool results and completion callbacks follow the original model-call order.
-- Callback inputs and public snapshots do not share mutable recorded state.
+- Step callback inputs and public snapshots do not share mutable recorded state.
+- Message assembly borrows history and must not mutate its messages or nested data.
 - Compaction changes working context, not recorded conversation history.
 - Handoff requires suspended, idle execution and terminal foreground children.
 - A failed handoff save leaves the existing local owner intact.
 - Application directories authorize saved-run access, including cached results across views.
 - Listener failure does not fail execution or storage; event delivery can fail independently.
+- Closing delivery rejects new events and drains accepted events before releasing listeners.
+- Immutable deltas can be shared; mutable event payloads remain isolated between listeners.
+- Token-count caches belong to one run and retain only the current request text.
 
 ## 6. Dependencies
 
@@ -69,7 +73,7 @@ use this runtime yet.
 | Run lifecycle | Tool workers, child completion, saving, idle notifications, and Agent reuse. |
 | Tool scheduling | Call order, pending input, merged calls, and resumed steps. |
 | Snapshot or checkpoint models | History replay, callback boundaries, and restoration. |
-| Event delivery | Queue bounds, ancestor listeners, context propagation, and worker cleanup. |
+| Event delivery | Pending delivery, ancestor listeners, context propagation, and worker cleanup. |
 | Application adapters | Authorization and ownership across coordinator views. |
 
 ## 8. How to verify
@@ -86,6 +90,8 @@ behavior, not database durability or production chat adoption.
 - `run.result()` can return before storage and cleanup finish.
 - Cancellation cannot undo tool side effects or interrupt arbitrary blocking I/O.
 - Event listeners must not wait for their own run to become idle.
+- Event queues are unbounded; slow listeners can increase retained memory.
+- Message assembly receives a tuple, but its nested objects remain mutable.
 - A checkpoint cannot serialize Python callbacks or external resources.
 - Local ownership does not exclude another process; the application must supply that guarantee.
 - A suspended run can be idle while still reserving its Agent.

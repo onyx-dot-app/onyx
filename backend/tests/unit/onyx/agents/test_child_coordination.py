@@ -478,7 +478,6 @@ def test_cancelled_parent_waits_for_child_terminal_record_before_snapshot() -> N
 
         coordinator = AgentCoordinator()
         with (
-            patch("onyx.agents.agent_coordination.CLEANUP_SECONDS", 0.01),
             patch("onyx.agents.agent_coordination.CHILD_TERMINAL_TIMEOUT_SECONDS", 0.5),
         ):
             run = parent_agent(delegate).start(max_steps=2, coordinator=coordinator)

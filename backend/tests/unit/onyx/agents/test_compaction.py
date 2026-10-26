@@ -1,10 +1,11 @@
 """Context pressure preserves the task, tool effects, and recorded history."""
 
 import threading
-from collections.abc import Generator
-from unittest.mock import patch
+from collections.abc import Generator, Sequence
+from unittest.mock import Mock, patch
 
 import pytest
+import tiktoken
 
 from onyx.agents.compaction import (
     CheckpointMismatchError,
@@ -155,7 +156,7 @@ def test_compaction_within_task_preserves_tool_effects_and_prepared_steps() -> N
         prepared.append(step.index)
         return PreparedStep(tools=tools, assemble_messages=render)
 
-    def render(messages: list[Message]) -> list[Message]:
+    def render(messages: Sequence[Message]) -> list[Message]:
         assert threading.current_thread() is execution_threads[0]
         return [*messages, SystemMessage(content="Use the required report format.")]
 
@@ -599,3 +600,131 @@ def test_compaction_identity_survives_suspension_and_resume(
     assert model.generations[-1].messages[0].text == (
         f"Conversation summary:\n{summary}" if summary else TASK
     )
+
+
+def test_long_requests_reuse_counts_and_release_removed_history() -> None:
+    class LargeContextModel(ContextModel):
+        @property
+        def config(self) -> LLMConfig:
+            return super().config.model_copy(update={"max_input_tokens": 128000})
+
+    source: list[Message] = [UserMessage(content="Compare these sources.")]
+    for index in range(350):
+        source.extend(
+            [
+                AssistantMessage(
+                    content=[
+                        TextContent(text=f"Checking source {index}."),
+                        ToolCall(
+                            id=f"call-{index}",
+                            name="search",
+                            arguments={"query": f"source {index}"},
+                        ),
+                    ]
+                ),
+                ToolResultMessage(
+                    tool_call_id=f"call-{index}",
+                    tool_name="search",
+                    content=f"Source {index} contains useful evidence.",
+                ),
+            ]
+        )
+    source.append(UserMessage(content=TASK))
+    run = Run(
+        RunState(run_id="run", agent_id="agent", status=RunStatus.RUNNING),
+        CancellationSignal(),
+    )
+    model = LargeContextModel()
+    encoder = Mock(wraps=tiktoken.get_encoding("cl100k_base"))
+    with patch("onyx.agents.compaction._encoder", return_value=encoder):
+        for _ in range(2):
+            request = _compact_context(
+                run,
+                model,
+                [message.model_copy(deep=True) for message in source],
+                PreparedStep(),
+                GenerationContext(),
+            )
+            assert len(request.messages) == len(source)
+            assert len(run._token_counts) > 1024
+            assert encoder.encode.call_count == len(run._token_counts)
+
+        encoded = encoder.encode.call_count
+        _compact_context(run, model, source[-3:], PreparedStep(), GenerationContext())
+        assert encoder.encode.call_count == encoded
+        last_message = source[-3]
+        assert isinstance(last_message, AssistantMessage)
+        assert set(run._token_counts) == {
+            "",
+            last_message.text,
+            last_message.tool_calls[0].model_dump_json(),
+            source[-2].text,
+            TASK,
+        }
+
+
+def test_rebuilt_prompts_reuse_counts_and_recount_changed_content() -> None:
+    evidence = "Retrieved evidence from search. " * 20
+    revised_evidence = evidence + "New information. " * 10
+    system = "Use the evidence to answer."
+    tokenizer = tiktoken.get_encoding("cl100k_base")
+    sdk_encoder = Mock(wraps=tokenizer)
+    with patch("onyx.agents.compaction._encoder", return_value=sdk_encoder):
+        # Each run and model counter must own its cache independently.
+        for _ in range(2):
+            model = ContextModel(tool_rounds=2)
+
+            def prepare(
+                state: StepInput,
+            ) -> PreparedStep:
+                tool = AgentTool(
+                    definition=ToolDefinition(
+                        name="lookup",
+                        description="Search updated sources"
+                        if state.step.index == 2
+                        else "Search",
+                        parameters={},
+                    ),
+                    execute=lambda _: ToolResult(content=evidence),
+                )
+
+                def assemble(messages: Sequence[Message]) -> list[Message]:
+                    updated_messages = [
+                        message.model_copy(update={"content": revised_evidence})
+                        if isinstance(message, ToolResultMessage)
+                        and state.step.index == 2
+                        else message
+                        for message in messages
+                    ]
+                    return [SystemMessage(content=system), *updated_messages]
+
+                return PreparedStep(tools=[tool], assemble_messages=assemble)
+
+            agent = Agent(
+                model,
+                state=AgentState(messages=[UserMessage(content=TASK)]),
+                prepare_step=prepare,
+            )
+            run = agent.start(background=False, max_steps=3)
+            assert run.result().output.text == "Evidence supports the conclusion [1]."
+            assert run.wait_for_idle(timeout=5)
+            assert len(model.generations) == 3
+            assert not model.summaries
+            assert not run._token_counts
+            assert [
+                message.content
+                for message in model.generations[-1].messages
+                if isinstance(message, ToolResultMessage)
+            ] == [revised_evidence, revised_evidence]
+            assert [
+                message.content
+                for message in agent.state.messages
+                if isinstance(message, ToolResultMessage)
+            ] == [evidence, evidence]
+
+    sdk_inputs = [call.args[0] for call in sdk_encoder.encode.call_args_list]
+    # Each text is encoded once per counter, even across copied prompt messages.
+    for text in (TASK, system, evidence, revised_evidence):
+        assert sdk_inputs.count(text) == 2
+    for request in model.generations:
+        assert sdk_inputs.count(request.tools[0].model_dump_json()) == 2

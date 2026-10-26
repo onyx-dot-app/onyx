@@ -89,9 +89,12 @@ combine compatible calls. Each original call retains its identity and result.
 | `before_tool_call` | Permit execution, return a result directly, or request identified input. |
 | `after_tool_call` | Enrich an accepted result. Failure retains the original result and fails the run. |
 
-Callback inputs are detached from recorded state. `prepare_step` replaces the
+Step callback inputs are detached from recorded state. `prepare_step` replaces the
 Agent defaults for that step. Its message assembler must be pure and repeatable:
-compaction can call it again with shorter history. Capture configuration during
+compaction can call it again with shorter history. The assembler borrows a read-only
+`Sequence[Message]`. Its tuple contains mutable messages; return replacements instead
+of changing messages or nested data. The runtime detaches the assembled request.
+Capture configuration during
 preparation rather than fetching it inside the assembler.
 
 Callbacks run synchronously and must bound their I/O. Cancellation cannot interrupt
@@ -107,9 +110,13 @@ Typed events describe run boundaries, messages, tool progress, and suspension.
 Message updates use the shared LLM content-delta types. Each event identifies its
 run; message events also identify their model message and step.
 
-Event delivery uses a bounded queue. Slow or failed listeners do not fail execution
-or storage, but delivery can fail. Inspect `run.delivery_failed` when delivery
-matters. Listeners must not wait for their own run to become idle.
+Event delivery uses an unbounded queue. Slow listeners can increase retained memory.
+Text, thinking-text, and tool-argument deltas without mutable attachments are shared
+between listeners. Other events are copied to preserve listener isolation.
+Closing delivery rejects new events and releases listeners after accepted events
+drain. Close does not wait; idle tracking includes pending delivery. Listener
+failures do not fail execution or storage. Inspect `run.delivery_failed` when
+delivery matters. Listeners must not wait for their own run to become idle.
 
 ## Child agents
 
@@ -133,6 +140,9 @@ cleanup. A timeout leaves unfinished work owned.
 Compaction reduces working model context while preserving recorded history. A
 checkpoint stores a summary and the last covered message ID. The runtime keeps
 recent context and only summarizes eligible history boundaries.
+
+Each run reuses token counts for unchanged text across model steps. The cache
+retains only the latest request text and clears when execution configuration is released.
 
 Summary calls use `LLMFlow.CHAT_HISTORY_SUMMARIZATION`, bounded output, and a
 bounded timeout. Invalid checkpoints or summaries that do not reduce context fail

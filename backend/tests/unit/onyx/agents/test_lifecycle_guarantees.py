@@ -15,7 +15,7 @@ from litellm.exceptions import (
 )
 from pydantic import BaseModel
 
-from onyx.agents.events import AgentEvent
+from onyx.agents.events import AgentEndEvent, AgentEvent
 from onyx.agents.execution_records import RunFailureKind
 from onyx.agents.models import PreparedStep, StepInput, StepResult, ToolCallContext
 from onyx.agents.runtime import Agent, RunFailed
@@ -194,17 +194,15 @@ def test_unsubscribe_before_dispatch_and_after_idle_is_safe() -> None:
     assert observed == []
 
 
-def test_observer_backlog_preserves_output_and_cleanup_ownership(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr("onyx.agents.concurrency.AGENT_EVENT_BUFFER_MAX_BYTES", 512)
-    monkeypatch.setattr("onyx.agents.concurrency.CLEANUP_SECONDS", 0.02)
+def test_observer_backlog_preserves_output_and_cleanup_ownership() -> None:
     entered = threading.Event()
     release = threading.Event()
+    received: list[AgentEvent] = []
 
-    def observe(_event: AgentEvent) -> None:
+    def observe(event: AgentEvent) -> None:
         entered.set()
         assert release.wait(3)
+        received.append(event)
 
     agent = Agent(
         FakeModelClient(
@@ -227,7 +225,8 @@ def test_observer_backlog_preserves_output_and_cleanup_ownership(
     following = agent.start(max_steps=1)
     assert following.result(timeout=2).output.text == "large " * 100
     assert following.wait_for_idle(2)
-    assert run.delivery_failed
+    assert not run.delivery_failed
+    assert isinstance(received[-1], AgentEndEvent)
     assert run.snapshot() == frozen
 
 

@@ -1,7 +1,7 @@
 """Runtime ownership across hooks, observation, snapshots, and lazy resources."""
 
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 import pytest
 from pydantic import BaseModel
@@ -26,11 +26,12 @@ from onyx.llm.model_response import Delta
 from onyx.llm.models import (
     AssistantMessage,
     GenerationRequest,
-    GenerationToolCallEvent,
     Message,
+    SystemMessage,
     TextContent,
     ThinkingDeltaEvent,
     ToolCall,
+    ToolCallEndEvent,
     ToolDefinition,
     ToolResult,
     ToolResultMessage,
@@ -96,7 +97,7 @@ def test_listeners_cannot_edit_history_or_each_others_events(inherited: bool) ->
             event.message.content.clear()
         elif event.type == "message_update":
             update = event.generation_event
-            if isinstance(update, GenerationToolCallEvent):
+            if isinstance(update, ToolCallEndEvent):
                 update.tool_call.arguments.clear()
             elif isinstance(update, ThinkingDeltaEvent) and update.blocks:
                 update.blocks.clear()
@@ -272,12 +273,15 @@ def test_prepared_request_isolates_nested_tool_arguments(with_assembly: bool) ->
     ]
     retained: list[Message] = []
 
-    def assemble(history: list[Message]) -> list[Message]:
+    def assemble(history: Sequence[Message]) -> list[Message]:
         assistant = history[0]
         assert isinstance(assistant, AssistantMessage)
-        assistant.tool_calls[0].arguments["filters"] = {"q": "assembled"}
-        retained.extend(history)
-        return history
+        call = assistant.tool_calls[0].model_copy(
+            update={"arguments": {"filters": {"q": "assembled"}}}
+        )
+        result = [assistant.model_copy(update={"content": [call]}), *history[1:]]
+        retained.extend(result)
+        return result
 
     request = PreparedStep(
         assemble_messages=assemble if with_assembly else None
@@ -415,3 +419,26 @@ def test_request_assembly_keeps_logical_tool_context_and_metadata() -> None:
     assert run.snapshot().messages[0].metadata == metadata
     starts = [event for event in events if event.type == "message_start"]
     assert len(starts) == 1 and starts[0].metadata == metadata
+
+
+def test_request_mutation_cannot_change_captured_assembly_instructions() -> None:
+    instructions = SystemMessage(content="Use sources", metadata=ExtraData())
+    history: list[Message] = [UserMessage(content="Question")]
+    prepared = PreparedStep(
+        assemble_messages=lambda messages: [instructions, *messages]
+    )
+    request = prepared.generation_request(history)
+    system = request.messages[0]
+    assert isinstance(system, SystemMessage)
+    system.content = "changed"
+    assert isinstance(system.metadata, ExtraData)
+    system.metadata.value = "changed"
+    question = request.messages[1]
+    assert isinstance(question, UserMessage)
+    question.content = "changed"
+
+    rebuilt = prepared.generation_request(history)
+    assert rebuilt.messages == [instructions, *history]
+    assert instructions.content == "Use sources"
+    assert instructions.metadata == ExtraData()
+    assert history[0].content == "Question"

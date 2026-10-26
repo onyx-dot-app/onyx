@@ -10,7 +10,10 @@ from onyx.agents.tools import PendingToolInput, ToolProgress
 from onyx.llm.models import (
     AssistantMessage,
     GenerationContentEvent,
+    TextDeltaEvent,
+    ThinkingDeltaEvent,
     ToolCall,
+    ToolCallDeltaEvent,
     ToolResult,
 )
 
@@ -112,3 +115,20 @@ AgentEvent = Annotated[
     | ToolEndEvent,
     Field(discriminator="type"),
 ]
+
+
+def is_shareable_delta(event: AgentEvent) -> bool:
+    """Whether a complete delta event can be shared without copying."""
+    # Subclasses may add mutable fields.
+    if type(event) is not MessageUpdateEvent:
+        return False
+    update = event.generation_event
+    if update.request_params is not None:
+        return False
+    if type(update) is TextDeltaEvent:
+        return True
+    if type(update) is ThinkingDeltaEvent:
+        return update.blocks is None
+    if type(update) is ToolCallDeltaEvent:
+        return True
+    return False
