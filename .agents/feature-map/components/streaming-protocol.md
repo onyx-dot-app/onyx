@@ -395,3 +395,11 @@ still render. Replay hides the configured thinking tool. Answers that start with
 citation retain its metadata. Interrupted responses retain citations only for the
 selected answer text. Tool debug packets appear only in integration-test mode,
 before the tool start packet.
+
+Generic model-facing error text is not displayed. Explicit public error details and
+structured tool output retain their existing rendering.
+Coding-child reasoning uses `CodingAgentThinkingDelta`, including native thinking
+and configured thinking-tool output. Replay assigns sections in accepted content
+order. Citation removal also applies to citation-only and interrupted answers.
+Generated-message metadata supplies saved source references, including previously
+retrieved sources that the current response did not retrieve again.

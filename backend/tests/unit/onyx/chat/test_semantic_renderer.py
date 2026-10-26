@@ -25,10 +25,12 @@ from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.chat.emitter import Emitter
 from onyx.chat.presentation import ResponsePresenter, project_response, replay_response
 from onyx.chat.renderer import MessageRenderer, ResponseLayout, ToolRenderer
+from onyx.chat.response import tool_arguments_for_display
 from onyx.chat.response_models import (
     ChatMessageMetadata,
     CitationMode,
     MessageRendering,
+    PresentationMode,
     ResponseRecord,
 )
 from onyx.configs.constants import DocumentSource
@@ -52,7 +54,11 @@ from onyx.llm.models import (
     ReasoningEffort,
     TextContent,
     TextDeltaEvent,
+    ThinkingContent,
+    ThinkingDeltaEvent,
     ToolCall,
+    ToolCallEndEvent,
+    ToolCallStartEvent,
     ToolDefinition,
     ToolResult,
     ToolResultMessage,
@@ -65,15 +71,23 @@ from onyx.server.query_and_chat.streaming_models import (
     BashToolDelta,
     BashToolStart,
     CitationInfo,
+    CodingAgentThinkingDelta,
+    CustomToolDelta,
     CustomToolStart,
     OverallStop,
     Packet,
     PacketException,
+    ReasoningDelta,
     SearchToolStart,
     SectionEnd,
     ToolCallDebug,
 )
-from onyx.tools.results import LlmBashExecutionResult, ToolExecutionError
+from onyx.tools.results import (
+    CustomToolCallSummary,
+    CustomToolErrorInfo,
+    LlmBashExecutionResult,
+    ToolExecutionError,
+)
 from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
 
@@ -173,13 +187,14 @@ def test_rendering_does_not_change_requests_transcript_or_execution() -> None:
     "fragments, expected",
     [
         (["Answer [", "1", "]."], "Answer."),
-        (["[1]"], "[1]"),
+        (["[1]"], ""),
         (["<unknown>literal XML</unknown>"], "<unknown>literal XML</unknown>"),
         (["unfinished ["], "unfinished ["),
     ],
 )
+@pytest.mark.parametrize("streamed", [False, True])
 def test_citation_display_keeps_raw_transcript(
-    fragments: list[str], expected: str
+    fragments: list[str], expected: str, streamed: bool
 ) -> None:
     accumulator = MessageAccumulator()
     renderer = MessageRenderer(
@@ -196,12 +211,12 @@ def test_citation_display_keeps_raw_transcript(
                 choice=StreamingChoice(delta=Delta(content=fragment)),
             )
         ):
-            if not isinstance(
+            if streamed and not isinstance(
                 event, (GenerationStartEvent, GenerationDoneEvent, GenerationErrorEvent)
             ):
                 packets.extend(renderer.consume(event))
     for event in accumulator.end():
-        if not isinstance(
+        if streamed and not isinstance(
             event, (GenerationStartEvent, GenerationDoneEvent, GenerationErrorEvent)
         ):
             packets.extend(renderer.consume(event))
@@ -615,3 +630,270 @@ def test_interrupted_answer_citations_belong_to_the_selected_text(
     response = project_response(snapshot, tool_ids={})
     assert response.answer == "Partial answer"
     assert response.citation_info == []
+
+
+@pytest.mark.parametrize("live", [False, True])
+@pytest.mark.parametrize("tool_thinking", [False, True])
+@pytest.mark.parametrize(
+    "mode", [PresentationMode.CODING_THINKING, PresentationMode.CODING_ANSWER]
+)
+def test_coding_thinking_uses_coding_packets(
+    live: bool, tool_thinking: bool, mode: PresentationMode
+) -> None:
+    settings = MessageRendering(mode=mode, think_tool="think")
+    message = AssistantMessage(
+        id="m",
+        content=[
+            ToolCall(id="t", name="think", arguments={"reasoning": "Inspect the code"})
+            if tool_thinking
+            else ThinkingContent(text="Inspect the code")
+        ],
+    )
+    parent = Placement(turn_index=3, tab_index=1)
+    if live:
+        renderer = MessageRenderer(settings, {}, ResponseLayout(), parent)
+        if tool_thinking:
+            call = message.tool_calls[0]
+            output = renderer.consume(
+                ToolCallStartEvent(
+                    content_index=0, tool_call_id=call.id, tool_name=call.name
+                )
+            )
+            output.extend(
+                renderer.consume(ToolCallEndEvent(content_index=0, tool_call=call))
+            )
+        else:
+            output = renderer.consume(
+                ThinkingDeltaEvent(content_index=0, text="Inspect the code")
+            )
+        output.extend(renderer.complete(message))
+    else:
+        output = replay_response(
+            ResponseRecord(
+                run_id="child",
+                parent_run_id="root",
+                status=RunStatus.COMPLETE,
+                steps=[
+                    StepRecord(
+                        message=message, generation_status=ExecutionStatus.COMPLETE
+                    )
+                ],
+            ),
+            {},
+            {"m": settings},
+            {},
+            parent=parent,
+        )
+    assert [
+        packet.obj.content
+        for packet in output
+        if isinstance(packet.obj, CodingAgentThinkingDelta)
+    ] == ["Inspect the code"]
+    assert not any(packet.obj.type.startswith("reasoning_") for packet in output)
+    assert all(
+        (packet.placement.turn_index, packet.placement.tab_index) == (3, 1)
+        for packet in output
+    )
+
+
+@pytest.mark.parametrize("tool_first", [False, True])
+def test_replay_preserves_live_text_and_tool_section_order(tool_first: bool) -> None:
+    call = ToolCall(id="search", name="internal_search", arguments={"queries": ["q"]})
+    text = TextContent(text="Let me check.")
+    message = AssistantMessage(
+        id="m", content=[call, text] if tool_first else [text, call]
+    )
+    output: list[Packet] = []
+    presenter = ResponsePresenter(_emitter(output))
+    presenter.consume(MessageStartEvent(run_id="r", message_id="m", step_index=0))
+    for index, block in enumerate(message.content):
+        event = (
+            ToolCallStartEvent(
+                content_index=index, tool_call_id=call.id, tool_name=call.name
+            )
+            if isinstance(block, ToolCall)
+            else TextDeltaEvent(content_index=index, text=text.text)
+        )
+        presenter.consume(
+            MessageUpdateEvent(
+                run_id="r", message_id="m", step_index=0, generation_event=event
+            )
+        )
+    presenter.consume(
+        MessageEndEvent(
+            run_id="r",
+            message_id="m",
+            step_index=0,
+            message=message,
+            status=ExecutionStatus.COMPLETE,
+        )
+    )
+    presenter.consume(
+        ToolStartEvent(run_id="r", message_id="m", step_index=0, tool_call=call)
+    )
+    replay = replay_response(
+        ResponseRecord(
+            run_id="r",
+            status=RunStatus.COMPLETE,
+            steps=[
+                StepRecord(message=message, generation_status=ExecutionStatus.COMPLETE)
+            ],
+        ),
+        {},
+        {},
+        {},
+    )
+    for packet_type in (AgentResponseStart, SearchToolStart):
+        live_placements = [
+            (
+                packet.placement.turn_index,
+                packet.placement.tab_index,
+                packet.placement.sub_turn_index,
+            )
+            for packet in output
+            if isinstance(packet.obj, packet_type)
+        ]
+        saved_placements = [
+            (
+                packet.placement.turn_index,
+                packet.placement.tab_index,
+                packet.placement.sub_turn_index,
+            )
+            for packet in replay
+            if isinstance(packet.obj, packet_type)
+        ]
+        assert live_placements == saved_placements
+        assert len(live_placements) == 1
+    tool_section = next(
+        packet.placement.turn_index
+        for packet in replay
+        if isinstance(packet.obj, SearchToolStart)
+    )
+    text_section = next(
+        packet.placement.turn_index
+        for packet in replay
+        if isinstance(packet.obj, AgentResponseStart)
+    )
+    assert (tool_section < text_section) == tool_first
+
+
+@pytest.mark.parametrize("live", [False, True])
+@pytest.mark.parametrize("public_error", [False, True])
+def test_tool_errors_only_display_explicit_public_details(
+    live: bool, public_error: bool
+) -> None:
+    call = ToolCall(id="call", name="custom", arguments={})
+    result = ToolResultMessage(
+        tool_call_id=call.id,
+        tool_name=call.name,
+        content="Private provider exception",
+        is_error=True,
+        details=CustomToolCallSummary(
+            tool_name=call.name,
+            response_type="text",
+            tool_result="",
+            error=CustomToolErrorInfo(
+                status_code=None, message="Please reconnect this tool"
+            ),
+        )
+        if public_error
+        else None,
+    )
+    if live:
+        renderer = ToolRenderer(call, Placement(turn_index=0))
+        output = renderer.start() + renderer.complete(result)
+    else:
+        output = replay_response(
+            ResponseRecord(
+                run_id="r",
+                status=RunStatus.COMPLETE,
+                steps=[
+                    StepRecord(
+                        message=AssistantMessage(id="m", content=[call]),
+                        generation_status=ExecutionStatus.COMPLETE,
+                        tools={
+                            call.id: ToolExecutionRecord(
+                                status=ExecutionStatus.COMPLETE, result=result
+                            )
+                        },
+                    )
+                ],
+            ),
+            {},
+            {},
+            {},
+        )
+    assert all(
+        "Private provider exception" not in packet.model_dump_json()
+        for packet in output
+    )
+    public_errors = [
+        packet.obj.error
+        for packet in output
+        if isinstance(packet.obj, CustomToolDelta) and packet.obj.error
+    ]
+    assert [error.message for error in public_errors] == (
+        ["Please reconnect this tool"] if public_error else []
+    )
+    assert result.text == "Private provider exception"
+
+
+@pytest.mark.parametrize("live", [False, True])
+def test_completion_batches_content_and_decodes_thinking_once(
+    live: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    decoded_calls: list[str] = []
+
+    def decode(call: ToolCall) -> dict[str, JsonValue]:
+        decoded_calls.append(call.id)
+        return tool_arguments_for_display(call)
+
+    monkeypatch.setattr("onyx.chat.response.tool_arguments_for_display", decode)
+    think = ToolCall(
+        id="think",
+        name="think",
+        arguments={},
+        raw_arguments='{"reasoning":"' + "r" * 128,
+        arguments_complete=False,
+    )
+    tool = ToolCall(id="lookup", name="lookup", arguments={})
+    message = AssistantMessage(
+        content=[
+            *[ThinkingContent(text="r") for _ in range(128)],
+            think,
+            *[TextContent(text="a") for _ in range(128)],
+            tool,
+            *[TextContent(text="b") for _ in range(128)],
+        ]
+    )
+    renderer = MessageRenderer(
+        MessageRendering(think_tool="think"), {}, ResponseLayout()
+    )
+    output: list[Packet] = []
+    if live:
+        output.extend(
+            renderer.consume(ThinkingDeltaEvent(content_index=0, text="r" * 64))
+        )
+    output.extend(renderer.complete(message))
+    assert renderer.complete(message) == []
+    assert decoded_calls == ["think"]
+    assert renderer.reasoning == "r" * 256
+    assert renderer.answer == "a" * 128 + "b" * 128
+    assert [
+        packet.obj.reasoning
+        for packet in output
+        if isinstance(packet.obj, ReasoningDelta)
+    ] == (["r" * 64, "r" * 192] if live else ["r" * 256])
+    assert [
+        packet.obj.content
+        for packet in output
+        if isinstance(packet.obj, AgentResponseDelta)
+    ] == ["a" * 128, "b" * 128]
+    answer_start = next(
+        packet for packet in output if isinstance(packet.obj, AgentResponseStart)
+    )
+    assert (
+        renderer.tool_placement(tool.id).turn_index > answer_start.placement.turn_index
+    )
+    assert think.arguments == {}
+    assert len(message.content) == 386

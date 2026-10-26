@@ -8,7 +8,13 @@ from onyx.agents.models import AgentInfo, RunState, StepRecord, ToolExecutionRec
 from onyx.chat.response_models import ResponseRecord
 from onyx.context.search.models import SearchDocsResponse
 from onyx.deep_research.configuration import ResearchConfiguration
-from onyx.llm.models import AssistantMessage, Message, ToolCall, ToolResultMessage
+from onyx.llm.models import (
+    AssistantMessage,
+    Message,
+    ThinkingContent,
+    ToolCall,
+    ToolResultMessage,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.streaming_json import parse_partial_object
 
@@ -27,18 +33,24 @@ def tool_arguments_for_display(call: ToolCall) -> dict[str, JsonValue]:
         return call.arguments
 
 
+def thinking_tool_text(call: ToolCall) -> str:
+    try:
+        return _STRING.validate_python(
+            tool_arguments_for_display(call).get("reasoning", "")
+        )
+    except ValidationError:
+        logger.debug("Thinking tool arguments are not text", exc_info=True)
+        return ""
+
+
 def message_thinking(message: AssistantMessage, think_tool: str | None = None) -> str:
-    """Collect model thinking and reasoning supplied through a configured think tool."""
-    thinking = message.thinking
-    for call in message.tool_calls:
-        if call.name == think_tool:
-            try:
-                thinking += _STRING.validate_python(
-                    tool_arguments_for_display(call).get("reasoning", "")
-                )
-            except ValidationError:
-                logger.debug("Thinking tool arguments are not text", exc_info=True)
-    return thinking
+    """Collect model and configured-tool thinking in accepted content order."""
+    return "".join(
+        block.text if isinstance(block, ThinkingContent) else thinking_tool_text(block)
+        for block in message.content
+        if isinstance(block, ThinkingContent)
+        or (isinstance(block, ToolCall) and block.name == think_tool)
+    )
 
 
 def response_record(
