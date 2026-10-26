@@ -152,6 +152,9 @@ It receives conversation history, this run's input and output, the step budget, 
 The input is detached from runtime state. `previous` references the matching messages within that input.
 Without this callback, the agent uses its configured instructions, tools, and model options.
 A custom callback returns the complete step configuration; the runtime does not merge agent defaults into it.
+Register executable tools on `Agent.tools`. `PreparedStep.tools` selects those same instances;
+it cannot supply new implementations. Invalid selections fail before the model call.
+On restoration, the registered tools must match the saved step's declarations.
 
 `after_step(StepResult)` processes each completed step, including the last allowed step.
 Return `True` to continue or `False` to finish. Without this callback, the agent continues after tool calls
@@ -171,7 +174,8 @@ Do not fetch settings, advance feature state, or capture the original history in
 
 `Agent` requires a `GenerationContext` with an explicit `LLMFlow` operation tag.
 This context supplies tracing identity, content policy, and execution timeouts for every step.
-The run copies these defaults at startup and binds its cancellation signal.
+The run copies these defaults at startup and owns its cancellation signal.
+Caller cancellation propagates into the run. Run failure or cancellation does not cancel the caller's signal.
 Each model call receives a separate context copy. Compaction applies its own tracing flow and timeout.
 `PreparedStep.stall_timeout_s` overrides the stream's idle timeout; `None` uses the agent's setting.
 Generation options remain part of `PreparedStep`, since tool choice and token limits can change between steps.
@@ -261,7 +265,9 @@ Spawning returns both an `agent_id` and a `run_id`. Use `agent_id` to start anot
 Use `run_id` to inspect, wait for, or cancel one execution. Paths are readable labels and may repeat.
 `wait_run` supports synchronous waits; it returns `None` on timeout without cancelling the child.
 Remote reads run on the calling tool thread. Their I/O timeouts bound a blocked read.
-Live and archived failures raise `RunFailed`; cancelled results raise `AgentCancelled`.
+Live and archived failures raise `RunFailed`. Waiting for a cancelled child raises `ChildRunCancelled`.
+Tools can handle that exception; otherwise, it becomes a tool error and the parent can continue.
+Cancelling the parent still interrupts its wait with `AgentCancelled`.
 
 Foreground children are the default. The parent waits for their terminal results and cancels them on failure or cancellation.
 Failed child cancellation records an error without skipping sibling cancellation or releasing locally owned work before it drains.
@@ -425,6 +431,11 @@ The fields survive a direct `ExecutionCheckpoint` JSON round trip without a feat
 
 `spawn_agent(restoration_config=...)` accepts application-owned settings for rebuilding a saved child
 for another run. Chat stores `ResearchConfiguration` directly; the SDK passes these settings to the application.
+Handoff releases the ownership adapter's reservation after saving suspended state.
+The SDK invokes release once; applications implement the storage operation.
+If release fails, handoff and local completion waiters report the cleanup error.
+A new execution owner can register the same run ID once ownership is released.
+
 Register executable tools on `Agent.tools`; the runtime restores the saved step's selection.
 Onyx tools receive application context when invoked. Chat and research derive it from feature state,
 which changes after the tool phase.

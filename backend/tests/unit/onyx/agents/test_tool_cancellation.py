@@ -9,7 +9,7 @@ from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent, ToolUpdateEvent
 from onyx.agents.models import RunStatus
 from onyx.agents.runtime import Agent, Run, RunFailed
-from onyx.agents.tools import AgentTool, ToolInvocation
+from onyx.agents.tools import AgentTool, ChildRunCancelled, ToolInvocation
 from onyx.llm.cancellation import (
     AgentCancelled,
     CancellationSignal,
@@ -158,7 +158,7 @@ def test_cancelled_child_does_not_block_independent_parent_work() -> None:
                 time.sleep(0.01)
             invocation.agents.cancel_run(submission.run_id)
             invocation.agents.wait_run(submission.run_id)
-        except AgentCancelled:
+        except ChildRunCancelled:
             recovering.set()
         replacement_started.set()
         return ToolResult(content="recovered")

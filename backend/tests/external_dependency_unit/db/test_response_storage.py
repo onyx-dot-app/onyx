@@ -1228,6 +1228,34 @@ def test_child_reuse_follows_selected_branch_not_completion_order(
         ]
 
 
+def test_root_metadata_does_not_consume_child_history_limit(
+    db_session: Session,
+    conversation: ChatSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("onyx.db.chat_subagents.MAX_AGENT_HISTORY_RUNS", 2)
+    monkeypatch.setattr(
+        "onyx.db.chat_subagents.get_session_with_current_tenant",
+        lambda: nullcontext(db_session),
+    )
+    first = _response(db_session, conversation)
+    record = _record(first)
+    child_id = uuid4()
+    child = _child_record(db_session, record, child_id, "Child answer")
+    _save(db_session, first, record)
+    latest = first
+    for _ in range(6):
+        latest = _response(db_session, conversation, previous=latest)
+        _save(db_session, latest, _record(latest))
+    metadata = {agent.id: agent for agent in load_session_agent_metadata(latest.id)}
+    assert metadata[str(conversation.id)].latest_run_id == str(latest.id)
+    assert metadata[str(child_id)].latest_run_id == child.run_id
+    assert metadata[str(child_id)].status == RunStatus.COMPLETE
+    assert [
+        agent.id for agent in load_session_agent_metadata(latest.id, include_root=False)
+    ] == [str(child_id)]
+
+
 @pytest.mark.parametrize("reverse_save_order", [False, True])
 def test_nested_child_visibility_and_reuse_follow_root_branch(
     db_session: Session,
@@ -1969,7 +1997,7 @@ def test_discovery_batches_response_metadata(
     assert all(agent.latest_run_id is not None for agent in metadata)
     assert sum(
         "WITH RECURSIVE selected_responses" in query for query in executed_sql
-    ) == (1 if reuse_branch and not child_count else 2)
+    ) == (2 if child_count else 1)
     assert sum(
         "WITH RECURSIVE session_ancestors" in query for query in executed_sql
     ) == bool(child_count)

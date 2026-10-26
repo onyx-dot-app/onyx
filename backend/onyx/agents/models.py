@@ -107,7 +107,7 @@ class CompactionMetadata(BaseModel):
 
 
 class PreparedStep(BaseModel):
-    """Decisions captured once and reused when compaction rebuilds a request."""
+    """Step settings reused during compaction; tools select registered Agent.tools instances."""
 
     model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True, frozen=True)
     system_prompt: str = ""
