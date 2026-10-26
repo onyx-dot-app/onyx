@@ -6,8 +6,13 @@ from collections.abc import Mapping
 
 from pydantic import BaseModel, ConfigDict, JsonValue, TypeAdapter
 
-from onyx.agents.execution_records import RunStatus
-from onyx.agents.models import AgentState, ExecutionCheckpoint, RunProgress, RunState
+from onyx.agents.models import (
+    AgentState,
+    ExecutionCheckpoint,
+    RunProgress,
+    RunState,
+    RunStatus,
+)
 from onyx.agents.tools import HumanToolAnswer, InputDecision
 from onyx.chat.models import (
     ChatMessageMetadata,

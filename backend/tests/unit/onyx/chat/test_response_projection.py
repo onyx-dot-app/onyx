@@ -10,11 +10,12 @@ from uuid import uuid4
 import pytest
 
 from onyx.agents.events import AgentEvent, MessageEndEvent
-from onyx.agents.execution_records import ExecutionStatus, RunStatus
 from onyx.agents.models import (
     AgentInfo,
+    ExecutionStatus,
     PreparedStep,
     RunState,
+    RunStatus,
     StepRecord,
     ToolExecutionRecord,
 )

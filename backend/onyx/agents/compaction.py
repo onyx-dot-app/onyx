@@ -10,8 +10,8 @@ if TYPE_CHECKING:
 
 from pydantic import BaseModel, Field
 
-from onyx.agents.execution_records import CompactionCheckpoint, completed_tool_call_ids
-from onyx.agents.models import CompactionMetadata
+from onyx.agents.execution_records import completed_tool_call_ids
+from onyx.agents.models import CompactionCheckpoint, CompactionMetadata
 from onyx.configs.model_configs import GEN_AI_INPUT_TOKEN_SAFETY_MARGIN
 from onyx.llm.interfaces import LLM, GenerationContext
 from onyx.llm.models import (

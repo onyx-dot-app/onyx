@@ -43,24 +43,22 @@ from onyx.agents.events import (
     ToolStartEvent,
     ToolUpdateEvent,
 )
-from onyx.agents.execution_records import (
-    CompactionCheckpoint,
-    ExecutionStatus,
-    RunFailure,
-    RunFailureKind,
-    RunStatus,
-    run_input_message_id,
-)
+from onyx.agents.execution_records import run_input_message_id
 from onyx.agents.models import (
     AgentState,
     AgentStep,
+    CompactionCheckpoint,
     ExecutionCheckpoint,
     ExecutionRequest,
+    ExecutionStatus,
     PreparedStep,
     RunAction,
+    RunFailure,
+    RunFailureKind,
     RunProgress,
     RunResult,
     RunState,
+    RunStatus,
     StepInput,
     StepRecord,
     StepResult,
@@ -699,6 +697,7 @@ class Run:
     ) -> None:
         # Checkpoint capture must not split a completed batch.
         with self.execution_lock:
+            self.cancellation_signal.check()
             if not self.is_accepting:
                 logger.warning("Tool batch completed after its run closed: %s", self.id)
                 raise AgentCancelled()
@@ -737,6 +736,7 @@ class Run:
             else None
         )
         with self.execution_lock:
+            self.cancellation_signal.check()
             if isinstance(pending, PendingToolInput) and (
                 pending.request_id in self._progress.human_tool_answers
                 or any(
@@ -1020,10 +1020,9 @@ class Run:
                 if run_id in self._watched_children:
                     continue
                 self._watched_children.add(run_id)
-            coordinator.completion(run_id).add_done_callback(
+            coordinator.child_completion(run_id, self.agent_id).add_done_callback(
                 lambda _future: self._wake_execution()
             )
-            coordinator.observe_completion(run_id)
 
     def _suspend(self) -> None:
         if self._restoration is not None:

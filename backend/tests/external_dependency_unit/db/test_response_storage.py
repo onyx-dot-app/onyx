@@ -18,20 +18,18 @@ from onyx.agents.events import (
     ToolStartEvent,
     ToolUpdateEvent,
 )
-from onyx.agents.execution_records import (
-    CompactionCheckpoint,
-    ExecutionStatus,
-    RunFailure,
-    RunFailureKind,
-    RunStatus,
-)
 from onyx.agents.models import (
     AgentInfo,
     AgentState,
+    CompactionCheckpoint,
     ExecutionCheckpoint,
+    ExecutionStatus,
     RunAction,
+    RunFailure,
+    RunFailureKind,
     RunProgress,
     RunState,
+    RunStatus,
     StepRecord,
     ToolExecutionRecord,
     messages_from_steps,

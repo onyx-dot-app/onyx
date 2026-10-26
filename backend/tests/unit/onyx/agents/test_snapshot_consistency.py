@@ -7,10 +7,11 @@ from unittest.mock import patch
 
 import pytest
 
-from onyx.agents.execution_records import ExecutionStatus, RunStatus
 from onyx.agents.models import (
+    ExecutionStatus,
     PreparedStep,
     RunState,
+    RunStatus,
     StepInput,
     StepRecord,
     ToolCallContext,

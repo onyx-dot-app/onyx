@@ -2,8 +2,7 @@
 
 import pytest
 
-from onyx.agents.execution_records import RunStatus
-from onyx.agents.models import StepResult
+from onyx.agents.models import RunStatus, StepResult
 from onyx.agents.runtime import Agent, Run
 from onyx.chat.response import response_record, response_snapshot
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal

@@ -1,11 +1,13 @@
 import threading
 import time
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
 from onyx.agents.agent_coordination import AgentCoordinator
-from onyx.agents.events import AgentEvent
+from onyx.agents.events import AgentEvent, ToolUpdateEvent
+from onyx.agents.models import RunStatus
 from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.llm.cancellation import (
@@ -466,3 +468,82 @@ def test_tool_failure_logs_unobserved_child_failure(
     ]
     assert len(failures) == 1
     assert child_completed.is_set()
+
+
+def test_cancelled_run_rejects_tool_result_while_waiting_for_child(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    child_started = threading.Event()
+    release_child = threading.Event()
+    release_tool = threading.Event()
+    result_attempted = threading.Event()
+    events: list[AgentEvent] = []
+
+    def child_reply(
+        _request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        child_started.set()
+        assert release_child.wait(5)
+        return AssistantMessage(content=[TextContent(text="child")])
+
+    child = Agent(
+        FakeModelClient(child_reply),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+    )
+
+    def delegate(invocation: ToolInvocation) -> ToolResult:
+        invocation.agents.spawn_agent(
+            child, name="child", description="", messages=[], max_steps=1
+        )
+        assert release_tool.wait(5)
+        return ToolResult(content="late result")
+
+    record_results = Run.record_tool_results
+
+    def record(run: Run, result: ToolResult, calls: Sequence[ToolCall]) -> None:
+        try:
+            record_results(run, result, calls)
+        finally:
+            result_attempted.set()
+
+    monkeypatch.setattr(Run, "record_tool_results", record)
+    coordinator = AgentCoordinator()
+    parent = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(
+                content=[ToolCall(id="delegate", name="delegate", arguments={})]
+            )
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name="delegate", description="", parameters={}
+                ),
+                execute=delegate,
+            )
+        ],
+    )
+    run = parent.start(max_steps=1, coordinator=coordinator, on_event=events.append)
+    try:
+        assert child_started.wait(3)
+        run.cancel()
+        release_tool.set()
+        assert result_attempted.wait(3)
+        state = run.snapshot()
+        assert state.status == RunStatus.RUNNING
+        assert state.steps[0].tools["delegate"].result is None
+        release_child.set()
+        with pytest.raises(AgentCancelled):
+            run.result(3)
+        assert run.wait_for_idle(3)
+        assert not any(
+            isinstance(event, ToolUpdateEvent)
+            and event.run_id == run.id
+            and event.progress.content == "late result"
+            for event in events
+        )
+    finally:
+        release_tool.set()
+        release_child.set()
+        assert coordinator.close(3)

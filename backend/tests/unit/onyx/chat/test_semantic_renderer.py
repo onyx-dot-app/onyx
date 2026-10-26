@@ -13,8 +13,7 @@ from onyx.agents.events import (
     MessageUpdateEvent,
     ToolStartEvent,
 )
-from onyx.agents.execution_records import ExecutionStatus, RunStatus
-from onyx.agents.models import RunState, StepRecord
+from onyx.agents.models import ExecutionStatus, RunState, RunStatus, StepRecord
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.chat.emitter import Emitter

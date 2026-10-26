@@ -3,7 +3,7 @@
 import pytest
 
 from onyx.agents.compaction import working_messages
-from onyx.agents.execution_records import CompactionCheckpoint
+from onyx.agents.models import CompactionCheckpoint
 from onyx.chat.chat_utils import convert_chat_history
 from onyx.chat.models import ChatHistoryMessage
 from onyx.configs.constants import MessageType

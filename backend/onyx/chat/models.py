@@ -12,12 +12,13 @@ from pydantic import (
     field_validator,
 )
 
-from onyx.agents.execution_records import (
+from onyx.agents.models import (
     CompactionCheckpoint,
     RunFailure,
     RunStatus,
+    StepRecord,
+    messages_from_steps,
 )
-from onyx.agents.models import StepRecord, messages_from_steps
 from onyx.cache.interface import CacheBackend
 from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.configs.constants import MessageType

@@ -17,8 +17,7 @@ from onyx.agents.events import (
     MessageUpdateEvent,
     ToolUpdateEvent,
 )
-from onyx.agents.execution_records import RunStatus
-from onyx.agents.models import ToolCallContext
+from onyx.agents.models import RunStatus, ToolCallContext
 from onyx.agents.runtime import Agent, RunFailed
 from onyx.agents.tools import AgentTool, ToolInvocation, ToolProgress
 from onyx.context.search.models import SearchDocsResponse
@@ -929,3 +928,108 @@ def test_large_event_is_delivered_without_serialization() -> None:
     finally:
         delivery.close()
         dispatcher.close()
+
+
+@pytest.mark.parametrize("trigger", ["timer", "pause", "close"])
+@pytest.mark.parametrize("failure", [None, RuntimeError, AgentCancelled])
+def test_event_work_remains_pending_until_flush_finishes(
+    monkeypatch: pytest.MonkeyPatch,
+    trigger: str,
+    failure: type[RuntimeError] | type[AgentCancelled] | None,
+) -> None:
+    monkeypatch.setattr(
+        concurrency, "EVENT_FLUSH_INTERVAL_SECONDS", 0.01 if trigger == "timer" else 60
+    )
+    received = threading.Event()
+    flushing = threading.Event()
+    release = threading.Event()
+    finalized = threading.Event()
+    flushes: list[bool] = []
+    received_ids: list[str] = []
+
+    def receive(event: AgentEvent) -> None:
+        received_ids.append(event.run_id)
+        received.set()
+
+    def flush(final: bool) -> None:
+        flushes.append(final)
+        flushing.set()
+        assert release.wait(3)
+        if final:
+            finalized.set()
+        if failure is not None:
+            raise failure("Sink write failed")
+
+    dispatcher = concurrency.EventDispatcher(flush=flush)
+    parent = concurrency.EventDelivery(dispatcher)
+    child = concurrency.EventDelivery(parent=parent)
+    parent.subscribe(receive)
+    try:
+        expected = [str(index) for index in range(256 if trigger == "close" else 1)]
+        for run_id in expected:
+            child.publish(AgentStartEvent(run_id=run_id))
+        assert received.wait(2)
+        if trigger == "pause":
+            dispatcher.pause()
+        elif trigger == "close":
+            dispatcher.close()
+        assert flushing.wait(2)
+        assert received_ids == expected
+        assert dispatcher.has_pending_events
+        assert not child.tracker.wait_idle(0)
+        assert not parent.tracker.wait_idle(0)
+        release.set()
+        assert child.tracker.wait_idle(2)
+        assert parent.tracker.wait_idle(2)
+        assert not dispatcher.has_pending_events
+        assert flushes[0] == (trigger == "close")
+    finally:
+        release.set()
+        child.close()
+        parent.close()
+        dispatcher.close()
+        assert finalized.wait(2)
+
+
+def test_run_idle_waits_for_buffered_event_output() -> None:
+    flushing = threading.Event()
+    release = threading.Event()
+    finalized = threading.Event()
+    buffered: list[str] = []
+    saved: list[str] = []
+
+    def flush(final: bool) -> None:
+        flushing.set()
+        assert release.wait(3)
+        saved.extend(buffered)
+        buffered.clear()
+        if final:
+            finalized.set()
+
+    dispatcher = concurrency.EventDispatcher(flush=flush)
+    agent = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(content=[TextContent(text="answer")])
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+    )
+    run = agent.start(
+        max_steps=1,
+        event_dispatcher=dispatcher,
+        on_event=lambda event: buffered.append(event.type),
+    )
+    try:
+        assert run.result(2).output.text == "answer"
+        assert flushing.wait(2)
+        assert not run.wait_for_idle(0)
+        assert dispatcher.has_pending_events
+        release.set()
+        assert run.wait_for_idle(2)
+        assert saved and not buffered
+        assert not dispatcher.has_pending_events
+    finally:
+        release.set()
+        run.cancel()
+        assert run.wait_for_idle(2)
+        dispatcher.close()
+        assert finalized.wait(2)

@@ -6,8 +6,8 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, aliased, joinedload, object_session, selectinload
 
 from onyx.agents.compaction import count_tokens
-from onyx.agents.execution_records import RunStatus, run_input_message_id
-from onyx.agents.models import AgentInfo, StepRecord, ToolExecutionRecord
+from onyx.agents.execution_records import run_input_message_id
+from onyx.agents.models import AgentInfo, RunStatus, StepRecord, ToolExecutionRecord
 from onyx.chat.models import (
     ChatExecutionRecord,
     ChatResponseSnapshot,

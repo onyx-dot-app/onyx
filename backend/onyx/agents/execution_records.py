@@ -1,60 +1,18 @@
-"""Recorded run outcomes, compaction checkpoints, and model-history replay rules."""
+"""Model-history replay and stable input message identities."""
 
 from collections import Counter
-from enum import Enum
 
-from pydantic import BaseModel, Field
-
-from onyx.llm.exceptions import LLMErrorInfo
 from onyx.llm.models import (
     AssistantMessage,
     Message,
+    ThinkingBlock,
+    ThinkingContent,
     ToolCall,
     ToolResultMessage,
 )
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-
-class RunStatus(str, Enum):
-    RUNNING = "running"
-    SUSPENDED = "suspended"
-    COMPLETE = "complete"
-    LIMIT = "limit"
-    CANCELLED = "cancelled"
-    ERROR = "error"
-
-    @property
-    def is_terminal(self) -> bool:
-        return self not in (RunStatus.RUNNING, RunStatus.SUSPENDED)
-
-
-class ExecutionStatus(str, Enum):
-    """State of one generation or tool invocation; running means no terminal outcome yet."""
-
-    RUNNING = "running"
-    COMPLETE = "complete"
-    CANCELLED = "cancelled"
-    ERROR = "error"
-
-
-class RunFailureKind(str, Enum):
-    LLM = "llm"
-    LLM_TIMEOUT = "llm_timeout"
-    LLM_RATE_LIMIT = "llm_rate_limit"
-    EXECUTION = "execution"
-
-
-class RunFailure(BaseModel):
-    kind: RunFailureKind
-    message: str
-    llm_error: LLMErrorInfo | None = None
-
-
-class CompactionCheckpoint(BaseModel):
-    summary: str
-    covered_through_message_id: str = Field(min_length=1)
 
 
 def run_input_message_id(run_id: str, index: int) -> str:
@@ -74,7 +32,7 @@ def completed_tool_call_ids(messages: list[Message], assistant_index: int) -> se
 def messages_for_model(
     messages: list[Message], *, copy_messages: bool = True
 ) -> list[Message]:
-    """Exclude unfinished or ambiguous tool calls from model history.
+    """Exclude incomplete tool exchanges and unsigned thinking from model history.
 
     History truncation can drop an assistant tool call while leaving its
     result behind. Providers such as Ollama reject these orphaned results
@@ -98,11 +56,33 @@ def messages_for_model(
                     "Omitting ambiguous duplicate tool calls from model context"
                 )
             copy = message.model_copy(deep=copy_messages)
-            copy.content = [
-                part
-                for part in copy.content
-                if not isinstance(part, ToolCall) or part.id in accepted
-            ]
+            content = []
+            for part in copy.content:
+                if isinstance(part, ToolCall) and part.id not in accepted:
+                    continue
+                if isinstance(part, ThinkingContent) and part.blocks:
+                    # A provider sends the signature only after its thinking block ends.
+                    blocks = [
+                        block
+                        for block in part.blocks
+                        if not isinstance(block, ThinkingBlock) or block.signature
+                    ]
+                    if len(blocks) != len(part.blocks):
+                        logger.debug("Omitting unsigned thinking from model context")
+                        if not blocks:
+                            continue
+                        part = part.model_copy(
+                            update={
+                                "blocks": blocks,
+                                "text": "".join(
+                                    block.thinking
+                                    for block in blocks
+                                    if isinstance(block, ThinkingBlock)
+                                ),
+                            }
+                        )
+                content.append(part)
+            copy.content = content
             if copy.content:
                 result.append(copy)
             else:

@@ -7,8 +7,13 @@ import pytest
 from pydantic import BaseModel, JsonValue
 from sqlalchemy.orm import Session
 
-from onyx.agents.execution_records import ExecutionStatus, RunStatus
-from onyx.agents.models import RunState, StepRecord, ToolExecutionRecord
+from onyx.agents.models import (
+    ExecutionStatus,
+    RunState,
+    RunStatus,
+    StepRecord,
+    ToolExecutionRecord,
+)
 from onyx.chat.models import ChatSearchResult
 from onyx.chat.presentation import _collect_tool_history
 from onyx.chat.renderer import ToolRenderer
