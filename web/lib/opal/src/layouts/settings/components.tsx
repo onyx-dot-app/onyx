@@ -26,7 +26,7 @@ import { useOpalStrings } from "@opal/strings";
 import { PageLoader } from "@opal/loaders/page-loader/components";
 import { PageCenter } from "@opal/layouts/page-center/components";
 import { IllustrationContent } from "@opal/layouts/illustration-content/components";
-import { isRichStr } from "@opal/components/text/InlineMarkdown";
+import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import SvgPlugBroken from "@opal/illustrations/plug-broken";
 
 // ---------------------------------------------------------------------------
@@ -180,7 +180,7 @@ function SettingsHeader({
   const strings = useOpalStrings();
   const [showShadow, setShowShadow] = useState(false);
   const { setPageTitle } = useContext(SettingsPageContext);
-  const titleText = isRichStr(title) ? title.raw : title;
+  const titleText = toPlainString(title);
   useEffect(() => {
     setPageTitle(titleText);
   }, [setPageTitle, titleText]);
