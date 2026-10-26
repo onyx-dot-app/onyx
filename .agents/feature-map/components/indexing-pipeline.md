@@ -206,7 +206,12 @@ calls `connector_document_extraction`.
 
 That function computes the poll window (`window_start`/`window_end`), decides
 whether to resume from a checkpoint or start clean
-(`get_latest_valid_checkpoint`, §4.6), and drives the connector's generator
+(`get_latest_valid_checkpoint`, §4.6), starts the connector's count of a window it
+starts clean when the connector is a `CorpusEstimateConnector` ([[connectors]] §4.4)
+on its own thread (`_CorpusEstimateRun`, on a second connector instance, timed as
+the `CORPUS_ESTIMATE` stage) so the fetch runs without waiting on it, joins the count
+before it marks extraction complete so the count's fleet event leaves before the
+watchdog may end the process, and drives the connector's generator
 (`ConnectorRunner.run(checkpoint)`, [[connectors]]) inside `_timed_connector_runs`,
 which records one `CONNECTOR_FETCH` timing event per document or hierarchy
 batch. Failure and checkpoint-only yields do not count as batches: their wait
@@ -626,7 +631,11 @@ fleet sender through `utils/fleet_telemetry.py:emit_stage_counter`: fetch in
 `opensearch/client.py:_report_written_chunks` ([[document-index]] §4.2). These
 calls never raise into the pipeline. The sender sums the deltas per attempt and
 stage ([[observability]] §4.11). Attempt state reaches the fleet only from the
-collection pass's reads of `IndexAttempt` rows.
+collection pass's reads of `IndexAttempt` rows. `_CorpusEstimateRun` sends one
+`corpus` event per count through `emit_corpus_estimate` when the count ends: the
+window, the count's duration, the expected total, whether it is partial, and the
+counts and bytes per document type, or no estimate when the count failed. A failed
+fetch stops the count, which then reports a lower bound.
 
 A spawned docfetching process starts its own sender in `job_client.py:_initializer`
 and stops it with a bounded wait (`EXIT_FLUSH_SECONDS`) in that function's `finally`

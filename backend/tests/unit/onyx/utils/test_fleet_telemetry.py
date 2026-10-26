@@ -97,6 +97,49 @@ def test_privacy_boundary_rejects_unreviewed_fields_and_free_text(
     assert sender.invalid == sender.dropped == 1
 
 
+def test_corpus_estimate_carries_counts_by_reviewed_type_and_no_detail(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from onyx.connectors.models import CorpusEstimate, DocumentTypeLabel
+
+    sender = make_sender()
+    monkeypatch.setattr(fleet, "_client", sender)
+    estimate = CorpusEstimate(
+        total_docs=3,
+        docs_by_type={DocumentTypeLabel.PDF: 3},
+        bytes_by_type={DocumentTypeLabel.PDF: 30},
+        partial=True,
+        detail="PRIVATE drive nobody can list",
+    )
+    fleet.emit_corpus_estimate(
+        7,
+        3,
+        "google_drive",
+        window_start=0.0,
+        window_end=100.0,
+        duration_ms=5,
+        estimate=estimate,
+    )
+    fleet.emit_corpus_estimate(
+        8,
+        3,
+        "google_drive",
+        window_start=0.0,
+        window_end=100.0,
+        duration_ms=5,
+        estimate=None,
+    )
+    counted, failed = sender._take_batch()
+    assert counted["event_type"] == "corpus"
+    assert counted["data"]["expected_docs"] == 3
+    assert counted["data"]["expected_partial"] is True
+    assert counted["data"]["expected_by_type"] == {"pdf": 3}
+    assert counted["data"]["expected_bytes_by_type"] == {"pdf": 30}
+    assert "PRIVATE" not in json.dumps(counted)
+    assert failed["data"]["expected_docs"] is None
+    assert failed["data"]["expected_by_type"] == {}
+
+
 def test_queue_keeps_a_copy_of_the_safe_data() -> None:
     sender = make_sender()
     metadata: dict[str, Any] = {"batch_size": 10}

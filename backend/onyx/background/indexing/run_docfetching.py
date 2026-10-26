@@ -1,9 +1,10 @@
 import sys
+import threading
 import time
 import traceback
-from collections.abc import Generator, Iterable
+from collections.abc import Callable, Generator, Iterable
 from datetime import datetime, timedelta, timezone
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 import sentry_sdk
 from celery import Celery
@@ -44,10 +45,14 @@ from onyx.connectors.exceptions import (
     UnexpectedValidationError,
 )
 from onyx.connectors.factory import instantiate_connector
-from onyx.connectors.interfaces import CheckpointedConnector
+from onyx.connectors.interfaces import (
+    CheckpointedConnector,
+    CorpusEstimateConnector,
+)
 from onyx.connectors.models import (
     ConnectorFailure,
     ConnectorStopSignal,
+    CorpusEstimate,
     Document,
     HierarchyNode,
     TextSection,
@@ -103,12 +108,13 @@ from onyx.redis.redis_hierarchy import (
     get_source_node_id_from_cache,
 )
 from onyx.redis.redis_pool import get_redis_client
-from onyx.utils.fleet_telemetry import emit_stage_counter
+from onyx.utils.fleet_telemetry import emit_corpus_estimate, emit_stage_counter
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import (
     sanitize_document_for_postgres,
     sanitize_hierarchy_nodes_for_postgres,
 )
+from onyx.utils.threadpool_concurrency import start_thread_with_context
 from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
@@ -550,6 +556,121 @@ def run_docfetching_entrypoint(
     INDEX_ATTEMPT_INFO_CONTEXTVAR.reset(token)
 
 
+def _corpus_estimator(
+    db_session: Session,
+    attempt: IndexAttempt,
+    connector: Connector,
+    credential: Credential,
+) -> CorpusEstimateConnector:
+    """A second instance of the connector for the count, so the fetch's
+    listing state stays its own. The caller checked the connector's class."""
+    return cast(
+        CorpusEstimateConnector,
+        instantiate_connector(
+            db_session=db_session,
+            source=connector.source,
+            input_type=connector.input_type,
+            connector_specific_config=_get_run_config(attempt),
+            credential=credential,
+        ),
+    )
+
+
+# How long docfetching waits for a count that outlives the fetch. Past this
+# the process exits and the count's fleet event is lost.
+CORPUS_ESTIMATE_JOIN_SECONDS = 3600.0
+# How long a failed fetch waits for the stopped count to report its lower
+# bound: the count stops at its next file, so one source request at most.
+CORPUS_ESTIMATE_STOP_SECONDS = 120.0
+
+
+class _CorpusEstimateRun:
+    """The connector's count of the window, on its own thread beside the
+    fetch. The count goes to fleet telemetry when it ends, a failed count as
+    no estimate, so the fleet sees how often counts fail. Building the
+    connector is part of the count, so a failure there never stops the
+    fetch. Stopping the run stops the count, which then reports a lower
+    bound."""
+
+    def __init__(
+        self,
+        make_connector: Callable[[Session], CorpusEstimateConnector],
+        index_attempt_id: int,
+        cc_pair_id: int,
+        source: DocumentSource,
+        window_start: datetime,
+        window_end: datetime,
+    ) -> None:
+        self._make_connector = make_connector
+        self._index_attempt_id = index_attempt_id
+        self._cc_pair_id = cc_pair_id
+        self._source = source
+        self._window_start = window_start
+        self._window_end = window_end
+        self._stop = threading.Event()
+        self._thread = start_thread_with_context(
+            self._run, name=f"corpus-estimate-{index_attempt_id}", daemon=True
+        )
+
+    def _run(self) -> None:
+        started = time.monotonic()
+        estimate: CorpusEstimate | None = None
+        try:
+            with time_stage(IndexAttemptStage.CORPUS_ESTIMATE, self._index_attempt_id):
+                with get_session_with_current_tenant() as db_session:
+                    connector = self._make_connector(db_session)
+                estimate = connector.estimate_corpus(
+                    self._window_start.timestamp(),
+                    self._window_end.timestamp(),
+                    self._stop.is_set,
+                    self._report,
+                )
+        except Exception:
+            logger.warning(
+                "Corpus estimate failed; the run goes on without one: attempt=%s",
+                self._index_attempt_id,
+                exc_info=True,
+            )
+        duration_ms = int((time.monotonic() - started) * 1000)
+        if estimate is not None:
+            logger.info(
+                "Corpus estimate: attempt=%s expected_docs=%s partial=%s by_type=%s detail=%s duration_ms=%s",
+                self._index_attempt_id,
+                estimate.total_docs,
+                estimate.partial,
+                estimate.docs_by_type,
+                estimate.detail,
+                duration_ms,
+            )
+        emit_corpus_estimate(
+            self._index_attempt_id,
+            self._cc_pair_id,
+            self._source.value,
+            window_start=self._window_start.timestamp(),
+            window_end=self._window_end.timestamp(),
+            duration_ms=duration_ms,
+            estimate=estimate,
+        )
+
+    def _report(self, running: CorpusEstimate) -> None:
+        logger.info(
+            "Corpus estimate in progress: attempt=%s documents_so_far=%s",
+            self._index_attempt_id,
+            running.total_docs,
+        )
+
+    def stop(self) -> None:
+        self._stop.set()
+
+    def wait(self, timeout: float) -> None:
+        self._thread.join(timeout=timeout)
+        if self._thread.is_alive():
+            logger.warning(
+                "Corpus estimate still running after the fetch; its result is lost: attempt=%s",
+                self._index_attempt_id,
+            )
+
+
 def connector_document_extraction(
     app: Celery,
     index_attempt_id: int,
@@ -731,6 +852,10 @@ def connector_document_extraction(
             raw_file_callback=raw_file_callback,
         )
 
+        # The connector counts the window only when the run starts it clean. A
+        # resumed run would count again what the previous attempt fetched.
+        fresh_window = True
+
         # don't use a checkpoint if we're explicitly indexing from
         # the beginning in order to avoid weird interactions between
         # checkpointing / failure handling
@@ -778,6 +903,7 @@ def connector_document_extraction(
                     and most_recent_attempt.total_batches is not None
                     and not checkpoint.has_more
                 ):
+                    fresh_window = False
                     last_batch_num = reissue_old_batches(
                         batch_storage,
                         db_session,
@@ -803,6 +929,25 @@ def connector_document_extraction(
             index_attempt_id=index_attempt_id,
             checkpoint=checkpoint,
         )
+
+        counts = fresh_window and isinstance(
+            connector_runner.connector, CorpusEstimateConnector
+        )
+
+    estimate_run = (
+        _CorpusEstimateRun(
+            lambda session: _corpus_estimator(
+                session, index_attempt, db_connector, db_credential
+            ),
+            index_attempt_id,
+            cc_pair_id,
+            db_connector.source,
+            window_start,
+            window_end,
+        )
+        if counts
+        else None
+    )
 
     batch_num = last_batch_num  # starts at 0 if no last batch
     total_doc_batches_queued = 0
@@ -1030,6 +1175,11 @@ def connector_document_extraction(
             format(elapsed_time, ".2f"),
         )
 
+        # Join the count first: once the attempt is marked complete the watchdog
+        # may end this process, and the count's fleet event with it.
+        if estimate_run is not None:
+            estimate_run.wait(CORPUS_ESTIMATE_JOIN_SECONDS)
+
         # Set total batches in database to signal extraction completion.
         # Used by check_for_indexing to determine if the index attempt is complete.
         with get_session_with_current_tenant() as db_session:
@@ -1043,6 +1193,9 @@ def connector_document_extraction(
         logger.exception(
             "Document extraction failed: attempt=%s error=%s", index_attempt_id, str(e)
         )
+        if estimate_run is not None:
+            estimate_run.stop()
+            estimate_run.wait(CORPUS_ESTIMATE_STOP_SECONDS)
 
         # Do NOT clean up batches on failure; future runs will use those batches
         # while docfetching will continue from the saved checkpoint if one exists

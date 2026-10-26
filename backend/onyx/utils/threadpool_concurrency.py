@@ -4,6 +4,7 @@ import concurrent.futures
 import contextvars
 import copy
 import threading
+import time
 import uuid
 from collections import deque
 from collections.abc import Callable, Coroutine, Iterator, MutableMapping, Sequence
@@ -656,3 +657,145 @@ def parallel_yield_from_funcs(
     yield from parallel_yield(
         [func_wrapper(func) for func in funcs], max_workers=max_workers
     )
+
+
+class PushbackObserver:
+    """Counts the pushback a service's retry wrappers waited out, rate limits
+    and server errors alike, for an ``AdaptiveConcurrency`` pacing the work.
+    Set it in ``PUSHBACK_OBSERVER`` for the span of the work. Threads this
+    module starts inherit it."""
+
+    def __init__(self) -> None:
+        self._hits = 0
+        self._lock = threading.Lock()
+
+    def record(self) -> None:
+        with self._lock:
+            self._hits += 1
+
+    def take_hits(self) -> int:
+        with self._lock:
+            hits, self._hits = self._hits, 0
+            return hits
+
+
+PUSHBACK_OBSERVER: contextvars.ContextVar[PushbackObserver | None] = (
+    contextvars.ContextVar("pushback_observer", default=None)
+)
+
+
+def record_pushback() -> None:
+    """For a retry wrapper to call when the service it talks to pushed back."""
+    observer = PUSHBACK_OBSERVER.get()
+    if observer is not None:
+        observer.record()
+
+
+# Workers a fresh adaptive run starts with: enough to make progress, few
+# enough that a rate-limited tenant is not hammered before the first signal.
+ADAPTIVE_INITIAL_WORKERS = 16
+# Each worker is a thread holding its own API client, so the cap bounds memory
+# as much as request rate. Pushback, not this cap, should be what stops growth.
+ADAPTIVE_MAX_WORKERS = 128
+# After a cut, hold the lower limit this long before growing again, so one
+# burst of pushback is not answered with a burst of new workers.
+ADAPTIVE_COOLDOWN_SECONDS = 5.0
+# Growth is paced by time, not by finished tasks: a few huge tasks must not
+# pin the limit at its start while they run.
+ADAPTIVE_GROW_INTERVAL_SECONDS = 0.25
+# How long the pool waits for a task to end before it looks for new work,
+# which bounds the delay between a task adding work and that work starting.
+ADAPTIVE_POLL_SECONDS = 0.25
+
+
+class AdaptiveConcurrency:
+    """A worker limit that climbs by one per interval while the service keeps
+    up and halves on each burst of pushback, so a job settles near the rate
+    the service allows without a fixed guess. Workers call ``observe`` as they
+    make progress, and the pool calls it on every poll."""
+
+    def __init__(
+        self,
+        observer: PushbackObserver,
+        initial: int = ADAPTIVE_INITIAL_WORKERS,
+        maximum: int = ADAPTIVE_MAX_WORKERS,
+    ) -> None:
+        self._observer = observer
+        self._maximum = maximum
+        self._limit = max(1, min(initial, maximum))
+        self._cooldown_until = 0.0
+        self._next_growth = 0.0
+        self._lock = threading.Lock()
+
+    @property
+    def limit(self) -> int:
+        with self._lock:
+            return self._limit
+
+    def observe(self) -> None:
+        """Cut on pushback, else grow by one once per interval after any cooldown."""
+        hits = self._observer.take_hits()
+        now = time.monotonic()
+        with self._lock:
+            if hits:
+                self._limit = max(1, self._limit // 2)
+                self._cooldown_until = now + ADAPTIVE_COOLDOWN_SECONDS
+                self._next_growth = self._cooldown_until
+                logger.info(
+                    "Adaptive concurrency: %s pushback hits, workers down to %s",
+                    hits,
+                    self._limit,
+                )
+                return
+            if now < self._next_growth or self._limit >= self._maximum:
+                return
+            self._limit += 1
+            self._next_growth = now + ADAPTIVE_GROW_INTERVAL_SECONDS
+
+
+class AdaptiveTaskPool:
+    """Runs zero-argument tasks with as many workers as an
+    ``AdaptiveConcurrency`` allows at each moment. A task may ``add`` more
+    tasks while it runs, so work can split itself as it discovers its size.
+    The first failure stops new work and is raised once the running tasks
+    end."""
+
+    def __init__(self, concurrency: AdaptiveConcurrency) -> None:
+        self._concurrency = concurrency
+        self._pending: deque[Callable[[], None]] = deque()
+        self._lock = threading.Lock()
+
+    def add(self, task: Callable[[], None]) -> None:
+        with self._lock:
+            self._pending.append(task)
+
+    def run(self) -> None:
+        running: set[Future[None]] = set()
+        failure: BaseException | None = None
+        while True:
+            while failure is None and len(running) < self._concurrency.limit:
+                with self._lock:
+                    task = self._pending.popleft() if self._pending else None
+                if task is None:
+                    break
+                running.add(start_thread_future(task, name="adaptive"))
+            if not running:
+                with self._lock:
+                    if failure is not None or not self._pending:
+                        break
+                continue
+            done, _ = concurrent.futures.wait(
+                running,
+                timeout=ADAPTIVE_POLL_SECONDS,
+                return_when=concurrent.futures.FIRST_COMPLETED,
+            )
+            for future in done:
+                running.discard(future)
+                error = future.exception()
+                if error is not None and failure is None:
+                    failure = error
+            # Every poll, not only a task's end, so the limit keeps moving
+            # while long tasks run.
+            self._concurrency.observe()
+        if failure is not None:
+            raise failure

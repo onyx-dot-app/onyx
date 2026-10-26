@@ -508,6 +508,34 @@ class IndexAttemptMetadata(BaseModel):
     structured_id: str | None = None
 
 
+class DocumentTypeLabel(str, Enum):
+    """The document types a corpus count reports. One vocabulary for every
+    source, so counts compare across connectors and fleet telemetry can carry
+    them. A source maps its own file types onto these."""
+
+    DOCUMENT = "document"
+    SPREADSHEET = "spreadsheet"
+    PRESENTATION = "presentation"
+    PDF = "pdf"
+    TEXT = "text"
+    IMAGE = "image"
+    OTHER = "other"
+
+
+class CorpusEstimate(BaseModel):
+    """How much a run has to fetch, from a metadata-only pass over the source.
+    ``partial`` means the pass stopped early or skipped a scope, so the real
+    total is at least ``total_docs``."""
+
+    total_docs: int = Field(ge=0)
+    docs_by_type: dict[DocumentTypeLabel, int] = {}
+    # Bytes per type. Only the files the source sizes add to a type's bytes.
+    bytes_by_type: dict[DocumentTypeLabel, int] = {}
+    partial: bool = False
+    # What the pass could not count: scopes it skipped or was stopped in.
+    detail: str | None = None
+
+
 class ConnectorCheckpoint(BaseModel):
     # TODO: maybe move this to something disk-based to handle extremely large checkpoints?
     has_more: bool

@@ -39,6 +39,7 @@ const STAGE_BUCKET = {
   CONNECTOR_VALIDATION: null,
   PERMISSION_VALIDATION: null,
   CHECKPOINT_LOAD: null,
+  CORPUS_ESTIMATE: null,
   CONNECTOR_FETCH: "fetchSource",
   HIERARCHY_UPSERT: "fetchSource",
   DOC_BATCH_STORE: "batchPreProcessing",

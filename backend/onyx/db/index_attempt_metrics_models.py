@@ -29,6 +29,8 @@ class IndexAttemptStage(str, PyEnum):
     CONNECTOR_VALIDATION = "CONNECTOR_VALIDATION"
     PERMISSION_VALIDATION = "PERMISSION_VALIDATION"
     CHECKPOINT_LOAD = "CHECKPOINT_LOAD"
+    # The connector's count of the window, on its own thread beside the fetch.
+    CORPUS_ESTIMATE = "CORPUS_ESTIMATE"
     CONNECTOR_FETCH = "CONNECTOR_FETCH"
     HIERARCHY_UPSERT = "HIERARCHY_UPSERT"
     DOC_BATCH_STORE = "DOC_BATCH_STORE"
@@ -83,6 +85,7 @@ STAGE_SCOPE: dict[IndexAttemptStage, StageScope] = {
     IndexAttemptStage.CONNECTOR_VALIDATION: StageScope.ATTEMPT_LEVEL,
     IndexAttemptStage.PERMISSION_VALIDATION: StageScope.ATTEMPT_LEVEL,
     IndexAttemptStage.CHECKPOINT_LOAD: StageScope.ATTEMPT_LEVEL,
+    IndexAttemptStage.CORPUS_ESTIMATE: StageScope.ATTEMPT_LEVEL,
     IndexAttemptStage.CONNECTOR_FETCH: StageScope.BATCH_LEVEL,
     IndexAttemptStage.HIERARCHY_UPSERT: StageScope.BATCH_LEVEL,
     IndexAttemptStage.DOC_BATCH_STORE: StageScope.BATCH_LEVEL,
