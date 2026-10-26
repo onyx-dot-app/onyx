@@ -8,10 +8,9 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from tiktoken import Encoding
 
-from pydantic import BaseModel, Field
 
 from onyx.agents.execution_records import completed_tool_call_ids
-from onyx.agents.models import CompactionCheckpoint, CompactionMetadata
+from onyx.agents.models import CompactionCheckpoint, CompactionMetadata, ContextBudget
 from onyx.configs.model_configs import GEN_AI_INPUT_TOKEN_SAFETY_MARGIN
 from onyx.llm.interfaces import LLM, GenerationContext
 from onyx.llm.models import (
@@ -44,13 +43,6 @@ class ContextLimitError(ValueError):
 
 class CheckpointMismatchError(ValueError):
     """The compaction checkpoint belongs to different source history."""
-
-
-class ContextBudget(BaseModel):
-    input_limit: int = Field(gt=0)
-    trigger: int = Field(gt=0)
-    recent: int = Field(gt=0)
-    summary: int = Field(gt=0)
 
 
 @lru_cache(maxsize=1)

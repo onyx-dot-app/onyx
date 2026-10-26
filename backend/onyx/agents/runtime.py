@@ -85,7 +85,6 @@ from onyx.llm.cancellation import (
 from onyx.llm.exceptions import (
     ClassifiedLLMError,
     LLMContextLimitError,
-    LLMErrorInfo,
     LLMRateLimitError,
     LLMTimeoutError,
     litellm_exception_to_safe_error,
@@ -97,6 +96,7 @@ from onyx.llm.models import (
     GenerationLifecycleEvent,
     GenerationOptions,
     GenerationRequest,
+    LLMErrorInfo,
     Message,
     SystemMessage,
     ToolCall,
