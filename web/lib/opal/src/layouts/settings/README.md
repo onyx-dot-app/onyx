@@ -51,6 +51,7 @@ mounts; the header stays still.
 | ------- | --------- | ------- | -------------------------------------------------------------- |
 | `gap`   | `Spacing` | `8`     | Space between sections, as a spacing step (N/4 rem)            |
 | `animateEnter` | `boolean` | `true` | Animate the body in when the page mounts; `false` renders it at once |
+| `loading` | `boolean` | `false` | Show the page loader in place of the children. When it turns `false`, the children mount and animate in |
 
 ## Usage
 

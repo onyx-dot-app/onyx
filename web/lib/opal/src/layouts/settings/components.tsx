@@ -15,6 +15,8 @@ import { spacingToRem } from "@opal/shared";
 import { HtmlHTMLAttributes, useEffect, useRef, useState } from "react";
 import { Content } from "@opal/layouts";
 import { useOpalStrings } from "@opal/strings";
+// Imported from its own file: the loaders index pulls in @opal/layouts.
+import { PageLoader } from "@opal/loaders/page-loader/components";
 
 // ---------------------------------------------------------------------------
 // Root
@@ -264,11 +266,19 @@ type SettingsBodyProps = WithoutStyles<HtmlHTMLAttributes<HTMLDivElement>> & {
    * not. `false` renders it at once. @default true
    */
   animateEnter?: boolean;
+  /**
+   * Shows the page loader in place of the children. When it turns false, the
+   * children mount and animate in, so the animation plays when the content
+   * is ready. @default false
+   */
+  loading?: boolean;
 };
 
 function SettingsBody({
   gap = 8,
   animateEnter = true,
+  loading = false,
+  children,
   ...props
 }: SettingsBodyProps) {
   const body = (
@@ -276,9 +286,12 @@ function SettingsBody({
       className="pt-6 pb-18 px-4 flex flex-col w-full"
       style={{ gap: spacingToRem(gap) }}
       {...props}
-    />
+    >
+      {loading ? <PageLoader /> : children}
+    </div>
   );
-  return animateEnter ? <Enter>{body}</Enter> : body;
+  // The loader does not animate; the content does once it replaces it.
+  return animateEnter && !loading ? <Enter>{body}</Enter> : body;
 }
 
 // ---------------------------------------------------------------------------
