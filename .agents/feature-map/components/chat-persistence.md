@@ -569,3 +569,8 @@ search. Citation links and source cards survive database reloads.
 Restored root questions retain `chat:<question-id>` identities. Child instructions
 retain their run-input identities. Compaction boundaries match these identities
 after reload.
+
+
+Root metadata reads only the latest selected response. The child-history limit
+applies to child responses. A long root conversation does not consume this limit
+or hide its child agents.
