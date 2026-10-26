@@ -349,6 +349,7 @@ Coordinator setup reuses its validated branch for child-agent discovery. It
 registers the root separately and skips ancestry reads when no children exist.
 Root metadata reads only the latest selected response. Child histories retain their separate response limit;
 root conversation length does not consume that limit or hide child metadata.
+Root history restoration uses the validated message-branch limit; child histories use the child-response limit.
 Discovery tests must check selected-branch visibility as well as query counts.
 
 The response also carries `current_stream` (`CurrentStreamInfo.stream_id`) when the
@@ -582,8 +583,8 @@ runs use in-memory coordination; their final saves retain usage without conversa
 content. Child sessions inherit the root's recording mode.
 
 Saved sources include documents referenced by root and child message display
-metadata, even when the response performs no new search. This preserves citation
-links and source cards when loading saved responses.
+metadata, even when the response performs no new search. Citation-only documents also link to the root response. This preserves citation
+links and source cards when loading saved responses. Restoration rejects missing cited sources explicitly.
 
 Restored root questions retain `chat:<question-id>` IDs. Child instructions retain
 their run-input IDs. Saved compaction boundaries use these same IDs after reload.
