@@ -133,7 +133,7 @@ def test_message_and_operation_updates_are_visible_together(
     try:
         assert preparing.wait(3)
         lock = SnapshotLock(run._state)
-        monkeypatch.setattr(run, "_lock", lock)
+        monkeypatch.setattr(run, "execution_lock", lock)
         release.set()
         run.result(timeout=3)
     finally:
