@@ -231,11 +231,15 @@ function isSameModelPrice(
   price: ModelPrice,
   other: ModelPrice | null
 ): boolean {
-  return (
-    other !== null &&
-    price.model === other.model &&
-    price.provider === other.provider
-  );
+  if (other === null) return false;
+  // Two providers of one type can list the same model at different prices.
+  if (
+    price.model_configuration_id !== null &&
+    other.model_configuration_id !== null
+  ) {
+    return price.model_configuration_id === other.model_configuration_id;
+  }
+  return price.model === other.model && price.provider === other.provider;
 }
 
 // Every available model's price (USD/1M, input · output · cache), grouped into a
@@ -324,7 +328,7 @@ function ModelPriceSection({ prices, defaultPrice }: ModelPriceSectionProps) {
                       >
                         {models.map((price) => (
                           <div
-                            key={`${provider}-${price.model}`}
+                            key={`${provider}-${price.model_configuration_id ?? price.model}`}
                             className="flex flex-row items-center justify-between gap-2 py-1 ps-3"
                           >
                             <Text

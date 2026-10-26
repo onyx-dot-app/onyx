@@ -4,11 +4,16 @@ import type { CostOverride } from "@/lib/languageModels/types";
 
 const mockMutate = jest.fn();
 const mockRefreshCostOverrides = jest.fn();
-const mockUpsertCostOverride = jest.fn();
+const mockCreateCostOverride = jest.fn();
+const mockUpdateCostOverride = jest.fn();
 
 const costOverrides: CostOverride[] = [
   {
-    model: "shared-model",
+    model_configuration_id: 10,
+    model_name: "shared-model",
+    model_display_name: "Shared Model",
+    llm_provider_id: 1,
+    llm_provider_name: "OpenAI",
     provider: "openai",
     input_cost_per_mtok: 0.001,
     output_cost_per_mtok: 2,
@@ -16,7 +21,12 @@ const costOverrides: CostOverride[] = [
     updated_at: null,
   },
   {
-    model: "shared-model",
+    // The mocked Anthropic provider's "shared-model" configuration.
+    model_configuration_id: 1,
+    model_name: "shared-model",
+    model_display_name: "Shared Model",
+    llm_provider_id: 2,
+    llm_provider_name: "Anthropic",
     provider: "anthropic",
     input_cost_per_mtok: 3,
     output_cost_per_mtok: 4,
@@ -40,7 +50,8 @@ jest.mock("@/lib/languageModels/costOverrides", () => ({
   deleteCostOverride: jest.fn(),
   refreshCostOverrides: (...args: unknown[]) =>
     mockRefreshCostOverrides(...args),
-  upsertCostOverride: (...args: unknown[]) => mockUpsertCostOverride(...args),
+  createCostOverride: (...args: unknown[]) => mockCreateCostOverride(...args),
+  updateCostOverride: (...args: unknown[]) => mockUpdateCostOverride(...args),
 }));
 
 jest.mock("@/lib/languageModels/hooks", () => ({
@@ -122,7 +133,8 @@ function wholeAmountField(index: number): HTMLElement {
 describe("CostOverridesPanel", () => {
   beforeEach(() => {
     mockRefreshCostOverrides.mockResolvedValue(undefined);
-    mockUpsertCostOverride.mockResolvedValue(costOverrides[1]);
+    mockCreateCostOverride.mockResolvedValue(costOverrides[1]);
+    mockUpdateCostOverride.mockResolvedValue(costOverrides[1]);
   });
 
   afterEach(() => {
@@ -139,7 +151,7 @@ describe("CostOverridesPanel", () => {
     }
     expect(
       screen.getByRole("button", {
-        name: "Edit Anthropic override for shared-model",
+        name: "Edit Anthropic override for Shared Model",
       })
     ).toBeInTheDocument();
   });
@@ -150,7 +162,7 @@ describe("CostOverridesPanel", () => {
 
     await user.click(
       screen.getByRole("button", {
-        name: "Edit Anthropic override for shared-model",
+        name: "Edit Anthropic override for Shared Model",
       })
     );
     // Save stays disabled until a value changes.
@@ -160,12 +172,12 @@ describe("CostOverridesPanel", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {
-      expect(mockUpsertCostOverride).toHaveBeenCalledWith({
-        model: "shared-model",
-        provider: "anthropic",
+      // The edit keeps the override on its model configuration.
+      expect(mockUpdateCostOverride).toHaveBeenCalledWith(1, {
         input_cost_per_mtok: 3,
         output_cost_per_mtok: 5,
         cache_read_cost_per_mtok: null,
+        model_configuration_id: 1,
       });
     });
   });

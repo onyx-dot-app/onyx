@@ -658,6 +658,7 @@ class LitellmLLM(LLM):
         supports_reasoning: bool = False,
         supports_images: bool | None = None,
         is_router: bool = False,
+        model_configuration_id: int | None = None,
     ):
         # No instance-level timeout: invoke() and stream() each take their own,
         # so an instance default would be a second source of truth.
@@ -666,6 +667,7 @@ class LitellmLLM(LLM):
         self._model_provider = model_provider
         self._model_version = model_name
         self._is_router = is_router
+        self._model_configuration_id = model_configuration_id
         self._api_key = api_key
         self._deployment_name = deployment_name
         self._api_base = api_base
@@ -818,6 +820,7 @@ class LitellmLLM(LLM):
                     model=self._model_version,
                     served_model=routed_model,
                     provider=provider,
+                    model_configuration_id=self._model_configuration_id,
                     prompt_tokens=usage.prompt_tokens,
                     completion_tokens=usage.completion_tokens,
                     cache_read_tokens=usage.cache_read_input_tokens,
@@ -1455,6 +1458,7 @@ class LitellmLLM(LLM):
             reasoning_effort_user_default=self._reasoning_effort_user_default,
             reasoning_effort_max=self._reasoning_effort_max,
             supports_reasoning=self._supports_reasoning,
+            model_configuration_id=self._model_configuration_id,
         )
 
     def _uses_isolated_client(self) -> bool:

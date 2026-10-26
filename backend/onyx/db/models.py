@@ -6614,12 +6614,10 @@ class ModelCostOverride(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
-    # litellm-style model name (e.g. "gpt-6-sol").
-    model: Mapped[str] = mapped_column(String, nullable=False)
-    # Empty string (not NULL) for a provider-agnostic override, so the unique key
-    # below works on every Postgres version without NULLS NOT DISTINCT (PG15+).
-    provider: Mapped[str] = mapped_column(
-        String, nullable=False, default="", server_default=""
+    # One override per model configuration; it goes away with its model.
+    model_configuration_id: Mapped[int] = mapped_column(
+        ForeignKey("model_configuration.id", ondelete="CASCADE"),
+        nullable=False,
     )
 
     # Rates in USD per million tokens.
@@ -6644,10 +6642,14 @@ class ModelCostOverride(Base):
         nullable=False,
     )
 
+    model_configuration: Mapped["ModelConfiguration"] = relationship(
+        "ModelConfiguration"
+    )
+
     __table_args__ = (
-        # provider+model so the same model can be priced per provider.
         UniqueConstraint(
-            "provider", "model", name="uq_model_cost_override_provider_model"
+            "model_configuration_id",
+            name="uq_model_cost_override_model_configuration_id",
         ),
     )
 

@@ -19,8 +19,11 @@ from sqlalchemy.pool import StaticPool
 
 import onyx.server.features.usage.api as usage_api
 from onyx.auth.users import current_user
+from onyx.db.cost_override import create_cost_override
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import (
+    LLMProvider,
+    ModelConfiguration,
     ModelCostOverride,
     TokenRateLimit,
     TokenRateLimit__UserGroup,
@@ -84,6 +87,8 @@ def db_session() -> Generator[Session, None, None]:
 
     for model in (
         UserUsage,
+        LLMProvider,
+        ModelConfiguration,
         ModelCostOverride,
         TokenRateLimit,
         User__UserGroup,
@@ -453,15 +458,31 @@ def test_selected_model_price_requires_model_access(
     assert body["selected_model_price"] is None
 
 
+def _seed_model_configuration(db_session: Session, model: str = "gpt-6-sol") -> int:
+    llm_provider = LLMProvider(name=f"openai-{uuid4()}", provider="openai")
+    db_session.add(llm_provider)
+    db_session.flush()
+    config = ModelConfiguration(
+        llm_provider_id=llm_provider.id, name=model, is_visible=True
+    )
+    db_session.add(config)
+    db_session.commit()
+    return config.id
+
+
 class TestGetModelPricePerMillion:
     def test_override_beats_litellm(
         self, db_session: Session, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(cost_overrides, "get_current_tenant_id", lambda: "public")
-        cost_overrides.upsert_override(db_session, "gpt-6-sol", 1.0, 4.0, 0.5)
+        config_id = _seed_model_configuration(db_session)
+        create_cost_override(db_session, config_id, 1.0, 4.0, 0.5)
+        db_session.commit()
         cost_overrides.invalidate_override_cache()
 
-        price = get_model_price_per_million("gpt-6-sol", "openai", db_session)
+        price = get_model_price_per_million(
+            "gpt-6-sol", "openai", db_session, model_configuration_id=config_id
+        )
         assert price.input_per_mtok == pytest.approx(1.0)
         assert price.output_per_mtok == pytest.approx(4.0)
         assert price.cache_per_mtok == pytest.approx(0.5)
@@ -470,9 +491,12 @@ class TestGetModelPricePerMillion:
         self, db_session: Session, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(cost_overrides, "get_current_tenant_id", lambda: "public")
+        config_id = _seed_model_configuration(db_session)
         # Clear tenant override cache between tests.
         cost_overrides.invalidate_override_cache()
-        price = get_model_price_per_million("gpt-6-sol", "openai", db_session)
+        price = get_model_price_per_million(
+            "gpt-6-sol", "openai", db_session, model_configuration_id=config_id
+        )
         assert price.input_per_mtok == pytest.approx(2.0)
         assert price.output_per_mtok == pytest.approx(10.0)
 
@@ -603,6 +627,43 @@ def test_available_model_prices_lists_priced_models(
     # An unpriced model is skipped, not surfaced with null prices.
     assert "totally-unknown-model-xyz" not in prices
     assert "gpt-6-luna" not in prices
+
+
+def test_available_model_prices_lists_each_overridden_copy(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two providers of one type serve gpt-6-sol; an override on one copy gives
+    it its own entry, while identical copies collapse to one."""
+    caller = str(uuid4())
+    _seed_current_window(db_session, caller)
+    monkeypatch.setattr(cost_overrides, "get_current_tenant_id", lambda: "public")
+    overridden_id = _seed_model_configuration(db_session)
+    catalog_id = _seed_model_configuration(db_session)
+    duplicate_id = _seed_model_configuration(db_session)
+    create_cost_override(db_session, overridden_id, 1.0, 4.0)
+    db_session.commit()
+    cost_overrides.invalidate_override_cache()
+    monkeypatch.setattr(
+        "onyx.server.features.usage.api.fetch_default_model", lambda _db, _flow: None
+    )
+    monkeypatch.setattr(
+        "onyx.server.features.usage.api.fetch_all_llm_providers_accessible_in_any_context",
+        lambda *_a, **_k: [
+            _StubProviderWithModels("openai", [(overridden_id, "gpt-6-sol", True)]),
+            _StubProviderWithModels("openai", [(catalog_id, "gpt-6-sol", True)]),
+            _StubProviderWithModels("openai", [(duplicate_id, "gpt-6-sol", True)]),
+        ],
+    )
+
+    body = (
+        TestClient(_make_app(db_session, _StubUser(caller))).get("/user/usage").json()
+    )
+    gpt_prices = sorted(
+        (p["input_per_mtok"], p["output_per_mtok"])
+        for p in body["available_model_prices"]
+        if p["model"] == "gpt-6-sol"
+    )
+    assert gpt_prices == [(1.0, 4.0), (2.0, 10.0)]
 
 
 def test_budget_reflects_group_cost_limit(
