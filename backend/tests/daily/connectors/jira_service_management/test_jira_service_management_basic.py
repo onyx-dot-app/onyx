@@ -33,4 +33,4 @@ def test_jira_service_management_connector_basic() -> None:
         for doc in batch:
             if isinstance(doc, Document):
                 assert doc.source == DocumentSource.JIRA_SERVICE_MANAGEMENT
-                assert doc.id.startswith("JSM_REQUEST_")
+                assert doc.id.startswith(f"{base_url.rstrip('/')}/browse/")
