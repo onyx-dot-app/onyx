@@ -373,10 +373,22 @@ class AgentCoordinator:
         run.add_done_callback(lambda: run.add_idle_callback(start))
         return completion
 
-    def cleanup_futures(self, run_id: str) -> list[Future[None]]:
+    def track_child_work(self, parent: Run, run_ids: Sequence[str]) -> None:
+        """Retain local child workers and cleanup without reading remote state."""
+        executions: list[Run] = []
+        cleanup: list[Future[None]] = []
         with self._state.lock:
-            tracked = self._state.tracked_runs.get(run_id)
-            return list(tracked.cleanup) if tracked is not None else []
+            for run_id in run_ids:
+                tracked = self._state.tracked_runs.get(run_id)
+                if tracked is None:
+                    continue
+                if tracked.execution is not None:
+                    executions.append(tracked.execution)
+                cleanup.extend(tracked.cleanup)
+        for execution in executions:
+            parent.track_child_work(execution)
+        for completion in cleanup:
+            parent.work.track_operation(completion)
 
     def complete(self, run: Run) -> None:
         """Save terminal output before resolving child completion."""
@@ -979,21 +991,24 @@ class RunCoordination:
         with self._lock:
             self._finished = True
             child_run_ids = list(self.children)
-        if cancel:
-            for run_id in child_run_ids:
-                self.coordinator.cancel_child(run_id, self.run.agent_id)
-        for run_id in child_run_ids:
-            local = self.coordinator.child_run(run_id, self.run.agent_id)
-            if local is not None:
-                self.run.track_child_work(local)
-            for cleanup in self.coordinator.cleanup_futures(run_id):
-                self.run.work.track_operation(cleanup)
         deadline = time.monotonic() + (
             CHILD_TERMINAL_TIMEOUT_SECONDS if cancel else OPERATION_TIMEOUT_SECONDS
         )
         failure: RunFailed | None = None
         records: list[RunState] = []
         try:
+            self.coordinator.track_child_work(self.run, child_run_ids)
+            if cancel:
+                cancellation_error: Exception | None = None
+                for run_id in child_run_ids:
+                    try:
+                        self.coordinator.cancel_child(run_id, self.run.agent_id)
+                    except Exception as error:
+                        logger.exception("Could not cancel child run %s", run_id)
+                        if cancellation_error is None:
+                            cancellation_error = error
+                if cancellation_error is not None:
+                    raise cancellation_error
             for run_id in child_run_ids:
                 try:
                     future = self.coordinator.completion(run_id)
@@ -1016,7 +1031,12 @@ class RunCoordination:
                         self.run.cancellation_signal.check()
                     logger.debug("Child execution was cancelled: %s", run_id)
                 except TimeoutError as error:
-                    self.coordinator.cancel_child(run_id, self.run.agent_id)
+                    try:
+                        self.coordinator.cancel_child(run_id, self.run.agent_id)
+                    except Exception:
+                        logger.exception(
+                            "Could not cancel timed-out child run %s", run_id
+                        )
                     if not cancel:
                         raise
                     raise TimeoutError(
