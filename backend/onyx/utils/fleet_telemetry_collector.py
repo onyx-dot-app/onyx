@@ -50,7 +50,9 @@ _INVENTORY_SECONDS: int = 6 * 3600
 # Where the next run starts reading.
 _CURSOR_KEY: str = "fleet_telemetry_cursor"
 _INVENTORY_KEY: str = "fleet_telemetry_inventory"
-# The service rejects attempt events from more than 190 days ago.
+# Finished attempts that ended longer ago are not sent. The service rejects attempt
+# events more than 190 days old, also when it processes them days after receipt,
+# and it deletes attempt states after six months. Do not raise this toward either.
 _ATTEMPT_HORIZON: timedelta = timedelta(days=180)
 # Connector configuration lists that select what to index. Only their sizes leave.
 _SELECTION_LISTS: tuple[str, ...] = (
@@ -172,18 +174,6 @@ def connector_data(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _attempt_end(row: dict[str, Any]) -> datetime:
-    """When a finished attempt ended. Not its update time: checkpoint cleanup updates
-    finished attempts days later. Attempts with no finish time (from before the
-    column, or ended in bulk) fall back as the connector page's attempt list does."""
-    return (
-        row["time_finished"]
-        or row["last_heartbeat_at"]
-        or row["started_at"]
-        or row["time_created"]
-    )
-
-
 def attempt_data(row: dict[str, Any]) -> dict[str, Any]:
     connector_type: str = row["source"].value.lower()
     data: dict[str, Any] = {
@@ -204,7 +194,7 @@ def attempt_data(row: dict[str, Any]) -> dict[str, Any]:
         "last_heartbeat_at": _iso(row["last_heartbeat_at"]),
     }
     if row["status"].is_terminal():
-        data["ended_at"] = _iso(_attempt_end(row))
+        data["ended_at"] = _iso(row["ended_at"])
     if row["error_sample"] is not None or row["error_count"]:
         category: str = classify_local_error(
             row["item_error_type"], row["error_sample"], row["item_error_sample"]
@@ -284,9 +274,13 @@ def _send(
     occurred_at: datetime | None = None,
     revision: int = 0,
 ) -> bool:
-    """Queue with an event ID made from the row's identity, its revision time, and
-    the event's revision, which orders states of one entity at the service."""
+    """Queue with an event ID made from the row's identity, the time that identifies
+    this state of the row, and the event's revision. The service orders the states
+    of one entity by revision, then by event time, which is `revision_at` unless
+    `occurred_at` is given."""
     identity: str = f"{tenant_id}:{entity}:{revision_at.isoformat()}"
+    # Revision 0 adds nothing, so these events keep the IDs that older versions
+    # gave them, and the service drops their repeats across an upgrade.
     if revision:
         identity += f":{revision}"
     if occurred_at is not None:
@@ -310,9 +304,16 @@ def _send_attempt(
     goes out at its end, at revision 1 plus its completed batches:
 
     - Checkpoint cleanup updates finished rows days later. Those sends repeat the
-      event ID and revision, so the service drops or ignores them.
+      event ID, revision, and time of the last send, so the service keeps that
+      state.
     - Batches still in flight when the attempt ended can complete later and add to
       its counts. Each one raises the revision, so the new counts replace the state.
+    - A later write of a final status, the same one or another, stamps a new finish
+      time. That send goes out at the new end, at the same revision, and the
+      service takes it when the end is later.
+    - No other later change gets to the service: a total batch count set after the
+      end, errors resolved later, or a status that a bulk update rewrites, such as
+      an embedding model swap.
     - The end comes from the worker's clock and can be earlier than the database
       time of the last running snapshot. The service orders states by (generation,
       revision, time), so the finished state still replaces the running one."""
@@ -321,9 +322,9 @@ def _send_attempt(
         return _send(
             sender, tenant_id, "attempt", attempt_data(row), entity, row["time_updated"]
         )
-    end: datetime = _attempt_end(row)
+    end: datetime = row["ended_at"]
     if end < datetime.now(timezone.utc) - _ATTEMPT_HORIZON:
-        # An old attempt that a bulk update touched. The service would reject it.
+        # An old attempt that a bulk update touched.
         return True
     return _send(
         sender,

@@ -165,6 +165,9 @@ def test_reads_return_changed_and_running_work_only(schema: str) -> None:
     assert list(attempts) == [1, 2]
     assert attempts[1]["error_count"] == 1
     assert attempts[1]["item_error_type"] == "ReadTimeout"
+    # The finished attempt ends at its finish time, not its last update.
+    assert attempts[1]["ended_at"] < attempts[1]["time_updated"] - timedelta(days=1)
+    assert attempts[2]["ended_at"] is None
     assert [(row["attempt_id"], row["stage"].value) for row in stages] == [
         (2, "EMBEDDING")
     ]
@@ -250,14 +253,20 @@ def test_one_pass_sends_only_safe_events(
         "stage": 1,
         "job": 5,
     }
-    failed: dict[str, Any] = next(
-        data for data in by_type["attempt"] if data["state"] == "failed"
+    failed_event: dict[str, Any] = next(
+        event
+        for event in events
+        if event["event_type"] == "attempt" and event["data"]["state"] == "failed"
     )
+    failed: dict[str, Any] = failed_event["data"]
     assert failed["error_code"] == "auth"
     # A later update, such as checkpoint cleanup, does not move the end.
-    assert datetime.fromisoformat(failed["ended_at"]) < datetime.now(
-        timezone.utc
-    ) - timedelta(days=1)
+    ended: datetime = datetime.fromisoformat(failed["ended_at"])
+    assert ended < datetime.now(timezone.utc) - timedelta(days=1)
+    # The service orders the states of an attempt by revision, then by event time.
+    # It ranks attempts by event time.
+    assert datetime.fromisoformat(failed_event["occurred_at"]) == ended
+    assert failed_event["revision"] > 0
     assert by_type["connector"][0]["metadata"]["permission_sync_enabled"] is True
     assert {data["cc_pair_id"]: data["doc_count"] for data in by_type["connector"]} == {
         1: 1,
