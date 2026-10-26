@@ -7,7 +7,7 @@ from pydantic import JsonValue, TypeAdapter, ValidationError
 from onyx.agents.models import AgentInfo, RunState, StepRecord, ToolExecutionRecord
 from onyx.chat.response_models import ResponseRecord
 from onyx.context.search.models import SearchDocsResponse
-from onyx.deep_research.configuration import ResearchConfiguration
+from onyx.deep_research.models import ResearchConfiguration
 from onyx.llm.models import (
     AssistantMessage,
     Message,
