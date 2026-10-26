@@ -114,9 +114,12 @@ def test_factory_rebuilds_feature_and_preserves_saved_context(name: str) -> None
             agent_id=original.id,
             status=RunStatus.SUSPENDED,
             steps=[],
-            progress=RunProgress(step_limit=3, feature_state=state),
+            progress=RunProgress(
+                step_limit=3, feature_state=state.model_dump(mode="json")
+            ),
         ),
     )
+    checkpoint = ExecutionCheckpoint.model_validate_json(checkpoint.model_dump_json())
     saved = checkpoint.model_copy(deep=True)
     rebuilt = restore_chat_agent(checkpoint, llm=llm, tools=[], user_identity=None)
     assert rebuilt is not original
@@ -124,7 +127,7 @@ def test_factory_rebuilds_feature_and_preserves_saved_context(name: str) -> None
     assert rebuilt.state == context
     assert isinstance(rebuilt, (ChatAgent, ResearchAgent, DeepResearchAgent))
     assert type(rebuilt) is type(original)
-    rebuilt.restore_state(state)
+    rebuilt.restore_state(state.model_dump(mode="json"))
     restored = rebuilt.capture_state()
     assert restored.model_dump(exclude={"elapsed_seconds"}) == state.model_dump(
         exclude={"elapsed_seconds"}

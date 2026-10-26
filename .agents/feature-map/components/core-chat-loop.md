@@ -163,6 +163,10 @@ See [[mcp-and-custom-tools]] §4.5 and [[agents-personas]] §4.5.
 Each worker constructs its feature agent and calls `Agent.start(background=False)`.
 Child agents and parallel tools use additional workers when needed.
 
+Model-history replay omits unfinished tool exchanges and orphaned results without changing recorded history.
+When one assistant message repeats a tool-call ID, replay omits those calls and their ambiguous result.
+Other calls and partial text remain available to the model.
+
 All responses share one `ChatDelivery`. Its event dispatcher renders SDK events,
 publishes browser packets, and writes the replay buffer. `Emitter` stamps each
 response's model index. Closing the browser reader does not stop execution.
@@ -264,6 +268,7 @@ whenever you touch this component.
    and history before closing its DB session. Workers must not lazy-load that ORM state.
 3. **Worker threads get a copied `contextvars.Context`.** Tenant ID and tracing live
    there. A new thread without the copy silently writes to the wrong tenant.
+   SDK agents require a generation context with an explicit `LLMFlow` operation tag.
 4. **Browser rendering must not drive execution.** SDK state owns model and tool
    progress. The presenter and renderer consume that state to produce packets.
    Text, thinking-text, and argument deltas without mutable attachments are shared

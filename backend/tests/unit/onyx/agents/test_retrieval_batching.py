@@ -13,6 +13,7 @@ from onyx.agents.models import ToolCallContext
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolExecutionMode, ToolInvocation, ToolProgress
 from onyx.llm.cancellation import AgentCancelled
+from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
     AssistantMessage,
     TextContent,
@@ -25,6 +26,7 @@ from onyx.tools.interface import Tool, ToolContext, merge_tool_arguments
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
+from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient
 
 
@@ -56,6 +58,7 @@ def test_compatible_calls_share_execution_and_keep_each_result(
 
     run = Agent(
         FakeModelClient(lambda *_: next(replies)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(
@@ -119,6 +122,7 @@ def test_before_tool_hook_keeps_individual_calls() -> None:
 
     run = Agent(
         FakeModelClient(lambda *_: next(replies)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         before_tool_call=before,
         tools=[
             AgentTool(
@@ -159,6 +163,7 @@ def test_cancellation_reaches_shared_retrieval() -> None:
                 ]
             )
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(
@@ -209,6 +214,7 @@ def test_suspended_batch_restores_results_without_retrieval_reexecution() -> Non
                 ]
             )
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[tool],
     ).start(max_steps=2)
     try:
@@ -228,6 +234,7 @@ def test_suspended_batch_restores_results_without_retrieval_reexecution() -> Non
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="done")])
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[tool],
         state=checkpoint.agent_state,
         agent_id=checkpoint.run_state.agent_id,
@@ -258,6 +265,7 @@ def test_sequential_batching_does_not_cross_another_tool() -> None:
 
     run = Agent(
         FakeModelClient(lambda *_: next(replies)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(
@@ -333,6 +341,7 @@ def test_real_retrieval_bindings_merge_their_public_argument(
     )
     run = Agent(
         FakeModelClient(lambda *_: next(replies)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[tool.bind(lambda: ToolContext())],
     ).start(max_steps=2)
     assert run.result(timeout=5).output.text == "done"
@@ -382,9 +391,11 @@ def test_rejected_merges_keep_original_calls_and_arguments(
         execution_mode=ToolExecutionMode.SEQUENTIAL,
         merge_arguments=partial(merge_tool_arguments, field="queries"),
     )
-    run = Agent(FakeModelClient(lambda *_: next(replies)), tools=[tool]).start(
-        max_steps=2
-    )
+    run = Agent(
+        FakeModelClient(lambda *_: next(replies)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[tool],
+    ).start(max_steps=2)
     run.result(timeout=5)
     assert run.wait_for_idle(5)
     assert executions == expected

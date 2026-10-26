@@ -23,6 +23,7 @@ from onyx.chat.presentation import ResponsePresenter, project_response
 from onyx.chat.renderer import MessageRenderer, ResponseLayout
 from onyx.context.search.models import SearchDoc
 from onyx.llm.cancellation import CancellationSignal
+from onyx.llm.interfaces import GenerationContext
 from onyx.llm.model_response import (
     Delta,
     MessageAccumulator,
@@ -53,6 +54,7 @@ from onyx.server.query_and_chat.streaming_models import (
     SearchToolStart,
     SectionEnd,
 )
+from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
 
 
@@ -92,6 +94,7 @@ def test_rendering_does_not_change_requests_transcript_or_execution() -> None:
         llm = FakeModelClient(reply)
         agent = Agent(
             llm,
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
             tools=[
                 AgentTool(
                     definition=ToolDefinition(
@@ -219,7 +222,8 @@ def test_formatting_failure_keeps_accepted_response(
             lambda _request, _signal: AssistantMessage(
                 content=[TextContent(text="Accepted answer")]
             )
-        )
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
     )
     run = agent.start(messages=[UserMessage(content="Question")], max_steps=1)
     run.result(timeout=10)

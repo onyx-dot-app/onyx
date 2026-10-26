@@ -3,7 +3,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, SerializeAsAny
 
 from onyx.agents.execution_records import (
     CompactionCheckpoint,
@@ -182,7 +182,7 @@ class RunProgress(BaseModel):
     tools: list[ToolDefinition] = Field(default_factory=list)
     previous_options: GenerationOptions | None = None
     finalized_tools: int = 0
-    feature_state: SerializeAsAny[BaseModel] | None = None
+    feature_state: dict[str, JsonValue] | None = None
     pending_tool_calls: dict[str, PendingToolInput | ChildRunWait] = Field(
         default_factory=dict
     )

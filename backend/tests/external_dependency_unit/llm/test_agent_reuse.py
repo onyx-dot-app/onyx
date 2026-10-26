@@ -88,6 +88,7 @@ def test_child_reuse_preserves_context_with_a_fresh_budget(db_session: Session) 
 
     parent = Agent(
         FakeModelClient(parent_reply),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(

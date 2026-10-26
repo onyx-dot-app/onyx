@@ -32,7 +32,7 @@ from onyx.db.enums import IncognitoRecordMode
 from onyx.db.models import ChatMessage, ChatSession
 from onyx.deep_research.models import ResearchConfiguration
 from onyx.llm.cancellation import CancellationSignal
-from onyx.llm.interfaces import LLMUserIdentity
+from onyx.llm.interfaces import GenerationContext, LLMUserIdentity
 from onyx.llm.models import (
     AssistantMessage,
     GenerationRequest,
@@ -46,6 +46,7 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
+from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient
 
 
@@ -239,6 +240,7 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
 
     root = Agent(
         FakeModelClient(lambda *_: next(root_replies)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         agent_id=root_id,
         tools=[
             AgentTool(
