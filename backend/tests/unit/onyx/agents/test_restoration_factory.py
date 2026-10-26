@@ -2,13 +2,13 @@
 
 import pytest
 
-from onyx.agents.execution_records import RunStatus
 from onyx.agents.models import (
     AgentState,
     AgentStep,
     ExecutionCheckpoint,
     RunProgress,
     RunState,
+    RunStatus,
     StepInput,
 )
 from onyx.chat.agent import ChatAgent

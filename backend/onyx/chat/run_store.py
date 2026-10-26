@@ -15,8 +15,13 @@ from onyx.agents.agent_coordination import (
     RunStore,
 )
 from onyx.agents.concurrency import OPERATION_TIMEOUT_SECONDS
-from onyx.agents.execution_records import RunStatus
-from onyx.agents.models import AgentInfo, AgentState, ExecutionCheckpoint, RunState
+from onyx.agents.models import (
+    AgentInfo,
+    AgentState,
+    ExecutionCheckpoint,
+    RunState,
+    RunStatus,
+)
 from onyx.agents.runtime import Agent, Run, RunNotTransferable
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend

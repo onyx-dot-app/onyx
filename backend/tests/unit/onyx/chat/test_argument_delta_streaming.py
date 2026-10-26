@@ -5,8 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from onyx.agents.execution_records import ExecutionStatus, RunStatus
-from onyx.agents.models import StepRecord
+from onyx.agents.models import ExecutionStatus, RunStatus, StepRecord
 from onyx.chat.models import MessageRendering, ResponseRecord
 from onyx.chat.renderer import MessageRenderer, ResponseLayout
 from onyx.chat.response import tool_arguments_for_display

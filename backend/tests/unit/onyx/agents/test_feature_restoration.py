@@ -11,14 +11,15 @@ import pytest
 from pydantic import JsonValue, TypeAdapter
 
 from onyx.agents.agent_coordination import AgentCoordinator
-from onyx.agents.execution_records import ExecutionStatus, RunStatus
 from onyx.agents.models import (
     AgentState,
     AgentStep,
     ExecutionCheckpoint,
+    ExecutionStatus,
     PreparedStep,
     RunProgress,
     RunState,
+    RunStatus,
     StepInput,
     StepRecord,
     ToolExecutionRecord,

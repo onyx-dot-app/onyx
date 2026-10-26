@@ -14,12 +14,13 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_coordination import AgentCoordinator, RunStore
-from onyx.agents.execution_records import CompactionCheckpoint, RunStatus
 from onyx.agents.models import (
     AgentState,
+    CompactionCheckpoint,
     ExecutionCheckpoint,
     RunProgress,
     RunState,
+    RunStatus,
 )
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import (

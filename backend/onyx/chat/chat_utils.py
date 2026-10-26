@@ -8,8 +8,8 @@ from typing import TypedDict
 from pydantic import JsonValue
 from sqlalchemy.orm import Session
 
-from onyx.agents.execution_records import CompactionCheckpoint, messages_for_model
-from onyx.agents.models import messages_from_steps
+from onyx.agents.execution_records import messages_for_model
+from onyx.agents.models import CompactionCheckpoint, messages_from_steps
 from onyx.chat.files import build_file_context
 from onyx.chat.incognito import (
     incognito_allowed_for_user,

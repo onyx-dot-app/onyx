@@ -11,8 +11,7 @@ import pytest
 
 from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent, ToolEndEvent
-from onyx.agents.execution_records import RunFailureKind
-from onyx.agents.models import AgentStep, PreparedStep, StepInput
+from onyx.agents.models import AgentStep, PreparedStep, RunFailureKind, StepInput
 from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.chat.citation_processor import CitationMapping

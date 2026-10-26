@@ -24,10 +24,7 @@ from sqlalchemy.orm import Session, joinedload, load_only, selectinload
 from sqlalchemy.sql.expression import ColumnElement
 from sqlalchemy.sql.selectable import CTE
 
-from onyx.agents.execution_records import (
-    CompactionCheckpoint,
-    RunStatus,
-)
+from onyx.agents.models import CompactionCheckpoint, RunStatus
 from onyx.chat.models import MessageRendering, PresentationMode
 from onyx.chat.response import message_thinking
 from onyx.configs.chat_configs import HARD_DELETE_CHATS

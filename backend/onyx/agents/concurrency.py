@@ -2,7 +2,7 @@
 
 import threading
 import time
-from collections import deque
+from collections import Counter, deque
 from collections.abc import Callable
 from concurrent.futures import Future
 from contextvars import copy_context
@@ -33,9 +33,9 @@ class WorkTracker:
         with self._lock:
             self._count += 1
 
-    def finished(self) -> None:
+    def finished(self, count: int = 1) -> None:
         with self._lock:
-            self._count -= 1
+            self._count -= count
             listeners = tuple(self._listeners) if self._count == 0 else ()
             if listeners:
                 self._listeners.clear()
@@ -119,6 +119,7 @@ class EventDispatcher:
 
     The optional flush callback batches listener output on that same worker. It
     receives True after close drains all accepted events, for final output cleanup.
+    Events remain pending until their listener output has been flushed.
     """
 
     def __init__(
@@ -179,6 +180,8 @@ class EventDispatcher:
 
     def _deliver(self) -> None:
         last_flush = time.monotonic()
+        delivered_event_count = 0
+        channel_event_counts: Counter[EventDelivery] = Counter()
         while True:
             with self._condition:
                 self._condition.wait_for(
@@ -202,18 +205,26 @@ class EventDispatcher:
                             owns_event=index == len(channels) - 1,
                         )
                 finally:
-                    with self._condition:
-                        self._pending_event_count -= 1
-                    for channel in channels:
-                        channel._context.run(channel.tracker.finished)
-            if self._flush is not None and (
+                    delivered_event_count += 1
+                    channel_event_counts.update(channels)
+            flush_due = self._flush is not None and (
                 exiting or time.monotonic() - last_flush >= EVENT_FLUSH_INTERVAL_SECONDS
-            ):
+            )
+            if flush_due and self._flush is not None:
                 try:
                     self._context.run(self._flush, final_flush)
+                except AgentCancelled:
+                    logger.debug("Agent event sink flush cancelled")
                 except Exception:
                     logger.exception("Agent event sink flush failed")
                 last_flush = time.monotonic()
+            if self._flush is None or flush_due:
+                with self._condition:
+                    self._pending_event_count -= delivered_event_count
+                delivered_event_count = 0
+                for channel, count in channel_event_counts.items():
+                    channel._context.run(channel.tracker.finished, count)
+                channel_event_counts.clear()
             if exiting:
                 with self._condition:
                     if self._queue or (
@@ -225,7 +236,7 @@ class EventDispatcher:
 
     @property
     def has_pending_events(self) -> bool:
-        """Whether accepted events are queued or still being delivered."""
+        """Whether accepted events await delivery or a buffered-output flush."""
         with self._condition:
             return self._pending_event_count > 0
 

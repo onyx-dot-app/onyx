@@ -5,8 +5,7 @@ from uuid import uuid4
 
 import pytest
 
-from onyx.agents.execution_records import ExecutionStatus, RunStatus
-from onyx.agents.models import RunState, StepRecord
+from onyx.agents.models import ExecutionStatus, RunState, RunStatus, StepRecord
 from onyx.chat.models import MessageRendering, PresentationMode
 from onyx.chat.presentation import project_response
 from onyx.configs.constants import MessageType

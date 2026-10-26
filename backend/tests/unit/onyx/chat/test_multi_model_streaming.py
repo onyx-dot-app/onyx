@@ -21,7 +21,7 @@ from litellm.exceptions import ContextWindowExceededError
 
 from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent
-from onyx.agents.execution_records import RunStatus
+from onyx.agents.models import RunStatus
 from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import AgentTool, InputMode, PendingToolInput
 from onyx.chat.agent import ChatAgent

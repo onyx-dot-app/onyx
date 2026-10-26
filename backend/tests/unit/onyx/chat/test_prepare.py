@@ -10,7 +10,7 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.agents.execution_records import RunStatus
+from onyx.agents.models import RunStatus
 from onyx.cache.interface import CacheLockLostError
 from onyx.chat.chat_processing_checker import (
     PREPARATION_LEASE_SECONDS,

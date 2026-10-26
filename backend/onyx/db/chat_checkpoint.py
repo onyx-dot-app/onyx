@@ -4,7 +4,7 @@ from pydantic import BaseModel, JsonValue, TypeAdapter
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.agents.execution_records import RunFailure, RunFailureKind, RunStatus
+from onyx.agents.models import RunFailure, RunFailureKind, RunStatus
 from onyx.chat.models import ResponseCheckpoint
 from onyx.db.chat_response import (
     configure_response_transaction__no_commit,

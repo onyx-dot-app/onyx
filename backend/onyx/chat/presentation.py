@@ -14,8 +14,7 @@ from onyx.agents.events import (
     ToolStartEvent,
     ToolUpdateEvent,
 )
-from onyx.agents.execution_records import ExecutionStatus, RunStatus
-from onyx.agents.models import AgentInfo, RunState
+from onyx.agents.models import AgentInfo, ExecutionStatus, RunState, RunStatus
 from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
 from onyx.chat.citation_utils import update_citation_processor_from_tool_result
 from onyx.chat.emitter import Emitter

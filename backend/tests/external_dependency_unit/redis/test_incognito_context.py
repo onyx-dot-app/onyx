@@ -19,8 +19,7 @@ from uuid import UUID, uuid4
 import pytest
 from redis.lock import Lock as RedisLock
 
-from onyx.agents.execution_records import ExecutionStatus, RunStatus
-from onyx.agents.models import StepRecord
+from onyx.agents.models import ExecutionStatus, RunStatus, StepRecord
 from onyx.cache.interface import CacheBackendType
 from onyx.chat.incognito_context import (
     _PENDING_TEARDOWNS_KEY,

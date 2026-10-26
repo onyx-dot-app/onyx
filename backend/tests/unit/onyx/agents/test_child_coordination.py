@@ -18,8 +18,16 @@ from onyx.agents.agent_coordination import (
     RunCoordination,
 )
 from onyx.agents.events import AgentEvent, MessageEndEvent
-from onyx.agents.execution_records import RunFailureKind, RunStatus
-from onyx.agents.models import AgentInfo, PreparedStep, RunState, StepInput, StepResult
+from onyx.agents.models import (
+    AgentInfo,
+    PreparedStep,
+    RunFailure,
+    RunFailureKind,
+    RunState,
+    RunStatus,
+    StepInput,
+    StepResult,
+)
 from onyx.agents.runtime import Agent, Run, RunFailed, RunNotTransferable, RunReleased
 from onyx.agents.tools import (
     AgentControl,
@@ -1817,6 +1825,274 @@ def test_remote_run_wait_and_cancel_use_authorized_fresh_snapshots(
     assert owner.close(timeout=3)
 
 
+@pytest.mark.parametrize("cached", [False, True])
+def test_handled_remote_child_failure_does_not_fail_parent(cached: bool) -> None:
+    remote = RunState(
+        run_id="remote-run",
+        agent_id="remote-agent",
+        status=RunStatus.ERROR,
+        failure=RunFailure(kind=RunFailureKind.EXECUTION, message="remote failed"),
+    )
+
+    def execute(invocation: ToolInvocation) -> ToolResult:
+        parent_run = coordinator.active_run(parent.id)
+        assert parent_run is not None
+        assert parent_run.coordination is not None
+        parent_run.coordination.children[remote.run_id] = False
+        completion: Future[RunState] = Future()
+        completion.set_result(remote)
+        coordinator._state.completions[remote.run_id] = completion
+        if cached:
+            coordinator._state.latest["remote-agent"] = remote
+            coordinator._visible_run_ids.add(remote.run_id)
+        with pytest.raises(RunFailed, match="remote failed"):
+            invocation.agents.wait_run(remote.run_id, timeout=1)
+        return ToolResult(content="Child failure handled")
+
+    parent = parent_agent(execute)
+    coordinator = AgentCoordinator(
+        directory=FakeAgentDirectory(read_run=lambda *_: remote)
+    )
+    coordinator.register(
+        AgentInfo(
+            id="remote-agent",
+            path="/root/remote",
+            parent_id=parent.id,
+            description="",
+            restoration_config=None,
+        )
+    )
+    try:
+        result = run_agent(parent, max_steps=2, coordinator=coordinator)
+        assert result.output.text == "first finished"
+    finally:
+        assert coordinator.close(3)
+
+
+@pytest.mark.parametrize("status", [RunStatus.RUNNING, RunStatus.SUSPENDED])
+def test_parent_waits_for_child_owned_by_another_coordinator(status: RunStatus) -> None:
+    release = threading.Event()
+
+    def generate(
+        _request: GenerationRequest, signal: CancellationSignal
+    ) -> AssistantMessage:
+        while not release.wait(0.01):
+            signal.check()
+        return AssistantMessage(content=[TextContent(text="remote finished")])
+
+    remote_owner = AgentCoordinator()
+    child = (
+        suspended_agent()
+        if status == RunStatus.SUSPENDED
+        else Agent(
+            FakeModelClient(generate),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        )
+    )
+    remote = child.start(max_steps=1, coordinator=remote_owner)
+    if status == RunStatus.SUSPENDED:
+        assert remote.wait_until_settled(2).status == RunStatus.SUSPENDED
+
+    def delegate(_invocation: ToolInvocation) -> ChildRunWait:
+        parent_run = coordinator.active_run(parent.id)
+        assert parent_run is not None
+        assert parent_run.coordination is not None
+        parent_run.coordination.attach_children([remote.id])
+        return ChildRunWait(run_ids=[remote.id])
+
+    parent = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(
+                content=[ToolCall(id="delegate", name="delegate", arguments={})]
+            )
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name="delegate", description="", parameters={}
+                ),
+                execute=delegate,
+                result_from_children=lambda _invocation, children: ToolResult(
+                    content=children[0].status.value
+                ),
+            )
+        ],
+    )
+    coordinator = AgentCoordinator(
+        directory=FakeAgentDirectory(
+            read_run=lambda *_: remote.snapshot(),
+            read_run_status=lambda *_: remote.status,
+            cancel_run=lambda *_: remote.cancel(),
+        )
+    )
+    coordinator.register(
+        AgentInfo(
+            id=child.id,
+            path="/root/remote",
+            parent_id=parent.id,
+            description="",
+            restoration_config=None,
+        )
+    )
+    root = parent.start(max_steps=1, coordinator=coordinator)
+    try:
+        assert root.wait_until_settled(2).status == RunStatus.SUSPENDED
+        assert not coordinator.completion(remote.id).done()
+        assert coordinator.child_run(remote.id, parent.id) is None
+        if status == RunStatus.SUSPENDED:
+            remote.submit(
+                HumanToolAnswer(
+                    request_id="question",
+                    decision=InputDecision.RESULT,
+                    result=ToolResult(content="approved"),
+                )
+            )
+        else:
+            release.set()
+        remote.result(2)
+        root.result(3)
+        assert root.wait_for_idle(2)
+        saved = root.snapshot()
+        assert saved.messages[-1].text == remote.status.value
+        assert saved.child_runs[0].run_id == remote.id
+    finally:
+        release.set()
+        assert coordinator.close(3)
+        assert remote_owner.close(3)
+
+
+@pytest.mark.parametrize("advance_during_read", [False, True])
+def test_observing_older_remote_run_preserves_latest_run(
+    advance_during_read: bool,
+) -> None:
+    child = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(content=[TextContent(text="done")])
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+    )
+    runs: list[Run] = []
+    run_agent(child, max_steps=1, runs=runs)
+    run_agent(child, max_steps=1, runs=runs)
+    older, newer = [run.snapshot() for run in runs]
+    reading, release_read = threading.Event(), threading.Event()
+    observing, release_status = threading.Event(), threading.Event()
+    first_read = True
+
+    def read(run_id: str, parent_id: str) -> RunState:
+        nonlocal first_read
+        assert (run_id, parent_id) == (older.run_id, "parent")
+        if first_read:
+            first_read = False
+            reading.set()
+            assert release_read.wait(3)
+            return older.model_copy(update={"status": RunStatus.RUNNING})
+        return older.model_copy(deep=True)
+
+    def status(_run_id: str, _parent_id: str) -> RunStatus:
+        observing.set()
+        assert release_status.wait(3)
+        return RunStatus.COMPLETE
+
+    coordinator = AgentCoordinator(
+        directory=FakeAgentDirectory(read_run=read, read_run_status=status)
+    )
+    coordinator.register(
+        AgentInfo(
+            id=child.id,
+            path="/root/remote",
+            parent_id="parent",
+            description="",
+            restoration_config=None,
+        )
+    )
+    waiting = start_thread_future(
+        lambda: coordinator.child_completion(older.run_id, "parent"),
+        name="remote-child-wait",
+    )
+    try:
+        assert reading.wait(2)
+        if advance_during_read:
+            coordinator.release(coordinator.restore_completed(newer))
+        release_read.set()
+        completion = waiting.result(2)
+        assert observing.wait(2)
+        if not advance_during_read:
+            coordinator.release(coordinator.restore_completed(newer))
+        release_status.set()
+        assert completion.result(2).run_id == older.run_id
+        assert coordinator.discover_children("parent")[0].latest_run_id == newer.run_id
+        assert coordinator.saved_run(newer.run_id, "parent") == newer
+    finally:
+        release_read.set()
+        release_status.set()
+        waiting.result(3)
+        assert coordinator.close(3)
+
+
+def test_zero_time_wait_uses_completed_remote_runs_within_authorized_view() -> None:
+    child = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(content=[TextContent(text="done")])
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+    )
+    runs: list[Run] = []
+    run_agent(child, max_steps=1, runs=runs)
+    run_agent(child, max_steps=1, runs=runs)
+    snapshots = {run.id: run.snapshot() for run in runs}
+    reads: dict[str, int] = {}
+
+    def read(run_id: str, parent_id: str) -> RunState:
+        assert parent_id == parent.id
+        reads[run_id] = reads.get(run_id, 0) + 1
+        snapshot = snapshots[run_id]
+        if reads[run_id] == 1:
+            return snapshot.model_copy(update={"status": RunStatus.RUNNING})
+        return snapshot.model_copy(deep=True)
+
+    def execute(invocation: ToolInvocation) -> ToolResult:
+        for run_id in snapshots:
+            coordinator.child_completion(run_id, parent.id).result(2)
+        previous_reads = dict(reads)
+        for run_id in snapshots:
+            result = invocation.agents.wait_run(run_id, timeout=0)
+            assert result is not None
+            assert result.run_id == run_id
+            assert result.output.text == "done"
+            with pytest.raises(ValueError, match="not available"):
+                coordinator.saved_run(run_id, "another-parent", load_archive=False)
+            branch = coordinator.view(directory=FakeAgentDirectory())
+            assert branch.saved_run(run_id, parent.id, load_archive=False) is None
+            with pytest.raises(ValueError, match="not available"):
+                branch.saved_run(run_id, parent.id)
+        assert reads == previous_reads
+        return ToolResult(content="done")
+
+    parent = parent_agent(execute)
+    coordinator = AgentCoordinator(
+        directory=FakeAgentDirectory(
+            read_run=read,
+            read_run_status=lambda *_: RunStatus.COMPLETE,
+        )
+    )
+    coordinator.register(
+        AgentInfo(
+            id=child.id,
+            path="/root/remote",
+            parent_id=parent.id,
+            description="",
+            restoration_config=None,
+        )
+    )
+    try:
+        result = run_agent(parent, max_steps=2, coordinator=coordinator)
+        assert result.output.text == "first finished"
+    finally:
+        assert coordinator.close(3)
+
+
 def test_registration_failure_prevents_model_and_thread_failure_rolls_back() -> None:
     invoked = threading.Event()
 
@@ -2089,7 +2365,7 @@ def test_saved_completion_isolated_and_notifies_without_execution_locks() -> Non
     saved = run.handoff()
     snapshots.append(saved.run_state.model_copy(update={"status": RunStatus.COMPLETE}))
     result_ready.set()
-    coordinator.observe_completion(run.id)
+    coordinator.observe_completion(run.id, agent_id=run.agent_id)
     try:
         assert checked.wait(3)
         exposed = coordinator.completion(run.id).result(3)
@@ -2497,7 +2773,7 @@ def test_adoption_cannot_publish_stale_observer_timeout(
 
     if timeout_claimed:
         monkeypatch.setattr(completion, "set_exception", delayed_exception)
-    coordinator.observe_completion(run.id)
+    coordinator.observe_completion(run.id, agent_id=run.agent_id)
     assert reading.wait(2)
     if timeout_claimed:
         release.set()
@@ -2511,7 +2787,7 @@ def test_adoption_cannot_publish_stale_observer_timeout(
         assert coordinator._state.work.tracker.wait_idle(3)
         active_completion = coordinator.completion(adopted.id)
         if timeout_claimed:
-            with pytest.raises(TimeoutError, match="Released run"):
+            with pytest.raises(TimeoutError, match="Remote run"):
                 completion.result(0)
             assert active_completion is not completion
         else:
