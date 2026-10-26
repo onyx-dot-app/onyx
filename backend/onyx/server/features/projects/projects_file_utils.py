@@ -82,9 +82,9 @@ class CategorizedFiles(BaseModel):
     acceptable: list[UploadFile] = Field(default_factory=list)
     rejected: list[RejectedFile] = Field(default_factory=list)
     acceptable_file_to_token_count: dict[str, int] = Field(default_factory=dict)
-    # Text extracted while counting tokens, keyed like the counts, so the
-    # upload can cache it instead of extracting again.
-    acceptable_file_to_text: dict[str, str] = Field(default_factory=dict)
+    # Text extracted while counting tokens, keyed by position in `acceptable`
+    # so same-named uploads keep their own text.
+    acceptable_index_to_text: dict[int, str] = Field(default_factory=dict)
     # Filenames within `acceptable` that should be stored but not indexed.
     skip_indexing: set[str] = Field(default_factory=set)
 
@@ -379,7 +379,9 @@ def categorize_uploaded_files(
                 else:
                     results.acceptable.append(upload)
                     results.acceptable_file_to_token_count[filename] = token_count
-                    results.acceptable_file_to_text[filename] = text_content
+                    results.acceptable_index_to_text[len(results.acceptable) - 1] = (
+                        text_content
+                    )
 
                 # Reset file pointer for subsequent upload handling
                 try:

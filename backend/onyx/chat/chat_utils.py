@@ -12,6 +12,7 @@ from onyx.chat.incognito import (
 )
 from onyx.chat.incognito_context import incognito_context_available
 from onyx.chat.models import (
+    ChatFileProcessingInfo,
     ChatHistoryResult,
     ChatLoadedFile,
     ChatMessageSimple,
@@ -294,15 +295,6 @@ def _get_or_extract_plaintext(
     if store_on_miss:
         store_plaintext(file_id, content_text)
     return content_text
-
-
-class ChatFileProcessingInfo(BaseModel):
-    token_count: int
-    # No text is available yet; the model gets CONTENT_PENDING_NOTICE instead.
-    content_pending: bool
-    # The user-file worker will store the canonical plaintext (it may include
-    # image captions), so an inline extraction must not be cached over it.
-    worker_owns_plaintext: bool
 
 
 def _get_chat_file_processing_info(

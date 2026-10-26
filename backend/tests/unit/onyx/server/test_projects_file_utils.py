@@ -110,7 +110,7 @@ def test_categorize_uploaded_files_accepts_size_under_limit(
 
     assert len(result.acceptable) == 1
     assert len(result.rejected) == 0
-    assert result.acceptable_file_to_text == {}
+    assert result.acceptable_index_to_text == {}
 
 
 def test_categorize_uploaded_files_uses_seek_fallback_when_upload_size_missing(
@@ -425,7 +425,7 @@ def test_categorize_text_under_token_limit_accepted(
 
     assert len(result.acceptable) == 1
     assert result.acceptable_file_to_token_count["ok.txt"] == 500
-    assert result.acceptable_file_to_text == {"ok.txt": small_text}
+    assert result.acceptable_index_to_text == {0: small_text}
 
 
 # --- skip-indexing vs rejection by file type ---

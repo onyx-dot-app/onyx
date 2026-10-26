@@ -74,8 +74,8 @@ def create_user_files(
     rejected_files = categorized_files.rejected
     id_to_temp_id: dict[str, str] = {}
     # Pair returned storage paths with the same set of acceptable files we uploaded
-    for file_path, file in zip(
-        upload_response.file_paths, categorized_files.acceptable, strict=True
+    for index, (file_path, file) in enumerate(
+        zip(upload_response.file_paths, categorized_files.acceptable, strict=True)
     ):
         new_id = uuid.uuid4()
         new_temp_id = (
@@ -103,9 +103,7 @@ def create_user_files(
         # Persist the UserFile first to satisfy FK constraints for association table
         db_session.add(new_file)
         db_session.flush()
-        extracted_text = categorized_files.acceptable_file_to_text.get(
-            file.filename or ""
-        )
+        extracted_text = categorized_files.acceptable_index_to_text.get(index)
         if extracted_text:
             plaintext_to_cache.append((new_file.id, extracted_text))
         # Incognito uploads may use a project as context but never join it.
@@ -116,9 +114,10 @@ def create_user_files(
             )
             db_session.add(project_to_user_file)
         user_files.append(new_file)
-    db_session.commit()
     # Cache the text extracted during categorization so chat can use the file
-    # before the worker stores its own (captioned) version at index time.
+    # before the worker stores its own (captioned) version at index time. Write
+    # before commit: once committed, a worker can claim the row, and a later
+    # upload write would overwrite its captioned text.
     if plaintext_to_cache:
         run_functions_tuples_in_parallel(
             [
@@ -126,6 +125,7 @@ def create_user_files(
                 for user_file_id, text in plaintext_to_cache
             ]
         )
+    db_session.commit()
     return CategorizedFilesResult(
         user_files=user_files,
         rejected_files=rejected_files,

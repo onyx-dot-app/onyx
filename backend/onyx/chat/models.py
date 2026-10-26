@@ -133,6 +133,15 @@ class ChatFullResponse(BaseModel):
     error_msg: str | None = None
 
 
+class ChatFileProcessingInfo(BaseModel):
+    token_count: int
+    # No text is available yet; the model gets CONTENT_PENDING_NOTICE instead.
+    content_pending: bool
+    # The user-file worker will store the canonical plaintext (it may include
+    # image captions), so an inline extraction must not be cached over it.
+    worker_owns_plaintext: bool
+
+
 class ChatLoadedFile(InMemoryChatFile):
     content_text: str | None
     token_count: int

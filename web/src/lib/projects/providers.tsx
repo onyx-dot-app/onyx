@@ -691,6 +691,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
               }
               if (
                 latest.status !== f.status ||
+                latest.content_ready !== f.content_ready ||
                 latest.name !== f.name ||
                 latest.file_type !== f.file_type
               ) {
@@ -716,6 +717,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
             if (latest) {
               if (
                 latest.status !== f.status ||
+                latest.content_ready !== f.content_ready ||
                 latest.name !== f.name ||
                 latest.file_type !== f.file_type
               ) {

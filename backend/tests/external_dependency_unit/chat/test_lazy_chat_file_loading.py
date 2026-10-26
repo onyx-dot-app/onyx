@@ -18,12 +18,8 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.chat.chat_utils import (
-    ChatFileProcessingInfo,
-    load_all_chat_files,
-    load_chat_file,
-)
-from onyx.chat.models import ChatLoadedFile
+from onyx.chat.chat_utils import load_all_chat_files, load_chat_file
+from onyx.chat.models import ChatFileProcessingInfo, ChatLoadedFile
 from onyx.configs.constants import FileOrigin, MessageType
 from onyx.db.chat import (
     create_chat_session,

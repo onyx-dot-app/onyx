@@ -41,7 +41,8 @@ interface UploadFile {
 async function uploadFilesToChat(
   page: Page,
   files: UploadFile[],
-  getStatus: () => string = () => "COMPLETED"
+  getStatus: () => string = () => "COMPLETED",
+  getContentReady: () => boolean = () => true
 ): Promise<void> {
   // Report every tracked file as COMPLETED (by default) so the chat input
   // treats uploads as ready. The send button is disabled while a file is still processing,
@@ -59,6 +60,7 @@ async function uploadFilesToChat(
         ids.map((id) => ({
           id,
           status: getStatus(),
+          content_ready: getContentReady(),
           token_count: 1,
           chunk_count: 1,
         }))
@@ -192,7 +194,9 @@ test.describe("Chat File Uploads", () => {
       await chat.goto();
       await mockChatEndpoint(page, buildMockStream(SHORT_AI_RESPONSE));
 
+      // An image-only document: processing, and no usable text until captioned.
       let fileStatus = "PROCESSING";
+      let contentReady = false;
       const fileName = "notes-processing.txt";
       await uploadFilesToChat(
         page,
@@ -203,7 +207,8 @@ test.describe("Chat File Uploads", () => {
             buffer: Buffer.from("Notes that are still processing.", "utf-8"),
           },
         ],
-        () => fileStatus
+        () => fileStatus,
+        () => contentReady
       );
 
       const { inputBar } = chat;
@@ -216,7 +221,39 @@ test.describe("Chat File Uploads", () => {
       await inputBar.expectText("Summarize this file");
 
       fileStatus = "COMPLETED";
+      contentReady = true;
       await inputBar.expectFileProcessing(false);
+      await expect(inputBar.sendButton).toBeEnabled();
+      await inputBar.send();
+      await chat.expectHumanMessage("Summarize this file");
+    });
+
+    test("a file still indexing does not block send once its text is ready", async ({
+      page,
+    }) => {
+      await chat.goto();
+      await mockChatEndpoint(page, buildMockStream(SHORT_AI_RESPONSE));
+
+      const fileName = "notes-indexing.txt";
+      await uploadFilesToChat(
+        page,
+        [
+          {
+            name: fileName,
+            mimeType: "text/plain",
+            buffer: Buffer.from(
+              "Notes whose text is already extracted.",
+              "utf-8"
+            ),
+          },
+        ],
+        () => "PROCESSING",
+        () => true
+      );
+
+      const { inputBar } = chat;
+      await inputBar.expectFileProcessing();
+      await inputBar.fill("Summarize this file");
       await expect(inputBar.sendButton).toBeEnabled();
       await inputBar.send();
       await chat.expectHumanMessage("Summarize this file");
