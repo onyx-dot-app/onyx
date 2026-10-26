@@ -27,7 +27,7 @@ import { cn } from "@opal/utils";
 // Reading-width cap only applies at md and up — below that the window is too
 // narrow for it to matter, so chat is always full width (and the top-bar
 // toggle is hidden).
-const MSG_MAX_W = "md:max-w-[720px] md:min-w-[400px]";
+const MSG_MAX_W = "md:max-w-chat-message";
 // Full width keeps a max-width (100%), so the switch animates instead of jumping.
 const MSG_FULL_W = "md:max-w-full";
 
