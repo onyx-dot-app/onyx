@@ -9,11 +9,14 @@ structure with a sticky scroll-aware header, centered content container, and bod
 
 ### Root
 
-Scrollable wrapper that centers content at a configurable max-width.
+Scrollable wrapper that centers content at a configurable max-width. It also
+holds the page's state, which `Body` renders.
 
 | Prop    | Type                                        | Default | Description                           |
 | ------- | ------------------------------------------- | ------- | ------------------------------------- |
 | `width` | `"sm" \| "md" \| "lg" \| "xl" \| "full"`    | `"md"`  | Max-width of the inner content column |
+| `animateEnter` | `boolean` | `true` | Animate the body in when the page mounts; `false` renders it at once |
+| `loading` | `boolean` | `false` | The body shows the page loader in place of its children. When it turns `false`, the children mount and animate in |
 
 Width presets map to CSS variables defined by the app (`--app-container-*`):
 `sm` = 672px, `md` = 872px, `lg` = 992px, `xl` = 1120px, `full` = 100%.
@@ -43,11 +46,14 @@ Headers are only sticky when `actions` is non-empty.
 
 ### Body
 
-Content container with consistent padding and vertical spacing.
+Content container with consistent padding and vertical spacing. It renders
+the state set on `Root`: the page loader while `loading`, and otherwise its
+children, animated in with [`Enter`](../../components/enter/README.md) unless
+`animateEnter` is `false`. The header stays still.
 
-| Prop  | Type      | Default | Description                                        |
-| ----- | --------- | ------- | -------------------------------------------------- |
-| `gap` | `Spacing` | `8`     | Space between sections, as a spacing step (N/4 rem) |
+| Prop    | Type      | Default | Description                                         |
+| ------- | --------- | ------- | --------------------------------------------------- |
+| `gap`   | `Spacing` | `8`     | Space between sections, as a spacing step (N/4 rem) |
 
 ## Usage
 

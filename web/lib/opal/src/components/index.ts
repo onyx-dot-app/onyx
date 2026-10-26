@@ -152,6 +152,13 @@ export {
 /* Fold */
 export { Fold, type FoldProps } from "@opal/components/fold/components";
 
+/* Enter */
+export {
+  Enter,
+  type EnterProps,
+  type EnterVariant,
+} from "@opal/components/enter/components";
+
 /* IconTooltip */
 export {
   IconTooltip,
