@@ -19,7 +19,8 @@ from onyx.db.enums import MCPAuthenticationType, MCPOAuthProviderMode
 from onyx.db.models import MCPServer
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import ToolDefinition, ToolResult
-from onyx.tools.interface import Tool, ToolContext
+from onyx.tools.interface import Tool
+from onyx.tools.models import ToolContext
 from onyx.tools.tool_constructor import _disambiguate_mcp_tool_names
 from onyx.tools.tool_implementations.mcp.mcp_tool import (
     MCPTool,

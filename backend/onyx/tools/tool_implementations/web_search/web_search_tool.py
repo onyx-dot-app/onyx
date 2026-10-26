@@ -11,8 +11,8 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.web_search import fetch_active_web_search_provider
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.tools.constants import WEB_SEARCH_TOOL_NAME
-from onyx.tools.interface import CITATIONS_PER_TOOL_CALL, Tool, ToolContext
-from onyx.tools.models import ToolCallException
+from onyx.tools.interface import CITATIONS_PER_TOOL_CALL, Tool
+from onyx.tools.models import ToolCallException, ToolContext
 from onyx.tools.tool_implementations.utils import (
     convert_inference_sections_to_llm_string,
 )

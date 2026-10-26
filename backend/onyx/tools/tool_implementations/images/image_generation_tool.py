@@ -5,7 +5,6 @@ from typing import Any, cast
 from uuid import UUID
 
 import requests
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
@@ -30,10 +29,16 @@ from onyx.image_gen.interfaces import (
 )
 from onyx.llm.cancellation import AgentCancelled
 from onyx.llm.models import ToolDefinition, ToolResult
-from onyx.tools.interface import Tool, ToolContext, parse_tool_arguments
-from onyx.tools.models import GeneratedImage, ToolCallException, ToolExecutionException
+from onyx.tools.interface import Tool, parse_tool_arguments
+from onyx.tools.models import (
+    GeneratedImage,
+    ToolCallException,
+    ToolContext,
+    ToolExecutionException,
+)
 from onyx.tools.tool_implementations.images.models import (
     FinalImageGenerationResponse,
+    ImageGenerationArguments,
     ImageGenerationResponse,
 )
 from onyx.utils.b64 import get_image_type_from_bytes
@@ -46,11 +51,6 @@ CANCELLATION_POLL_INTERVAL = 5.0
 
 PROMPT_FIELD = "prompt"
 REFERENCE_IMAGE_FILE_IDS_FIELD = "reference_image_file_ids"
-
-
-class ImageGenerationArguments(BaseModel):
-    prompt: str
-    shape: ImageShape = ImageShape.SQUARE
 
 
 class ImageGenerationTool(Tool):

@@ -12,8 +12,9 @@ from onyx.agents.runtime import Agent
 from onyx.chat.agent import ChatAgent
 from onyx.chat.models import ChatFeatureState, ChatSearchResult
 from onyx.configs.constants import FileOrigin
-from onyx.deep_research.agent import DeepResearchAgent, DeepResearchFeatureState
-from onyx.deep_research.research_agent import ResearchAgent, ResearchFeatureState
+from onyx.deep_research.agent import DeepResearchAgent
+from onyx.deep_research.models import DeepResearchFeatureState, ResearchFeatureState
+from onyx.deep_research.research_agent import ResearchAgent
 from onyx.file_store.constants import AGENT_CHECKPOINT_FILE_PREFIX
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.factory import get_llm_token_counter

@@ -52,8 +52,7 @@ from onyx.server.settings.store import load_settings
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.server.utils_vector_db import require_vector_db
 from onyx.tools.constants import SEARCH_TOOL_ID
-from onyx.tools.interface import ToolContext
-from onyx.tools.models import ChatMinimalTextMessage
+from onyx.tools.models import ChatMinimalTextMessage, ToolContext
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tracing.framework.create import (
     SearchTraceMetadata,

@@ -3,18 +3,17 @@ from collections.abc import Callable
 from functools import partial
 from typing import TYPE_CHECKING, final
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError
+from pydantic import BaseModel, JsonValue, ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.agents.tools import AgentTool, ToolExecutionMode, ToolInvocation, ToolOutcome
 from onyx.chat.prompt_formatting import prompt_metadata
 from onyx.configs.constants import MessageType
-from onyx.db.memory import UserMemoryContext
 from onyx.llm.models import Message, ToolDefinition, ToolResult
 from onyx.tools.models import (
-    ChatFile,
     ChatMinimalTextMessage,
     ToolCallException,
+    ToolContext,
     ToolExecutionError,
     ToolExecutionException,
 )
@@ -29,25 +28,6 @@ if TYPE_CHECKING:
 logger = setup_logger()
 
 CITATIONS_PER_TOOL_CALL = 100
-
-
-class ToolContext(BaseModel):
-    """Application data available to each tool in an agent step."""
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    user_memory_context: UserMemoryContext | None = None
-    user_info: str | None = None
-    citation_mapping: dict[int, str] = Field(default_factory=dict)
-    next_citation_num: int = 1
-    # On repeat searches, defer to the model's new queries instead of repeating
-    # the expansion flow that may have produced poor results on the first pass.
-    skip_search_query_expansion: bool = False
-    chat_files: list[ChatFile] = Field(default_factory=list)
-    url_snippet_map: dict[str, str] = Field(default_factory=dict)
-    # When False, don't pass memory context to search tools for query expansion
-    # (but still pass it to the memory tool for persistence)
-    inject_memories_in_prompt: bool = True
 
 
 _MESSAGE_TYPES = {

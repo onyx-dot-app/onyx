@@ -7,7 +7,7 @@ import pytest
 
 from onyx.agents.tools import ToolInvocation, ToolProgress
 from onyx.chat.renderer import ToolRenderer
-from onyx.db.memory import UserInfo, UserMemoryContext
+from onyx.context.models import UserInfo, UserMemoryContext
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import ToolCall, ToolResult
 from onyx.server.query_and_chat.placement import Placement
@@ -17,8 +17,7 @@ from onyx.server.query_and_chat.streaming_models import (
     SectionEnd,
     ToolCallDebug,
 )
-from onyx.tools.interface import ToolContext
-from onyx.tools.models import MemoryUpdated
+from onyx.tools.models import MemoryUpdated, ToolContext
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 
 

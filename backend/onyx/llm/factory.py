@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from functools import lru_cache
 
-from pydantic import BaseModel, JsonValue
+from pydantic import JsonValue
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission
@@ -21,7 +21,7 @@ from onyx.llm.constants import LlmProviderNames
 from onyx.llm.decisions.client import DecisionClient
 from onyx.llm.decisions.factory import build_decision_client
 from onyx.llm.interfaces import LLM, LlmRequestPolicy
-from onyx.llm.models import ReasoningEffort
+from onyx.llm.models import ReasoningEffort, UserChatDefaults
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.token_budget import TOKEN_COUNT_CACHE_SIZE
@@ -40,13 +40,6 @@ from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
-
-
-class UserChatDefaults(BaseModel):
-    """User generation preferences used when selecting an LLM."""
-
-    temperature_default: float | None = None
-    reasoning_effort_default: ReasoningEffort | None = None
 
 
 def _build_provider_extra_headers(

@@ -18,7 +18,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import UserMessage
-from onyx.tools.interface import ToolContext
+from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 
 MODULE = "onyx.tools.tool_implementations.search.search_tool"

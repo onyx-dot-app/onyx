@@ -7,7 +7,7 @@ import pytest
 from onyx.chat.errors import (
     _REFUSAL_FINISH_REASONS,
     EmptyLLMResponseError,
-    _build_empty_llm_response_error,
+    build_empty_llm_response_error,
 )
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.models import (
@@ -33,7 +33,7 @@ class TestEmptyLlmResponseClassification:
     ) -> None:
         monkeypatch.setattr("onyx.chat.errors.is_true_openai_model", lambda *_: True)
 
-        err = _build_empty_llm_response_error(
+        err = build_empty_llm_response_error(
             llm=self._make_llm(),
             message=AssistantMessage(),
             tool_choice=ToolChoiceOptions.AUTO,
@@ -49,7 +49,7 @@ class TestEmptyLlmResponseClassification:
     ) -> None:
         monkeypatch.setattr("onyx.chat.errors.is_true_openai_model", lambda *_: True)
 
-        err = _build_empty_llm_response_error(
+        err = build_empty_llm_response_error(
             llm=self._make_llm(),
             message=AssistantMessage(
                 content=[ThinkingContent(text="scratchpad only")],
@@ -66,7 +66,7 @@ class TestEmptyLlmResponseClassification:
         """Anthropic refusal: HTTP 200, stop_reason="refusal" (normalized by
         LiteLLM to "content_filter"), no text or tool calls. Must surface as a
         refusal, not a generic empty-stream error."""
-        err = _build_empty_llm_response_error(
+        err = build_empty_llm_response_error(
             llm=self._make_llm(provider="anthropic", model="claude-fable-5"),
             message=AssistantMessage(
                 stop_reason="content_filter",
@@ -89,7 +89,7 @@ class TestEmptyLlmResponseClassification:
         """Native provider refusal reasons may pass through gateways unchanged."""
         monkeypatch.setattr("onyx.chat.errors.is_true_openai_model", lambda *_: True)
 
-        err = _build_empty_llm_response_error(
+        err = build_empty_llm_response_error(
             llm=self._make_llm(),
             message=AssistantMessage(
                 stop_reason=finish_reason,

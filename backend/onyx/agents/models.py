@@ -7,12 +7,12 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, SerializeAsAny
 
 from onyx.agents.execution_records import messages_for_model
 from onyx.agents.tools import AgentTool, ChildRunWait, HumanToolAnswer, PendingToolInput
-from onyx.llm.exceptions import LLMErrorInfo
 from onyx.llm.models import (
     AssistantMessage,
     GenerationOptions,
     GenerationRequest,
     GenerationRequestParams,
+    LLMErrorInfo,
     Message,
     ToolCall,
     ToolDefinition,
@@ -53,6 +53,13 @@ class RunFailure(BaseModel):
     kind: RunFailureKind
     message: str
     llm_error: LLMErrorInfo | None = None
+
+
+class ContextBudget(BaseModel):
+    input_limit: int = Field(gt=0)
+    trigger: int = Field(gt=0)
+    recent: int = Field(gt=0)
+    summary: int = Field(gt=0)
 
 
 class CompactionCheckpoint(BaseModel):

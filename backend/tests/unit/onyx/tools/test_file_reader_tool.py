@@ -17,11 +17,10 @@ from onyx.agents.tools import ToolInvocation
 from onyx.file_store.models import ChatFileType, InMemoryChatFile
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import ToolResult
-from onyx.tools.interface import ToolContext
-from onyx.tools.models import FileReadResult, ToolCallException
+from onyx.tools.constants import FILE_READER_MAX_CHARS
+from onyx.tools.models import FileReadResult, ToolCallException, ToolContext
 from onyx.tools.tool_implementations.file_reader.file_reader_tool import (
     FILE_ID_FIELD,
-    MAX_NUM_CHARS,
     NUM_CHARS_FIELD,
     START_CHAR_FIELD,
     FileReaderTool,
@@ -166,7 +165,7 @@ class TestRun:
         mock_load_user_file: MagicMock,
     ) -> None:
         uid = uuid4()
-        content = "x" * (MAX_NUM_CHARS + 500)
+        content = "x" * (FILE_READER_MAX_CHARS + 500)
         mock_load_user_file.return_value = _text_file(content)
 
         tool = _make_tool(user_file_ids=[uid])
@@ -175,7 +174,7 @@ class TestRun:
                 call_id="test",
                 arguments={
                     FILE_ID_FIELD: str(uid),
-                    NUM_CHARS_FIELD: MAX_NUM_CHARS + 9999,
+                    NUM_CHARS_FIELD: FILE_READER_MAX_CHARS + 9999,
                 },
                 cancellation=CancellationSignal(),
                 update=lambda _progress: None,
@@ -183,7 +182,7 @@ class TestRun:
             context=ToolContext(),
         )
         assert isinstance(resp, ToolResult)
-        assert f"Characters 0-{MAX_NUM_CHARS}" in resp.text
+        assert f"Characters 0-{FILE_READER_MAX_CHARS}" in resp.text
 
     @patch.object(FileReaderTool, "_load_file")
     def test_includes_continuation_hint(

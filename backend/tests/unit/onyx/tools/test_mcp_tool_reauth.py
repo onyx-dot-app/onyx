@@ -15,7 +15,7 @@ from onyx.llm.models import ToolResult
 from onyx.server.features.mcp.credentials import ResolvedMCPCredentials
 from onyx.server.features.mcp.models import MCPAuthTemplate
 from onyx.server.metrics.mcp_common import MCPToolCallStatus
-from onyx.tools.interface import ToolContext
+from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 
 MODULE = "onyx.tools.tool_implementations.mcp.mcp_tool"
