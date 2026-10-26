@@ -146,6 +146,11 @@ Background children can outlive the parent; the application must retain their
 coordinator. Register `add_completion_cleanup` for resources that must survive
 suspension and remain available until local work drains.
 
+The coordinator keeps each run’s execution handle, coordination, completion,
+cleanup work, and remote observer in one internal record. Handoff releases local
+execution while retaining completion and cleanup tracking. Branch permissions
+remain separate from that record.
+
 The coordinator shares local ownership across views. Each view uses its directory
 to authorize access to saved agents and runs. It rejects competing local owners.
 Closing the coordinator cancels owned runs and waits for execution, saving, and

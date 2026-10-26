@@ -2,7 +2,7 @@
 
 > Executes model and tool steps with explicit cancellation, ownership, and restoration boundaries.
 
-**Verified against:** `bed5f3500f` (2026-10-26)
+**Verified against:** `f9a64de5fe` (2026-10-26)
 **Domain:** core-loop
 **Edition:** CE
 **Owns:** `backend/onyx/agents/`
@@ -59,6 +59,7 @@ See `backend/onyx/agents/README.md` for the public contracts and usage.
 - Completing an older remote run does not replace a newer latest run for that agent.
 - Handoff requires suspended, idle execution and terminal foreground children.
 - A failed handoff save leaves the existing local owner intact.
+- Each tracked run retains completion and cleanup work when handoff releases its local execution.
 - Application directories authorize saved-run access, including cached results across views.
 - Listener failure does not fail execution or storage; event delivery can fail independently.
 - Closing delivery rejects new events; accepted events remain pending through buffered-output flushes.
