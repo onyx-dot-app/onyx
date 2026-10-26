@@ -32,7 +32,7 @@ def completed_tool_call_ids(messages: list[Message], assistant_index: int) -> se
 def messages_for_model(
     messages: list[Message], *, copy_messages: bool = True
 ) -> list[Message]:
-    """Exclude incomplete tool exchanges and unsigned thinking from model history.
+    """Exclude incomplete tool exchanges and non-replayable thinking from model history.
 
     History truncation can drop an assistant tool call while leaving its
     result behind. Providers such as Ollama reject these orphaned results
@@ -60,7 +60,9 @@ def messages_for_model(
             for part in copy.content:
                 if isinstance(part, ToolCall) and part.id not in accepted:
                     continue
-                if isinstance(part, ThinkingContent) and part.blocks:
+                if isinstance(part, ThinkingContent):
+                    if not part.blocks:
+                        continue
                     # A provider sends the signature only after its thinking block ends.
                     blocks = [
                         block
