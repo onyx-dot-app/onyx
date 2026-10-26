@@ -982,6 +982,8 @@ def test_event_work_remains_pending_until_flush_finishes(
         assert child.tracker.wait_idle(2)
         assert parent.tracker.wait_idle(2)
         assert not dispatcher.has_pending_events
+        assert child.failed.is_set() == (failure is not None)
+        assert parent.failed.is_set() == (failure is not None)
         assert flushes[0] == (trigger == "close")
     finally:
         release.set()
@@ -991,7 +993,8 @@ def test_event_work_remains_pending_until_flush_finishes(
         assert finalized.wait(2)
 
 
-def test_run_idle_waits_for_buffered_event_output() -> None:
+@pytest.mark.parametrize("fails", [False, True])
+def test_run_idle_waits_for_buffered_event_output(fails: bool) -> None:
     flushing = threading.Event()
     release = threading.Event()
     finalized = threading.Event()
@@ -1001,10 +1004,12 @@ def test_run_idle_waits_for_buffered_event_output() -> None:
     def flush(final: bool) -> None:
         flushing.set()
         assert release.wait(3)
-        saved.extend(buffered)
-        buffered.clear()
         if final:
             finalized.set()
+        if fails:
+            raise RuntimeError("Sink write failed")
+        saved.extend(buffered)
+        buffered.clear()
 
     dispatcher = concurrency.EventDispatcher(flush=flush)
     agent = Agent(
@@ -1025,7 +1030,9 @@ def test_run_idle_waits_for_buffered_event_output() -> None:
         assert dispatcher.has_pending_events
         release.set()
         assert run.wait_for_idle(2)
-        assert saved and not buffered
+        assert bool(saved) != fails
+        assert bool(buffered) == fails
+        assert run.delivery_failed == fails
         assert not dispatcher.has_pending_events
     finally:
         release.set()
