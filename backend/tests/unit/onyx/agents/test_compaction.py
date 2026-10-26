@@ -76,7 +76,7 @@ from onyx.llm.token_budget import TokenBudget, resolve_token_budget
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.traces import TraceContentMode
 from tests.unit.onyx.agents.checkpoint_storage import CheckpointStorage, SavedCheckpoint
-from tests.unit.onyx.agents.fakes import message_events
+from tests.unit.onyx.agents.fakes import FakeModelClient, message_events
 
 TASK = "Compare the evidence and preserve citations."
 
@@ -138,7 +138,6 @@ class ContextModel(LLM):
         try:
             message = self.invoke(request, context)
         except LLMContextLimitError:
-            yield ThinkingDeltaEvent(content_index=0, text="Discarded attempt")
             yield GenerationErrorEvent(error_message="Too much context")
             raise
         yield from message_events(message)
@@ -1174,3 +1173,39 @@ def test_compaction_identity_survives_suspension_and_resume(
     assert model.generations[-1].messages[0].text == (
         f"Conversation summary:\n{summary}" if summary else TASK
     )
+
+
+def test_context_rejection_after_thinking_does_not_restart_generation() -> None:
+    calls = 0
+
+    class ThinkingClient(FakeModelClient):
+        def stream(
+            self, request: GenerationRequest, context: GenerationContext | None = None
+        ) -> Generator[GenerationEvent, None, None]:
+            nonlocal calls
+            del request, context
+            calls += 1
+            yield ThinkingDeltaEvent(content_index=0, text="Partial reasoning")
+            raise LLMContextLimitError("Provider rejected context")
+
+    agent = Agent(
+        ThinkingClient(lambda *_: AssistantMessage()),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+    )
+    events: list[AgentEvent] = []
+    run = agent.start(
+        background=False,
+        max_steps=1,
+        messages=[UserMessage(content="Question")],
+        on_event=events.append,
+    )
+    with pytest.raises(RunFailed):
+        run.result(2)
+    assert run.wait_for_idle(2)
+    assert calls == 1
+    state = run.snapshot()
+    assert state.steps[0].message.thinking == "Partial reasoning"
+    assert len([e for e in events if e.type == "message_start"]) == 1
+    ends = [e for e in events if e.type == "message_end"]
+    assert len(ends) == 1
+    assert ends[0].message == state.steps[0].message

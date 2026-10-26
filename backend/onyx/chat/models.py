@@ -14,6 +14,7 @@ from pydantic import (
 
 from onyx.agents.models import (
     CompactionCheckpoint,
+    CompactionMetadata,
     RunFailure,
     RunStatus,
     StepRecord,
@@ -27,6 +28,7 @@ from onyx.db.enums import IncognitoRecordMode
 from onyx.db.memory import UserMemoryContext
 from onyx.deep_research.models import ResearchConfiguration
 from onyx.file_store.models import (
+    ChatLoadedFile,
     ExtractedContextFiles,
     FileDescriptor,
     FileToolMetadata,
@@ -59,6 +61,16 @@ from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultTyp
 from onyx.tools.tool_implementations.search.models import SearchToolState
 
 MAX_DISCOVERED_AGENTS = 128
+
+
+class PromptMetadata(CompactionMetadata):
+    token_count: int | None = None
+    image_files: list[ChatLoadedFile] | None = None
+    image_token_count: int = 0
+    should_cache: bool = False
+    file_id: str | None = None
+    is_reminder: bool = False
+    omit_tool_result_content: bool = False
 
 
 class CitationMode(str, Enum):

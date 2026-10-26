@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping
 
-from pydantic import BaseModel, JsonValue, TypeAdapter
+from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.models import MessageRendering, PresentationMode
@@ -13,6 +13,7 @@ from onyx.coding_agent.tool_definitions import (
     CODING_AGENT_TOOL_NAME,
     GENERATE_ANSWER_TOOL_NAME,
 )
+from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.deep_research.tool_definitions import (
@@ -213,15 +214,19 @@ class MessageRenderer:
         if self.citation_processor is None:
             return self._append(text or "")
         result = []
+        citations = []
         for value in self.citation_processor.process_token(text):
             if isinstance(value, str):
                 result.extend(self._append(value))
             else:
                 self.citations.append(value)
-                if self._answer_placement is not None:
-                    result.append(
-                        packets.Packet(placement=self._answer_placement, obj=value)
-                    )
+                citations.append(value)
+        # Citation metadata can precede the first answer text in the processor.
+        if self._answer_placement is not None:
+            result.extend(
+                packets.Packet(placement=self._answer_placement, obj=value)
+                for value in citations
+            )
         return result
 
     def tool_placement(self, call_id: str) -> Placement:
@@ -375,51 +380,61 @@ class ToolRenderer:
     def start(self) -> list[packets.Packet]:
         name = self.call.name
         args = tool_arguments_for_display(self.call)
-        objects: list[packets.PacketObj]
-        if name in {SearchTool.NAME, WebSearchTool.NAME}:
-            objects = [
-                packets.SearchToolStart(is_internet_search=name == WebSearchTool.NAME)
-            ]
-            queries = _STRINGS.validate_python(args.get("queries", []))
-            self._queries.update(queries)
-            objects.append(packets.SearchToolQueriesDelta(queries=queries))
-        elif name == OpenURLTool.NAME:
-            objects = [
-                packets.OpenUrlStart(),
-                packets.OpenUrlUrls(
-                    urls=_STRINGS.validate_python(args.get("urls", []))
-                ),
-            ]
-        elif name == PythonTool.NAME:
-            objects = [
-                packets.PythonToolStart(
-                    code=_STRING.validate_python(args.get("code", ""))
-                )
-            ]
-        elif name == BASH_TOOL_NAME:
-            objects = [
-                packets.BashToolStart(cmd=_STRING.validate_python(args.get("cmd", "")))
-            ]
-        elif name == FileReaderTool.NAME:
-            objects = [packets.FileReaderStart()]
-        elif name == MemoryTool.NAME:
-            objects = [packets.MemoryToolStart()]
-        elif name == ImageGenerationTool.NAME:
-            objects = [packets.ImageGenerationToolStart()]
-        elif name == RESEARCH_AGENT_TOOL_NAME:
-            objects = [
-                packets.ResearchAgentStart(
-                    research_task=_STRING.validate_python(args.get("task", ""))
-                )
-            ]
-        elif name == CODING_AGENT_TOOL_NAME:
-            objects = [
-                packets.CodingAgentStart(
-                    query=_STRING.validate_python(args.get("query", "")),
-                    repo=_STRING.validate_python(args.get("github_repo", "")),
-                )
-            ]
-        else:
+        objects: list[packets.PacketObj] = []
+        try:
+            if name in {SearchTool.NAME, WebSearchTool.NAME}:
+                objects = [
+                    packets.SearchToolStart(
+                        is_internet_search=name == WebSearchTool.NAME
+                    )
+                ]
+                queries = _STRINGS.validate_python(args.get("queries", []))
+                self._queries.update(queries)
+                objects.append(packets.SearchToolQueriesDelta(queries=queries))
+            elif name == OpenURLTool.NAME:
+                objects = [
+                    packets.OpenUrlStart(),
+                    packets.OpenUrlUrls(
+                        urls=_STRINGS.validate_python(args.get("urls", []))
+                    ),
+                ]
+            elif name == PythonTool.NAME:
+                objects = [
+                    packets.PythonToolStart(
+                        code=_STRING.validate_python(args.get("code", ""))
+                    )
+                ]
+            elif name == BASH_TOOL_NAME:
+                objects = [
+                    packets.BashToolStart(
+                        cmd=_STRING.validate_python(args.get("cmd", ""))
+                    )
+                ]
+            elif name == FileReaderTool.NAME:
+                objects = [packets.FileReaderStart()]
+            elif name == MemoryTool.NAME:
+                objects = [packets.MemoryToolStart()]
+            elif name == ImageGenerationTool.NAME:
+                objects = [packets.ImageGenerationToolStart()]
+            elif name == RESEARCH_AGENT_TOOL_NAME:
+                objects = [
+                    packets.ResearchAgentStart(
+                        research_task=_STRING.validate_python(args.get("task", ""))
+                    )
+                ]
+            elif name == CODING_AGENT_TOOL_NAME:
+                objects = [
+                    packets.CodingAgentStart(
+                        query=_STRING.validate_python(args.get("query", "")),
+                        repo=_STRING.validate_python(args.get("github_repo", "")),
+                    )
+                ]
+        except ValidationError:
+            objects = []
+            logger.debug(
+                "Tool arguments cannot use the specialized display", exc_info=True
+            )
+        if not objects:
             objects = [
                 packets.CustomToolStart(tool_name=name, tool_id=self.tool_id),
                 packets.CustomToolArgs(
@@ -429,15 +444,17 @@ class ToolRenderer:
                     },
                 ),
             ]
-        objects.append(
-            packets.ToolCallDebug(
-                tool_call_id=self.call.id,
-                tool_name=name,
-                tool_args={
-                    key: value for key, value in args.items() if key != REQUEST_BODY
-                },
+        if INTEGRATION_TESTS_MODE:
+            objects.insert(
+                0,
+                packets.ToolCallDebug(
+                    tool_call_id=self.call.id,
+                    tool_name=name,
+                    tool_args={
+                        key: value for key, value in args.items() if key != REQUEST_BODY
+                    },
+                ),
             )
-        )
         return [packets.Packet(placement=self.placement, obj=obj) for obj in objects]
 
     def update(

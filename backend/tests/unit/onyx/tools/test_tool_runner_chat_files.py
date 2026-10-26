@@ -9,9 +9,9 @@ from onyx.tools.models import ChatFile
 class TestChatFileConversion:
     """Tests for ChatLoadedFile to ChatFile conversion."""
 
-    def test_convert_loaded_files_to_chat_files(self) -> None:
+    def testconvert_loaded_files_to_chat_files(self) -> None:
         """Test conversion of ChatLoadedFile to ChatFile."""
-        from onyx.chat.files import _convert_loaded_files_to_chat_files
+        from onyx.chat.files import convert_loaded_files_to_chat_files
         from onyx.chat.prompt_formatting import ChatLoadedFile
         from onyx.file_store.models import ChatFileType
 
@@ -36,7 +36,7 @@ class TestChatFileConversion:
         ]
 
         # Convert to ChatFile
-        chat_files = _convert_loaded_files_to_chat_files(loaded_files)
+        chat_files = convert_loaded_files_to_chat_files(loaded_files)
 
         assert len(chat_files) == 2
         assert chat_files[0].filename == "document.pdf"
@@ -53,7 +53,7 @@ class TestChatFileConversion:
         empty body fine (sha256 of b"" + empty upload; the LLM sees the empty
         result and reacts), so passing zero-byte files through is intentional.
         """
-        from onyx.chat.files import _convert_loaded_files_to_chat_files
+        from onyx.chat.files import convert_loaded_files_to_chat_files
         from onyx.chat.prompt_formatting import ChatLoadedFile
         from onyx.file_store.models import ChatFileType
 
@@ -76,7 +76,7 @@ class TestChatFileConversion:
             ),
         ]
 
-        chat_files = _convert_loaded_files_to_chat_files(loaded_files)
+        chat_files = convert_loaded_files_to_chat_files(loaded_files)
 
         # Both files reach PythonTool; the empty one carries content=b"".
         assert len(chat_files) == 2
@@ -87,7 +87,7 @@ class TestChatFileConversion:
 
     def test_convert_files_with_missing_filename_uses_fallback(self) -> None:
         """Test that files without filename use file_id as fallback."""
-        from onyx.chat.files import _convert_loaded_files_to_chat_files
+        from onyx.chat.files import convert_loaded_files_to_chat_files
         from onyx.chat.prompt_formatting import ChatLoadedFile
         from onyx.file_store.models import ChatFileType
 
@@ -102,22 +102,22 @@ class TestChatFileConversion:
             ),
         ]
 
-        chat_files = _convert_loaded_files_to_chat_files(loaded_files)
+        chat_files = convert_loaded_files_to_chat_files(loaded_files)
 
         assert len(chat_files) == 1
         assert chat_files[0].filename == "file_abc123"
 
     def test_convert_empty_list_returns_empty(self) -> None:
         """Test that empty input returns empty output."""
-        from onyx.chat.files import _convert_loaded_files_to_chat_files
+        from onyx.chat.files import convert_loaded_files_to_chat_files
 
-        chat_files = _convert_loaded_files_to_chat_files([])
+        chat_files = convert_loaded_files_to_chat_files([])
         assert chat_files == []
 
     def test_context_tabular_user_files_loaded_for_tools(self) -> None:
         from uuid import uuid4
 
-        from onyx.chat.files import _load_context_user_files_for_tools
+        from onyx.chat.files import load_context_user_files_for_tools
 
         user_file_id = uuid4()
         user_file = UserFileMetadata(
@@ -133,7 +133,7 @@ class TestChatFileConversion:
             mock_file_store = mock_file_store_factory.return_value
             mock_file_store.read_file.return_value.read.return_value = b"raw xlsx bytes"
 
-            chat_files = _load_context_user_files_for_tools(
+            chat_files = load_context_user_files_for_tools(
                 [user_file],
                 existing_filenames=set(),
             )
@@ -158,7 +158,7 @@ class TestChatFileConversion:
         try/except + continue."""
         from uuid import uuid4
 
-        from onyx.chat.files import _load_context_user_files_for_tools
+        from onyx.chat.files import load_context_user_files_for_tools
 
         user_file = UserFileMetadata(
             id=uuid4(),
@@ -172,7 +172,7 @@ class TestChatFileConversion:
             mock_file_store = mock_file_store_factory.return_value
             mock_file_store.read_file.side_effect = FileNotFoundError("gone")
 
-            chat_files = _load_context_user_files_for_tools(
+            chat_files = load_context_user_files_for_tools(
                 [user_file], existing_filenames=set()
             )
 
@@ -183,7 +183,7 @@ class TestChatFileConversion:
     def test_context_non_tabular_user_files_not_loaded_for_tools(self) -> None:
         from uuid import uuid4
 
-        from onyx.chat.files import _load_context_user_files_for_tools
+        from onyx.chat.files import load_context_user_files_for_tools
 
         user_file = UserFileMetadata(
             id=uuid4(),
@@ -194,7 +194,7 @@ class TestChatFileConversion:
         )
 
         with patch("onyx.chat.files.get_default_file_store") as mock_file_store_factory:
-            chat_files = _load_context_user_files_for_tools(
+            chat_files = load_context_user_files_for_tools(
                 [user_file],
                 existing_filenames=set(),
             )
@@ -206,7 +206,7 @@ class TestChatFileConversion:
         # Avoid overwriting an existing staged chat attachment with the same name.
         from uuid import uuid4
 
-        from onyx.chat.files import _load_context_user_files_for_tools
+        from onyx.chat.files import load_context_user_files_for_tools
 
         user_file_id = uuid4()
         user_file = UserFileMetadata(
@@ -220,7 +220,7 @@ class TestChatFileConversion:
             mock_file_store = mock_file_store_factory.return_value
             mock_file_store.read_file.return_value.read.return_value = b"a,b\n1,2"
 
-            chat_files = _load_context_user_files_for_tools(
+            chat_files = load_context_user_files_for_tools(
                 [user_file],
                 existing_filenames={"data.csv"},
             )

@@ -234,13 +234,16 @@ class AgentCoordinator:
                             raise ValueError(
                                 "Remote run returned an invalid terminal result"
                             )
+                        completion_result = result.model_copy(deep=True)
                         with self._state.lock:
                             if stop.is_set() or future.done():
                                 return
+                            # Reserve publication before releasing the coordinator lock.
+                            stop.set()
                             latest = self._state.latest.get(info.id)
                             if latest is not None and latest.run_id == run_id:
                                 self._state.latest[info.id] = result
-                        future.set_result(result.model_copy(deep=True))
+                        future.set_result(completion_result)
                         return
                 except Exception:
                     logger.exception("Could not read remote run result; retrying")
@@ -283,28 +286,60 @@ class AgentCoordinator:
         return self.read_visible_run(run_id, parent_id).status
 
     def restore_completed(self, snapshot: RunState) -> Run:
-        """Retain an archived terminal result without executing or saving it again."""
-        restored = Run.from_snapshot(snapshot)
-        with self._state.lock:
-            self.check_open()
-            if restored.agent_id not in self._state.registrations:
-                raise ValueError("Completed run requires a registered agent")
-            tracked = self._state.tracked_runs.get(restored.id)
-            existing = tracked.execution if tracked is not None else None
-            if existing is None:
+        """Retain an archived terminal result and notify existing dependency waiters."""
+        saved = snapshot.model_copy(deep=True)
+        restored = Run.from_snapshot(saved)
+        deadline = time.monotonic() + OPERATION_TIMEOUT_SECONDS
+        while True:
+            with self._state.lock:
+                self.check_open()
+                if restored.agent_id not in self._state.registrations:
+                    raise ValueError("Completed run requires a registered agent")
+                tracked = self._state.tracked_runs.get(restored.id)
                 if tracked is None:
                     tracked = _TrackedRun()
                     self._state.tracked_runs[restored.id] = tracked
-                else:
-                    tracked.completion = Future()
-                tracked.execution = restored
-                tracked.restored_from_history = True
-                tracked.completion.set_result(snapshot.model_copy(deep=True))
-                self._visible_run_ids.add(restored.id)
-                return restored
-        if not existing.is_done or existing.snapshot() != snapshot:
-            raise RuntimeError("Run identity already has an execution owner")
-        return existing
+                existing = tracked.execution
+                completion = tracked.completion
+                observer = tracked.observer_stop
+                observer_is_publishing = (
+                    existing is None
+                    and observer is not None
+                    and observer.is_set()
+                    and not completion.done()
+                )
+                if not observer_is_publishing:
+                    if existing is not None:
+                        break
+                    if completion.done():
+                        if completion.exception() is not None:
+                            completion = Future()
+                            completion.set_running_or_notify_cancel()
+                            tracked.completion = completion
+                        elif completion.result() != saved:
+                            raise RuntimeError(
+                                "Run identity already has a different completion"
+                            )
+                    if observer is not None:
+                        observer.set()
+                    tracked.execution = restored
+                    tracked.restored_from_history = True
+                    latest = self._state.latest.get(restored.agent_id)
+                    if latest is not None and latest.run_id == restored.id:
+                        self._state.latest[restored.agent_id] = saved.model_copy(
+                            deep=True
+                        )
+                    self._visible_run_ids.add(restored.id)
+                    break
+            # An observer that selected an outcome publishes without the coordinator lock.
+            completion.exception(timeout=max(0, deadline - time.monotonic()))
+        if existing is not None:
+            if not existing.is_done or existing.snapshot() != saved:
+                raise RuntimeError("Run identity already has an execution owner")
+            return existing
+        if not completion.done():
+            completion.set_result(saved)
+        return restored
 
     def completion(self, run_id: str) -> Future[RunState]:
         """Complete after persistence; consumers must not mutate the shared result."""
@@ -1043,6 +1078,8 @@ class RunCoordination:
                         "Child execution did not publish a terminal record after cancellation"
                     ) from error
         finally:
+            # Cancelling a suspended child can start a new worker before cleanup.
+            self.coordinator.track_child_work(self.run, child_run_ids)
             self._links.close()
         if failure is not None:
             raise failure
