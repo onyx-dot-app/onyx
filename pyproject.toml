@@ -69,7 +69,7 @@ backend = [
     # backend/onyx/file_processing/extract_file_text.py and what impacts
     # updating might have on this behavior.
     "markitdown[pdf, docx, pptx, xlsx, xls]==0.1.7",
-    "mcp[cli]==1.28.1",
+    "mcp[cli]==1.30.0",
     "msal==1.37.0",
     "msoffcrypto-tool==6.0.0",
     "Office365-REST-Python-Client==2.6.2",
