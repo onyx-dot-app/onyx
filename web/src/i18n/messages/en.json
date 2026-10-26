@@ -4883,11 +4883,11 @@
             },
             "include_patterns": {
               "label": "Include patterns",
-              "description": "Glob patterns; only matching files are indexed (e.g. reports/**). Optional."
+              "description": "Regular expressions; only matching files are indexed (e.g. report-2024 or ~$). Optional."
             },
             "exclude_patterns": {
               "label": "Exclude patterns",
-              "description": "Glob patterns for files to skip (e.g. **/drafts/*). Optional."
+              "description": "Regular expressions for files to skip (e.g. -draft$ or ~$). Optional."
             },
             "exclude_hidden": {
               "label": "Exclude hidden files",

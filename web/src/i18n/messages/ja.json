@@ -1513,7 +1513,7 @@
           "description": "クエリ時に Slack を検索"
         },
         "directory": {
-          "description": "Index files from a directory mounted on the server"
+          "description": "サーバーにマウントされたディレクトリからファイルをインデックスします"
         }
       }
     },
@@ -4866,7 +4866,7 @@
           }
         },
         "directory": {
-          "description": "Index documents from a folder mounted on the Onyx server.",
+          "description": "Onyx サーバーにマウントされたフォルダからドキュメントをインデックスします。",
           "fields": {
             "root_directory": {
               "label": "Root directory",
@@ -4883,11 +4883,11 @@
             },
             "include_patterns": {
               "label": "Include patterns",
-              "description": "Glob patterns; only matching files are indexed (e.g. reports/**). Optional."
+              "description": "正規表現。一致するファイルのみがインデックスされます（例: report-2024、~$）。任意。"
             },
             "exclude_patterns": {
               "label": "Exclude patterns",
-              "description": "Glob patterns for files to skip (e.g. **/drafts/*). Optional."
+              "description": "スキップするファイルを指定する正規表現（例: -draft$、~$）。任意。"
             },
             "exclude_hidden": {
               "label": "Exclude hidden files",

@@ -4883,11 +4883,11 @@
             },
             "include_patterns": {
               "label": "Einschluss-Muster",
-              "description": "Reguläre Ausdrücke; nur passende Dateien werden indexiert (z. B. report-2024 oder ~$). Optional."
+              "description": "Reguläre Ausdrücke; es werden nur passende Dateien indexiert (z. B. report-2024 oder ~$). Optional."
             },
             "exclude_patterns": {
               "label": "Ausschluss-Muster",
-              "description": "Reguläre Ausdrücke für Dateien, die übersprungen werden (z. B. -draft$ oder ~$). Optional."
+              "description": "Reguläre Ausdrücke für Dateien, die übersprungen werden sollen (z. B. -draft$ oder ~$). Optional."
             },
             "exclude_hidden": {
               "label": "Versteckte Dateien ausschließen",

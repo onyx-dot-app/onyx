@@ -1513,7 +1513,7 @@
           "description": "查询时搜索 Slack"
         },
         "directory": {
-          "description": "Index files from a directory mounted on the server"
+          "description": "对服务器上挂载的目录中的文件建立索引"
         }
       }
     },
@@ -4866,7 +4866,7 @@
           }
         },
         "directory": {
-          "description": "Index documents from a folder mounted on the Onyx server.",
+          "description": "对挂载在 Onyx 服务器上的文件夹中的文档建立索引。",
           "fields": {
             "root_directory": {
               "label": "Root directory",
@@ -4883,11 +4883,11 @@
             },
             "include_patterns": {
               "label": "Include patterns",
-              "description": "Glob patterns; only matching files are indexed (e.g. reports/**). Optional."
+              "description": "正则表达式；仅索引匹配的文件（例如 report-2024 或 ~$）。可选。"
             },
             "exclude_patterns": {
               "label": "Exclude patterns",
-              "description": "Glob patterns for files to skip (e.g. **/drafts/*). Optional."
+              "description": "用于跳过文件的正则表达式（例如 -draft$ 或 ~$）。可选。"
             },
             "exclude_hidden": {
               "label": "Exclude hidden files",

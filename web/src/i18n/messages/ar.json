@@ -1513,7 +1513,7 @@
           "description": "البحث في Slack عند الاستعلام"
         },
         "directory": {
-          "description": "Index files from a directory mounted on the server"
+          "description": "فهرسة الملفات من دليل مُثبَّت على الخادم"
         }
       }
     },
@@ -4866,7 +4866,7 @@
           }
         },
         "directory": {
-          "description": "Index documents from a folder mounted on the Onyx server.",
+          "description": "يفهرس المستندات من مجلد مُثبَّت على خادم Onyx.",
           "fields": {
             "root_directory": {
               "label": "Root directory",
@@ -4883,11 +4883,11 @@
             },
             "include_patterns": {
               "label": "Include patterns",
-              "description": "Regular expressions; only matching files are indexed (e.g. report-2024 or ~$). Optional."
+              "description": "تعبيرات نمطية؛ تتم فهرسة الملفات المطابقة فقط (مثل report-2024 أو ~$). اختياري."
             },
             "exclude_patterns": {
               "label": "Exclude patterns",
-              "description": "Regular expressions for files to skip (e.g. -draft$ or ~$). Optional."
+              "description": "تعبيرات نمطية للملفات التي يتم تخطيها (مثل -draft$ أو ~$). اختياري."
             },
             "exclude_hidden": {
               "label": "Exclude hidden files",

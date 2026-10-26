@@ -1513,7 +1513,7 @@
           "description": "질의 시 Slack 검색"
         },
         "directory": {
-          "description": "Index files from a directory mounted on the server"
+          "description": "서버에 마운트된 디렉터리에서 파일을 인덱싱합니다"
         }
       }
     },
@@ -4866,7 +4866,7 @@
           }
         },
         "directory": {
-          "description": "Index documents from a folder mounted on the Onyx server.",
+          "description": "Onyx 서버에 마운트된 폴더의 문서를 인덱싱합니다.",
           "fields": {
             "root_directory": {
               "label": "Root directory",
@@ -4883,11 +4883,11 @@
             },
             "include_patterns": {
               "label": "Include patterns",
-              "description": "Glob patterns; only matching files are indexed (e.g. reports/**). Optional."
+              "description": "정규 표현식; 일치하는 파일만 인덱싱됩니다(예: report-2024 또는 ~$). 선택 사항."
             },
             "exclude_patterns": {
               "label": "Exclude patterns",
-              "description": "Glob patterns for files to skip (e.g. **/drafts/*). Optional."
+              "description": "건너뛸 파일에 대한 정규 표현식(예: -draft$ 또는 ~$). 선택 사항."
             },
             "exclude_hidden": {
               "label": "Exclude hidden files",

@@ -1513,7 +1513,7 @@
           "description": "Rechercher dans Slack à la requête"
         },
         "directory": {
-          "description": "Index files from a directory mounted on the server"
+          "description": "Indexe les fichiers depuis un répertoire monté sur le serveur"
         }
       }
     },
@@ -4866,7 +4866,7 @@
           }
         },
         "directory": {
-          "description": "Index documents from a folder mounted on the Onyx server.",
+          "description": "Indexe les documents depuis un dossier monté sur le serveur Onyx.",
           "fields": {
             "root_directory": {
               "label": "Root directory",
@@ -4883,11 +4883,11 @@
             },
             "include_patterns": {
               "label": "Include patterns",
-              "description": "Glob patterns; only matching files are indexed (e.g. reports/**). Optional."
+              "description": "Expressions régulières ; seuls les fichiers correspondants sont indexés (ex. report-2024 ou ~$). Optionnel."
             },
             "exclude_patterns": {
               "label": "Exclude patterns",
-              "description": "Glob patterns for files to skip (e.g. **/drafts/*). Optional."
+              "description": "Expressions régulières pour les fichiers à ignorer (ex. -draft$ ou ~$). Optionnel."
             },
             "exclude_hidden": {
               "label": "Exclude hidden files",

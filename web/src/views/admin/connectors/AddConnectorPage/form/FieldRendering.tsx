@@ -372,10 +372,17 @@ export const RenderField: FC<RenderFieldProps> = ({
   // Labels/descriptions may be i18n message keys (e.g. "connectors.directory.*");
   // resolve those against the connectorsList catalog and pass everything else
   // through unchanged.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const translateIfKey = (value: any): any =>
-    typeof value === "string" && value.startsWith("connectors.")
-      ? (t as unknown as (key: string) => string)(value)
+  // SAFETY: a value starting with "connectors." is a key of the
+  // `admin.connectorsList` catalog; `connectorCopy.test.ts` checks each one
+  // against en.json.
+  const isConnectorMessageKey = (
+    value: string,
+  ): value is Parameters<typeof t>[0] => value.startsWith("connectors.");
+  const translateIfKey = (
+    value: string | undefined,
+  ): string | undefined =>
+    typeof value === "string" && isConnectorMessageKey(value)
+      ? t(value)
       : value;
 
   const label = translateIfKey(
