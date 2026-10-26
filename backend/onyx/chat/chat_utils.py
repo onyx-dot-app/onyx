@@ -16,8 +16,8 @@ from onyx.chat.incognito import (
     resolve_incognito_record_mode,
 )
 from onyx.chat.incognito_context import incognito_context_available
-from onyx.chat.models import ChatHistoryMessage, ChatHistoryResult
-from onyx.chat.prompt_formatting import PromptMetadata, count_message_tokens
+from onyx.chat.models import ChatHistoryMessage, ChatHistoryResult, PromptMetadata
+from onyx.chat.prompt_formatting import count_message_tokens
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.db.chat import (
     create_chat_session,

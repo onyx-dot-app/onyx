@@ -10,6 +10,7 @@ import pytest
 from pydantic import BaseModel
 from sqlalchemy import delete, event, func, inspect, select, update
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.unitofwork import UOWTransaction
 
 from onyx.agents.events import (
     MessageEndEvent,
@@ -85,6 +86,7 @@ from onyx.db.chat_subagents import (
 )
 from onyx.db.enums import IncognitoRecordMode
 from onyx.db.models import ChatMessage, ChatResponseItem, ChatSession, Tool
+from onyx.db.models import SearchDoc as StoredSearchDoc
 from onyx.db.models import ToolCall as StoredToolCall
 from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.file_store.models import ChatFileType, FileDescriptor
@@ -181,10 +183,25 @@ def conversation(db_session: Session) -> Generator[ChatSession, None, None]:
     db_session.add(session)
     db_session.flush()
     session_id = session.id
-    yield session
-    db_session.rollback()
-    db_session.execute(delete(ChatSession).where(ChatSession.id == session_id))
-    db_session.commit()
+    document_ids: set[int] = set()
+
+    def track_documents(session: Session, _context: UOWTransaction) -> None:
+        document_ids.update(
+            row.id for row in session.new if isinstance(row, StoredSearchDoc)
+        )
+
+    event.listen(db_session, "after_flush", track_documents)
+    try:
+        yield session
+    finally:
+        event.remove(db_session, "after_flush", track_documents)
+        db_session.rollback()
+        db_session.execute(delete(ChatSession).where(ChatSession.id == session_id))
+        if document_ids:
+            db_session.execute(
+                delete(StoredSearchDoc).where(StoredSearchDoc.id.in_(document_ids))
+            )
+        db_session.commit()
 
 
 @pytest.fixture
@@ -2233,3 +2250,41 @@ def test_response_store_rejects_wrong_session_or_recording_mode_before_writes(
     assert row.message == ""
     assert row.error is None
     assert not row.response_items
+
+
+@pytest.mark.parametrize("reserve_child", [False, True])
+def test_content_free_sessions_reject_incremental_content_writes(
+    db_session: Session, conversation: ChatSession, reserve_child: bool
+) -> None:
+    conversation.incognito_record_mode = IncognitoRecordMode.USAGE_ONLY
+    response = _response(db_session, conversation, text="")
+    db_session.commit()
+    record = _record(response, answer="must not be stored")
+    child_id = uuid4()
+    with pytest.raises(ValueError, match="Content-free"):
+        if reserve_child:
+            reserve_child_response__no_commit(
+                db_session,
+                response.id,
+                agent=AgentInfo(
+                    id=str(child_id),
+                    path="/root/child",
+                    parent_id=str(conversation.id),
+                    description="private",
+                    restoration_config=None,
+                ),
+                instruction=UserMessage(content="private instruction"),
+                previous_response_id=None,
+                parent_response_id=response.id,
+                parent_message_id="message",
+                parent_tool_call_id="call",
+            )
+        else:
+            save_response_record__no_commit(db_session, response.id, record)
+    db_session.commit()
+    db_session.expire_all()
+    assert response.message == ""
+    assert not response.response_items
+    assert not response.tool_calls
+    assert response.response_status is None
+    assert db_session.get(ChatSession, child_id) is None

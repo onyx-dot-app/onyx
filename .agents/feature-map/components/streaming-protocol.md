@@ -345,7 +345,9 @@ and `web/tests/e2e/utils/chatMock.ts` (`buildMockStream`, `mockChatEndpoint`) bu
 and parse mock NDJSON bodies matching this exact format; use them when a test
 needs to assert on packet ordering or a new packet type without a real LLM call.
 
-`backend/onyx/chat/renderer.py:ToolRenderer.start` emits `ToolCallDebug` packets.
+`backend/onyx/chat/renderer.py:ToolRenderer.start` emits `ToolCallDebug` only in
+integration-test mode, before the start packet. Debug packets must not close a
+coding-agent bash step before its output arrives.
 Tests can use them to assert tool names and arguments without an environment flag.
 
 ### Manual reproduction
@@ -393,27 +395,11 @@ Tests can use them to assert tool names and arguments without an environment fla
   `blocks` comes back empty, not stop at the first `done=True`.
 
 
-### Response rendering safeguards
+### Tool rendering and replay
 
-Malformed tool arguments use a generic card so saved errors and later answers can
-still render. Replay hides the configured thinking tool. Answers that start with a
-citation retain its metadata. Interrupted responses retain citations only for the
-selected answer text. Tool debug packets appear only in integration-test mode,
-before the tool start packet.
+Malformed model arguments use a generic tool card. They do not prevent the saved
+error or later answer from loading. Tools retain their existing error-display
+policy; a model-facing error alone does not request a browser error marker.
 
-Generic model-facing error text is not displayed. Explicit public error details and
-structured tool output retain their existing rendering.
-Coding-child reasoning uses `CodingAgentThinkingDelta`, including native thinking
-and configured thinking-tool output. Replay assigns sections in accepted content
-order. Answer sections close before intervening thinking or tool calls; later answer text starts a new section.
-Only consecutive top-level tool calls share tabs. Text or reasoning between calls starts a new section. Citation removal also applies to citation-only and interrupted answers.
-Generated-message metadata supplies saved source references, including previously
-retrieved sources that the current response did not retrieve again.
-
-When a run ends, unfinished tool cards receive the same start and end packets as
-saved replay. This closes Python code-writing indicators when execution stops
-before a tool starts. Completed tool cards do not emit another end packet.
-Tool-card ownership includes the run ID, so child completion does not close a
-parent's cards. Completed coding tools emit final-answer packets without repeating
-the answer as thinking. Research reports emit once, whether supplied through
-progress or directly at completion.
+Live and saved answers retain citation metadata when the answer starts with a
+citation. Saved history hides the configured thinking tool, just as live output does.

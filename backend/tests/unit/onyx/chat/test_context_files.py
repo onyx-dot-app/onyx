@@ -13,8 +13,8 @@ from uuid import UUID, uuid4
 import pytest
 
 from onyx.chat.files import (
-    _collect_available_file_ids,
     _get_or_extract_plaintext,
+    collect_available_file_ids,
     determine_search_params,
     extract_context_files,
     load_chat_files,
@@ -186,7 +186,7 @@ class TestResolveContextUserFiles:
                 persona, 99, uuid4(), MagicMock()
             )
         assert selected == [shared_file, persona_file]
-        available: AvailableFiles = _collect_available_file_ids(
+        available: AvailableFiles = collect_available_file_ids(
             history, capture_user_file_metadata(selected)
         )
         assert set(available.user_file_ids) == {shared_file.id, persona_file.id}
@@ -696,9 +696,7 @@ def test_file_reader_uses_the_same_combined_file_scope_as_prompt() -> None:
         "onyx.chat.files.get_user_files_from_project", return_value=[project_file]
     ) as project_files:
         selected = resolve_context_user_files(persona, 99, uuid4(), MagicMock())
-        available = _collect_available_file_ids(
-            [], capture_user_file_metadata(selected)
-        )
+        available = collect_available_file_ids([], capture_user_file_metadata(selected))
     assert set(available.user_file_ids) == {persona_file.id, project_file.id}
     project_files.assert_called_once()
 

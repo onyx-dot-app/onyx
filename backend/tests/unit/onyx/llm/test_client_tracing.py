@@ -6,7 +6,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from onyx.chat import prompt_formatting
-from onyx.chat.prompt_formatting import PromptMetadata, prepare_model_messages
+from onyx.chat.models import PromptMetadata
+from onyx.chat.prompt_formatting import prepare_model_messages
 from onyx.file_store.models import ChatFileType, ChatLoadedFile
 from onyx.llm import model_request
 from onyx.llm.interfaces import GenerationContext

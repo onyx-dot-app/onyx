@@ -20,10 +20,10 @@ from onyx.chat.models import (
     CheckpointBinding,
     MessagePayload,
     MessageRendering,
+    PromptMetadata,
     ResponseCheckpoint,
     ResponseRecord,
 )
-from onyx.chat.prompt_formatting import PromptMetadata
 from onyx.chat.response import response_snapshot
 from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.context.search.models import SearchDocsResponse

@@ -22,7 +22,8 @@ from onyx.agents.models import (
 )
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolInvocation
-from onyx.chat.prompt_formatting import PromptMetadata, prepare_model_messages
+from onyx.chat.models import PromptMetadata
+from onyx.chat.prompt_formatting import prepare_model_messages
 from onyx.chat.response import response_record
 from onyx.file_store.models import ChatFileType, ChatLoadedFile
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal

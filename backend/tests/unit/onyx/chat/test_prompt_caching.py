@@ -2,8 +2,8 @@
 
 import pytest
 
-from onyx.chat.models import PersonaPromptConfig
-from onyx.chat.prompt_formatting import PromptMetadata, prompt_metadata
+from onyx.chat.models import PersonaPromptConfig, PromptMetadata
+from onyx.chat.prompt_formatting import prompt_metadata
 from onyx.chat.prompt_utils import build_chat_prompt, prepare_prompt
 from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
 from onyx.llm.models import (

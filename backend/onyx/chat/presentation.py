@@ -316,7 +316,7 @@ def _project_response_display(
                 update={
                     "answer": renderer.answer,
                     "reasoning": renderer.reasoning,
-                    "citation_info": response.citation_info + renderer.citations,
+                    "citation_info": renderer.citations,
                     "top_documents": renderer.documents or response.top_documents,
                     "pre_answer_processing_time": setting.pre_answer_seconds
                     if renderer.answer_started

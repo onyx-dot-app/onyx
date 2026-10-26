@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 
-from onyx.chat.prompt_formatting import PromptMetadata, prepare_model_messages
+from onyx.chat.models import PromptMetadata
+from onyx.chat.prompt_formatting import prepare_model_messages
 from onyx.configs.constants import MessageType
 from onyx.db.models import ChatMessage
 from onyx.llm.interfaces import LLM, GenerationContext
