@@ -637,6 +637,8 @@ class ToolRenderer:
             output = (
                 self.update(result.details, result.text) if result is not None else []
             )
+        # Only explicitly public failures become error packets. Other errors allow
+        # model recovery and can contain internal execution details.
         if result is not None and isinstance(result.details, ToolExecutionError):
             output.append(
                 packets.Packet(

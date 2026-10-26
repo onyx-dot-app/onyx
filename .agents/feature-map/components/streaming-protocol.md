@@ -73,6 +73,14 @@ failure can therefore leave a complete response record available for saving.
 `chat/response_models.py` separates response content from per-message rendering
 settings, such as citation display and research phase.
 
+The detached response record is an in-memory aggregate. Database codecs restore
+concrete tool-result types before replay. It is not a standalone JSON storage schema.
+The response owner classifies execution failures and reports them separately.
+Session reload carries the saved message error alongside rendered packets.
+`OverallStop` ends rendering; it does not assert that execution succeeded.
+Only tool failures explicitly marked for public display produce error packets.
+Other tool errors remain available to the model for recovery.
+
 These APIs prepare the shared runtime transition. Production chat, research,
 coding, and session reload still use their existing execution and loading paths.
 

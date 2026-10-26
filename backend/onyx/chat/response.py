@@ -44,7 +44,11 @@ def message_thinking(message: AssistantMessage, think_tool: str | None = None) -
 def response_record(
     snapshot: RunState, registrations: Sequence[AgentInfo] = ()
 ) -> ResponseRecord:
-    """Detach accepted content before optional artifact and display processing."""
+    """Detach accepted content before optional artifact and display processing.
+
+    This aggregate retains concrete result objects in memory. Storage owns their
+    typed encoding; the aggregate is not a standalone JSON persistence schema.
+    """
     metadata = {info.id: info for info in registrations}
 
     def capture(node: RunState, *, is_root: bool = False) -> ResponseRecord:

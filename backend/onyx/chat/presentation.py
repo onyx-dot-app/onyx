@@ -397,6 +397,7 @@ class ResponsePresenter:
             else:
                 output = tool.complete(event.result)
         elif isinstance(event, AgentEndEvent):
+            # The response owner reports classified failures separately.
             if renderer := self.renderers.pop(event.run_id, None):
                 output.extend(renderer.finish())
             if event.parent_run_id is None:
@@ -423,7 +424,11 @@ def replay_response(
     parent: Placement | None = None,
     default_mode: PresentationMode = PresentationMode.ANSWER,
 ) -> list[Packet]:
-    """Render saved accepted steps using detached tool records and source documents."""
+    """Render saved accepted steps using detached tool records and source documents.
+
+    The session response carries the saved message error separately. Stop packets
+    close rendering; they do not classify execution success or failure.
+    """
     layout = layout or ResponseLayout()
     packets: list[Packet] = []
     for step in response.steps:
