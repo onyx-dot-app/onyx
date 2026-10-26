@@ -1,7 +1,6 @@
 from collections.abc import Callable
 from functools import partial
 
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
@@ -33,9 +32,9 @@ from onyx.chat.incognito import (
 from onyx.chat.incognito_context import incognito_session_ended
 from onyx.chat.models import (
     ChatHistoryMessage,
-    ChatHistoryResult,
     ChatTurnSetup,
     PersonaPromptConfig,
+    PreparedHistory,
     ReservedChatResponse,
 )
 from onyx.chat.prompt_utils import (
@@ -101,7 +100,7 @@ from onyx.server.query_and_chat.models import (
 )
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.tools.constants import FILE_READER_TOOL_ID, SEARCH_TOOL_ID
-from onyx.tools.models import ChatFile, SearchToolUsage
+from onyx.tools.models import SearchToolUsage
 from onyx.tools.tool_constructor import (
     CustomToolConfig,
     FileReaderToolConfig,
@@ -262,11 +261,6 @@ def _process_query(
     return _resolve_query_processing_hook_result(hook_result, message_text)
 
 
-class _PreparedHistory(BaseModel):
-    history: ChatHistoryResult
-    files: list[ChatFile]
-
-
 def _prepare_history(
     chat_history: list[ChatHistoryMessage],
     file_inputs: list[ChatFileInput],
@@ -274,7 +268,7 @@ def _prepare_history(
     extracted_context_files: ExtractedContextFiles,
     token_counter: Callable[[str], int],
     additional_context: str | None,
-) -> _PreparedHistory:
+) -> PreparedHistory:
     files = load_chat_files(file_inputs)
     tool_files = convert_loaded_files_to_chat_files(files)
     tool_files.extend(
@@ -289,7 +283,7 @@ def _prepare_history(
         additional_context=additional_context,
         token_counter=token_counter,
     )
-    return _PreparedHistory(
+    return PreparedHistory(
         history=history,
         files=tool_files,
     )

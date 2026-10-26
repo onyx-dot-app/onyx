@@ -201,7 +201,7 @@ do it on the agent itself, not from chat-preferences.
 
 ### 4.2 Basic information and organization profile
 
-`db/memory.py:get_memories(user, db_session)` builds one `UserMemoryContext`
+`db/memory.py:get_memories(user, db_session)` builds one `UserMemoryContext` from `context/models.py`
 per turn (called from `process_message.py:build_chat_turn`, owned by
 [[core-chat-loop]]). It reads `user.personal_name`, `user.personal_role`,
 `user.email` for basic info, and calls
@@ -216,7 +216,7 @@ follows the identity provider.
 
 `process_message.py:build_chat_turn` strips memories from the assembled prompt
 when `user.use_memories` is `False`, via `user_memory_context.without_memories()`
-(`db/memory.py:UserMemoryContext.without_memories`), while keeping name, role,
+(`context/models.py:UserMemoryContext.without_memories`), while keeping name, role,
 and preferences intact. The **full** context (including memories) is still
 passed into `run_llm_loop` so the `MemoryTool` can still read and update
 existing memories mid-turn (`inject_memories_in_prompt=user.use_memories`,

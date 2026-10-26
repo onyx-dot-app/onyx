@@ -18,7 +18,7 @@ from onyx.chat.citation_utils import (
     build_context_file_citation_mapping,
     update_citation_processor_from_tool_result,
 )
-from onyx.chat.errors import _build_empty_llm_response_error
+from onyx.chat.errors import build_empty_llm_response_error
 from onyx.chat.files import build_python_chat_files_from_search_docs
 from onyx.chat.models import (
     ChatFeatureState,
@@ -32,8 +32,8 @@ from onyx.chat.prompt_utils import (
     prepare_prompt,
 )
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
+from onyx.context.models import UserMemoryContext
 from onyx.context.search.models import SearchDocsResponse
-from onyx.db.memory import UserMemoryContext
 from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
 from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
 from onyx.llm.models import (
@@ -48,8 +48,8 @@ from onyx.llm.models import (
 )
 from onyx.tools.built_in_tools import STOPPING_TOOLS_NAMES
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles
-from onyx.tools.interface import Tool, ToolContext
-from onyx.tools.models import ChatFile
+from onyx.tools.interface import Tool
+from onyx.tools.models import ChatFile, ToolContext
 from onyx.tools.restoration import (
     capture_search_state,
     restore_search_state,
@@ -317,7 +317,7 @@ class ChatAgent(Agent, RestorableFeature):
 
     def _validate_answer(self, result: StepResult) -> None:
         if not result.message.text and not result.message.tool_calls:
-            raise _build_empty_llm_response_error(
+            raise build_empty_llm_response_error(
                 llm=self.llm,
                 message=result.message,
                 tool_choice=(

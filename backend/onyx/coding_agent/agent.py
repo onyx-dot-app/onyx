@@ -44,7 +44,7 @@ from onyx.prompts.coding_agent.coding_agent import (
     USER_FINAL_ANSWER_QUERY,
 )
 from onyx.prompts.prompt_utils import get_current_llm_day_time
-from onyx.tools.interface import ToolContext
+from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.bash.bash_tool import BashTool
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
@@ -70,7 +70,7 @@ CODING_AGENT_GITHUB_DOWNLOAD_TIMEOUT = (30, 300)
 
 
 @contextmanager
-def _setup_session(
+def coding_sandbox_session(
     repo: str,
     github_token: str | None,
 ) -> Iterator[str]:

@@ -36,7 +36,8 @@ from onyx.llm.models import (
     apply_generation_event,
 )
 from onyx.llm.multi_llm import LitellmLLM
-from onyx.tools.interface import Tool, ToolContext
+from onyx.tools.interface import Tool
+from onyx.tools.models import ToolContext
 
 
 class FakeAgentDirectory(AgentDirectory):

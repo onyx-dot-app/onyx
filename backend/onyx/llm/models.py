@@ -12,6 +12,12 @@ from pydantic import (
 )
 
 
+class LLMErrorInfo(BaseModel):
+    message: str
+    error_code: str
+    is_retryable: bool
+
+
 class ToolChoiceOptions(str, Enum):
     REQUIRED = "required"
     AUTO = "auto"
@@ -82,6 +88,14 @@ _REASONING_EFFORT_RANK: dict[ReasoningEffort, int] = {
 def reasoning_effort_exceeds(effort: ReasoningEffort, cap: ReasoningEffort) -> bool:
     """Whether `effort` asks for more thinking than `cap` allows."""
     return _REASONING_EFFORT_RANK[effort] > _REASONING_EFFORT_RANK[cap]
+
+
+class UserChatDefaults(BaseModel):
+    """A user's own chat defaults, resolved below any admin per-model
+    setting. See resolve_reasoning_effort for the reasoning chain."""
+
+    temperature_default: float | None = None
+    reasoning_effort_default: ReasoningEffort | None = None
 
 
 def resolve_reasoning_effort(

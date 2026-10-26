@@ -155,7 +155,7 @@ Runs, in one parallel batch, whichever of these apply:
 `decide_search_scope` returns a `list[DocumentSource] | None`, restricted to
 `connected_sources` (`db/connector.py:fetch_unique_document_sources`) intersected
 with any user/persona source restriction. `decide_time_filter` returns a
-`TimeFilter` (`secondary_llm_flows/time_filter.py`) whose `apply_to` intersects
+`TimeFilter` (`context/search/models.py`) whose `apply_to` intersects
 the inferred window with any caller-selected range, so an inferred window can
 only narrow, never widen, an explicit one; a disjoint inferred window is dropped
 rather than applied.

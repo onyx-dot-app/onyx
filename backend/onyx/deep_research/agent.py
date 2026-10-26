@@ -2,9 +2,8 @@ import time
 from collections.abc import Callable, Mapping
 from functools import partial
 from threading import Lock
-from typing import Literal
 
-from pydantic import BaseModel, JsonValue
+from pydantic import JsonValue
 
 from onyx.agents.models import (
     AgentState,
@@ -32,10 +31,12 @@ from onyx.configs.chat_configs import (
     DR_REPORT_LLM_TIMEOUT_S,
 )
 from onyx.deep_research.models import (
+    DeepResearchFeatureState,
     ResearchAgentCallResult,
     ResearchConfiguration,
     ResearchMessageMetadata,
     ResearchPhase,
+    ResearchTask,
 )
 from onyx.deep_research.research_agent import ResearchAgent
 from onyx.deep_research.tool_definitions import (
@@ -90,20 +91,6 @@ ORCHESTRATION_OUTPUT_TOKENS = 1024
 MIN_RESEARCH_CONTEXT_TOKENS = 50000
 MAX_ORCHESTRATOR_CYCLES = 8
 MAX_ORCHESTRATOR_CYCLES_REASONING = 4
-
-
-class ResearchTask(BaseModel):
-    task: str
-
-
-class DeepResearchFeatureState(BaseModel):
-    kind: Literal["deep_research.state.v1"] = "deep_research.state.v1"
-    language_section: str
-    reasoning_effort: ReasoningEffort
-    file_metadata: dict[str, FileToolMetadata] | None
-    skip_clarification: bool
-    elapsed_seconds: float
-    citation_mapping: CitationMapping
 
 
 class DeepResearchAgent(Agent, RestorableFeature):

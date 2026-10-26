@@ -14,7 +14,7 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.server.security.models import OutboundSSRFParams, SSRFProtectionLevel
 from onyx.server.security.store import get_security_settings
-from onyx.tools.interface import Tool, ToolContext
+from onyx.tools.interface import Tool
 from onyx.tools.models import (
     CHAT_SESSION_ID_PLACEHOLDER,
     MESSAGE_ID_PLACEHOLDER,
@@ -25,6 +25,7 @@ from onyx.tools.models import (
     CustomToolUserFileSnapshot,
     DynamicSchemaInfo,
     ToolCallException,
+    ToolContext,
 )
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     REQUEST_BODY,

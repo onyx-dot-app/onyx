@@ -7,7 +7,8 @@ import pytest
 from onyx.agents.tools import ToolInvocation
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import ToolResult
-from onyx.tools.interface import Tool, ToolContext
+from onyx.tools.interface import Tool
+from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.utils import fleet_query_telemetry as telemetry

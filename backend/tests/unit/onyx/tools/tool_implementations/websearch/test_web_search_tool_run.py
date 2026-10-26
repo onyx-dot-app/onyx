@@ -7,8 +7,7 @@ import pytest
 
 from onyx.agents.tools import ToolInvocation
 from onyx.llm.cancellation import CancellationSignal
-from onyx.tools.interface import ToolContext
-from onyx.tools.models import ToolCallException
+from onyx.tools.models import ToolCallException, ToolContext
 from onyx.tools.tool_implementations.web_search.models import WebSearchResult
 from onyx.tools.tool_implementations.web_search.web_search_tool import (
     WebSearchTool,

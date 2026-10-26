@@ -22,7 +22,8 @@ from onyx.llm.models import (
     ToolResult,
     ToolResultMessage,
 )
-from onyx.tools.interface import Tool, ToolContext, merge_tool_arguments
+from onyx.tools.interface import Tool, merge_tool_arguments
+from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool

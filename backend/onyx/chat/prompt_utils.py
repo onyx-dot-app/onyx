@@ -4,23 +4,26 @@ import json
 from collections.abc import Callable, Sequence
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.chat.models import (
     ChatPrompt,
     ChatReminderContext,
+    ContextDocument,
+    ContextDocuments,
     PersonaPromptConfig,
     PromptMetadata,
+    SearchPassages,
 )
 from onyx.chat.prompt_formatting import (
     count_message_tokens,
     prepare_model_messages,
     prompt_metadata,
 )
+from onyx.context.models import UserMemoryContext
 from onyx.context.search.models import SearchDocsResponse
 from onyx.db.enums import SUPPORTED_LANGUAGE_ENGLISH_NAMES, SupportedLanguage
-from onyx.db.memory import UserMemoryContext
 from onyx.db.persona import get_default_behavior_persona
 from onyx.db.user_file import calculate_user_files_token_count
 from onyx.file_store.models import (
@@ -217,29 +220,6 @@ def build_chat_prompt(
         if reminder
         else None,
     )
-
-
-class _ContextDocument(BaseModel):
-    document: int
-    title: str | None = None
-    contents: str
-
-
-class _ContextDocuments(BaseModel):
-    documents: list[_ContextDocument] = Field(default_factory=list)
-
-
-class _SearchPassage(BaseModel):
-    model_config = ConfigDict(extra="allow")
-    __pydantic_extra__: dict[str, JsonValue] = Field(init=False)
-    document: int
-    content: str
-
-
-class _SearchPassages(BaseModel):
-    model_config = ConfigDict(extra="allow")
-    __pydantic_extra__: dict[str, JsonValue] = Field(init=False)
-    results: list[_SearchPassage]
 
 
 def get_default_base_system_prompt(db_session: Session) -> str:
@@ -578,7 +558,7 @@ def _deduplicate_search_passages(messages: list[Message]) -> None:
         ):
             continue
         try:
-            passages = _SearchPassages.model_validate_json(message.text)
+            passages = SearchPassages.model_validate_json(message.text)
         except ValidationError:
             # Search metadata can accompany unstructured or historical tool output.
             logger.debug(
@@ -772,7 +752,7 @@ def _create_context_files_message(
     context_files: ExtractedContextFiles,
 ) -> Message:
     """Build a user message with numbered document text and titles."""
-    documents: list[_ContextDocument] = []
+    documents: list[ContextDocument] = []
     for idx, file_text in enumerate(context_files.file_texts, start=1):
         title = (
             context_files.file_metadata[idx - 1].filename
@@ -780,11 +760,11 @@ def _create_context_files_message(
             else None
         )
         documents.append(
-            _ContextDocument(document=idx, title=title or None, contents=file_text)
+            ContextDocument(document=idx, title=title or None, contents=file_text)
         )
 
     documents_json = json.dumps(
-        _ContextDocuments(documents=documents).model_dump(exclude_none=True), indent=2
+        ContextDocuments(documents=documents).model_dump(exclude_none=True), indent=2
     )
     message_content = f"Here are some documents provided for context, they may not all be relevant:\n{documents_json}"
 

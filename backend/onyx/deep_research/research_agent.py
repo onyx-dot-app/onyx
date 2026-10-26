@@ -1,9 +1,8 @@
 import time
 from collections.abc import Callable, Mapping
 from functools import partial
-from typing import Literal
 
-from pydantic import BaseModel, JsonValue
+from pydantic import JsonValue
 
 from onyx.agents.models import (
     AgentState,
@@ -24,6 +23,7 @@ from onyx.configs.chat_configs import DR_REPORT_LLM_TIMEOUT_S
 from onyx.context.search.models import SearchDocsResponse
 from onyx.deep_research.models import (
     ResearchConfiguration,
+    ResearchFeatureState,
     ResearchMessageMetadata,
     ResearchPhase,
 )
@@ -58,13 +58,13 @@ from onyx.prompts.deep_research.research_agent import (
 )
 from onyx.prompts.prompt_utils import get_current_llm_day_time
 from onyx.prompts.tool_prompts import INTERNAL_SEARCH_GUIDANCE
-from onyx.tools.interface import Tool, ToolContext
+from onyx.tools.interface import Tool
+from onyx.tools.models import ToolContext
 from onyx.tools.restoration import (
     capture_search_state,
     restore_search_state,
 )
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
-from onyx.tools.tool_implementations.search.models import SearchToolState
 from onyx.tools.tool_implementations.search.search_tool import (
     SearchTool,
 )
@@ -76,15 +76,6 @@ from onyx.tracing.flows import LLMFlow
 MAX_INTERMEDIATE_REPORT_LENGTH_TOKENS = 10000
 RESEARCH_STEP_OUTPUT_TOKENS = 1000
 RESEARCH_AGENT_FORCE_REPORT_SECONDS = 12 * 60
-
-
-class ResearchFeatureState(BaseModel):
-    kind: Literal["research.state.v1"] = "research.state.v1"
-    elapsed_seconds: float = 0.0
-    configuration: ResearchConfiguration
-    citation_sources: CitationMapping
-    citation_mapping: dict[int, str]
-    search_tools: dict[str, SearchToolState]
 
 
 class ResearchAgent(Agent, RestorableFeature):

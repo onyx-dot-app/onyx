@@ -14,7 +14,7 @@ from onyx.agents.models import (
 from onyx.chat.agent import ChatAgent
 from onyx.chat.models import PersonaPromptConfig
 from onyx.chat.restoration import restore_chat_agent
-from onyx.db.memory import UserInfo, UserMemoryContext
+from onyx.context.models import UserInfo, UserMemoryContext
 from onyx.deep_research.agent import DeepResearchAgent
 from onyx.deep_research.research_agent import ResearchAgent
 from onyx.file_store.models import ExtractedContextFiles

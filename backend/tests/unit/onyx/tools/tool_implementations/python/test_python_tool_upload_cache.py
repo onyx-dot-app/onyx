@@ -12,8 +12,7 @@ from uuid import uuid4
 from onyx.agents.tools import ToolInvocation
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import ToolResult
-from onyx.tools.interface import ToolContext
-from onyx.tools.models import ChatFile
+from onyx.tools.models import ChatFile, ToolContext
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     StreamResultEvent,
 )

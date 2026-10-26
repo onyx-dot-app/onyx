@@ -16,7 +16,7 @@ from onyx.server.features.mcp.oauth import MCPReauthenticationRequired
 from onyx.server.metrics import mcp_client, metrics_auth
 from onyx.server.metrics.mcp_common import MCPToolCallStatus
 from onyx.server.metrics.mcp_server import MCPAuthResult, MCPServerToolName
-from onyx.tools.interface import ToolContext
+from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 
 
