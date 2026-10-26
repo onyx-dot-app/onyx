@@ -264,6 +264,7 @@ Remote reads run on the calling tool thread. Their I/O timeouts bound a blocked 
 Live and archived failures raise `RunFailed`; cancelled results raise `AgentCancelled`.
 
 Foreground children are the default. The parent waits for their terminal results and cancels them on failure or cancellation.
+Failed child cancellation records an error without skipping sibling cancellation or releasing locally owned work before it drains.
 A suspended foreground child releases the parent's worker without cancelling its siblings.
 Pass `lifetime=AgentLifetime.BACKGROUND` to let a child continue after its parent finishes.
 Background children do not hold the parent's cleanup open. The application must retain their coordinator.

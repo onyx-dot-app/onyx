@@ -98,6 +98,7 @@ from onyx.llm.models import (
     GenerationOptions,
     GenerationRequest,
     Message,
+    SystemMessage,
     ToolCall,
     ToolResult,
     ToolResultMessage,
@@ -1086,14 +1087,21 @@ class Run:
             except Exception as error:
                 logger.exception("Child executions did not reach terminal output")
                 outcome = RunStatus.ERROR
-                children = [
-                    _capture_unsettled_child(
-                        self.coordination.coordinator.run_state(run_id, self.agent_id)
-                    )
-                    for run_id in self.coordination.children
-                ]
                 with self.execution_lock:
                     self._state.failure = _failure(error, llm)
+                    child_run_ids = tuple(self.coordination.children)
+                children = []
+                for run_id in child_run_ids:
+                    try:
+                        state = self.coordination.coordinator.run_state(
+                            run_id, self.agent_id
+                        )
+                        children.append(_capture_unsettled_child(state))
+                    except Exception:
+                        logger.exception(
+                            "Could not retain child run %s while ending its parent",
+                            run_id,
+                        )
             with self.execution_lock:
                 self._state.child_runs = children
         with self.execution_lock:
@@ -1363,6 +1371,7 @@ def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -
                             "Model generation exceeded its total timeout"
                         )
                     with run.execution_lock:
+                        cancellation_signal.check()
                         if not run.is_accepting:
                             raise AgentCancelled()
                         if event.request_params:
@@ -1507,7 +1516,10 @@ def _truncate_context(
 ) -> tuple[CompactionCheckpoint, GenerationRequest, int]:
     """Find the first smaller request that fits after removing older turns."""
     boundaries = set(history_boundaries(source))
+    system_messages: list[Message] = []
     for index, message in enumerate(source):
+        if isinstance(message, SystemMessage):
+            system_messages.append(message)
         if not isinstance(message, UserMessage) or index not in boundaries:
             continue
         cutoff_message_id = source[index - 1].id
@@ -1518,8 +1530,9 @@ def _truncate_context(
             covered_through_message_id=cutoff_message_id,
         )
         cancellation_signal.check()
+        # Each cutoff starts a user turn, so the suffix retains the current task.
         candidate_request = prepared.generation_request(
-            working_messages(source, checkpoint)
+            [*system_messages, *source[index:]]
         )
         cancellation_signal.check()
         candidate_size = request_tokens(candidate_request, token_counts)
