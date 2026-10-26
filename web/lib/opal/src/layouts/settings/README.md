@@ -17,6 +17,7 @@ holds the page's state, which `Body` renders.
 | `width` | `"sm" \| "md" \| "lg" \| "xl" \| "full"`    | `"md"`  | Max-width of the inner content column |
 | `animateEnter` | `boolean` | `true` | Animate the body in when the page mounts; `false` renders it at once |
 | `loading` | `boolean` | `false` | The body shows the page loader in place of its children. When it turns `false`, the children mount and animate in |
+| `error` | `boolean \| string \| RichStr` | `false` | The body shows the standard error state in place of its children, titled "{header title} failed to load". A string or `markdown()` is the description; `true` uses a generic one. It wins over `loading` |
 
 Width presets map to CSS variables defined by the app (`--app-container-*`):
 `sm` = 672px, `md` = 872px, `lg` = 992px, `xl` = 1120px, `full` = 100%.
@@ -47,9 +48,12 @@ Headers are only sticky when `actions` is non-empty.
 ### Body
 
 Content container with consistent padding and vertical spacing. It renders
-the state set on `Root`: the page loader while `loading`, and otherwise its
+the state set on `Root`: the error state when `error` is set (the
+broken-plug illustration, centred, with the page title and the
+description), else the page loader while `loading`, and otherwise its
 children, animated in with [`Enter`](../../components/enter/README.md) unless
-`animateEnter` is `false`. The header stays still.
+`animateEnter` is `false`. The header stays still, and reports its title to
+`Root` for the error title.
 
 | Prop    | Type      | Default | Description                                         |
 | ------- | --------- | ------- | --------------------------------------------------- |

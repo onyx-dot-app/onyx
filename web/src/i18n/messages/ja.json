@@ -6176,8 +6176,7 @@
           "text": "グループを作成して、ユーザーを整理しアクセス権を管理しましょう。"
         },
         "loadError": {
-          "description": "詳細はコンソールを確認してください。",
-          "title": "グループを読み込めませんでした。"
+          "description": "詳細はコンソールを確認してください。"
         },
         "newGroup": {
           "label": "新しいグループ"
@@ -8836,8 +8835,7 @@
       "page": {
         "description": "サービスアカウントを使用して、{appName} API にプログラムからアクセスします。",
         "error": {
-          "description": "詳細はコンソールを確認してください。",
-          "title": "サービスアカウントの読み込みに失敗しました。"
+          "description": "詳細はコンソールを確認してください。"
         }
       },
       "regenerateModal": {
@@ -10043,8 +10041,7 @@
         }
       },
       "loadError": {
-        "description": "トレース設定を読み込めません。",
-        "title": "トレース設定の読み込みに失敗しました"
+        "description": "トレース設定を読み込めません。"
       },
       "page": {
         "description": "オブザーバビリティプラットフォームを接続して、LLM 呼び出しを監視・評価します。"
@@ -16081,6 +16078,12 @@
     },
     "settingsHeader": {
       "cancel": "キャンセル"
+    },
+    "settingsBody": {
+      "error": {
+        "title": "{page} を読み込めませんでした",
+        "description": "問題が発生しました。しばらくしてからもう一度お試しください。"
+      }
     },
     "table": {
       "alwaysShown": "常に表示",

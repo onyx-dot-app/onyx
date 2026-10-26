@@ -6176,8 +6176,7 @@
           "text": "Create groups to organize users and manage access."
         },
         "loadError": {
-          "description": "Please check the console for more details.",
-          "title": "Failed to load groups."
+          "description": "Please check the console for more details."
         },
         "newGroup": {
           "label": "New Group"
@@ -8836,8 +8835,7 @@
       "page": {
         "description": "Use service accounts to programmatically access {appName} API.",
         "error": {
-          "description": "Please check the console for more details.",
-          "title": "Failed to load service accounts."
+          "description": "Please check the console for more details."
         }
       },
       "regenerateModal": {
@@ -10043,8 +10041,7 @@
         }
       },
       "loadError": {
-        "description": "Unable to load tracing configuration.",
-        "title": "Failed to load tracing settings"
+        "description": "Unable to load tracing configuration."
       },
       "page": {
         "description": "Connect observability platforms to monitor and evaluate LLM calls."
@@ -16081,6 +16078,12 @@
     },
     "settingsHeader": {
       "cancel": "Cancel"
+    },
+    "settingsBody": {
+      "error": {
+        "title": "{page} failed to load",
+        "description": "Something went wrong. Try again in a moment."
+      }
     },
     "table": {
       "alwaysShown": "Always Shown",

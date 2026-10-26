@@ -6176,8 +6176,7 @@
           "text": "创建用户组以组织用户并管理访问权限。"
         },
         "loadError": {
-          "description": "请查看控制台以了解更多详情。",
-          "title": "加载用户组失败。"
+          "description": "请查看控制台以了解更多详情。"
         },
         "newGroup": {
           "label": "新建用户组"
@@ -8836,8 +8835,7 @@
       "page": {
         "description": "使用服务账号通过程序访问 {appName} API。",
         "error": {
-          "description": "请查看控制台了解更多详情。",
-          "title": "加载服务账号失败。"
+          "description": "请查看控制台了解更多详情。"
         }
       },
       "regenerateModal": {
@@ -10043,8 +10041,7 @@
         }
       },
       "loadError": {
-        "description": "无法加载追踪配置。",
-        "title": "加载追踪设置失败"
+        "description": "无法加载追踪配置。"
       },
       "page": {
         "description": "连接可观测性平台，以监控和评估 LLM 调用。"
@@ -16081,6 +16078,12 @@
     },
     "settingsHeader": {
       "cancel": "取消"
+    },
+    "settingsBody": {
+      "error": {
+        "title": "无法加载{page}",
+        "description": "出了点问题。请稍后重试。"
+      }
     },
     "table": {
       "alwaysShown": "始终显示",

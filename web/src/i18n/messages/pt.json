@@ -6176,8 +6176,7 @@
           "text": "Crie grupos para organizar usuários e gerenciar o acesso."
         },
         "loadError": {
-          "description": "Verifique o console para mais detalhes.",
-          "title": "Falha ao carregar os grupos."
+          "description": "Verifique o console para mais detalhes."
         },
         "newGroup": {
           "label": "Novo grupo"
@@ -8836,8 +8835,7 @@
       "page": {
         "description": "Use contas de serviço para acessar a API do {appName} de forma programática.",
         "error": {
-          "description": "Verifique o console para mais detalhes.",
-          "title": "Falha ao carregar as contas de serviço."
+          "description": "Verifique o console para mais detalhes."
         }
       },
       "regenerateModal": {
@@ -10043,8 +10041,7 @@
         }
       },
       "loadError": {
-        "description": "Não foi possível carregar a configuração de rastreamento.",
-        "title": "Falha ao carregar as configurações de rastreamento"
+        "description": "Não foi possível carregar a configuração de rastreamento."
       },
       "page": {
         "description": "Conecte plataformas de observabilidade para monitorar e avaliar as chamadas de LLM."
@@ -16081,6 +16078,12 @@
     },
     "settingsHeader": {
       "cancel": "Cancelar"
+    },
+    "settingsBody": {
+      "error": {
+        "title": "Não foi possível carregar {page}",
+        "description": "Algo deu errado. Tente novamente em instantes."
+      }
     },
     "table": {
       "alwaysShown": "Sempre exibida",

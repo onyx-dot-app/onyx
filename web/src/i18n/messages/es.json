@@ -6176,8 +6176,7 @@
           "text": "Crea grupos para organizar a los usuarios y gestionar el acceso."
         },
         "loadError": {
-          "description": "Consulta la consola para ver más detalles.",
-          "title": "No se pudieron cargar los grupos."
+          "description": "Consulta la consola para ver más detalles."
         },
         "newGroup": {
           "label": "Nuevo grupo"
@@ -8836,8 +8835,7 @@
       "page": {
         "description": "Usa cuentas de servicio para acceder de forma programática a la API de {appName}.",
         "error": {
-          "description": "Consulta la consola para ver más detalles.",
-          "title": "No se pudieron cargar las cuentas de servicio."
+          "description": "Consulta la consola para ver más detalles."
         }
       },
       "regenerateModal": {
@@ -10043,8 +10041,7 @@
         }
       },
       "loadError": {
-        "description": "No se pudo cargar la configuración del trazado.",
-        "title": "No se pudo cargar la configuración del trazado"
+        "description": "No se pudo cargar la configuración del trazado."
       },
       "page": {
         "description": "Conecta plataformas de observabilidad para monitorizar y evaluar las llamadas al LLM."
@@ -16081,6 +16078,12 @@
     },
     "settingsHeader": {
       "cancel": "Cancelar"
+    },
+    "settingsBody": {
+      "error": {
+        "title": "No se pudo cargar {page}",
+        "description": "Algo salió mal. Inténtalo de nuevo en un momento."
+      }
     },
     "table": {
       "alwaysShown": "Siempre visible",

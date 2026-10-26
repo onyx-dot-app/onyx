@@ -4,7 +4,6 @@ import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { SettingsLayouts } from "@opal/layouts";
-import { MessageCard } from "@opal/components";
 import ProviderCard from "@/sections/admin/ProviderCard";
 import { FetchError } from "@/lib/fetcher";
 import { useCreateModal } from "@opal/components";
@@ -26,14 +25,16 @@ const route = ADMIN_ROUTES.TRACING;
 interface ShellProps {
   children: ReactNode;
   loading?: boolean;
+  /** The page failed to load; the string is its description. */
+  error?: string | false;
 }
 
-function Shell({ children, loading }: ShellProps) {
+function Shell({ children, loading, error }: ShellProps) {
   const t = useTranslations("admin.tracing");
   const adminRouteTitle = useAdminRouteTitle();
 
   return (
-    <SettingsLayouts.Root loading={loading}>
+    <SettingsLayouts.Root loading={loading} error={error}>
       <SettingsLayouts.Header
         icon={route.icon}
         title={adminRouteTitle(route)}
@@ -56,25 +57,16 @@ export default function TracingPage() {
   const { providers, error, isLoading, mutateProviders } =
     useTracingProviders();
 
-  if (error) {
-    const detail =
-      error instanceof FetchError && typeof error.info?.detail === "string"
+  // The server's detail when it gives one, else the generic description.
+  const loadError: string | false = error
+    ? (error instanceof FetchError && typeof error.info?.detail === "string"
         ? error.info.detail
-        : error.message;
-    return (
-      <Shell>
-        <MessageCard
-          variant="error"
-          title={t("loadError.title")}
-          description={detail ?? t("loadError.description")}
-        />
-      </Shell>
-    );
-  }
+        : error.message) || t("loadError.description")
+    : false;
 
   return (
     <>
-      <Shell loading={isLoading}>
+      <Shell loading={isLoading} error={loadError}>
         <div className="flex w-full flex-col gap-2">
           {TRACING_PROVIDER_ORDER.map((providerType) => {
             const detail = TRACING_PROVIDER_DETAILS[providerType];
