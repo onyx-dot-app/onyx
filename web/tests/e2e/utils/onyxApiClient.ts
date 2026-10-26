@@ -103,6 +103,7 @@ export interface CreateAgentOptions {
  * - `getUserGroups()` - Lists all user groups (including default system groups)
  * - `createUserGroup(name)` - Creates a user group
  * - `addUsersToGroup(groupId, userIds)` - Adds users to a user group
+ * - `getUserGroupPermissions(groupId)` - Lists group permission grants
  * - `setUserGroupPermissions(groupId, permissions)` - Replaces group permission grants
  * - `deleteUserGroup(id)` - Deletes a user group
  *
@@ -900,6 +901,19 @@ export class OnyxApiClient {
       `Failed to add users to group ${groupId}`
     );
     this.log(`Added ${userIds.length} user(s) to user group: ${groupId}`);
+  }
+
+  /**
+   * Lists the toggleable permissions granted to a user group.
+   */
+  async getUserGroupPermissions(groupId: number): Promise<string[]> {
+    const response = await this.get(
+      `/manage/admin/user-group/${groupId}/permissions`
+    );
+    return await this.handleResponse<string[]>(
+      response,
+      `Failed to get permissions for user group ${groupId}`
+    );
   }
 
   /**
