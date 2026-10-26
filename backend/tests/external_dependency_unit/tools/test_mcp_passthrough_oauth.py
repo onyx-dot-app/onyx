@@ -32,8 +32,7 @@ from onyx.db.models import OAuthAccount, Persona, Tool, User
 from onyx.db.tools import capture_persona_tool_configuration
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.factory import get_default_llm
-from onyx.tools.interface import ToolContext
-from onyx.tools.models import CustomToolCallSummary
+from onyx.tools.models import CustomToolCallSummary, ToolContext
 from onyx.tools.tool_constructor import SearchToolConfig, construct_tools
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider

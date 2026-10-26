@@ -65,7 +65,7 @@ from onyx.server.query_and_chat.streaming_models import (
     OverallStop,
     Packet,
 )
-from onyx.tools.interface import ToolContext
+from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.bash.bash_tool import BashTool
 from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
     CodingAgentTool,
@@ -1037,7 +1037,7 @@ def test_coding_cancellation_keeps_sandbox_until_child_work_finishes(
         return ToolResult(content="done")
 
     module = "onyx.tools.tool_implementations.coding_agent.coding_agent_tool"
-    monkeypatch.setattr(f"{module}._setup_session", sandbox)
+    monkeypatch.setattr(f"{module}.coding_sandbox_session", sandbox)
     monkeypatch.setattr(f"{module}.get_llm_token_counter", lambda _llm: len)
     monkeypatch.setattr(BashTool, "_run", bash)
     child_llm = ScriptedLLM([tool_delta(BASH_TOOL_NAME, '{"cmd":"pwd"}')], 128000)

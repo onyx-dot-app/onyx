@@ -6,7 +6,6 @@ The memories are passed in via ToolContext.user_memory_context, which contains t
 memories that exist for the user.
 """
 
-from pydantic import BaseModel
 from typing_extensions import override
 
 from onyx.agents.tools import ToolExecutionMode, ToolInvocation
@@ -15,13 +14,14 @@ from onyx.llm.cancellation import check_cancelled
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.secondary_llm_flows.memory_update import process_memory_update
-from onyx.tools.interface import (
-    Tool,
+from onyx.tools.interface import Tool, parse_tool_arguments, tool_message_history
+from onyx.tools.models import (
+    MemoryArguments,
+    MemoryOperation,
+    MemoryUpdated,
+    ToolCallException,
     ToolContext,
-    parse_tool_arguments,
-    tool_message_history,
 )
-from onyx.tools.models import MemoryOperation, MemoryUpdated, ToolCallException
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_incognito_record_mode
 
@@ -29,10 +29,6 @@ logger = setup_logger()
 
 
 MEMORY_FIELD = "memory"
-
-
-class MemoryArguments(BaseModel):
-    memory: str
 
 
 class MemoryTool(Tool):

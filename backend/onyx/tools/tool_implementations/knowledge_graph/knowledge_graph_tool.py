@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 from onyx.agents.tools import ToolInvocation
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.llm.models import ToolDefinition, ToolResult
-from onyx.tools.interface import Tool, ToolContext
+from onyx.tools.interface import Tool
+from onyx.tools.models import ToolContext
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

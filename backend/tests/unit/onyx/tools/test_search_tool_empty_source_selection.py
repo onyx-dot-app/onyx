@@ -7,8 +7,7 @@ from onyx.agents.tools import ToolInvocation
 from onyx.context.search.models import BaseFilters, SearchDocsResponse
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import ToolResult, UserMessage
-from onyx.tools.interface import ToolContext
-from onyx.tools.models import ToolCallException
+from onyx.tools.models import ToolCallException, ToolContext
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 
 

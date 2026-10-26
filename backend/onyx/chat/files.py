@@ -188,17 +188,6 @@ def resolve_context_user_files(
     return selected_files
 
 
-def _empty_extracted_context_files() -> ExtractedContextFiles:
-    return ExtractedContextFiles(
-        file_texts=[],
-        image_files=[],
-        use_as_search_filter=False,
-        total_token_count=0,
-        file_metadata=[],
-        uncapped_token_count=None,
-    )
-
-
 def _extract_text_from_in_memory_file(f: InMemoryChatFile) -> str | None:
     """Decode stored plaintext directly; parse original document bytes otherwise."""
     try:
@@ -235,7 +224,14 @@ def extract_context_files(
     # TODO(yuhong): I believe this is not handling all file types correctly.
 
     if not user_files:
-        return _empty_extracted_context_files()
+        return ExtractedContextFiles(
+            file_texts=[],
+            image_files=[],
+            use_as_search_filter=False,
+            total_token_count=0,
+            file_metadata=[],
+            uncapped_token_count=None,
+        )
 
     # Aggregate tokens for the file content that will be added
     # Skip tokens for those with metadata only

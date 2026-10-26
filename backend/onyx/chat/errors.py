@@ -61,7 +61,7 @@ _REFUSAL_FINISH_REASONS = {
 }
 
 
-def _build_empty_llm_response_error(
+def build_empty_llm_response_error(
     llm: LLM,
     message: AssistantMessage,
     tool_choice: ToolChoiceOptions,

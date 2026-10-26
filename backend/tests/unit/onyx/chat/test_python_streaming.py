@@ -11,8 +11,11 @@ from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import ToolCall
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import PythonToolDelta
-from onyx.tools.interface import ToolContext
-from onyx.tools.models import LlmPythonExecutionResult, PythonExecutionDelta
+from onyx.tools.models import (
+    LlmPythonExecutionResult,
+    PythonExecutionDelta,
+    ToolContext,
+)
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     StreamErrorEvent,
     StreamOutputEvent,

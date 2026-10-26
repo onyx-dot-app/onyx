@@ -1,7 +1,6 @@
 import io
 from uuid import UUID
 
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
@@ -13,8 +12,14 @@ from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.models import ChatFileType, InMemoryChatFile, UserFileMetadata
 from onyx.file_store.utils import load_chat_file_by_id, load_user_file_content
 from onyx.llm.models import ToolDefinition, ToolResult
-from onyx.tools.interface import Tool, ToolContext, parse_tool_arguments
-from onyx.tools.models import FileReadResult, ToolCallException
+from onyx.tools.constants import FILE_READER_MAX_CHARS
+from onyx.tools.interface import Tool, parse_tool_arguments
+from onyx.tools.models import (
+    FileReaderArguments,
+    FileReadResult,
+    ToolCallException,
+    ToolContext,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -23,15 +28,7 @@ FILE_ID_FIELD = "file_id"
 START_CHAR_FIELD = "start_char"
 NUM_CHARS_FIELD = "num_chars"
 
-MAX_NUM_CHARS = 16000
-DEFAULT_NUM_CHARS = MAX_NUM_CHARS
 PREVIEW_CHARS = 500
-
-
-class FileReaderArguments(BaseModel):
-    file_id: str
-    start_char: int = 0
-    num_chars: int = DEFAULT_NUM_CHARS
 
 
 class FileReaderTool(Tool):
@@ -144,7 +141,7 @@ class FileReaderTool(Tool):
         file_id = self._validate_file_id(raw_file_id)
         start_char = max(0, arguments.start_char)
         num_chars = min(
-            MAX_NUM_CHARS,
+            FILE_READER_MAX_CHARS,
             max(1, arguments.num_chars),
         )
 

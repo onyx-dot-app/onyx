@@ -31,8 +31,8 @@ from onyx.server.features.mcp.oauth import (
 )
 from onyx.server.metrics.mcp_client import record_mcp_client_tool_outcome
 from onyx.server.metrics.mcp_common import MCPToolCallStatus
-from onyx.tools.interface import Tool, ToolContext
-from onyx.tools.models import CustomToolCallSummary
+from onyx.tools.interface import Tool
+from onyx.tools.models import CustomToolCallSummary, ToolContext
 from onyx.tools.tool_name import sanitize_tool_name
 from onyx.utils.logger import setup_logger
 
