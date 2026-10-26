@@ -13,6 +13,7 @@ from pydantic import (
 )
 
 from onyx.agents.models import (
+    AgentInfo,
     CompactionCheckpoint,
     CompactionMetadata,
     RunFailure,
@@ -151,6 +152,56 @@ class ResponseRecord(BaseModel):
     @property
     def messages(self) -> list[Message]:
         return messages_from_steps(self.steps)
+
+
+class HistoryLink(BaseModel):
+    id: int
+    parent_message_id: int | None
+    chat_session_id: UUID
+
+
+class SessionAncestor(BaseModel):
+    id: UUID
+    agent_name: str | None
+    parent_id: UUID | None
+
+
+class SavedResponse(BaseModel):
+    message_id: int
+    root_message_id: int
+    root_session_id: UUID
+    agent: AgentInfo
+    response: ResponseRecord
+
+
+class ResponseStatus(BaseModel):
+    message_id: int
+    root_message_id: int
+    root_session_id: UUID
+    parent_agent_id: str | None
+    status: RunStatus
+
+
+class ResponseAncestry(BaseModel):
+    message_id: int
+    session_id: UUID
+    status: RunStatus | None
+    spawned_by_message_id: int | None
+    parent_session_id: UUID | None
+    parent_response_id: int | None
+
+
+class ChatBranch(BaseModel):
+    chat_session_id: UUID
+    message_ids: list[int]
+
+
+class ResponseLink(BaseModel):
+    id: int
+    chat_session_id: UUID
+    previous_response_id: int | None
+    root_id: int
+    status: RunStatus
 
 
 class SavedAgentContext(BaseModel):
@@ -528,6 +579,12 @@ class ChatTurnSetup(BaseModel):
     mcp_headers: dict[str, str] | None
 
 
+class ResponseOwner(BaseModel):
+    token: UUID
+    root_message_id: int
+    ownership_version: int | None = None
+
+
 class CheckpointBinding(BaseModel):
     """Application identity; validating this record does not authorize access."""
 
@@ -555,3 +612,8 @@ class ResponseCheckpoint(BaseModel):
     request_params: GenerationRequestParams | None
     message_payloads: list[MessagePayload]
     input_payloads: list[MessagePayload]
+
+
+class SavedCheckpoint(BaseModel):
+    ownership_version: int
+    data: ResponseCheckpoint

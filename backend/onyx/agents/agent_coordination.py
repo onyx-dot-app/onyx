@@ -185,23 +185,29 @@ class AgentCoordinator:
         with self._state.lock:
             tracked = self._state.tracked_runs[run.id]
             binding = tracked.coordination
-            tracked.coordination = None
-            tracked.execution = None
-            self._state.agents.pop(run.agent_id, None)
-            self._state.latest[run.agent_id] = snapshot
-            has_waiters = any(
-                run.id in entry.coordination.children
-                for entry in self._state.tracked_runs.values()
-                if entry.coordination is not None
-            )
-        if binding is not None:
-            binding.close(released_run_ids=binding.children)
+            completion = tracked.completion
+        # Reserve the local execution until its ownership cleanup finishes.
         try:
+            if binding is not None:
+                binding.close(released_run_ids=binding.children)
             if self._ownership is not None:
                 self._ownership.release(run.id)
+        except BaseException as error:
+            completion.set_exception(error)
+            raise
         finally:
-            if has_waiters:
-                self.observe_completion(run.id, agent_id=run.agent_id)
+            with self._state.lock:
+                tracked.coordination = None
+                tracked.execution = None
+                self._state.agents.pop(run.agent_id, None)
+                self._state.latest[run.agent_id] = snapshot
+                has_waiters = any(
+                    run.id in entry.coordination.children
+                    for entry in self._state.tracked_runs.values()
+                    if entry.coordination is not None
+                )
+        if has_waiters:
+            self.observe_completion(run.id, agent_id=run.agent_id)
 
     def observe_completion(self, run_id: str, *, agent_id: str) -> None:
         """Resolve a remote dependency from storage without retaining its execution."""
@@ -584,10 +590,12 @@ class AgentCoordinator:
             tracked.coordination = binding
             tracked.execution = run
             stop = tracked.observer_stop
+            if (stop is not None and stop.is_set()) or (
+                tracked.completion.done() and tracked.completion.exception() is not None
+            ):
+                tracked.completion = Future()
+                tracked.completion.set_running_or_notify_cancel()
             if stop is not None:
-                if stop.is_set():
-                    tracked.completion = Future()
-                    tracked.completion.set_running_or_notify_cancel()
                 stop.set()
                 tracked.observer_stop = None
             self._visible_run_ids.add(run.id)

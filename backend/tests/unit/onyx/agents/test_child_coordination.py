@@ -21,6 +21,7 @@ from onyx.agents.agent_coordination import (
 from onyx.agents.events import AgentEvent, MessageEndEvent
 from onyx.agents.models import (
     AgentInfo,
+    ExecutionCheckpoint,
     ExecutionStatus,
     PreparedStep,
     RunFailure,
@@ -2498,9 +2499,12 @@ def suspended_agent(*, agent_id: str | None = None) -> Agent:
     )
 
 
-@pytest.mark.parametrize("worker_failure", [False, True])
-def test_released_child_observation_failure_ends_parent(
-    worker_failure: bool, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    "failure",
+    ["worker", "timeout", "release", "release_without_directory"],
+)
+def test_released_child_failure_ends_parent(
+    failure: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     child = suspended_agent()
     spawned: list[SpawnResult] = []
@@ -2536,12 +2540,23 @@ def test_released_child_observation_failure_ends_parent(
         ],
     )
     saved: list[RunState] = []
+    release_error = RuntimeError("Ownership release failed")
+
+    def release(run_id: str) -> None:
+        if not spawned or run_id != spawned[0].run_id:
+            return
+        if failure.startswith("release"):
+            raise release_error
+
     owner = AgentCoordinator(
         directory=FakeAgentDirectory(
             read_run_status=lambda *_: RunStatus.SUSPENDED,
             read_run=lambda *_: saved[0],
             cancel_run=lambda *_: None,
         )
+        if failure != "release_without_directory"
+        else None,
+        ownership=FakeRunOwnership(release=release),
     )
     root = parent.start(max_steps=2, coordinator=owner)
     try:
@@ -2550,17 +2565,23 @@ def test_released_child_observation_failure_ends_parent(
         assert child_run.wait_until_settled(3).status == RunStatus.SUSPENDED
         assert child_run.wait_for_idle(3)
         saved.append(child_run.snapshot())
-        if worker_failure:
+        if failure == "worker":
 
             def fail_start(_operation: Callable[[], object]) -> None:
                 raise RuntimeError("Cannot observe released child")
 
             monkeypatch.setattr(owner._state.work, "start", fail_start)
-        else:
+        elif failure == "timeout":
             monkeypatch.setattr(
                 "onyx.agents.agent_coordination.OPERATION_TIMEOUT_SECONDS", 0
             )
-        child_run.handoff()
+        if failure.startswith("release"):
+            with pytest.raises(RuntimeError) as caught:
+                child_run.handoff()
+            assert caught.value is release_error
+            assert owner.completion(child_run.id).exception(timeout=0) is release_error
+        else:
+            child_run.handoff()
         with pytest.raises(RunFailed):
             root.result(3)
         assert root.wait_for_idle(3)
@@ -2572,6 +2593,73 @@ def test_released_child_observation_failure_ends_parent(
         assert owner.completion(child_run.id).exception(timeout=0) is not None
     finally:
         monkeypatch.undo()
+        assert owner.close(3)
+
+
+@pytest.mark.parametrize("release_fails", [False, True])
+def test_handoff_reserves_execution_until_ownership_release(
+    release_fails: bool,
+) -> None:
+    releasing, finish_release = threading.Event(), threading.Event()
+    observed = threading.Event()
+    release_error = RuntimeError("Ownership release failed")
+
+    def release(_run_id: str) -> None:
+        if releasing.is_set():
+            return
+        releasing.set()
+        assert finish_release.wait(3)
+        if release_fails:
+            raise release_error
+
+    def read_status(_run_id: str, _parent_id: str) -> RunStatus:
+        observed.set()
+        return RunStatus.SUSPENDED
+
+    owner = AgentCoordinator(
+        ownership=FakeRunOwnership(release=release),
+        directory=FakeAgentDirectory(read_run_status=read_status),
+    )
+    original = suspended_agent()
+    run = original.start(max_steps=2, coordinator=owner)
+    handoff: Future[ExecutionCheckpoint] | None = None
+    try:
+        assert run.wait_until_settled(3).status == RunStatus.SUSPENDED
+        assert run.wait_for_idle(3)
+        state = run.snapshot()
+        completion = owner.completion(run.id)
+        handoff = start_thread_future(lambda: run.handoff(), name="handoff")
+        assert releasing.wait(3)
+        owner.observe_completion(run.id, agent_id=run.agent_id)
+        assert owner.run(run.id) is run
+        assert not observed.is_set()
+        replacement = suspended_agent(agent_id=original.id)
+        with pytest.raises(RuntimeError, match="already running or draining"):
+            replacement.resume(state, coordinator=owner)
+        finish_release.set()
+        if release_fails:
+            with pytest.raises(RuntimeError) as caught:
+                handoff.result(timeout=3)
+            assert caught.value is release_error
+            assert completion.exception(timeout=0) is release_error
+        else:
+            handoff.result(timeout=3)
+            assert not completion.done()
+        resumed = suspended_agent(agent_id=original.id).resume(state, coordinator=owner)
+        assert resumed.wait_until_settled(3).status == RunStatus.SUSPENDED
+        resumed_completion = owner.completion(run.id)
+        assert not resumed_completion.done()
+        assert (resumed_completion is completion) == (not release_fails)
+        resumed.cancel()
+        assert resumed_completion.result(timeout=3).status == RunStatus.CANCELLED
+        assert resumed.wait_for_idle(3)
+    finally:
+        finish_release.set()
+        if handoff is not None:
+            try:
+                handoff.result(timeout=3)
+            except RuntimeError as error:
+                assert release_fails and error is release_error
         assert owner.close(3)
 
 

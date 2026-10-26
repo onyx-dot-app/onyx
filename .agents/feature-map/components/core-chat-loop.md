@@ -169,7 +169,9 @@ An unhandled child cancellation becomes a tool error; cancelling the parent inte
 Each run owns its cancellation signal. Caller cancellation propagates into the run;
 run failure or cancellation does not cancel the caller's signal.
 Handoff saves suspended state and invokes the ownership adapter's release once.
-Release failure settles local completion waiters with the cleanup error; saved state remains available.
+Local execution stays reserved until ownership release finishes. Release failure settles local waiters
+and pending parent dependencies with the cleanup error; saved state remains available for another resume.
+Completion publication uses the existing observer reservation, so a late remote read cannot overwrite the error.
 Tool errors retain their model-facing text in recorded results. Progress updates omit that text;
 structured result details supply public errors to the renderer.
 

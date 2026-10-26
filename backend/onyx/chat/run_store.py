@@ -6,8 +6,6 @@ from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel
-
 from onyx.agents.agent_coordination import (
     AgentCoordinator,
     AgentDirectory,
@@ -26,7 +24,13 @@ from onyx.agents.runtime import Agent, Run, RunNotTransferable
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.chat.checkpoint import deserialize_checkpoint, serialize_checkpoint
-from onyx.chat.models import CheckpointBinding, ResponseRecord
+from onyx.chat.models import (
+    CheckpointBinding,
+    ResponseOwner,
+    ResponseRecord,
+    ResponseStatus,
+    SavedResponse,
+)
 from onyx.chat.response import response_record, response_snapshot
 from onyx.chat.restoration import persist_checkpoint_files
 from onyx.configs.constants import MessageType
@@ -38,8 +42,6 @@ from onyx.db.chat_checkpoint import (
     release_checkpoint_claim__no_commit,
 )
 from onyx.db.chat_response import (
-    ResponseStatus,
-    SavedResponse,
     abort_response_start__no_commit,
     find_response__no_commit,
     finish_checkpoint__no_commit,
@@ -66,12 +68,6 @@ OWNER_EXPIRY_MARGIN_SECONDS = 5.0
 OWNER_LOCK_SECONDS = 30
 OWNER_LOCK_WAIT_SECONDS = 10
 STOP_TTL_SECONDS = 600
-
-
-class ResponseOwner(BaseModel):
-    token: UUID
-    root_message_id: int
-    ownership_version: int | None = None
 
 
 class _OwnershipLost(RuntimeError):

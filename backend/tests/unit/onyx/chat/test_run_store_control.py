@@ -10,7 +10,8 @@ import pytest
 from onyx.agents.runtime import Run
 from onyx.cache.interface import CacheBackend
 from onyx.chat import run_store
-from onyx.chat.run_store import ChatRunStore, ResponseOwner, _OwnedRun, _OwnerLease
+from onyx.chat.models import ResponseOwner
+from onyx.chat.run_store import ChatRunStore, _OwnedRun, _OwnerLease
 
 
 class Clock:

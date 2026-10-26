@@ -1,11 +1,11 @@
 """Conditional checkpoint transitions. Callers own transactions."""
 
-from pydantic import BaseModel, JsonValue, TypeAdapter
+from pydantic import JsonValue, TypeAdapter
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.agents.models import RunFailure, RunFailureKind, RunStatus
-from onyx.chat.models import ResponseCheckpoint
+from onyx.chat.models import ResponseCheckpoint, SavedCheckpoint
 from onyx.db.chat_response import (
     configure_response_transaction__no_commit,
     finish_checkpoint__no_commit,
@@ -13,11 +13,6 @@ from onyx.db.chat_response import (
 from onyx.db.models import ChatMessage, ChatResponseCheckpoint
 
 _JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
-
-
-class SavedCheckpoint(BaseModel):
-    ownership_version: int
-    data: ResponseCheckpoint
 
 
 def _lock_response(session: Session, message_id: int) -> ChatMessage:

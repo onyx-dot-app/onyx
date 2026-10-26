@@ -11,6 +11,7 @@ from onyx.agents.events import (
     MessageEndEvent,
     MessageStartEvent,
     MessageUpdateEvent,
+    ToolEndEvent,
     ToolStartEvent,
 )
 from onyx.agents.models import (
@@ -20,7 +21,7 @@ from onyx.agents.models import (
     StepRecord,
     ToolExecutionRecord,
 )
-from onyx.agents.runtime import Agent
+from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import (
@@ -32,9 +33,13 @@ from onyx.chat.models import (
 )
 from onyx.chat.presentation import ResponsePresenter, project_response
 from onyx.chat.renderer import MessageRenderer, ResponseLayout, ToolRenderer
-from onyx.chat.response import tool_arguments_for_display
+from onyx.chat.response import response_record, tool_arguments_for_display
+from onyx.coding_agent.models import CodingAgentCallResult
+from onyx.coding_agent.tool_definitions import CODING_AGENT_TOOL_NAME
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc
+from onyx.deep_research.models import ResearchAgentCallResult
+from onyx.deep_research.tool_definitions import RESEARCH_AGENT_TOOL_NAME
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.model_response import (
@@ -57,6 +62,7 @@ from onyx.llm.models import (
     ThinkingContent,
     ThinkingDeltaEvent,
     ToolCall,
+    ToolCallDeltaEvent,
     ToolCallEndEvent,
     ToolCallStartEvent,
     ToolDefinition,
@@ -72,15 +78,19 @@ from onyx.server.query_and_chat.streaming_models import (
     BashToolDelta,
     BashToolStart,
     CitationInfo,
+    CodingAgentFinal,
     CodingAgentThinkingDelta,
     CustomToolDelta,
     CustomToolStart,
+    IntermediateReportDelta,
     OverallStop,
     Packet,
     PacketException,
+    PythonToolStart,
     ReasoningDelta,
     SearchToolStart,
     SectionEnd,
+    ToolCallArgumentDelta,
     ToolCallDebug,
 )
 from onyx.tools.models import (
@@ -89,6 +99,7 @@ from onyx.tools.models import (
     LlmBashExecutionResult,
     ToolExecutionError,
 )
+from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
 
@@ -97,6 +108,193 @@ class _Execution(BaseModel):
     requests: list[GenerationRequest]
     messages: list[Message]
     executed: list[str]
+
+
+@pytest.mark.parametrize(
+    ("status", "tool_started", "tool_finished"),
+    [
+        (ExecutionStatus.CANCELLED, False, False),
+        (ExecutionStatus.ERROR, False, False),
+        (ExecutionStatus.COMPLETE, False, False),
+        (ExecutionStatus.COMPLETE, True, False),
+        (ExecutionStatus.COMPLETE, True, True),
+    ],
+)
+def test_interrupted_python_arguments_close_the_live_code_card(
+    status: ExecutionStatus,
+    tool_started: bool,
+    tool_finished: bool,
+) -> None:
+    output: list[Packet] = []
+    presenter = ResponsePresenter(Emitter(output.append))
+    call = ToolCall(
+        id="python",
+        name=PythonTool.NAME,
+        arguments={"code": "print(1)"} if status == ExecutionStatus.COMPLETE else {},
+        raw_arguments=(
+            '{"code":"print(1)"}'
+            if status == ExecutionStatus.COMPLETE
+            else '{"code":"print(1)'
+        ),
+        arguments_complete=status == ExecutionStatus.COMPLETE,
+    )
+    message = AssistantMessage(id="m", content=[call])
+    presenter.consume(MessageStartEvent(run_id="r", message_id="m", step_index=0))
+    for update in (
+        ToolCallStartEvent(content_index=0, tool_call_id=call.id, tool_name=call.name),
+        ToolCallDeltaEvent(content_index=0, arguments_delta=call.raw_arguments or ""),
+    ):
+        presenter.consume(
+            MessageUpdateEvent(
+                run_id="r", message_id="m", step_index=0, generation_event=update
+            )
+        )
+    assert any(isinstance(packet.obj, ToolCallArgumentDelta) for packet in output)
+    if status == ExecutionStatus.COMPLETE:
+        presenter.consume(
+            MessageUpdateEvent(
+                run_id="r",
+                message_id="m",
+                step_index=0,
+                generation_event=ToolCallEndEvent(content_index=0, tool_call=call),
+            )
+        )
+    presenter.consume(
+        MessageEndEvent(
+            run_id="r", message_id="m", step_index=0, message=message, status=status
+        )
+    )
+    if tool_started:
+        presenter.consume(
+            ToolStartEvent(run_id="r", message_id="m", step_index=0, tool_call=call)
+        )
+    if tool_finished:
+        presenter.consume(
+            ToolEndEvent(
+                run_id="r",
+                message_id="m",
+                step_index=0,
+                tool_call=call,
+                result=ToolResult(content=""),
+            )
+        )
+    presenter.consume(AgentEndEvent(run_id="r", outcome=RunStatus.CANCELLED))
+    replay = _response_packets(
+        ResponseRecord(
+            run_id="r",
+            status=RunStatus.CANCELLED
+            if status == ExecutionStatus.CANCELLED
+            else RunStatus.ERROR,
+            steps=[StepRecord(message=message, generation_status=status)],
+        ),
+        {},
+        {},
+        {},
+    )
+    for packets in (output, replay):
+        starts = [
+            packet for packet in packets if isinstance(packet.obj, PythonToolStart)
+        ]
+        assert len(starts) == 1
+        assert starts[0].obj == PythonToolStart(code="print(1)")
+        assert (
+            sum(
+                isinstance(packet.obj, SectionEnd)
+                and packet.placement == starts[0].placement
+                for packet in packets
+            )
+            == 1
+        )
+
+
+def test_child_completion_closes_only_its_tool_cards() -> None:
+    output: list[Packet] = []
+    presenter = ResponsePresenter(Emitter(output.append))
+    call = ToolCall(id="python", name=PythonTool.NAME, arguments={"code": "print(1)"})
+    for run_id in ("parent", "child"):
+        presenter.consume(
+            MessageStartEvent(run_id=run_id, message_id="m", step_index=0)
+        )
+        presenter.consume(
+            MessageEndEvent(
+                run_id=run_id,
+                message_id="m",
+                step_index=0,
+                message=AssistantMessage(id="m", content=[call]),
+                status=ExecutionStatus.COMPLETE,
+            )
+        )
+        presenter.consume(
+            ToolStartEvent(run_id=run_id, message_id="m", step_index=0, tool_call=call)
+        )
+    starts = [packet for packet in output if isinstance(packet.obj, PythonToolStart)]
+    assert len(starts) == 2
+    presenter.consume(
+        AgentEndEvent(
+            run_id="child", parent_run_id="parent", outcome=RunStatus.CANCELLED
+        )
+    )
+    ends = [packet for packet in output if isinstance(packet.obj, SectionEnd)]
+    assert [packet.placement for packet in ends] == [starts[1].placement]
+    presenter.consume(AgentEndEvent(run_id="parent", outcome=RunStatus.CANCELLED))
+    ends = [packet for packet in output if isinstance(packet.obj, SectionEnd)]
+    assert [packet.placement for packet in ends] == [
+        starts[1].placement,
+        starts[0].placement,
+    ]
+
+
+@pytest.mark.parametrize("coding", [False, True])
+def test_completed_agent_tool_output_matches_replay(coding: bool) -> None:
+    name = CODING_AGENT_TOOL_NAME if coding else RESEARCH_AGENT_TOOL_NAME
+    details = (
+        CodingAgentCallResult(answer="Final report")
+        if coding
+        else ResearchAgentCallResult(
+            intermediate_report="Final report", citation_mapping={}
+        )
+    )
+    output: list[Packet] = []
+    presenter = ResponsePresenter(Emitter(output.append))
+    runs: list[Run] = []
+    run_agent(
+        Agent(
+            FakeModelClient(
+                lambda *_: AssistantMessage(
+                    content=[ToolCall(id="child", name=name, arguments={})]
+                )
+            ),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            tools=[
+                AgentTool(
+                    definition=ToolDefinition(name=name, description="", parameters={}),
+                    execute=lambda _: ToolResult(
+                        content="Final report", details=details
+                    ),
+                )
+            ],
+        ),
+        max_steps=1,
+        runs=runs,
+        listener=presenter.consume,
+    )
+    replay = _response_packets(response_record(runs[0].snapshot()), {}, {}, {})
+    for packets in (output, replay):
+        assert not any(
+            isinstance(packet.obj, CodingAgentThinkingDelta) for packet in packets
+        )
+        if coding:
+            assert [
+                packet.obj.answer
+                for packet in packets
+                if isinstance(packet.obj, CodingAgentFinal)
+            ] == ["Final report"]
+        else:
+            assert [
+                packet.obj.content
+                for packet in packets
+                if isinstance(packet.obj, IntermediateReportDelta)
+            ] == ["Final report"]
 
 
 def test_rendering_does_not_change_requests_transcript_or_execution() -> None:

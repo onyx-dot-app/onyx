@@ -124,7 +124,11 @@ The LLM stream carries raw tool-argument fragments. `MessageRenderer` decodes th
 incrementally only for Python code and the configured reasoning tool. It emits the
 existing `ToolCallArgumentDelta` or reasoning packets. Other tools use finalized
 arguments when execution starts. Saved interrupted calls retain raw arguments for
-display without becoming executable.
+display without becoming executable. When a run ends, its unfinished tool cards receive
+the same start/end packets as saved replay. This also closes Python code-writing indicators
+when execution stops before a tool starts. Completed tool cards do not emit another end packet.
+Completed coding-tool answers emit only final-answer packets. Research reports emit once,
+whether delivered through a progress update or directly at completion.
 
 ### 4.2 `Placement`
 
