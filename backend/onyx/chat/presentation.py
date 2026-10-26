@@ -313,7 +313,7 @@ def _project_response_display(
                 update={
                     "answer": renderer.answer,
                     "reasoning": renderer.reasoning,
-                    "citation_info": response.citation_info + renderer.citations,
+                    "citation_info": renderer.citations,
                     "top_documents": renderer.documents or response.top_documents,
                     "pre_answer_processing_time": setting.pre_answer_seconds
                     if renderer.answer_started
@@ -432,7 +432,11 @@ def replay_response(
         setting = settings.get(message_id, MessageRendering(mode=default_mode))
         renderer = MessageRenderer(setting, documents, layout, parent)
         packets.extend(renderer.complete(message))
-        calls = [call for call in message.tool_calls if call.name not in HIDDEN_TOOLS]
+        calls = [
+            call
+            for call in message.tool_calls
+            if call.name not in HIDDEN_TOOLS and call.name != setting.think_tool
+        ]
         if not calls:
             continue
         for call in calls:

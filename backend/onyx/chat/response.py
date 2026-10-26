@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 
-from pydantic import JsonValue, TypeAdapter
+from pydantic import JsonValue, TypeAdapter, ValidationError
 
 from onyx.agents.models import AgentInfo, RunState, StepRecord, ToolExecutionRecord
 from onyx.chat.response_models import ResponseRecord
@@ -32,9 +32,12 @@ def message_thinking(message: AssistantMessage, think_tool: str | None = None) -
     thinking = message.thinking
     for call in message.tool_calls:
         if call.name == think_tool:
-            thinking += _STRING.validate_python(
-                tool_arguments_for_display(call).get("reasoning", "")
-            )
+            try:
+                thinking += _STRING.validate_python(
+                    tool_arguments_for_display(call).get("reasoning", "")
+                )
+            except ValidationError:
+                logger.debug("Thinking tool arguments are not text", exc_info=True)
     return thinking
 
 

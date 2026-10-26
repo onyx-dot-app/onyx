@@ -378,3 +378,12 @@ packets to assert which tool ran and with what arguments
 - **A capped buffer read (`max_chunks`) can return `done=True` with more data
   still pending.** Any new reader of `read_stream_chunks` must loop until
   `blocks` comes back empty, not stop at the first `done=True`.
+
+
+### Response rendering safeguards
+
+Malformed tool arguments use a generic card so saved errors and later answers can
+still render. Replay hides the configured thinking tool. Answers that start with a
+citation retain its metadata. Interrupted responses retain citations only for the
+selected answer text. Tool debug packets appear only in integration-test mode,
+before the tool start packet.
