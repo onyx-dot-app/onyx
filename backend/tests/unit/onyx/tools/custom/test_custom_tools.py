@@ -12,8 +12,7 @@ from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import ToolResult
 from onyx.server.features.tool.api import _validate_tool_definition
 from onyx.server.security.models import SSRFProtectionLevel
-from onyx.tools.interface import ToolContext
-from onyx.tools.models import CustomToolCallSummary, DynamicSchemaInfo
+from onyx.tools.models import CustomToolCallSummary, DynamicSchemaInfo, ToolContext
 from onyx.tools.tool_implementations.custom import custom_tool
 from onyx.tools.tool_implementations.custom.custom_tool import (
     CUSTOM_TOOL_REQUEST_TIMEOUT,

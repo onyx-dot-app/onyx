@@ -22,8 +22,7 @@ from onyx.image_gen.interfaces import ImageShape
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import AssistantMessage, ToolCall
-from onyx.tools.interface import ToolContext
-from onyx.tools.models import ToolCallException
+from onyx.tools.models import ToolCallException, ToolContext
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     REFERENCE_IMAGE_FILE_IDS_FIELD,
     ImageGenerationTool,

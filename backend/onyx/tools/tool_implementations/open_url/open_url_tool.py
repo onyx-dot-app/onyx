@@ -26,8 +26,8 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
 from onyx.document_index.interfaces import DocumentIndex, DocumentSectionRequest
 from onyx.llm.models import ToolDefinition, ToolResult
-from onyx.tools.interface import CITATIONS_PER_TOOL_CALL, Tool, ToolContext
-from onyx.tools.models import ToolCallException
+from onyx.tools.interface import CITATIONS_PER_TOOL_CALL, Tool
+from onyx.tools.models import ToolCallException, ToolContext
 from onyx.tools.tool_implementations.open_url.models import (
     FailedFetch,
     WebContentProvider,

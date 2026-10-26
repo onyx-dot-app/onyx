@@ -18,11 +18,11 @@ from onyx.llm.models import (
     ToolResult,
     ToolResultMessage,
 )
-from onyx.tools.interface import ToolContext
 from onyx.tools.models import (
     MemoryOperation,
     MemoryUpdated,
     ToolCallException,
+    ToolContext,
     ToolExecutionError,
     ToolExecutionException,
 )

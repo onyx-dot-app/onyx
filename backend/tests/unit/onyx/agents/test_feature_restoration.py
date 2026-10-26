@@ -39,7 +39,7 @@ from onyx.chat.restoration import persist_checkpoint_files
 from onyx.coding_agent.agent import CodingAgent
 from onyx.coding_agent.tool_definitions import BASH_TOOL_NAME
 from onyx.configs.constants import DocumentSource
-from onyx.context.search.models import SearchDoc
+from onyx.context.search.models import SearchCycle, SearchDoc
 from onyx.deep_research.agent import DeepResearchAgent
 from onyx.deep_research.research_agent import ResearchAgent
 from onyx.deep_research.tool_definitions import GENERATE_REPORT_TOOL_NAME
@@ -56,9 +56,7 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
-from onyx.secondary_llm_flows.source_filter import SearchCycle
-from onyx.tools.interface import ToolContext
-from onyx.tools.models import ChatFile
+from onyx.tools.models import ChatFile, ToolContext
 from onyx.tools.tool_implementations.bash.bash_tool import BashTool
 from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
     CodingAgentTool,
@@ -440,7 +438,7 @@ def test_coding_delegation_releases_parent_worker_without_deleting_waiting_works
         return child
 
     module = "onyx.tools.tool_implementations.coding_agent.coding_agent_tool"
-    monkeypatch.setattr(f"{module}._setup_session", sandbox)
+    monkeypatch.setattr(f"{module}.coding_sandbox_session", sandbox)
     monkeypatch.setattr(f"{module}.CodingAgent", child_feature)
     monkeypatch.setattr(f"{module}.get_llm_token_counter", lambda _llm: len)
     monkeypatch.setattr(

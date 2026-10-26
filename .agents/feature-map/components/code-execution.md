@@ -91,7 +91,7 @@ stops and forces a final answer. The loop checks this limit once per cycle.
 - No table stores code-interpreter sessions or executions. Session lifetime is entirely
   server-side state on the Code Interpreter service, referenced only by a `session_id: str`
   string that Onyx holds in memory for the duration of one coding-agent call
-  (`backend/onyx/coding_agent/agent.py:_setup_session`).
+  (`backend/onyx/coding_agent/agent.py:coding_sandbox_session`).
 - Generated files from `run_python` are persisted through the ordinary file store as
   `FileOrigin.CHAT_IMAGE_GEN` records (`python_tool.py:run`, `file_store/utils.py`). See §5 and
   §9; the access rule for that origin is documented in `[[file-store-and-user-files]]` and is
@@ -165,11 +165,11 @@ route only exists on Code Interpreter servers reporting version `>= 0.4.0`
 `BashTool` is constructed with a `session_id` already in hand
 (`bash_tool.py:__init__(self, tool_id, session_id, emitter)`); it does not create or destroy
 sessions itself. Session lifecycle belongs entirely to its one caller,
-`backend/onyx/coding_agent/agent.py:_setup_session`:
+`backend/onyx/coding_agent/agent.py:coding_sandbox_session`:
 
 ```
 CodingAgent                             coding_agent/agent.py
-  └─ _setup_session (context manager)    coding_agent/agent.py
+  └─ coding_sandbox_session (context manager)    coding_agent/agent.py
       ├─ download_github_archive         utils/github.py   (tarball of the target repo)
       ├─ CodeInterpreterClient.upload_file(repo.tar.gz)
       ├─ CodeInterpreterClient.create_session(ttl_seconds=3600, files=[tarball])
@@ -223,13 +223,13 @@ bytes on a later cycle. It is not a Code Interpreter session; it is purely an up
 optimization scoped to one `PythonTool` object (one turn's worth of `run_python` calls).
 
 **Bash (inside the coding agent) has exactly one session per coding-agent call.**
-`_setup_session` creates one Code Interpreter session with a 1-hour TTL
+`coding_sandbox_session` creates one Code Interpreter session with a 1-hour TTL
 (`CODING_AGENT_SESSION_TTL_SECONDS`), and every bash call the sub-agent makes during that call
 runs `execute_bash_in_session` against that same `session_id`, so the filesystem (including
 the extracted repo) persists across bash calls. The coding agent's own comment says this is
 intentional: bash calls are dispatched sequentially, not in parallel, because "they share the
 session filesystem and ordering matters" (`backend/onyx/coding_agent/agent.py:CodingAgent`).
-The session is torn down when `_setup_session`'s context manager exits; if that
+The session is torn down when `coding_sandbox_session`'s context manager exits; if that
 best-effort `delete_session` call itself fails, the pod's own TTL is the backstop.
 
 **Generated files from `run_python` are retained, not the execution state.** A generated file
@@ -320,7 +320,7 @@ relied on to reap them, `python_tool.py:run`).
 | adds a new executable tool (a third code-execution surface) | `BUILT_IN_TOOL_MAP` and the seeding migration pattern (`[[tools-framework]]` §8), whether it needs a session like `bash` or is stateless like `run_python`, and whether its output needs the same truncation and generated-file handling |
 | changes output handling (truncation, generated-file save path) | `CODE_INTERPRETER_MAX_OUTPUT_LENGTH`, `FileOrigin.CHAT_IMAGE_GEN` and the session stamp `PythonTool` must pass (`[[file-store-and-user-files]]` §5), and the frontend renderers that assume `stdout`/`stderr`/`file_ids` shapes |
 | changes `/admin/code-interpreter` semantics | `useCodeInterpreter.ts`'s polling and status derivation, and both `is_available` implementations that read `CodeInterpreterServer.server_enabled` |
-| changes the coding-agent session lifecycle | `_setup_session`'s TTL and cleanup, and whether bash calls must stay sequential (filesystem sharing) |
+| changes the coding-agent session lifecycle | `coding_sandbox_session`'s TTL and cleanup, and whether bash calls must stay sequential (filesystem sharing) |
 
 ---
 

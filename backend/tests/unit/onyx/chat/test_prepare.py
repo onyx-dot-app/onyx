@@ -27,9 +27,9 @@ from onyx.chat.prepare import (
     prepare_chat_turn,
 )
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
+from onyx.context.models import UserInfo, UserMemoryContext
 from onyx.context.search.models import PersonaSearchInfo
 from onyx.db.enums import IncognitoRecordMode
-from onyx.db.memory import UserInfo, UserMemoryContext
 from onyx.db.models import ChatMessage, ChatSession, Persona, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError

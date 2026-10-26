@@ -1,4 +1,4 @@
-from pydantic import BaseModel, TypeAdapter
+from pydantic import TypeAdapter
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
@@ -10,8 +10,13 @@ from onyx.configs.app_configs import (
 )
 from onyx.db.code_interpreter import fetch_code_interpreter_server
 from onyx.llm.models import ToolDefinition, ToolResult
-from onyx.tools.interface import Tool, ToolContext, parse_tool_arguments
-from onyx.tools.models import LlmBashExecutionResult, ToolCallException
+from onyx.tools.interface import Tool, parse_tool_arguments
+from onyx.tools.models import (
+    BashArguments,
+    LlmBashExecutionResult,
+    ToolCallException,
+    ToolContext,
+)
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
 )
@@ -21,10 +26,6 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 CMD_FIELD = "cmd"
-
-
-class BashArguments(BaseModel):
-    cmd: str
 
 
 class BashTool(Tool):

@@ -14,12 +14,11 @@ from onyx.agents.models import (
 )
 from onyx.agents.tools import ToolInvocation, ToolResult
 from onyx.chat.presentation import project_response
-from onyx.db.memory import UserInfo, UserMemoryContext
+from onyx.context.models import UserInfo, UserMemoryContext
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import AssistantMessage, ToolCall, ToolResultMessage
-from onyx.tools.interface import ToolContext
-from onyx.tools.models import MemoryUpdated
+from onyx.tools.models import MemoryUpdated, ToolContext
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 
 

@@ -7,11 +7,13 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
 from onyx.configs.constants import MessageType
+from onyx.context.models import UserMemoryContext
 from onyx.context.search.models import PersonaSearchInfo, SearchDoc
 from onyx.file_store.models import (
     install_lazy_content_loader,
     maybe_materialize_lazy_content,
 )
+from onyx.tools.constants import FILE_READER_MAX_CHARS
 from onyx.utils.headers import HeaderItemDict
 
 
@@ -29,6 +31,12 @@ class GeneratedImage(BaseModel):
     shape: str | None = None
 
 
+class FileReaderArguments(BaseModel):
+    file_id: str
+    start_char: int = 0
+    num_chars: int = FILE_READER_MAX_CHARS
+
+
 class FileReadResult(BaseModel):
     type: Literal["file_read_result"] = "file_read_result"
     file_name: str
@@ -43,6 +51,10 @@ class FileReadResult(BaseModel):
 class MemoryOperation(str, Enum):
     ADD = "add"
     UPDATE = "update"
+
+
+class MemoryArguments(BaseModel):
+    memory: str
 
 
 class MemoryUpdated(BaseModel):
@@ -179,6 +191,25 @@ class ChatFile(BaseModel):
         return object.__getattribute__(self, name)
 
 
+class ToolContext(BaseModel):
+    """Application data available to each tool in an agent step."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    user_memory_context: UserMemoryContext | None = None
+    user_info: str | None = None
+    citation_mapping: dict[int, str] = Field(default_factory=dict)
+    next_citation_num: int = 1
+    # On repeat searches, defer to the model's new queries instead of repeating
+    # the expansion flow that may have produced poor results on the first pass.
+    skip_search_query_expansion: bool = False
+    chat_files: list[ChatFile] = Field(default_factory=list)
+    url_snippet_map: dict[str, str] = Field(default_factory=dict)
+    # When False, don't pass memory context to search tools for query expansion
+    # (but still pass it to the memory tool for persistence)
+    inject_memories_in_prompt: bool = True
+
+
 class ToolCallInfo(BaseModel):
     message_id: str
     parent_message_id: str | None = None
@@ -252,6 +283,10 @@ class LlmOpenUrlResult(BaseCiteableToolResult):
     content: str
 
 
+class PythonArguments(BaseModel):
+    code: str
+
+
 class PythonExecutionFile(BaseModel):
     """File generated during Python execution"""
 
@@ -279,6 +314,10 @@ class LlmPythonExecutionResult(BaseModel):
     error: str | None = None
     # Set when some session files are absent
     staging_notice: str | None = None
+
+
+class BashArguments(BaseModel):
+    cmd: str
 
 
 class LlmBashExecutionResult(BaseModel):

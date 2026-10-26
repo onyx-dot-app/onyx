@@ -26,13 +26,15 @@ from onyx.file_store.utils import (
     get_default_file_store,
 )
 from onyx.llm.models import ToolDefinition, ToolResult
-from onyx.tools.interface import Tool, ToolContext, parse_tool_arguments
+from onyx.tools.interface import Tool, parse_tool_arguments
 from onyx.tools.models import (
     ChatFile,
     LlmPythonExecutionResult,
+    PythonArguments,
     PythonExecutionDelta,
     PythonExecutionFile,
     ToolCallException,
+    ToolContext,
 )
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
@@ -83,10 +85,6 @@ def _dedupe_code_interpreter_filename(
     deduped_filename = f"{base[:max_base_len]}{suffix}"
     seen_filenames.add(deduped_filename)
     return deduped_filename
-
-
-class PythonArguments(BaseModel):
-    code: str
 
 
 class _StagePlan(BaseModel):

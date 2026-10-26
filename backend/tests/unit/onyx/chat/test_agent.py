@@ -464,7 +464,7 @@ def test_chat_prepared_prompt_rebuilds_history_with_captured_instructions(
 def test_user_information_is_split_out_of_the_shared_system_prompt(
     monkeypatch: pytest.MonkeyPatch, inject_memories: bool
 ) -> None:
-    from onyx.db.memory import UserInfo, UserMemoryContext
+    from onyx.context.models import UserInfo, UserMemoryContext
     from onyx.llm.models import SystemMessage
 
     monkeypatch.setattr(

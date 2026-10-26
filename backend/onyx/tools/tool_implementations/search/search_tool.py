@@ -59,7 +59,9 @@ from onyx.context.search.models import (
     InferenceChunk,
     InferenceSection,
     PersonaSearchInfo,
+    SearchCycle,
     SearchDocsResponse,
+    TimeFilter,
     UserAccessFilters,
 )
 from onyx.context.search.pipeline import merge_individual_chunks, search_pipeline
@@ -104,20 +106,20 @@ from onyx.secondary_llm_flows.query_expansion import (
     keyword_query_expansion,
     semantic_query_rephrase,
 )
-from onyx.secondary_llm_flows.source_filter import SearchCycle, decide_search_scope
-from onyx.secondary_llm_flows.time_filter import TimeFilter, decide_time_filter
+from onyx.secondary_llm_flows.source_filter import decide_search_scope
+from onyx.secondary_llm_flows.time_filter import decide_time_filter
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.tools.constants import INTERNAL_SEARCH_TOOL_NAME
 from onyx.tools.interface import (
     CITATIONS_PER_TOOL_CALL,
     Tool,
-    ToolContext,
     parse_tool_arguments,
     tool_message_history,
 )
 from onyx.tools.models import (
     ChatMinimalTextMessage,
     ToolCallException,
+    ToolContext,
 )
 from onyx.tools.tool_implementations.search.constants import (
     KEYWORD_QUERY_HYBRID_ALPHA,
@@ -128,7 +130,10 @@ from onyx.tools.tool_implementations.search.constants import (
     ORIGINAL_QUERY_WEIGHT,
     SELECTION_TOKEN_BUDGET_MULTIPLIER,
 )
-from onyx.tools.tool_implementations.search.models import SearchToolState
+from onyx.tools.tool_implementations.search.models import (
+    SearchArguments,
+    SearchToolState,
+)
 from onyx.tools.tool_implementations.search.search_utils import (
     expand_section_with_context,
     merge_overlapping_sections,
@@ -150,10 +155,6 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 QUERIES_FIELD = "queries"
-
-
-class SearchArguments(BaseModel):
-    queries: list[str]
 
 
 class QueryExpansionAndScope(BaseModel):

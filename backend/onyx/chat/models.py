@@ -23,9 +23,9 @@ from onyx.agents.models import (
 from onyx.cache.interface import CacheBackend
 from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.configs.constants import MessageType
+from onyx.context.models import UserMemoryContext
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.db.enums import IncognitoRecordMode
-from onyx.db.memory import UserMemoryContext
 from onyx.deep_research.models import ResearchConfiguration
 from onyx.file_store.models import (
     ChatLoadedFile,
@@ -292,6 +292,11 @@ class ChatHistoryResult(BaseModel):
     all_injected_file_metadata: dict[str, FileToolMetadata]
 
 
+class PreparedHistory(BaseModel):
+    history: ChatHistoryResult
+    files: list[ChatFile]
+
+
 class SearchParams(BaseModel):
     """Resolved search filter IDs and search-tool usage for a chat turn."""
 
@@ -403,6 +408,29 @@ class ChatReminderContext(BaseModel):
     out_of_cycles: bool
     persona_task_prompt: str | None
     has_context_documents: bool
+
+
+class ContextDocument(BaseModel):
+    document: int
+    title: str | None = None
+    contents: str
+
+
+class ContextDocuments(BaseModel):
+    documents: list[ContextDocument] = Field(default_factory=list)
+
+
+class SearchPassage(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    __pydantic_extra__: dict[str, JsonValue] = Field(init=False)
+    document: int
+    content: str
+
+
+class SearchPassages(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    __pydantic_extra__: dict[str, JsonValue] = Field(init=False)
+    results: list[SearchPassage]
 
 
 class ChatPrompt(BaseModel):
