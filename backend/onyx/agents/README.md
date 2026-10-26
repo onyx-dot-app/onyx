@@ -574,7 +574,10 @@ Admission is claimed before loading history. Another tab or pod cannot start a t
 The browser checks session readiness after stream errors and reloads; stream closure alone does not confirm completion.
 Execution leases remain separate and retain ownership until work drains or is explicitly transferred.
 
-`AgentCoordinator` tracks local agents and runs. Its application interfaces provide access to saved data and execution ownership:
+`AgentCoordinator` keeps each run's execution handle, coordination, completion, cleanup work, and remote observer in one internal record.
+Handoff releases the local execution while retaining completion and cleanup tracking. Branch permissions remain separate from that record.
+
+Its application interfaces provide access to saved data and execution ownership:
 
 | Interface | Responsibility |
 | --- | --- |
