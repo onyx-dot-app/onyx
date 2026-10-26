@@ -1,0 +1,43 @@
+{
+  "name": "greptile",
+  "version": "1.3.0",
+  "description": "AI code review agent for GitHub and GitLab. View Greptile's PR review comments, run reviews on your working branch, and search your organization's knowledge base and coding patterns, directly from Codex.",
+  "author": {
+    "name": "Greptile",
+    "url": "https://www.greptile.com/"
+  },
+  "homepage": "https://www.greptile.com/docs/mcp-v2/overview",
+  "repository": "https://github.com/greptileai/skills",
+  "license": "MIT",
+  "keywords": [
+    "greptile",
+    "code-review",
+    "pull-requests",
+    "codex"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Greptile",
+    "shortDescription": "Review code and PR feedback",
+    "longDescription": "AI code review agent for GitHub and GitLab. View Greptile's PR review comments, run reviews on your working branch, and search your organization's knowledge base and coding patterns, directly from Codex.",
+    "developerName": "Greptile",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://www.greptile.com/",
+    "supportURL": "https://www.greptile.com/contact",
+    "privacyPolicyURL": "https://www.greptile.com/security/privacy",
+    "termsOfServiceURL": "https://www.greptile.com/terms-of-service",
+    "brandColor": "#16A34A",
+    "composerIcon": "./assets/icon.svg",
+    "logo": "./assets/logo.svg",
+    "defaultPrompt": [
+      "Review my current branch with Greptile",
+      "Show Greptile’s comments on this PR",
+      "Search our knowledge base for how authentication works"
+    ]
+  }
+}
