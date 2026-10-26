@@ -21,6 +21,11 @@ from onyx.connectors.exceptions import (
     CredentialExpiredError,
     InsufficientPermissionsError,
 )
+from onyx.connectors.google_drive.constants import MAX_DEDUP_DRIVE_FILE_IDS
+from onyx.connectors.google_drive.corpus_estimate import (
+    CountStopped,
+    estimate_drive_corpus,
+)
 from onyx.connectors.google_drive.doc_conversion import (
     _FALLBACK_BINARY_WEB_VIEW_LINK_TEMPLATE,
     _FALLBACK_WEB_VIEW_LINK_TEMPLATES,
@@ -47,8 +52,10 @@ from onyx.connectors.google_drive.file_retrieval import (
     get_files_in_shared_drive,
     get_folder_metadata,
     has_link_only_permission,
+    owner_email,
 )
 from onyx.connectors.google_drive.models import (
+    DriveCountScope,
     DriveRetrievalPhase,
     DriveRetrievalStage,
     GoogleDriveCheckpoint,
@@ -82,6 +89,7 @@ from onyx.connectors.google_utils.shared_constants import (
 from onyx.connectors.interfaces import (
     CheckpointedConnectorWithPermSync,
     CheckpointOutput,
+    CorpusEstimateConnector,
     GenerateSlimDocumentOutput,
     NormalizationResult,
     Resolver,
@@ -92,6 +100,7 @@ from onyx.connectors.interfaces import (
 from onyx.connectors.models import (
     ConnectorFailure,
     ConnectorMissingCredentialError,
+    CorpusEstimate,
     Document,
     DocumentFailure,
     EntityFailure,
@@ -126,11 +135,6 @@ MY_DRIVE_PAGES_PER_CHECKPOINT = 2
 OAUTH_PAGES_PER_CHECKPOINT = 2
 # Partitions (drives or users) started per service account checkpoint call.
 PARTITIONS_PER_CHECKPOINT = 4
-
-# Upper bound on the dedup set. Drive file ids measure ~119 bytes per entry with
-# deep_getsizeof, so this holds it near 95 MB, well under
-# CHECKPOINT_SIZE_LIMIT_BYTES.
-MAX_DEDUP_DRIVE_FILE_IDS = 800_000
 
 
 def extract_str_list_from_comma_str(string: str | None) -> list[str]:
@@ -236,16 +240,6 @@ def _resume_start(
     return max(completed_until, start) if start is not None else completed_until
 
 
-def _owner_email(drive_file: GoogleDriveFileType) -> str | None:
-    """Lowercased owner of a My Drive file. Drive allows one owner; shared
-    drive files have none."""
-    owners = drive_file.get("owners") or []
-    if not owners:
-        return None
-    email = owners[0].get("emailAddress")
-    return email.lower() if isinstance(email, str) else None
-
-
 def _note_modified_time(
     progress: PhaseProgress, drive_file: GoogleDriveFileType
 ) -> None:
@@ -318,6 +312,7 @@ class GoogleDriveConnector(
     SlimConnector,
     SlimConnectorWithPermSync,
     CheckpointedConnectorWithPermSync[GoogleDriveCheckpoint],
+    CorpusEstimateConnector,
     Resolver,
 ):
     slim_listing_honors_indexing_start = True
@@ -966,7 +961,9 @@ class GoogleDriveConnector(
         if phase is DriveRetrievalPhase.SHARED_DRIVES:
             partition_keys = list(checkpoint.drive_ids_to_retrieve or [])
         elif phase is DriveRetrievalPhase.MY_DRIVES:
-            partition_keys = self._my_drive_partition_emails(checkpoint)
+            partition_keys = self._my_drive_partition_emails(
+                checkpoint.user_emails or []
+            )
         elif phase is DriveRetrievalPhase.REQUESTED_TARGETS:
             partition_keys = self._plan_requested_targets(checkpoint)
         elif (
@@ -977,7 +974,9 @@ class GoogleDriveConnector(
             # in scope, so this phase walks the same users.
             partition_keys = [
                 email
-                for email in self._my_drive_partition_emails(checkpoint)
+                for email in self._my_drive_partition_emails(
+                    checkpoint.user_emails or []
+                )
                 if email not in checkpoint.failed_impersonation_emails
             ]
         logger.info("Entering phase %s with %s partitions", phase, len(partition_keys))
@@ -1200,7 +1199,7 @@ class GoogleDriveConnector(
                 if isinstance(item, str):
                     progress.next_page_token = item
                     return True
-                owner = _owner_email(item)
+                owner = owner_email(item)
                 owned_here = owner == email.lower() and not item.get("driveId")
                 via_shortcut = RESOLVED_FROM_SHORTCUT_KEY in item
                 # A shortcut to this user's own file: the listing reaches the
@@ -1246,7 +1245,7 @@ class GoogleDriveConnector(
         covered_drive_ids = self._covered_drive_ids(checkpoint)
         covered_owners = {
             owner.lower()
-            for owner in self._my_drive_partition_emails(checkpoint)
+            for owner in self._my_drive_partition_emails(checkpoint.user_emails or [])
             if owner not in checkpoint.failed_impersonation_emails
         }
         suppressed: int = 0
@@ -1268,7 +1267,7 @@ class GoogleDriveConnector(
                     return True
                 if (
                     item.get("driveId") in covered_drive_ids
-                    or _owner_email(item) in covered_owners
+                    or owner_email(item) in covered_owners
                 ):
                     suppressed += 1
                     continue
@@ -1352,7 +1351,7 @@ class GoogleDriveConnector(
             if email is not None:
                 return [email]
         else:
-            owner = _owner_email(metadata)
+            owner = owner_email(metadata)
             if (
                 owner is not None
                 and owner.endswith(f"@{self.google_domain.lower()}")
@@ -1477,10 +1476,7 @@ class GoogleDriveConnector(
         allowed = {user.lower() for user in checkpoint.user_emails or []}
         return email.lower() in allowed
 
-    def _my_drive_partition_emails(
-        self, checkpoint: GoogleDriveCheckpoint
-    ) -> list[str]:
-        users = checkpoint.user_emails or []
+    def _my_drive_partition_emails(self, users: list[str]) -> list[str]:
         if self.include_my_drives:
             return list(users)
         requested = {email.lower() for email in self._requested_my_drive_emails}
@@ -2416,6 +2412,87 @@ class GoogleDriveConnector(
             if MISSING_SCOPES_ERROR_STR in str(e):
                 raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e
             raise
+
+    def _count_scope(self, should_stop: Callable[[], bool]) -> DriveCountScope:
+        """What the count lists, resolved as the run resolves it: the same
+        drive ids, users, and principal per requested folder. An OAuth user
+        with every corpus on reads it all in one listing, so no drive or
+        folder is listed on its own. Raises ``CountStopped`` when the caller
+        stops the count while this still makes requests."""
+
+        def check_stop() -> None:
+            if should_stop():
+                raise CountStopped()
+
+        check_stop()
+        all_in_one_listing = not self._is_service_account and (
+            self.include_shared_drives
+            and self.include_my_drives
+            and self.include_files_shared_with_me
+        )
+        drive_ids, folder_ids = (
+            ([], []) if all_in_one_listing else self._compute_retrieval_ids()
+        )
+        checkpoint = self.build_dummy_checkpoint()
+        checkpoint.user_emails = self._get_all_user_emails()
+        drives: dict[str, str] = {}
+        incomplete: list[str] = []
+        unlistable: list[str] = []
+        for drive_id in drive_ids:
+            check_stop()
+            email, complete = self._choose_drive_principal(drive_id, checkpoint)
+            if email is None:
+                unlistable.append(drive_id)
+                continue
+            drives[drive_id] = email
+            if not complete:
+                incomplete.append(drive_id)
+        folders: dict[str, list[str]] = {}
+        unreachable: list[str] = []
+        for folder_id in folder_ids:
+            check_stop()
+            found = self._find_target_viewer(folder_id, checkpoint)
+            if found is None:
+                unreachable.append(folder_id)
+                continue
+            viewer, metadata = found
+            # A folder inside a drive listed in full is counted with the drive.
+            in_drive = metadata.get("driveId")
+            if in_drive in drives and in_drive not in incomplete:
+                continue
+            folders[folder_id] = self._target_principals(
+                folder_id, viewer, metadata, checkpoint
+            )
+        return DriveCountScope(
+            include_shared_drives=self.include_shared_drives,
+            include_my_drives=self.include_my_drives,
+            include_files_shared_with_me=self.include_files_shared_with_me,
+            drives=drives,
+            incomplete_drive_ids=incomplete,
+            unlistable_drive_ids=unlistable,
+            folders=folders,
+            unreachable_folder_ids=unreachable,
+            my_drive_emails=self._my_drive_partition_emails(checkpoint.user_emails),
+        )
+
+    @override
+    def estimate_corpus(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        should_stop: Callable[[], bool],
+        on_progress: Callable[[CorpusEstimate], None],
+    ) -> CorpusEstimate:
+        return estimate_drive_corpus(
+            self.ops,
+            primary_admin_email=self.primary_admin_email,
+            is_service_account=self._is_service_account,
+            plan_scope=lambda: self._count_scope(should_stop),
+            start=start,
+            end=end,
+            should_stop=should_stop,
+            on_progress=on_progress,
+        )
 
     @override
     def retrieve_all_slim_docs(

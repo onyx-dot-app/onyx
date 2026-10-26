@@ -408,6 +408,31 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
         return ThreadSafeDict()
 
 
+class DriveCountScope(BaseModel):
+    """What a corpus count lists, resolved the way the run resolves it: each
+    shared drive and requested folder with the users to read it as, and the
+    users whose My Drives and shared files to read. The flags shape the one
+    listing an OAuth user makes."""
+
+    model_config = ConfigDict(frozen=True)
+
+    include_shared_drives: bool
+    include_my_drives: bool
+    include_files_shared_with_me: bool
+    # Shared drive id -> the user the run lists it as.
+    drives: dict[str, str]
+    # Drives whose user is not an organizer: the listing can miss
+    # limited-access folders, so their files are a lower bound.
+    incomplete_drive_ids: list[str] = []
+    # Drives no user can list. Reported, not counted.
+    unlistable_drive_ids: list[str] = []
+    # Requested folder id -> the users the run reads it as.
+    folders: dict[str, list[str]]
+    # Requested folders no user can see. Reported, not counted.
+    unreachable_folder_ids: list[str] = []
+    my_drive_emails: list[str]
+
+
 class GoogleDriveAuth(BaseModel):
     model_config = ConfigDict(frozen=True)
 
