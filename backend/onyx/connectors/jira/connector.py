@@ -351,7 +351,7 @@ def process_jira_issue(
     comment_email_blacklist: tuple[str, ...] = (),
     labels_to_skip: set[str] | None = None,
     parent_hierarchy_raw_node_id: str | None = None,
-    preloaded_comment_texts: list[str] | None = None,
+    comment_texts_provider: Callable[[], list[str]] | None = None,
     source: DocumentSource = DocumentSource.JIRA,
 ) -> Document | None:
     issue_key: str = _issue_key(issue)
@@ -369,8 +369,8 @@ def process_jira_issue(
     description: str = rich_text(get_issue_field(issue, "description"))
 
     comments: list[str] = (
-        preloaded_comment_texts
-        if preloaded_comment_texts is not None
+        comment_texts_provider()
+        if comment_texts_provider is not None
         else get_comment_strs(
             issue=issue,
             comment_email_blacklist=comment_email_blacklist,

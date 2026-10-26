@@ -50,9 +50,11 @@ def _gateway(
         credentials_provider=OnyxStaticCredentialsProvider(
             None,
             DocumentSource.JIRA.value,
-            credentials
-            if credentials is not None
-            else {"jira_user_email": "user@example.com", "jira_api_token": "token"},
+            (
+                credentials
+                if credentials is not None
+                else {"jira_user_email": "user@example.com", "jira_api_token": "token"}
+            ),
         ),
         connector_specific_config={"jira_base_url": "https://jira.example.com"},
     )
@@ -85,7 +87,7 @@ def test_service_desk_comment_error_keeps_http_status_for_fallback() -> None:
         _gateway(client).get_request_comments(issue_key="SUP-1", start=0, limit=50)
 
     assert raised.value.status_code == 404
-    assert raised.value.text == "Not found"
+    assert raised.value.body == "Not found"
 
 
 def test_bulk_fetch_success() -> None:

@@ -93,7 +93,7 @@ def test_fallback_only_accepts_comments_explicitly_marked_public(
     assert jsm_connector._source_operations is not None
     gateway: Any = jsm_connector._source_operations
     gateway.get_request_comments.side_effect = JiraApiError(
-        "Synthetic response", text=None, status_code=404
+        "Synthetic response", body=None, status_code=404
     )
 
     issue = {
@@ -122,7 +122,7 @@ def test_public_fallback_handles_hidden_author_email_and_adf(
     assert jsm_connector._source_operations is not None
     gateway: Any = jsm_connector._source_operations
     gateway.get_request_comments.side_effect = JiraApiError(
-        "Synthetic response", text=None, status_code=404
+        "Synthetic response", body=None, status_code=404
     )
     issue: dict[str, Any] = {
         "key": "SUP-4",
@@ -196,7 +196,7 @@ def test_comment_api_failure_does_not_return_incomplete_comments(
 ) -> None:
     assert jsm_connector._source_operations is not None
     gateway: Any = jsm_connector._source_operations
-    error = JiraApiError("Synthetic response", text=None, status_code=status_code)
+    error = JiraApiError("Synthetic response", body=None, status_code=status_code)
     responses: list[Any] = []
     if after_first_page:
         responses.append(
@@ -219,7 +219,7 @@ def test_later_page_not_found_does_not_use_fallback(
 ) -> None:
     assert jsm_connector._source_operations is not None
     gateway: Any = jsm_connector._source_operations
-    error = JiraApiError("Synthetic response", text=None, status_code=404)
+    error = JiraApiError("Synthetic response", body=None, status_code=404)
     gateway.get_request_comments.side_effect = [
         {
             "values": [{"public": True, "body": "First page reply"}],
@@ -407,3 +407,17 @@ def test_inherited_issue_items_preserve_public_only_comments(
         permissions.assert_called_once_with("SUP", add_prefix=True)
     else:
         permissions.assert_not_called()
+
+
+@pytest.mark.parametrize("status_code", [401, 403, 429, 500])
+def test_skipped_labels_do_not_request_comments(
+    jsm_connector: JiraServiceManagementConnector, status_code: int
+) -> None:
+    gateway: Any = jsm_connector._source_operations
+    gateway.get_request_comments.side_effect = JiraApiError(
+        "Synthetic response", body=None, status_code=status_code
+    )
+    jsm_connector.labels_to_skip = {"excluded"}
+    issue: dict[str, Any] = {"key": "SUP-9", "fields": {"labels": ["excluded"]}}
+    assert jsm_connector._process_issue(issue) is None
+    gateway.get_request_comments.assert_not_called()

@@ -147,7 +147,7 @@ class JiraServiceManagementConnector(JiraConnector):
             comment_email_blacklist=self.comment_email_blacklist,
             labels_to_skip=self.labels_to_skip,
             parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
-            preloaded_comment_texts=self._get_public_comment_texts(issue),
+            comment_texts_provider=lambda: self._get_public_comment_texts(issue),
             source=self.document_source,
         )
 
