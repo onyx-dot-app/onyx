@@ -23,6 +23,7 @@ from onyx.agents.runtime import Agent, RunFailed
 from onyx.agents.tool_execution import ToolBatch
 from onyx.agents.tools import AgentTool, ToolInvocation, ToolProgress
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
+from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
     AssistantMessage,
     GenerationContentEvent,
@@ -38,6 +39,7 @@ from onyx.llm.models import (
     ToolDefinition,
     ToolResult,
 )
+from onyx.tracing.flows import LLMFlow
 from onyx.utils.threadpool_concurrency import start_thread_future
 from tests.unit.onyx.agents.fakes import FakeModelClient
 
@@ -125,7 +127,10 @@ def test_nested_parallel_children_and_grandchildren_keep_context() -> None:
     def delegate(invocation: ToolInvocation) -> ToolResult:
         token = tenant.set(invocation.call_id)
         try:
-            child = Agent(FakeModelClient(leaf_reply))
+            child = Agent(
+                FakeModelClient(leaf_reply),
+                generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            )
             spawned = invocation.agents.spawn_agent(
                 child, name=invocation.call_id, description="", messages=[], max_steps=1
             )
@@ -147,6 +152,7 @@ def test_nested_parallel_children_and_grandchildren_keep_context() -> None:
                     ]
                 )
             ),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
             tools=[
                 AgentTool(
                     definition=ToolDefinition(
@@ -170,6 +176,7 @@ def test_nested_parallel_children_and_grandchildren_keep_context() -> None:
                 ]
             )
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(name="parent", description="", parameters={}),
@@ -206,7 +213,8 @@ def test_child_thread_start_failure_rolls_back_registration(
     child = Agent(
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="child")])
-        )
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
     )
     coordinator = AgentCoordinator()
     original = runtime.start_thread_with_context
@@ -236,6 +244,7 @@ def test_child_thread_start_failure_rolls_back_registration(
                 content=[ToolCall(id="call", name="delegate", arguments={})]
             )
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(
@@ -279,6 +288,7 @@ def test_terminal_snapshot_rejects_late_tool_result(
                 ]
             )
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(name="late", description="", parameters={}),
@@ -333,7 +343,10 @@ def test_discovery_reads_run_status_without_holding_coordinator_lock(
         assert release_model.wait(5)
         return AssistantMessage(content=[TextContent(text="done")])
 
-    agent = Agent(FakeModelClient(reply))
+    agent = Agent(
+        FakeModelClient(reply),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+    )
     coordinator = AgentCoordinator()
     coordinator.register(
         AgentInfo(
@@ -413,7 +426,8 @@ def test_parent_listener_failure_keeps_child_result_and_idle() -> None:
     agent = Agent(
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="answer")])
-        )
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
     )
     parent = concurrency.EventDelivery()
     parent.subscribe(fail)

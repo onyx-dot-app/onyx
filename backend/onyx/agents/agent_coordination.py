@@ -226,14 +226,19 @@ class AgentCoordinator:
                                 "Released run returned an invalid terminal result"
                             )
                         with self._state.lock:
-                            if stop.is_set():
+                            if stop.is_set() or future.done():
                                 return
                             self._state.latest[info.id] = result
-                        future.set_result(result)
+                        future.set_result(result.model_copy(deep=True))
                         return
                 except Exception:
                     logger.exception("Could not read released run result; retrying")
                 if time.monotonic() >= deadline:
+                    with self._state.lock:
+                        if stop.is_set() or future.done():
+                            return
+                        # A new owner needs a fresh completion once observation expires.
+                        stop.set()
                     future.set_exception(
                         TimeoutError("Released run did not complete in time")
                     )
@@ -244,7 +249,9 @@ class AgentCoordinator:
             self._state.work.start(observe)
         except Exception as error:
             with self._state.lock:
-                self._state.completion_observers.pop(run_id, None)
+                if stop.is_set() or future.done():
+                    return
+                stop.set()
             logger.exception("Could not start dependency observation")
             future.set_exception(error)
 
@@ -285,7 +292,7 @@ class AgentCoordinator:
         return existing
 
     def completion(self, run_id: str) -> Future[RunState]:
-        """Observe terminal handling, including application persistence failures."""
+        """Complete after persistence; consumers must not mutate the shared result."""
         with self._state.lock:
             future = self._state.completions.get(run_id)
         if future is None:
@@ -294,7 +301,9 @@ class AgentCoordinator:
 
     def child_completion(self, run_id: str, parent_id: str) -> Future[RunState]:
         """Authorize a dependency and use its persisted completion as the result."""
-        snapshot = self.run_state(run_id, parent_id)
+        if self.child_run(run_id, parent_id) is not None:
+            return self.completion(run_id)
+        snapshot = self.saved_run(run_id, parent_id)
         with self._state.lock:
             future = self._state.completions.get(run_id)
         if future is None:
@@ -487,12 +496,12 @@ class AgentCoordinator:
             binding = RunCoordination(self, run)
             self._state.bindings[run.id] = binding
             self._state.runs[run.id] = run
+            stop = self._state.completion_observers.pop(run.id, None)
             completion = self._state.completions.get(run.id)
-            if completion is None:
+            if completion is None or (stop is not None and stop.is_set()):
                 completion = Future()
                 completion.set_running_or_notify_cancel()
                 self._state.completions[run.id] = completion
-            stop = self._state.completion_observers.pop(run.id, None)
             if stop is not None:
                 stop.set()
             self._visible_run_ids.add(run.id)
@@ -930,7 +939,7 @@ class RunCoordination:
                             max(0, deadline - time.monotonic()),
                         )
                     state = future.result(timeout=max(0, deadline - time.monotonic()))
-                    records.append(state)
+                    records.append(state.model_copy(deep=True))
                     validate_run_completion(state)
                 except RunFailed as error:
                     with self._lock:
@@ -961,10 +970,12 @@ class RunCoordination:
         for run_id in run_ids:
             future = self.coordinator.child_completion(run_id, self.run.agent_id)
             if future.done():
-                states.append(future.result().model_copy(deep=True))
+                states.append(future.result())
             else:
                 pending = True
-        return None if pending else states
+        if pending:
+            return None
+        return [state.model_copy(deep=True) for state in states]
 
     def release(self) -> None:
         self.coordinator.release(self.run)
@@ -1075,12 +1086,15 @@ class _ToolControl(AgentControl):
             raise ValueError("Wait timeout is outside its allowed bounds")
         run = self.owner.coordinator.child_run(run_id, self.owner.run.agent_id)
         if run is not None:
+            completion = self.owner.coordinator.completion(run_id)
             try:
-                wait_operation(
-                    run._completed, self.owner.run._cancellation_signal, timeout
+                state = wait_operation(
+                    completion, self.owner.run._cancellation_signal, timeout
                 )
-                result = run.result(timeout=0)
+                result = result_from_snapshot(state)
             except TimeoutError:
+                if completion.done():
+                    completion.result()
                 return None
             except (RunFailed, AgentCancelled):
                 self.owner.observe_children([run_id])

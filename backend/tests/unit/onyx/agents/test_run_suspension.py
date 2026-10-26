@@ -3,9 +3,10 @@
 import gc
 import threading
 import weakref
+from collections.abc import Mapping
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, JsonValue
 
 import onyx.agents.runtime as runtime
 from onyx.agents.agent_coordination import AgentCoordinator
@@ -27,6 +28,7 @@ from onyx.agents.tools import (
     ToolInvocation,
 )
 from onyx.llm.cancellation import CancellationSignal
+from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
     AssistantMessage,
     GenerationRequest,
@@ -37,6 +39,7 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
+from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient, FakeRunStore
 
 
@@ -89,6 +92,7 @@ def test_answer_starts_approved_action_while_parallel_sibling_is_running() -> No
                 ToolCall(id="effect", name="effect", arguments={}),
             ]
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(name="search", description="", parameters={}),
@@ -137,6 +141,7 @@ def test_answer_during_suspension_delivery_drain_restarts_exactly_once() -> None
 
     agent = Agent(
         _model([ToolCall(id="effect", name="effect", arguments={})]),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(name="effect", description="", parameters={}),
@@ -171,6 +176,7 @@ def test_identical_answer_retry_restarts_after_thread_start_failure(
 
     agent = Agent(
         _model([ToolCall(id="effect", name="effect", arguments={})]),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(name="effect", description="", parameters={}),
@@ -208,8 +214,97 @@ class _FailingRestoration(RestorableFeature):
     def capture_state(self) -> BaseModel:
         raise RuntimeError("Feature state could not be captured")
 
-    def restore_state(self, state: BaseModel) -> None:
+    def restore_state(self, state: Mapping[str, JsonValue]) -> None:
         raise AssertionError(f"Unexpected restore: {state}")
+
+
+class _FeatureState(BaseModel):
+    next_citation: int = 0
+    sources: dict[str, list[str]] = Field(default_factory=dict)
+
+
+class _StatefulFeature(RestorableFeature):
+    def __init__(self) -> None:
+        self.state = _FeatureState()
+
+    def capture_state(self) -> _FeatureState:
+        return self.state
+
+    def restore_state(self, state: Mapping[str, JsonValue]) -> None:
+        self.state = _FeatureState.model_validate(state)
+
+    def execute(self, _invocation: ToolInvocation) -> ToolResult:
+        return ToolResult(
+            content=f"{self.state.next_citation}: {self.state.sources['search'][0]}"
+        )
+
+
+def test_json_checkpoint_restores_feature_fields_before_resuming_tools() -> None:
+    def make_agent(feature: _StatefulFeature, state: AgentState) -> Agent:
+        def generate(
+            request: GenerationRequest, _signal: CancellationSignal
+        ) -> AssistantMessage:
+            last = request.messages[-1]
+            if isinstance(last, ToolResultMessage):
+                return AssistantMessage(content=[TextContent(text=last.content)])
+            return AssistantMessage(
+                content=[ToolCall(id="effect", name="effect", arguments={})]
+            )
+
+        return Agent(
+            FakeModelClient(generate),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            agent_id="stateful-agent",
+            state=state,
+            tools=[
+                AgentTool(
+                    definition=ToolDefinition(
+                        name="effect", description="", parameters={}
+                    ),
+                    execute=feature.execute,
+                )
+            ],
+            before_tool_call=_gate,
+            restoration=feature,
+        )
+
+    original = _StatefulFeature()
+    original.state = _FeatureState(next_citation=7, sources={"search": ["retained"]})
+    agent = make_agent(original, AgentState())
+    run = agent.start(messages=[UserMessage(content="Find evidence")], max_steps=2)
+    try:
+        assert run.wait_until_settled(3).status == RunStatus.SUSPENDED
+        assert run.wait_for_idle(3)
+        original.state.next_citation = 99
+        original.state.sources["search"].append("changed")
+        encoded = run.handoff().model_dump_json()
+    finally:
+        run.cancel()
+        assert run.wait_for_idle(3)
+    del original, agent, run
+
+    checkpoint = ExecutionCheckpoint.model_validate_json(encoded)
+    feature = _StatefulFeature()
+    agent = make_agent(feature, checkpoint.agent_state)
+    resumed = agent.resume(checkpoint.run_state)
+    try:
+        assert resumed.wait_until_settled(3).status == RunStatus.SUSPENDED
+        resumed.submit(_approve())
+        assert resumed.result(timeout=3).output.text == "7: retained"
+        assert feature.state == _FeatureState(
+            next_citation=7, sources={"search": ["retained"]}
+        )
+        feature.state.next_citation = 99
+        feature.state.sources["search"].append("changed")
+        progress = resumed.snapshot().progress
+        assert progress is not None
+        assert progress.feature_state == {
+            "next_citation": 7,
+            "sources": {"search": ["retained"]},
+        }
+    finally:
+        resumed.cancel()
+        assert resumed.wait_for_idle(3)
 
 
 def test_feature_capture_failure_finishes_run_and_releases_work() -> None:
@@ -220,6 +315,7 @@ def test_feature_capture_failure_finishes_run_and_releases_work() -> None:
 
     agent = Agent(
         _model([ToolCall(id="question", name="question", arguments={})]),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(
@@ -246,6 +342,7 @@ def test_current_thread_start_returns_on_suspension_and_resumes_on_worker() -> N
     terminal_threads: list[threading.Thread] = []
     agent = Agent(
         _model([ToolCall(id="effect", name="effect", arguments={})]),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(name="effect", description="", parameters={}),
@@ -279,6 +376,7 @@ def test_released_run_does_not_save_terminal_output() -> None:
     coordinator = AgentCoordinator()
     agent = Agent(
         _model([ToolCall(id="effect", name="effect", arguments={})]),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(name="effect", description="", parameters={}),
@@ -313,6 +411,7 @@ def test_checkpoint_save_precedes_local_release(save_fails: bool) -> None:
     coordinator = AgentCoordinator()
     agent = Agent(
         _model([ToolCall(id="effect", name="effect", arguments={})]),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(name="effect", description="", parameters={}),
@@ -365,6 +464,7 @@ def test_explicit_suspension_blocks_dependency_wakeup_until_resume(
 
     agent = Agent(
         _model([ToolCall(id="effect", name="effect", arguments={})]),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(name="effect", description="", parameters={}),
@@ -401,6 +501,7 @@ def test_explicit_suspension_blocks_dependency_wakeup_until_resume(
 def test_run_can_capture_and_release_without_its_creating_agent() -> None:
     agent = Agent(
         _model([ToolCall(id="effect", name="effect", arguments={})]),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         state=AgentState(messages=[UserMessage(content="Earlier context")]),
         tools=[
             AgentTool(
@@ -446,6 +547,7 @@ def test_cold_question_resume_uses_answer_without_repeating_tool() -> None:
 
         return Agent(
             _model([ToolCall(id="question", name="question", arguments={})]),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
             agent_id="question-agent",
             state=context,
             tools=[
@@ -517,6 +619,7 @@ def test_cold_resume_retains_consumed_answer_identity_and_rejects_conflict() -> 
 
         return Agent(
             FakeModelClient(generate),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
             agent_id="agent",
             state=context,
             tools=[
@@ -584,6 +687,7 @@ def test_resume_after_completed_step_does_not_repeat_completion_callback() -> No
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="finished")])
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         after_step=complete,
     )
     run = agent.start(max_steps=1)
@@ -599,6 +703,7 @@ def test_resume_after_completed_step_does_not_repeat_completion_callback() -> No
             FakeModelClient(
                 lambda *_: pytest.fail("Completed generation must not repeat")
             ),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
             state=restored.agent_state,
             agent_id=restored.run_state.agent_id,
             after_step=lambda _: pytest.fail("Completed callback must not repeat"),

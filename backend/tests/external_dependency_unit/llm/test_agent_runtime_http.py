@@ -10,6 +10,7 @@ from onyx.agents.models import AgentState
 from onyx.agents.runtime import Agent, RunFailed
 from onyx.agents.tools import AgentTool
 from onyx.llm.constants import LlmProviderNames
+from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
     AssistantMessage,
     Message,
@@ -19,6 +20,7 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.llm.multi_llm import LitellmLLM
+from onyx.tracing.flows import LLMFlow
 from tests.integration.common_utils.managers.mock_llm import MockLLMScript
 from tests.integration.mock_services.mock_llm_server.models import (
     Reply,
@@ -73,6 +75,7 @@ def test_tool_result_reaches_next_provider_request(script: MockLLMScript) -> Non
                 execute=lambda _invocation: ToolResult(content="42"),
             )
         ],
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
     )
     run = agent.start(
         max_steps=3,
@@ -117,7 +120,11 @@ def test_compaction_summary_is_used_without_replacing_recorded_history(
                 ),
             ]
         )
-    agent = Agent(model(script, input_limit=3000), state=AgentState(messages=history))
+    agent = Agent(
+        model(script, input_limit=3000),
+        state=AgentState(messages=history),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+    )
     run = agent.start(
         max_steps=1,
         messages=[UserMessage(content="What is the answer now?")],
@@ -148,6 +155,7 @@ def test_provider_failure_retains_completed_tool_output(script: MockLLMScript) -
                 execute=lambda _invocation: ToolResult(content="accepted output"),
             )
         ],
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
     )
     run = agent.start(
         max_steps=3,

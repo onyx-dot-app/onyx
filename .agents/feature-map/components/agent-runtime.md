@@ -2,7 +2,7 @@
 
 > Executes model and tool steps with explicit cancellation, ownership, and restoration boundaries.
 
-**Verified against:** `8af1ae5828` (2026-10-26)
+**Verified against:** `c8148fbcab` (2026-10-26)
 **Domain:** core-loop
 **Edition:** CE
 **Owns:** `backend/onyx/agents/`
@@ -49,6 +49,10 @@ See `backend/onyx/agents/README.md` for the public contracts and usage.
 - Step callback inputs and public snapshots do not share mutable recorded state.
 - Message assembly borrows history and must not mutate its messages or nested data.
 - Compaction changes working context, not recorded conversation history.
+- Summary batches share one operation deadline.
+- Every Agent requires an explicit tracing flow.
+- Feature state is stored as JSON; restoration validates it into a feature model.
+- Tool-facing child waits observe saved completion; parent records are detached.
 - Handoff requires suspended, idle execution and terminal foreground children.
 - A failed handoff save leaves the existing local owner intact.
 - Application directories authorize saved-run access, including cached results across views.

@@ -2,7 +2,7 @@
 
 import threading
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import Future
 from contextlib import ExitStack, closing
 from contextvars import copy_context
@@ -11,7 +11,7 @@ from functools import partial
 from typing import TYPE_CHECKING, Literal, Protocol, TypedDict, cast
 from uuid import uuid4
 
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue, TypeAdapter
 
 from onyx.agents.compaction import (
     CheckpointMismatchError,
@@ -103,6 +103,7 @@ if TYPE_CHECKING:
     from onyx.agents.agent_coordination import AgentCoordinator, RunCoordination
 
 logger = setup_logger()
+_FEATURE_STATE = TypeAdapter(dict[str, JsonValue])
 
 
 class _Ancestry(TypedDict):
@@ -201,9 +202,13 @@ def _capture_unsettled_child(state: RunState) -> RunState:
 class RestorableFeature(Protocol):
     """Capture and restore feature-owned state at safe execution boundaries."""
 
-    def capture_state(self) -> BaseModel: ...
+    def capture_state(self) -> BaseModel:
+        """Return state for immediate serialization; nested values may be borrowed."""
+        ...
 
-    def restore_state(self, state: BaseModel) -> None: ...
+    def restore_state(self, state: Mapping[str, JsonValue]) -> None:
+        """Read borrowed state without mutation; validate into an owned feature model."""
+        ...
 
 
 class Agent:
@@ -213,11 +218,11 @@ class Agent:
         self,
         llm: LLM,
         *,
+        generation_context: GenerationContext,
         state: AgentState | None = None,
         system_prompt: str = "",
         tools: Sequence[AgentTool] = (),
         options: GenerationOptions | None = None,
-        generation_context: GenerationContext | None = None,
         prepare_step: Callable[[StepInput], PreparedStep] | None = None,
         after_step: Callable[[StepResult], bool] | None = None,
         before_tool_call: Callable[
@@ -230,12 +235,14 @@ class Agent:
         previous_run_id: str | None = None,
         restoration: "RestorableFeature | None" = None,
     ) -> None:
+        if generation_context.flow is None:
+            raise ValueError("Agent generation context requires an LLMFlow")
         self._id = agent_id or str(uuid4())
         self.llm = llm
         self.tools = list(tools)
         self.system_prompt = system_prompt
         self.options = options or GenerationOptions()
-        self.generation_context = generation_context or GenerationContext()
+        self.generation_context = generation_context
         self.prepare_step = prepare_step
         self.after_step = after_step
         self.before_tool_call = before_tool_call
@@ -846,10 +853,12 @@ class Run:
     def _suspend(self) -> None:
         if self._restoration is not None:
             self._cancellation_signal.check()
-            feature_state = self._restoration.capture_state()
+            feature_state = _FEATURE_STATE.validate_python(
+                self._restoration.capture_state().model_dump(mode="json")
+            )
             self._cancellation_signal.check()
             with self._lock:
-                self._progress.feature_state = feature_state.model_copy(deep=True)
+                self._progress.feature_state = feature_state
         if self._coordination is not None:
             with self._lock:
                 self._progress.child_run_ids = list(self._coordination.children)

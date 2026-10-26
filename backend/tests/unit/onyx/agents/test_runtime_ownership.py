@@ -32,6 +32,7 @@ from onyx.llm.models import (
     ToolResult,
     ToolResultMessage,
 )
+from onyx.tracing.flows import LLMFlow
 from onyx.utils.threadpool_concurrency import start_thread_future
 from tests.unit.onyx.agents.fakes import FakeAgentDirectory, FakeModelClient, run_agent
 from tests.unit.onyx.agents.test_child_coordination import parent_agent
@@ -51,6 +52,7 @@ def test_first_step_failure_is_recorded_and_agent_can_retry() -> None:
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="Recovered")])
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         prepare_step=decide,
     )
     handles: list[Run] = []
@@ -85,6 +87,7 @@ def test_archive_lookup_does_not_restore_an_agent(in_discovery: bool) -> None:
             FakeModelClient(
                 lambda *_: AssistantMessage(content=[TextContent(text="New")])
             ),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
             agent_id=agent_id,
             previous_run_id=archived.run_id,
         )
@@ -150,6 +153,7 @@ def test_cancelled_tool_reserves_agent_until_owned_work_drains() -> None:
                 else [ToolCall(id="blocked", name="blocked", arguments={})]
             )
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(
@@ -202,7 +206,9 @@ def test_generation_deadline_rejects_output_when_blocked_read_returns() -> None:
 
     agent = Agent(
         FakeModelClient(generate),
-        generation_context=GenerationContext(total_timeout_s=0.1),
+        generation_context=GenerationContext(
+            flow=LLMFlow.CHAT_RESPONSE, total_timeout_s=0.1
+        ),
     )
     run = agent.start(max_steps=1)
     try:
@@ -270,7 +276,8 @@ def test_loaded_agent_bound_is_shared_across_parent_runs() -> None:
             Agent(
                 FakeModelClient(
                     lambda *_: AssistantMessage(content=[TextContent(text="Done")])
-                )
+                ),
+                generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
             ),
             name="duplicate label",
             description="Task",
@@ -327,6 +334,7 @@ def test_parallel_result_survives_another_tool_failure(cancelled: bool) -> None:
                 ]
             )
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(
@@ -375,7 +383,10 @@ def test_timed_out_wait_does_not_observe_a_later_child_failure(
 
     def delegate(invocation: ToolInvocation) -> ToolResult:
         submission = invocation.agents.spawn_agent(
-            Agent(FakeModelClient(fail)),
+            Agent(
+                FakeModelClient(fail),
+                generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            ),
             name="child",
             description="Task",
             messages=[],
@@ -442,7 +453,10 @@ def test_child_cancel_does_not_need_a_free_blocking_worker() -> None:
 
     def delegate(invocation: ToolInvocation) -> ToolResult:
         submitted = invocation.agents.spawn_agent(
-            Agent(FakeModelClient(blocked)),
+            Agent(
+                FakeModelClient(blocked),
+                generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            ),
             name="blocked",
             description="Task",
             messages=[],
@@ -488,6 +502,7 @@ def test_child_restart_waits_for_cancelled_archive_read() -> None:
                 content=[ToolCall(id="inspect", name="inspect", arguments={})]
             )
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(
@@ -550,6 +565,7 @@ def test_completed_step_decides_completion_before_budget_limit(
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="Answer")])
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         prepare_step=prepare,
         after_step=after_step,
     )
@@ -571,6 +587,7 @@ def test_final_validation_failure_preserves_completed_output() -> None:
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="Partial answer")])
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         after_step=validate,
     ).start(max_steps=1)
     with pytest.raises(RunFailed):
@@ -602,7 +619,9 @@ def test_agent_remains_reserved_until_model_read_returns(
     coordinator = AgentCoordinator() if coordinated else None
     agent = Agent(
         FakeModelClient(generate),
-        generation_context=GenerationContext(total_timeout_s=0.1 if timeout else None),
+        generation_context=GenerationContext(
+            flow=LLMFlow.CHAT_RESPONSE, total_timeout_s=0.1 if timeout else None
+        ),
     )
     old = agent.start(max_steps=1, coordinator=coordinator)
     try:

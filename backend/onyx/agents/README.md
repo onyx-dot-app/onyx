@@ -30,7 +30,8 @@ omits incomplete tool exchanges; it does not remove them from the recorded outpu
 
 ## Start a run
 
-An application supplies an `LLM` and a tracing context for its operation:
+An application supplies an `LLM` and a required tracing context with an explicit
+`LLMFlow` operation tag:
 
 ```python
 from onyx.agents.runtime import Agent
@@ -125,6 +126,10 @@ Supply an `AgentCoordinator` when tools need child execution. A tool calls
 `result_from_children` callback converts terminal child snapshots into a tool
 result. The parent suspends while waiting; resumption does not repeat the spawn.
 
+Tool-facing child waits use saved completion and propagate storage failures.
+Parent history receives detached child records. The public completion future
+shares one result between consumers; consumers must not mutate it.
+
 Foreground children hold parent completion open. Parent cancellation reaches them.
 Background children can outlive the parent; the application must retain their
 coordinator. Register `add_completion_cleanup` for resources that must survive
@@ -144,8 +149,9 @@ recent context and only summarizes eligible history boundaries.
 Each run reuses token counts for unchanged text across model steps. The cache
 retains only the latest request text and clears when execution configuration is released.
 
-Summary calls use `LLMFlow.CHAT_HISTORY_SUMMARIZATION`, bounded output, and a
-bounded timeout. Invalid checkpoints or summaries that do not reduce context fail
+Summary calls use `LLMFlow.CHAT_HISTORY_SUMMARIZATION` and bounded output.
+All summary batches share one time budget: the smaller of the caller timeout and
+180 seconds. When this budget expires, context fitting uses its truncation fallback. Invalid checkpoints or summaries that do not reduce context fail
 explicitly. Compaction does not rerun step-preparation or completion callbacks.
 
 ## Suspension and restoration
@@ -169,7 +175,12 @@ boundaries, so execution can avoid repeating completed work.
 Python clients, callbacks, or external resources. Applications must reconstruct
 those bindings and enforce exclusive ownership across processes. Stateful callbacks
 can implement `RestorableFeature` to capture and restore their own state at safe
-execution boundaries.
+execution boundaries. The runtime immediately serializes captured feature models
+into JSON objects. These fields survive a direct checkpoint JSON round trip.
+Restoration receives a borrowed, read-only mapping, including its nested values;
+the feature must validate it into its own model before retaining or changing it.
+Other polymorphic payloads, such as message metadata and tool details, still need
+an application codec for durable restoration.
 
 The coordinator defines three application interfaces:
 

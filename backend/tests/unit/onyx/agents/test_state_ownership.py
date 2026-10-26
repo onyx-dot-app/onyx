@@ -37,6 +37,7 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
+from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import (
     FakeModelClient,
     ScriptedLLM,
@@ -113,7 +114,11 @@ def test_listeners_cannot_edit_history_or_each_others_events(inherited: bool) ->
         assert ready.wait(2)
         return _model(request)
 
-    agent = Agent(FakeModelClient(generate), tools=[_tool()])
+    agent = Agent(
+        FakeModelClient(generate),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[_tool()],
+    )
     observed: list[AgentEvent] = []
     parent = EventDelivery() if inherited else None
     if parent is not None:
@@ -147,9 +152,12 @@ def test_after_step_cannot_rewrite_accepted_output() -> None:
         step.tool_results.clear()
         return False
 
-    run = Agent(FakeModelClient(_model), tools=[_tool()], after_step=complete).start(
-        max_steps=1
-    )
+    run = Agent(
+        FakeModelClient(_model),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[_tool()],
+        after_step=complete,
+    ).start(max_steps=1)
     run.result()
     assert run.wait_for_idle(2)
     assert run.snapshot().messages[0].text == "Searching"
@@ -168,7 +176,8 @@ def test_observer_failure_does_not_change_execution(
     run = Agent(
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="answer")])
-        )
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
     ).start(max_steps=1, on_event=observe)
     assert (run.result()).output.text == "answer"
     assert run.wait_for_idle(2)
@@ -196,6 +205,7 @@ def test_completed_tools_survive_sibling_cancellation() -> None:
                 ]
             )
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(name="lookup", description="", parameters={}),
@@ -232,6 +242,7 @@ def test_live_and_completed_history_match_and_are_isolated() -> None:
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="answer")])
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         state=AgentState(messages=[UserMessage(content="earlier")]),
         after_step=after_step,
     )
@@ -316,6 +327,7 @@ def test_message_end_observer_cannot_mutate_recorded_generation() -> None:
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="answer")])
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         prepare_step=lambda _: PreparedStep(output_metadata=ExtraData()),
     )
     run = agent.start(max_steps=1, on_event=on_event)
@@ -347,6 +359,7 @@ def test_tool_finalization_has_one_commit_point(replace: bool) -> None:
 
     agent = Agent(
         FakeModelClient(model),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             _tool(
                 lambda _: ToolResult(
@@ -406,6 +419,7 @@ def test_request_assembly_keeps_logical_tool_context_and_metadata() -> None:
 
     agent = Agent(
         FakeModelClient(generate),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         state=AgentState(messages=[UserMessage(content="original task")]),
         prepare_step=prepare,
     )
