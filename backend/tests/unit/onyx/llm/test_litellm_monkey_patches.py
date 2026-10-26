@@ -595,3 +595,36 @@ def test_gemini_candidate_without_content_yields_empty_choice() -> None:
     assert [(c.finish_reason, c.message.content) for c in response.choices] == [
         ("length", None)
     ]
+
+
+def test_gemini_candidate_without_content_does_not_inherit_prior_candidate() -> None:
+    from litellm.llms.vertex_ai.gemini.vertex_and_google_ai_studio_gemini import (
+        VertexGeminiConfig,
+    )
+
+    apply_monkey_patches()
+    response = ModelResponse()
+    response.choices = []
+    VertexGeminiConfig._process_candidates(
+        [
+            {
+                "content": {
+                    "role": "model",
+                    "parts": [
+                        {"text": "hi"},
+                        {"functionCall": {"name": "search", "args": {}}},
+                    ],
+                },
+                "finishReason": "STOP",
+            },
+            {"finishReason": "MAX_TOKENS"},
+        ],
+        response,
+        {},
+    )
+    first, second = response.choices
+    assert first.message.content == "hi"
+    assert first.message.tool_calls
+    assert (second.index, second.finish_reason) == (1, "length")
+    assert second.message.content is None
+    assert not second.message.tool_calls

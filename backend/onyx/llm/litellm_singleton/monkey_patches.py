@@ -141,8 +141,12 @@ from litellm.llms.ollama.common_utils import OllamaError
 from litellm.llms.openrouter.chat.transformation import (
     OpenRouterChatCompletionStreamingHandler,
 )
-from litellm.types.llms.vertex_ai import GeminiThinkingConfig
-from litellm.types.utils import ChatCompletionUsageBlock, ModelResponseStream
+from litellm.types.llms.vertex_ai import Candidates, GeminiThinkingConfig
+from litellm.types.utils import (
+    ChatCompletionUsageBlock,
+    ModelResponse,
+    ModelResponseStream,
+)
 
 # Original upstream chunk_parser, saved before any patching for fallback use
 _original_responses_chunk_parser = (
@@ -1006,17 +1010,45 @@ def _patch_vertex_gemini_newer_models() -> None:
         return params
 
     def _patched_gemini_process_candidates(
-        _candidates: list[Any], *args: Any, **kwargs: Any
-    ) -> Any:
-        candidates = [
+        _candidates: list[Candidates],
+        model_response: ModelResponse | ModelResponseStream,
+        standard_optional_params: dict[str, Any],
+        cumulative_tool_call_index: int = 0,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[Any], list[Any], int]:
+        grounding_metadata: list[dict[str, Any]] = []
+        url_context_metadata: list[dict[str, Any]] = []
+        safety_ratings: list[Any] = []
+        citation_metadata: list[Any] = []
+        # One call per candidate: upstream shares message state across candidates.
+        for idx, candidate in enumerate(_candidates):
+            if "content" not in candidate and "finishReason" in candidate:
+                candidate = cast(
+                    Candidates, {**candidate, "content": {"role": "model", "parts": []}}
+                )
+            candidate = cast(Candidates, {"index": idx, **candidate})
             (
-                {**candidate, "content": {"role": "model", "parts": []}}
-                if "content" not in candidate and "finishReason" in candidate
-                else candidate
+                grounding,
+                url_context,
+                safety,
+                citations,
+                cumulative_tool_call_index,
+            ) = original_process_candidates(
+                [candidate],
+                model_response,
+                standard_optional_params,
+                cumulative_tool_call_index,
             )
-            for candidate in _candidates
-        ]
-        return original_process_candidates(cast(Any, candidates), *args, **kwargs)
+            grounding_metadata.extend(grounding)
+            url_context_metadata.extend(url_context)
+            safety_ratings.extend(safety)
+            citation_metadata.extend(citations)
+        return (
+            grounding_metadata,
+            url_context_metadata,
+            safety_ratings,
+            citation_metadata,
+            cumulative_tool_call_index,
+        )
 
     def _patched_gemini_map_thinking_level(
         reasoning_effort: str, model: Optional[str] = None
