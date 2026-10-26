@@ -320,6 +320,49 @@ class NullFilteredString(TypeDecorator):
         return value
 
 
+# Migration b3f1c9a27d84 sized search_settings.reclaim_status from IndexReclaimStatus
+# when it ran. Databases migrated before RECLAIMED existed got VARCHAR(8), and release
+# branches have no migration that widens it. "RECLAIMED" has 9 characters, so
+# RECLAIMED is stored as this shorter value.
+_RECLAIMED_DB_VALUE = "RECLAIMD"
+# Databases created after RECLAIMED existed got VARCHAR(9) and can hold this value.
+_LEGACY_RECLAIMED_DB_VALUE = "RECLAIMED"
+
+
+class IndexReclaimStatusType(TypeDecorator):
+    """Stores an IndexReclaimStatus by member name, except RECLAIMED, which is stored
+    as _RECLAIMED_DB_VALUE so that it fits every database. Reads accept both stored
+    forms of RECLAIMED.
+
+    A SQL comparison with RECLAIMED binds only _RECLAIMED_DB_VALUE, so it misses rows
+    that hold the legacy value. Compare with the other statuses instead."""
+
+    impl = String
+    cache_ok = True
+
+    def process_bind_param(
+        self,
+        value: IndexReclaimStatus | None,
+        dialect: Dialect,  # noqa: ARG002
+    ) -> str | None:
+        if value is None:
+            return None
+        if value == IndexReclaimStatus.RECLAIMED:
+            return _RECLAIMED_DB_VALUE
+        return value.name
+
+    def process_result_value(
+        self,
+        value: str | None,
+        dialect: Dialect,  # noqa: ARG002
+    ) -> IndexReclaimStatus | None:
+        if value is None:
+            return None
+        if value in (_RECLAIMED_DB_VALUE, _LEGACY_RECLAIMED_DB_VALUE):
+            return IndexReclaimStatus.RECLAIMED
+        return IndexReclaimStatus[value]
+
+
 """
 Auth/Authz (users, permissions, access) Tables
 """
@@ -2354,7 +2397,7 @@ class SearchSettings(Base):
     # NULL = not reclaim-tracked; set to PENDING at reindex submit on the current
     # PRESENT (the future PAST).
     reclaim_status: Mapped[IndexReclaimStatus | None] = mapped_column(
-        Enum(IndexReclaimStatus, native_enum=False), nullable=True
+        IndexReclaimStatusType(), nullable=True
     )
     # Soak anchor: when the index stopped being read (port drained), NOT swap time —
     # so INSTANT backfills (which read PAST post-swap) anchor correctly.

@@ -271,7 +271,8 @@ class IndexReclaimStatus(str, PyEnum):
     SOAKING: the old index stopped being read; waiting out the retention window.
     DELETING: deleting the old index's data (loops until count-verified empty).
     RECLAIMED: terminal success — the old index's data is gone; the PAST row is kept
-        (not deleted) as the durable record that this index was reclaimed.
+        (not deleted) as the durable record that this index was reclaimed. It is written
+        to the database as a shorter value; see IndexReclaimStatusType.
     BLOCKED: parked after repeated failures; alerted, needs operator/cooldown revival.
     """
 
