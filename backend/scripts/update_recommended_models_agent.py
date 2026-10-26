@@ -177,8 +177,12 @@ only — you may pick outside these families when the vendor lineup changed) ==
 FAILURE_CONTEXT_TEMPLATE = """\
 == PREVIOUS ATTEMPT FAILED CI ==
 The last generated PR failed the provider chat tests — real API calls against
-each recommended model. Fix your picks based on this failure output (drop or
-replace the failing models):
+each recommended model. Read the error for each failing model:
+- The provider rejected the model (unknown model, not found, deprecated, no
+  access): drop or replace that model.
+- Onyx failed while handling a model the vendor still recommends (for example
+  a 400 VALIDATION_ERROR with "An unexpected error occurred", or a 5xx): that
+  is an Onyx bug, not a bad pick. Keep the model; do not swap in an older one.
 
 {failure_context}
 """
