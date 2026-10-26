@@ -7,7 +7,7 @@ import useShareableGroups, {
   type MinimalUserGroupSnapshot,
 } from "@/hooks/useShareableGroups";
 import useShareableUsers from "@/hooks/useShareableUsers";
-import { InputDivider, InputPadder, toast } from "@opal/layouts";
+import { InputPadder, Section, toast } from "@opal/layouts";
 import { useAgent } from "@/lib/agents/hooks";
 import type { FullAgent, PersonaSharePermission } from "@/lib/agents/types";
 import {
@@ -22,7 +22,7 @@ import { can } from "@/lib/permissions/resource-actions";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
 import { Modal } from "@opal/components";
-import { Button, Card, Text } from "@opal/components";
+import { Button, Card, Divider, Text } from "@opal/components";
 import {
   SvgArrowExchange,
   SvgArrowLeft,
@@ -533,12 +533,11 @@ export function ShareAgentModal({
         ? SvgUsers
         : SvgLock;
 
-    // The card adds 0.5rem and each InputPadder the other 0.5rem, so every
-    // row sits 1rem from the card's edge
+    // The card adds 0.5rem and each row's own padding the other 0.5rem
     return (
       <Card padding={2}>
-        {canEditShares ? (
-          <InputPadder>
+        <Section gap={2} height="auto" alignItems="stretch">
+          {canEditShares ? (
             <AddPeoplePicker
               existingGroupIds={existingGroupIds}
               existingUserIds={existingUserIds}
@@ -566,12 +565,10 @@ export function ShareAgentModal({
               stagedUsers={stagedUsers}
               users={shareableUsers}
             />
-          </InputPadder>
-        ) : null}
+          ) : null}
 
-        {/* Mock anatomy: icon + scope trigger on the left, org-permission
+          {/* Mock anatomy: icon + scope trigger on the left, org-permission
             trigger on the right — no label or description text */}
-        <InputPadder>
           <ShareAccessRow
             icon={scopeIcon}
             titleSlot={
@@ -605,14 +602,12 @@ export function ShareAgentModal({
               />
             }
           />
-        </InputPadder>
 
-        <InputDivider />
+          <Divider paddingParallel={0} paddingPerpendicular={0} />
 
-        {/* Admins always appear and always hold edit access (ENG-4175);
+          {/* Admins always appear and always hold edit access (ENG-4175);
             on vacant agents this row carries the transfer affordance */}
-        {agent ? (
-          <InputPadder>
+          {agent ? (
             <ShareAccessRow
               description={t("shareAgent.admins.description", {
                 count: agent.admin_count,
@@ -641,11 +636,9 @@ export function ShareAgentModal({
               }
               title={t("shareAgent.admins.title")}
             />
-          </InputPadder>
-        ) : null}
+          ) : null}
 
-        {agent?.owner ? (
-          <InputPadder>
+          {agent?.owner ? (
             <ShareAccessRow
               avatarInitial={agent.owner.email.charAt(0).toUpperCase()}
               icon={SvgUser}
@@ -669,11 +662,9 @@ export function ShareAgentModal({
                   : agent.owner.email
               }
             />
-          </InputPadder>
-        ) : null}
+          ) : null}
 
-        {agent?.owner_group ? (
-          <InputPadder>
+          {agent?.owner_group ? (
             <ShareAccessRow
               avatarIcon={SvgUsers}
               icon={SvgUsers}
@@ -693,15 +684,14 @@ export function ShareAgentModal({
               }
               title={agent.owner_group.name}
             />
-          </InputPadder>
-        ) : null}
+          ) : null}
 
-        {effectiveState.userShares.map((share) => {
-          const isCurrentUser = currentUser?.id === share.user.id;
+          {effectiveState.userShares.map((share) => {
+            const isCurrentUser = currentUser?.id === share.user.id;
 
-          return (
-            <InputPadder key={share.user.id}>
+            return (
               <ShareAccessRow
+                key={share.user.id}
                 avatarInitial={share.user.email.charAt(0).toUpperCase()}
                 icon={SvgUser}
                 rightChildren={
@@ -733,13 +723,12 @@ export function ShareAgentModal({
                     : share.user.email
                 }
               />
-            </InputPadder>
-          );
-        })}
+            );
+          })}
 
-        {effectiveState.groupShares.map((share) => (
-          <InputPadder key={share.group_id}>
+          {effectiveState.groupShares.map((share) => (
             <ShareAccessRow
+              key={share.group_id}
               avatarIcon={SvgUsers}
               icon={SvgUsers}
               rightChildren={
@@ -765,8 +754,8 @@ export function ShareAgentModal({
               }
               title={share.group_name}
             />
-          </InputPadder>
-        ))}
+          ))}
+        </Section>
       </Card>
     );
   }

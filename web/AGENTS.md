@@ -58,10 +58,11 @@ refresh-components import that Opal replaces. Migrate a file to Opal when you ed
 - **Inputs sit 1rem from their container's edge.** Build the 1rem from two 0.5rem steps, not from
   absolute positioning:
   - Give the container 0.5rem, for example `Modal.Body padding={2}`.
-  - Wrap each input or row in `InputPadder` (0.5rem). Put `InputDivider` between groups.
-  - A naked input (no card around it) gets its other 0.5rem from the container.
-  - To group inputs visually, put them in a white, borderless `<Card padding={2}>`. The card adds
-    0.5rem, and each `InputPadder` inside adds the other 0.5rem.
+  - A naked input (no card around it): wrap it in `InputPadder`, which adds the other 0.5rem. Put
+    `InputDivider` between naked groups.
+  - A covered input: to group inputs visually, put them in a white, borderless `<Card padding={2}>`.
+    The card adds 0.5rem, and the input's own 0.5rem internal padding adds the rest. Do not wrap
+    inputs inside the card in `InputPadder`.
 - **Data fetching:** `useSWR`, on the client, inside the component that needs the data, with a
   loader while pending. Do not fetch at the top of the page and pass data down.
 
