@@ -20,6 +20,9 @@ export interface PlanMetadata {
   color: PlanColor;
   /** For a `tag` slot, such as `Content`'s or an option's. */
   tag: TagProps;
-  /** Why the feature is off below this plan, linking to billing. */
-  tooltip: RichStr;
+  /**
+   * Why the feature is off below this plan, linking to billing. The Free plan
+   * gates nothing, so it has none.
+   */
+  tooltip: RichStr | undefined;
 }

@@ -4,7 +4,8 @@ Onyx calls the Notion REST API with ``requests``, and this is the only module in
 ``notion/`` that imports it. Operations return the raw JSON of the API, or
 ``NotionSearchResponse`` pages for a search. An error response, a network
 error, or a rate limit leaves the gateway as ``NotionApiError``, so callers
-never handle ``requests`` exceptions.
+never handle ``requests`` exceptions. The error carries the request and the
+response body, for a check's Error Details.
 
 Notion answers 404 ``object_not_found`` both for an object that does not exist
 and for an object that is not shared with the integration.
@@ -26,6 +27,7 @@ from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
     RateLimitTriedTooManyTimesError,
     rl_requests,
 )
+from onyx.connectors.exceptions import SourceApiError
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.notion.models import NotionSearchObjectType, NotionSearchResponse
 from onyx.connectors.source_operations import (
@@ -49,11 +51,12 @@ _RATE_LIMITED_STATUS = 429
 _ERROR_TEXT_CHARS = 300
 
 
-class NotionApiError(Exception):
+class NotionApiError(SourceApiError):
     """A Notion API call failed.
 
-    ``status_code`` is None for a network error. ``code`` is Notion's error
-    code (e.g. ``unauthorized``, ``restricted_resource``, ``object_not_found``,
+    ``status_code`` is None for a network error; ``timed_out`` marks one
+    where Notion did not answer in time. ``code`` is Notion's error code
+    (e.g. ``unauthorized``, ``restricted_resource``, ``object_not_found``,
     ``rate_limited``), None when the response has none.
     ``retry_after_seconds`` is the ``Retry-After`` time of a 429.
     """
@@ -65,18 +68,26 @@ class NotionApiError(Exception):
         status_code: int | None,
         code: str | None,
         retry_after_seconds: float | None = None,
+        timed_out: bool = False,
+        method: str | None = None,
+        url: str | None = None,
+        body: str | None = None,
     ) -> None:
-        super().__init__(message)
-        self.status_code = status_code
+        super().__init__(
+            message, status_code=status_code, method=method, url=url, body=body
+        )
         self.code = code
         self.retry_after_seconds = retry_after_seconds
+        self.timed_out = timed_out
 
     @property
     def is_rate_limited(self) -> bool:
         return self.status_code == _RATE_LIMITED_STATUS
 
 
-def _error_from_response(response: requests.Response) -> NotionApiError:
+def _error_from_response(
+    response: requests.Response, *, method: str, url: str
+) -> NotionApiError:
     status: int = response.status_code
     code: str | None = None
     message: str | None = None
@@ -101,6 +112,9 @@ def _error_from_response(response: requests.Response) -> NotionApiError:
         status_code=status,
         code=code,
         retry_after_seconds=retry_after,
+        method=method,
+        url=url,
+        body=response.text or None,
     )
 
 
@@ -156,13 +170,20 @@ class NotionSourceOperations(SourceOperations):
                 f"Notion rate limited every attempt: {e}",
                 status_code=_RATE_LIMITED_STATUS,
                 code="rate_limited",
+                method=method,
+                url=url,
             ) from e
         except requests.RequestException as e:
             raise NotionApiError(
-                f"Notion request failed: {e}", status_code=None, code=None
+                f"Notion request failed: {e}",
+                status_code=None,
+                code=None,
+                timed_out=isinstance(e, requests.Timeout),
+                method=method,
+                url=url,
             ) from e
         if response.status_code >= 400:
-            raise _error_from_response(response)
+            raise _error_from_response(response, method=method, url=url)
         try:
             body: Any = response.json()
         except ValueError as e:
@@ -170,6 +191,9 @@ class NotionSourceOperations(SourceOperations):
                 f"Notion returned a body that is not JSON (HTTP {response.status_code})",
                 status_code=response.status_code,
                 code=None,
+                method=method,
+                url=url,
+                body=response.text or None,
             ) from e
         if not isinstance(body, dict):
             raise NotionApiError(
@@ -177,6 +201,9 @@ class NotionSourceOperations(SourceOperations):
                 f"(HTTP {response.status_code})",
                 status_code=response.status_code,
                 code=None,
+                method=method,
+                url=url,
+                body=response.text or None,
             )
         return body
 

@@ -54,6 +54,8 @@ jest.mock("@/app/craft/services/apiServices", () => ({
 }));
 
 const sessionId = "session-thinking";
+const originalNameBuildSession =
+  useBuildSessionStore.getState().nameBuildSession;
 const originalLoadSession = useBuildSessionStore.getState().loadSession;
 
 describe("useBuildStreaming thinking packets", () => {
@@ -64,6 +66,7 @@ describe("useBuildStreaming thinking packets", () => {
       currentSessionId: null,
       sessions: new Map(),
       loadSession: jest.fn().mockResolvedValue(undefined),
+      nameBuildSession: jest.fn().mockResolvedValue(undefined),
     } as never);
     useBuildSessionStore.getState().createSession(sessionId, {
       status: "active",
@@ -141,8 +144,69 @@ describe("useBuildStreaming thinking packets", () => {
     });
     useBuildSessionStore.setState({
       loadSession: originalLoadSession,
+      nameBuildSession: originalNameBuildSession,
     } as never);
     jest.useRealTimers();
+  });
+
+  it("names the first accepted turn after a slow submission and unmount", async () => {
+    let accept:
+      | ((turn: Awaited<ReturnType<typeof createTurn>>) => void)
+      | undefined;
+    jest.mocked(createTurn).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          accept = resolve;
+        })
+    );
+    const nameSession = useBuildSessionStore.getState().nameBuildSession;
+    const { result, unmount } = renderHook(() => useBuildStreaming());
+    let sending: Promise<void> | undefined;
+    act(() => {
+      sending = result.current.streamMessage(sessionId, "build the app");
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(5000);
+    });
+    expect(nameSession).not.toHaveBeenCalled();
+    unmount();
+    await act(async () => {
+      accept?.({
+        session_id: sessionId,
+        turn_id: "accepted",
+        status: "QUEUED",
+        turn_index: 0,
+      });
+      await sending;
+    });
+    expect(nameSession).toHaveBeenCalledWith(sessionId);
+  });
+
+  it("does not name a rejected submission", async () => {
+    jest.mocked(createTurn).mockRejectedValueOnce(new Error("Rejected"));
+    const { result } = renderHook(() => useBuildStreaming());
+    await act(async () => {
+      await result.current.streamMessage(sessionId, "build the app");
+    });
+    expect(
+      useBuildSessionStore.getState().nameBuildSession
+    ).not.toHaveBeenCalled();
+  });
+
+  it("does not rename a later turn", async () => {
+    jest.mocked(createTurn).mockResolvedValueOnce({
+      session_id: sessionId,
+      turn_id: "later",
+      status: "QUEUED",
+      turn_index: 1,
+    });
+    const { result } = renderHook(() => useBuildStreaming());
+    await act(async () => {
+      await result.current.streamMessage(sessionId, "continue");
+    });
+    expect(
+      useBuildSessionStore.getState().nameBuildSession
+    ).not.toHaveBeenCalled();
   });
 
   it("settles a thought when the next packet arrives while keeping the row visible", async () => {
@@ -1125,7 +1189,7 @@ describe("useBuildStreaming thinking packets", () => {
     ]);
   });
 
-  it("appends a connect card stream item from a connect_app_request packet", async () => {
+  it("deduplicates a restored connect card and its live announcement", async () => {
     jest
       .mocked(fetchActiveTurn)
       .mockResolvedValue({ turn_id: "turn-thinking", turn_index: 0 } as never);
@@ -1137,6 +1201,18 @@ describe("useBuildStreaming thinking packets", () => {
           request_id: "req-1",
           external_app_id: 17,
           reason: "to schedule events",
+        } as never);
+        onPacket({
+          type: "connect_app_request",
+          request_id: "req-1",
+          external_app_id: 17,
+          reason: "to schedule events",
+        } as never);
+        onPacket({
+          type: "connect_app_request",
+          request_id: "req-2",
+          external_app_id: 18,
+          reason: "to read documents",
         } as never);
         throw new DOMException("Subscription closed", "AbortError");
       });
@@ -1155,6 +1231,13 @@ describe("useBuildStreaming thinking packets", () => {
         requestId: "req-1",
         externalAppId: 17,
         reason: "to schedule events",
+      }),
+      expect.objectContaining({
+        type: "connect_app_request",
+        id: "req-2",
+        requestId: "req-2",
+        externalAppId: 18,
+        reason: "to read documents",
       }),
     ]);
   });
@@ -1937,7 +2020,7 @@ describe("useBuildStreaming thinking packets", () => {
       session_loaded_in_sandbox: true,
       sandbox: { id: "sandbox-1", status: "running" },
       agent_provider: "openai",
-      agent_model: "gpt-5-mini",
+      agent_model: "gpt-6-luna",
     } as never);
     jest
       .mocked(fetchActiveTurn)

@@ -26,6 +26,14 @@ class ChatTraceMetadata(BaseModel):
     user_id: str | None = None
 
 
+class SearchTraceMetadata(BaseModel):
+    """Trace metadata for search entry points that have no chat session."""
+
+    tenant_id: str = Field(default_factory=get_current_tenant_id)
+    user_id: str | None = None
+    persona_id: int | None = None
+
+
 def trace(
     workflow_name: str,
     trace_id: str | None = None,

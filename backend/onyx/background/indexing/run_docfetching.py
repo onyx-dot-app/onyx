@@ -287,7 +287,9 @@ def _emit_fetch_telemetry(
 ) -> None:
     """Count the documents and the failure of one ConnectorRunner batch."""
     if isinstance(item, tuple) and len(item) == 4:
-        docs, _hierarchy, failure, _checkpoint = item
+        docs, hierarchy, failure, _checkpoint = item
+        if docs is None and hierarchy is None and failure is None:
+            return
         emit_stage_counter(
             index_attempt_id,
             "fetch",
@@ -299,13 +301,23 @@ def _emit_fetch_telemetry(
         )
 
 
+def _is_fetch_batch(item: object) -> bool:
+    if not (isinstance(item, tuple) and len(item) == 4):
+        return False
+    docs, hierarchy, _failure, _checkpoint = item
+    return bool(docs) or bool(hierarchy)
+
+
 def _timed_connector_runs(
     runner_iterable: Iterable[_TimedYield],
     index_attempt_id: int,
 ) -> Generator[_TimedYield, None, None]:
     """Yield from `runner_iterable`, recording one CONNECTOR_FETCH event per
-    successful yield with the time spent inside the connector waiting for it.
+    document or hierarchy batch with the time spent inside the connector
+    waiting for it.
 
+    Failure and checkpoint-only yields are not batches: their wait time is
+    carried into the next batch, and time after the last batch is dropped.
     Time is measured between consecutive ``next()`` calls so the metric
     reflects "how slow is the source itself" rather than "how slow is each
     iteration of the docfetching loop body".
@@ -316,6 +328,7 @@ def _timed_connector_runs(
     """
     buffer = StageEventBuffer(IndexAttemptStage.CONNECTOR_FETCH, index_attempt_id)
     runner_iter = iter(runner_iterable)
+    carried_ms = 0
     try:
         while True:
             fetch_start = time.monotonic()
@@ -326,7 +339,9 @@ def _timed_connector_runs(
             except Exception:
                 # Record the partial duration of the failing fetch so the
                 # terminal error iteration isn't lost from the metric.
-                failed_ms: int = max(0, int((time.monotonic() - fetch_start) * 1000))
+                failed_ms: int = carried_ms + max(
+                    0, int((time.monotonic() - fetch_start) * 1000)
+                )
                 buffer.record(failed_ms)
                 emit_stage_counter(
                     index_attempt_id,
@@ -335,9 +350,14 @@ def _timed_connector_runs(
                     duration_ms=failed_ms,
                 )
                 raise
-            fetch_ms: int = max(0, int((time.monotonic() - fetch_start) * 1000))
-            buffer.record(fetch_ms)
-            _emit_fetch_telemetry(index_attempt_id, item, fetch_ms)
+            carried_ms += max(0, int((time.monotonic() - fetch_start) * 1000))
+            if not _is_fetch_batch(item):
+                _emit_fetch_telemetry(index_attempt_id, item, 0)
+                yield item
+                continue
+            buffer.record(carried_ms)
+            _emit_fetch_telemetry(index_attempt_id, item, carried_ms)
+            carried_ms = 0
             if buffer.count >= _CONNECTOR_FETCH_FLUSH_EVERY:
                 buffer.flush()
             yield item
@@ -433,6 +453,25 @@ def _check_failure_threshold(
         raise RuntimeError(
             f"Connector run encountered too many errors, aborting. Last error: {last_failure}"
         )
+
+
+def mark_attempt_failed_unless_terminal(
+    index_attempt_id: int, error: Exception
+) -> None:
+    """Fail the attempt with ``error`` unless it is already terminal. The
+    watchdog's reason names only the exit code, so the real message is recorded
+    here. Best effort: the watchdog still fails the attempt if this write misses."""
+    try:
+        with get_session_with_current_tenant() as db_session:
+            mark_attempt_failed(
+                index_attempt_id,
+                db_session,
+                failure_reason=str(error) or type(error).__name__,
+                full_exception_trace="".join(traceback.format_exception(error)),
+                unless_terminal=True,
+            )
+    except Exception:
+        logger.exception("Failed to mark attempt %s as failed", index_attempt_id)
 
 
 def run_docfetching_entrypoint(
@@ -739,18 +778,16 @@ def connector_document_extraction(
                     and most_recent_attempt.total_batches is not None
                     and not checkpoint.has_more
                 ):
-                    reissued_batch_count, completed_batches = reissue_old_batches(
+                    last_batch_num = reissue_old_batches(
                         batch_storage,
-                        index_attempt_id,
+                        db_session,
+                        index_attempt,
                         cc_pair_id,
                         tenant_id,
                         app,
-                        most_recent_attempt,
+                        most_recent_attempt.id if most_recent_attempt else None,
                         docprocessing_priority,
                     )
-                    last_batch_num = reissued_batch_count + completed_batches
-                    index_attempt.completed_batches = completed_batches
-                    db_session.commit()
                 else:
                     logger.info(
                         "Cleaning up all batches for index attempt %s before starting new run",
@@ -782,7 +819,7 @@ def connector_document_extraction(
 
         # Main extraction loop
         while checkpoint.has_more:
-            logger.info(
+            logger.debug(
                 "Running '%s' connector with checkpoint: %s",
                 db_connector.source.value,
                 checkpoint,
@@ -1090,31 +1127,9 @@ def connector_document_extraction(
                 )
 
         else:
-            with get_session_with_current_tenant() as db_session_temp:
-                # don't overwrite an attempt already in a terminal state for
-                # another reason (e.g. INTERRUPTED by a worker shutdown)
-                index_attempt = get_index_attempt(db_session_temp, index_attempt_id)
-                if index_attempt and index_attempt.status.is_terminal():
-                    logger.info(
-                        "Attempt %s is already terminal, skipping marking as failed.",
-                        index_attempt_id,
-                    )
-                    raise e
-
-                # PERSISTENT_INDEXING deliberately does NOT catch unhandled
-                # connector-generator exceptions: we can't isolate the failing
-                # entity from a black-box raise, and silently landing the
-                # attempt as COMPLETED_WITH_ERRORS would let the system advance
-                # past potentially-missed source data. Operators need a FAILED
-                # signal here to triage. Threshold disable + docprocessing
-                # per-batch recovery still apply.
-                mark_attempt_failed(
-                    index_attempt_id,
-                    db_session_temp,
-                    failure_reason=str(e),
-                    full_exception_trace=traceback.format_exc(),
-                )
-
+            # Even under PERSISTENT_INDEXING an unattributed raise fails the attempt:
+            # COMPLETED_WITH_ERRORS would advance past missed source data.
+            mark_attempt_failed_unless_terminal(index_attempt_id, e)
             raise e
 
     finally:
@@ -1155,50 +1170,76 @@ def cache_and_upsert_hierarchy_nodes(
 
 def reissue_old_batches(
     batch_storage: DocumentBatchStorage,
-    index_attempt_id: int,
+    db_session: Session,
+    index_attempt: IndexAttempt,
     cc_pair_id: int,
     tenant_id: str,
     app: Celery,
-    most_recent_attempt: IndexAttempt | None,
+    most_recent_attempt_id: int | None,
     priority: OnyxCeleryPriority,
-) -> tuple[int, int]:
-    # When loading from a checkpoint, we need to start new docprocessing tasks
-    # tied to the new index attempt for any batches left over in the file store
-    old_batches = batch_storage.get_all_batches_for_cc_pair()
-    batch_storage.update_old_batches_to_new_index_attempt(old_batches)
-    for batch_id in old_batches:
+) -> int:
+    """Moves the batches a previous attempt left in the file store to this
+    attempt and sends a docprocessing task for each. Returns the number for this
+    attempt's next new batch.
+
+    The previous attempt's docprocessing tasks can still run. Each one counts
+    its batch in completed_batches before it deletes the batch. So after the
+    move, a fresh read of the count covers every batch that was not moved. A
+    batch can be in both, which only leaves an unused batch number. The count
+    can also come from a later attempt than the one that stored the batches
+    (one that failed before it fetched anything), so the next number is also
+    kept above every moved batch.
+    """
+    moved_batches = batch_storage.update_old_batches_to_new_index_attempt(
+        batch_storage.get_all_batches_for_cc_pair()
+    )
+    moved_batch_nums: list[int] = []
+    for batch_id in moved_batches:
+        path_info = batch_storage.extract_path_info(batch_id)
+        if path_info is None:
+            raise RuntimeError(f"Could not extract path info from batch {batch_id}")
+        moved_batch_nums.append(path_info.batch_num)
+
+    old_completed_batches = (
+        IndexingCoordination.get_completed_batches(db_session, most_recent_attempt_id)
+        if most_recent_attempt_id is not None
+        else 0
+    )
+    next_batch_num = max(
+        [old_completed_batches + len(moved_batch_nums)]
+        + [batch_num + 1 for batch_num in moved_batch_nums]
+    )
+    # Completion needs completed_batches to reach the final batch number, so
+    # the batch numbers this attempt never processes count as completed. Set
+    # before the tasks go out, so their increments are not overwritten.
+    index_attempt.completed_batches = next_batch_num - len(moved_batch_nums)
+    db_session.commit()
+
+    for batch_id, batch_num in zip(moved_batches, moved_batch_nums, strict=True):
         logger.info(
             "Re-issuing docprocessing task for batch %s for index attempt %s",
             batch_id,
-            index_attempt_id,
+            index_attempt.id,
         )
-        path_info = batch_storage.extract_path_info(batch_id)
-        if path_info is None:
-            logger.warning(
-                "Could not extract path info from batch %s, skipping", batch_id
-            )
-            continue
-        if path_info.cc_pair_id != cc_pair_id:
-            raise RuntimeError(f"Batch {batch_id} is not for cc pair {cc_pair_id}")
 
         try:
             RedisDocprocessing(
-                index_attempt_id,
+                index_attempt.id,
                 get_redis_client(),
             ).incr_pending()
         except Exception:
             logger.debug(
                 "Failed to increment pending counter for attempt %s",
-                index_attempt_id,
+                index_attempt.id,
                 exc_info=True,
             )
         app.send_task(
             OnyxCeleryTask.DOCPROCESSING_TASK,
             kwargs={
-                "index_attempt_id": index_attempt_id,
+                "index_attempt_id": index_attempt.id,
                 "cc_pair_id": cc_pair_id,
                 "tenant_id": tenant_id,
-                "batch_num": path_info.batch_num,  # use same batch num as previously
+                "batch_num": batch_num,  # use same batch num as previously
                 # Use current time (not the original send time) so QUEUE_WAIT
                 # measures wait time for *this* reissue, not stale latency from
                 # the prior attempt.
@@ -1207,15 +1248,11 @@ def reissue_old_batches(
             queue=OnyxCeleryQueues.DOCPROCESSING,
             priority=priority,
         )
-    recent_batches = most_recent_attempt.completed_batches if most_recent_attempt else 0
-    # resume from the batch num of the last attempt. This should be one more
-    # than the last batch created by docfetching regardless of whether the batch
-    # is still in the filestore waiting for processing or not.
-    last_batch_num = len(old_batches) + recent_batches
+
     logger.info(
         "Starting from batch %s due to re-issued batches: %s, completed batches: %s",
-        last_batch_num,
-        old_batches,
-        recent_batches,
+        next_batch_num,
+        moved_batches,
+        old_completed_batches,
     )
-    return len(old_batches), recent_batches
+    return next_batch_num

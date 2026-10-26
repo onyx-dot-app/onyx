@@ -20,6 +20,7 @@ import {
   type EmbeddingProvider,
   type VertexEmbeddingConfig,
 } from "@/lib/searchSettings/types";
+import { defaultTestModelName } from "@/lib/searchSettings";
 import {
   connectEmbeddingProvider,
   testEmbedding,
@@ -103,7 +104,8 @@ function ModalShell({ provider, isEditing, children }: ModalShellProps) {
 // returns `null`.
 //
 // `apiUrl`, `apiVersion`, `deploymentName` default to "" / null so simple
-// providers (OpenAI / Cohere / Voyage / Google) only have to pass `apiKey`.
+// providers (OpenAI / Cohere / Voyage / Google) only have to pass `apiKey`
+// and the `modelName` the test embeds with.
 // ---------------------------------------------------------------------------
 
 interface ProviderTestResult {
@@ -115,7 +117,7 @@ async function testAndSaveProviderCredentials({
   apiKey,
   unknownErrorMessage,
   apiUrl = "",
-  modelName = "",
+  modelName,
   apiVersion = null,
   deploymentName = null,
   vertexConfig,
@@ -126,7 +128,7 @@ async function testAndSaveProviderCredentials({
   /** Fallback toast copy when the backend error carries no message. */
   unknownErrorMessage: string;
   apiUrl?: string;
-  modelName?: string;
+  modelName: string;
   apiVersion?: string | null;
   deploymentName?: string | null;
   vertexConfig?: VertexEmbeddingConfig | null;
@@ -158,8 +160,10 @@ interface ProviderModalProps {
   provider: EmbeddingProvider;
   existingCredentials?: ConfiguredEmbeddingProvider;
   /**
-   * Model being connected, selected, or edited for this provider. Google
-   * tests this model. Custom providers also use it to preload model fields.
+   * Model being connected, selected, or edited for this provider. The
+   * credential test of a registry provider embeds with it, else with
+   * `defaultTestModelName`. Custom providers also use it to preload model
+   * fields.
    */
   existingModel?: EmbeddingModel;
   /**
@@ -181,6 +185,7 @@ interface StandardFormValues {
 function StandardProviderModal({
   provider,
   existingCredentials,
+  existingModel,
   onSubmit,
 }: ProviderModalProps) {
   const t = useTranslations("admin.indexSettings");
@@ -207,6 +212,9 @@ function StandardProviderModal({
           await testAndSaveProviderCredentials({
             provider,
             apiKey,
+            modelName:
+              existingModel?.modelName ??
+              defaultTestModelName(provider.providerName),
             unknownErrorMessage: t("toasts.unknownError"),
           })
         ) {
@@ -360,8 +368,7 @@ function GoogleProviderModal({
             },
             modelName:
               existingModel?.modelName ??
-              provider.embeddingModels[0]?.modelName ??
-              "",
+              defaultTestModelName(provider.providerName),
             unknownErrorMessage: t("toasts.unknownError"),
           })
         ) {
@@ -398,6 +405,7 @@ function AzureProviderModal({
   onSubmit,
 }: ProviderModalProps) {
   const t = useTranslations("admin.indexSettings");
+  const tPlaceholders = useTranslations("common.placeholders");
   const { appName } = useSettings();
   const isEditing = !!existingCredentials;
   const maskedApiKey = existingCredentials?.api_key ?? "";
@@ -445,6 +453,7 @@ function AzureProviderModal({
             apiKey,
             unknownErrorMessage: t("toasts.unknownError"),
             apiUrl: values.apiUrl,
+            modelName: values.modelName.trim(),
             apiVersion: values.apiVersion,
             deploymentName: values.deploymentName,
           })
@@ -462,7 +471,7 @@ function AzureProviderModal({
       <ModalShell provider={provider} isEditing={isEditing}>
         <ApiUrlField
           title={t("azure.targetUrl.title")}
-          placeholder="https://your_resource_name.openai.azure.com/openai/v1/embeddings"
+          placeholder={tPlaceholders("azure.embeddingsUrl")}
         />
         <ApiKeyField provider={provider} />
         <TextField
@@ -563,7 +572,7 @@ function LiteLLMProviderModal({
       <ModalShell provider={provider} isEditing={isEditing}>
         <ApiUrlField
           title={t("litellm.apiUrl.title")}
-          placeholder="https://..."
+          placeholder={t("placeholders.apiUrl")}
           subDescription={t("litellm.apiUrl.description", {
             provider: provider.displayName,
           })}
@@ -609,6 +618,7 @@ function BifrostProviderModal({
   onSubmit,
 }: ProviderModalProps) {
   const t = useTranslations("admin.indexSettings");
+  const tPlaceholders = useTranslations("common.placeholders");
   const { appName } = useSettings();
   const isEditing = !!existingCredentials;
   const maskedApiKey = existingCredentials?.api_key ?? "";
@@ -663,7 +673,7 @@ function BifrostProviderModal({
       <ModalShell provider={provider} isEditing={isEditing}>
         <ApiUrlField
           title={t("bifrost.apiUrl.title")}
-          placeholder="https://bifrost.example.com"
+          placeholder={tPlaceholders("bifrost.embeddingsApiBase")}
           subDescription={t("bifrost.apiUrl.description", { appName })}
         />
 
@@ -672,7 +682,7 @@ function BifrostProviderModal({
         <TextField
           name="modelName"
           title={t("fields.modelName.title")}
-          placeholder="openai/text-embedding-3-large"
+          placeholder={tPlaceholders("bifrost.embeddingModel")}
           subDescription={
             isModelLocked
               ? t("bifrost.modelName.editDescription", { appName })

@@ -1,3 +1,6 @@
+from enum import Enum
+from typing import Literal, overload
+
 from google.auth.transport.requests import AuthorizedSession
 from google.oauth2.credentials import Credentials as OAuthCredentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
@@ -24,15 +27,54 @@ class GmailService(Resource):
     pass
 
 
-def _get_google_service(
-    service_name: str,
-    service_version: str,
+class GoogleService(Enum):
+    DOCS = ("docs", "v1")
+    DRIVE = ("drive", "v3")
+    ADMIN = ("admin", "directory_v1")
+    GMAIL = ("gmail", "v1")
+
+
+@overload
+def get_google_service(
+    service: Literal[GoogleService.DOCS],
+    creds: ServiceAccountCredentials | OAuthCredentials,
+    user_email: str | None = None,
+) -> GoogleDocsService: ...
+
+
+@overload
+def get_google_service(
+    service: Literal[GoogleService.DRIVE],
+    creds: ServiceAccountCredentials | OAuthCredentials,
+    user_email: str | None = None,
+) -> GoogleDriveService: ...
+
+
+@overload
+def get_google_service(
+    service: Literal[GoogleService.ADMIN],
+    creds: ServiceAccountCredentials | OAuthCredentials,
+    user_email: str | None = None,
+) -> AdminService: ...
+
+
+@overload
+def get_google_service(
+    service: Literal[GoogleService.GMAIL],
+    creds: ServiceAccountCredentials | OAuthCredentials,
+    user_email: str | None = None,
+) -> GmailService: ...
+
+
+def get_google_service(
+    service: GoogleService,
     creds: ServiceAccountCredentials | OAuthCredentials,
     user_email: str | None = None,
 ) -> GoogleDriveService | GoogleDocsService | AdminService | GmailService:
     creds = get_impersonated_creds(creds, user_email)
-    service: Resource = build(service_name, service_version, credentials=creds)
-    return service  # ty: ignore[invalid-return-type]
+    service_name, service_version = service.value
+    resource: Resource = build(service_name, service_version, credentials=creds)
+    return resource  # ty: ignore[invalid-return-type]
 
 
 def get_impersonated_creds(
@@ -55,39 +97,3 @@ def get_google_authorized_session(
     builders don't cover (e.g. streaming a response under a byte cap). Caller owns
     the session and must close it."""
     return AuthorizedSession(get_impersonated_creds(creds, user_email))
-
-
-def get_google_docs_service(
-    creds: ServiceAccountCredentials | OAuthCredentials,
-    user_email: str | None = None,
-) -> GoogleDocsService:
-    return _get_google_service(  # ty: ignore[invalid-return-type]
-        "docs", "v1", creds, user_email
-    )
-
-
-def get_drive_service(
-    creds: ServiceAccountCredentials | OAuthCredentials,
-    user_email: str | None = None,
-) -> GoogleDriveService:
-    return _get_google_service(  # ty: ignore[invalid-return-type]
-        "drive", "v3", creds, user_email
-    )
-
-
-def get_admin_service(
-    creds: ServiceAccountCredentials | OAuthCredentials,
-    user_email: str | None = None,
-) -> AdminService:
-    return _get_google_service(  # ty: ignore[invalid-return-type]
-        "admin", "directory_v1", creds, user_email
-    )
-
-
-def get_gmail_service(
-    creds: ServiceAccountCredentials | OAuthCredentials,
-    user_email: str | None = None,
-) -> GmailService:
-    return _get_google_service(  # ty: ignore[invalid-return-type]
-        "gmail", "v1", creds, user_email
-    )

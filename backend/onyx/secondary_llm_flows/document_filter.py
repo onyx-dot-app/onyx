@@ -19,6 +19,7 @@ from onyx.prompts.search_prompts import (
     DOCUMENT_SELECTION_PROMPT,
     TRY_TO_FILL_TO_MAX_INSTRUCTIONS,
 )
+from onyx.secondary_llm_flows.search_prompt_budget import SearchPromptBudget
 from onyx.tools.tool_implementations.search.constants import MAX_CHUNKS_FOR_RELEVANCE
 from onyx.tracing.flows import LLMFlow
 from onyx.utils.logger import setup_logger
@@ -106,6 +107,7 @@ def classify_section_relevance(
     llm: LLM,
     section_above_text: str | None,
     section_below_text: str | None,
+    enforce_llm_input_budget: bool = False,
 ) -> ContextExpansionType:
     """Use LLM to classify section relevance and determine context expansion type.
 
@@ -119,25 +121,47 @@ def classify_section_relevance(
     Returns:
         ContextExpansionType indicating how the section should be expanded
     """
-    # Build the prompt
-    prompt_text = DOCUMENT_CONTEXT_SELECTION_PROMPT.format(
-        document_title=document_title,
-        main_section=section_text,
-        section_above=section_above_text or "N/A",
-        section_below=section_below_text or "N/A",
-        user_query=user_query,
-    )
-
     # Default to MAIN_SECTION_ONLY
     default_classification = ContextExpansionType.MAIN_SECTION_ONLY
 
+    budget = SearchPromptBudget(llm) if enforce_llm_input_budget else None
+    options = (
+        budget.options()
+        if budget
+        else GenerationOptions(reasoning_effort=ReasoningEffort.OFF)
+    )
+
+    def build_request(
+        main_section: str,
+        above: str | None = None,
+        below: str | None = None,
+    ) -> GenerationRequest:
+        return GenerationRequest(
+            messages=[
+                UserMessage(
+                    content=DOCUMENT_CONTEXT_SELECTION_PROMPT.format(
+                        document_title=document_title,
+                        main_section=main_section,
+                        section_above=above or "N/A",
+                        section_below=below or "N/A",
+                        user_query=user_query,
+                    )
+                )
+            ],
+            options=options,
+        )
+
+    request = build_request(section_text, section_above_text, section_below_text)
+    if budget and not budget.fits(request):
+        fitted_text = budget.fit_text(section_text, build_request)
+        if fitted_text is None:
+            logger.warning("Search classification prompt exceeds its input budget")
+            return default_classification
+        request = build_request(fitted_text)
+
     try:
-        prompt_msg = UserMessage(content=prompt_text)
         response = llm.invoke(
-            GenerationRequest(
-                messages=[prompt_msg],
-                options=GenerationOptions(reasoning_effort=ReasoningEffort.OFF),
-            ),
+            request,
             context=GenerationContext(
                 total_timeout_s=SECONDARY_LLM_FLOW_TIMEOUT_S,
                 flow=LLMFlow.CLASSIFY_SECTION_RELEVANCE,
@@ -221,6 +245,7 @@ def select_sections_for_expansion(
     max_sections: int = 10,
     max_chunks_per_section: int | None = MAX_CHUNKS_FOR_RELEVANCE,
     try_to_fill_to_max: bool = False,
+    enforce_llm_input_budget: bool = False,
 ) -> tuple[list[InferenceSection], list[str] | None]:
     """Use LLM to select the most relevant document sections for expansion.
 
@@ -301,21 +326,63 @@ def select_sections_for_expansion(
 
     # Build the prompt
     extra_instructions = TRY_TO_FILL_TO_MAX_INSTRUCTIONS if try_to_fill_to_max else ""
-    prompt_text = UserMessage(
-        content=DOCUMENT_SELECTION_PROMPT.format(
-            max_sections=max_sections,
-            extra_instructions=extra_instructions,
-            formatted_doc_sections=json.dumps(sections_dict, separators=(",", ":")),
-            user_query=user_query,
-        )
+    budget = SearchPromptBudget(llm) if enforce_llm_input_budget else None
+    options = (
+        budget.options()
+        if budget
+        else GenerationOptions(reasoning_effort=ReasoningEffort.OFF)
     )
+
+    def build_request(
+        candidates: list[dict[str, str | int | list[str]]],
+    ) -> GenerationRequest:
+        return GenerationRequest(
+            messages=[
+                UserMessage(
+                    content=DOCUMENT_SELECTION_PROMPT.format(
+                        max_sections=max_sections,
+                        extra_instructions=extra_instructions,
+                        formatted_doc_sections=json.dumps(
+                            candidates, separators=(",", ":")
+                        ),
+                        user_query=user_query,
+                    )
+                )
+            ],
+            options=options,
+        )
+
+    request = build_request(sections_dict)
+    if budget:
+        while len(sections_dict) > 1 and not budget.fits(request):
+            sections_dict.pop()
+            request = build_request(sections_dict)
+        if not budget.fits(request):
+            first_section = sections_dict[0]
+            sections_dict[0] = {
+                key: first_section[key]
+                for key in ("section_id", "title", "source_type", "content")
+            }
+            first_section = sections_dict[0]
+
+            def build_content_request(content: str) -> GenerationRequest:
+                return build_request([{**first_section, "content": content}])
+
+            original_content = str(first_section["content"])
+            fitted_content = budget.fit_text(original_content, build_content_request)
+            if fitted_content is None:
+                first_section["title"] = ""
+                fitted_content = budget.fit_text(
+                    original_content, build_content_request
+                )
+            if fitted_content is None:
+                logger.warning("Search selection prompt exceeds its input budget")
+                return sections[:max_sections], None
+            request = build_content_request(fitted_content)
 
     try:
         response = llm.invoke(
-            GenerationRequest(
-                messages=[prompt_text],
-                options=GenerationOptions(reasoning_effort=ReasoningEffort.OFF),
-            ),
+            request,
             context=GenerationContext(
                 total_timeout_s=SECONDARY_LLM_FLOW_TIMEOUT_S,
                 flow=LLMFlow.SELECT_SECTIONS_FOR_EXPANSION,
@@ -341,7 +408,7 @@ def select_sections_for_expansion(
         # Skip out-of-range IDs and don't count them toward max_sections
         selected_sections = []
         document_ids_with_exclamation = []  # Collect document_ids for sections with "!"
-        num_sections = len(sections)
+        num_sections = len(sections_dict)
 
         for section_id_str in section_ids:
             # Convert to int

@@ -58,7 +58,7 @@ def _build_tool_call_payload() -> dict:
     return {
         "id": "chatcmpl-f739f09c-7c9b-4dd6-aea7-cf41d4fd2196",
         "created": 1762544538,
-        "model": "gpt-5",
+        "model": "gpt-6-sol",
         "object": "chat.completion.chunk",
         "choices": [
             {
@@ -87,7 +87,7 @@ def _build_reasoning_payload() -> dict:
     return {
         "id": "chatcmpl-c2a25682-5715-4ca2-84a9-061498f79626",
         "created": 1762544538,
-        "model": "gpt-5",
+        "model": "gpt-6-sol",
         "object": "chat.completion.chunk",
         "choices": [
             {
@@ -177,7 +177,7 @@ def _build_usage_only_chunk_payload() -> dict:
     return {
         "id": "chatcmpl-usage-only",
         "created": 1762544600,
-        "model": "gpt-5.1",
+        "model": "gpt-6.1-sol",
         "object": "chat.completion.chunk",
         "choices": [],
         "usage": {
@@ -377,8 +377,78 @@ def test_from_litellm_model_response_stream_prefers_routed_model() -> None:
 
 def test_from_litellm_model_response_stream_falls_back_to_chunk_model() -> None:
     payload = _build_usage_only_chunk_payload()
-    payload["model"] = "gpt-4o"
+    payload["model"] = "gpt-6-luna"
 
     response = from_litellm_model_response_stream(_make_stream_double(payload))
 
-    assert response.model == "gpt-4o"
+    assert response.model == "gpt-6-luna"
+
+
+@pytest.mark.parametrize("streaming", [False, True], ids=["invoke", "stream"])
+@pytest.mark.parametrize(
+    "cache_fields, expected_cache_read_tokens",
+    [
+        pytest.param({}, 0, id="missing"),
+        pytest.param({"cache_read_input_tokens": None}, 0, id="null"),
+        pytest.param({"prompt_tokens_details": None}, 0, id="null-details"),
+        pytest.param(
+            {"prompt_tokens_details": {"cached_tokens": 400}},
+            400,
+            id="nested-only",
+        ),
+        pytest.param(
+            {
+                "cache_read_input_tokens": None,
+                "prompt_tokens_details": {"cached_tokens": 400},
+            },
+            400,
+            id="null-flat-falls-back",
+        ),
+        pytest.param(
+            {
+                "cache_read_input_tokens": 0,
+                "prompt_tokens_details": {"cached_tokens": 400},
+            },
+            0,
+            id="zero-flat-wins",
+        ),
+        pytest.param(
+            {
+                "cache_read_input_tokens": 200,
+                "prompt_tokens_details": {"cached_tokens": 400},
+            },
+            200,
+            id="positive-flat-wins",
+        ),
+    ],
+)
+def test_response_conversion_preserves_cached_token_usage(
+    streaming: bool,
+    cache_fields: dict[str, int | None | dict[str, int]],
+    expected_cache_read_tokens: int,
+) -> None:
+    payload = (
+        _build_usage_only_chunk_payload()
+        if streaming
+        else _build_non_streaming_response_payload()
+    )
+    payload["usage"] = {
+        "prompt_tokens": 1000,
+        "completion_tokens": 20,
+        "total_tokens": 1020,
+        "cache_creation_input_tokens": 100,
+        **cache_fields,
+    }
+
+    response = (
+        from_litellm_model_response_stream(_make_stream_double(payload))
+        if streaming
+        else from_litellm_model_response(_make_response_double(payload))
+    )
+
+    assert response.usage is not None
+    assert response.usage.cache_read_input_tokens == expected_cache_read_tokens
+    assert response.usage.prompt_tokens == 1000
+    assert response.usage.completion_tokens == 20
+    assert response.usage.total_tokens == 1020
+    assert response.usage.cache_creation_input_tokens == 100

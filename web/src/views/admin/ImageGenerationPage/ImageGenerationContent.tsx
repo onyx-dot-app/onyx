@@ -8,10 +8,6 @@ import { useCreateModal } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import {
-  LLMProviderResponse,
-  LLMProviderView,
-} from "@/lib/languageModels/types";
-import {
   IMAGE_PROVIDER_GROUPS,
   ImageProvider,
 } from "@/views/admin/ImageGenerationPage/constants";
@@ -35,16 +31,6 @@ const NO_DEFAULT_VALUE = "__none__";
 
 export default function ImageGenerationContent() {
   const t = useTranslations("admin.imageGeneration");
-  const {
-    data: llmProviderResponse,
-    error: llmError,
-    mutate: refetchProviders,
-  } = useSWR<LLMProviderResponse<LLMProviderView>>(
-    SWR_KEYS.llmProvidersWithImageGen,
-    errorHandlingFetcher
-  );
-  const llmProviders = llmProviderResponse?.providers ?? [];
-
   const {
     data: configs = [],
     error: configError,
@@ -79,6 +65,12 @@ export default function ImageGenerationContent() {
         (p) => !p.deprecated || connectedProviderIds.has(p.image_provider_id)
       ),
     })).filter((g) => g.providers.length > 0);
+  }, [connectedProviderIds]);
+
+  const connectedDeprecatedProviders = useMemo(() => {
+    return IMAGE_PROVIDER_GROUPS.flatMap((group) => group.providers).filter(
+      (p) => p.deprecated && connectedProviderIds.has(p.image_provider_id)
+    );
   }, [connectedProviderIds]);
 
   const defaultConfig = useMemo(() => {
@@ -159,7 +151,6 @@ export default function ImageGenerationContent() {
         t("disconnectSuccess.message", { title: disconnectProvider.title })
       );
       refetchConfigs();
-      refetchProviders();
     } catch (error) {
       console.error("Failed to disconnect image generation provider:", error);
       toast.error(
@@ -175,7 +166,6 @@ export default function ImageGenerationContent() {
     toast.success(t("configureSuccess.message"));
     setEditConfig(null);
     refetchConfigs();
-    refetchProviders();
   };
 
   // Compute replacement options when disconnecting an active provider
@@ -206,9 +196,9 @@ export default function ImageGenerationContent() {
       const firstModel = firstGroup?.providers[0];
       if (firstModel) setReplacementProviderId(firstModel.image_provider_id);
     }
-  }, [disconnectProvider]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [disconnectProvider]);
 
-  if (llmError || configError) {
+  if (configError) {
     return <div className="text-error">{t("loadError.message")}</div>;
   }
 
@@ -225,6 +215,17 @@ export default function ImageGenerationContent() {
         {connectedProviderIds.size === 0 && (
           <MessageCard variant="info" title={t("emptyState.title")} />
         )}
+
+        {connectedDeprecatedProviders.map((provider) => (
+          <MessageCard
+            key={provider.image_provider_id}
+            variant="warning"
+            title={t("retiredModelWarning.title", { title: provider.title })}
+            description={t("retiredModelWarning.description", {
+              title: provider.title,
+            })}
+          />
+        ))}
 
         {/* Provider Groups */}
         {visibleGroups.map((group) => (
@@ -362,7 +363,6 @@ export default function ImageGenerationContent() {
           {getImageGenForm({
             modal: modal,
             imageProvider: activeProvider,
-            existingProviders: llmProviders,
             existingConfig: editConfig || undefined,
             onSuccess: handleModalSuccess,
           })}

@@ -96,6 +96,7 @@ function VertexFormFields(
   props: ImageGenFormChildProps<VertexImageGenFormValues>
 ) {
   const t = useTranslations("admin.imageGeneration");
+  const tPlaceholders = useTranslations("common.placeholders");
   const tInputSelect = useTranslations("common.inputSelect");
   const {
     apiStatus,
@@ -235,7 +236,7 @@ function VertexFormFields(
                   value={field.value}
                   onChange={(e) => helper.setValue(e.target.value)}
                   onBlur={field.onBlur}
-                  placeholder="my-vertex-project"
+                  placeholder={tPlaceholders("vertexAi.projectId")}
                   variant={disabled ? "disabled" : undefined}
                 />
               </FormField.Control>
@@ -280,7 +281,7 @@ function VertexFormFields(
                 value={field.value}
                 onChange={(e) => helper.setValue(e.target.value)}
                 onBlur={field.onBlur}
-                placeholder="global"
+                placeholder={tPlaceholders("vertexAi.location")}
                 variant={disabled ? "disabled" : undefined}
               />
             </FormField.Control>

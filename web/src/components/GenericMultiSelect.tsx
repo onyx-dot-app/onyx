@@ -2,7 +2,7 @@ import { FormikProps, ErrorMessage } from "formik";
 import { useTranslations } from "next-intl";
 import Text from "@/refresh-components/texts/Text";
 import { InputSingleComboBox } from "@opal/components";
-import { Tag } from "@opal/components";
+import { Chip } from "@opal/components";
 import { Disabled } from "@opal/core";
 export type GenericMultiSelectFormType<T extends string> = {
   [K in T]: number[];
@@ -141,9 +141,8 @@ export function GenericMultiSelect<
       {selectedItems.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {selectedItems.map((item) => (
-            <Tag
+            <Chip
               key={item.id}
-              size="md"
               title={item.name}
               disabled={disabled}
               onRemove={() => handleRemove(item.id)}

@@ -6,6 +6,8 @@ from playwright.sync_api import sync_playwright
 
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.utils.logger import setup_logger
+from onyx.utils.playwright_fetch import install_ssrf_guard, read_bounded_page_html
+from onyx.utils.url import validate_outbound_http_url
 
 logger = setup_logger()
 
@@ -34,9 +36,12 @@ def scrape_url_content(
     try:
         validate_url(url)
         playwright = sync_playwright().start()
-        browser = playwright.chromium.launch(headless=True)
-        context = browser.new_context()
+        browser = playwright.chromium.launch(
+            headless=True, args=["--block-new-web-contents"]
+        )
+        context = browser.new_context(service_workers="block")
         page = context.new_page()
+        install_ssrf_guard(page, allow_private_network=False)
 
         logger.info("Navigating to URL: %s", url)
         try:
@@ -63,7 +68,10 @@ def scrape_url_content(
                 previous_height = new_height
                 scroll_attempts += 1
 
-        content = page.content()
+        validate_url(page.url)
+        content = read_bounded_page_html(page)
+        if content is None:
+            return None
         soup = BeautifulSoup(content, "html.parser")
 
         parsed_html = web_html_cleanup(soup)
@@ -106,13 +114,14 @@ def scrape_url_content(
 
 def validate_url(url: str) -> None:
     """
-    Validates that a URL is properly formatted.
+    Validates that a URL is properly formatted and safe to fetch.
 
     Args:
         url: The URL to validate
 
     Raises:
         ValueError: If URL is not valid
+        SSRFException: If the URL targets an internal or blocked host
     """
     parse = urlparse(url)
     if parse.scheme != "http" and parse.scheme != "https":
@@ -120,3 +129,5 @@ def validate_url(url: str) -> None:
 
     if not parse.hostname:
         raise ValueError("URL must include a hostname")
+
+    validate_outbound_http_url(url)

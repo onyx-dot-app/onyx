@@ -22,6 +22,7 @@ export type AdminNavItemId =
   | "webSearch"
   | "imageGeneration"
   | "voice"
+  | "decisionModels"
   | "codeInterpreter"
   | "chatPreferences"
   | "llmGateway"
@@ -30,6 +31,7 @@ export type AdminNavItemId =
   | "craftPreferences"
   | "customAnalytics"
   | "agents"
+  | "plugins"
   | "mcpActions"
   | "openapiActions"
   | "indexingStatus"
@@ -76,6 +78,7 @@ export const NAV_ITEM_IDS: Record<
   AdminNavItemId | null
 > = {
   LLM_MODELS: "languageModels",
+  DECISION_MODELS: "decisionModels",
   WEB_SEARCH: "webSearch",
   IMAGE_GENERATION: "imageGeneration",
   VOICE: "voice",
@@ -83,12 +86,14 @@ export const NAV_ITEM_IDS: Record<
   CHAT_PREFERENCES: "chatPreferences",
   LLM_GATEWAY: "llmGateway",
   CRAFT_ACCESS: "craftAccess",
-  CRAFT_APPS: "craftApps",
+  CRAFT_APPS: null,
   CRAFT_PREFERENCES: "craftPreferences",
   CUSTOM_ANALYTICS: "customAnalytics",
   AGENTS: "agents",
-  MCP_ACTIONS: "mcpActions",
-  OPENAPI_ACTIONS: "openapiActions",
+  PLUGINS: "plugins",
+  PLUGINS_EXTERNAL_APP: null,
+  MCP_ACTIONS: null,
+  OPENAPI_ACTIONS: null,
   INDEXING_STATUS: "indexingStatus",
   CONNECTORS: "connectors",
   DOCUMENT_SETS: "documentSets",
@@ -174,6 +179,11 @@ const NAV_SECTION_IDS: readonly (readonly [
   ["Usage", "usage"],
 ];
 
+/** Sections whose heading shows a Beta tag. */
+export const BETA_SECTION_IDS: ReadonlySet<AdminNavSectionId> = new Set([
+  "craft",
+]);
+
 /** `null` for the unlabeled (default) section. */
 function sectionIdFor(section: string): AdminNavSectionId | null {
   return NAV_SECTION_IDS.find(([label]) => label === section)?.[1] ?? null;
@@ -188,6 +198,7 @@ export interface SidebarItemEntry {
   error?: boolean;
   disabled?: boolean;
   requiredTier?: Tier | null;
+  beta?: boolean;
 }
 
 export function buildItems(
@@ -222,6 +233,7 @@ export function buildItems(
       sectionId: sectionIdFor(route.section),
       disabled,
       requiredTier: route.requiredTier,
+      beta: route.beta,
     };
 
     // INDEX_SETTINGS surfaces a reindexing-needed error indicator

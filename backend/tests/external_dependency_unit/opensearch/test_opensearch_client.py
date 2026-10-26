@@ -2727,8 +2727,8 @@ class TestOpenSearchClient:
         Tests semantic search with filters for ACL, hidden documents, and tenant
         isolation.
 
-        The exact score assertions also check that quantized fields are
-        rescored with the full-precision vectors.
+        The score assertions check that quantized fields are rescored with
+        full-precision vectors, allowing floating-point rounding.
         """
         # Precondition.
         _patch_global_tenant_state(monkeypatch, True)
@@ -2842,7 +2842,7 @@ class TestOpenSearchClient:
                 for k in DocumentChunkWithoutVectors.model_fields
             }
         )
-        assert results[0].score == 1.0
+        assert results[0].score == pytest.approx(1.0, rel=0, abs=1e-6)
         # Same for the second result.
         assert results[1].document_chunk.document_id == "private-doc-user-a"
         assert results[1].document_chunk == DocumentChunkWithoutVectors(

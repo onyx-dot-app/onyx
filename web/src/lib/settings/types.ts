@@ -1,5 +1,6 @@
 import { Tier } from "@/lib/tiers/types";
 import type { Notification } from "@/lib/notifications/interfaces";
+import type { Locale } from "@/i18n/config";
 
 export enum ApplicationStatus {
   PAYMENT_REMINDER = "payment_reminder",
@@ -77,6 +78,9 @@ export interface Settings {
   // Workspace default for Craft access; per-user overrides win.
   craft_default_enabled?: boolean;
 
+  // Workspace UI language for users without a stored language of their own.
+  default_language: Locale;
+
   // Workspace-wide switch for the LLM gateway (direct model API access via
   // /api/gateway). When false, all gateway routes reject requests.
   llm_gateway_enabled?: boolean;
@@ -120,6 +124,8 @@ export interface Settings {
 
   // Factory defaults for the restore button.
   default_pruning_freq?: number;
+  // A new connector's schedule as the create form fills it in, in seconds.
+  default_refresh_freq?: number;
   default_user_file_max_upload_size_mb?: number;
   default_file_token_count_threshold_k?: number;
 

@@ -44,6 +44,7 @@ Every [InputTypeInTag](../../texts/input-type-in-tag/README.md) prop, plus:
 | `onSelectOption`    | `(option: SelectOption) => void`    | **(required)** | Called when an option is chosen                                    |
 | `mode`              | `"closed" \| "open"`                | `"closed"`     | Set openness, see above                                            |
 | `dropdownMaxHeight` | `string`                            | `"15rem"`      | Max height of the dropdown in CSS units                            |
+| `showTags`          | `boolean`                           | `true`         | `false` keeps the chosen options out of the field: they show only as selected rows in the list, for a caller that lists them elsewhere |
 
 `onAdd` is the create row's commit in `mode="open"`. In `mode="closed"` it never fires.
 

@@ -11,29 +11,45 @@ import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import type { CredentialValues } from "@/lib/credentials/types";
 import CollapsibleSection from "@/app/admin/agents/CollapsibleSection";
 import {
+  Button,
   InputKeyValue,
   InputNumber,
+  MessageCard,
   Tabs,
   Text as OpalText,
 } from "@opal/components";
-import { useField, useFormikContext } from "formik";
+import { getIn, useField, useFormikContext } from "formik";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import { Content, InputHorizontal, InputVertical, Label } from "@opal/layouts";
+import {
+  Content,
+  InputHorizontal,
+  InputErrorText,
+  InputVertical,
+  Label,
+  Section,
+} from "@opal/layouts";
+import { SvgRefreshCw } from "@opal/icons";
+import { useConnectorCheckActions } from "@/views/admin/connectors/AddConnectorPage/form/checkActions";
 import {
   InputCheckboxField,
   InputMultiUploadField,
   InputSingleSelectField,
   InputSingleUploadField,
+  InputSwitchField,
 } from "@opal/form";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
-import SwitchField from "@/refresh-components/form/SwitchField";
 import TextListField from "@/refresh-components/form/TextListField";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import FindingListField from "@/views/admin/connectors/AddConnectorPage/form/FindingListField";
 import type { StoredReportScope } from "@/lib/connectors/checks/findings";
-import { markdown } from "@opal/utils";
+import {
+  useFieldCheckError,
+  useOptionsFinding,
+} from "@/lib/connectors/checks/hooks";
+import type { ListOption } from "@/lib/connectors/types/form";
+import { escapeMarkdown, markdown } from "@opal/utils";
 
 // Define a general type for form values
 type FormValues = Record<string, any>;
@@ -54,7 +70,7 @@ const TabsField: FC<TabsFieldProps> = ({
   reportScope,
 }) => {
   const t = useTranslations("admin.connectorsList");
-  const { setFieldTouched, setFieldValue } = useFormikContext<FormValues>();
+  const { setFieldValue } = useFormikContext<FormValues>();
 
   const resolvedLabel =
     typeof tabField.label === "function"
@@ -91,10 +107,9 @@ const TabsField: FC<TabsFieldProps> = ({
             tabField.tabs[0]?.value
           }
           onValueChange={(newTab) => {
+            // The new tab's fields show their errors once used or on Create,
+            // not as soon as the tab opens.
             setFieldValue(tabField.name, newTab);
-            tabField.tabs
-              .find((tab) => tab.value === newTab)
-              ?.fields.forEach((field) => setFieldTouched(field.name, true));
             // Clear values from other tabs but preserve defaults
             tabField.tabs.forEach((tab) => {
               if (tab.value !== newTab) {
@@ -157,6 +172,61 @@ interface CheckboxTabsFieldProps {
  * A checkbox option shown as two tabs. The tab labels name both choices, so
  * the label only names the tab strip for assistive technology.
  */
+interface ListAvailabilityProps {
+  connector: ConfigurableSources;
+  availability: NonNullable<ListOption["availableCount"]>;
+  reportScope: StoredReportScope | null;
+}
+
+/**
+ * How many options a discovery check found for a list, once it has run, and
+ * a button that runs the listing again without opening the checks.
+ */
+function ListAvailability({
+  connector,
+  availability,
+  reportScope,
+}: ListAvailabilityProps) {
+  const t = useTranslations("admin.connectorsList");
+  const checkActions = useConnectorCheckActions();
+  // A refresh that finds nothing shows 0, not an older count.
+  const finding = useOptionsFinding(
+    connector,
+    availability.finding,
+    reportScope,
+    true
+  );
+  if (finding === null && checkActions === null) return null;
+  return (
+    <Section flexDirection="row" width="fit" height="fit" gap={0.5}>
+      {finding && (
+        <OpalText font="secondary-body" color="text-03">
+          {t(
+            // SAFETY: a config label is a key of `admin.connectorsList`;
+            // `connectorCopy.test.ts` checks each one against en.json.
+            availability.label as Parameters<typeof t>[0],
+            {
+              count: finding.options.length,
+              more: finding.truncated ? "true" : "false",
+            }
+          )}
+        </OpalText>
+      )}
+      {checkActions && (
+        <Button
+          icon={SvgRefreshCw}
+          prominence="internal"
+          size="sm"
+          type="button"
+          tooltip={t("field.availableRefresh.tooltip")}
+          aria-label={t("field.availableRefresh.tooltip")}
+          onClick={() => checkActions.runCheck(availability.checkId)}
+        />
+      )}
+    </Section>
+  );
+}
+
 function CheckboxTabsField({
   option,
   label,
@@ -256,7 +326,7 @@ function ToggleField({ name, label, description, disabled }: ToggleFieldProps) {
       title={label}
       description={description}
     >
-      <SwitchField name={name} disabled={disabled} />
+      <InputSwitchField name={name} disabled={disabled} />
     </InputHorizontal>
   );
 }
@@ -278,7 +348,26 @@ export const RenderField: FC<RenderFieldProps> = ({
   reportScope,
 }) => {
   const t = useTranslations("admin.connectorsList");
-  const { setFieldValue } = useFormikContext<FormValues>(); // Get Formik's context functions
+  const { setFieldValue, setFieldTouched, errors, touched } =
+    useFormikContext<FormValues>(); // Get Formik's context functions
+  // A failed check that judges this field shows as its error, unless the
+  // form's own validation already has one for it.
+  const checkError: string | null = useFieldCheckError(
+    connector,
+    field.name,
+    reportScope
+  );
+  const fieldError: string | undefined =
+    getIn(errors, field.name) === undefined
+      ? (checkError ?? undefined)
+      : undefined;
+  // The error a field shows itself, under its input: its Formik error once
+  // touched, else a check's.
+  const formikError: unknown = getIn(errors, field.name);
+  const shownError: string | undefined =
+    getIn(touched, field.name) && typeof formikError === "string"
+      ? formikError
+      : fieldError;
 
   const label =
     typeof field.label === "function"
@@ -302,6 +391,39 @@ export const RenderField: FC<RenderFieldProps> = ({
   const richDescription: RichStr | undefined =
     typeof description === "string" && description
       ? markdown(description)
+      : undefined;
+  // A description with form arguments (e.g. the GitHub owner) is formatted
+  // here; without its arguments it is hidden.
+  const descriptionArgs: Record<string, string> | null | undefined =
+    field.type === "string_tab" ? field.descriptionValues?.(values) : undefined;
+  const stringTabDescription: RichStr | undefined =
+    descriptionArgs === undefined
+      ? richDescription
+      : descriptionArgs === null
+        ? undefined
+        : markdown(
+            t(
+              // SAFETY: a config description is a key of
+              // `admin.connectorsList`; `connectorCopy.test.ts` checks each
+              // one against en.json.
+              field.description as Parameters<typeof t>[0],
+              Object.fromEntries(
+                Object.entries(descriptionArgs).map(([name, value]) => [
+                  name,
+                  escapeMarkdown(value),
+                ])
+              )
+            )
+          );
+  const checkActions = useConnectorCheckActions();
+  const testCheck: { checkId: string; label: string } | undefined =
+    field.type === "text" ? field.testCheck : undefined;
+  // A text field's placeholder can follow the form's values.
+  const textPlaceholder: string | undefined =
+    field.type === "text"
+      ? typeof field.placeholder === "function"
+        ? field.placeholder(values)
+        : field.placeholder
       : undefined;
   const optionalSuffix: string | undefined = field.optional
     ? t("field.optionalSuffix.label")
@@ -363,7 +485,16 @@ export const RenderField: FC<RenderFieldProps> = ({
         <InputVertical
           disabled={disabled}
           title={label}
-          subDescription={richDescription}
+          description={richDescription}
+          rightChildren={
+            field.availableCount && (
+              <ListAvailability
+                connector={connector}
+                availability={field.availableCount}
+                reportScope={reportScope}
+              />
+            )
+          }
           suffix={optionalSuffix}
         >
           {field.optionsFinding !== undefined ? (
@@ -384,9 +515,10 @@ export const RenderField: FC<RenderFieldProps> = ({
           ) : (
             <TextListField
               name={field.name}
-              placeholder={t("listInput.placeholder", {
-                label: label.toLowerCase(),
-              })}
+              placeholder={
+                field.placeholder ??
+                t("listInput.placeholder", { label: label.toLowerCase() })
+              }
               disabled={disabled}
             />
           )}
@@ -512,41 +644,108 @@ export const RenderField: FC<RenderFieldProps> = ({
         />
       ) : field.type === "text" ? (
         // The field name ties the label to the input's id and shows the
-        // field's Formik error under it.
+        // field's Formik error under it. A field with a test check shows its
+        // error itself, between the input and its help row.
         <InputVertical
-          withLabel={field.name}
+          withLabel={testCheck ? false : field.name}
           title={label}
+          error={testCheck ? undefined : fieldError}
           subDescription={
-            subDescriptionKey
-              ? t(`subDescriptions.${subDescriptionKey}`, {
-                  connectorName: getSourceDisplayName(connector) ?? connector,
-                })
-              : richDescription
+            testCheck
+              ? undefined
+              : subDescriptionKey
+                ? t(`subDescriptions.${subDescriptionKey}`, {
+                    connectorName: getSourceDisplayName(connector) ?? connector,
+                  })
+                : richDescription
           }
           suffix={optionalSuffix}
         >
-          {field.isTextArea ? (
-            <InputTextAreaField
-              name={field.name}
-              // Tests find a config text field by its config name.
-              data-testid={field.name}
-              placeholder={field.placeholder}
-              variant={disabled ? "disabled" : undefined}
-              rows={1}
-            />
-          ) : (
-            <InputTypeInField
-              name={field.name}
-              data-testid={field.name}
-              placeholder={field.placeholder}
-              variant={disabled ? "disabled" : undefined}
-            />
-          )}
+          {/* A field with a test check shows its description beside the
+              button, under the input. */}
+          <Section gap={1} alignItems="stretch" width="full">
+            {field.isTextArea ? (
+              <InputTextAreaField
+                name={field.name}
+                // Tests find a config text field by its config name.
+                data-testid={field.name}
+                placeholder={textPlaceholder}
+                // A check's error turns it red as a Formik error does.
+                variant={
+                  disabled ? "disabled" : fieldError ? "error" : undefined
+                }
+                rows={1}
+                mono={field.mono}
+              />
+            ) : (
+              <InputTypeInField
+                name={field.name}
+                data-testid={field.name}
+                placeholder={textPlaceholder}
+                variant={
+                  disabled ? "disabled" : fieldError ? "error" : undefined
+                }
+              />
+            )}
+            {testCheck && shownError && (
+              <InputErrorText type="error">{shownError}</InputErrorText>
+            )}
+            {testCheck && (
+              <Section
+                flexDirection="row"
+                justifyContent="between"
+                alignItems="center"
+                gap={4}
+                width="full"
+              >
+                <Section
+                  gap={0}
+                  alignItems="start"
+                  width="fit"
+                  // Shrinks and wraps, so the button keeps its width.
+                  className="min-w-0 flex-1"
+                >
+                  {typeof description === "string" &&
+                    description.split("\n").map((line) => (
+                      <OpalText
+                        key={line}
+                        font="secondary-body"
+                        color="text-03"
+                      >
+                        {markdown(line)}
+                      </OpalText>
+                    ))}
+                </Section>
+                <Section width="fit" height="fit" className="shrink-0">
+                  <Button
+                    icon={SvgRefreshCw}
+                    prominence="secondary"
+                    disabled={disabled || checkActions === null}
+                    onClick={() => {
+                      // A blank query has nothing to test: the field shows
+                      // its error instead.
+                      const query: unknown = values[field.name];
+                      if (typeof query !== "string" || query.trim() === "") {
+                        void setFieldTouched(field.name, true, true);
+                        return;
+                      }
+                      checkActions?.runCheck(testCheck.checkId);
+                    }}
+                  >
+                    {testCheck.label}
+                  </Button>
+                </Section>
+              </Section>
+            )}
+          </Section>
         </InputVertical>
       ) : field.type === "string_tab" ? (
-        <OpalText font="secondary-body" color="text-03">
-          {richDescription ?? ""}
-        </OpalText>
+        // A tab with nothing to fill in says what it indexes.
+        <MessageCard
+          innerPadding={1}
+          title={label}
+          description={stringTabDescription}
+        />
       ) : (
         <>
           {/* oxlint-disable-next-line i18n/no-raw-jsx-text -- developer diagnostic, not copy */}

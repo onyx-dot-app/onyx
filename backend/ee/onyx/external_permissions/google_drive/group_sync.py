@@ -5,16 +5,18 @@ from pydantic import BaseModel
 
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.google_drive.folder_retrieval import (
-    get_folder_permissions_by_ids,
     get_modified_folders,
 )
 from ee.onyx.external_permissions.google_drive.models import (
     GoogleDrivePermission,
     PermissionType,
 )
+from ee.onyx.external_permissions.google_drive.permission_retrieval import (
+    get_permissions_by_ids,
+)
 from ee.onyx.external_permissions.utils import credential_json
 from onyx.access.utils import build_domain_group_id
-from onyx.configs.app_configs import JOB_TIMEOUT
+from onyx.configs.app_configs import PERMISSION_SYNC_TIMEOUT
 from onyx.connectors.factory import build_connector_kwargs
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_drive.source_operations import (
@@ -47,7 +49,7 @@ def _check_sync_deadline(deadline: float) -> None:
     loop in this module must check the shared deadline itself."""
     if time.monotonic() > deadline:
         raise TimeoutError(
-            f"Drive group sync exceeded {JOB_TIMEOUT}s before completing "
+            f"Drive group sync exceeded {PERMISSION_SYNC_TIMEOUT}s before completing "
             "enumeration; failing the sync so the worker releases its lock "
             "and fence instead of running indefinitely."
         )
@@ -73,7 +75,7 @@ def _get_all_folders(
     SKIP_LOG_INTERVAL = 1000
 
     crawl_deadline = (
-        deadline if deadline is not None else time.monotonic() + JOB_TIMEOUT
+        deadline if deadline is not None else time.monotonic() + PERMISSION_SYNC_TIMEOUT
     )
 
     seen_folder_ids: set[str] = set()
@@ -108,8 +110,11 @@ def _get_all_folders(
 
             if not raw_permissions and permission_ids:
                 # Fetch permissions using the IDs
-                permissions = get_folder_permissions_by_ids(
-                    ops, user_email, folder_id, permission_ids
+                permissions = get_permissions_by_ids(
+                    ops=ops,
+                    user_email=user_email,
+                    doc_id=folder_id,
+                    permission_ids=permission_ids,
                 )
             else:
                 permissions = [
@@ -377,7 +382,7 @@ def gdrive_group_sync(
 
     # One budget for the whole sync: every long enumeration phase below checks
     # this deadline, since none of them yield often (or at all) on big domains.
-    sync_deadline = time.monotonic() + JOB_TIMEOUT
+    sync_deadline = time.monotonic() + PERMISSION_SYNC_TIMEOUT
 
     # Get all drive members
     drive_id_to_members_map = _get_drive_members(google_drive_connector, sync_deadline)

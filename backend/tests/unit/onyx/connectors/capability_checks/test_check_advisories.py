@@ -8,8 +8,6 @@ from onyx.connectors.capabilities import CredentialCapability
 from onyx.connectors.capability_checks import draft_runs, findings_setting
 from onyx.connectors.capability_checks.draft_runs import (
     DraftCheckRunSnapshot,
-    DraftCheckState,
-    DraftCheckStateKind,
     DraftRunStatus,
     StoredDraftRun,
     apply_cached_result,
@@ -31,6 +29,8 @@ from onyx.connectors.capability_checks.models import (
     CheckNotApplicableError,
     CheckOutput,
     CountFinding,
+    DraftCheckState,
+    DraftCheckStateKind,
 )
 from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.exceptions import ConnectorValidationError

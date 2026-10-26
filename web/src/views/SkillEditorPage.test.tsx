@@ -1,3 +1,5 @@
+import type { ComponentProps } from "react";
+import type ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
 import {
   act,
   deferred,
@@ -51,6 +53,7 @@ function existingSkill(
     is_personal: true,
     enabled: true,
     can_toggle: true,
+    installation_policy: "AVAILABLE",
     author_user_id: "author-id",
     author_email: "author@example.com",
     owner: { id: "author-id", email: "author@example.com" },
@@ -90,7 +93,18 @@ jest.mock("@/lib/skills/creationDraft", () => ({
 
 jest.mock("@/sections/modals/skills/ShareSkillModal", () => ({
   __esModule: true,
-  default: () => null,
+  default: (props: ComponentProps<typeof ShareSkillModal>) =>
+    props.open && props.mode === "create" ? (
+      <button
+        type="button"
+        onClick={() => {
+          props.onSaveDraft({ ...props.draft, public_permission: "VIEWER" });
+          props.onClose();
+        }}
+      >
+        Choose organization access
+      </button>
+    ) : null,
 }));
 
 jest.mock("@/lib/skills/api", () => ({
@@ -127,6 +141,31 @@ describe("SkillEditorPage", () => {
   });
 
   afterEach(() => jest.restoreAllMocks());
+
+  it("includes draft sharing settings in the creation request", async () => {
+    const user = setupUser();
+    mockCreateCustomSkillFromEditor.mockResolvedValue({
+      name: "report-writer",
+    });
+    render(<SkillEditorPage />);
+    await fillRequiredFields(user);
+    await user.click(screen.getByRole("button", { name: "Edit sharing" }));
+    await user.click(
+      screen.getByRole("button", { name: "Choose organization access" })
+    );
+    expect(mockCreateCustomSkillFromEditor).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(mockCreateCustomSkillFromEditor).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sharing: {
+          public_permission: "VIEWER",
+          user_shares: [],
+          group_shares: [],
+        },
+      }),
+      undefined
+    );
+  });
 
   it("navigates after creation even when the skill-list refresh fails", async () => {
     const user = setupUser();
@@ -431,7 +470,7 @@ describe("SkillEditorPage", () => {
     );
   });
 
-  it("shows the app dependency and required organization visibility", () => {
+  it("keeps sharing in the header without a management section", () => {
     const skill = existingSkill({
       is_personal: false,
       public_permission: "VIEWER",
@@ -451,15 +490,9 @@ describe("SkillEditorPage", () => {
 
     render(<SkillEditorPage skillId={skill.id} />);
 
+    expect(screen.queryByText("Management")).not.toBeInTheDocument();
     expect(
-      screen.getByText(
-        "Connect app “Acme CRM” from the Apps page to use this skill."
-      )
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Organization-wide viewer access is required while this skill is associated with app “Acme CRM”."
-      )
+      screen.getByRole("button", { name: "Edit sharing" })
     ).toBeInTheDocument();
   });
 

@@ -376,6 +376,35 @@
       "temperature": true,
       "tool_call": true
     },
+    "deepseek/deepseek-v4.1-flash-1017": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.006,
+        "input": 0.3,
+        "output": 1.2
+      },
+      "family": "deepseek-flash",
+      "limit": {
+        "context": 1048576,
+        "output": 393216
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "DeepSeek V4.1 Flash 1017",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-17",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "deepseek/deepseek_v3": {
       "attachment": false,
       "cost": {
@@ -649,8 +678,9 @@
     "inclusionai/ling-3.1-flash": {
       "attachment": false,
       "cost": {
-        "input": 0,
-        "output": 0
+        "cache_read": 0.06,
+        "input": 0.3,
+        "output": 0.9
       },
       "family": "ling",
       "limit": {
@@ -1835,6 +1865,35 @@
       "release_date": "2026-05-29",
       "structured_output": true,
       "temperature": true,
+      "tool_call": true
+    },
+    "stepfun/step-5-preview": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.1,
+        "input": 1,
+        "output": 2.7
+      },
+      "limit": {
+        "context": 1000000,
+        "input": 1000000,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Step 5 Preview",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-09-16",
+      "structured_output": true,
       "tool_call": true
     },
     "tencent/hy3": {

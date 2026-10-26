@@ -1,4 +1,4 @@
-import { FiCircle, FiList, FiTool } from "react-icons/fi";
+import { FiList } from "react-icons/fi";
 import type { useTranslations } from "next-intl";
 import type { IconFunctionComponent } from "@opal/types";
 import {
@@ -19,6 +19,7 @@ import {
   SvgSlowTime,
   SvgXCircle,
   SvgCode,
+  SvgWrench,
 } from "@opal/icons";
 
 /**
@@ -135,7 +136,7 @@ export function getToolName(packets: Packet[], t: TimelineTranslate): string {
 
 export function getToolIcon(packets: Packet[]): IconFunctionComponent {
   const firstPacket = packets[0];
-  if (!firstPacket) return FiCircle;
+  if (!firstPacket) return SvgCircle;
 
   switch (firstPacket.obj.type) {
     case PacketType.SEARCH_TOOL_START: {
@@ -149,7 +150,7 @@ export function getToolIcon(packets: Packet[]): IconFunctionComponent {
     case PacketType.FETCH_TOOL_START:
       return SvgLink;
     case PacketType.CUSTOM_TOOL_START:
-      return FiTool;
+      return SvgWrench;
     case PacketType.IMAGE_GENERATION_TOOL_START:
       return SvgImage;
     case PacketType.DEEP_RESEARCH_PLAN_START:

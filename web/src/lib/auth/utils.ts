@@ -1,4 +1,30 @@
-import type { AuthTypeMetadata } from "@/lib/auth/types";
+import { type AuthTypeMetadata, SessionEndReason } from "@/lib/auth/types";
+import type { ErrorResponseBody } from "@/lib/fetcher";
+
+// ---------------------------------------------------------------------------
+// Session rejection
+// ---------------------------------------------------------------------------
+
+function isSessionEndReason(errorCode: string): errorCode is SessionEndReason {
+  return Object.values(SessionEndReason).some((reason) => reason === errorCode);
+}
+
+export function sessionEndReasonFromErrorCode(
+  errorCode: string | null | undefined
+): SessionEndReason | null {
+  return errorCode && isSessionEndReason(errorCode) ? errorCode : null;
+}
+
+/** True when the server rejected the session itself, not only the request.
+ * A plain 403 (e.g. missing permission) does not end the session. */
+export function isSessionEndedResponse(
+  status: number,
+  body: ErrorResponseBody | null | undefined
+): boolean {
+  return (
+    status === 403 && sessionEndReasonFromErrorCode(body?.error_code) !== null
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Auth URL helpers

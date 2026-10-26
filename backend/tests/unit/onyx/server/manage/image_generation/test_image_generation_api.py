@@ -40,7 +40,7 @@ def test_image_generation_error_is_actionable_and_redacts_credentials() -> None:
         ),
         pytest.raises(OnyxError) as exc_info,
     ):
-        run_test_image_generation(request, MagicMock(), MagicMock())
+        run_test_image_generation(request, MagicMock())
 
     assert exc_info.value.error_code is OnyxErrorCode.VALIDATION_ERROR
     assert "Unsupported image size" in exc_info.value.detail

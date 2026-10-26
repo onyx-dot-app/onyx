@@ -39,8 +39,6 @@ from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX, OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_delete import RedisConnectorDelete
-from onyx.redis.redis_connector_doc_perm_sync import RedisConnectorPermissionSync
-from onyx.redis.redis_connector_ext_group_sync import RedisConnectorExternalGroupSync
 from onyx.redis.redis_connector_prune import RedisConnectorPrune
 from onyx.redis.redis_document_set import RedisDocumentSet
 from onyx.redis.redis_pool import get_redis_client
@@ -238,22 +236,6 @@ def on_task_postrun(
         cc_pair_id = RedisConnector.get_id_from_task_id(task_id)
         if cc_pair_id is not None:
             RedisConnectorPrune.remove_from_taskset(int(cc_pair_id), task_id, r)
-        return
-
-    if task_id.startswith(RedisConnectorPermissionSync.SUBTASK_PREFIX):
-        cc_pair_id = RedisConnector.get_id_from_task_id(task_id)
-        if cc_pair_id is not None:
-            RedisConnectorPermissionSync.remove_from_taskset(
-                int(cc_pair_id), task_id, r
-            )
-        return
-
-    if task_id.startswith(RedisConnectorExternalGroupSync.SUBTASK_PREFIX):
-        cc_pair_id = RedisConnector.get_id_from_task_id(task_id)
-        if cc_pair_id is not None:
-            RedisConnectorExternalGroupSync.remove_from_taskset(
-                int(cc_pair_id), task_id, r
-            )
         return
 
 
@@ -721,6 +703,7 @@ _VECTOR_DB_TASK_MODULES: set[str] = {
     "onyx.background.celery.tasks.pruning",
     "onyx.background.celery.tasks.vespa",
     "onyx.background.celery.tasks.cc_pair_ids_backfill",
+    "onyx.background.celery.tasks.tabular_rechunk",
     "onyx.background.celery.tasks.doc_permission_syncing",
     "onyx.background.celery.tasks.hierarchyfetching",
     # EE modules that are vector-DB-dependent

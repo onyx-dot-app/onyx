@@ -110,7 +110,7 @@ test.describe("Zoom Scribe voice provider", () => {
       custom_config: { language: "fr-FR" },
     });
     expect(capturedUpserts[0]).toMatchObject({
-      name: "Zoom Scribe",
+      name: "Zoom AI Services",
       provider_type: "zoom",
       api_key: "zoom-raw-key",
       api_secret: "zoom-raw-secret",

@@ -1,7 +1,7 @@
 "use client";
 
 import { ValidSources } from "@/lib/connectors/types/source";
-import { DriveOAuthSetup } from "@/views/admin/connectors/AddConnectorPage/form/gdrive/Credential";
+import { GoogleOAuthSetup } from "@/views/admin/connectors/AddConnectorPage/form/google/GoogleOAuthSetup";
 
 interface OwnAccountSetupProps {
   source: ValidSources;
@@ -12,5 +12,8 @@ interface OwnAccountSetupProps {
  * in the source's credential spec).
  */
 export default function OwnAccountSetup({ source }: OwnAccountSetupProps) {
-  return source === ValidSources.GoogleDrive ? <DriveOAuthSetup /> : null;
+  return source === ValidSources.GoogleDrive ||
+    source === ValidSources.Gmail ? (
+    <GoogleOAuthSetup source={source} />
+  ) : null;
 }

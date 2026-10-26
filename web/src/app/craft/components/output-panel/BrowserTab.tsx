@@ -4,8 +4,10 @@ import { useEffect, useEffectEvent, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, SelectCard, Text, Tooltip } from "@opal/components";
 import { SvgGlobe, SvgLoader } from "@opal/icons";
+import { Section } from "@opal/layouts";
 import { cn } from "@opal/utils";
 
+import type { BuildSessionData } from "@/app/craft/hooks/useBuildSessionStore";
 import type { RegisteredWebapp, AppDiscoveryState } from "@/lib/build/types";
 import { WorkspaceHome } from "@/app/craft/components/output-panel/WorkspaceHome";
 
@@ -13,6 +15,10 @@ interface BrowserTabProps {
   resourceId: string;
   onLoadingChange?: (id: string, loading: boolean) => void;
   apps: RegisteredWebapp[];
+  htmlFiles?: string[];
+  htmlInventoryStatus?: BuildSessionData["outputInventoryStatus"];
+  htmlInventoryLoading?: boolean;
+  onFileOpen?: (path: string, name: string) => void;
   appId: string | null;
   discoveryState: AppDiscoveryState;
   refreshKey?: number;
@@ -24,6 +30,10 @@ export default function BrowserTab({
   resourceId,
   onLoadingChange,
   apps,
+  htmlFiles = [],
+  htmlInventoryStatus = "complete",
+  htmlInventoryLoading = false,
+  onFileOpen,
   appId,
   discoveryState,
   refreshKey = 0,
@@ -31,6 +41,7 @@ export default function BrowserTab({
   onNavigate,
 }: BrowserTabProps) {
   const t = useTranslations("craft.browserTab");
+  const outputsT = useTranslations("craft.outputsTab");
   const reportLoading = useEffectEvent((id: string, loading: boolean) => {
     onLoadingChange?.(id, loading);
   });
@@ -58,10 +69,16 @@ export default function BrowserTab({
     appId === null ? (
       <WorkspaceHome title={t("home.title")}>
         {discoveryState === "checking" && apps.length === 0 ? (
-          <div className="flex items-center gap-2" role="status">
+          <Section
+            flexDirection="row"
+            width="auto"
+            height="auto"
+            gap={2}
+            role="status"
+          >
             <SvgLoader size={20} className="motion-safe:animate-spin" />
             <Text font="main-ui-muted">{t("checking.label")}</Text>
-          </div>
+          </Section>
         ) : null}
         {discoveryState === "unavailable" || discoveryState === "failed" ? (
           <div role="status" className="max-w-sm">
@@ -74,34 +91,84 @@ export default function BrowserTab({
             </Text>
           </div>
         ) : null}
-        {discoveryState === "ready" && apps.length === 0 ? (
-          <div className="flex max-w-sm flex-col gap-2">
+        {(htmlInventoryLoading || htmlInventoryStatus !== "complete") && (
+          <Section height="auto" flexDirection="row" gap={2} role="status">
+            {htmlInventoryLoading && (
+              <SvgLoader
+                size={20}
+                className="motion-safe:animate-spin shrink-0"
+                aria-hidden
+              />
+            )}
+            <Text font="secondary-body" color="text-03">
+              {outputsT(
+                htmlInventoryLoading || htmlInventoryStatus === "unloaded"
+                  ? "loading.label"
+                  : htmlInventoryStatus === "error"
+                    ? "error.description"
+                    : "incomplete.description"
+              )}
+            </Text>
+          </Section>
+        )}
+        {discoveryState === "ready" &&
+        htmlInventoryStatus === "complete" &&
+        !htmlInventoryLoading &&
+        apps.length === 0 &&
+        htmlFiles.length === 0 ? (
+          <Section height="auto" gap={2} className="max-w-sm">
             <Text font="main-ui-body">{t("empty.title")}</Text>
             <Text font="main-ui-muted" color="text-03">
               {t("empty.description")}
             </Text>
-          </div>
+          </Section>
         ) : null}
-        <div className="flex w-full flex-col gap-1.5">
-          {apps.map((candidate) => (
+        <Section height="auto" gap={1.5} alignItems="stretch">
+          {[
+            ...(!accessRevoked && onFileOpen
+              ? htmlFiles.map((path) => ({
+                  id: `file:${path}`,
+                  name: path.split("/").pop() || path,
+                  url: path,
+                  state: "ready" as const,
+                  onOpen: () => onFileOpen(path, path.split("/").pop() || path),
+                }))
+              : []),
+            ...apps.map((candidate) => ({
+              ...candidate,
+              id: `app:${candidate.id}`,
+              onOpen: () => onNavigate(candidate.id),
+            })),
+          ].map((candidate) => (
             <Tooltip key={candidate.id} tooltip={candidate.url} side="bottom">
               <SelectCard
                 role="button"
                 tabIndex={0}
                 aria-label={candidate.name}
                 state="filled"
-                border="none"
-                padding={3}
+                border="solid"
+                padding={4}
                 rounding={3}
-                onClick={() => onNavigate(candidate.id)}
+                onClick={candidate.onOpen}
               >
-                <div className="flex min-w-0 items-center gap-3">
+                <Section
+                  flexDirection="row"
+                  height="auto"
+                  gap={3}
+                  justifyContent="start"
+                  className="min-w-0"
+                >
                   <SvgGlobe
                     size={20}
                     className="shrink-0 stroke-text-03"
                     aria-hidden
                   />
-                  <div className="flex min-w-0 flex-col">
+                  <Section
+                    height="auto"
+                    gap={0}
+                    alignItems="start"
+                    className="min-w-0 text-start"
+                  >
                     <Text
                       font="main-ui-muted"
                       color="text-04"
@@ -125,12 +192,12 @@ export default function BrowserTab({
                         )}
                       </Text>
                     )}
-                  </div>
-                </div>
+                  </Section>
+                </Section>
               </SelectCard>
             </Tooltip>
           ))}
-        </div>
+        </Section>
       </WorkspaceHome>
     ) : null;
 

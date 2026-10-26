@@ -45,7 +45,7 @@ def _openai_llm() -> _ConfigOnlyLLM:
     return _ConfigOnlyLLM(
         LLMConfig(
             model_provider="openai",
-            model_name="gpt-5-mini",
+            model_name="gpt-6-luna",
             temperature=0,
             max_input_tokens=1_000,
         )
@@ -59,7 +59,7 @@ def _real_openai_litellm_llm() -> LitellmLLM:
     return LitellmLLM(
         api_key="test-key",
         model_provider="openai",
-        model_name="gpt-5-mini",
+        model_name="gpt-6-luna",
         max_input_tokens=1_000,
     )
 
@@ -78,7 +78,7 @@ def _fake_httpx_module(client_factory: Any) -> MagicMock:
 
 
 def test_is_openai_passthrough_eligible_true_for_openai_model() -> None:
-    provider = _provider(1, "openai", [_model("gpt-5-mini")])
+    provider = _provider(1, "openai", [_model("gpt-6-luna")])
     with patch.object(openai_passthrough, "OPENAI_GATEWAY_PASSTHROUGH_ENABLED", True):
         assert (
             is_openai_passthrough_eligible(provider, provider.model_configurations[0])
@@ -96,7 +96,7 @@ def test_is_openai_passthrough_eligible_false_for_anthropic_provider() -> None:
 
 
 def test_is_openai_passthrough_eligible_false_when_kill_switch_off() -> None:
-    provider = _provider(1, "openai", [_model("gpt-5-mini")])
+    provider = _provider(1, "openai", [_model("gpt-6-luna")])
     with patch.object(openai_passthrough, "OPENAI_GATEWAY_PASSTHROUGH_ENABLED", False):
         assert (
             is_openai_passthrough_eligible(provider, provider.model_configurations[0])
@@ -120,7 +120,7 @@ def test_is_openai_passthrough_eligible_false_for_openai_compatible_model() -> N
 def test_is_openai_passthrough_eligible_true_for_litellm_proxy_real_openai_model() -> (
     None
 ):
-    provider = _provider(1, "litellm_proxy", [_model("gpt-4o")])
+    provider = _provider(1, "litellm_proxy", [_model("gpt-6-sol")])
     with patch.object(openai_passthrough, "OPENAI_GATEWAY_PASSTHROUGH_ENABLED", True):
         assert (
             is_openai_passthrough_eligible(provider, provider.model_configurations[0])
@@ -133,7 +133,7 @@ def test_is_openai_passthrough_eligible_false_for_azure() -> None:
     a different auth/URL shape (api-key header, api-version query param,
     deployment-scoped URL) that this module's Bearer-auth /v1/responses
     construction does not fit."""
-    provider = _provider(1, "azure", [_model("gpt-4o")])
+    provider = _provider(1, "azure", [_model("gpt-6-sol")])
     with patch.object(openai_passthrough, "OPENAI_GATEWAY_PASSTHROUGH_ENABLED", True):
         assert (
             is_openai_passthrough_eligible(provider, provider.model_configurations[0])
@@ -142,7 +142,7 @@ def test_is_openai_passthrough_eligible_false_for_azure() -> None:
 
 
 def test_base_url_defaults_to_openai_when_api_base_unset() -> None:
-    provider = _provider(1, "openai", [_model("gpt-5-mini")])
+    provider = _provider(1, "openai", [_model("gpt-6-luna")])
     provider.api_base = None
 
     assert _base_url(provider) == "https://api.openai.com"
@@ -150,7 +150,7 @@ def test_base_url_defaults_to_openai_when_api_base_unset() -> None:
 
 
 def test_base_url_strips_trailing_v1_without_slash() -> None:
-    provider = _provider(1, "openai", [_model("gpt-5-mini")])
+    provider = _provider(1, "openai", [_model("gpt-6-luna")])
     provider.api_base = "https://api.openai.com/v1"
 
     assert _base_url(provider) == "https://api.openai.com"
@@ -158,7 +158,7 @@ def test_base_url_strips_trailing_v1_without_slash() -> None:
 
 
 def test_base_url_strips_trailing_v1_with_slash() -> None:
-    provider = _provider(1, "openai", [_model("gpt-5-mini")])
+    provider = _provider(1, "openai", [_model("gpt-6-luna")])
     provider.api_base = "https://api.openai.com/v1/"
 
     assert _base_url(provider) == "https://api.openai.com"
@@ -166,7 +166,7 @@ def test_base_url_strips_trailing_v1_with_slash() -> None:
 
 
 def test_base_url_leaves_proxy_base_without_v1_unchanged() -> None:
-    provider = _provider(1, "litellm_proxy", [_model("gpt-4o")])
+    provider = _provider(1, "litellm_proxy", [_model("gpt-6-sol")])
     provider.api_base = "http://localhost:4000"
 
     assert _base_url(provider) == "http://localhost:4000"
@@ -177,7 +177,7 @@ def test_base_url_does_not_over_strip_path_not_ending_in_v1() -> None:
     """A base whose path legitimately ends in something other than /v1 (e.g.
     a deployment-scoped or versioned path) must be left alone; only an exact
     trailing "/v1" segment is stripped."""
-    provider = _provider(1, "litellm_proxy", [_model("gpt-4o")])
+    provider = _provider(1, "litellm_proxy", [_model("gpt-6-sol")])
     provider.api_base = "https://gateway.example.com/openai/v1beta"
 
     assert _base_url(provider) == "https://gateway.example.com/openai/v1beta"
@@ -189,7 +189,7 @@ def test_base_url_does_not_over_strip_path_not_ending_in_v1() -> None:
 
 def _responses_request(**overrides: Any) -> ResponsesRequest:
     defaults: dict[str, Any] = {
-        "model": "1/gpt-5-mini",
+        "model": "1/gpt-6-luna",
         "input": [{"role": "user", "content": "hi"}],
     }
     defaults.update(overrides)
@@ -199,9 +199,9 @@ def _responses_request(**overrides: Any) -> ResponsesRequest:
 def test_build_upstream_request_swaps_model_name() -> None:
     request = _responses_request()
 
-    body = _build_upstream_request(request, "gpt-5-mini", "user-1", True)
+    body = _build_upstream_request(request, "gpt-6-luna", "user-1", True)
 
-    assert body["model"] == "gpt-5-mini"
+    assert body["model"] == "gpt-6-luna"
 
 
 def test_build_upstream_request_forces_store_false_even_when_client_sends_true() -> (
@@ -209,7 +209,7 @@ def test_build_upstream_request_forces_store_false_even_when_client_sends_true()
 ):
     request = _responses_request(store=True)
 
-    body = _build_upstream_request(request, "gpt-5-mini", "user-1", True)
+    body = _build_upstream_request(request, "gpt-6-luna", "user-1", True)
 
     assert body["store"] is False
 
@@ -217,7 +217,7 @@ def test_build_upstream_request_forces_store_false_even_when_client_sends_true()
 def test_build_upstream_request_forces_store_false_when_client_omits_it() -> None:
     request = _responses_request()
 
-    body = _build_upstream_request(request, "gpt-5-mini", "user-1", True)
+    body = _build_upstream_request(request, "gpt-6-luna", "user-1", True)
 
     assert body["store"] is False
 
@@ -226,7 +226,7 @@ def test_build_upstream_request_forces_store_false_when_client_omits_it() -> Non
 def test_build_upstream_request_sets_stream_explicitly(stream_flag: bool) -> None:
     request = _responses_request(stream=stream_flag)
 
-    body = _build_upstream_request(request, "gpt-5-mini", "user-1", stream_flag)
+    body = _build_upstream_request(request, "gpt-6-luna", "user-1", stream_flag)
 
     assert body["stream"] is stream_flag
 
@@ -240,7 +240,7 @@ def test_build_upstream_request_overwrites_user_safety_identifier_and_prompt_cac
         prompt_cache_key="client-supplied-cache-key",
     )
 
-    body = _build_upstream_request(request, "gpt-5-mini", "user-1", True)
+    body = _build_upstream_request(request, "gpt-6-luna", "user-1", True)
 
     expected_hash = hashlib.sha256(b"user-1").hexdigest()
     assert body["user"] == expected_hash
@@ -255,7 +255,7 @@ def test_build_upstream_request_rejects_previous_response_id() -> None:
     request = _responses_request(previous_response_id="resp_abc123")
 
     with pytest.raises(OnyxError) as exc_info:
-        _build_upstream_request(request, "gpt-5-mini", "user-1", True)
+        _build_upstream_request(request, "gpt-6-luna", "user-1", True)
 
     assert exc_info.value.error_code is OnyxErrorCode.NOT_IMPLEMENTED
     assert "previous_response_id" in str(exc_info.value.detail)
@@ -265,7 +265,7 @@ def test_build_upstream_request_rejects_conversation() -> None:
     request = _responses_request(conversation="conv_abc123")
 
     with pytest.raises(OnyxError) as exc_info:
-        _build_upstream_request(request, "gpt-5-mini", "user-1", True)
+        _build_upstream_request(request, "gpt-6-luna", "user-1", True)
 
     assert exc_info.value.error_code is OnyxErrorCode.NOT_IMPLEMENTED
     assert "conversation" in str(exc_info.value.detail)
@@ -275,7 +275,7 @@ def test_build_upstream_request_rejects_background() -> None:
     request = _responses_request(background=True)
 
     with pytest.raises(OnyxError) as exc_info:
-        _build_upstream_request(request, "gpt-5-mini", "user-1", True)
+        _build_upstream_request(request, "gpt-6-luna", "user-1", True)
 
     assert exc_info.value.error_code is OnyxErrorCode.NOT_IMPLEMENTED
     assert "background" in str(exc_info.value.detail)
@@ -287,7 +287,7 @@ def test_build_upstream_request_rejects_mcp_tool() -> None:
     )
 
     with pytest.raises(OnyxError) as exc_info:
-        _build_upstream_request(request, "gpt-5-mini", "user-1", True)
+        _build_upstream_request(request, "gpt-6-luna", "user-1", True)
 
     assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
     assert "mcp" in str(exc_info.value.detail)
@@ -299,7 +299,7 @@ def test_build_upstream_request_rejects_file_search_tool() -> None:
     )
 
     with pytest.raises(OnyxError) as exc_info:
-        _build_upstream_request(request, "gpt-5-mini", "user-1", True)
+        _build_upstream_request(request, "gpt-6-luna", "user-1", True)
 
     assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
 
@@ -312,7 +312,7 @@ def test_build_upstream_request_rejects_code_interpreter_with_string_container()
     )
 
     with pytest.raises(OnyxError) as exc_info:
-        _build_upstream_request(request, "gpt-5-mini", "user-1", True)
+        _build_upstream_request(request, "gpt-6-luna", "user-1", True)
 
     assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
 
@@ -328,7 +328,7 @@ def test_build_upstream_request_rejects_code_interpreter_container_file_ids() ->
     )
 
     with pytest.raises(OnyxError) as exc_info:
-        _build_upstream_request(request, "gpt-5-mini", "user-1", True)
+        _build_upstream_request(request, "gpt-6-luna", "user-1", True)
 
     assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
 
@@ -338,7 +338,7 @@ def test_build_upstream_request_allows_code_interpreter_with_auto_container() ->
         tools=[{"type": "code_interpreter", "container": {"type": "auto"}}]
     )
 
-    body = _build_upstream_request(request, "gpt-5-mini", "user-1", True)
+    body = _build_upstream_request(request, "gpt-6-luna", "user-1", True)
 
     assert body["tools"] == [
         {"type": "code_interpreter", "container": {"type": "auto"}}
@@ -356,7 +356,7 @@ def test_build_upstream_request_rejects_input_file_with_file_id() -> None:
     )
 
     with pytest.raises(OnyxError) as exc_info:
-        _build_upstream_request(request, "gpt-5-mini", "user-1", True)
+        _build_upstream_request(request, "gpt-6-luna", "user-1", True)
 
     assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
 
@@ -372,7 +372,7 @@ def test_build_upstream_request_rejects_input_image_with_file_id() -> None:
     )
 
     with pytest.raises(OnyxError) as exc_info:
-        _build_upstream_request(request, "gpt-5-mini", "user-1", True)
+        _build_upstream_request(request, "gpt-6-luna", "user-1", True)
 
     assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
 
@@ -393,7 +393,7 @@ def test_build_upstream_request_allows_input_file_with_inline_base64_data() -> N
         ]
     )
 
-    body = _build_upstream_request(request, "gpt-5-mini", "user-1", True)
+    body = _build_upstream_request(request, "gpt-6-luna", "user-1", True)
 
     assert body["input"][0]["content"][0]["file_data"] == "base64-encoded-content"
 
@@ -410,7 +410,7 @@ def test_build_upstream_request_allows_input_image_with_url() -> None:
         ]
     )
 
-    body = _build_upstream_request(request, "gpt-5-mini", "user-1", True)
+    body = _build_upstream_request(request, "gpt-6-luna", "user-1", True)
 
     assert body["input"][0]["content"][0]["image_url"] == "https://example.com/x.png"
 
@@ -419,7 +419,7 @@ def test_build_upstream_request_rejects_top_level_prompt() -> None:
     request = _responses_request(prompt={"id": "pmpt_123"})
 
     with pytest.raises(OnyxError) as exc_info:
-        _build_upstream_request(request, "gpt-5-mini", "user-1", True)
+        _build_upstream_request(request, "gpt-6-luna", "user-1", True)
 
     assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
 
@@ -430,7 +430,7 @@ def test_build_upstream_request_forwards_hosted_tool_and_include_verbatim() -> N
         include=["reasoning.encrypted_content"],
     )
 
-    body = _build_upstream_request(request, "gpt-5-mini", "user-1", True)
+    body = _build_upstream_request(request, "gpt-6-luna", "user-1", True)
 
     assert body["tools"] == [{"type": "web_search"}]
     assert body["include"] == ["reasoning.encrypted_content"]
@@ -442,14 +442,14 @@ def test_build_upstream_request_forwards_unknown_future_fields() -> None:
         truncation="auto",
     )
 
-    body = _build_upstream_request(request, "gpt-5-mini", "user-1", True)
+    body = _build_upstream_request(request, "gpt-6-luna", "user-1", True)
 
     assert body["future_field"] == {"anything": True}
     assert body["truncation"] == "auto"
 
 
 def test_build_upstream_headers_only_authorization_and_content_type() -> None:
-    provider = _provider(1, "openai", [_model("gpt-5-mini")])
+    provider = _provider(1, "openai", [_model("gpt-6-luna")])
 
     with patch.object(openai_passthrough, "build_llm_extra_headers", return_value={}):
         headers = _build_upstream_headers(provider)
@@ -461,7 +461,7 @@ def test_build_upstream_headers_only_authorization_and_content_type() -> None:
 
 
 def test_build_upstream_headers_merges_server_configured_extra_headers() -> None:
-    provider = _provider(1, "openai", [_model("gpt-5-mini")])
+    provider = _provider(1, "openai", [_model("gpt-6-luna")])
     with patch.object(
         openai_passthrough,
         "build_llm_extra_headers",
@@ -474,7 +474,7 @@ def test_build_upstream_headers_merges_server_configured_extra_headers() -> None
 
 
 def test_build_upstream_headers_rejects_provider_without_api_key() -> None:
-    provider = _provider(1, "openai", [_model("gpt-5-mini")])
+    provider = _provider(1, "openai", [_model("gpt-6-luna")])
     provider.api_key = None
 
     with pytest.raises(OnyxError) as exc_info:
@@ -642,7 +642,7 @@ def _non_streaming_run(
     llm_generation_span_patch: Any = None,
     llm: Any = None,
 ) -> JSONResponse:
-    provider = _provider(1, "openai", [_model("gpt-5-mini")])
+    provider = _provider(1, "openai", [_model("gpt-6-luna")])
     model_config = provider.model_configurations[0]
     span_patch = llm_generation_span_patch or (lambda *a, **k: nullcontext())  # noqa: ARG005
 
@@ -711,7 +711,7 @@ def test_handle_openai_passthrough_non_streaming_timeout_raises_timeout_message(
 _UPSTREAM_RESPONSE_BODY: dict[str, Any] = {
     "id": "resp_upstream_abc123",
     "object": "response",
-    "model": "gpt-5-mini",
+    "model": "gpt-6-luna",
     "output": [
         {
             "type": "message",
@@ -876,11 +876,11 @@ class _FakeHttpxClient:
 _STREAM_WORKER_KWARGS = {
     "url": "https://api.openai.com/v1/responses",
     "headers": {"Authorization": "Bearer k"},
-    "body": {"model": "gpt-5-mini"},
+    "body": {"model": "gpt-6-luna"},
     "flow": LLMFlow.CRAFT_LLM_GENERATION,
     "input_messages": [{"role": "user", "content": "hi"}],
     "tools": None,
-    "model": "gpt-5-mini",
+    "model": "gpt-6-luna",
 }
 
 
@@ -1104,7 +1104,7 @@ def test_passthrough_stream_upstream_error_emits_single_error_frame() -> None:
     assert data["type"] == "response.failed"
     assert data["response"]["error"]["message"] == "bad request"
     assert data["response"]["status"] == "failed"
-    assert data["response"]["model"] == "gpt-5-mini"
+    assert data["response"]["model"] == "gpt-6-luna"
     assert data["response"]["output"] == []
     assert data["sequence_number"] == 0
 
@@ -1145,12 +1145,12 @@ def test_passthrough_stream_closes_exitstack_resources() -> None:
 
 def _responses_endpoint_request() -> ResponsesRequest:
     return ResponsesRequest(
-        model="1/gpt-5-mini", input=[{"role": "user", "content": "hi"}]
+        model="1/gpt-6-luna", input=[{"role": "user", "content": "hi"}]
     )
 
 
 def test_gateway_responses_routes_to_passthrough_when_eligible() -> None:
-    provider = _provider(1, "openai", [_model("gpt-5-mini")])
+    provider = _provider(1, "openai", [_model("gpt-6-luna")])
     model_config = provider.model_configurations[0]
     request = _responses_endpoint_request()
     passthrough_response = JSONResponse(content={"id": "resp_1"})

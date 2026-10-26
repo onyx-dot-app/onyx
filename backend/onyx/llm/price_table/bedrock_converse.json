@@ -6608,6 +6608,136 @@
       "temperature": false,
       "tool_call": true
     },
+    "us.stability.stable-conservative-upscale-v1:0": {
+      "cost": {
+        "image": 0.4
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "us.stability.stable-conservative-upscale-v1:0"
+    },
+    "us.stability.stable-creative-upscale-v1:0": {
+      "cost": {
+        "image": 0.6
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "us.stability.stable-creative-upscale-v1:0"
+    },
+    "us.stability.stable-fast-upscale-v1:0": {
+      "cost": {
+        "image": 0.03
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "us.stability.stable-fast-upscale-v1:0"
+    },
+    "us.stability.stable-image-control-sketch-v1:0": {
+      "cost": {
+        "image": 0.07
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "us.stability.stable-image-control-sketch-v1:0"
+    },
+    "us.stability.stable-image-control-structure-v1:0": {
+      "cost": {
+        "image": 0.07
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "us.stability.stable-image-control-structure-v1:0"
+    },
+    "us.stability.stable-image-erase-object-v1:0": {
+      "cost": {
+        "image": 0.07
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "us.stability.stable-image-erase-object-v1:0"
+    },
+    "us.stability.stable-image-inpaint-v1:0": {
+      "cost": {
+        "image": 0.07
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "us.stability.stable-image-inpaint-v1:0"
+    },
+    "us.stability.stable-image-remove-background-v1:0": {
+      "cost": {
+        "image": 0.07
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "us.stability.stable-image-remove-background-v1:0"
+    },
+    "us.stability.stable-image-search-recolor-v1:0": {
+      "cost": {
+        "image": 0.07
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "us.stability.stable-image-search-recolor-v1:0"
+    },
+    "us.stability.stable-image-search-replace-v1:0": {
+      "cost": {
+        "image": 0.07
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "us.stability.stable-image-search-replace-v1:0"
+    },
+    "us.stability.stable-image-style-guide-v1:0": {
+      "cost": {
+        "image": 0.07
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "us.stability.stable-image-style-guide-v1:0"
+    },
+    "us.stability.stable-outpaint-v1:0": {
+      "cost": {
+        "image": 0.06
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "us.stability.stable-outpaint-v1:0"
+    },
+    "us.stability.stable-style-transfer-v1:0": {
+      "cost": {
+        "image": 0.08
+      },
+      "limit": {
+        "context": 77
+      },
+      "mode": "image_edit",
+      "name": "us.stability.stable-style-transfer-v1:0"
+    },
     "us.twelvelabs.marengo-embed-2-7-v1:0": {
       "cost": {
         "image_input": 0.0001,

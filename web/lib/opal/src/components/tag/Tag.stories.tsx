@@ -1,6 +1,12 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { Tag } from "@opal/components";
-import { SvgAlertCircle } from "@opal/icons";
+import {
+  SvgAlertCircle,
+  SvgAlertTriangle,
+  SvgCheckCircle,
+  SvgPause,
+  SvgRefreshCw,
+} from "@opal/icons";
 
 const TAG_COLORS = ["green", "purple", "blue", "gray", "amber"] as const;
 
@@ -46,52 +52,27 @@ export const AllColorsWithIcon: Story = {
   ),
 };
 
-export const Editable: Story = {
-  args: {
-    title: "Label",
-    onRemove: () => {},
-  },
-};
-
-export const EditableMd: Story = {
+export const Status: Story = {
   render: () => (
     <div className="flex items-center gap-2">
-      <Tag title="Default" size="md" onRemove={() => {}} />
+      <Tag icon={SvgRefreshCw} title="Indexing" color="blue" variant="status" />
       <Tag
-        title="With icon"
-        size="md"
-        icon={SvgAlertCircle}
-        onRemove={() => {}}
+        icon={SvgCheckCircle}
+        title="Synced"
+        color="green"
+        variant="status"
       />
-      <Tag title="Label" size="md" value="Value" onRemove={() => {}} />
-      <Tag
-        title="A very long label that gets capped at 160px"
-        size="md"
-        onRemove={() => {}}
-      />
-      <Tag title="Error" size="md" error onRemove={() => {}} />
-      <Tag title="Disabled" size="md" disabled onRemove={() => {}} />
+      <Tag icon={SvgPause} title="Paused" color="amber" variant="status" />
+      <Tag icon={SvgAlertCircle} title="Failed" color="red" variant="status" />
     </div>
   ),
 };
 
-export const EditableSm: Story = {
+export const Count: Story = {
   render: () => (
     <div className="flex items-center gap-2">
-      <Tag title="Default" onRemove={() => {}} />
-      <Tag title="With icon" icon={SvgAlertCircle} onRemove={() => {}} />
-      <Tag
-        title="A very long label that gets capped at 120px"
-        onRemove={() => {}}
-      />
-      <Tag title="Disabled" disabled onRemove={() => {}} />
+      <Tag icon={SvgAlertTriangle} title="12" color="orange" variant="count" />
+      <Tag icon={SvgAlertCircle} title="4" color="red" variant="count" />
     </div>
   ),
-};
-
-export const TruncatedWithTooltip: Story = {
-  args: {
-    title: "A very long metadata label that gets capped",
-    truncate: true,
-  },
 };

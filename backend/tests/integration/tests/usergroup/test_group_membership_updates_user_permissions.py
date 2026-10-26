@@ -21,10 +21,7 @@ from tests.integration.common_utils.test_models import DATestUser, DATestUserGro
 
 
 def _set_membership_is_manager(user_id: str, group_id: int, value: bool) -> None:
-    """Flip is_manager on one (user, group) edge, then recompute.
-
-    make_group_manager lands in a later PR, so promote by writing the edge directly.
-    """
+    """Flip is_manager on one (user, group) edge, then recompute."""
     with get_session_with_current_tenant() as db_session:
         db_session.execute(
             update(User__UserGroup)

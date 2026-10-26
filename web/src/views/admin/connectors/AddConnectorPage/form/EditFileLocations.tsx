@@ -1,9 +1,9 @@
 "use client";
 
-import { useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { useField } from "formik";
 import { useTranslations } from "next-intl";
-import { Button, Card, Text } from "@opal/components";
+import { Button, Card, Pagination, Text } from "@opal/components";
 import { Content, ContentAction, Section, toast } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
 import { SvgFile, SvgUploadCloud, SvgX } from "@opal/icons";
@@ -15,6 +15,7 @@ import {
   type ConnectorFileList,
 } from "@/lib/connectors/edit/files";
 import { stageEditFiles } from "@/lib/connectors/edit/svc";
+import { CONNECTOR_FILES_PAGE_SIZE } from "@/lib/fileConnector";
 
 export interface EditFileLocationsProps {
   ccPairId: number;
@@ -41,6 +42,7 @@ export default function EditFileLocations({
   const [zipMetadata, , zipMetadataHelpers] = useField<
     string | null | undefined
   >("zip_metadata_file_id");
+  const [page, setPage] = useState(1);
   const [uploading, setUploadingState] = useState(false);
   const setUploading = (next: boolean) => {
     setUploadingState(next);
@@ -49,6 +51,24 @@ export default function EditFileLocations({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const list = storedFileList(locations.value ?? [], names.value ?? null);
+
+  // The whole list is already in the form; only a page of it is rendered, so
+  // a zip of thousands of files does not build thousands of cards.
+  const totalFiles = list.fileIds.length;
+  const totalPages = Math.max(
+    1,
+    Math.ceil(totalFiles / CONNECTOR_FILES_PAGE_SIZE)
+  );
+  const pageStart = (page - 1) * CONNECTOR_FILES_PAGE_SIZE;
+  const pageFileIds = list.fileIds.slice(
+    pageStart,
+    pageStart + CONNECTOR_FILES_PAGE_SIZE
+  );
+
+  // Removing files can shrink the list under an open page.
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   const setList = (next: ConnectorFileList) => {
     void locationsHelpers.setValue(next.fileIds);
@@ -64,7 +84,12 @@ export default function EditFileLocations({
         files,
         zipMetadata.value ?? null
       );
-      setList(withStagedFiles(list, staged));
+      const next = withStagedFiles(list, staged);
+      setList(next);
+      // Staged files land at the end of the list, so follow them there.
+      setPage(
+        Math.max(1, Math.ceil(next.fileIds.length / CONNECTOR_FILES_PAGE_SIZE))
+      );
       void zipMetadataHelpers.setValue(staged.zip_metadata_file_id);
     } catch (error) {
       toast.error(
@@ -96,8 +121,8 @@ export default function EditFileLocations({
           {t("empty")}
         </Text>
       ) : (
-        list.fileIds.map((fileId, index) => {
-          const name = list.fileNames[index] ?? fileId;
+        pageFileIds.map((fileId, indexInPage) => {
+          const name = list.fileNames[pageStart + indexInPage] ?? fileId;
           return (
             <Card key={fileId} color="background-tint-01" padding={2}>
               <ContentAction
@@ -119,6 +144,18 @@ export default function EditFileLocations({
             </Card>
           );
         })
+      )}
+      {totalFiles > CONNECTOR_FILES_PAGE_SIZE && (
+        <Pagination
+          variant="count"
+          currentPage={page}
+          totalPages={totalPages}
+          pageSize={CONNECTOR_FILES_PAGE_SIZE}
+          totalItems={totalFiles}
+          onChange={setPage}
+          units={t("units", { count: totalFiles })}
+          size="sm"
+        />
       )}
       <TableLayouts.HiddenInput
         inputRef={inputRef}

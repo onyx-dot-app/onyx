@@ -51,6 +51,9 @@ over; the entire agentic loop runs inside the sandbox's `opencode serve`
 process, and the backend's job is to start it, stream its events, persist
 them, and know when to stop.
 
+The sidebar’s New Session link opens `/craft/v1`. It supports the browser’s Open in New Tab action and Ctrl/Command-click.
+Same-tab clicks retain the unsaved-change prompt. Opening another tab leaves the current session in place.
+
 The output panel starts closed. Its first opening shows Outputs, which lists agent-created files under `outputs/`.
 All Files browses the complete workspace; Apps opens the local webapp. Files open in individual, closeable tabs.
 Closing the active tab returns to the last viewed open tab. Closing the last tab leaves an empty panel.
@@ -85,6 +88,10 @@ the turn pauses and the user sees an approval card; the user can approve or
 reject just that request, or approve it for the rest of the session. Files
 the agent produces appear as artifacts the user can browse, download, or
 (for Markdown) export as a `.docx`.
+An app connection card resolves its pending agent request even when credentials already exist.
+It shows Connected only after the decision endpoint succeeds. Failed decisions remain retryable.
+Refresh restores pending connection cards and shows the existing flashing cursor while the turn is active.
+Failed turn-status reads keep the input disabled and expose the session retry action.
 Passive discoveries update the inventory without adding tabs, opening the panel, or changing selection.
 Explicit resource actions create and select tabs. See [[craft-streaming]] for inventory and revision rules.
 The user's own uploaded library files
@@ -125,9 +132,9 @@ protects.
 | GET | `/build/sessions/{id}/turns/{turn_id}` | `get_interactive_turn` (`interactive_turns/api.py`) | Read an owned turn's status, including its terminal outcome. |
 | GET | `/build/sessions/{id}/turns/{turn_id}/events` | `get_interactive_turn_events` (`interactive_turns/api.py`) | SSE attach/resume to a running turn; also (re)starts the runner if it stalled. |
 | GET/PUT/POST/PATCH/DELETE | `/build/sessions/{id}/generate-name`, `/name`, `/public`, `/files`, `/pptx-preview/{path}`, `/output-thumbnail/{path}`, `/webapp-info`, `/webapp-download`, `/download-directory/{path}`, `/upload`, `/files/{path}`, `/scheduled-run-context`, `/scheduled-run-events` | `session/api.py` | Naming, sharing (`sharing_scope`), workspace file browse and upload, webapp info, and the scheduled-run banner and live events. |
+| GET | `/build/approvals/sessions/{id}` | `list_session_approvals` (`approvals/api.py`) | All live requests and the 50 most recent outcomes. |
 | GET | `/build/approvals/sessions/{id}/live` | `list_live_approvals` (`approvals/api.py`) | |
 | POST | `/build/approvals/{approval_id}/decision` | `submit_decision` (`approvals/api.py`) | |
-| POST | `/build/approvals/{approval_id}/session-grant` | `submit_session_grant` (`approvals/api.py`) | Pre-approval; see §4.6. |
 | GET/POST | `/build/user-library/tree`, `/build/user-library/upload`, `/build/user-library/upload-zip`, `/build/user-library/directories` | `user_library/api.py` | User library CRUD. |
 | DELETE | `/build/user-library/files/{document_id}` | `delete_file` (`user_library/api.py`) | |
 | GET | `/build/admin/base-instructions` | `get_base_instructions` (`api.py`) | Owned by `[[craft-admin]]`. |
@@ -148,6 +155,7 @@ protects.
 | `OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS` | env-configured | A single opencode step going silent this long aborts that step; the executor re-prompts (see §4.2). |
 | `SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS` | env-configured | How long the sandbox proxy parks on an `ASK` request before treating it as expired; also the "live" window `list_live_approvals` uses. |
 | `SESSION_FLOW_LOCK_LEASE_SECONDS` | derived from provisioning deadlines | Lease on the per-user session-creation lock. |
+| `SANDBOX_CLEANUP_DEADLINE_SECONDS` | 6000 | Application deadline for a cleanup sweep. Ownership checks stop later operations after expiry. |
 | `ENABLE_OPENCODE_DEBUGGING` | false | Gates `debug.py`'s pod-log-stream endpoint; 404s (not 403) when off. |
 
 ---
@@ -183,6 +191,14 @@ ActionReceipt  ── gated_app, approval (nullable, SET NULL on delete)
 against stale provisioning attempts), `skills_hash`, `mcp_config_hash`,
 `encrypted_pat`. Owned in depth by `[[craft-sandboxes]]`; this document only
 reads it to decide whether a turn can run.
+`cleanup_checkpoint` records committed cleanup proof for one attempt, workspace storage instance, and heartbeat.
+Idle and FAILED cleanup commit this proof before deleting runtime resources that hold prior work.
+FAILED cleanup skips the proof for runtimes from the current attempt and when no workspace storage identity exists.
+Retries reuse it only while the runtime is absent and all three values match.
+The reaper can resume deletion after runtime loss. New provisioning and successful sleep clear this proof.
+Heartbeat updates clear it too. Uploads and file deletions commit that update before changing files.
+Upload and file deletion endpoints hold `session_creation_lock` during the mutation.
+The reaper holds the same lock during its final checkpoint commit and runtime termination.
 
 ### `Artifact` (`backend/onyx/db/models.py:Artifact`)
 
@@ -190,6 +206,8 @@ One mutable row per `(session_id, path)`, upserted at turn end
 (`db/artifact.py:upsert_artifact`). `source_revision` stores the observed filesystem revision;
 Changes advance `version` and invalidate `archive_file_id`.
 Unchanged files keep their producing `turn_index`. `viewed_revision` records the session owner's last viewed version.
+Chat file links and uploaded attachment Expand actions open the file in the output panel.
+The panel provides Download for unsupported attachments. The output panel owns file-view acknowledgements, including updates while a file stays active.
 `deleted=True` retains the row so chat can display an unavailable card.
 
 ### `ActionReceipt` (`backend/onyx/db/models.py:ActionReceipt`)
@@ -206,7 +224,7 @@ receipt), `status` (`PENDING` → `CONFIRMED`/`FAILED`, swept to `UNKNOWN` after
 One agent-initiated gated request: `actions` (a non-empty JSONB list,
 sorted strictest-policy-first so `actions[0]` drove the gating decision),
 `payload`, `decision` (`NULL` = pending), `decided_via`
-(`ApprovalDecidedVia.USER`, `SESSION_GRANT`, or `PRE_APPROVAL`; the last is written by the proxy for scheduled-task grants, see `[[craft-scheduled-tasks]]`), `gated_app_id` (the shared
+(`ApprovalDecidedVia.USER`, `SESSION_GRANT`, or `PRE_APPROVAL`; the last remains on historical scheduled-task approvals, see `[[craft-scheduled-tasks]]`), `gated_app_id` (the shared
 `GatedApp` identity row from `[[craft-admin]]`, `SET NULL` on delete so the
 row survives as an audit record).
 
@@ -242,10 +260,12 @@ Session and sandbox identities are **committed before external
 provisioning**: "reserve, then reconcile, then finalize"
 (`session/api.py`, comment on `create_session`). A failed or
 interrupted attempt leaves durable, repairable state instead of rolling back
-to nothing; a later request converges on the same IDs. The Redis lock only
-reduces duplicate provisioning work under concurrency; correctness comes
-from the committed reservation plus the sandbox's
-`provisioning_attempt_number` fence (owned by `[[craft-sandboxes]]`).
+to nothing; a later request converges on the same IDs. Periodic cleanup also
+marks abandoned attempts FAILED and collects owned runtime resources.
+The backend provisioning lock uses `CacheBackend` and serializes creation and cleanup.
+Committed reservations and `provisioning_attempt_number` fence database writes.
+Cleanup also checks observed resource identities before deletion.
+These controls are owned by `[[craft-sandboxes]]`.
 
 A session becomes runnable through `ensure_session_ready`
 (`session/session_ready.py:ensure_session_ready`), called both from the
@@ -461,17 +481,19 @@ preserve-opencode-sessions.md` and confirmed against
 
 - **Per-session workspace snapshots** (`outputs/`, `attachments/`): created
   by `create_session_snapshot_keep_latest`
-  (`sandbox_lifecycle.py`), restored by `ensure_session_ready`. Owned in
-  depth by `[[craft-sandboxes]]`.
+  (`sandbox_lifecycle.py`), restored by `ensure_session_ready`. The new archive's
+  database reference commits before old archives are pruned. A failed commit
+  preserves the previous committed snapshot. Owned in depth by `[[craft-sandboxes]]`.
 - **Sandbox-global opencode history** (`.opencode-data/`, shared by every
   `BuildSession` in one sandbox): captured by
   `sandbox_manager.create_opencode_history_snapshot`, which is called from
-  three places (owned in depth by `[[craft-sandboxes]]` §4.5):
+  four automatic paths (owned in depth by `[[craft-sandboxes]]` §4.5):
   1. `sleep_sandbox` (`sandbox_lifecycle.py`, comment: "Chat
      history lives outside session workspaces; capture it before the
-     [terminate]"), before putting an idle sandbox to sleep. If the snapshot
-     fails but the pod still passes a health check, the reap is skipped
-     rather than sleeping a healthy sandbox without fresh history.
+     [terminate]"), before putting an idle sandbox to sleep. Snapshot or workspace
+     discovery failure aborts sleep, including on unhealthy or unreachable runtimes.
+     Confirmed missing storage skips checkpoint calls. Incomplete deletion leaves
+     session ports allocated and does not mark the sandbox SLEEPING.
   2. `cleanup_idle_sandboxes_task` (`background/celery/tasks/build/tasks.py`),
      a periodic background sweep: any sandbox with a session whose latest
      snapshot is older than `idle_timeout / SNAPSHOT_INTERVAL_DIVISOR` (15
@@ -480,6 +502,12 @@ preserve-opencode-sessions.md` and confirmed against
   3. `snapshot_opencode_history_before_recovery`
      (`sandbox_lifecycle.py`), best-effort, before terminating an
      **unhealthy** sandbox during recovery.
+  4. `_checkpoint_failed_runtime` (`session/resource_cleanup.py`), before collecting
+     a FAILED owner's runtime that can contain prior session work. It captures
+     opencode history only when the manager sets
+     `supports_opencode_history_persistence`. Checkpoint
+     failure preserves those resources for retry. Fresh Kubernetes pods with current
+     attempt labels do not require this checkpoint. Retained Docker volumes do.
 
 **There is no per-turn capture.** The background sweep (`cleanup_idle_sandboxes_task`)
 tries to keep opencode history fresh, with a target of
@@ -506,10 +534,9 @@ recovery mechanics this depends on.
 sandbox proxy blocks an ASK-policied request        (owned by [[craft-admin]] / [[craft-external-apps]])
   └─ insert_action_approval (pending row)            db/action_approval.py
   └─ ApprovalRequestedPacket over SSE                packets.py, session/streaming.py
-       (FE fetches full contents from /live, Postgres stays source of truth)
-GET  /build/approvals/sessions/{id}/live             approvals/api.py:list_live_approvals
+       (FE fetches requests and outcomes; Postgres stays source of truth)
+GET  /build/approvals/sessions/{id}                  approvals/api.py:list_session_approvals
 POST /build/approvals/{id}/decision                  approvals/api.py:submit_decision
-POST /build/approvals/{id}/session-grant              approvals/api.py:submit_session_grant
   └─ try_record_decision (conditional UPDATE)         db/action_approval.py
   └─ approval_cache.send_wake                          wakes the parked proxy request
 ```
@@ -519,7 +546,7 @@ not this component: an `ASK`-policied request is held there, waiting on the
 approval row's decision. This document owns the human-facing side: the
 pending row, the packet that tells the frontend to render a card
 (`ApprovalRequestedPacket`, carrying only ids so the frontend refetches
-contents from `/live` and Postgres stays the single source of truth,
+contents from the session approvals endpoint and Postgres stays the single source of truth,
 `approvals/api.py` module docstring), and the decision endpoints.
 
 `try_record_decision` (`db/action_approval.py`) is a conditional `UPDATE ...
@@ -527,11 +554,11 @@ WHERE decision IS NULL`, the sole race arbiter; a second decision on an
 already-decided row returns the existing decision if it matches
 (idempotent) or a `CONFLICT` if it doesn't. A decision wakes the parked
 proxy request via a `approval:wake:{id}` cache channel
-(`_send_wake_best_effort`); a missed wake just falls back to the proxy's own
+(`submit_decision`); a missed wake just falls back to the proxy's own
 `SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS` wait.
 
-**Pre-approval is "session-grant", not a separate mechanism.**
-`submit_session_grant` (`approvals/api.py`) approves the specific request
+**Approve for session uses the shared decision endpoint.**
+With `ApprovalChoice.APPROVE_SESSION`, `submit_decision` (`approvals/api.py`) approves the specific request
 *and* every other currently-pending or future request in the session that
 matches the same `(gated_app_id)` target and whose required action types are
 a subset of what was just granted (`actions_requiring_approval`,
@@ -549,6 +576,10 @@ explicitly filters to rows created within that same wait window, treating
 anything older as orphaned (the proxy that was waiting on it is gone), so
 the frontend never offers to decide a request that can no longer have any
 effect.
+
+The session approvals endpoint returns all live requests and the 50 most recent outcomes.
+Expired undecided requests count as outcomes. The frontend uses one query for cards and refreshes it after decisions.
+The query loads app identities together to avoid one database read per card.
 
 ### 4.7 Artifacts, receipts, and export
 
@@ -588,10 +619,14 @@ Only explicit selections enter the current turn’s attachment context. Stored f
 Uploads hold the session row lock through quota checks and file writes, so concurrent requests share one session limit.
 URL session identity owns the draft; a welcome sandbox is its replaceable upload destination.
 Replacing that destination preserves selected source files and uploads them into the replacement.
-New Build, another session, or visit end clears the previous draft.
+New Session, another session, or visit end clears the previous attachment draft.
+Composer text uses `useDraft` in browser session storage, keyed by account and URL session ID, with a separate New Session key for each account.
+Signed-out composers do not save drafts. Logout removes current and legacy Craft draft keys.
+Text survives same-tab navigation and reloads without moving between sessions. Accepted prompt handoff or queueing clears the saved text. Failed session provisioning retains the text and attachments.
+Draft cleanup survives composer unmounting. Paste-tile edits and slash-query removal update the saved text immediately.
 Upload completion updates only still-selected files in the same visit and refreshes the file inventory.
 Pending file status prevents duplicate uploads. Upload errors retain HTTP status and subscription error details.
-ChatPanel owns its UploadFilesProvider. Unmounting chat releases its draft, including pending welcome files and navigation to Craft apps.
+ChatPanel owns its UploadFilesProvider. Unmounting chat releases its attachment draft, including pending welcome files and navigation to Craft apps.
 
 ### 4.8 User library
 
@@ -635,11 +670,15 @@ send_message / reconcile_session_llm_config     session/manager.py
                  → first visible model
 ```
 
+Every candidate must support chat. Decision-only models cannot become a
+session selection, configured default, or automatic fallback. Models that
+support both chat and decisions remain eligible.
+
 Priority, per `llm_config.py:_select_gateway_default`: (1) the session's own
 persisted `agent_provider`/`agent_model`, if still visible and accessible;
-(2) the admin's Craft default (`fetch_default_craft_model`,
+(2) the admin's Craft default (`fetch_default_model(..., LLMModelFlowType.CRAFT)`,
 `LLMModelFlowType.CRAFT`); (3) the admin's chat default
-(`fetch_default_llm_model`); (4) each provider's recommended model
+(`fetch_default_model(..., LLMModelFlowType.CHAT)`); (4) each provider's recommended model
 (`recommended-models.json`); (5) the first visible model of the first
 provider. Per `[[llm-providers]]`, `CRAFT` is a pointer flow that nothing
 populates automatically, so step (2) is frequently empty and step (3) is
@@ -650,6 +689,16 @@ when the resolved config actually changed, tracked via a
 `dispose_pending` cache marker so a crash between writing the file and
 disposing the stale opencode instance is retried on the next turn rather
 than silently leaving the instance on the old config until pod death.
+
+**Automatic naming starts after the first turn is accepted.** The accepted
+`send-message` response guarantees that the user message is committed.
+The frontend store requests `PUT /sessions/{id}/name` with `name: null`.
+The backend names only unnamed sessions and checks the name again under a
+row lock after generation. A successful manual rename takes precedence. Failed
+manual renames leave pending automatic names eligible to update the sidebar. Empty or failed
+model responses use the first message, trimmed to 40 characters. Empty
+sessions reject naming instead of saving a UUID label. The generate-name
+endpoint remains a preview and does not persist its result.
 
 **Session naming does not use this resolution at all.**
 `naming.py:generate_session_name` calls `get_default_llm()` (the workspace
@@ -719,11 +768,11 @@ A directory scan reports current files, not exact per-turn provenance.
    `session_runtime_intact` is the fast-path check; anything that fails it
    must route through `ensure_session_ready` under the user's
    `session_creation_lock`, never rebuild a workspace ad hoc.
-5. **History must reach durable storage before a healthy sandbox can be reaped.**
-   `sleep_sandbox` aborts the reap when a workspace snapshot fails or when
-   the opencode history snapshot fails on a pod that passes `health_check`.
-   If the pod is unreachable, `sleep_sandbox` logs a warning and sleeps the
-   sandbox without a fresh history snapshot. See §4.5 for this gap.
+5. **History must reach durable storage before recoverable storage is reaped.**
+   `sleep_sandbox` aborts after workspace discovery, workspace snapshot, or
+   opencode history snapshot failure. An unhealthy endpoint does not prove storage
+   loss. Only confirmed missing storage skips checkpoint calls. Sleep finalization
+   requires successful deletion of the observed resources and the same database attempt.
 6. **A `client_request_id` makes `send-message` idempotent**, not merely
    deduplicated at the HTTP layer: `get_turn_for_request` returns the
    existing turn for a repeated id rather than creating a second one.
@@ -780,11 +829,11 @@ A directory scan reports current files, not exact per-turn provenance.
 | changes the turn executor (`interactive_turns/executor.py`) | every streamed terminal path still calls `finalize_persist` before `finish_turn` (the prompt-slot rejection path persists an error row instead); the timeout-continuation loop's `MAX_TIMEOUT_CONTINUATIONS` cap; `[[craft-streaming]]`'s event shapes the executor switches on (`PromptResponse`, `ActivityTimeoutError`, `SandboxError`) |
 | changes locking (`prompt_slot`, `acquire_active_turn_lock`, `session_creation_lock`) | the CONFLICT-vs-silent-failure behavior at each acquisition site; whether a reclaim (`claim_turn_for_runner`) can still race a live runner; `[[craft-sandboxes]]`'s reaper, which also touches sandbox state under related locks |
 | changes interrupt (`interrupt_signal.py`, `interrupt_message`) | the FE's pending Stop request barrier and known-turn terminal outcome contract; whether partial output still commits before `finish_turn(CANCELLED)`; the direct `abort_opencode_session` remaining best-effort, with a short HTTP timeout under the admission lock |
-| adds an approval point | `ApprovalRequestedPacket` plumbing through `[[craft-streaming]]`; `list_live_approvals`'s time-window filter; whether the new point's target maps to a `GatedApp (kind, target_id)` the session-grant matching in `submit_session_grant` can actually cover |
+| adds an approval point | `ApprovalRequestedPacket` plumbing through `[[craft-streaming]]`; `list_live_approvals`'s time-window filter; whether the new point's target maps to a `GatedApp (kind, target_id)` the session-grant matching in `submit_decision` can actually cover |
 | changes session state (`BuildSession` columns, `session_ready.py`) | `session_runtime_intact`'s fast-path check; `reconcile_session_llm_config`'s short-circuit comparison; any snapshot/restore path in `[[craft-sandboxes]]` that reads these columns |
 | changes artifact upsert or hashing | the FE artifact list/version display; `export_docx`/`download_artifact`, which read the live workspace, not the DB row's cached bytes |
 | changes user library sync | both trigger sets (upload/delete synchronous sync via `sync_user_library_to_active_sandboxes`, and session-provisioning sync via `build_managed_content_payload`/`push_managed_content`); the shared `Document`/cc-pair machinery other ingestion consumers also read |
-| changes opencode history capture points | `[[craft-sandboxes]]`'s reaper, background-sweep, and recovery paths that are the three callers; the manual `/opencode-history-snapshot` endpoint, if you wire up a per-turn caller for the first time |
+| changes opencode history capture points | `[[craft-sandboxes]]`'s reaper, background-sweep, recovery, and failed-runtime cleanup paths; the manual `/opencode-history-snapshot` endpoint, if you wire up a per-turn caller for the first time |
 
 ---
 
@@ -807,7 +856,7 @@ cd backend && uv run pytest tests/external_dependency_unit/craft/test_turn_heart
 cd backend && uv run pytest tests/external_dependency_unit/craft/test_session_lifecycle.py
 cd backend && uv run pytest tests/external_dependency_unit/craft/test_action_approval_db.py
 cd backend && uv run pytest tests/external_dependency_unit/craft/test_approvals_api.py
-cd backend && uv run pytest tests/external_dependency_unit/craft/test_scheduled_task_pre_approvals.py
+cd backend && uv run pytest tests/external_dependency_unit/permissions/test_action_policies.py
 
 # Integration
 cd backend && uv run pytest tests/integration/tests/craft/test_sessions_api.py
@@ -875,8 +924,8 @@ processing and blocking sandbox egress during OpenCode startup.
 - **`/build/sessions/{id}/opencode-history-snapshot` is a manual capture
   hook.** Tests and operators call it. No frontend code calls it. Do not
   assume a per-turn or per-send history capture happens. The automatic
-  capture points are idle-reap sleep, the periodic background sweep, and
-  best-effort pre-recovery (§4.5).
+  capture points are idle-reap sleep, the periodic background sweep,
+  best-effort pre-recovery, and cleanup of FAILED runtimes with prior session work (§4.5).
 - **Subagent messages skip the interactive-turn queue entirely.**
   `send_subagent_message` (`session/messages.py`) streams synchronously
   through `SessionManager.send_subagent_message` →

@@ -889,12 +889,13 @@ def upload_file_endpoint(
     safe_filename = sanitize_filename(file.filename)
 
     try:
-        relative_path, _ = session_manager.upload_file(
-            session_id=session_id,
-            user_id=user_id,
-            filename=safe_filename,
-            content=content,
-        )
+        with session_creation_lock(user_id):
+            relative_path, _ = session_manager.upload_file(
+                session_id=session_id,
+                user_id=user_id,
+                filename=safe_filename,
+                content=content,
+            )
     except UploadLimitExceededError as e:
         # Return 429 for limit exceeded errors
         raise HTTPException(status_code=429, detail=str(e))
@@ -928,7 +929,8 @@ def delete_file_endpoint(
     session_manager = SessionManager(db_session)
 
     try:
-        deleted = session_manager.delete_file(session_id, user_id, path)
+        with session_creation_lock(user_id):
+            deleted = session_manager.delete_file(session_id, user_id, path)
     except ValueError as e:
         error_message = str(e)
         if "path traversal" in error_message.lower():

@@ -7,7 +7,10 @@ from urllib.parse import urlparse, urlunparse
 from pydantic import BaseModel
 
 from onyx.access.models import ExternalAccess
-from onyx.configs.app_configs import GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES
+from onyx.configs.app_configs import (
+    GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES,
+    SKIP_SPREADSHEET_CONTENT,
+)
 from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.connectors.cross_connector_utils.section_utils import cap_sections_text
 from onyx.connectors.cross_connector_utils.tabular_section_utils import (
@@ -299,6 +302,7 @@ def _download_and_extract_sections_basic(
                 content_type=content_type,
                 raw_file_callback=raw_file_callback,
                 link=link,
+                skip_content=SKIP_SPREADSHEET_CONTENT,
             )
             tabular_sections = result.sections
             staged_file_id = result.staged_file_id

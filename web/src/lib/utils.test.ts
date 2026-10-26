@@ -1,4 +1,10 @@
-import { ensureHrefProtocol, transformLinkUri } from "./utils";
+import { ensureHrefProtocol, transformLinkUri, getFileIcon } from "@/lib/utils";
+import {
+  SvgSpreadsheetFile,
+  SvgAudioFile,
+  SvgVideoFile,
+  SvgFileText,
+} from "@opal/icons";
 
 describe("ensureHrefProtocol", () => {
   it("adds https protocol to bare domains", () => {
@@ -40,4 +46,32 @@ describe("transformLinkUri", () => {
   it("blocks unsafe protocols", () => {
     expect(transformLinkUri("javascript:alert(1)")).toBeNull();
   });
+});
+
+describe("file category icons", () => {
+  it.each([
+    "report.xlsx",
+    "report.XLS",
+    "report.ods",
+    "report.csv",
+    "report.tsv",
+  ])("uses a spreadsheet icon for %s", (name) =>
+    expect(getFileIcon(name)).toBe(SvgSpreadsheetFile)
+  );
+  it.each([
+    "recording.mp3",
+    "recording.wav",
+    "recording.flac",
+    "recording.opus",
+  ])("uses an audio icon for %s", (name) =>
+    expect(getFileIcon(name)).toBe(SvgAudioFile)
+  );
+  it.each(["clip.mp4", "clip.mov", "clip.mkv", "clip.avi"])(
+    "uses a video icon for %s",
+    (name) => expect(getFileIcon(name)).toBe(SvgVideoFile)
+  );
+  it.each(["report.docx", "unknown.bin", "recording.mp3.txt", undefined])(
+    "keeps the generic document icon for %s",
+    (name) => expect(getFileIcon(name)).toBe(SvgFileText)
+  );
 });

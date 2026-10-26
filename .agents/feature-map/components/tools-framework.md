@@ -49,11 +49,25 @@ scoped down when web search is excluded.
 | POST | `/admin/tool/custom` | `create_custom_tool` | Creates a custom OpenAPI tool. |
 | PUT | `/admin/tool/custom/{tool_id}` | `update_custom_tool` | |
 | DELETE | `/admin/tool/custom/{tool_id}` | `delete_custom_tool` | |
-| PATCH | `/admin/tool/status` | `update_tools_status` | Enables/disables a `Tool` row (`Tool.enabled`). |
+| PATCH | `/admin/tool/status` | `update_tools_status` | Enables/disables MCP or built-in `Tool` rows (`Tool.enabled`); rejects OpenAPI status edits. |
 | POST | `/admin/tool/custom/validate` | `validate_tool` | Validates an OpenAPI schema before save. |
 
 MCP tool CRUD lives under `/admin/mcp` and is covered by `[[mcp-and-custom-tools]]`,
 not here.
+
+### Terraform custom tools
+
+`terraform-provider-onyx/internal/provider/custom_tool_resource.go` retains the
+`onyx_custom_tool.enabled` attribute as a compatibility name for default Chat selection.
+It reads `default_chat_enabled` and writes that field through custom-tool create/update.
+It does not call the global status endpoint. Upgrade the provider with this API change;
+older provider versions still use global status writes.
+
+The optional `default_chat_enabled` request field requires full admin access.
+Omitting it preserves the selection and existing scoped metadata-edit permissions.
+The API saves metadata and this selection in one transaction. The per-tool helper
+changes only that tool's default-persona attachment, preserving other selections.
+See [[mcp-and-custom-tools]] §4.5 for legacy flags and custom-agent availability.
 
 ### The per-message tool toggle
 
@@ -80,7 +94,10 @@ and `BashTool`, checked in `python_tool.py:is_available` and `bash_tool.py:is_av
   - `openapi_schema` set: a custom tool backed by a user-supplied OpenAPI schema
     (`tool_constructor.py:build_custom_tools_from_openapi_schema_and_headers`).
   - `mcp_server_id` set: an MCP tool, one row per tool exposed by that MCP server.
-  A row can have `enabled = False` without being detached from its personas; see §5.
+  MCP and built-in rows can have `enabled = False` without being detached from their personas; see §5.
+  New OpenAPI records stay enabled; default Chat selection uses persona attachments.
+  Legacy disabled OpenAPI records remain off in default Chat, but custom agents ignore
+  that flag. Explicit default Chat selection normalizes it; see [[mcp-and-custom-tools]] §4.5.
 - `Persona__Tool` (`db/models.py:Persona__Tool`): join table recording that a tool
   is *available* to a persona. Availability here does not imply usability; a
   persona can list `ImageGenerationTool` while no image provider is configured.
@@ -163,8 +180,17 @@ passes the availability check but is never added to `tool_dict`.
 tool-name disambiguation and custom-tool schemas can expand one DB row into more
 than one runtime tool).
 
+The optional `selection_llm_factory` is passed only to internal search. Search
+resolves it lazily for section selection and relevance classification, after
+retrieval returns sections. Rewrites, filters, the answer client, and other tools
+keep the supplied `llm`. Constructing tools, exposing schemas, or finding no
+results does not resolve SEARCH_SELECTION or check its provider budget.
+If the factory raises, search logs a warning and selects with the supplied `llm`.
+The independent CHAT_NAMING default is not used by search tools.
+
 For each `db_tool_model` in `persona.tools`, in order:
-1. Skip if `db_tool_model.enabled` is `False`.
+1. Skip disabled MCP and built-in rows. For OpenAPI rows, honor a legacy
+   `enabled=False` only in default Chat; custom agents retain their attached tools.
 2. Skip if `allowed_tool_ids` is given and the tool's id is not in it (the
    per-message toggle from §2).
 3. For a built-in tool (`in_code_tool_id` set), resolve the class via
@@ -249,6 +275,12 @@ tool calls the LLM just made and the constructed `Tool` instances.
 
 ## 5. Contracts and invariants
 
+Personal MCP and OpenAPI Chat opt-outs are enforced only for `DEFAULT_PERSONA_ID`,
+before credential resolution or MCP cache reuse. An explicit `allowed_tool_ids`
+list cannot override them. Custom agents retain their own attached tools.
+Preferences are batch-read once per construction for configured MCP servers
+and OpenAPI tool IDs. Missing preferences preserve the existing default-on behavior.
+
 1. **A new built-in tool needs both `BUILT_IN_TOOL_MAP` and a DB row.** Adding the
    class alone does nothing; `_construct_tools_impl` only sees tools present on
    `persona.tools`, and those rows come from `Tool.in_code_tool_id` seeded via
@@ -280,10 +312,10 @@ tool calls the LLM just made and the constructed `Tool` instances.
    `_construct_tools_impl` happens after, and independently of, the persona-tool
    loop that checks the whitelist. A change to per-message tool filtering must
    account for this or memory will leak into a turn the user tried to restrict.
-9. **A tool with `Tool.enabled = False` stays attached to its personas.**
+9. **A disabled MCP or built-in tool stays attached to its personas.**
    `Persona__Tool` is an availability record, not a usability one; the
    `enabled` check happens in `_construct_tools_impl`, not at the DB relationship
-   level.
+   level. Legacy OpenAPI flags only block default Chat; custom agents ignore them.
 
 ---
 
@@ -414,3 +446,11 @@ See `backend/AGENTS.md` for authoritative commands and required env.
   `_merge_tool_calls` collapses N calls to `SearchTool`/`WebSearchTool`/`OpenURLTool`
   into one before execution and before it enters history, so the model later sees
   the merged, expanded arguments rather than what it originally emitted.
+
+
+### Default Chat MCP availability
+
+For the default persona, `tool_constructor.py` checks both server availability in
+Chat and the user's MCP server access before resolving credentials. This prevents
+a group-restricted server from becoming available to all users through default
+Chat. Custom agents retain their existing attached-tool access behavior.

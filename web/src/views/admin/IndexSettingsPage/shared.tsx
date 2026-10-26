@@ -1,18 +1,18 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { useField } from "formik";
 import { useSettings } from "@/lib/settings/hooks";
 import * as Yup from "yup";
 import { markdown } from "@opal/utils";
 import { Divider } from "@opal/components";
-import { InputSingleUploadField } from "@opal/form";
+import { InputSingleUploadField, InputSwitchField } from "@opal/form";
 import type { RichStr } from "@opal/types";
 import { InputHorizontal, InputVertical } from "@opal/layouts";
 import type {
   EmbeddingProvider,
   IndexSettingsTranslator,
 } from "@/lib/searchSettings/types";
-import SwitchField from "@/refresh-components/form/SwitchField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 
@@ -32,6 +32,8 @@ interface ApiKeyFieldProps {
 
 export function ApiKeyField({ provider, optional = false }: ApiKeyFieldProps) {
   const t = useTranslations("admin.indexSettings");
+  // On edit, the initial value is the stored masked key.
+  const [, meta] = useField<string>("apiKey");
 
   return (
     <InputVertical
@@ -45,7 +47,10 @@ export function ApiKeyField({ provider, optional = false }: ApiKeyFieldProps) {
         })
       )}
     >
-      <PasswordInputTypeInField name="apiKey" />
+      <PasswordInputTypeInField
+        name="apiKey"
+        existingValue={meta.initialValue}
+      />
     </InputVertical>
   );
 }
@@ -194,7 +199,7 @@ export function ModelSpecFields({
         description={t("fields.normalize.description")}
         withLabel="normalize"
       >
-        <SwitchField name="normalize" />
+        <InputSwitchField name="normalize" />
       </InputHorizontal>
     </>
   );

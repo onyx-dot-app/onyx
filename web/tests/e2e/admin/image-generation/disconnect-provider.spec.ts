@@ -46,13 +46,6 @@ async function mockImageGenApis(
       await route.continue();
     }
   });
-
-  await page.route(
-    "**/api/admin/llm/provider?include_image_gen=true",
-    async (route) => {
-      await route.fulfill({ status: 200, json: { providers: [] } });
-    }
-  );
 }
 
 test.describe("Image Generation Provider Disconnect", () => {

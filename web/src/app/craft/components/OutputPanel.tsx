@@ -174,6 +174,24 @@ function OutputResources({
   const tabs = usePanelTabs();
   const activeId = useActivePanelTabId();
   const active = tabs.find((tab) => panelTabId(tab) === activeId);
+  const activeFileCard =
+    active?.kind === "file"
+      ? outputCards.find(
+          (card) => card.kind === "file" && card.path === active.path
+        )
+      : undefined;
+  useEffect(() => {
+    if (
+      isOpen &&
+      runtimeReady &&
+      activeFileCard &&
+      !activeFileCard.deleted &&
+      (activeFileCard.viewed_revision ?? 0) < activeFileCard.revision
+    ) {
+      void markViewed(activeFileCard);
+    }
+  }, [isOpen, runtimeReady, activeFileCard, markViewed]);
+
   const select = useBuildSessionStore((state) => state.setActivePanelTabId);
   const close = useBuildSessionStore((state) => state.closePanelTab);
   const reorder = useBuildSessionStore((state) => state.reorderPanelTab);
@@ -217,10 +235,6 @@ function OutputResources({
   };
   const openFile = (path: string, name: string) => {
     useBuildSessionStore.getState().openFilePreview(sessionId, path, name);
-    const card = outputCards.find(
-      (output) => output.kind === "file" && output.path === path
-    );
-    if (card) void markViewed(card);
   };
   const markAppViewed = (appId: string | null) => {
     if (appId !== contentSessionId) return;
@@ -363,12 +377,17 @@ function OutputResources({
           refreshKey: (activeResource?.refreshKey ?? 0) + 1,
         });
       } else {
-        void refreshWebapps()
-          .catch(() => undefined)
-          .finally(() => {
-            if (scopeAlive.current)
-              updateResource(active, { manualRefresh: false });
-          });
+        void Promise.allSettled([
+          refreshWebapps(),
+          active.appId === null && contentSessionId
+            ? useBuildSessionStore
+                .getState()
+                .refreshOutputInventory(contentSessionId, { silent: true })
+            : Promise.resolve(),
+        ]).finally(() => {
+          if (scopeAlive.current)
+            updateResource(active, { manualRefresh: false });
+        });
       }
     } else if (contentSessionId) {
       updateResource(active, {
@@ -431,12 +450,7 @@ function OutputResources({
           onSelect={(id) => {
             select(sessionId, id);
             const tab = tabs.find((candidate) => panelTabId(candidate) === id);
-            if (tab?.kind === "file") {
-              const card = outputCards.find(
-                (output) => output.kind === "file" && output.path === tab.path
-              );
-              if (card) void markViewed(card);
-            } else if (tab?.kind === "browser") markAppViewed(tab.appId);
+            if (tab?.kind === "browser") markAppViewed(tab.appId);
           }}
           onClose={(id) => close(sessionId, id)}
           onReorder={(id, index) => reorder(sessionId, id, index)}
@@ -641,6 +655,17 @@ function OutputResources({
                   }
                   accessRevoked={accessRevoked}
                   apps={apps}
+                  htmlFiles={Object.keys(session?.outputInventory ?? {})
+                    .filter(
+                      (path) =>
+                        path.startsWith("outputs/") && /\.html?$/i.test(path)
+                    )
+                    .sort()}
+                  htmlInventoryStatus={
+                    session?.outputInventoryStatus ?? "unloaded"
+                  }
+                  htmlInventoryLoading={!!outputInventoryLoading}
+                  onFileOpen={openFile}
                   appId={tab.appId}
                   discoveryState={discoveryState}
                   refreshKey={

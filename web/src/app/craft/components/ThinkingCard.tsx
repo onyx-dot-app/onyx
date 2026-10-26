@@ -3,13 +3,8 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { cn } from "@opal/utils";
-import { Text } from "@opal/components";
+import { Collapsible, Text } from "@opal/components";
 import { SvgBubbleText, SvgChevronDown } from "@opal/icons";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/refresh-components/Collapsible";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 
 // MinimalMarkdown's default `p` goes through MemoizedParagraph which forces
@@ -116,8 +111,8 @@ export default function ThinkingCard({
   if (!content) return null;
 
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <CollapsibleTrigger asChild>
+    <Collapsible.Root open={isOpen} onOpenChange={setIsOpen}>
+      <Collapsible.Trigger asChild>
         <button
           className={cn(
             "group w-full text-left px-3 py-1.5 rounded-md transition-colors duration-200",
@@ -142,8 +137,8 @@ export default function ThinkingCard({
             />
           </div>
         </button>
-      </CollapsibleTrigger>
-      <CollapsibleContent>
+      </Collapsible.Trigger>
+      <Collapsible.Content>
         <div className="px-3 pb-2 pt-0">
           <div className="py-1 max-h-48 overflow-y-auto">
             <MinimalMarkdown
@@ -154,7 +149,7 @@ export default function ThinkingCard({
             />
           </div>
         </div>
-      </CollapsibleContent>
-    </Collapsible>
+      </Collapsible.Content>
+    </Collapsible.Root>
   );
 }

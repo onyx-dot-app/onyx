@@ -24,7 +24,11 @@ from onyx.auth.scoped_permissions import (
 )
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.indexing.attempt_restart import revoke_restarted_attempt_tasks
-from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryTask
+from onyx.configs.constants import (
+    CHECK_FOR_INDEXING_EXPIRES_SECONDS,
+    OnyxCeleryPriority,
+    OnyxCeleryTask,
+)
 from onyx.connectors.capability_checks.draft_runs import DraftCheckRunSnapshot
 from onyx.connectors.edit_plan.apply import (
     apply_connector_edit,
@@ -82,9 +86,6 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 router = APIRouter(prefix="/manage", dependencies=[Depends(require_vector_db)])
-
-# The indexing beat runs every 15 s, so a late kick has no value.
-_CHECK_FOR_INDEXING_EXPIRES_SECONDS = 60
 
 
 def _authorize_pair_edit(db_session: Session, user: User, cc_pair_id: int) -> None:
@@ -193,6 +194,13 @@ def _proposed_state(
         name=proposal.name,
         refresh_freq=proposal.refresh_freq,
         prune_freq=proposal.prune_freq,
+        # Omitted keeps the schedule (an older client); an explicit null
+        # clears it.
+        check_freq=(
+            proposal.check_freq
+            if "check_freq" in proposal.model_fields_set
+            else current.check_freq
+        ),
     )
 
 
@@ -211,7 +219,7 @@ def _kick_off_applied_edit(
             OnyxCeleryTask.CHECK_FOR_INDEXING,
             kwargs={"tenant_id": tenant_id},
             priority=OnyxCeleryPriority.HIGH,
-            expires=_CHECK_FOR_INDEXING_EXPIRES_SECONDS,
+            expires=CHECK_FOR_INDEXING_EXPIRES_SECONDS,
         )
     except Exception:
         logger.exception(
@@ -337,6 +345,7 @@ def start_cc_pair_edit_checks(
             access_type=request.access_type,
             connector_specific_config=request.connector_specific_config,
             rerun=request.rerun,
+            actions=request,
         )
     except CapabilityRunEnqueueError as e:
         raise OnyxError(

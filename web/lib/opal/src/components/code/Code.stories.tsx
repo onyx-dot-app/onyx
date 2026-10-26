@@ -49,3 +49,10 @@ export const LongLine: Story = {
     children: `abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyz`,
   },
 };
+
+export const Tint: Story = {
+  args: {
+    tint: true,
+    children: `Traceback (most recent call last):\n  File "connector.py", line 42, in load\nConnectionError: 503 Service Unavailable`,
+  },
+};

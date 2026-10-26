@@ -374,4 +374,6 @@ def require_permission(
     dependency._is_require_permission = True  # ty: ignore[unresolved-attribute]
     # Lets tests pin a route's permission level without closure introspection.
     dependency._required_permission = required  # ty: ignore[unresolved-attribute]
+    dependency._allow_scope = allow_scope  # ty: ignore[unresolved-attribute]
+    dependency._allow_anonymous = allow_anonymous  # ty: ignore[unresolved-attribute]
     return dependency

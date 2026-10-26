@@ -99,6 +99,8 @@ def _job_row(**overrides: Any) -> dict[str, Any]:
         "groups_processed": 0,
         "memberships_synced": 0,
         "error_count": 0,
+        "last_progress_at": None,
+        "last_heartbeat_at": None,
     }
     row.update(overrides)
     return row
@@ -245,6 +247,19 @@ def test_job_data_reports_duration_and_failure() -> None:
         _job_row(job_id="sync:1", job_type="pruning", cc_pair_id=None)
     )
     assert "cc_pair_id" not in unlinked
+    assert "last_progress_at" not in unlinked
+
+
+def test_job_data_reports_sync_attempt_progress() -> None:
+    running: dict[str, Any] = collector.job_data(
+        _job_row(
+            last_progress_at=_NOW - timedelta(minutes=1),
+            last_heartbeat_at=_NOW,
+        )
+    )
+    assert running["last_progress_at"] == (_NOW - timedelta(minutes=1)).isoformat()
+    assert running["last_heartbeat_at"] == _NOW.isoformat()
+    assert fleet.sanitize_data("job", running) == running
 
 
 @pytest.mark.parametrize(

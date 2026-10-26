@@ -2,7 +2,6 @@ from typing import Any
 from unittest.mock import create_autospec, patch
 
 import pytest
-
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.exceptions import ConnectorValidationError
@@ -10,6 +9,7 @@ from onyx.connectors.jira.source_operations import JiraApiError, JiraSourceOpera
 from onyx.connectors.jira_service_management.connector import (
     JiraServiceManagementConnector,
 )
+from onyx.connectors.models import Document
 
 
 @pytest.fixture
@@ -356,3 +356,54 @@ def test_load_credentials_uses_jsm_source_and_shared_gateway() -> None:
         "jira_base_url": "https://jira.example.com",
         "scoped_token": True,
     }
+
+
+@pytest.mark.parametrize("include_permissions", [False, True])
+@pytest.mark.parametrize(
+    "public_comments", [[], [{"public": True, "body": "Public reply"}]]
+)
+def test_inherited_issue_items_preserve_public_only_comments(
+    jsm_connector: JiraServiceManagementConnector,
+    include_permissions: bool,
+    public_comments: list[dict[str, Any]],
+) -> None:
+    gateway: Any = jsm_connector._source_operations
+    gateway.get_request_comments.return_value = {
+        "values": public_comments,
+        "isLastPage": True,
+    }
+    issue: dict[str, Any] = {
+        "key": "SUP-8",
+        "fields": {
+            "summary": "Support ticket",
+            "description": "Customer report",
+            "labels": [],
+            "updated": "2026-09-01T01:00:00.000+0000",
+            "created": "2026-09-01T00:00:00.000+0000",
+            "project": {"key": "SUP", "name": "Support"},
+            "comment": {"comments": [{"body": "Private raw Jira comment"}]},
+        },
+    }
+    with patch.object(
+        jsm_connector, "_get_project_permissions", return_value=None
+    ) as permissions:
+        documents = [
+            item
+            for item in jsm_connector._issue_to_items(issue, set(), include_permissions)
+            if isinstance(item, Document)
+        ]
+    assert len(documents) == 1
+    document = documents[0]
+    assert document.source == DocumentSource.JIRA_SERVICE_MANAGEMENT
+    text = document.sections[0].text or ""
+    assert "Private raw Jira comment" not in text
+    assert ("Public reply" in text) == bool(public_comments)
+    assert (
+        document.parent_hierarchy_raw_node_id
+        == jsm_connector._get_parent_hierarchy_raw_node_id(issue, "SUP")
+    )
+    gateway.get_request_comments.assert_called_once()
+    if include_permissions:
+        permissions.assert_called_once_with("SUP", add_prefix=True)
+    else:
+        permissions.assert_not_called()

@@ -74,6 +74,7 @@ class ReindexPortManager:
         vector_quantization: str | None = None,
         passage_prefix: str | None = None,
         index_name: str | None = None,
+        settings_overrides: dict[str, Any] | None = None,
     ) -> httpx.Response:
         """Reindex to the current embedding model (a new ALT index). With no vector
         setting changed, the port copies the stored vectors; a changed
@@ -91,7 +92,10 @@ class ReindexPortManager:
 
         Leaving `enable_contextual_rag` / `contextual_rag_model_configuration_id` unset
         preserves whatever the tenant already has, so a reindex that isn't testing
-        contextual RAG can't silently disable it. Pass either explicitly to change it."""
+        contextual RAG can't silently disable it. Pass either explicitly to change it.
+
+        `settings_overrides` replaces payload fields, for example the model fields of
+        another target model."""
         if acknowledged_wont_port_cc_pair_ids is None:
             acknowledged_wont_port_cc_pair_ids = (
                 ReindexPortManager.wont_port_cc_pair_ids(
@@ -129,6 +133,7 @@ class ReindexPortManager:
             "contextual_rag_model_configuration_id": contextual_rag_model_configuration_id,
             "acknowledged_wont_port_cc_pair_ids": acknowledged_wont_port_cc_pair_ids,
         }
+        payload.update(settings_overrides or {})
         return client.post(
             f"{SEARCH_SETTINGS_URL}/set-new-search-settings",
             json=payload,

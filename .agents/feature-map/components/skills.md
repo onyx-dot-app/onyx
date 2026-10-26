@@ -39,10 +39,35 @@ A Craft user opens the skills library at `/craft/v1/skills`
 (`web/src/app/craft/v1/skills/page.tsx` renders `SkillsPage`). It lists two
 groups: built-in skills (pptx, image generation, company search, Craft
 documentation, browser, and one per connectable app such as Slack, Linear,
-Gmail, Google Calendar, Google Drive, GitHub, HubSpot, Notion) and custom
-skills (their own, shared with them, or published organization-wide). Each
+Gmail, Google Calendar, Google Drive, GitHub, HubSpot, Notion, Zendesk) and
+custom skills (their own, shared with them, or published organization-wide). Each
 card shows an enable/disable toggle, a preview of the rendered instructions,
-and, for a custom skill they can edit, an edit action.
+and, for a custom skill they can edit, Edit and Delete actions. Delete is available directly on the card, including invalid skills whose editor cannot load. It requires confirmation and uses the same edit permission as the editor.
+
+Member external-app plugin modals also offer instruction previews and per-user skill switches in their Skills tab. Preview replaces the plugin modal content without opening a second dialog. Back or Escape returns to Skills and preserves enable drafts. These switches remain drafts until Save; Cancel discards them.
+
+Admins can set custom skills to Available to install,
+Installed by default, or Required in the sharing dialog. The dialog groups access,
+installation, invited people, and ownership into sections. Three installation
+buttons share one row, with the selected policy description below. Organization
+sharing hides the invited-people section; ownership and transfer remain visible.
+A compact “Manage individual access” control opens explicit user and group grants,
+including editor grants on app-associated skills.
+Skill permission options read “Can use” and “Can edit”.
+Edit sharing appears beside Cancel and Save in the editor header.
+Editable skill cards show a sharing action on hover or keyboard focus.
+That action loads authorized sharing metadata without reading the skill bundle.
+Invalid or missing bundles do not block sharing changes.
+The blank and uploaded-skill creation editors also offer sharing settings.
+These choices use one local draft until creation and save with the skill in one transaction.
+The sharing modal has separate create and edit modes.
+Policies apply to everyone with access, including invited users and group members.
+Permission rows reflow on narrow screens. Default installation
+respects saved user choices. Required skills show a badge instead of a toggle.
+Users can preview required skills by clicking their card or using the keyboard.
+The skill name is a preview button. Sharing, editing, deletion, and switches are separate controls.
+The Required tag explains the admin requirement on hover.
+Users cannot disable required skills; only admins can delete them.
 
 Turning a skill on or off changes what the agent can do on its next turn: an
 enabled skill's files land in the sandbox and its `SKILL.md` becomes
@@ -53,7 +78,7 @@ GitHub repository (`ImportSkillsFromGitHubModal`), which previews every
 `SKILL.md` found in the repo and lets the user pick which to bring in.
 
 An external-app-backed skill (Slack, Linear, Gmail, Google Calendar, Google
-Drive, GitHub, HubSpot, Notion) only becomes usable once the user has
+Drive, GitHub, HubSpot, Notion, Zendesk) only becomes usable once the user has
 connected that app; until then it is visible but not enable-able, and the
 card explains why (see §4.3). If the admin has restricted specific actions
 of a connected app, the pushed skill file itself carries a short list of
@@ -85,6 +110,7 @@ in the session (`SkillsStaleNotice.tsx`) with a manual reload button.
 | PUT | `/skills/custom/{skill_id}/bundle` | `replace_current_user_skill_bundle` | Full bundle replacement. |
 | POST/DELETE | `/skills/custom/{skill_id}/files` | `upload_current_user_skill_files` / `remove_current_user_skill_file` | Incremental file add/remove, re-renders `SKILL.md` (§4.1). |
 | PATCH | `/skills/custom/{skill_id}` | `patch_current_user_skill` | Description/instructions/visibility. |
+| GET | `/skills/custom/{skill_id}/share` | `fetch_custom_skill_sharing` | Requires edit access; returns sharing metadata without reading the bundle. |
 | PATCH | `/skills/custom/{skill_id}/share` | `share_current_user_skill` | User/group shares, org visibility. |
 | POST | `/skills/custom/{skill_id}/transfer-ownership` | `transfer_current_user_skill_ownership` | |
 | DELETE | `/skills/custom/{skill_id}` | `delete_current_user_skill` | Hard delete, see §5.6. |
@@ -123,7 +149,7 @@ Skill  (one row per built-in or custom skill)
   +--< Skill__User        (skill_id, user_id, permission)
   +--< Skill__UserGroup    (skill_id, user_group_id, permission)
   +--< ExternalApp__Skill  (external_app_id, skill_id)  -- at most one app per skill
-  +--< UserSkillPreference (user_id, skill_id, name)  -- per-user "enabled"
+  +--< UserSkillPreference (user_id, skill_id, name, enabled)  -- explicit user choice
 
 Sandbox
     skills_hash        -- last skill fileset+guidance hash pushed to THIS sandbox
@@ -146,14 +172,42 @@ BuildSession
 - `Skill__User` / `Skill__UserGroup` (`models.py:Skill__User`, `models.py:Skill__UserGroup`): one
   row per explicit share, `permission` is `VIEWER` or `EDITOR`
   (`SkillSharePermission`). `Skill.public_permission` is the org-wide grade,
-  independent of any explicit share.
-- `UserSkillPreference` (`models.py:UserSkillPreference`): the only row that represents
-  "this user has this skill turned on." Built-ins don't need one -
-  `_is_enabled_for_user` (`db/skill.py`) treats every built-in as
-  enabled unconditionally; only custom (or org-shared) skills need an
-  opt-in row. The unique index is on `(user_id, name)`, not `(user_id,
-  skill_id)`: two skills can never both be "enabled" under the same name for
-  one user, which is what produces `SKILL_NAME_CONFLICT` on enable.
+  independent of any explicit share. Share replacement expires the changed ORM
+  collections so creation and update responses include the saved grants.
+- `Skill.installation_policy` is AVAILABLE, DEFAULT, or REQUIRED. Admins set it
+  through the sharing API for custom skills. AVAILABLE requires
+  opt-in. DEFAULT enables the skill unless the user has an explicit preference.
+  REQUIRED enables it regardless of that preference and prevents user toggles.
+  Only admins can delete required skills. Policies follow the current audience;
+  changing visibility does not reset the policy. Inaccessible required skills
+  cannot override a user's same-name selection.
+- `UserSkillPreference` stores explicit enabled and disabled choices. Existing
+  selections migrate to enabled rows. Missing rows inherit the skill policy.
+  Bundle edits preserve preferences. REQUIRED overrides opt-outs without deleting
+  them; returning to DEFAULT restores them.
+- A partial unique index permits one enabled preference per user and name.
+  Another partial unique index permits one automatic skill per name across the tenant,
+  including separate audiences. Required
+  skills take precedence over optional selections without deleting them.
+  Default skills yield to accessible explicit same-name selections. Revoked access
+  preserves the selection but stops it from suppressing a default skill. Restoring
+  access restores that selection. Selecting a replacement
+  records opt-outs for all previous effective skills and saved selections.
+  Creating a skill does not silently replace a same-name default skill.
+  Creating a required skill needs no explicit preference and preserves the prior
+  same-name optional selection for when the requirement is removed.
+  Creation and toggle preference writes share a user row lock that allows sharing foreign-key reads.
+- App readiness and bundle validity still gate runtime use, including required
+  skills. Disconnecting an app preserves explicit opt-outs. Deleting the app
+  resets detached custom skills to AVAILABLE and removes their preferences.
+- Private custom skills require an owner. The migration assigns existing private
+  orphans to an active admin, assuming the organization has one.
+  Transfer or delete private skills before deleting their owner. A database check
+  also rejects direct or concurrent writes that would leave them ownerless.
+  Public skills retain the existing admin-recovery behavior after owner deletion.
+- Policies are evaluated from current access when skills are listed or rendered.
+  Existing pushes and runtime reload behavior remain unchanged. Membership edits
+  and failed pushes do not guarantee immediate refresh of every running sandbox.
 - `ExternalApp__Skill` (`models.py:ExternalApp__Skill`): non-owning link, unique on
   `skill_id`, so a skill depends on at most one external app.
 - `Sandbox.skills_hash` / `Sandbox.mcp_config_hash`
@@ -206,7 +260,8 @@ built-in-only mechanism (§4.2).
 `skills/built_in.py:_REGISTRY` is the single source of truth: one
 `SeededBuiltInProvider` (pptx, image-generation, company-search,
 craft-documentation, browser) or `ExternalAppBuiltInProvider` (slack, linear,
-google-calendar, google-drive, gmail, github, hubspot, notion) per built-in,
+google-calendar, google-drive, gmail, github, hubspot, notion, zendesk) per
+built-in,
 each pinned to a directory under `backend/onyx/skills/builtin/<skill_id>/`.
 Import-time validation (`BuiltInSkillRegistry.__init__`) parses every
 built-in's `SKILL.md`/`SKILL.md.template` and fails the process if two
@@ -227,17 +282,33 @@ built-in's `SKILL.md` is regenerated per user at push time
 (`skills/push.py:_render_template`): `company-search` calls
 `render_company_search_skill` (`skills/rendering.py`), substituting
 `{{AVAILABLE_SOURCES_SECTION}}` with the user's connected, non-internal-only
-document sources; an external-app skill calls `render_external_app_skill`,
-which resolves a `cloud-description:` frontmatter override on cloud
-deployments, strips or keeps `{{#IF_CLOUD_SCOPE}}...{{/IF_CLOUD_SCOPE}}`
-blocks, and fills `{{ACTION_AVAILABILITY_SECTION}}` with a "these actions are
-unavailable and should not be attempted" list built from
+document sources; an external-app skill goes through
+`rendering.py:render_external_app_files`, which resolves a
+`cloud-description:` frontmatter override on cloud deployments, strips or keeps
+`{{#IF_CLOUD_SCOPE}}...{{/IF_CLOUD_SCOPE}}` blocks, substitutes any
+`{{APP:<key>}}` value the provider derived from this app row's configuration
+(`skills/rendering.py:_app_template_values` — a
+Zendesk account's base URL), and fills `{{ACTION_AVAILABILITY_SECTION}}` with a "these
+actions are unavailable and should not be attempted" list built from
 `build_action_availability_section`: cloud-withheld actions plus the admin's
 stored `DENY` overrides (`external_apps/providers/registry.py:action_policy_views`).
+Other `*.template` files substitute only `{{APP:<key>}}` values and ship without
+the `.template` suffix (`rendering.py:render_external_app_files`). They do not
+process cloud or action markers, or reject unresolved markers. This gives bundled
+helpers their account configuration. Both static and template traversal use
+`content.py:iter_builtin_skill_files`, which excludes hidden paths, Python cache
+paths, and directories. The static-file loader skips raw template sources. The library preview
+calls the same renderer
+(`server/features/skill/response_helpers.py:skill_preview_response`), so what a
+user reads in the preview is what the agent gets — not the raw markers.
+The Zendesk skill documents draft Help Center articles, ticket side conversations,
+and personal macros through its existing JSON `call` command. These workflows
+use separate app policies and require their resource-specific OAuth write scopes.
+
 Only `DENY` is surfaced; `ALWAYS` and `ASK` actions are left undocumented
 here because the skill body already covers them and `ASK` is handled at call
 time by the sandbox proxy (`[[craft-external-apps]]`). An unresolved
-`{{...}}` placeholder after rendering raises rather than shipping broken
+`{{...}}` placeholder in rendered `SKILL.md` raises rather than shipping broken
 markup to the agent (`rendering.py:render_external_app_skill`, the trailing
 `if "{{" in rendered` check). This whole mechanism matches
 `docs/craft/features/external-apps/external-app-skill-action-availability.md`
@@ -322,7 +393,7 @@ explicit reload without waiting for a new session.
 desired hash and diffing, so a skill push can't race a concurrent push for
 the same sandbox into recording a stale hash as current. The push and the
 hash write are not atomic with each other, though: `push_to_sandboxes`
-happens outside any DB transaction, and only sandboxes for which the file
+runs while those database locks are held. Only sandboxes for which the file
 push actually succeeded get their hash updated
 (`push_skills_for_users`'s `successful_sandbox_ids`); a partial failure
 therefore self-heals on the next push attempt rather than recording a hash
@@ -351,15 +422,11 @@ for content that never landed.
    excluded from the fileset entirely** (`list_runtime_skills_for_user`'s
    `ready_external_app_skill_ids` filter). It never reaches the sandbox in a
    broken state; it simply isn't there until the app is connected.
-5. **Disabling a personal skill must stay reversible.** Disable is
-   `DELETE FROM user_skill_preference WHERE user_id=... AND skill_id=...`
-   (`db/skill.py:set_skill_enabled_for_user`) - re-inserting the same row
-   (re-enabling) fully restores prior state. Only `delete_skill`
-   (`db/skill.py`, a hard `DELETE FROM skill`) is irreversible. A change that
-   makes "disable" write a tombstone flag instead of removing the row, or
-   that starts cascading deletes from a disable action, breaks this
-   deliberately-chosen semantic (see `project_personal_skill_disable_is_reversible_mute`
-   precedent for the same distinction elsewhere in Craft).
+5. **User choices survive edits and policy changes.** Disable upserts a preference
+   with `enabled=False`; it does not delete the skill. Required skills reject
+   toggle requests on the server. Policy writes require full admin access.
+   Enablement resolves centrally in `db/skill.py:_is_enabled_for_user`, shared by
+   API responses and runtime selection. Never infer enablement from row existence.
 6. **Custom skill validation must run before content reaches a sandbox.**
    `_assemble_fileset` never unzips an unvalidated or invalid custom bundle;
    `validate_stored_custom_skill` is the sole gate, and its classification is
@@ -375,7 +442,7 @@ for content that never landed.
    skill with an `ExternalApp__Skill` row - it must stay organization-visible
    at read level even if only the connected app's users can use it.
 9. **A skill name can be "enabled" by only one row per user.**
-   `UserSkillPreference`'s unique index is on `(user_id, name)`; two
+   `UserSkillPreference`'s partial unique index is on `(user_id, name)` for enabled rows; two
    different skills sharing a name can never both be the user's active
    choice under that name, by construction, not by an application check.
 
@@ -419,12 +486,12 @@ for content that never landed.
 
 | If your change… | Also check |
 |---|---|
-| adds a built-in skill | `built_in.py:_REGISTRY` entry, its `builtin/<id>/` directory and `SKILL.md`, whether it needs `is_available`, and whether a new template needs a renderer branch in `push.py:_render_template` |
+| adds a built-in skill | `built_in.py:_REGISTRY` entry, its `builtin/<id>/` directory and `SKILL.md`, whether it needs `is_available`, and whether a new template needs a renderer branch in `push.py:_render_template` (and, with it, the preview path in `response_helpers.py:skill_preview_response`) |
 | changes the bundle format (zip layout, `SKILL.md` frontmatter shape) | `bundle.py` (`normalize_custom_bundle`, `_validated_bundle_path`), `metadata.py` (`SkillMetadata`), `validation.py`, and every existing stored custom skill's bundle (a schema tightening can retroactively invalidate real rows) |
 | changes the hash inputs (`compute_skill_runtime_hash`, `_assemble_fileset`, `build_connectable_apps_list`) | confirm the new input is actually folded into the hash bytes, or a real content change won't mark sandboxes/sessions stale; also check `[[craft-sessions]]`'s `session_runtime_stale` still reads the right fields |
 | changes app coupling (`ExternalApp__Skill`, `EXTERNAL_APP_SKILL_ID_TO_APP_TYPE`, `get_skill_external_app_dependencies`) | `[[craft-external-apps]]`'s action-policy views, `db/skill.py:list_runtime_skills_for_user`'s readiness filter, and `response_helpers.py`'s dependency response shown in the UI |
 | changes sharing (`Skill__User`, `Skill__UserGroup`, `public_permission`) | `skill_visible_to_user`/`_is_editable_by_user` (both must move together), the scoped-manager GATE 2 check in `api.py:_assert_group_share_within_scope`, and `set_skill_public_permission`'s app-association guard |
-| changes enable/disable semantics | §5.5 above; verify disable stays a row delete, not a flag flip, and that `delete_skill` remains the only irreversible path |
+| changes enable/disable semantics | §5.5 above; verify explicit opt-outs survive updates and required policies override them |
 | changes GitHub ingestion (`ingest_from_github.py`) | path-traversal/symlink checks, `GITHUB_SKILL_MAX_COUNT`, and that `parse_skill_document`'s validation still runs before any bundle is stored |
 | changes what gets pushed or where (`SKILLS_MOUNT_PATH`, `push_to_sandbox(es)`) | `[[craft-sandboxes]]`'s sidecar `/push` contract and the `managed` volume mount |
 
@@ -488,13 +555,11 @@ See `backend/AGENTS.md` for authoritative test commands and required env.
 
 - **The runtime hash is computed twice per push and is not atomic with the
   push itself.** `push_skills_for_users` locks and compares hashes, pushes
-  files with no open transaction, then records the hash only for sandboxes
+  files while holding database locks, then records the hash only for sandboxes
   whose push succeeded. A crash between file-push success and hash-record
   leaves the sandbox correct but the DB stale; the next push recomputes the
-  same desired hash, sees a mismatch, and re-pushes harmlessly. Don't
-  "optimize" this into a single transaction spanning the external push -
-  that was deliberately avoided (mirrors the reserve/reconcile/finalize
-  split in `[[craft-sandboxes]]`).
+  same desired hash, sees a mismatch, and re-pushes harmlessly. The database
+  transaction cannot roll back an external file write.
 - **Two different staleness signals exist and are easy to conflate.**
   `Sandbox.skills_hash` (has this sandbox received the current push) and
   `BuildSession.skills_hash` (has this session's live opencode instance been

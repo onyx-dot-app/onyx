@@ -107,7 +107,7 @@ resource "onyx_llm_provider" "openai" {
   api_key_wo         = var.openai_api_key
   api_key_wo_version = 1
 
-  model_configurations = [{ name = "gpt-5-mini" }]
+  model_configurations = [{ name = "gpt-6-luna" }]
 }
 ```
 

@@ -8,7 +8,7 @@
  * Components covered:
  * - CheckboxField (unlabeled, from CheckboxField.tsx)
  * - LabeledCheckboxField (from LabeledCheckboxField.tsx)
- * - SwitchField
+ * - InputSwitchField
  * - InputTypeInField
  * - InputTextAreaField
  * - InputSingleSelectField (from @opal/form)
@@ -22,10 +22,9 @@ import React from "react";
 
 import UnlabeledCheckboxField from "./CheckboxField";
 import { CheckboxField as LabeledCheckboxField } from "./LabeledCheckboxField";
-import SwitchField from "./SwitchField";
 import InputTypeInField from "./InputTypeInField";
 import InputTextAreaField from "./InputTextAreaField";
-import { InputSingleSelectField } from "@opal/form";
+import { InputSingleSelectField, InputSwitchField } from "@opal/form";
 import InputDatePickerField from "./InputDatePickerField";
 import PasswordInputTypeInField from "./PasswordInputTypeInField";
 
@@ -113,17 +112,17 @@ export const LabeledCheckboxWithTooltip: Story = {
 };
 
 // ---------------------------------------------------------------------------
-// SwitchField
+// InputSwitchField
 // ---------------------------------------------------------------------------
 
 export const Switch: Story = {
-  name: "SwitchField",
+  name: "InputSwitchField",
   render: () => (
     <FormikWrapper initialValues={{ notifications: true }}>
       <label htmlFor="notifications" style={{ fontWeight: 500 }}>
         Enable notifications
       </label>
-      <SwitchField name="notifications" />
+      <InputSwitchField name="notifications" />
     </FormikWrapper>
   ),
 };

@@ -7,7 +7,11 @@ import pytest
 from onyx.db.enums import MCPAuthenticationType
 from onyx.db.models import MCPConnectionConfig
 from onyx.server.features.mcp.credentials import ResolvedMCPCredentials
-from onyx.server.features.mcp.models import MCPAuthTemplate
+from onyx.server.features.mcp.models import (
+    MCPAuthTemplate,
+    MCPConnectionData,
+    MCPConnectionStatus,
+)
 from onyx.utils.sensitive import SensitiveValue
 
 
@@ -157,3 +161,93 @@ def test_fresh_template_rendering_overrides_persisted_auto_substitution() -> Non
     )
 
     assert creds.build_headers() == {"X-User": "alice@example.com"}
+
+
+@pytest.mark.parametrize(
+    "data, expected",
+    [
+        ({"headers": {}}, MCPConnectionStatus.NOT_CONNECTED),
+        (
+            {"headers": {}, "client_info": {"client_id": "registered"}},
+            MCPConnectionStatus.NOT_CONNECTED,
+        ),
+        (
+            {
+                "headers": {},
+                "tokens": {"access_token": "access", "token_type": "Bearer"},
+            },
+            MCPConnectionStatus.CONNECTED,
+        ),
+        (
+            {
+                "headers": {},
+                "tokens": {"access_token": "access", "token_type": "Bearer"},
+                "token_expires_at": 1,
+            },
+            MCPConnectionStatus.REAUTH_REQUIRED,
+        ),
+        (
+            {
+                "headers": {},
+                "tokens": {
+                    "access_token": "access",
+                    "token_type": "Bearer",
+                    "refresh_token": "refresh",
+                },
+                "token_expires_at": 1,
+            },
+            MCPConnectionStatus.CONNECTED,
+        ),
+        ({"headers": {}, "reauth_required": True}, MCPConnectionStatus.REAUTH_REQUIRED),
+    ],
+)
+def test_oauth_connection_status(
+    data: MCPConnectionData, expected: MCPConnectionStatus
+) -> None:
+    credentials = ResolvedMCPCredentials(
+        connection_config_id=1,
+        connection_data=data,
+        user_oauth_token=None,
+        auth_type=MCPAuthenticationType.OAUTH,
+    )
+    assert credentials.connection_status() == expected
+    assert credentials.can_authenticate() == (expected == MCPConnectionStatus.CONNECTED)
+
+
+def test_existing_api_key_missing_new_required_field_needs_reauth() -> None:
+    credentials = ResolvedMCPCredentials(
+        connection_config_id=1,
+        connection_data={"headers": {}, "header_substitutions": {"api_key": "old"}},
+        user_oauth_token=None,
+        auth_type=MCPAuthenticationType.API_TOKEN,
+        auth_template=MCPAuthTemplate(
+            headers={"Authorization": "Bearer {api_key}", "X-Org": "{organization}"}
+        ),
+    )
+    assert credentials.connection_status() == MCPConnectionStatus.REAUTH_REQUIRED
+
+
+@pytest.mark.parametrize("auth_type", [None, MCPAuthenticationType.NONE])
+@pytest.mark.parametrize("rejected", [False, True])
+def test_none_auth_missing_template_values_requires_setup(
+    auth_type: MCPAuthenticationType | None, rejected: bool
+) -> None:
+    credentials = ResolvedMCPCredentials(
+        connection_config_id=1,
+        connection_data={
+            "headers": {"X-Client": "onyx"},
+            "header_substitutions": {"workspace": "existing"},
+            "reauth_required": rejected,
+        },
+        user_oauth_token=None,
+        auth_type=auth_type,
+        auth_template=MCPAuthTemplate(
+            headers={"X-Workspace": "{workspace}", "X-Org": "{organization}"}
+        ),
+    )
+    assert not credentials.can_authenticate()
+    assert credentials.connection_status() == (
+        MCPConnectionStatus.REAUTH_REQUIRED
+        if rejected
+        else MCPConnectionStatus.NOT_CONNECTED
+    )

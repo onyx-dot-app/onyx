@@ -152,6 +152,14 @@ Preparation resolves:
 - the user message row via `create_new_chat_message`
 - assistant message IDs via `reserve_message_id` or `reserve_multi_model_message_ids`
 
+Setup clears a forced tool ID when `is_tool_available_for_persona` excludes its
+attached tool. Construction uses the same predicate, so both paths apply the same
+legacy-flag rule. Disabled MCP and built-in tools remain excluded. Legacy disabled
+OpenAPI tools remain excluded from default Chat, while configured custom agents
+can use and force them, subject to access and authentication. No migration changes
+these legacy flags; explicit default Chat selection normalizes them.
+See [[mcp-and-custom-tools]] §4.5 and [[agents-personas]] §4.5.
+
 ### 4.3 Execution: `_run_models`
 
 One worker thread per model in a `ThreadPoolExecutor`, each submitted with a copied
@@ -161,6 +169,13 @@ the copy is a real bug class.
 Each worker gets:
 - its own `Emitter(model_idx=i, merged_queue, drain_done)`
 - its own `ChatStateContainer`
+
+Each worker passes a lazy SEARCH_SELECTION client factory into `construct_tools`.
+Search keeps the answer client for rewrites and filters, resolving the separate
+client only for section selection and relevance classification after retrieval.
+The factory captures the session's pinned incognito policy and request headers.
+An unset SEARCH_SELECTION returns that same answer client and never falls back
+to the independent CHAT_NAMING designation.
 
 All workers write `(model_idx, packet)` tuples to **one shared `merged_queue`**.
 A single writer thread, `_drain_to_completion`, drains it and publishes packets to the
@@ -176,13 +191,18 @@ session boundaries.
 `construct_message_history` (`llm_loop.py`) produces this order:
 
 ```
-[system] [history before last user] [custom agent prompt] [context/project files]
-[forgotten-files notice] [last user message] [tool calls and responses] [reminder]
+[system] [user information] [history before last user] [custom agent prompt]
+[context/project files] [forgotten-files notice] [last user message]
+[tool calls and responses] [reminder]
 ```
 
 The reasoning behind each position is in `backend/onyx/chat/README.md` and in
 [[context-assembly]]. Two rules worth internalising:
 
+- The per-user block (name, email, directory profile, language, preferences,
+  memories) is its own SYSTEM message after the system prompt, so the system
+  prompt itself is identical for users sharing a base prompt, tool set and
+  date, and its cache entry is shared among them.
 - The custom agent prompt is a **user message**, not part of the system prompt, and
   it **moves** to sit just above the newest user message each turn. If
   `persona.replace_base_system_prompt` is set, agent instructions form the system

@@ -5,10 +5,11 @@ import { useTranslations } from "next-intl";
 import * as SliderPrimitive from "@radix-ui/react-slider";
 import {
   Button,
-  LineItemButton,
-  Text,
+  Collapsible,
   InputTypeIn,
+  LineItemButton,
   PopoverMenu,
+  Text,
   Tooltip,
 } from "@opal/components";
 import {
@@ -44,13 +45,9 @@ import {
   reasoningStopIndex,
 } from "@/sections/model-selector/setting-controls";
 import { useLanguageModelsForCurrentAgent } from "@/lib/languageModels/hooks";
+import { useProviderNames } from "@/lib/languageModels/useProviderNames";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/refresh-components/Collapsible";
 import type {
   LLMOption,
   ModelOptionProvider,
@@ -461,9 +458,16 @@ export default function ModelSelectorContent({
   const internalScrollRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = externalScrollRef ?? internalScrollRef;
 
+  const providerNames = useProviderNames();
   const llmOptions = useMemo(
-    () => buildLlmOptions(llmProviders, currentModelName, includeHiddenModels),
-    [llmProviders, currentModelName, includeHiddenModels]
+    () =>
+      buildLlmOptions(
+        llmProviders,
+        currentModelName,
+        includeHiddenModels,
+        providerNames
+      ),
+    [llmProviders, currentModelName, includeHiddenModels, providerNames]
   );
 
   // "Auto" selects the admin-configured router; router rows never list.
@@ -739,13 +743,12 @@ export default function ModelSelectorContent({
                 : groupedOptions.flatMap((group, groupIndex) => {
                     const open = isGroupOpen(group.key);
                     const collapsible = (
-                      <Collapsible
+                      <Collapsible.Root
                         key={group.key}
                         open={open}
                         onOpenChange={() => toggleGroup(group.key)}
-                        className="flex flex-col gap-1"
                       >
-                        <CollapsibleTrigger asChild>
+                        <Collapsible.Trigger asChild>
                           <Interactive.Stateless prominence="tertiary">
                             <Interactive.Container
                               size="fit"
@@ -783,14 +786,14 @@ export default function ModelSelectorContent({
                               </div>
                             </Interactive.Container>
                           </Interactive.Stateless>
-                        </CollapsibleTrigger>
+                        </Collapsible.Trigger>
 
-                        <CollapsibleContent>
+                        <Collapsible.Content paddingTop={1}>
                           <Section gap={1} alignItems="stretch">
                             {group.options.map(renderModelItem)}
                           </Section>
-                        </CollapsibleContent>
-                      </Collapsible>
+                        </Collapsible.Content>
+                      </Collapsible.Root>
                     );
                     // null children render as PopoverMenu divider lines.
                     return groupIndex > 0 ? [null, collapsible] : [collapsible];

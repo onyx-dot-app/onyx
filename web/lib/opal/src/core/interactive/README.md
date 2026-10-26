@@ -59,7 +59,7 @@ Both `Stateless` and `Stateful` support `interaction?: "rest" | "hover" | "activ
 | ------------ | --------------------- | ----------------------- | -------------------- | -------------------- |
 | **Rest**     | `action-selection-05` | `background-tint-01`    | `transparent`        | `transparent`        |
 | **Hover**    | `action-selection-04` | `background-tint-02`    | `background-tint-02` | `background-tint-00` |
-| **Active**   | `action-selection-06` | `background-tint-00`    | `background-tint-00` | `background-tint-00` |
+| **Active**   | `action-selection-06` | `background-tint-00`    | `background-tint-00` | `background-tint-01` |
 | **Disabled** | `action-selection-02` | `background-neutral-02` | `transparent`        | `transparent`        |
 
 **Foreground**
@@ -67,8 +67,8 @@ Both `Stateless` and `Stateful` support `interaction?: "rest" | "hover" | "activ
 |              | Primary         | Secondary             | Tertiary              | Internal              |
 | ------------ | --------------- | --------------------- | --------------------- | --------------------- |
 | **Rest**     | `text-light-05` | `action-text-link-05` | `action-text-link-05` | `action-text-link-05` |
-| **Hover**    | `text-light-05` | `action-text-link-05` | `action-text-link-05` | `action-text-link-05` |
-| **Active**   | `text-light-05` | `action-text-link-05` | `action-text-link-05` | `action-text-link-05` |
+| **Hover**    | `text-light-05` | `action-text-link-05` | `action-text-link-05` | `action-selection-06` |
+| **Active**   | `text-light-05` | `action-text-link-05` | `action-text-link-05` | `action-selection-06` |
 | **Disabled** | `text-01`       | `action-selection-03` | `action-selection-03` | `action-selection-03` |
 
 ### Stateless: Danger
@@ -79,7 +79,7 @@ Both `Stateless` and `Stateful` support `interaction?: "rest" | "hover" | "activ
 | ------------ | ------------------ | ----------------------- | -------------------- | -------------------- |
 | **Rest**     | `action-danger-05` | `background-tint-01`    | `transparent`        | `transparent`        |
 | **Hover**    | `action-danger-04` | `background-tint-02`    | `background-tint-02` | `background-tint-00` |
-| **Active**   | `action-danger-06` | `background-tint-00`    | `background-tint-00` | `background-tint-00` |
+| **Active**   | `action-danger-06` | `background-tint-00`    | `background-tint-00` | `background-tint-01` |
 | **Disabled** | `action-danger-02` | `background-neutral-02` | `transparent`        | `transparent`        |
 
 **Foreground**
@@ -87,8 +87,8 @@ Both `Stateless` and `Stateful` support `interaction?: "rest" | "hover" | "activ
 |              | Primary         | Secondary               | Tertiary                | Internal                |
 | ------------ | --------------- | ----------------------- | ----------------------- | ----------------------- |
 | **Rest**     | `text-light-05` | `action-text-danger-05` | `action-text-danger-05` | `action-text-danger-05` |
-| **Hover**    | `text-light-05` | `action-text-danger-05` | `action-text-danger-05` | `action-text-danger-05` |
-| **Active**   | `text-light-05` | `action-text-danger-05` | `action-text-danger-05` | `action-text-danger-05` |
+| **Hover**    | `text-light-05` | `action-text-danger-05` | `action-text-danger-05` | `action-danger-06`      |
+| **Active**   | `text-light-05` | `action-text-danger-05` | `action-text-danger-05` | `action-danger-06`      |
 | **Disabled** | `text-01`       | `action-danger-03`      | `action-danger-03`      | `action-danger-03`      |
 
 ### Stateful: Select-Heavy / Select-Light

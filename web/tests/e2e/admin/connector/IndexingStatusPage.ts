@@ -8,6 +8,8 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 import { expectScreenshot } from "@tests/e2e/utils/visualRegression";
 
+const MANAGE_LINK_NAME = "Manage";
+
 export class IndexingStatusPage {
   readonly page: Page;
   readonly pageTitle: Locator;
@@ -17,57 +19,49 @@ export class IndexingStatusPage {
     this.pageTitle = page.locator('[aria-label="admin-page-title"]');
   }
 
-  /**
-   * The collapsed summary row for a connector source group, located by its
-   * display name (e.g. "File" for the `file` source). Connectors are grouped
-   * by source and shown collapsed by default, so the source display name is
-   * the stable signal that the table has rendered with data.
-   */
-  sourceGroup(displayName: string): Locator {
-    return this.page.getByText(displayName, { exact: true }).first();
-  }
-
   async goto() {
     await this.page.goto("/admin/indexing-status");
     await expect(this.pageTitle).toBeVisible({ timeout: 10_000 });
   }
 
   /**
-   * The row for an individual connector, located by its exact name. Only
-   * visible once its source group has been expanded.
+   * The card for an individual connector, located by its exact name. Every
+   * connector is listed flat, so the card is the stable signal that the list
+   * has rendered with data.
    */
   connectorRow(connectorName: string): Locator {
     return this.page
-      .getByRole("row")
+      .getByTestId(/^indexing-connector-\d+$/)
       .filter({ hasText: connectorName })
       .first();
   }
 
+  /** The link to the connector's detail page, offered only on rows the viewer can manage. */
+  manageLink(connectorName: string): Locator {
+    // Exact, so a connector whose name contains "manage" does not match through its own name link.
+    return this.connectorRow(connectorName).getByRole("link", {
+      name: MANAGE_LINK_NAME,
+      exact: true,
+    });
+  }
+
   /**
-   * Wait for a source group to render so we don't snapshot the loading
+   * Wait for a connector's card to render so we don't snapshot the loading
    * skeleton, then settle the network before any screenshot.
    */
-  async waitForSourceGroup(displayName: string) {
-    await expect(this.sourceGroup(displayName)).toBeVisible({
+  async waitForConnector(connectorName: string) {
+    await expect(this.connectorRow(connectorName)).toBeVisible({
       timeout: 15_000,
     });
     await this.page.waitForLoadState("networkidle");
   }
 
   /**
-   * Expand a collapsed source group so its connector rows are visible.
-   */
-  async expandSourceGroup(displayName: string) {
-    await this.waitForSourceGroup(displayName);
-    await this.sourceGroup(displayName).click();
-  }
-
-  /**
-   * Click a connector row and wait for the connector detail page
-   * (`/admin/connector/<ccPairId>`). Returns the ccPairId from the URL.
+   * Open a connector's detail page (`/admin/connector/<ccPairId>`) through
+   * its manage link. Returns the ccPairId from the URL.
    */
   async openConnector(connectorName: string): Promise<number> {
-    await this.connectorRow(connectorName).click();
+    await this.manageLink(connectorName).click();
     await this.page.waitForURL(/\/admin\/connector\/\d+/, {
       timeout: 15_000,
     });
@@ -81,15 +75,14 @@ export class IndexingStatusPage {
   }
 
   async expectRowOpens(connectorName: string, ccPairId: number) {
-    await expect(this.connectorRow(connectorName)).toHaveClass(
-      /cursor-pointer/
-    );
+    await expect(this.manageLink(connectorName)).toBeVisible();
     expect(await this.openConnector(connectorName)).toBe(ccPairId);
   }
 
   async expectRowInert(connectorName: string) {
     const row = this.connectorRow(connectorName);
-    await expect(row).not.toHaveClass(/cursor-pointer/);
+    await expect(row).toBeVisible();
+    await expect(this.manageLink(connectorName)).toHaveCount(0);
 
     // Arm the watcher before the click. Asserting the URL afterwards cannot fail,
     // because it matches the page we are already on and passes on the first poll.
@@ -102,17 +95,8 @@ export class IndexingStatusPage {
     expect(await navigated).toBe(false);
   }
 
-  /**
-   * Capture a full-page visual snapshot. Masks the same dynamic columns the
-   * admin-pages sweep masked so the relocated baseline stays comparable.
-   */
+  /** Capture a full-page visual snapshot. */
   async expectScreenshot(name: string) {
-    await expectScreenshot(this.page, {
-      name,
-      mask: [
-        '[data-testid="admin-date-range-selector-button"]',
-        '[data-column-id="updated_at"]',
-      ],
-    });
+    await expectScreenshot(this.page, { name });
   }
 }

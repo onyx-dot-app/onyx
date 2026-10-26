@@ -122,7 +122,7 @@ Lite 模式是轻量级的 AI 聊天界面。它占用的资源更少（内存�
 适合希望快速试用 Onyx 界面的用户，或仅需要聊天界面和智能体功能的团队。
 
 > [!TIP]
-> **如需免费试用 Onyx 且无需部署，请访问 [Onyx Cloud](https://cloud.onyx.app/signup?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)。**
+> **如需免费试用 Onyx 且无需部署，请访问 [Onyx Cloud](https://cloud.onyx.app/auth/signup?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)。**
 
 ---
 

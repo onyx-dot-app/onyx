@@ -16,6 +16,14 @@ bun run storybook:build  # static build to storybook-static/
 
 The dev server hot-reloads when you edit a component or story file.
 
+Run the shared-component browser regressions with:
+
+```bash
+bun run playwright --config playwright.storybook.config.ts
+```
+
+This command starts Storybook on port 6019. It needs Chromium, but does not need the application or backend.
+
 ## Writing Stories
 
 Stories are **co-located** next to their component source:

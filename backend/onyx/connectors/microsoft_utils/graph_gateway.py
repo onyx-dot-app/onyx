@@ -8,11 +8,13 @@ from onyx.connectors.microsoft_utils.graph_auth import (
     MicrosoftAuthContext,
     acquire_graph_token_response,
     build_graph_auth_context,
+    token_info,
 )
 from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
 from onyx.connectors.microsoft_utils.graph_errors import (
     microsoft_error_from_exception,
 )
+from onyx.connectors.microsoft_utils.models import MicrosoftTokenInfo
 
 
 class MicrosoftGraphAuthConfig(BaseModel):
@@ -65,6 +67,10 @@ class MicrosoftGraphGateway:
 
     def token_response(self) -> dict[str, Any]:
         return acquire_graph_token_response(self.auth_context, self.graph_api_host)
+
+    def token_info(self) -> MicrosoftTokenInfo:
+        """Signs in, and reads what the token tells about the app."""
+        return token_info(self.auth_context, self.token_response())
 
     def access_token(self) -> str:
         return str(self.token_response()["access_token"])

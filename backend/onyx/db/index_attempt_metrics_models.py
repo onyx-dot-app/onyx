@@ -10,9 +10,8 @@ stage timing aggregates) without creating a circular import.
 
 The ordering of `IndexAttemptStage` members is intentional and represents
 the natural temporal order of the pipeline (docfetching first, then
-docprocessing). Both the API ordering and the frontend "Pipeline order"
-sort rely on this ordering, so do not reorder members without updating
-those consumers.
+docprocessing). Both the API ordering and the frontend's stage list rely on
+this ordering, so do not reorder members without updating those consumers.
 """
 
 from enum import Enum as PyEnum
@@ -23,7 +22,7 @@ class IndexAttemptStage(str, PyEnum):
 
     Member declaration order matches the natural temporal order of the
     pipeline (docfetching first, then docprocessing). Both backend
-    serialization and frontend "Pipeline order" display rely on this.
+    serialization and the frontend's stage list rely on this.
     """
 
     # --- Docfetching (one process per attempt) ---

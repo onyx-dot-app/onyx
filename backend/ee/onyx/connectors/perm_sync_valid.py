@@ -5,6 +5,10 @@ from ee.onyx.external_permissions.linear.capability_checks import (
     build_linear_doc_permission_sync_checks,
     build_linear_group_sync_checks,
 )
+from ee.onyx.external_permissions.youtrack.capability_checks import (
+    build_youtrack_doc_permission_sync_checks,
+    build_youtrack_group_sync_checks,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.box.connector import BoxConnector
 from onyx.connectors.canvas.connector import CanvasConnector
@@ -13,11 +17,13 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CapabilityCheckResult,
     CapabilityCheckStatus,
+    CheckErrorKind,
 )
 from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
+    NothingToCheckError,
     UnexpectedValidationError,
 )
 from onyx.connectors.factory import identify_connector_class
@@ -39,7 +45,12 @@ from onyx.connectors.sharepoint.capability_checks import (
     build_sharepoint_group_sync_checks,
 )
 from onyx.connectors.sharepoint.connector import SharepointConnector
+from onyx.connectors.youtrack.config import YouTrackConnectorConfig
+from onyx.connectors.youtrack.connector import YouTrackConnector
 from onyx.connectors.zoom.connector import ZoomConnector
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 def validate_canvas_perm_sync(connector: CanvasConnector) -> None:
@@ -84,8 +95,9 @@ def validate_box_perm_sync(connector: BoxConnector) -> None:
 
 def validate_sharepoint_perm_sync(connector: SharepointConnector) -> None:
     """Runs the named checks the way the runner does, so a check whose
-    setting is off stays skipped. A failed or inconclusive required check
-    raises, the way the old probes did."""
+    setting is off stays skipped. A failed or incomplete required check
+    raises. An inconclusive sample does not: it keeps its report row, but
+    proves nothing wrong with the credential."""
     context: CapabilityCheckContext = CapabilityCheckContext(
         source=DocumentSource.SHAREPOINT,
         credential_json={},
@@ -113,8 +125,17 @@ def validate_sharepoint_perm_sync(connector: SharepointConnector) -> None:
             continue
         if result.status is CapabilityCheckStatus.FAILED:
             raise ConnectorValidationError(result.message)
-        if result.status is CapabilityCheckStatus.INDETERMINATE:
-            raise UnexpectedValidationError(result.message)
+        if result.status is not CapabilityCheckStatus.INCOMPLETE:
+            continue
+        if result.error_kind is CheckErrorKind.INCONCLUSIVE:
+            # A sample with no file to read, or one that went away.
+            logger.info(
+                "SharePoint check %s found nothing to test: %s",
+                result.check_id,
+                result.message,
+            )
+            continue
+        raise UnexpectedValidationError(result.message)
 
 
 def validate_onedrive_perm_sync(connector: OneDriveConnector) -> None:
@@ -151,6 +172,29 @@ def validate_linear_perm_sync(connector: LinearConnector) -> None:
         check.run(context)
 
 
+def validate_youtrack_perm_sync(connector: YouTrackConnector) -> None:
+    """Scheduled syncs validate through here, so a token that lost admin read
+    or Override Visibility Restrictions fails the sync instead of hiding every
+    restricted issue."""
+    context: CapabilityCheckContext = CapabilityCheckContext(
+        source=DocumentSource.YOUTRACK,
+        credential_json={},
+        connector=connector,
+        connector_specific_config=YouTrackConnectorConfig(
+            base_url=connector.base_url, projects=connector.projects
+        ).model_dump(mode="json"),
+        source_operations=connector.ops,
+    )
+    # Checks mirrored across both capabilities share an id and run once.
+    checks: dict[str, CapabilityCheck] = {
+        check.check_id: check
+        for check in build_youtrack_doc_permission_sync_checks()
+        + build_youtrack_group_sync_checks()
+    }
+    for check in checks.values():
+        check.run(context)
+
+
 def validate_zoom_perm_sync(connector: ZoomConnector) -> None:
     """
     Permission sync reads each recording's share settings, its registered
@@ -173,7 +217,11 @@ def validate_hubspot_perm_sync(connector: HubSpotConnector) -> None:
         source_operations=connector.ops,
     )
     for check in build_hubspot_doc_permission_sync_checks():
-        check.run(context)
+        try:
+            check.run(context)
+        except NothingToCheckError as e:
+            # A portal with no records has no viewers to sync yet.
+            logger.info("HubSpot check %s found nothing to test: %s", check.check_id, e)
 
 
 # The single source of truth for which connectors carry a real perm-sync probe:
@@ -190,6 +238,7 @@ _VALIDATOR_BY_CONNECTOR_CLASS: dict[type[BaseConnector], Callable[[Any], None]] 
     HubSpotConnector: validate_hubspot_perm_sync,
     OneDriveConnector: validate_onedrive_perm_sync,
     SharepointConnector: validate_sharepoint_perm_sync,
+    YouTrackConnector: validate_youtrack_perm_sync,
     ZoomConnector: validate_zoom_perm_sync,
 }
 

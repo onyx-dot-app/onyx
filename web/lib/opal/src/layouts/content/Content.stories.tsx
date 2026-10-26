@@ -36,6 +36,16 @@ export const XlSection: Story = {
   },
 };
 
+export const XlEditableAtRest: Story = {
+  args: {
+    sizePreset: "headline",
+    variant: "heading",
+    title: "Confluence - Policy knowledge base",
+    editable: true,
+    editButton: "rest",
+  },
+};
+
 // ---------------------------------------------------------------------------
 // LG stories (sizePreset: headline | section, variant: section)
 // ---------------------------------------------------------------------------

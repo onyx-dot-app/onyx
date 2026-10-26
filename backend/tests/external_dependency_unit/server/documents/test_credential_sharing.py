@@ -309,21 +309,35 @@ def test_scoped_owner_cannot_share_outside_their_groups(
 
 
 @pytest.mark.usefixtures("enable_ee")
-def test_admin_changes_sharing_of_an_admin_credential(
+def test_admins_cannot_edit_or_delete_an_admin_credential(
     env: _Env, db_session: Session
 ) -> None:
     credential = _credential(db_session, env.owner, admin_public=True)
 
-    snapshot = update_credential_sharing_endpoint(
-        credential.id,
-        CredentialSharing(admin_public=True, groups=[env.other_group.id]),
-        user=env.admin,
-        db_session=db_session,
+    assert (
+        update_credential(
+            credential.id,
+            CredentialBase(
+                credential_json={"token": "rotated"},
+                admin_public=True,
+                source=_SOURCE,
+            ),
+            env.admin,
+            db_session,
+        )
+        is None
     )
-
-    assert snapshot.groups == [env.other_group.id]
-    # The owner stays the owner.
-    assert snapshot.user_id == env.owner.id
+    with pytest.raises(OnyxError) as exc:
+        delete_credential_for_user(credential.id, env.admin, db_session)
+    assert exc.value.error_code is OnyxErrorCode.CREDENTIAL_NOT_FOUND
+    with pytest.raises(OnyxError) as exc:
+        update_credential_sharing_endpoint(
+            credential.id,
+            CredentialSharing(admin_public=True, groups=[env.other_group.id]),
+            user=env.admin,
+            db_session=db_session,
+        )
+    assert exc.value.error_code is OnyxErrorCode.CREDENTIAL_NOT_FOUND
 
 
 @pytest.mark.usefixtures("enable_ee")
@@ -334,7 +348,7 @@ def test_unknown_group_is_rejected(env: _Env, db_session: Session) -> None:
         update_credential_sharing_endpoint(
             credential.id,
             CredentialSharing(admin_public=True, groups=[-1]),
-            user=env.admin,
+            user=env.owner,
             db_session=db_session,
         )
     assert exc.value.error_code is OnyxErrorCode.INVALID_INPUT
@@ -348,7 +362,7 @@ def test_community_edition_rejects_groups(env: _Env, db_session: Session) -> Non
         update_credential_sharing_endpoint(
             credential.id,
             CredentialSharing(admin_public=True, groups=[env.group.id]),
-            user=env.admin,
+            user=env.owner,
             db_session=db_session,
         )
     assert exc.value.error_code is OnyxErrorCode.FEATURE_NOT_AVAILABLE
@@ -376,7 +390,7 @@ def test_update_keeps_the_owner(env: _Env, db_session: Session) -> None:
             admin_public=True,
             source=_SOURCE,
         ),
-        env.admin,
+        env.owner,
         db_session,
     )
 
@@ -471,20 +485,21 @@ def test_pair_views_mask_a_credential_the_reader_cannot_edit(
         db_session.commit()
         pairs.append(pair)
     try:
-        # The admin reads every pair, but can edit only the admin credential.
+        # The admin reads every pair, but edits neither credential: only its
+        # owner may.
         full_infos = [
             get_cc_pair_full_info(pair.id, user=env.admin, db_session=db_session)
             for pair in pairs
         ]
         assert full_infos[0].credential.credential_json["token"] != _SECRET
-        assert full_infos[1].credential.credential_json["token"] == _SECRET
+        assert full_infos[1].credential.credential_json["token"] != _SECRET
 
         statuses = {
             status.cc_pair_id: status.credential.credential_json.get("token")
             for status in get_connector_status(user=env.admin, db_session=db_session)
         }
         assert statuses[pairs[0].id] != _SECRET
-        assert statuses[pairs[1].id] == _SECRET
+        assert statuses[pairs[1].id] != _SECRET
     finally:
         for pair in pairs:
             connector_id = pair.connector_id

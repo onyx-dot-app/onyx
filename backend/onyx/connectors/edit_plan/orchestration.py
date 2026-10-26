@@ -3,7 +3,7 @@ plan and stores it. Writes nothing except the plan store, and the credential
 that the validation's connector construction can refresh and store."""
 
 from datetime import datetime, timezone
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pydantic
 from sqlalchemy.orm import Session
@@ -55,6 +55,7 @@ def _validate_proposed_state(
     current: CurrentPairState,
     proposed: ProposedPairState,
     credential: Credential,
+    user_id: UUID,
 ) -> ProposedPairingValidation | None:
     """The blocking validation, run only when something it checks changed."""
     if (
@@ -72,6 +73,7 @@ def _validate_proposed_state(
         connector_specific_config=proposed.connector_specific_config,
         credential=credential,
         access_type=proposed.access_type,
+        user_id=user_id,
     )
 
 
@@ -144,7 +146,9 @@ def plan_connector_edit(
     credential = fetch_proposed_credential(
         db_session, user=user, current=current, proposed=proposed
     )
-    validation = _validate_proposed_state(db_session, current, proposed, credential)
+    validation = _validate_proposed_state(
+        db_session, current, proposed, credential, user.id
+    )
     dry_run_results = (
         get_cc_pair_dry_run_results(
             cc_pair_id=cc_pair_id,
@@ -152,6 +156,7 @@ def plan_connector_edit(
             source=current.source,
             access_type=proposed.access_type,
             connector_specific_config=proposed.connector_specific_config,
+            user_id=user.id,
         )
         if current.source in CONNECTOR_CLASS_MAP
         else []
@@ -213,6 +218,7 @@ def with_latest_dry_run_results(
         source=proposed.source,
         access_type=proposed.access_type,
         connector_specific_config=proposed.connector_specific_config,
+        user_id=stored.user_id,
     )
     return stored.model_copy(
         update={"plan": stored.plan.model_copy(update={"dry_run_results": results})}

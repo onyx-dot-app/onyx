@@ -10,7 +10,7 @@ from mitmproxy.options import Options
 from mitmproxy.tools.dump import DumpMaster
 
 from onyx.sandbox_proxy import server
-from onyx.sandbox_proxy.destination_policy import is_destination_blocked
+from onyx.sandbox_proxy.destination_policy import resolve_destination
 from onyx.sandbox_proxy.models import DestinationPolicyConfig
 from tests.unit.sandbox_proxy.conftest import wait_for_proxy_listener
 
@@ -128,5 +128,5 @@ def test_startup_uses_internal_cidrs(monkeypatch: pytest.MonkeyPatch) -> None:
         server, "SANDBOX_PROXY_INTERNAL_CIDRS", " 2600:ffff::/32 ,10.0.0.0/8"
     )
     policy: DestinationPolicyConfig = server._build_destination_policy()
-    assert is_destination_blocked(policy, "2600:ffff::1", 443)
-    assert not is_destination_blocked(policy, "2606:4700:4700::1111", 443)
+    assert resolve_destination(policy, "2600:ffff::1", 443) is None
+    assert resolve_destination(policy, "2606:4700:4700::1111", 443) is not None
