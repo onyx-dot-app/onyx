@@ -75,6 +75,11 @@ def _collect_tool_history(
     citations.update_citation_mapping(initial_citations or {})
     for step_index, step in enumerate(snapshot.steps):
         message = step.message
+        documents.update(message_documents(message.metadata))
+        if isinstance(message.metadata, (ChatMessageMetadata, ResearchMessageMetadata)):
+            citations.update_citation_mapping(
+                message.metadata.sources, update_duplicate_keys=True
+            )
         for index, call in enumerate(message.tool_calls):
             tool_id = tool_ids.get(call.name)
             if tool_id is None:

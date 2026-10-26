@@ -9,7 +9,7 @@ from onyx.tools.models import ChatFile
 class TestChatFileConversion:
     """Tests for ChatLoadedFile to ChatFile conversion."""
 
-    def testconvert_loaded_files_to_chat_files(self) -> None:
+    def test_convert_loaded_files_to_chat_files(self) -> None:
         """Test conversion of ChatLoadedFile to ChatFile."""
         from onyx.chat.files import convert_loaded_files_to_chat_files
         from onyx.chat.prompt_formatting import ChatLoadedFile
