@@ -35,12 +35,12 @@ from onyx.chat.compression import (
 )
 from onyx.chat.emitter import Emitter
 from onyx.chat.files import (
-    _collect_available_file_ids,
-    _convert_loaded_files_to_chat_files,
-    _load_context_user_files_for_tools,
+    collect_available_file_ids,
+    convert_loaded_files_to_chat_files,
     determine_search_params,
     extract_context_files,
     load_all_chat_files,
+    load_context_user_files_for_tools,
     resolve_context_user_files,
 )
 from onyx.chat.incognito import (
@@ -427,7 +427,7 @@ def build_chat_turn(
     # Collect file IDs for the file reader tool *before* summary truncation so
     # that files attached to older (summarized-away) messages are still accessible
     # via the FileReaderTool.
-    available_files = _collect_available_file_ids(
+    available_files = collect_available_file_ids(
         chat_history=chat_history,
         context_user_files=context_user_files,
     )
@@ -545,9 +545,9 @@ def build_chat_turn(
     # Load all files needed for this chat chain into memory.
     files = load_all_chat_files(chat_history, db_session)
     # Convert loaded files to ChatFile format for tools like PythonTool
-    chat_files_for_tools = _convert_loaded_files_to_chat_files(files)
+    chat_files_for_tools = convert_loaded_files_to_chat_files(files)
     chat_files_for_tools.extend(
-        _load_context_user_files_for_tools(
+        load_context_user_files_for_tools(
             context_user_files,
             {chat_file.filename for chat_file in chat_files_for_tools},
         )

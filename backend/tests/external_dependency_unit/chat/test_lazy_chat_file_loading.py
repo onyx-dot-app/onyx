@@ -439,7 +439,7 @@ class TestLoadAllChatFilesLazy:
 
 
 class TestConvertLoadedFilesToChatFilesLazy:
-    """``_convert_loaded_files_to_chat_files`` must produce lazy ChatFiles —
+    """``convert_loaded_files_to_chat_files`` must produce lazy ChatFiles —
     it must not call ``len(loaded_file.content) > 0`` style guards that
     would defeat the lazy fix."""
 
@@ -448,7 +448,7 @@ class TestConvertLoadedFilesToChatFilesLazy:
         read_counter: _ReadCounter,
         file_cleanup: list[str],
     ) -> None:
-        from onyx.chat.files import _convert_loaded_files_to_chat_files
+        from onyx.chat.files import convert_loaded_files_to_chat_files
 
         file_id = _write_file(b"some-bytes", file_type="image/png")
         file_cleanup.append(file_id)
@@ -461,7 +461,7 @@ class TestConvertLoadedFilesToChatFilesLazy:
         ]
 
         baseline = read_counter.count
-        chat_files = _convert_loaded_files_to_chat_files(loaded)
+        chat_files = convert_loaded_files_to_chat_files(loaded)
         assert len(chat_files) == 1
         # Wrapping must not have materialized anything.
         assert read_counter.count == baseline

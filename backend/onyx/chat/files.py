@@ -51,7 +51,7 @@ logger = setup_logger()
 APPROX_CHARS_PER_TOKEN = 4
 
 
-def _collect_available_file_ids(
+def collect_available_file_ids(
     chat_history: list[ChatMessage],
     context_user_files: list[UserFile],
 ) -> AvailableFiles:
@@ -80,7 +80,7 @@ def _collect_available_file_ids(
     )
 
 
-def _convert_loaded_files_to_chat_files(
+def convert_loaded_files_to_chat_files(
     loaded_files: list[ChatLoadedFile],
 ) -> list[ChatFile]:
     """Convert ChatLoadedFile objects to ChatFile for tool usage (e.g., PythonTool).
@@ -119,7 +119,7 @@ def _deduped_filename(filename: str, seen_filenames: set[str], file_id: str) -> 
     return deduped_filename
 
 
-def _load_context_user_files_for_tools(
+def load_context_user_files_for_tools(
     user_files: list[UserFile],
     existing_filenames: set[str],
 ) -> list[ChatFile]:
@@ -381,7 +381,7 @@ def _build_tool_metadata(user_file: UserFileMetadata) -> FileToolMetadata:
         file_type=file_type,
         approx_char_count=(user_file.token_count or 0) * APPROX_CHARS_PER_TOKEN,
     ).tool_metadata
-    # `_load_context_user_files_for_tools` only loads metadata-only files into
+    # `load_context_user_files_for_tools` only loads metadata-only files into
     # `chat_files_for_tools`, so those are the only context files PythonTool
     # ever receives. The rest are listed for the LLM but never staged — only
     # read_file can fetch them.

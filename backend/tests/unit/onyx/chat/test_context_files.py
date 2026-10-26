@@ -12,7 +12,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from onyx.chat.files import (
-    _collect_available_file_ids,
+    collect_available_file_ids,
     determine_search_params,
     extract_context_files,
     resolve_context_user_files,
@@ -132,7 +132,7 @@ class TestResolveContextUserFiles:
                 persona, 99, uuid4(), MagicMock()
             )
         assert selected == [shared_file, persona_file]
-        available: AvailableFiles = _collect_available_file_ids(history, selected)
+        available: AvailableFiles = collect_available_file_ids(history, selected)
         assert set(available.user_file_ids) == {shared_file.id, persona_file.id}
         assert available.chat_file_ids == [attachment_id]
 
@@ -635,7 +635,7 @@ class TestSearchFilterDetermination:
 class TestContextFileStagingFlag:
     """`staged_for_tools` must mirror what actually reaches PythonTool.
 
-    `_load_context_user_files_for_tools` loads only metadata-only files into
+    `load_context_user_files_for_tools` loads only metadata-only files into
     `chat_files_for_tools`, so everything else is listed for the LLM but never
     staged. The out-of-context file notice reads this flag to decide whether it
     may name the python tool; getting it wrong sends the model after bytes the

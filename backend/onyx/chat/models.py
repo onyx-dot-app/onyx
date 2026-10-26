@@ -5,6 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from onyx.agents.models import CompactionMetadata
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import (
@@ -22,6 +23,16 @@ from onyx.server.query_and_chat.streaming_models import (
 )
 from onyx.tools.models import SearchToolUsage, ToolCallKickoff
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
+
+
+class PromptMetadata(CompactionMetadata):
+    token_count: int | None = None
+    image_files: list[ChatLoadedFile] | None = None
+    image_token_count: int = 0
+    should_cache: bool = False
+    file_id: str | None = None
+    is_reminder: bool = False
+    omit_tool_result_content: bool = False
 
 
 class HistoryImageReplay(BaseModel):

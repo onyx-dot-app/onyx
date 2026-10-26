@@ -627,3 +627,8 @@ cd backend && uv run pytest tests/integration -k chat
   actual tool set for the turn is known. It will overshoot the real prompt size
   on any turn that does not use every tool; this is intentional slack, not a
   bug to tighten.
+
+
+Shared file preparation uses public helpers in `chat/files.py`. Prompt formatting
+imports `PromptMetadata` from `chat/models.py`, so callers share the data type
+without importing the formatter to access its definition.
