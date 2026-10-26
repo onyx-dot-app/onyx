@@ -5,6 +5,7 @@ checkpointed walking, filtering, slim-document generation for pruning and
 re-resolution of failed documents.
 """
 
+import os
 import time
 import unicodedata
 from collections.abc import Generator
@@ -491,4 +492,52 @@ def test_produced_failure_keeps_raw_path_for_reindex(source_root: Path) -> None:
     assert (
         retried[0].failed_document.document_id
         == failures[0].failed_document.document_id
+    )
+
+
+def test_intermediate_symlink_swap_yields_failure_not_document(
+    source_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression for the CodeRabbit TOCTOU finding (CWE-367).
+
+    O_NOFOLLOW in no_follow_opener only protects the final path component:
+    if an intermediate directory is swapped for a symlink pointing outside
+    the root in the gap between _absolute_path() validation and open(),
+    the kernel follows it and a file outside the root would be indexed.
+
+    The swap is staged inside a patched os.path.realpath -- right where
+    _absolute_path() resolves the path -- which makes the race
+    deterministic instead of timing-dependent. The file must surface as a
+    ConnectorFailure (like any other read failure), never as a Document.
+    """
+    sub = source_root / "sub"
+    sub.mkdir()
+    (sub / "file.txt").write_text("harmless")
+    outside = source_root.parent / "outside"
+    outside.mkdir()
+    # Same name, different content: after the swap the validated path
+    # root/sub/file.txt resolves through the symlink to this outside file.
+    (outside / "file.txt").write_text("secret from outside the root")
+
+    connector = _make_connector(source_root)
+    real_realpath = os.path.realpath
+    validated = real_realpath(sub / "file.txt")
+
+    def realpath_with_swap(path: str, *args: Any, **kwargs: Any) -> str:
+        resolved = real_realpath(path, *args, **kwargs)
+        if resolved == validated:
+            # Attacker wins the race: replace the validated intermediate
+            # directory with a symlink to outside the root.
+            os.rename(sub, source_root / "sub.bak")
+            os.symlink(str(outside), str(sub))
+        return resolved
+
+    monkeypatch.setattr(os.path, "realpath", realpath_with_swap, raising=True)
+
+    result = connector._process_path(
+        "sub/file.txt", start=None, end=None, apply_time_window=False
+    )
+
+    assert isinstance(result, ConnectorFailure), (
+        f"expected ConnectorFailure, got {type(result).__name__}: {result!r}"
     )

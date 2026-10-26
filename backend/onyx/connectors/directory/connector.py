@@ -370,7 +370,26 @@ class DirectoryConnector(
         source_link = self._source_link(normalized)
 
         def no_follow_opener(path: str, flags: int) -> int:
-            return os.open(path, flags | os.O_NOFOLLOW)
+            fd = os.open(path, flags | os.O_NOFOLLOW)
+            # O_NOFOLLOW only protects the final path component: an
+            # intermediate directory swapped for a symlink between
+            # _absolute_path() validation and this open is still followed by
+            # the kernel (CWE-367). Verify the path the open actually
+            # resolved against the validated one and reject the file on
+            # mismatch (surfaces like any other read failure).
+            try:
+                resolved = os.readlink(f"/proc/self/fd/{fd}")
+            except OSError:
+                # No procfs (non-Linux): best effort, O_NOFOLLOW still
+                # guards the leaf component.
+                return fd
+            if resolved != absolute_path:
+                os.close(fd)
+                raise OSError(
+                    f"Directory file {path!r} was resolved to {resolved!r} "
+                    "outside the validated path; refusing to index it."
+                )
+            return fd
 
         try:
             with open(absolute_path, "rb", opener=no_follow_opener) as file_handle:
