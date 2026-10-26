@@ -20,7 +20,6 @@ from onyx.agents.events import (
 from onyx.agents.execution_records import RunStatus
 from onyx.agents.models import ToolCallContext
 from onyx.agents.runtime import Agent, RunFailed
-from onyx.agents.tool_execution import ToolBatch
 from onyx.agents.tools import AgentTool, ToolInvocation, ToolProgress
 from onyx.context.search.models import SearchDocsResponse
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
@@ -257,14 +256,8 @@ def test_child_thread_start_failure_rolls_back_registration(
     assert runtime.start_thread_with_context is original
 
 
-def test_terminal_snapshot_rejects_late_tool_result(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    tool_entered, release_tool, recorded = (
-        threading.Event(),
-        threading.Event(),
-        threading.Event(),
-    )
+def test_terminal_snapshot_rejects_late_tool_result() -> None:
+    tool_entered, release_tool = threading.Event(), threading.Event()
 
     def late(_invocation: ToolInvocation) -> ToolResult:
         tool_entered.set()
@@ -298,26 +291,13 @@ def test_terminal_snapshot_rejects_late_tool_result(
         ],
     )
     agent.before_tool_call = before_call
-    original_record = ToolBatch._record_tool_result
-
-    def record_result(
-        execution: ToolBatch,
-        result: ToolResult,
-        call: ToolCall,
-    ) -> None:
-        try:
-            original_record(execution, result, call)
-        finally:
-            recorded.set()
-
-    monkeypatch.setattr(ToolBatch, "_record_tool_result", record_result)
     run = agent.start(max_steps=1)
     try:
         with pytest.raises(RunFailed):
             run.result(3)
         terminal = run.snapshot()
         release_tool.set()
-        assert recorded.wait(3)
+        assert run.wait_for_idle(3)
         assert run.snapshot() == terminal
     finally:
         release_tool.set()
