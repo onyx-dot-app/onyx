@@ -104,7 +104,6 @@ export default function BillingPage() {
   const [showLicenseActivationInput, setShowLicenseActivationInput] =
     useState(false);
   const [licenseCardAutoOpened, setLicenseCardAutoOpened] = useState(false);
-  const [viewChangeId, setViewChangeId] = useState(0);
   const [isActivating, setIsActivating] = useState<boolean>(false);
 
   const {
@@ -419,10 +418,8 @@ export default function BillingPage() {
 
   const viewConfig = getViewConfig();
 
-  // A new view id remounts the view, so it animates in.
   const changeView = (newView: "plans" | "details" | "checkout") => {
     if (newView === view) return;
-    setViewChangeId((id) => id + 1);
     setView(newView);
   };
 
@@ -474,7 +471,7 @@ export default function BillingPage() {
       ),
     };
 
-    return <Enter key={viewChangeId}>{views[view]}</Enter>;
+    return <div className="w-full">{views[view]}</div>;
   };
 
   // Render footer
