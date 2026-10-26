@@ -168,7 +168,6 @@ def fetch_chat_sessions_eagerly_by_time(
     # token counts and no message content, and every mode meters usage.
     filters: list[ColumnElement | BinaryExpression] = [
         ChatSession.time_created.between(start, end),
-        ChatSession.spawned_by_message_id.is_(None),
     ]
 
     if initial_time:

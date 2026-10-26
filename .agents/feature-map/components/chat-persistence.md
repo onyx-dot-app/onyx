@@ -344,6 +344,8 @@ item stores one model generation, including thinking blocks and provider metadat
 `ToolCall.result` stores the actual tool result and typed application details.
 Readers rebuild model history from these records in step and tool-call order.
 The existing production loop still uses `chat/save_chat.py` and its legacy rows.
+Both writers use `db/chat_display.py` for recording policy, token counts, source
+links, citations, and referenced files. Their tool-record writes remain separate.
 These APIs prepare the runtime transition; they do not switch chat execution.
 
 `db/chat_subagents.py` loads child history from the selected conversation branch.
@@ -351,6 +353,8 @@ A child session belongs to the root conversation that created it. Public chat
 lists, search, message reads, and admin history exclude child sessions. Deleting
 a root removes its descendants and files. Retention considers descendant activity.
 Child discovery rejects unrelated branches and bounds traversal and payload size.
+Usage exports include child prompts and retain the root user, persona, and flow
+attribution. Excluding children from content-history views does not exclude their usage.
 
 The canonical writer enforces the session's recording policy. Content-free sessions
 retain status and usage without response items, tool results, or child content.

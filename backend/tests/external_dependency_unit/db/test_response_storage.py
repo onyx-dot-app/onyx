@@ -2,6 +2,7 @@
 
 from collections.abc import Generator
 from contextlib import nullcontext
+from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 import pytest
@@ -10,6 +11,8 @@ from sqlalchemy import delete, event, func, inspect, select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.unitofwork import UOWTransaction
 
+from ee.onyx.db.usage_export import get_empty_chat_messages_entries__paginated
+from ee.onyx.server.reporting.usage_export_models import FlowType
 from onyx.agents.models import (
     AgentInfo,
     CompactionCheckpoint,
@@ -22,6 +25,7 @@ from onyx.agents.models import (
     ToolExecutionRecord,
     messages_from_steps,
 )
+from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.presentation import project_response, replay_response
 from onyx.chat.response_models import (
     ChatResponseSnapshot,
@@ -59,7 +63,7 @@ from onyx.db.chat_subagents import (
     lookup_session_agent,
 )
 from onyx.db.enums import IncognitoRecordMode
-from onyx.db.models import ChatMessage, ChatResponseItem, ChatSession, Tool
+from onyx.db.models import ChatMessage, ChatResponseItem, ChatSession, Tool, User
 from onyx.db.models import SearchDoc as StoredSearchDoc
 from onyx.db.models import ToolCall as StoredToolCall
 from onyx.llm.models import (
@@ -1796,3 +1800,83 @@ def test_content_free_sessions_reject_incremental_content_writes(
     assert not response.tool_calls
     assert response.response_status is None
     assert db_session.get(ChatSession, child_id) is None
+
+
+def test_legacy_save_preserves_distinct_document_version_keys(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    response = _response(db_session, conversation)
+    documents = [
+        SearchDoc(
+            document_id="same-document",
+            chunk_ind=index,
+            semantic_identifier="Guide",
+            blurb=f"Part {index}",
+            source_type=DocumentSource.WEB,
+            boost=1,
+            hidden=False,
+            metadata={},
+            match_highlights=[f"<hi>{index}</hi>"],
+        )
+        for index in range(2)
+    ]
+    save_legacy_chat_turn(
+        message_text="Answer",
+        reasoning_tokens=None,
+        tool_calls=[],
+        citation_to_doc={},
+        all_search_docs={
+            ChatStateContainer.create_search_doc_key(doc, use_simple_key=False): doc
+            for doc in documents
+        },
+        db_session=db_session,
+        assistant_message=response,
+    )
+    db_session.expire_all()
+    assert {
+        (doc.chunk_ind, tuple(doc.match_highlights or []))
+        for doc in response.search_docs or []
+    } == {(doc.chunk_ind, tuple(doc.match_highlights)) for doc in documents}
+
+
+def test_child_usage_is_reported_with_root_attribution(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    user = User(
+        id=uuid4(), email=f"usage-{uuid4()}@example.com", hashed_password="unused"
+    )
+    db_session.add(user)
+    db_session.flush()
+    conversation.user_id = user.id
+    conversation.onyxbot_flow = True
+    root = _response(db_session, conversation)
+    record = _record(root)
+    child = _child_record(db_session, record, uuid4(), "Child answer")
+    _save(db_session, root, record)
+    db_session.commit()
+    try:
+        child_session = db_session.get(ChatSession, UUID(child.agent_id or ""))
+        assert child_session is not None
+        assert child_session.user_id == user.id
+        assert child_session.persona_id == conversation.persona_id
+        assert child_session.onyxbot_flow is True
+        _, entries = get_empty_chat_messages_entries__paginated(
+            db_session,
+            (
+                datetime.now(timezone.utc) - timedelta(days=1),
+                datetime.now(timezone.utc) + timedelta(days=1),
+            ),
+            limit=None,
+        )
+        child_entries = [
+            entry for entry in entries if entry.chat_session_id == child_session.id
+        ]
+        assert len(child_entries) == 1
+        assert child_entries[0].user_id == str(user.id)
+        assert child_entries[0].user_email == user.email
+        assert child_entries[0].flow_type == FlowType.SLACK
+        assert child_entries[0].number_of_tokens > 0
+    finally:
+        db_session.rollback()
+        db_session.delete(user)
+        db_session.commit()

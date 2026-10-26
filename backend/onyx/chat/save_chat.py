@@ -4,49 +4,18 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from onyx.chat.chat_state import ChatStateContainer, SearchDocKey
-from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import (
-    add_search_docs_to_chat_message,
     add_search_docs_to_tool_call,
-    create_db_search_doc,
 )
+from onyx.db.chat_display import save_chat_display__no_commit
 from onyx.db.models import ChatMessage, ToolCall
 from onyx.db.tools import create_tool_call_no_commit
-from onyx.file_processing.file_types import guess_mime_type
-from onyx.file_store.models import FileDescriptor
 from onyx.natural_language_processing.utils import BaseTokenizer, get_tokenizer
-from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.tools.records import ToolCallInfo
 from onyx.utils.logger import setup_logger
-from onyx.utils.postgres_sanitization import sanitize_string
 
 logger = setup_logger()
-
-
-def _extract_referenced_file_descriptors(
-    tool_calls: list[ToolCallInfo],
-    message_text: str,
-) -> list[FileDescriptor]:
-    """Extract FileDescriptors for code interpreter files referenced in the message text."""
-    descriptors: list[FileDescriptor] = []
-    for tool_call_info in tool_calls:
-        if not tool_call_info.generated_files:
-            continue
-        for gen_file in tool_call_info.generated_files:
-            file_id = (
-                gen_file.file_link.rsplit("/", 1)[-1] if gen_file.file_link else ""
-            )
-            if file_id and file_id in message_text:
-                mime_type = guess_mime_type(gen_file.filename)
-                descriptors.append(
-                    FileDescriptor(
-                        id=file_id,
-                        type=mime_type_to_chat_file_type(mime_type),
-                        name=gen_file.filename,
-                    )
-                )
-    return descriptors
 
 
 def _create_and_link_tool_calls(
@@ -180,185 +149,33 @@ def save_chat_turn(
     persist_content: bool = True,
     request_params: dict[str, Any] | None = None,
 ) -> None:
-    """
-    Save a chat turn by populating the assistant_message and creating related entities.
-
-    This function:
-    1. Updates the ChatMessage with text, reasoning tokens, and token count
-    2. Creates DB SearchDoc entries from pre-deduplicated all_search_docs
-    3. Builds tool_call -> search_doc mapping for displayed docs
-    4. Builds citation mapping from citation_to_doc
-    5. Links all unique SearchDocs to the ChatMessage
-    6. Creates ToolCall entries and links SearchDocs to them
-    7. Builds the citations mapping for the ChatMessage
-
-    Args:
-        message_text: The message content to save
-        reasoning_tokens: Optional reasoning tokens for the message
-        tool_calls: List of tool call information to create ToolCall entries (may include search_docs)
-        citation_to_doc: Mapping from citation number to SearchDoc for building citations
-        all_search_docs: Pre-deduplicated search docs from ChatStateContainer
-        db_session: Database session for persistence
-        assistant_message: The ChatMessage object to populate (should already exist in DB)
-        is_clarification: Whether this assistant message is a clarification question (deep research flow)
-        emitted_citations: Set of citation numbers that were actually emitted during streaming.
-            If provided, only citations in this set will be saved; others are filtered out.
-        pre_answer_processing_time: Duration of processing before answer starts (in seconds)
-    """
-    # 1. Update ChatMessage with message content, reasoning tokens, and token count
-    sanitized_message_text = (
-        sanitize_string(message_text) if message_text else message_text
-    )
-    # A content-free turn keeps the row and its token count, which comes from
-    # the real answer, but none of the conversation-derived parts.
-    if persist_content:
-        assistant_message.message = sanitized_message_text
-        assistant_message.reasoning_tokens = (
-            sanitize_string(reasoning_tokens) if reasoning_tokens else reasoning_tokens
-        )
-    else:
-        assistant_message.message = ""
-        assistant_message.reasoning_tokens = None
-        tool_calls = []
-        citation_to_doc = {}
-        all_search_docs = {}
-        emitted_citations = set()
-    assistant_message.is_clarification = is_clarification
-    # Attribution, not content, so incognito keeps it.
-    assistant_message.request_params = request_params
-
-    # Use pre-answer processing time (captured when MESSAGE_START was emitted)
-    if pre_answer_processing_time is not None:
-        assistant_message.processing_duration_seconds = pre_answer_processing_time
-
-    # Calculate token count using default tokenizer, when storing, this should not use the LLM
-    # specific one so we use a system default tokenizer here.
-    default_tokenizer = get_tokenizer(None, None)
-    if sanitized_message_text:
-        assistant_message.token_count = len(
-            default_tokenizer.encode(sanitized_message_text)
-        )
-    else:
-        assistant_message.token_count = 0
-
-    # 2. Create DB SearchDoc entries from pre-deduplicated all_search_docs
-    search_doc_key_to_id: dict[SearchDocKey, int] = {}
-    for key, search_doc_py in all_search_docs.items():
-        db_search_doc = create_db_search_doc(
-            server_search_doc=search_doc_py,
-            db_session=db_session,
-            commit=False,
-        )
-        search_doc_key_to_id[key] = db_search_doc.id
-
-    # 3. Build tool_call -> search_doc mapping (for displayed docs in each tool call)
-    tool_call_to_search_doc_ids: dict[str, list[int]] = {}
-    for tool_call_info in tool_calls:
-        if tool_call_info.search_docs:
-            search_doc_ids_for_tool: list[int] = []
-            for search_doc_py in tool_call_info.search_docs:
-                key = ChatStateContainer.create_search_doc_key(search_doc_py)
-                if key in search_doc_key_to_id:
-                    search_doc_ids_for_tool.append(search_doc_key_to_id[key])
-                else:
-                    # Displayed doc not in all_search_docs - create it
-                    # This can happen if displayed_docs contains docs not in search_docs
-                    db_search_doc = create_db_search_doc(
-                        server_search_doc=search_doc_py,
-                        db_session=db_session,
-                        commit=False,
-                    )
-                    search_doc_key_to_id[key] = db_search_doc.id
-                    search_doc_ids_for_tool.append(db_search_doc.id)
-            tool_call_to_search_doc_ids[tool_call_info.tool_call_id] = list(
-                set(search_doc_ids_for_tool)
-            )
-
-    # Collect all search doc IDs for ChatMessage linking
-    all_search_doc_ids_set: set[int] = set(search_doc_key_to_id.values())
-
-    # 4. Build a citation mapping from the citation number to the saved DB SearchDoc ID
-    # Only include citations that were actually emitted during streaming
-    citation_number_to_search_doc_id: dict[int, int] = {}
-
-    for citation_num, search_doc_py in citation_to_doc.items():
-        # Skip citations that weren't actually emitted (if emitted_citations is provided)
-        if emitted_citations is not None and citation_num not in emitted_citations:
-            continue
-
-        # Create the unique key for this SearchDoc version
-        search_doc_key = ChatStateContainer.create_search_doc_key(search_doc_py)
-
-        # Get the search doc ID (should already exist from processing tool_calls)
-        if search_doc_key in search_doc_key_to_id:
-            db_search_doc_id = search_doc_key_to_id[search_doc_key]
-        else:
-            # Citation doc not found in tool call search_docs
-            # Expected case: Project files (source_type=FILE) are cited but don't come from tool calls
-            # Unexpected case: Other citation-only docs (indicates a potential issue upstream)
-            is_project_file = search_doc_py.source_type == DocumentSource.FILE
-
-            if is_project_file:
-                logger.info(
-                    "Project file citation %s not in tool calls, creating it",
-                    search_doc_py.document_id,
-                )
-            else:
-                logger.warning(
-                    "Citation doc %s not found in tool call search_docs, creating it",
-                    search_doc_py.document_id,
-                )
-
-            # Create the SearchDoc in the database
-            # NOTE: It's important that this maps to the saved DB Document ID, because
-            # the match-highlights are specific to this saved version, not any document that has
-            # the same document_id.
-            db_search_doc = create_db_search_doc(
-                server_search_doc=search_doc_py,
-                db_session=db_session,
-                commit=False,
-            )
-            db_search_doc_id = db_search_doc.id
-            search_doc_key_to_id[search_doc_key] = db_search_doc_id
-
-            # Link project files to ChatMessage to enable frontend preview
-            if is_project_file:
-                all_search_doc_ids_set.add(db_search_doc_id)
-
-        # Build mapping from citation number to search doc ID
-        citation_number_to_search_doc_id[citation_num] = db_search_doc_id
-
-    # 5. Link all unique SearchDocs (from both tool calls and citations) to ChatMessage
-    final_search_doc_ids: list[int] = list(all_search_doc_ids_set)
-    if final_search_doc_ids:
-        add_search_docs_to_chat_message(
-            chat_message_id=assistant_message.id,
-            search_doc_ids=final_search_doc_ids,
-            db_session=db_session,
-        )
-
-    # 6. Create ToolCall entries and link SearchDocs to them
-    _create_and_link_tool_calls(
+    """Save displayed content and legacy tool rows in one transaction."""
+    tokenizer = get_tokenizer(None, None)
+    tool_sources = save_chat_display__no_commit(
+        message_text=message_text,
+        reasoning_tokens=reasoning_tokens,
         tool_calls=tool_calls,
-        assistant_message=assistant_message,
+        citation_to_doc=citation_to_doc,
+        all_search_docs=all_search_docs,
+        document_key=ChatStateContainer.create_search_doc_key,
         db_session=db_session,
-        default_tokenizer=default_tokenizer,
-        tool_call_to_search_doc_ids=tool_call_to_search_doc_ids,
+        assistant_message=assistant_message,
+        tokenizer=tokenizer,
+        is_clarification=is_clarification,
+        emitted_citations=emitted_citations,
+        pre_answer_processing_time=pre_answer_processing_time,
+        persist_content=persist_content,
+        request_params=request_params,
     )
-
-    # 7. Build citations mapping - use the mapping we already built in step 4
-    assistant_message.citations = citation_number_to_search_doc_id or None
-
-    # 8. Attach code interpreter generated files that the assistant actually
-    # referenced in its response, so they are available via load_all_chat_files
-    # on subsequent turns. Files not mentioned are intermediate artifacts.
-    if sanitized_message_text:
-        referenced = _extract_referenced_file_descriptors(
-            tool_calls, sanitized_message_text
+    if persist_content:
+        _create_and_link_tool_calls(
+            tool_calls=tool_calls,
+            assistant_message=assistant_message,
+            db_session=db_session,
+            default_tokenizer=tokenizer,
+            tool_call_to_search_doc_ids={
+                info.tool_call_id: sources
+                for info, sources in zip(tool_calls, tool_sources, strict=True)
+            },
         )
-        if referenced:
-            existing_files = assistant_message.files or []
-            assistant_message.files = existing_files + referenced
-
-    # Finally save the messages, tool calls, and docs
     db_session.commit()
