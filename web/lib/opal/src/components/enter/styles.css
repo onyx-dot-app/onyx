@@ -15,8 +15,9 @@
   animation: opal-enter-fade-up 0.25s ease-out;
 }
 
+/* Same selector as the variant rule, so this override wins on specificity. */
 @media (prefers-reduced-motion: reduce) {
-  .opal-enter {
+  .opal-enter[data-enter-variant] {
     animation: none;
   }
 }

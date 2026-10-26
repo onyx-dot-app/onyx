@@ -13,9 +13,7 @@ import { heightVariants, widthVariants } from "@opal/shared";
 /** How the content arrives. `fade-up`: fades in while rising 8px. */
 type EnterVariant = "fade-up";
 
-interface EnterProps extends WithoutStyles<
-  React.HTMLAttributes<HTMLDivElement>
-> {
+type EnterProps = WithoutStyles<React.HTMLAttributes<HTMLDivElement>> & {
   children: React.ReactNode;
   /** @default "fade-up" */
   variant?: EnterVariant;
@@ -25,7 +23,7 @@ interface EnterProps extends WithoutStyles<
   height?: ExtremaSizeVariants;
   /** Ref forwarded to the root `<div>`. */
   ref?: React.Ref<HTMLDivElement>;
-}
+};
 
 // ---------------------------------------------------------------------------
 // Enter
