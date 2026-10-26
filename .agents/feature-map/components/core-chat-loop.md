@@ -162,7 +162,18 @@ See [[mcp-and-custom-tools]] §4.5 and [[agents-personas]] §4.5.
 `start_thread_future`. This utility copies tenant and tracing context into the thread.
 Each worker constructs its feature agent and calls `Agent.start(background=False)`.
 Child agents and parallel tools use additional workers when needed.
+`Agent.tools` registers executable tools. `prepare_step` selects registered instances;
+invalid selections fail before model generation. Restored selections must match saved tool declarations.
+Waiting for a cancelled child raises `ChildRunCancelled`, which a tool can handle.
+An unhandled child cancellation becomes a tool error; cancelling the parent interrupts its wait.
+Each run owns its cancellation signal. Caller cancellation propagates into the run;
+run failure or cancellation does not cancel the caller's signal.
+Handoff saves suspended state and invokes the ownership adapter's release once.
+Release failure settles local completion waiters with the cleanup error; saved state remains available.
+Tool errors retain their model-facing text in recorded results. Progress updates omit that text;
+structured result details supply public errors to the renderer.
 
+`agents/execution_records.py` assigns stable input-message IDs and prepares model history.
 Model-history replay omits unfinished tool exchanges and orphaned results without changing recorded history.
 When one assistant message repeats a tool-call ID, replay omits those calls and their ambiguous result.
 Other calls and partial text remain available to the model.

@@ -128,6 +128,7 @@ def test_message_and_operation_updates_are_visible_together(
     run = Agent(
         FakeModelClient(generate),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[tool],
         prepare_step=prepare,
         after_tool_call=enrich,
     ).start(max_steps=2)

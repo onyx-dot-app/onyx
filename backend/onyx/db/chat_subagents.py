@@ -386,9 +386,9 @@ def load_saved_response(
 def _agent_metadata(
     agent: ChatSession,
     ancestors: dict[UUID, SessionAncestor],
-    links: list[_ResponseLink],
+    latest_response_id: int | None,
+    status: RunStatus | None,
 ) -> AgentInfo:
-    latest = links[0] if links else None
     parent_id = ancestors[agent.id].parent_id
     return AgentInfo(
         id=str(agent.id),
@@ -396,8 +396,10 @@ def _agent_metadata(
         parent_id=str(parent_id) if parent_id else None,
         description=agent.description or "" if parent_id else "",
         restoration_config=agent.restoration_config,
-        latest_run_id=str(latest.id) if latest else None,
-        status=latest.status if latest else None,
+        latest_run_id=str(latest_response_id)
+        if latest_response_id is not None
+        else None,
+        status=status,
     )
 
 
@@ -438,8 +440,42 @@ def load_session_agent_metadata(
                 for agent in agents
             }
         )
-        links = _selected_response_links(db_session, branch, agent_ids)
-        return [_agent_metadata(agent, ancestors, links[agent.id]) for agent in agents]
+        links = _selected_response_links(
+            db_session,
+            branch,
+            [agent_id for agent_id in agent_ids if agent_id != branch.chat_session_id],
+        )
+        metadata: list[AgentInfo] = []
+        for agent in agents:
+            if agent.id == branch.chat_session_id:
+                # Root discovery needs only the latest response, not its full history.
+                latest_root = db_session.execute(
+                    select(ChatMessage.id, ChatMessage.response_status)
+                    .where(
+                        ChatMessage.chat_session_id == branch.chat_session_id,
+                        ChatMessage.id.in_(branch.message_ids),
+                        ChatMessage.response_status.is_not(None),
+                    )
+                    .order_by(
+                        case(
+                            {
+                                message_id: index
+                                for index, message_id in enumerate(branch.message_ids)
+                            },
+                            value=ChatMessage.id,
+                        )
+                    )
+                    .limit(1)
+                ).one_or_none()
+                latest_id, status = (
+                    latest_root if latest_root is not None else (None, None)
+                )
+            else:
+                latest = links[agent.id][0] if links[agent.id] else None
+                latest_id = latest.id if latest else None
+                status = latest.status if latest else None
+            metadata.append(_agent_metadata(agent, ancestors, latest_id, status))
+        return metadata
 
 
 def lookup_session_agent(
@@ -460,8 +496,11 @@ def lookup_session_agent(
         )
         if agent is None:
             return None
+        links = _selected_response_links(db_session, branch, [agent.id])[agent.id]
+        latest = links[0] if links else None
         return _agent_metadata(
             agent,
             session_ancestors(db_session, [agent.id]),
-            _selected_response_links(db_session, branch, [agent.id])[agent.id],
+            latest.id if latest else None,
+            latest.status if latest else None,
         )

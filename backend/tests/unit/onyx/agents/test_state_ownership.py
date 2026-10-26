@@ -356,9 +356,11 @@ def test_request_assembly_keeps_logical_tool_context_and_metadata() -> None:
         tool_histories.append([message.text for message in invocation.messages])
         return ToolResult(content="evidence")
 
+    tool = _tool(execute)
+
     def prepare(_input: StepInput) -> PreparedStep:
         return PreparedStep(
-            tools=[_tool(execute)],
+            tools=[tool],
             output_metadata=metadata,
             assemble_messages=lambda _: [UserMessage(content="provider prompt")],
         )
@@ -373,6 +375,7 @@ def test_request_assembly_keeps_logical_tool_context_and_metadata() -> None:
         FakeModelClient(generate),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         state=AgentState(messages=[UserMessage(content="original task")]),
+        tools=[tool],
         prepare_step=prepare,
     )
     events: list[AgentEvent] = []

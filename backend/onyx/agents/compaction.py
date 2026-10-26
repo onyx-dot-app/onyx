@@ -269,6 +269,9 @@ def compact_history(
             "No eligible history boundary is available for compaction"
         )
     cutoff = eligible_cutoff
+    cutoff_message_id = history[cutoff - 1].id
+    if cutoff_message_id is None:
+        raise ContextLimitError("Compaction source message has no identity")
     summary = previous.summary if previous else ""
     input_budget = (
         budget.input_limit - budget.summary - token_counter(AGENT_COMPACTION_PROMPT)
@@ -327,9 +330,6 @@ def compact_history(
         summary = response.text.strip()
     if source.message is not None:
         raise ContextLimitError("History exceeds the bounded summary workload")
-    cutoff_message_id = history[cutoff - 1].id
-    if cutoff_message_id is None:
-        raise ValueError("Compaction source message has no identity")
     checkpoint = CompactionCheckpoint(
         summary=summary,
         covered_through_message_id=cutoff_message_id,
