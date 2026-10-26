@@ -572,32 +572,9 @@ uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit/db/
 [[background-jobs]]
 
 
-### Incremental response content
+### Incremental content writes
 
-Canonical response writers reject content-free sessions before writing content.
-Durable child reservations enforce the same root-session policy. Child sessions
-inherit the root recording mode. Production chat still uses its existing writer.
-
-
-Saved sources include root and child message display metadata, even without a new
-search. Citation links and source cards survive database reloads.
-
-Restored root questions retain `chat:<question-id>` identities. Child instructions
-retain their run-input identities. Compaction boundaries match these identities
-after reload.
-
-
-Root metadata reads only the latest selected response. The child-history limit
-applies to child responses. A long root conversation does not consume this limit
-or hide its child agents.
-
-
-Root history restoration uses the validated message-branch limit. Child history
-uses the child-response limit. Citation-only documents also link to the root
-response; restoration reports missing cited sources explicitly.
-
-Shared history and response data models live in `chat/response_models.py`.
-Database modules import those models instead of defining separate data contracts.
-
-Replay includes sources linked only to a tool. Root-selected document versions
-take precedence for answer citations; tool cards retain their own saved versions.
+Database response writers reject content-free sessions before writing response
+content. Durable child reservations enforce the same root-session rule. Content-free
+runs use in-memory coordination; their final saves retain usage without conversation
+content. Child sessions inherit the root's recording mode.

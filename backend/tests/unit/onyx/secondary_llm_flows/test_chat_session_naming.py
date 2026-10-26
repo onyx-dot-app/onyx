@@ -4,7 +4,7 @@ from uuid import uuid4
 import pytest
 from fastapi import Request
 
-from onyx.chat.prompt_formatting import PromptMetadata
+from onyx.chat.models import PromptMetadata
 from onyx.configs.constants import MessageType
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.models import ChatMessage, LLMProvider, ModelConfiguration

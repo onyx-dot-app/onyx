@@ -549,6 +549,10 @@ class _ResponseWriter:
         response: ChatMessage,
         presentation: dict[str, MessageRendering],
     ) -> None:
+        if not record_mode_persists_content(
+            response.chat_session.incognito_record_mode
+        ):
+            raise ValueError("Content-free sessions cannot store response records")
         self.db_session = db_session
         self.response = response
         self.branch_ids = visible_message_ids(db_session, response)
@@ -685,6 +689,8 @@ def reserve_child_response__no_commit(
     parent = find_response__no_commit(session, parent_response_id)
     if root is None or parent is None or root_response_id(session, parent) != root.id:
         raise ValueError("Parent response is unavailable on this branch")
+    if not record_mode_persists_content(root.chat_session.incognito_record_mode):
+        raise ValueError("Content-free sessions cannot reserve durable child responses")
     if agent.parent_id != str(parent.chat_session_id):
         raise ValueError("Child agent belongs to another parent")
     if not isinstance(instruction.content, str):
@@ -711,6 +717,7 @@ def reserve_child_response__no_commit(
         child_session = ChatSession(
             id=UUID(agent.id),
             spawned_by_message_id=parent.id,
+            incognito_record_mode=root.chat_session.incognito_record_mode,
             agent_name=sanitize_string(agent.path.rsplit("/", 1)[-1]),
             description=sanitize_string(agent.description),
             restoration_config=agent.restoration_config,

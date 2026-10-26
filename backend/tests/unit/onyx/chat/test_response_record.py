@@ -37,7 +37,11 @@ from onyx.llm.models import (
     Usage,
     UserMessage,
 )
-from onyx.tools.models import ChatFile, CustomToolCallSummary
+from onyx.tools.models import (
+    ChatFile,
+    CustomToolCallSummary,
+    CustomToolUserFileSnapshot,
+)
 from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
 
@@ -328,3 +332,21 @@ def test_capture_excludes_staged_files_and_metadata_before_copying() -> None:
         assert isinstance(retained, ToolResultMessage)
         assert isinstance(retained.details, SearchDocsResponse)
         assert retained.details.queries == ["query"]
+
+
+@pytest.mark.parametrize("response_type", ["image", "csv", "json"])
+def test_custom_result_json_distinguishes_files_from_ordinary_data(
+    response_type: str,
+) -> None:
+    data = {"file_ids": ["file"], "description": "keep this field"}
+    summary = CustomToolCallSummary(
+        tool_name="custom",
+        response_type=response_type,
+        tool_result={"file_ids": ["file"]} if response_type != "json" else data,
+    )
+    restored = CustomToolCallSummary.model_validate_json(summary.model_dump_json())
+    if response_type == "json":
+        assert restored.tool_result == data
+    else:
+        assert isinstance(restored.tool_result, CustomToolUserFileSnapshot)
+        assert restored.tool_result.file_ids == ["file"]

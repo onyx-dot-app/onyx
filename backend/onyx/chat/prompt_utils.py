@@ -7,9 +7,13 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError
 from sqlalchemy.orm import Session
 
-from onyx.chat.models import ChatPrompt, ChatReminderContext, PersonaPromptConfig
-from onyx.chat.prompt_formatting import (
+from onyx.chat.models import (
+    ChatPrompt,
+    ChatReminderContext,
+    PersonaPromptConfig,
     PromptMetadata,
+)
+from onyx.chat.prompt_formatting import (
     count_message_tokens,
     prepare_model_messages,
     prompt_metadata,

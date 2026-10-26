@@ -26,7 +26,7 @@ from onyx.chat.citation_utils import (
     collapse_citations,
     extract_citation_order_from_text,
 )
-from onyx.chat.prompt_formatting import PromptMetadata
+from onyx.chat.models import PromptMetadata
 from onyx.chat.prompt_utils import prepare_prompt, with_language_section
 from onyx.configs.chat_configs import (
     DR_REPORT_LLM_TIMEOUT_S,

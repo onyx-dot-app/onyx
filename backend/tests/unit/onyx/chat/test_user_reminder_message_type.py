@@ -10,7 +10,8 @@ These tests verify that:
 
 import pytest
 
-from onyx.chat.prompt_formatting import PromptMetadata, prepare_model_messages
+from onyx.chat.models import PromptMetadata
+from onyx.chat.prompt_formatting import prepare_model_messages
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.model_request import (
     CODE_BLOCK_MARKDOWN,
