@@ -1,0 +1,22 @@
+/* Enter — content animates in once, when it mounts */
+
+@keyframes opal-enter-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.opal-enter[data-enter-variant="fade-up"] {
+  animation: opal-enter-fade-up 0.25s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opal-enter {
+    animation: none;
+  }
+}
