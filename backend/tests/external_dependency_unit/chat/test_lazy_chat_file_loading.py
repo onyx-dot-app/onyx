@@ -18,7 +18,11 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.chat.chat_utils import load_all_chat_files, load_chat_file
+from onyx.chat.chat_utils import (
+    ChatFileProcessingInfo,
+    load_all_chat_files,
+    load_chat_file,
+)
 from onyx.chat.models import ChatLoadedFile
 from onyx.configs.constants import FileOrigin, MessageType
 from onyx.db.chat import (
@@ -31,6 +35,10 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType, FileDescriptor
 from onyx.tools.models import ChatFile
 from tests.external_dependency_unit.conftest import create_test_user
+
+_READY_INFO = ChatFileProcessingInfo(
+    token_count=0, content_pending=False, worker_owns_plaintext=False
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -280,8 +288,7 @@ class TestLoadChatFileLazy:
 
         loaded = load_chat_file(
             {"id": file_id, "type": ChatFileType.IMAGE, "name": "icon.png"},
-            token_count=0,
-            content_pending=False,
+            _READY_INFO,
         )
 
         # Construction must not have read raw bytes.
@@ -310,8 +317,7 @@ class TestLoadChatFileLazy:
 
         loaded = load_chat_file(
             {"id": file_id, "type": ChatFileType.IMAGE, "name": "gone.png"},
-            token_count=0,
-            content_pending=False,
+            _READY_INFO,
         )
 
         # Delete the underlying file after construction but before the lazy
@@ -333,8 +339,7 @@ class TestLoadChatFileLazy:
 
         loaded = load_chat_file(
             {"id": file_id, "type": ChatFileType.IMAGE, "name": "flaky.png"},
-            token_count=0,
-            content_pending=False,
+            _READY_INFO,
         )
 
         with patch.object(
@@ -456,8 +461,7 @@ class TestConvertLoadedFilesToChatFilesLazy:
         loaded = [
             load_chat_file(
                 {"id": file_id, "type": ChatFileType.IMAGE, "name": "x.png"},
-                token_count=0,
-                content_pending=False,
+                _READY_INFO,
             )
         ]
 

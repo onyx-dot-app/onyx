@@ -5844,6 +5844,24 @@ class UserFile(Base):
         lazy="selectin",
     )
 
+    @property
+    def is_processing(self) -> bool:
+        """True while the user-file worker still owns this row's status and plaintext."""
+        return self.status in (UserFileStatus.PROCESSING, UserFileStatus.INDEXING)
+
+    @property
+    def content_ready(self) -> bool:
+        """Whether the file's text can reach the LLM now, ahead of indexing.
+
+        Upload extracts text synchronously and records its token count, so a
+        processing file with a positive count is usable (for an image the count
+        is a vision estimate). Zero means an image-only document whose content
+        only exists once the worker captions it.
+        """
+        if self.status in (UserFileStatus.COMPLETED, UserFileStatus.SKIPPED):
+            return True
+        return self.is_processing and bool(self.token_count)
+
     __table_args__ = (
         # Declared here as well as in the migration so autogenerate does not
         # read it as a stray index and propose dropping it.

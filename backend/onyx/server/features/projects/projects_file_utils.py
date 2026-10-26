@@ -82,6 +82,9 @@ class CategorizedFiles(BaseModel):
     acceptable: list[UploadFile] = Field(default_factory=list)
     rejected: list[RejectedFile] = Field(default_factory=list)
     acceptable_file_to_token_count: dict[str, int] = Field(default_factory=dict)
+    # Text extracted while counting tokens, keyed like the counts, so the
+    # upload can cache it instead of extracting again.
+    acceptable_file_to_text: dict[str, str] = Field(default_factory=dict)
     # Filenames within `acceptable` that should be stored but not indexed.
     skip_indexing: set[str] = Field(default_factory=set)
 
@@ -327,6 +330,8 @@ def categorize_uploaded_files(
                     # when image extraction is enabled.
                     if image_bearing_ext and count > 0:
                         results.acceptable.append(upload)
+                        # Zero tells UserFile.content_ready the text only
+                        # exists after captioning.
                         results.acceptable_file_to_token_count[filename] = 0
                         try:
                             upload.file.seek(0)
@@ -374,6 +379,7 @@ def categorize_uploaded_files(
                 else:
                     results.acceptable.append(upload)
                     results.acceptable_file_to_token_count[filename] = token_count
+                    results.acceptable_file_to_text[filename] = text_content
 
                 # Reset file pointer for subsequent upload handling
                 try:

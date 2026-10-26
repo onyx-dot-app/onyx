@@ -136,8 +136,7 @@ class ChatFullResponse(BaseModel):
 class ChatLoadedFile(InMemoryChatFile):
     content_text: str | None
     token_count: int
-    # True while the user-file worker is still processing the file — its
-    # canonical plaintext (e.g. including image captions) doesn't exist yet.
+    # No text is available yet; the prompt gets CONTENT_PENDING_NOTICE instead.
     content_pending: bool = False
 
     # Named distinctly from the base ``lazy_from_descriptor`` so the subclass

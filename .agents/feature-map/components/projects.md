@@ -417,7 +417,8 @@ tests. See `backend/AGENTS.md` for the authoritative commands.
    answers correctly without a search tool call.
 4. Add enough additional file content to push the project over the 60%
    ceiling for the active model. Confirm the new file's status moves
-   `PROCESSING` → `COMPLETED` (`GET /user/projects/file/statuses`), and that a
+   `PROCESSING` → `COMPLETED` (`GET /user/projects/file/statuses`) while
+   `content_ready` is already `true` on the first poll, and that a
    question depending on it now triggers an internal search tool call instead
    of being answered from raw context.
 5. Attach a custom agent with its own files. Confirm answers can use files

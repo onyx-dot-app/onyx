@@ -31,7 +31,6 @@ from onyx.db.chat import (
 )
 from onyx.db.enums import (
     IncognitoRecordMode,
-    UserFileStatus,
     record_mode_persists_content,
 )
 from onyx.db.file_record import FileRecordNotFoundError
@@ -297,9 +296,18 @@ def _get_or_extract_plaintext(
     return content_text
 
 
+class ChatFileProcessingInfo(BaseModel):
+    token_count: int
+    # No text is available yet; the model gets CONTENT_PENDING_NOTICE instead.
+    content_pending: bool
+    # The user-file worker will store the canonical plaintext (it may include
+    # image captions), so an inline extraction must not be cached over it.
+    worker_owns_plaintext: bool
+
+
 def _get_chat_file_processing_info(
     file_descriptor: FileDescriptor, db_session: Session
-) -> tuple[int, bool]:
+) -> ChatFileProcessingInfo:
     """Read session-bound fields before attachment content work starts."""
     user_file_id_str = file_descriptor.get("user_file_id", "")
     user_file: UserFile | None = None
@@ -310,18 +318,20 @@ def _get_chat_file_processing_info(
             logger.warning(
                 "Failed to look up user file for %s: %s", file_descriptor["id"], e
             )
-    token_count = user_file.token_count if user_file and user_file.token_count else 0
-    content_pending = user_file is not None and user_file.status in (
-        UserFileStatus.PROCESSING,
-        UserFileStatus.INDEXING,
+    if user_file is None:
+        return ChatFileProcessingInfo(
+            token_count=0, content_pending=False, worker_owns_plaintext=False
+        )
+    return ChatFileProcessingInfo(
+        token_count=user_file.token_count or 0,
+        content_pending=user_file.is_processing and not user_file.content_ready,
+        worker_owns_plaintext=user_file.is_processing,
     )
-
-    return token_count, content_pending
 
 
 @log_function_time()
 def load_chat_file(
-    file_descriptor: FileDescriptor, token_count: int, content_pending: bool
+    file_descriptor: FileDescriptor, info: ChatFileProcessingInfo
 ) -> ChatLoadedFile:
     """Build a ChatLoadedFile whose raw ``content`` bytes are loaded lazily.
 
@@ -346,9 +356,10 @@ def load_chat_file(
 
     # Extract text content if it's a text file type (not an image). The
     # cached-plaintext path avoids reading the original bytes on the steady
-    # state; only the cache miss branch opens the binary stream.
+    # state; only the cache miss branch opens the binary stream. A pending
+    # file has no text yet, so skip the read and let the prompt carry the notice.
     content_text: str | None = None
-    if file_type.is_text_file():
+    if file_type.is_text_file() and not info.content_pending:
 
         def _extract() -> str:
             # Only invoked on cache miss; bytes-read happens here, not upfront.
@@ -369,7 +380,7 @@ def load_chat_file(
             # extraction under its key: the worker's canonical plaintext (which
             # may include image captions) should be what later turns read.
             content_text = _get_or_extract_plaintext(
-                cache_key, _extract, store_on_miss=not content_pending
+                cache_key, _extract, store_on_miss=not info.worker_owns_plaintext
             )
         except Exception as e:
             logger.warning(
@@ -410,9 +421,9 @@ def load_chat_file(
         file_type=file_type,
         filename=filename,
         content_text=content_text,
-        token_count=token_count,
+        token_count=info.token_count,
         loader=_load_content,
-        content_pending=content_pending,
+        content_pending=info.content_pending,
     )
 
 
@@ -440,7 +451,7 @@ def load_all_chat_files(
             [
                 (
                     load_chat_file,
-                    (file, *_get_chat_file_processing_info(file, db_session)),
+                    (file, _get_chat_file_processing_info(file, db_session)),
                 )
                 for file in file_descriptors_for_history
             ],

@@ -55,7 +55,7 @@ that a background sweep deletes the file's blob and its row after the session en
 | GET | `/user/projects/files/{project_id}` | `api.py:get_files_in_project` | |
 | DELETE | `/user/projects/file/{file_id}` | `api.py:delete_user_file` | Refuses when the file has project or persona associations. |
 | GET | `/user/projects/file/{file_id}` | `api.py:get_user_file` | Metadata (`UserFileSnapshot`), not bytes. |
-| POST | `/user/projects/file/statuses` | `api.py:get_user_file_statuses` | Poll target while a file is `PROCESSING`. |
+| POST | `/user/projects/file/statuses` | `api.py:get_user_file_statuses` | Poll target while a file is `PROCESSING`. Each snapshot carries `content_ready` (§4.2). |
 | DELETE/POST | `/user/projects/{project_id}/files/{file_id}` | `unlink_user_file_from_project`, `link_user_file_to_project` | |
 | GET | `/user/projects/{project_id}/token-count`, `/user/projects/session/{id}/token-count` | | Aggregate token counts for the file-budget UI. |
 | GET | `/chat/file/{file_id:path}` | `chat_backend.py:fetch_chat_file` | **The serving endpoint.** Accepts either a storage `file_id` or a `UserFile.id`; see §4.5. |
@@ -188,7 +188,18 @@ Synchronous, inside the request:
   exempted from indexing, e.g. spreadsheets over the token threshold) and
   links it to `project_id` if one was given (never for incognito uploads,
   `create_user_files`'s `if project_id and incognito_session_id is None`
-  branch).
+  branch). It also caches the text `categorize_uploaded_files` already
+  extracted (`CategorizedFiles.acceptable_file_to_text`) through
+  `file_store/utils.py:store_user_file_plaintext`, so chat can read the file
+  before the worker finishes. The worker's own write (which may add image
+  captions) overwrites it later.
+- `db/models.py:UserFile.content_ready` is the one rule for "chat can use
+  this file now": `COMPLETED` and `SKIPPED` always, `PROCESSING`/`INDEXING`
+  when the upload-time `token_count` is positive. Zero means an image-only
+  document whose content only exists after captioning. `UserFileSnapshot`
+  exposes it as `content_ready`; the chat composer gates Send on it, and
+  `chat/chat_utils.py:_get_chat_file_processing_info` uses it to decide
+  whether the model sees the file's text or `CONTENT_PENDING_NOTICE`.
 
 Asynchronous, in `PROCESS_SINGLE_USER_FILE`
 (`tasks.py:process_user_file_impl`): loads the blob back through

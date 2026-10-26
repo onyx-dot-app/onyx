@@ -19,12 +19,14 @@ from onyx.configs.constants import (
 )
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import Project__UserFile, User, UserFile, UserProject
+from onyx.file_store.utils import store_user_file_plaintext
 from onyx.server.documents.connector import upload_files
 from onyx.server.features.projects.projects_file_utils import (
     RejectedFile,
     categorize_uploaded_files,
 )
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -68,6 +70,7 @@ def create_user_files(
     # Should revisit to decide whether this should be a feature.
     upload_response = upload_files(categorized_files.acceptable, FileOrigin.USER_FILE)
     user_files = []
+    plaintext_to_cache: list[tuple[UUID, str]] = []
     rejected_files = categorized_files.rejected
     id_to_temp_id: dict[str, str] = {}
     # Pair returned storage paths with the same set of acceptable files we uploaded
@@ -100,6 +103,11 @@ def create_user_files(
         # Persist the UserFile first to satisfy FK constraints for association table
         db_session.add(new_file)
         db_session.flush()
+        extracted_text = categorized_files.acceptable_file_to_text.get(
+            file.filename or ""
+        )
+        if extracted_text:
+            plaintext_to_cache.append((new_file.id, extracted_text))
         # Incognito uploads may use a project as context but never join it.
         if project_id and incognito_session_id is None:
             project_to_user_file = Project__UserFile(
@@ -109,6 +117,15 @@ def create_user_files(
             db_session.add(project_to_user_file)
         user_files.append(new_file)
     db_session.commit()
+    # Cache the text extracted during categorization so chat can use the file
+    # before the worker stores its own (captioned) version at index time.
+    if plaintext_to_cache:
+        run_functions_tuples_in_parallel(
+            [
+                (store_user_file_plaintext, (user_file_id, text))
+                for user_file_id, text in plaintext_to_cache
+            ]
+        )
     return CategorizedFilesResult(
         user_files=user_files,
         rejected_files=rejected_files,

@@ -642,10 +642,7 @@ def process_user_file_impl(
                 )
                 return
 
-            if uf.status not in (
-                UserFileStatus.PROCESSING,
-                UserFileStatus.INDEXING,
-            ):
+            if not uf.is_processing:
                 task_logger.info(
                     f"process_user_file_impl - Skipping id={user_file_id} status={uf.status}"
                 )

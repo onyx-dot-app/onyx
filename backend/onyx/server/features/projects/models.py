@@ -25,6 +25,8 @@ class UserFileSnapshot(BaseModel):
     chat_file_type: ChatFileType
     token_count: int | None
     chunk_count: int | None
+    # Text is usable in chat now, even while indexing is still running.
+    content_ready: bool
 
     @classmethod
     def from_model(
@@ -46,6 +48,7 @@ class UserFileSnapshot(BaseModel):
             chat_file_type=mime_type_to_chat_file_type(model.content_type),
             token_count=model.token_count,
             chunk_count=model.chunk_count,
+            content_ready=model.content_ready,
         )
 
 

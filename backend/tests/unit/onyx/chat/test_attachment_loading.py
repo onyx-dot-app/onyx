@@ -59,8 +59,9 @@ def test_attachment_metadata_is_read_before_workers() -> None:
 
 
 @pytest.mark.parametrize("status", [None, *UserFileStatus])
+@pytest.mark.parametrize("token_count", [None, 42])
 def test_loading_preserves_processing_plaintext_guard(
-    status: UserFileStatus | None,
+    status: UserFileStatus | None, token_count: int | None
 ) -> None:
     user_file_id = str(uuid4())
     descriptor: FileDescriptor = {
@@ -68,9 +69,11 @@ def test_loading_preserves_processing_plaintext_guard(
         "type": ChatFileType.PLAIN_TEXT,
         "user_file_id": user_file_id,
     }
-    user_file = UserFile(token_count=None, status=status) if status else None
+    user_file = UserFile(token_count=token_count, status=status) if status else None
     session = MagicMock(spec=Session)
-    pending = status in (UserFileStatus.PROCESSING, UserFileStatus.INDEXING)
+    worker_owns = status in (UserFileStatus.PROCESSING, UserFileStatus.INDEXING)
+    # Upload-time text (a positive count) is usable before the worker finishes.
+    pending = worker_owns and not token_count
     with (
         patch("onyx.chat.chat_utils.get_user_file_by_id", return_value=user_file),
         patch(
@@ -78,10 +81,15 @@ def test_loading_preserves_processing_plaintext_guard(
         ) as plaintext,
     ):
         loaded = load_all_chat_files([ChatMessage(files=[descriptor])], session)[0]
-    assert loaded.token_count == 0
+    assert loaded.token_count == ((token_count or 0) if user_file else 0)
     assert loaded.content_pending is pending
-    assert plaintext.call_args.args[0] == user_file_id
-    assert plaintext.call_args.kwargs["store_on_miss"] is not pending
+    if pending:
+        # Nothing to read yet; the prompt carries the pending notice instead.
+        plaintext.assert_not_called()
+        assert loaded.content_text is None
+    else:
+        assert plaintext.call_args.args[0] == user_file_id
+        assert plaintext.call_args.kwargs["store_on_miss"] is not worker_owns
 
 
 @pytest.mark.parametrize("user_file_id", [None, "not-a-uuid"])
