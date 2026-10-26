@@ -27,9 +27,7 @@
     "test:ci": "jest --ci --maxWorkers=2 --silent --bail",
     "test:changed": "jest --onlyChanged",
     "test:diff": "jest --changedSince=main",
-    "test:debug": "node --inspect-brk node_modules/.bin/jest --runInBand",
-    "storybook": "storybook dev -p 6006",
-    "storybook:build": "storybook build -o storybook-static"
+    "test:debug": "node --inspect-brk node_modules/.bin/jest --runInBand"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.1.0",
@@ -108,11 +106,6 @@
     "@formatjs/icu-messageformat-parser": "^3.5.17",
     "@oxlint/plugins": "^1.71.0",
     "@playwright/test": "^1.39.0",
-    "@storybook/addon-docs": "10.6.2",
-    "@storybook/addon-mcp": "^0.7.0",
-    "@storybook/addon-themes": "10.6.2",
-    "@storybook/react": "10.6.2",
-    "@storybook/react-vite": "10.6.2",
     "@swc/core": "^1.15.43",
     "@swc/jest": "^0.2.39",
     "@tailwindcss/postcss": "^4.3.3",
@@ -136,7 +129,6 @@
     "oxlint": "^1.66.0",
     "oxlint-plugin-react-doctor": "0.9.11",
     "stats.js": "^0.17.0",
-    "storybook": "10.6.2",
     "tailwindcss": "^4.3.3",
     "typescript": "7.1.0-dev.20260916.1",
     "whatwg-fetch": "^3.6.20"
