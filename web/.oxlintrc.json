@@ -109,12 +109,6 @@
   },
   "overrides": [
     {
-      "files": [".storybook/mocks/**"],
-      "rules": {
-        "anti-slop/no-hookless-use-function": "off"
-      }
-    },
-    {
       "files": [
         "**/*.test.ts",
         "**/*.test.tsx",
@@ -122,8 +116,7 @@
         "**/*.spec.tsx",
         "**/__tests__/**",
         "**/__mocks__/**",
-        "tests/**",
-        "**/*.stories.tsx"
+        "tests/**"
       ],
       "rules": {
         "anti-slop/no-chained-type-assertions": "off",
@@ -159,8 +152,7 @@
         "**/*.spec.tsx",
         "**/__tests__/**",
         "**/__mocks__/**",
-        "tests/**",
-        "**/*.stories.tsx"
+        "tests/**"
       ],
       "rules": {
         "i18n/no-raw-jsx-text": "off"
@@ -174,8 +166,7 @@
         "**/*.spec.tsx",
         "**/__tests__/**",
         "**/__mocks__/**",
-        "tests/**",
-        "**/*.stories.tsx"
+        "tests/**"
       ],
       "rules": {
         "no-restricted-imports": "off",
@@ -470,7 +461,6 @@
         "src/app/craft/onboarding/components/CraftLlmSetup.tsx",
         "src/app/craft/onboarding/components/LivingMapDiagram.tsx",
         "src/app/craft/onboarding/components/LivingMapModal.tsx",
-        "src/app/craft/onboarding/explorations/WelcomePageMock.tsx",
         "src/app/craft/page.tsx",
         "src/app/craft/v1/apps/UserCredentialsModal.tsx",
         "src/app/craft/v1/apps/admin/ActionPolicyEditorModal.tsx",
@@ -679,7 +669,6 @@
     "out",
     "build",
     "public",
-    "storybook-static",
     "lib/opal/dist",
     "tools/oxlint/anti-slop",
     "tools/oxlint/i18n",

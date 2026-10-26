@@ -14,8 +14,6 @@ interface CraftToolGroupProps {
   toolCalls: ToolCallState[];
   /** Once an assistant message follows, animate the block closed. */
   autoCollapse?: boolean;
-  /** Override the initial open/closed state (useful in Storybook). */
-  defaultOpen?: boolean;
 }
 
 function aggregateStatus(toolCalls: ToolCallState[]): ToolCallState["status"] {
@@ -44,15 +42,12 @@ function renderStatusIcon(toolCalls: ToolCallState[]) {
 export default function CraftToolGroup({
   toolCalls,
   autoCollapse = false,
-  defaultOpen,
 }: CraftToolGroupProps) {
   const t = useTranslations("craft.toolCards.group");
   const aggregate = aggregateStatus(toolCalls);
   // Open while the run is active so streaming calls stay visible and nothing
   // collapses as new calls append; settled groups start collapsed.
-  const [isOpen, setIsOpen] = useState(
-    defaultOpen ?? aggregate === "in_progress"
-  );
+  const [isOpen, setIsOpen] = useState(aggregate === "in_progress");
   // Skill groups get a comet while running and a thin border at rest.
   const skillGroup = toolCalls.some(isSkillCall);
   const skillActive = aggregate === "in_progress" && skillGroup;
