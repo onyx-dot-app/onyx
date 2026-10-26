@@ -15,6 +15,7 @@ from onyx.agents.compaction import (
     compact_history,
     context_budget,
     count_tokens,
+    history_boundaries,
     request_tokens,
     working_messages,
 )
@@ -28,7 +29,13 @@ from onyx.agents.models import (
     RunStatus,
     StepInput,
 )
-from onyx.agents.runtime import Agent, Run, RunFailed, _compact_context
+from onyx.agents.runtime import (
+    Agent,
+    Run,
+    RunFailed,
+    _compact_context,
+    _truncate_context,
+)
 from onyx.agents.tools import (
     AgentTool,
     HumanToolAnswer,
@@ -894,6 +901,63 @@ def test_failed_summary_truncates_old_turns_without_changing_history(
     reloaded.start(background=False, max_steps=1).result()
     assert model.generations[-1].messages[: len(request.messages)] == request.messages
     assert reloaded.state.messages[: len(history)] == history
+
+
+def test_truncation_validates_boundaries_once_across_candidates() -> None:
+    history: list[Message] = [
+        SystemMessage(id="system", content="Keep the system instructions."),
+        UserMessage(id="old-user", content="Old question " * 300),
+        AssistantMessage(
+            id="old-answer", content=[TextContent(text="Old answer " * 300)]
+        ),
+        SystemMessage(id="later-system", content="Keep these instructions too."),
+        UserMessage(id="middle-user", content="Middle question " * 300),
+        AssistantMessage(
+            id="middle-answer", content=[TextContent(text="Middle answer " * 300)]
+        ),
+        UserMessage(id="current-user", content=TASK),
+        AssistantMessage(
+            id="current-tool-call",
+            content=[ToolCall(id="current", name="lookup", arguments={})],
+        ),
+        ToolResultMessage(
+            id="current-tool-result",
+            tool_call_id="current",
+            tool_name="lookup",
+            content="Current evidence",
+        ),
+    ]
+    original = [message.model_copy(deep=True) for message in history]
+    candidates: list[list[Message]] = []
+
+    def assemble(messages: Sequence[Message]) -> list[Message]:
+        candidates.append(list(messages))
+        return list(messages)
+
+    prepared = PreparedStep(assemble_messages=assemble)
+    expected = [history[0], history[3], *history[6:]]
+    input_limit = request_tokens(GenerationRequest(messages=expected))
+    boundary_scan = Mock(wraps=history_boundaries)
+    with (
+        patch("onyx.agents.runtime.history_boundaries", boundary_scan),
+        patch("onyx.agents.compaction.history_boundaries", boundary_scan),
+    ):
+        checkpoint, request, size = _truncate_context(
+            CancellationSignal(),
+            history,
+            prepared,
+            token_counts={},
+            input_limit=input_limit,
+            original_size=request_tokens(GenerationRequest(messages=history)),
+        )
+    assert boundary_scan.call_count == 1
+    assert len(candidates) == 3
+    assert checkpoint.summary == ""
+    assert checkpoint.covered_through_message_id == "middle-answer"
+    assert request.messages == expected
+    assert request.messages == working_messages(history, checkpoint)
+    assert size <= input_limit
+    assert history == original
 
 
 @pytest.mark.parametrize("total_timeout", [None, 71, 500])

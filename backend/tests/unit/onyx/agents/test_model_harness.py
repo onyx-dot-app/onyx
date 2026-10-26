@@ -154,6 +154,57 @@ def test_partial_message_closes_before_run_completion(cancelled: bool) -> None:
     )
 
 
+def test_model_event_rechecks_cancellation_before_recording() -> None:
+    pause_next_check = threading.Event()
+    check_passed = threading.Event()
+    continue_check = threading.Event()
+
+    class PausingSignal(CancellationSignal):
+        @override
+        def check(self) -> None:
+            super().check()
+            if pause_next_check.is_set():
+                pause_next_check.clear()
+                check_passed.set()
+                assert continue_check.wait(5)
+
+    class StreamingModel(FakeModelClient):
+        @override
+        def stream(
+            self, request: GenerationRequest, context: GenerationContext | None = None
+        ) -> Generator[GenerationEvent, None, None]:
+            yield TextDeltaEvent(content_index=0, text="Accepted")
+            pause_next_check.set()
+            yield TextDeltaEvent(content_index=0, text=" late output")
+
+    events: list[AgentEvent] = []
+    signal = PausingSignal()
+    run = Agent(
+        StreamingModel(lambda *_: AssistantMessage()),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+    ).start(max_steps=1, cancellation=signal, on_event=events.append)
+    try:
+        assert check_passed.wait(2)
+        with run.execution_lock:
+            signal.cancel()
+            continue_check.set()
+        with pytest.raises(AgentCancelled):
+            run.result(2)
+        assert run.wait_for_idle(2)
+        assert run.snapshot().messages[0].text == "Accepted"
+        text_updates = [
+            event.generation_event.text
+            for event in events
+            if event.type == "message_update"
+            and isinstance(event.generation_event, TextDeltaEvent)
+        ]
+        assert text_updates == ["Accepted"]
+    finally:
+        continue_check.set()
+        run.cancel()
+        assert run.wait_for_idle(2)
+
+
 def test_cancelled_argument_stream_retains_partial_snapshot_without_executing() -> None:
     reached_partial = threading.Event()
     resume = threading.Event()
