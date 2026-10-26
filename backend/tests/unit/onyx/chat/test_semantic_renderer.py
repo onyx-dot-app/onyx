@@ -897,3 +897,39 @@ def test_completion_batches_content_and_decodes_thinking_once(
     )
     assert think.arguments == {}
     assert len(message.content) == 386
+
+
+@pytest.mark.parametrize("public_error", [False, True])
+def test_live_tool_failure_keeps_private_text_out_of_packets(
+    public_error: bool,
+) -> None:
+    packets: list[Packet] = []
+    presenter = ResponsePresenter(_emitter(packets))
+    private_error = "Internal service credential could not be loaded"
+    tool = AgentTool(
+        definition=ToolDefinition(name="custom_action", description="", parameters={}),
+        execute=lambda _: ToolResult(
+            content=private_error,
+            is_error=True,
+            details=ToolExecutionError(message="Action unavailable")
+            if public_error
+            else None,
+        ),
+    )
+    agent = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(
+                content=[ToolCall(id="call", name=tool.name, arguments={})]
+            )
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[tool],
+    )
+    run_agent(agent, max_steps=1, listener=presenter.consume)
+    assert all(private_error not in packet.model_dump_json() for packet in packets)
+    assert sum(isinstance(packet.obj, PacketException) for packet in packets) == int(
+        public_error
+    )
+    result = agent.state.messages[-1]
+    assert isinstance(result, ToolResultMessage)
+    assert result.is_error and result.text == private_error
