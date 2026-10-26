@@ -429,8 +429,13 @@ class ToolRenderer:
         self.has_child_output = False
         self._has_python_output = False
         self._files: set[str] = set()
+        self._started = False
+        self._finished = False
 
     def start(self) -> list[packets.Packet]:
+        if self._started:
+            return []
+        self._started = True
         name = self.call.name
         args = tool_arguments_for_display(self.call)
         objects: list[packets.PacketObj] = []
@@ -513,6 +518,8 @@ class ToolRenderer:
     def update(
         self, details: BaseModel | None, content: str = ""
     ) -> list[packets.Packet]:
+        if self._finished:
+            return []
         objects: list[packets.PacketObj] = []
         if isinstance(details, PythonExecutionDelta):
             self._has_python_output = True
@@ -644,12 +651,12 @@ class ToolRenderer:
                 )
             )
         elif isinstance(details, CodingAgentCallResult):
-            objects.append(packets.CodingAgentThinkingDelta(content=details.answer))
+            # Child message events carry thinking; completion carries the final answer.
+            return []
         elif isinstance(details, ResearchAgentCallResult):
             if not self.has_child_output:
-                return [
-                    packets.Packet(placement=self.placement, obj=obj)
-                    for obj in [
+                objects.extend(
+                    [
                         packets.IntermediateReportStart(),
                         packets.IntermediateReportDelta(
                             content=details.intermediate_report
@@ -657,9 +664,8 @@ class ToolRenderer:
                         packets.IntermediateReportCitedDocs(
                             cited_docs=list(details.citation_mapping.values())
                         ),
-                        packets.SectionEnd(),
                     ]
-                ]
+                )
         elif content and self.call.name not in {
             SearchTool.NAME,
             WebSearchTool.NAME,
@@ -679,19 +685,21 @@ class ToolRenderer:
         return [packets.Packet(placement=self.placement, obj=obj) for obj in objects]
 
     def complete(self, result: ToolResult | None) -> list[packets.Packet]:
+        if self._finished:
+            return []
+        output = self.start()
         if result is not None and isinstance(result.details, CodingAgentCallResult):
-            output = [
+            output.append(
                 packets.Packet(
                     placement=self.placement,
                     obj=packets.CodingAgentFinal(answer=result.details.answer),
                 )
-            ]
-        else:
-            output = (
-                self.update(result.details, "" if result.is_error else result.text)
-                if result is not None
-                else []
             )
+        elif result is not None:
+            output.extend(
+                self.update(result.details, "" if result.is_error else result.text)
+            )
+        self._finished = True
         if result is not None and isinstance(result.details, ToolExecutionError):
             output.append(
                 packets.Packet(
