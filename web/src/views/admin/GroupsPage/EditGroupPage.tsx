@@ -605,7 +605,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
 
   return (
     <>
-      <SettingsLayouts.Root>
+      <SettingsLayouts.Root loading={isLoading && !error}>
         <SettingsLayouts.Header
           icon={SvgUsers}
           title={t("edit.header.title")}
@@ -615,8 +615,6 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
         />
 
         <SettingsLayouts.Body>
-          {isLoading && <IconLoader />}
-
           {error && (
             <Text as="p" secondaryBody text03>
               {t("edit.loadError.text")}

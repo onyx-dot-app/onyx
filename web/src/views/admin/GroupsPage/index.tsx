@@ -1,6 +1,5 @@
 "use client";
 
-import { IconLoader } from "@opal/loaders";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useFocusOnMount, useGridNavigation, useHotkey } from "@opal/hooks";
 import { useRouter } from "next/navigation";
@@ -115,7 +114,7 @@ function GroupsPage() {
   }
 
   return (
-    <SettingsLayouts.Root>
+    <SettingsLayouts.Root loading={isLoading}>
       <div data-testid="groups-page-heading">
         <SettingsLayouts.Header icon={SvgUsers} title={t("page.title")} divider>
           <MessageCard
@@ -163,8 +162,6 @@ function GroupsPage() {
           inputRef={setSearchInput}
           onSearchKeyDown={handleSearchKeyDown}
         />
-
-        {isLoading && <IconLoader />}
 
         {error && (
           <IllustrationContent

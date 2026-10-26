@@ -1,6 +1,5 @@
 "use client";
 
-import { IconLoader } from "@opal/loaders";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
@@ -269,26 +268,10 @@ export default function ServiceAccountsPage() {
     );
   }
 
-  if (isLoading) {
-    return (
-      <SettingsLayouts.Root>
-        <SettingsLayouts.Header
-          title={adminRouteTitle(route)}
-          icon={route.icon}
-          description={t("page.description", { appName })}
-          divider
-        />
-        <SettingsLayouts.Body>
-          <IconLoader />
-        </SettingsLayouts.Body>
-      </SettingsLayouts.Root>
-    );
-  }
-
   const hasKeys = visibleApiKeys.length > 0;
 
   return (
-    <SettingsLayouts.Root>
+    <SettingsLayouts.Root loading={isLoading}>
       <SettingsLayouts.Header
         title={adminRouteTitle(route)}
         icon={route.icon}
