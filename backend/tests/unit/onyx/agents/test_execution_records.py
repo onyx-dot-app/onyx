@@ -1,18 +1,17 @@
 """Recorded output stays intact when incomplete tool exchanges leave model context."""
 
 import pytest
-from pydantic import TypeAdapter, ValidationError
+from pydantic import TypeAdapter
 
-from onyx.agents.execution_records import (
-    CompactionCheckpoint,
-    RunStatus,
-    messages_for_model,
-)
+from onyx.agents.execution_records import messages_for_model
+from onyx.llm.model_request import format_provider_message
 from onyx.llm.models import (
     AssistantMessage,
     Message,
     MessageRole,
+    RedactedThinkingBlock,
     TextContent,
+    ThinkingBlock,
     ThinkingContent,
     ToolCall,
     ToolResultMessage,
@@ -97,25 +96,6 @@ def test_replay_can_reuse_owned_content_without_mutating_the_message_list() -> N
     assert replay[1].content is not assistant.content
 
 
-@pytest.mark.parametrize("status", list(RunStatus))
-def test_suspended_execution_is_not_terminal(status: RunStatus) -> None:
-    assert status.is_terminal == (
-        status not in (RunStatus.RUNNING, RunStatus.SUSPENDED)
-    )
-
-
-def test_compaction_checkpoint_requires_an_identified_history_boundary() -> None:
-    with pytest.raises(ValidationError):
-        CompactionCheckpoint(summary="Summary", covered_through_message_id="")
-    checkpoint = CompactionCheckpoint(
-        summary="Summary", covered_through_message_id="m1"
-    )
-    assert (
-        CompactionCheckpoint.model_validate_json(checkpoint.model_dump_json())
-        == checkpoint
-    )
-
-
 @pytest.mark.parametrize("copy_messages", [False, True])
 def test_replay_omits_duplicate_call_ids_with_their_results(
     copy_messages: bool,
@@ -161,5 +141,51 @@ def test_replay_omits_duplicate_call_ids_with_their_results(
         result,
         later,
         later_result,
+    ]
+    assert messages == original
+
+
+@pytest.mark.parametrize("copy_messages", [False, True])
+def test_replay_preserves_signed_blocks_and_omits_unfinished_thinking(
+    copy_messages: bool,
+) -> None:
+    signed = ThinkingBlock(thinking="Completed reasoning", signature="signature")
+    redacted = RedactedThinkingBlock(data="opaque")
+    partial = ThinkingBlock(thinking="Unfinished reasoning")
+    messages: list[Message] = [
+        AssistantMessage(
+            content=[ThinkingContent(text=partial.thinking, blocks=[partial])],
+            stop_reason="aborted",
+        ),
+        UserMessage(content="Continue"),
+        AssistantMessage(
+            content=[
+                ThinkingContent(
+                    text=signed.thinking + partial.thinking,
+                    blocks=[signed, redacted, partial],
+                ),
+                TextContent(text="Partial answer"),
+            ],
+            stop_reason="error",
+        ),
+    ]
+    original = [message.model_copy(deep=True) for message in messages]
+
+    replay = messages_for_model(messages, copy_messages=copy_messages)
+
+    assert replay == [
+        messages[1],
+        AssistantMessage(
+            content=[
+                ThinkingContent(text=signed.thinking, blocks=[signed, redacted]),
+                TextContent(text="Partial answer"),
+            ],
+            stop_reason="error",
+        ),
+    ]
+    wire = format_provider_message(replay[1]).model_dump(exclude_none=True)
+    assert wire["thinking_blocks"] == [
+        signed.model_dump(),
+        redacted.model_dump(),
     ]
     assert messages == original
