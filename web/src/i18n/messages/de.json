@@ -11503,6 +11503,9 @@
         },
         "people": {
           "label": "Personen mit Zugriff"
+        },
+        "generalAccess": {
+          "title": "Allgemeiner Zugriff"
         }
       },
       "viewer": {

@@ -23,6 +23,7 @@ import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
 import { Modal } from "@opal/components";
 import {
+  AttachmentItemButton,
   Button,
   Card,
   Divider,
@@ -48,7 +49,6 @@ import {
 } from "@opal/icons";
 import { copyText, escapeMarkdown, markdown } from "@opal/utils";
 import { useModal } from "@opal/components";
-import { ShareAccessRow } from "@/sections/modals/ShareAccessRow";
 import {
   StaticPermissionLabel,
   TransferTrailingButton,
@@ -773,39 +773,47 @@ export function ShareAgentModal({
             />
           ) : null}
 
-          {/* Mock anatomy: icon + scope trigger on the left, org-permission
-            trigger on the right — no label or description text */}
-          <ShareAccessRow
+          {/* General access: the scope menu, then what that scope may do */}
+          <AttachmentItemButton
+            presentational
+            prominence="secondary"
             icon={scopeIcon}
-            titleSlot={
-              <SharePermissionMenu
-                ariaLabel={t("shareAgent.scopeMenu.ariaLabel")}
-                // Stays visible so the current scope still reads; only changing it is gated.
-                disabled={!canEditShares || !canPublish}
-                showTriggerIcon={false}
-                onChange={(scope) => {
-                  setDraftState((currentDraftState) => ({
-                    ...currentDraftState,
-                    isPublic: scope === "PUBLIC",
-                  }));
-                }}
-                options={scopeOptions}
-                value={effectiveState.isPublic ? "PUBLIC" : "PRIVATE"}
-              />
-            }
+            title={t("shareAgent.generalAccess.title")}
             rightChildren={
-              <SharePermissionMenu
-                ariaLabel={t("shareAgent.publicPermissionMenu.ariaLabel")}
-                disabled={!canEditShares || !canPublish}
-                onChange={(permission) => {
-                  setDraftState((currentDraftState) => ({
-                    ...currentDraftState,
-                    publicPermission: permission,
-                  }));
-                }}
-                options={permissionOptions}
-                value={effectiveState.publicPermission}
-              />
+              <Section
+                flexDirection="row"
+                justifyContent="end"
+                alignItems="center"
+                gap={1}
+                width="fit"
+              >
+                <SharePermissionMenu
+                  ariaLabel={t("shareAgent.scopeMenu.ariaLabel")}
+                  // Stays visible so the current scope still reads; only changing it is gated.
+                  disabled={!canEditShares || !canPublish}
+                  showTriggerIcon={false}
+                  onChange={(scope) => {
+                    setDraftState((currentDraftState) => ({
+                      ...currentDraftState,
+                      isPublic: scope === "PUBLIC",
+                    }));
+                  }}
+                  options={scopeOptions}
+                  value={effectiveState.isPublic ? "PUBLIC" : "PRIVATE"}
+                />
+                <SharePermissionMenu
+                  ariaLabel={t("shareAgent.publicPermissionMenu.ariaLabel")}
+                  disabled={!canEditShares || !canPublish}
+                  onChange={(permission) => {
+                    setDraftState((currentDraftState) => ({
+                      ...currentDraftState,
+                      publicPermission: permission,
+                    }));
+                  }}
+                  options={permissionOptions}
+                  value={effectiveState.publicPermission}
+                />
+              </Section>
             }
           />
 
