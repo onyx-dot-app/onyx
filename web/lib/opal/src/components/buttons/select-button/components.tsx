@@ -18,6 +18,7 @@ import {
   type TooltipSide,
 } from "@opal/components";
 import { SvgX } from "@opal/icons";
+import { Section } from "@opal/layouts/general/components";
 import { cn } from "@opal/utils";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
 import { ChevronIcon } from "@opal/components/buttons/chevron";
@@ -187,43 +188,53 @@ function SelectButton({
         width={width}
         rounding={roundingOverride ?? (isLarge ? 3 : size === "2xs" ? 1 : 2)}
       >
-        <div
-          className={cn(
-            "opal-select-content",
-            isBetween && "w-full justify-between",
-            foldable && !isBetween && "interactive-foldable-host"
-          )}
-        >
-          {isBetween ? (
-            <>
-              <span className="opal-select-content">
-                {iconWrapper(Icon, size, !!children)}
-                {labelEl}
-              </span>
-              {trailingEl}
-            </>
-          ) : foldable ? (
-            <>
-              {iconWrapper(Icon, size, false)}
-              <Interactive.Foldable>
-                {labelEl}
-                {trailingEl}
-              </Interactive.Foldable>
-            </>
-          ) : (
-            <>
+        {isBetween ? (
+          <Section
+            flexDirection="row"
+            justifyContent="between"
+            gap={1}
+            height="auto"
+          >
+            <Section flexDirection="row" gap={1} width="fit" height="auto">
               {iconWrapper(Icon, size, !!children)}
               {labelEl}
-              {trailingEl}
-            </>
-          )}
-        </div>
+            </Section>
+            {trailingEl}
+          </Section>
+        ) : (
+          // Not a Section: its inline `gap` would override the foldable
+          // host's gap transition.
+          <div
+            className={cn(
+              "opal-select-content",
+              foldable && "interactive-foldable-host"
+            )}
+          >
+            {foldable ? (
+              <>
+                {iconWrapper(Icon, size, false)}
+                <Interactive.Foldable>
+                  {labelEl}
+                  {trailingEl}
+                </Interactive.Foldable>
+              </>
+            ) : (
+              <>
+                {iconWrapper(Icon, size, !!children)}
+                {labelEl}
+                {trailingEl}
+              </>
+            )}
+          </div>
+        )}
       </Interactive.Container>
     </Interactive.Stateful>
   );
 
   const withClear = onClear ? (
-    <div className="relative">
+    // Hugs the button (or fills, with width="full") so the clear button sits
+    // over the chevron, not at the edge of a wider container.
+    <div className={cn("relative", width === "full" ? "w-full" : "w-fit")}>
       {button}
       {showClear && (
         <div className="absolute end-2 top-1/2 -translate-y-1/2">
@@ -235,6 +246,8 @@ function SelectButton({
             size="2xs"
             prominence="tertiary"
             tooltip={strings.clearFilter}
+            aria-label={strings.clearFilter}
+            disabled={disabled}
             interaction="hover"
             onClick={(e) => {
               e.stopPropagation();
