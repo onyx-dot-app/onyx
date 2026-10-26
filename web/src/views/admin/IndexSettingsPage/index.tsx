@@ -1355,20 +1355,20 @@ export default function IndexSettingsPage() {
         </ConfirmationModalLayout>
       </cancelReindexModal.Provider>
 
-      <SettingsLayouts.Root>
+      <SettingsLayouts.Root
+        loading={
+          isLoadingCurrentModel ||
+          isLoadingSearchSettings ||
+          isLoadingLlmProviders
+        }
+      >
         <SettingsLayouts.Header
           icon={route.icon}
           title={adminRouteTitle(route)}
           description={t("header.description")}
         />
 
-        <SettingsLayouts.Body
-          loading={
-            isLoadingCurrentModel ||
-            isLoadingSearchSettings ||
-            isLoadingLlmProviders
-          }
-        >
+        <SettingsLayouts.Body>
           <Formik<IndexSettingsFormValues>
             enableReinitialize
             initialValues={initialFormValues}

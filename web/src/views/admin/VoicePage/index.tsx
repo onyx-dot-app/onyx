@@ -229,14 +229,14 @@ export default function VoicePage() {
   };
 
   return (
-    <SettingsLayouts.Root>
+    <SettingsLayouts.Root loading={isLoading}>
       <SettingsLayouts.Header
         icon={route.icon}
         title={t("header.title")}
         description={t("header.description")}
         divider
       />
-      <SettingsLayouts.Body loading={isLoading}>
+      <SettingsLayouts.Body>
         <Section gap={8}>
           <Section gap={3}>
             <Content

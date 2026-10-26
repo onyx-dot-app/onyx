@@ -58,9 +58,9 @@ function EditSlackChannelConfigContent({ id }: { id: string }) {
     : t("editChannel.channel.header.title");
 
   return (
-    <SettingsLayouts.Root>
+    <SettingsLayouts.Root loading={isLoading}>
       <SettingsLayouts.Header icon={SvgSlack} title={title} divider cancel />
-      <SettingsLayouts.Body loading={isLoading}>
+      <SettingsLayouts.Body>
         {channelsError || !slackChannelConfigs ? (
           <ErrorCallout
             errorTitle={t("error.generic.title")}

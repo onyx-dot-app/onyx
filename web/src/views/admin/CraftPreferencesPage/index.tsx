@@ -243,9 +243,9 @@ export default function CraftPreferencesPage() {
   }
 
   return (
-    <SettingsLayouts.Root>
+    <SettingsLayouts.Root loading={settings.isLoading}>
       {header}
-      <SettingsLayouts.Body loading={settings.isLoading}>
+      <SettingsLayouts.Body>
         <Card border="solid" rounding={4}>
           <Section alignItems="stretch" gap={1}>
             <InputVertical title={t("defaultModel.label")} withLabel>

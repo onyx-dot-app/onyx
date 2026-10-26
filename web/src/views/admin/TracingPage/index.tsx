@@ -33,14 +33,14 @@ function Shell({ children, loading }: ShellProps) {
   const adminRouteTitle = useAdminRouteTitle();
 
   return (
-    <SettingsLayouts.Root>
+    <SettingsLayouts.Root loading={loading}>
       <SettingsLayouts.Header
         icon={route.icon}
         title={adminRouteTitle(route)}
         description={t("page.description")}
         divider
       />
-      <SettingsLayouts.Body loading={loading}>{children}</SettingsLayouts.Body>
+      <SettingsLayouts.Body>{children}</SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
 }

@@ -642,14 +642,14 @@ export default function LanguageModelsPage() {
   }
 
   return (
-    <SettingsLayouts.Root>
+    <SettingsLayouts.Root loading={!existingLlmProviders}>
       <SettingsLayouts.Header
         icon={route.icon}
         title={adminRouteTitle(route)}
         divider
       />
 
-      <SettingsLayouts.Body loading={!existingLlmProviders}>
+      <SettingsLayouts.Body>
         {hasProviders ? (
           <Card border="solid" rounding={4}>
             <Section alignItems="stretch">

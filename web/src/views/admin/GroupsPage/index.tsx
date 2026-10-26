@@ -114,7 +114,7 @@ function GroupsPage() {
   }
 
   return (
-    <SettingsLayouts.Root>
+    <SettingsLayouts.Root loading={isLoading}>
       <div data-testid="groups-page-heading">
         <SettingsLayouts.Header icon={SvgUsers} title={t("page.title")} divider>
           <MessageCard
@@ -146,7 +146,7 @@ function GroupsPage() {
       </div>
 
       {/* The search row's own padding spaces it from the cards. */}
-      <SettingsLayouts.Body gap={0} loading={isLoading}>
+      <SettingsLayouts.Body gap={0}>
         <AdminListHeader
           hasItems={!isLoading && !error && manageableGroups.length > 0}
           searchQuery={searchQuery}

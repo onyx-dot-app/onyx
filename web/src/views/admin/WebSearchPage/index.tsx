@@ -349,7 +349,7 @@ export default function WebSearchPage() {
 
   return (
     <>
-      <SettingsLayouts.Root>
+      <SettingsLayouts.Root loading={isLoading}>
         <SettingsLayouts.Header
           icon={route.icon}
           title={t("header.title")}
@@ -357,7 +357,7 @@ export default function WebSearchPage() {
           divider
         />
 
-        <SettingsLayouts.Body loading={isLoading}>
+        <SettingsLayouts.Body>
           <div className="flex w-full flex-col gap-3">
             <Content
               title={t("searchEngine.title")}

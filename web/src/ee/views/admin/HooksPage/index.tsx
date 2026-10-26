@@ -598,14 +598,14 @@ export default function HooksPage() {
         />
       )}
 
-      <SettingsLayouts.Root>
+      <SettingsLayouts.Root loading={isLoading}>
         <SettingsLayouts.Header
           icon={route.icon}
           title={adminRouteTitle(route)}
           description={t("page.description", { appName: settings.appName })}
           divider
         />
-        <SettingsLayouts.Body loading={isLoading}>
+        <SettingsLayouts.Body>
           {specsError || hooksError ? (
             <Text font="secondary-body" color="text-03">
               {specsError

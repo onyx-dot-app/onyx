@@ -192,9 +192,9 @@ export default function CraftPage() {
   }
 
   return (
-    <SettingsLayouts.Root>
+    <SettingsLayouts.Root loading={settings.isLoading}>
       {header}
-      <SettingsLayouts.Body loading={settings.isLoading}>
+      <SettingsLayouts.Body>
         <Card border="solid" rounding={4}>
           <Section alignItems="stretch" gap={2}>
             <InputHorizontal

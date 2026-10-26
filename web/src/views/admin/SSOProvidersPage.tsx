@@ -45,7 +45,7 @@ function Shell({ children, onAddProvider, addGated, loading }: ShellProps) {
   const adminRouteTitle = useAdminRouteTitle();
 
   return (
-    <SettingsLayouts.Root>
+    <SettingsLayouts.Root loading={loading}>
       <SettingsLayouts.Header
         icon={route.icon}
         title={adminRouteTitle(route)}
@@ -63,7 +63,7 @@ function Shell({ children, onAddProvider, addGated, loading }: ShellProps) {
           </Button>,
         ]}
       />
-      <SettingsLayouts.Body loading={loading}>{children}</SettingsLayouts.Body>
+      <SettingsLayouts.Body>{children}</SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
 }

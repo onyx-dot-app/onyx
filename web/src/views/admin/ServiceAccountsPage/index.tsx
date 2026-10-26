@@ -271,7 +271,7 @@ export default function ServiceAccountsPage() {
   const hasKeys = visibleApiKeys.length > 0;
 
   return (
-    <SettingsLayouts.Root>
+    <SettingsLayouts.Root loading={isLoading}>
       <SettingsLayouts.Header
         title={adminRouteTitle(route)}
         icon={route.icon}
@@ -279,7 +279,7 @@ export default function ServiceAccountsPage() {
         divider
       />
 
-      <SettingsLayouts.Body loading={isLoading}>
+      <SettingsLayouts.Body>
         {isTrialing && (
           <MessageCard
             variant="warning"
