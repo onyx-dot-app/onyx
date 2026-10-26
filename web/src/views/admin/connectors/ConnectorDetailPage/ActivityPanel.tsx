@@ -7,10 +7,9 @@ import {
   Card,
   Divider,
   Dropdown,
-  FilterButton,
+  SelectButton,
   InputTypeIn,
   MessageCard,
-  SelectButton,
   ShadowDiv,
   Tag,
   Tooltip,
@@ -432,13 +431,16 @@ export default function ActivityPanel({
                     >
                       <Dropdown>
                         <Dropdown.Trigger asChild>
-                          <FilterButton
+                          <SelectButton
+                            variant="select-filter"
+                            chevron
+                            labelFont="main-ui-action"
                             icon={SvgActivity}
-                            active={shown !== "all"}
+                            state={shown !== "all" ? "selected" : "empty"}
                             onClear={() => setShown("all")}
                           >
                             {t(`filter.${shown}`)}
-                          </FilterButton>
+                          </SelectButton>
                         </Dropdown.Trigger>
                         <Dropdown.Data
                           label={t("filter.label")}

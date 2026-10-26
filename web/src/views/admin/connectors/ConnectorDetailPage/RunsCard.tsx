@@ -9,7 +9,7 @@ import {
   Card,
   Divider,
   Dropdown,
-  FilterButton,
+  SelectButton,
   InputTypeIn,
   MessageCard,
   Pagination,
@@ -407,13 +407,16 @@ export default function RunsCard({
             ) : (
               <Dropdown>
                 <Dropdown.Trigger asChild>
-                  <FilterButton
+                  <SelectButton
+                    variant="select-filter"
+                    chevron
+                    labelFont="main-ui-action"
                     icon={SvgClock}
-                    active={picked.hours !== null}
+                    state={picked.hours !== null ? "selected" : "empty"}
                     onClear={() => pickWindow(ALL_TIME)}
                   >
                     {t(`window.${picked.id}`)}
-                  </FilterButton>
+                  </SelectButton>
                 </Dropdown.Trigger>
                 <Dropdown.Data
                   label={t("window.label")}
@@ -433,13 +436,16 @@ export default function RunsCard({
             {kinds.length > 1 && (
               <Dropdown>
                 <Dropdown.Trigger asChild>
-                  <FilterButton
+                  <SelectButton
+                    variant="select-filter"
+                    chevron
+                    labelFont="main-ui-action"
                     icon={SvgSlowMotion}
-                    active={kind !== null}
+                    state={kind !== null ? "selected" : "empty"}
                     onClear={() => pickKind(null)}
                   >
                     {kind === null ? t("kinds.all") : t(`kinds.${kind}`)}
-                  </FilterButton>
+                  </SelectButton>
                 </Dropdown.Trigger>
                 <Dropdown.Data
                   label={t("kinds.label")}
@@ -468,15 +474,18 @@ export default function RunsCard({
             )}
             <Dropdown>
               <Dropdown.Trigger asChild>
-                <FilterButton
+                <SelectButton
+                  variant="select-filter"
+                  chevron
+                  labelFont="main-ui-action"
                   icon={SvgActivity}
-                  active={statusGroup !== null}
+                  state={statusGroup !== null ? "selected" : "empty"}
                   onClear={() => pickStatusGroup(null)}
                 >
                   {statusGroup === null
                     ? t("statusGroups.all")
                     : t(`statusGroups.${statusGroup}`)}
-                </FilterButton>
+                </SelectButton>
               </Dropdown.Trigger>
               <Dropdown.Data
                 label={t("statusGroups.label")}

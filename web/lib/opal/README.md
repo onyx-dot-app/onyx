@@ -158,7 +158,7 @@ The tag pattern must match `opal/v*.*.*` for the workflow to fire.
 
 ## Conventions
 
-- Component directories are kebab-case (e.g. `select-button/`, `open-button/`,
+- Component directories are kebab-case (e.g. `select-button/`, `line-item-button/`,
   `content-action/`).
 - Each component dir contains `components.tsx`, `README.md`, and `styles.css` (when needed).
 - Imports inside the lib use the `@opal/` path alias; never `@/`.

@@ -18,18 +18,6 @@ export {
   type SelectButtonProps,
 } from "@opal/components/buttons/select-button/components";
 
-/* OpenButton */
-export {
-  OpenButton,
-  type OpenButtonProps,
-} from "@opal/components/buttons/open-button/components";
-
-/* FilterButton */
-export {
-  FilterButton,
-  type FilterButtonProps,
-} from "@opal/components/buttons/filter-button/components";
-
 /* AttachmentItemButton */
 export {
   AttachmentItemButton,

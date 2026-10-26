@@ -3,7 +3,7 @@
 import { useTranslations } from "next-intl";
 import {
   Dropdown,
-  OpenButton,
+  SelectButton,
   type DropdownItem,
   type DropdownWidth,
 } from "@opal/components";
@@ -56,7 +56,8 @@ export default function SharePermissionMenu<T extends string>({
 
   if (disabled || (!onChange && !onRemove)) {
     return (
-      <OpenButton
+      <SelectButton
+        chevron
         aria-label={ariaLabel}
         disabled
         foldable={false}
@@ -68,7 +69,7 @@ export default function SharePermissionMenu<T extends string>({
         width={width}
       >
         {selectedOption.label}
-      </OpenButton>
+      </SelectButton>
     );
   }
 
@@ -107,7 +108,8 @@ export default function SharePermissionMenu<T extends string>({
   return (
     <Dropdown width={menuWidth}>
       <Dropdown.Trigger asChild>
-        <OpenButton
+        <SelectButton
+          chevron
           aria-label={ariaLabel}
           foldable={false}
           icon={showTriggerIcon ? selectedOption.icon : undefined}
@@ -118,7 +120,7 @@ export default function SharePermissionMenu<T extends string>({
           width={width}
         >
           {selectedOption.label}
-        </OpenButton>
+        </SelectButton>
       </Dropdown.Trigger>
       <Dropdown.Data
         label={ariaLabel}
