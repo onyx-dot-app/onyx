@@ -7,7 +7,7 @@ import {
   Button,
   Card,
   Dropdown,
-  FilterButton,
+  SelectButton,
   InputTypeIn,
   MessageCard,
   Pagination,
@@ -180,13 +180,16 @@ export default function ConnectorList({
         >
           <Dropdown>
             <Dropdown.Trigger asChild>
-              <FilterButton
+              <SelectButton
+                variant="select-filter"
+                chevron
+                labelFont="main-ui-action"
                 icon={SvgActivity}
-                active={status !== null}
+                state={status !== null ? "selected" : "empty"}
                 onClear={() => pickStatus(null)}
               >
                 {status === null ? t("statusFilter.all") : tBadges(status)}
-              </FilterButton>
+              </SelectButton>
             </Dropdown.Trigger>
             <Dropdown.Data
               label={t("statusFilter.label")}
