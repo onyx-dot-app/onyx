@@ -1,8 +1,9 @@
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from functools import partial
+from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue
 
 from onyx.agents.execution_records import CompactionCheckpoint
 from onyx.agents.models import (
@@ -79,6 +80,7 @@ RESEARCH_AGENT_FORCE_REPORT_SECONDS = 12 * 60
 
 
 class ResearchFeatureState(BaseModel):
+    kind: Literal["research.state.v1"] = "research.state.v1"
     elapsed_seconds: float = 0.0
     configuration: ResearchConfiguration
     citation_sources: CitationMapping
@@ -166,12 +168,10 @@ class ResearchAgent(Agent, RestorableFeature):
             citation_sources=self.citation_processor.citation_to_doc,
             citation_mapping=self.citation_mapping,
             search_tools=capture_search_state(self.application_tools),
-        ).model_copy(deep=True)
+        )
 
-    def restore_state(self, state: BaseModel) -> None:
-        if not isinstance(state, ResearchFeatureState):
-            raise ValueError("Research restoration requires ResearchFeatureState")
-        saved = state.model_copy(deep=True)
+    def restore_state(self, state: Mapping[str, JsonValue]) -> None:
+        saved = ResearchFeatureState.model_validate(state)
         if (
             saved.configuration.language_section != self.language_section
             or saved.configuration.reasoning_effort != self.reasoning_effort

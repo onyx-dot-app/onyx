@@ -133,6 +133,8 @@ Its `ownership_version` changes when a checkpoint is published or claimed, preve
 The runtime revision inside `state` tracks execution changes and serves a separate purpose.
 Checkpoint bindings identify the tenant and response. Saved progress uses the runtime’s field names, including
 `pending_tool_calls` and `human_tool_answers`.
+Feature state is a JSON object validated by its owning feature during restoration.
+Chat's `kind` discriminator selects the feature schema; message metadata and tool details retain their tagged codec.
 
 ### `ChatSession` (`db/models.py:ChatSession`, table `chat_session`)
 

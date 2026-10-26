@@ -53,6 +53,7 @@ from onyx.llm.models import (
     ToolResultMessage,
 )
 from onyx.server.query_and_chat.models import MessageResponseIDInfo
+from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient
 
 
@@ -95,6 +96,7 @@ def test_snapshot_retains_partial_output_after_producer_continues() -> None:
     started: Future[Run] = Future()
     agent = Agent(
         StreamingClient(lambda *_: AssistantMessage()),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         prepare_step=lambda _input: PreparedStep(
             output_metadata=ResearchMessageMetadata(
                 phase=ResearchPhase.CLARIFICATION, is_reasoning_model=False
@@ -139,6 +141,7 @@ def test_snapshot_does_not_wait_for_slow_stream_observer() -> None:
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="answer")])
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
     )
 
     def display(event: AgentEvent) -> None:
@@ -195,6 +198,7 @@ def test_full_response_content_survives_delivery_gaps(
                 content=[TextContent(text="Second [2], then first [1].")]
             )
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         prepare_step=lambda _input: PreparedStep(
             output_metadata=ChatMessageMetadata(
                 sources={1: documents[0], 2: documents[1]}
@@ -252,7 +256,8 @@ def test_response_projection_uses_the_selected_run_after_agent_reuse() -> None:
     agent = Agent(
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text=next(replies))])
-        )
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
     )
     first_run = _run_observed(agent)
     first = project_response(first_run.snapshot(), tool_ids={})
@@ -389,6 +394,7 @@ def test_response_save_captures_run_once() -> None:
 
     agent = Agent(
         TwoStepClient(lambda *_: next(replies)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
                 definition=ToolDefinition(

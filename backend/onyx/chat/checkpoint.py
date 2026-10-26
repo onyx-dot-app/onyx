@@ -10,7 +10,6 @@ from onyx.agents.execution_records import RunStatus
 from onyx.agents.models import AgentState, ExecutionCheckpoint, RunProgress, RunState
 from onyx.agents.tools import HumanToolAnswer, InputDecision
 from onyx.chat.models import (
-    ChatFeatureState,
     ChatMessageMetadata,
     ChatSearchResult,
     CheckpointBinding,
@@ -23,9 +22,7 @@ from onyx.chat.prompt_formatting import PromptMetadata
 from onyx.chat.response import response_snapshot
 from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.context.search.models import SearchDocsResponse
-from onyx.deep_research.agent import DeepResearchFeatureState
 from onyx.deep_research.models import ResearchAgentCallResult, ResearchMessageMetadata
-from onyx.deep_research.research_agent import ResearchFeatureState
 from onyx.llm.models import Message, ToolResult
 from onyx.tools.models import (
     CustomToolCallSummary,
@@ -40,27 +37,23 @@ from onyx.tools.tool_implementations.images.models import FinalImageGenerationRe
 _JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
 
 
-def _checkpoint_model_types() -> dict[str, type[BaseModel]]:
-    return {
-        "chat.state.v1": ChatFeatureState,
-        "research.state.v1": ResearchFeatureState,
-        "deep_research.state.v1": DeepResearchFeatureState,
-        "prompt.metadata.v1": PromptMetadata,
-        "chat.metadata.v1": ChatMessageMetadata,
-        "chat.rendering.v1": MessageRendering,
-        "chat.search.v1": ChatSearchResult,
-        "search.results.v1": SearchDocsResponse,
-        "research.metadata.v1": ResearchMessageMetadata,
-        "research.result.v1": ResearchAgentCallResult,
-        "coding.result.v1": CodingAgentCallResult,
-        "tool.custom.v1": CustomToolCallSummary,
-        "tool.file_read.v1": FileReadResult,
-        "tool.bash.v1": LlmBashExecutionResult,
-        "tool.python.v1": LlmPythonExecutionResult,
-        "tool.memory.v1": MemoryUpdated,
-        "tool.error.v1": ToolExecutionError,
-        "tool.image.v1": FinalImageGenerationResponse,
-    }
+CHECKPOINT_PAYLOAD_TYPES: dict[str, type[BaseModel]] = {
+    "prompt.metadata.v1": PromptMetadata,
+    "chat.metadata.v1": ChatMessageMetadata,
+    "chat.rendering.v1": MessageRendering,
+    "chat.search.v1": ChatSearchResult,
+    "search.results.v1": SearchDocsResponse,
+    "research.metadata.v1": ResearchMessageMetadata,
+    "research.result.v1": ResearchAgentCallResult,
+    "coding.result.v1": CodingAgentCallResult,
+    "tool.custom.v1": CustomToolCallSummary,
+    "tool.file_read.v1": FileReadResult,
+    "tool.bash.v1": LlmBashExecutionResult,
+    "tool.python.v1": LlmPythonExecutionResult,
+    "tool.memory.v1": MemoryUpdated,
+    "tool.error.v1": ToolExecutionError,
+    "tool.image.v1": FinalImageGenerationResponse,
+}
 
 
 class _Payload(BaseModel):
@@ -149,8 +142,7 @@ class _CheckpointSerializer:
         )
 
     def encode_progress(self, progress: RunProgress) -> dict[str, JsonValue]:
-        data = _dump(progress, exclude={"human_tool_answers", "feature_state"})
-        data["feature_state"] = self.encode_payload(progress.feature_state)
+        data = _dump(progress, exclude={"human_tool_answers"})
         data["human_tool_answers"] = {
             key: self.encode_answer(answer)
             for key, answer in progress.human_tool_answers.items()
@@ -159,10 +151,8 @@ class _CheckpointSerializer:
 
     def decode_progress(self, value: JsonValue) -> RunProgress:
         raw = _object(value)
-        feature_state = raw.pop("feature_state", None)
         answers = raw.pop("human_tool_answers", {})
         progress = RunProgress.model_validate(raw)
-        progress.feature_state = self.decode_payload(feature_state)
         progress.human_tool_answers = {
             key: self.decode_answer(answer) for key, answer in _object(answers).items()
         }
@@ -240,7 +230,7 @@ def serialize_checkpoint(
         raise ValueError("Save each child response independently before checkpointing")
     if snapshot.run_id != response.run_id or binding.response_id != response.run_id:
         raise ValueError("Checkpoint belongs to another response")
-    serializer = _CheckpointSerializer(_checkpoint_model_types())
+    serializer = _CheckpointSerializer(CHECKPOINT_PAYLOAD_TYPES)
 
     def payload(message: Message) -> MessagePayload:
         return MessagePayload(
@@ -281,7 +271,7 @@ def deserialize_checkpoint(
     binding: CheckpointBinding,
 ) -> ExecutionCheckpoint:
     """Validate saved resume data against the selected history and rebuild execution state."""
-    serializer = _CheckpointSerializer(_checkpoint_model_types())
+    serializer = _CheckpointSerializer(CHECKPOINT_PAYLOAD_TYPES)
     if _digest(context, serializer) != data.history_digest:
         raise ValueError("Checkpoint history changed")
     if _response_digest(response) != data.response_digest:

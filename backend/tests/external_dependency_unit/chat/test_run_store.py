@@ -33,7 +33,7 @@ from onyx.agents.tools import (
 )
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.agent import ChatAgent
-from onyx.chat.checkpoint import _checkpoint_model_types
+from onyx.chat.checkpoint import CHECKPOINT_PAYLOAD_TYPES
 from onyx.chat.history_store import get_chat_history_store
 from onyx.chat.models import ChatFeatureState, CheckpointBinding
 from onyx.chat.presentation import project_response
@@ -51,6 +51,7 @@ from onyx.db.models import ChatMessage, ChatResponseCheckpoint, ChatSession
 from onyx.file_store.models import ExtractedContextFiles
 from onyx.file_store.postgres_file_store import PostgresBackedFileStore
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
+from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
     AssistantMessage,
     GenerationRequest,
@@ -61,6 +62,7 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.tools.models import ChatFile, FileReadResult
+from onyx.tracing.flows import LLMFlow
 from onyx.utils.threadpool_concurrency import start_thread_future
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.unit.onyx.agents.checkpoint_storage import CheckpointStorage
@@ -274,6 +276,7 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
             FakeModelClient(
                 lambda *_: AssistantMessage(content=[TextContent(text="done")])
             ),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
             agent_id=checkpoint.run_state.agent_id,
             state=checkpoint.agent_state,
             tools=tools,
@@ -311,6 +314,7 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
                 ]
             )
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         agent_id=str(branch[0]),
         state=context,
         tools=tools,
@@ -455,6 +459,7 @@ def _resume_response_in_process(session_id: str, message_id: str, run_id: str) -
             FakeModelClient(
                 lambda *_: AssistantMessage(content=[TextContent(text="done")])
             ),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
             agent_id=checkpoint.run_state.agent_id,
             state=checkpoint.agent_state,
             tools=[
@@ -531,6 +536,7 @@ def test_transfer_rejects_input_missing_from_history_before_handoff(
                 content=[ToolCall(id="question", name="ask", arguments={})]
             )
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         agent_id=str(branch[0]),
         tools=[
             AgentTool(
@@ -593,6 +599,7 @@ def test_competing_resume_claims_and_stale_writer(
                 content=[ToolCall(id="question", name="ask", arguments={})]
             )
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[tool],
         agent_id=str(branch[0]),
     )
@@ -698,7 +705,8 @@ def test_checkpoint_files_use_durable_references_and_session_cleanup(
                     agent_id=str(branch[0]),
                     status=RunStatus.SUSPENDED,
                     progress=RunProgress(
-                        step_limit=2, feature_state=feature.capture_state()
+                        step_limit=2,
+                        feature_state=feature.capture_state().model_dump(mode="json"),
                     ),
                 ),
             )
@@ -706,7 +714,7 @@ def test_checkpoint_files_use_durable_references_and_session_cleanup(
             persist_checkpoint_files(captured, session_id=branch[0])
             reads.assert_not_called()
             assert saves.call_count == 1
-            codec = CheckpointStorage(_checkpoint_model_types())
+            codec = CheckpointStorage(CHECKPOINT_PAYLOAD_TYPES)
             encoded = codec.save(
                 captured.run_state,
                 captured.agent_state,
@@ -770,6 +778,7 @@ def test_owner_cleanup_failure_releases_local_control(
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="done")])
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         agent_id=str(branch[0]),
     )
     try:
@@ -826,6 +835,7 @@ def test_terminal_run_retains_control_until_cancelled_tool_drains(
                 content=[ToolCall(id="slow", name="slow", arguments={})]
             )
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         agent_id=str(branch[0]),
         tools=[
             AgentTool(
@@ -879,7 +889,10 @@ def test_parallel_children_use_reserved_response_identity(
             return AssistantMessage(content=[TextContent(text=invocation.call_id)])
 
         spawned = invocation.agents.spawn_agent(
-            Agent(FakeModelClient(child_reply)),
+            Agent(
+                FakeModelClient(child_reply),
+                generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            ),
             name=invocation.call_id,
             description="Parallel research",
             messages=[UserMessage(content=invocation.call_id)],
@@ -902,6 +915,7 @@ def test_parallel_children_use_reserved_response_identity(
     )
     agent = Agent(
         FakeModelClient(lambda *_: next(replies)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         agent_id=str(branch[0]),
         tools=[
             AgentTool(
@@ -976,7 +990,8 @@ def test_failed_child_start_can_retry_without_an_orphan_response(
     child = Agent(
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="child answer")])
-        )
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
     )
 
     def delegate(invocation: ToolInvocation) -> ToolResult:
@@ -1042,6 +1057,7 @@ def test_failed_child_start_can_retry_without_an_orphan_response(
     )
     agent = Agent(
         FakeModelClient(lambda *_: next(replies)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         agent_id=str(branch[0]),
         tools=[
             AgentTool(
@@ -1107,6 +1123,7 @@ def test_root_start_failure_releases_reserved_response_for_retry(
         FakeModelClient(
             lambda *_: AssistantMessage(content=[TextContent(text="done")])
         ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         agent_id=str(branch[0]),
     )
     try:
@@ -1153,7 +1170,8 @@ def test_resumed_child_keeps_its_original_response_tree(
             Agent(
                 FakeModelClient(
                     lambda *_: AssistantMessage(content=[TextContent(text="facts")])
-                )
+                ),
+                generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
             ),
             name="facts",
             description="Nested research",
@@ -1176,6 +1194,7 @@ def test_resumed_child_keeps_its_original_response_tree(
         )
         return Agent(
             FakeModelClient(lambda *_: next(replies)),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
             agent_id=checkpoint.run_state.agent_id,
             state=checkpoint.agent_state,
             tools=[
@@ -1208,6 +1227,7 @@ def test_resumed_child_keeps_its_original_response_tree(
                         content=[ToolCall(id="ask", name="ask", arguments={})]
                     )
                 ),
+                generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
                 tools=[ask],
             ),
             name="research",
@@ -1236,6 +1256,7 @@ def test_resumed_child_keeps_its_original_response_tree(
     )
     agent = Agent(
         FakeModelClient(lambda *_: next(replies)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         agent_id=str(branch[0]),
         tools=[
             AgentTool(
