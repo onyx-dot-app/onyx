@@ -29,7 +29,7 @@ import { cn } from "@opal/utils";
 // toggle is hidden).
 const MSG_MAX_W = "md:max-w-[720px] md:min-w-[400px]";
 // Full width keeps a max-width (100%), so the switch animates instead of jumping.
-const MSG_FULL_W = "md:max-w-full md:min-w-[400px]";
+const MSG_FULL_W = "md:max-w-full";
 
 /** Animates the full-width toggle; every surface it widens uses this. */
 export const FULL_WIDTH_TRANSITION =
