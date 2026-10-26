@@ -19,7 +19,7 @@ from onyx.chat.llm_loop import EmptyLLMResponseError
 from onyx.chat.models import StreamingError
 from onyx.configs.constants import MessageType
 from onyx.db.chat import set_preferred_response
-from onyx.db.models import ChatMessage
+from onyx.db.models import ChatMessage, ChatSession
 from onyx.llm.models import ToolChoiceOptions
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.models import SendMessageRequest
@@ -188,6 +188,7 @@ class TestSetPreferredResponseValidation:
         db = MagicMock()
         user_msg = MagicMock()
         user_msg.message_type = MessageType.USER
+        user_msg.chat_session = ChatSession(id=uuid4(), spawned_by_message_id=None)
 
         # First call returns user_msg, second call (for assistant) returns None
         db.get.side_effect = [user_msg, None]
@@ -219,6 +220,7 @@ class TestSetPreferredResponseValidation:
             id=1,
             message_type=MessageType.USER,
             chat_session_id=session_id,
+            chat_session=ChatSession(id=session_id, spawned_by_message_id=None),
             preferred_response_id=3,
             latest_child_message_id=3,
         )
@@ -246,6 +248,7 @@ class TestSetPreferredResponseValidation:
             id=1,
             message_type=MessageType.USER,
             chat_session_id=session_id,
+            chat_session=ChatSession(id=session_id, spawned_by_message_id=None),
             preferred_response_id=3,
             latest_child_message_id=3,
         )
