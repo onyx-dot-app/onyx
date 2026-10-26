@@ -3,7 +3,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from onyx.agents.execution_records import ExecutionStatus, RunStatus, messages_for_model
+from onyx.agents.execution_records import messages_for_model
+from onyx.agents.models import ExecutionStatus, RunStatus
 from onyx.chat.chat_utils import (
     _build_tool_call_response_history_message,
     capture_chat_history,

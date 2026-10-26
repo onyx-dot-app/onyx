@@ -4,9 +4,9 @@ from functools import partial
 
 from pydantic import JsonValue
 
-from onyx.agents.execution_records import CompactionCheckpoint
 from onyx.agents.models import (
     AgentState,
+    CompactionCheckpoint,
     PreparedStep,
     StepInput,
     StepResult,

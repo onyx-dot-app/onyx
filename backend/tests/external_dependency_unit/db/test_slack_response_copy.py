@@ -6,8 +6,12 @@ import pytest
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from onyx.agents.execution_records import ExecutionStatus, RunStatus
-from onyx.agents.models import StepRecord, ToolExecutionRecord
+from onyx.agents.models import (
+    ExecutionStatus,
+    RunStatus,
+    StepRecord,
+    ToolExecutionRecord,
+)
 from onyx.chat.chat_utils import capture_chat_history
 from onyx.chat.models import ResponseRecord
 from onyx.configs.constants import MessageType

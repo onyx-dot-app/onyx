@@ -8,7 +8,7 @@ from litellm.exceptions import APIConnectionError
 
 from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.events import AgentEndEvent, AgentEvent
-from onyx.agents.execution_records import RunFailureKind, RunStatus
+from onyx.agents.models import RunFailureKind, RunStatus
 from onyx.deep_research.agent import DeepResearchAgent
 from onyx.deep_research.tool_definitions import (
     GENERATE_REPORT_TOOL_NAME,

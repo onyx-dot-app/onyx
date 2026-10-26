@@ -5,9 +5,9 @@ from typing import Literal
 
 from pydantic import BaseModel, JsonValue
 
-from onyx.agents.execution_records import CompactionCheckpoint
 from onyx.agents.models import (
     AgentState,
+    CompactionCheckpoint,
     PreparedStep,
     StepInput,
     StepResult,

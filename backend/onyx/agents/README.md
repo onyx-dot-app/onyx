@@ -15,7 +15,7 @@ streaming events, cancellation, and record-keeping.
 | `tools.py` | `AgentTool`, `ToolInvocation`, and the `AgentControl` interface. |
 | `events.py` | Typed execution events. |
 | `compaction.py` | Token budgets, checkpoints, and history summarization. |
-| `execution_records.py` | Run outcomes, compaction checkpoints, and model-history replay. |
+| `execution_records.py` | Model-history replay and input message identities. |
 
 Message and request types, and `CancellationSignal`, come from [`onyx/llm`](../llm/README.md).
 

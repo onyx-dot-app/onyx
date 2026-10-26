@@ -5,9 +5,10 @@ from uuid import uuid4
 
 import pytest
 
-from onyx.agents.execution_records import ExecutionStatus, RunStatus
 from onyx.agents.models import (
+    ExecutionStatus,
     RunState,
+    RunStatus,
     StepRecord,
     ToolExecutionRecord,
 )

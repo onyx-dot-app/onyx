@@ -5,14 +5,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, SerializeAsAny
 
-from onyx.agents.execution_records import (
-    CompactionCheckpoint,
-    ExecutionStatus,
-    RunFailure,
-    RunStatus,
-    messages_for_model,
-)
+from onyx.agents.execution_records import messages_for_model
 from onyx.agents.tools import AgentTool, ChildRunWait, HumanToolAnswer, PendingToolInput
+from onyx.llm.exceptions import LLMErrorInfo
 from onyx.llm.models import (
     AssistantMessage,
     GenerationOptions,
@@ -23,6 +18,46 @@ from onyx.llm.models import (
     ToolDefinition,
     ToolResultMessage,
 )
+
+
+class RunStatus(str, Enum):
+    RUNNING = "running"
+    SUSPENDED = "suspended"
+    COMPLETE = "complete"
+    LIMIT = "limit"
+    CANCELLED = "cancelled"
+    ERROR = "error"
+
+    @property
+    def is_terminal(self) -> bool:
+        return self not in (RunStatus.RUNNING, RunStatus.SUSPENDED)
+
+
+class ExecutionStatus(str, Enum):
+    """State of one generation or tool invocation; running means no terminal outcome yet."""
+
+    RUNNING = "running"
+    COMPLETE = "complete"
+    CANCELLED = "cancelled"
+    ERROR = "error"
+
+
+class RunFailureKind(str, Enum):
+    LLM = "llm"
+    LLM_TIMEOUT = "llm_timeout"
+    LLM_RATE_LIMIT = "llm_rate_limit"
+    EXECUTION = "execution"
+
+
+class RunFailure(BaseModel):
+    kind: RunFailureKind
+    message: str
+    llm_error: LLMErrorInfo | None = None
+
+
+class CompactionCheckpoint(BaseModel):
+    summary: str
+    covered_through_message_id: str = Field(min_length=1)
 
 
 class AgentInfo(BaseModel):

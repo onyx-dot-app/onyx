@@ -8,8 +8,7 @@ from onyx.agents.agent_coordination import (
     AgentDirectory,
     RunStore,
 )
-from onyx.agents.execution_records import RunStatus
-from onyx.agents.models import AgentInfo, RunState
+from onyx.agents.models import AgentInfo, RunState, RunStatus
 from onyx.agents.runtime import Agent
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.history_store import ChatHistoryStore, get_chat_history_store

@@ -9,13 +9,14 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from onyx.agents.execution_records import ExecutionStatus, RunStatus
 from onyx.agents.models import (
     AgentState,
     ExecutionCheckpoint,
+    ExecutionStatus,
     RunAction,
     RunProgress,
     RunState,
+    RunStatus,
     StepRecord,
     ToolCallContext,
     ToolExecutionRecord,

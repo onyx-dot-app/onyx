@@ -15,8 +15,7 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.agents.execution_records import ExecutionStatus
-from onyx.agents.models import StepRecord, ToolExecutionRecord
+from onyx.agents.models import ExecutionStatus, StepRecord, ToolExecutionRecord
 from onyx.chat.incognito import delete_incognito_generated_files
 from onyx.chat.incognito_context import (
     append_incognito_message,
@@ -304,7 +303,7 @@ def _load_agent_history(
 
 
 def test_temporary_agent_history_sources_and_lifetime() -> None:
-    from onyx.agents.execution_records import RunStatus
+    from onyx.agents.models import RunStatus
     from onyx.chat.incognito_context import (
         INCOGNITO_CONTEXT_TTL_SECONDS,
         save_incognito_response,
@@ -652,7 +651,7 @@ def test_incognito_sibling_responses_keep_independent_agents_and_history(
     from concurrent.futures import ThreadPoolExecutor
     from threading import Barrier
 
-    from onyx.agents.execution_records import RunStatus
+    from onyx.agents.models import RunStatus
     from onyx.chat.incognito_context import (
         save_incognito_response,
     )

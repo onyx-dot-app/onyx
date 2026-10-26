@@ -7,8 +7,7 @@ from typing import override
 import pytest
 
 from onyx.agents.events import AgentEvent
-from onyx.agents.execution_records import RunStatus
-from onyx.agents.models import PreparedStep
+from onyx.agents.models import PreparedStep, RunStatus
 from onyx.agents.runtime import Agent, RunFailed
 from onyx.agents.tools import AgentTool
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal

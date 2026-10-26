@@ -5,7 +5,7 @@ from uuid import uuid4
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 
-from onyx.agents.execution_records import RunStatus
+from onyx.agents.models import RunStatus
 from onyx.configs.constants import MessageType
 from onyx.db.chat_response import read_response_status__no_commit
 from onyx.db.models import ChatMessage, ChatSession, ToolCall

@@ -54,7 +54,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.types import LargeBinary, TypeDecorator
 from typing_extensions import TypedDict  # noreorder
 
-from onyx.agents.execution_records import ExecutionStatus, RunFailure, RunStatus
+from onyx.agents.models import ExecutionStatus, RunFailure, RunStatus
 from onyx.auth.schemas import UserRole
 from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.configs.constants import (

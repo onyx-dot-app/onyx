@@ -6,11 +6,13 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_coordination import AgentCoordinator
-from onyx.agents.execution_records import (
+from onyx.agents.models import (
+    AgentInfo,
     ExecutionStatus,
     RunStatus,
+    StepRecord,
+    ToolExecutionRecord,
 )
-from onyx.agents.models import AgentInfo, StepRecord, ToolExecutionRecord
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.chat.chat_utils import capture_chat_history, convert_chat_history
