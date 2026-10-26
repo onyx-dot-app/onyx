@@ -301,7 +301,7 @@ audioop-lts==0.2.2 \
 authlib==1.8.0 \
     --hash=sha256:88aebbd9af6757e14e912d5dc007ae1dc1f3e27e3b2152ce7c552ee2c3b3c121 \
     --hash=sha256:f3ecd5f1da737262fb53bf1a4d95c4ea1ad9dd509316587a255c99ab1838a4f0
-    # via fastmcp
+    # via fastmcp-slim
 azure-cognitiveservices-speech==1.50.0 \
     --hash=sha256:2621d1c95741c0864d418f88c59d1355bde0d893beb57c609b6ae4819c99e591 \
     --hash=sha256:44279ad5430db7484ef412d89599f926e623b184a365a2258056f4ffdee34e55 \
@@ -723,7 +723,7 @@ cryptography==50.0.0 \
 cyclopts==4.2.4 \
     --hash=sha256:27e1d175df2889aba72cd960c4e34c8b0a501c5b0161e849c72d9fee5903ecbb \
     --hash=sha256:41054f5e921a4f2b8ab9c839f12a274dec06a19560dc4898ce37cb775ca68ca4
-    # via fastmcp
+    # via fastmcp-slim
 dask==2026.1.1 \
     --hash=sha256:12b1dbb0d6e92f287feb4076871600b2fba3a843d35ff214776ada5e9e7a1529 \
     --hash=sha256:146b0ef2918eb581e06139183a88801b4a8c52d7c37758a91f8c3b75c54b0e15
@@ -802,7 +802,7 @@ exceptiongroup==1.3.0 \
     --hash=sha256:b241f5885f560bc56a59ee63ca4c6a8bfa46ae4ad651af316d4e81817bb9fd88
     # via
     #   braintrust
-    #   fastmcp
+    #   fastmcp-slim
 fastapi==0.133.1 \
     --hash=sha256:658f34ba334605b1617a65adf2ea6461901bdb9af3a3080d63ff791ecf7dc2e2 \
     --hash=sha256:ed152a45912f102592976fde6cbce7dae1a8a1053da94202e51dd35d184fadd6
@@ -844,9 +844,13 @@ fastavro==1.12.1 \
     --hash=sha256:d71c8aa841ef65cfab709a22bb887955f42934bced3ddb571e98fdbdade4c609 \
     --hash=sha256:ed924233272719b5d5a6a0b4d80ef3345fc7e84fc7a382b6232192a9112d38a6
     # via cohere
-fastmcp==3.2.0 \
-    --hash=sha256:d4830b8ffc3592d3d9c76dc0f398904cf41f04910e41a0de38cc1004e0903bef \
-    --hash=sha256:e71aba3df16f86f546a4a9e513261d3233bcc92bef0dfa647bac3fa33623f681
+fastmcp==3.4.10 \
+    --hash=sha256:68f422db0a7c6228142663f17d9f79a5a12a509e1408a8ac207b3e442e166e38 \
+    --hash=sha256:c6474855d6230cce4feb7084d654ba518578b25856c6ef26a2ff2d806ef68969
+fastmcp-slim==3.4.10 \
+    --hash=sha256:d80ae606ead8dfefa1f21b009929824210ea87eb4b422653a1be8dca61797ccd \
+    --hash=sha256:f388941db8bdf38999e6c9d2536c4cd59a6571908d851cee2d10ee59f4e53532
+    # via fastmcp
 fastuuid==0.14.0 \
     --hash=sha256:09098762aad4f8da3a888eb9ae01c84430c907a297b97166b8abc07b640f2995 \
     --hash=sha256:0df14e92e7ad3276327631c9e7cec09e32572ce82089c55cb1bb8df71cf394ed \
@@ -1080,6 +1084,10 @@ greenlet==3.2.4 \
     # via
     #   playwright
     #   sqlalchemy
+griffelib==2.4.1 \
+    --hash=sha256:40c028dd2e623f464423f0e11e3c553158f1cf4f1368239a370534d73e1407ff \
+    --hash=sha256:76bc562f936ad1ce198d2cf6d0731bd5c92a7d934b69ef828ef22ee0ffdb62ce
+    # via fastmcp-slim
 grpc-google-iam-v1==0.14.4 \
     --hash=sha256:392b3796947ed6334e61171d9ab06bf7eb357f554e5fc7556ad7aab6d0e17038 \
     --hash=sha256:412facc320fcbd94034b4df3d557662051d4d8adfa86e0ddb4dca70a3f739964
@@ -1176,7 +1184,7 @@ httpx==0.28.1 \
     # via
     #   cohere
     #   exa-py
-    #   fastmcp
+    #   fastmcp-slim
     #   google-genai
     #   httpx-oauth
     #   huggingface-hub
@@ -1325,7 +1333,9 @@ jmespath==1.0.1 \
 joserfc==1.7.5 \
     --hash=sha256:add2c2c84e8373b084d526a8b53daba5d7a513a118cd2dcd9fc9f979d0922159 \
     --hash=sha256:d5ff536e658e17664f8c1b1ab60dc4aa62aa973fcef1edd33cc44bda45d6f5ea
-    # via authlib
+    # via
+    #   authlib
+    #   fastmcp-slim
 jsonpatch==1.33 \
     --hash=sha256:0ae28c0cd062bbd8b8ecc26d7d164fbbea9652a1a3693f3b956c1eae5145dade \
     --hash=sha256:9fcd4009c41e6d12348b4a0ff2563ba56a2923a7dfee731d004e212e1ee5030c
@@ -1337,7 +1347,7 @@ jsonpointer==3.0.0 \
 jsonref==1.1.0 \
     --hash=sha256:32fe8e1d85af0fdefbebce950af85590b22b60f9e95443176adbde4e1ecea552 \
     --hash=sha256:590dc7773df6c21cbf948b5dac07a72a251db28b0238ceecce0a2abfa8ec30a9
-    # via fastmcp
+    # via fastmcp-slim
 jsonschema==4.25.1 \
     --hash=sha256:3fba0169e345c7175110351d456342c364814cfcf3b964ba4587f22915230a63 \
     --hash=sha256:e4a9655ce0da0c0b67a085847e00a3a51449e1157f4f75e9fb5aa545e122eb85
@@ -1348,7 +1358,7 @@ jsonschema==4.25.1 \
 jsonschema-path==0.4.6 \
     --hash=sha256:451354b5311fa955c3144e6e4e255388c751c0121c5570ec5bb9291dd42d08c9 \
     --hash=sha256:c89eb635f4d497c9ac328eeff359c489755838806a7d033510a692e9576f5c4b
-    # via fastmcp
+    # via fastmcp-slim
 jsonschema-specifications==2025.9.1 \
     --hash=sha256:98802fee3a11ee76ecaca44429fda8a41bff98b00a0f2838151b113f210cc6fe \
     --hash=sha256:b540987f239e745613c7a9176f3edb72b832a4ac465cf02712288397832b5e8d
@@ -1575,7 +1585,7 @@ matrix-client==0.3.2 \
 mcp==1.28.1 \
     --hash=sha256:2726bca5e7193f61c5dde8b12500a6de2d9acf6d1a1c0be9e8c2e706437991df \
     --hash=sha256:d51e36a5f5644faea4f85ea649bfffa6bc6c26770d42798ad6a3de3d2ba69683
-    # via fastmcp
+    # via fastmcp-slim
 mdurl==0.1.2 \
     --hash=sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8 \
     --hash=sha256:bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba
@@ -1899,7 +1909,7 @@ openai==2.38.0 \
 openapi-pydantic==0.5.1 \
     --hash=sha256:a3a09ef4586f5bd760a8df7f43028b60cafb6d9f61de2acba9574766255ab146 \
     --hash=sha256:ff6835af6bde7a459fb93eb93bb92b8749b754fc6e51b2f1590a19dc3005ee0d
-    # via fastmcp
+    # via fastmcp-slim
 openinference-instrumentation==0.1.42 \
     --hash=sha256:2275babc34022e151b5492cfba41d3b12e28377f8e08cb45e5d64fe2d9d7fe37 \
     --hash=sha256:e7521ff90833ef7cc65db526a2f59b76a496180abeaaee30ec6abbbc0b43f8ec
@@ -1921,7 +1931,7 @@ opentelemetry-api==1.42.1 \
     --hash=sha256:51a69edacadbc03a8950ace1c4c21099cacc538820ac2c9e36277e78cebba714 \
     --hash=sha256:56c63bea9f77b62856be8c47600474acad853b2924b99b1687c4cb6297166716
     # via
-    #   fastmcp
+    #   fastmcp-slim
     #   langfuse
     #   openinference-instrumentation
     #   opentelemetry-exporter-otlp-proto-http
@@ -1992,7 +2002,7 @@ packaging==26.3 \
     #   braintrust
     #   dask
     #   distributed
-    #   fastmcp
+    #   fastmcp-slim
     #   google-cloud-aiplatform
     #   google-cloud-bigquery
     #   huggingface-hub
@@ -2114,7 +2124,7 @@ platformdirs==4.5.0 \
     --hash=sha256:70ddccdd7c99fc5942e9fc25636a8b34d04c24b335100223152c2803e4063312 \
     --hash=sha256:e578a81bb873cbb89a41fcc904c7ef523cc18284b7e3b3ccf06aca1403b7ebd3
     # via
-    #   fastmcp
+    #   fastmcp-slim
     #   zeep
 playwright==1.58.0 \
     --hash=sha256:185e0132578733d02802dfddfbbc35f42be23a45ff49ccae5081f25952238117 \
@@ -2284,7 +2294,7 @@ pwdlib==0.3.0 \
 py-key-value-aio==0.4.4 \
     --hash=sha256:18e17564ecae61b987f909fc2cd41ee2012c84b4b1dcb8c055cf8b4bc1bf3f5d \
     --hash=sha256:e3012e6243ed7cc09bb05457bd4d03b1ba5c2b1ca8700096b3927db79ffbbe55
-    # via fastmcp
+    # via fastmcp-slim
 pyairtable==3.0.1 \
     --hash=sha256:07295d82be1adfd3c00e21c640e7c79d0819846daf0549bc982736cc07e85d8e \
     --hash=sha256:7012a2403ba333db9d76d93453ade8762b3d12818d11cde670fa6cb697f42daf
@@ -2325,7 +2335,7 @@ pydantic==2.12.5 \
     #   cohere
     #   exa-py
     #   fastapi
-    #   fastmcp
+    #   fastmcp-slim
     #   google-cloud-aiplatform
     #   google-genai
     #   langchain-core
@@ -2389,7 +2399,9 @@ pydantic-core==2.41.5 \
 pydantic-settings==2.15.0 \
     --hash=sha256:0ba092c291c94baceb5eff768aa0d56400a457585bc0175925a5a5510303da42 \
     --hash=sha256:694b793e84f766ba76a90ebdefc01d0a9a045dab0382bee70393da93712ad117
-    # via mcp
+    # via
+    #   fastmcp-slim
+    #   mcp
 pydivert==2.1.0 ; sys_platform == 'win32' \
     --hash=sha256:382db488e3c37c03ec9ec94e061a0b24334d78dbaeebb7d4e4d32ce4355d9da1 \
     --hash=sha256:f0e150f4ff591b78e35f514e319561dadff7f24a82186a171dd4d465483de5b4
@@ -2498,7 +2510,7 @@ pypdfium2==5.9.0 \
 pyperclip==1.9.0 \
     --hash=sha256:b7de0142ddc81bfc5c7507eea19da920b92252b548b96186caf94a5e2527d310
     # via
-    #   fastmcp
+    #   fastmcp-slim
     #   mitmproxy
 pyreadline3==3.5.4 ; sys_platform == 'win32' \
     --hash=sha256:8d57d53039a1c75adba8e50dd3d992b28143480816187ea5efbd5c78e6c885b7 \
@@ -2527,7 +2539,7 @@ python-dotenv==1.2.2 \
     --hash=sha256:1d8214789a24de455a8b8bd8ae6fe3c6b69a5e3d64aa8a8e5d68e694bbcb285a \
     --hash=sha256:2c371a91fbd7ba082c2c1dc1f8bf89ca22564a087c2c287cd9b662adde799cf3
     # via
-    #   fastmcp
+    #   fastmcp-slim
     #   litellm
     #   magika
     #   mcp
@@ -2548,6 +2560,7 @@ python-multipart==0.0.32 \
     --hash=sha256:ff6d3f776f16878c894e52e107296ffc890e913c611b1a4ec6c44e2821fe2e23
     # via
     #   fastapi-users
+    #   fastmcp-slim
     #   mcp
 python-pptx==0.6.23 \
     --hash=sha256:587497ff28e779ab18dbb074f6d4052893c85dedc95ed75df319364f331fedee \
@@ -2617,7 +2630,7 @@ pyyaml==6.0.3 \
     # via
     #   dask
     #   distributed
-    #   fastmcp
+    #   fastmcp-slim
     #   huggingface-hub
     #   jsonschema-path
     #   kubernetes
@@ -2813,7 +2826,7 @@ rich==14.2.0 \
     --hash=sha256:76bc51fe2e57d2b1be1f96c524b890b816e334ab4c1e45888799bfaab0021edd
     # via
     #   cyclopts
-    #   fastmcp
+    #   fastmcp-slim
     #   rich-rst
     #   typer
 rich-rst==1.3.2 \
@@ -2984,6 +2997,7 @@ starlette==1.3.1 \
     --hash=sha256:c7372aae11c3c3f26a42df7bd626cec2f47d03483d261d369516a615a53714c6
     # via
     #   fastapi
+    #   fastmcp-slim
     #   mcp
     #   prometheus-fastapi-instrumentator
 stone==3.3.1 \
@@ -3128,6 +3142,7 @@ typing-extensions==4.15.0 \
     #   cron-descriptor
     #   exa-py
     #   fastapi
+    #   fastmcp-slim
     #   google-cloud-aiplatform
     #   google-genai
     #   grpcio
@@ -3179,7 +3194,7 @@ tzlocal==5.3.1 \
 uncalled-for==0.2.0 \
     --hash=sha256:2c0bd338faff5f930918f79e7eb9ff48290df2cb05fcc0b40a7f334e55d4d85f \
     --hash=sha256:b4f8fdbcec328c5a113807d653e041c5094473dd4afa7c34599ace69ccb7e69f
-    # via fastmcp
+    # via fastmcp-slim
 unstructured-client==0.42.6 \
     --hash=sha256:c93b1d9d1b9f63a8e961729d00224b3659ef9ef3e14996ea4e53ddc95df671a9 \
     --hash=sha256:ea54f2c4ca3e7a1330f9e77cbc96f88f829518beeec5e1b797b5352f4d76a73a
@@ -3233,7 +3248,7 @@ uvicorn==0.49.0 \
     --hash=sha256:ba3d14c3ee7e41c6c654c46c9eb489d33213cdd30aa1696eab1374337c13f68f \
     --hash=sha256:ebf4271aa580d9de97f93192d4595176df6e91f9aae919ca73e4fc07df1e66a3
     # via
-    #   fastmcp
+    #   fastmcp-slim
     #   mcp
     #   onyx
 vine==5.1.0 \
@@ -3295,7 +3310,7 @@ watchfiles==1.1.1 \
     --hash=sha256:f096076119da54a6080e8920cbdaac3dbee667eb91dcc5e5b78840b87415bd44 \
     --hash=sha256:f27db948078f3823a6bb3b465180db8ebecf26dd5dae6f6180bd87383b6b4428 \
     --hash=sha256:f9a2ae5c91cecc9edd47e041a930490c31c3afb1f5e6d71de3dc671bfaca02bf
-    # via fastmcp
+    # via fastmcp-slim
 wcwidth==0.2.14 \
     --hash=sha256:4d478375d31bc5395a3c55c40ccdf3354688364cd61c4f6adacaa9215d0b3605 \
     --hash=sha256:a7bb560c8aee30f9957e5f9895805edd20602f2d7f720186dfd906e82b4982e1
@@ -3321,7 +3336,7 @@ websockets==15.0.1 \
     --hash=sha256:ee443ef070bb3b6ed74514f5efaa37a252af57c90eb33b956d35c8e9c10a1931 \
     --hash=sha256:f7a866fbc1e97b5c617ee4116daaa09b722101d4a3c170c787450ba409f9736f
     # via
-    #   fastmcp
+    #   fastmcp-slim
     #   google-genai
     #   langsmith
 werkzeug==3.1.9 \
