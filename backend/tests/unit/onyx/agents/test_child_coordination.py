@@ -1536,6 +1536,12 @@ def test_child_handoff_preserves_parent_waiter_and_cleanup(early_answer: bool) -
     del original
     spawned: list[SpawnResult] = []
     cleaned: list[str] = []
+    cleaning, release_cleanup = threading.Event(), threading.Event()
+
+    def cleanup() -> None:
+        cleaned.append(spawned[0].run_id)
+        cleaning.set()
+        assert release_cleanup.wait(5)
 
     def delegate(invocation: ToolInvocation) -> ChildRunWait:
         assert child is not None
@@ -1544,9 +1550,7 @@ def test_child_handoff_preserves_parent_waiter_and_cleanup(early_answer: bool) -
                 child, name="child", description="", messages=[], max_steps=2
             )
         )
-        invocation.agents.add_completion_cleanup(
-            spawned[0].run_id, lambda: cleaned.append(spawned[0].run_id)
-        )
+        invocation.agents.add_completion_cleanup(spawned[0].run_id, cleanup)
         return ChildRunWait(run_ids=[spawned[0].run_id])
 
     replies = iter(
@@ -1579,6 +1583,7 @@ def test_child_handoff_preserves_parent_waiter_and_cleanup(early_answer: bool) -
         completion = owner.completion(run.id)
         assert child is not None
         saved = run.handoff()
+        assert cleaning.wait(2)
         child = None
         gc.collect()
         assert child_ref() is None
@@ -1613,11 +1618,14 @@ def test_child_handoff_preserves_parent_waiter_and_cleanup(early_answer: bool) -
             assert adopted.wait_until_settled(2).status == RunStatus.SUSPENDED
             adopted.submit(answer)
         assert root.result(3).output.text == "parent finished"
+        assert not root.wait_for_idle(0)
+        release_cleanup.set()
         assert root.wait_for_idle(3)
         assert adopted.status == RunStatus.COMPLETE
         assert cleaned == [run.id]
         assert completion.result(0).messages[-1].text == "restored child finished"
     finally:
+        release_cleanup.set()
         assert owner.close(3)
 
 
@@ -1839,29 +1847,26 @@ def test_handled_remote_child_failure_does_not_fail_parent(cached: bool) -> None
         assert parent_run is not None
         assert parent_run.coordination is not None
         parent_run.coordination.children[remote.run_id] = False
-        completion: Future[RunState] = Future()
-        completion.set_result(remote)
-        coordinator._state.completions[remote.run_id] = completion
-        if cached:
-            coordinator._state.latest["remote-agent"] = remote
-            coordinator._visible_run_ids.add(remote.run_id)
         with pytest.raises(RunFailed, match="remote failed"):
             invocation.agents.wait_run(remote.run_id, timeout=1)
         return ToolResult(content="Child failure handled")
 
     parent = parent_agent(execute)
-    coordinator = AgentCoordinator(
-        directory=FakeAgentDirectory(read_run=lambda *_: remote)
+    owner = AgentCoordinator(directory=FakeAgentDirectory(read_run=lambda *_: remote))
+    info = AgentInfo(
+        id="remote-agent",
+        path="/root/remote",
+        parent_id=parent.id,
+        description="",
+        restoration_config=None,
     )
-    coordinator.register(
-        AgentInfo(
-            id="remote-agent",
-            path="/root/remote",
-            parent_id=parent.id,
-            description="",
-            restoration_config=None,
-        )
+    owner.register(info)
+    owner.release_execution(owner.restore_completed(remote))
+    coordinator = owner.view(
+        directory=FakeAgentDirectory(read_run=lambda *_: remote),
+        visible_run_ids=[remote.run_id] if cached else [],
     )
+    coordinator.register(info)
     try:
         result = run_agent(parent, max_steps=2, coordinator=coordinator)
         assert result.output.text == "first finished"
@@ -2147,11 +2152,14 @@ def test_registration_releases_execution_locks_during_spawn_and_resume() -> None
 
         def probe() -> None:
             with agent._lock, run.execution_lock, coordinator._state.lock:
-                binding = coordinator._state.bindings[run.id]
+                binding = run.coordination
+                assert binding is not None
                 with binding._lock:
-                    parent_id = run.snapshot().parent_run_id
+                    parent_id = run.parent_run_id
                     if parent_id is not None:
-                        with coordinator._state.bindings[parent_id]._lock:
+                        parent_binding = coordinator.run(parent_id).coordination
+                        assert parent_binding is not None
+                        with parent_binding._lock:
                             checked.append(run.id)
                     else:
                         checked.append(run.id)

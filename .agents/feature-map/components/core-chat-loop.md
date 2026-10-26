@@ -248,6 +248,9 @@ preserves the checkpoint needed to continue the selected message branch.
   Slow cache calls can delay the next check.
 - Cancellation signals reach root runs, children, and tool work. Accepted partial
   output is saved; late events cannot append new response output.
+- `AgentCoordinator` keeps execution, completion, cleanup, and remote observation
+  in one record per tracked run. Handoff retains completion and cleanup tracking.
+  Each coordinator view authorizes access independently of this shared registry.
 - The browser shows cancellation in progress while active work drains. Session
   admission remains held until workers, persistence, and delivery finish.
 - Processing status refreshes every 60 seconds. Resume uses the replay buffer and

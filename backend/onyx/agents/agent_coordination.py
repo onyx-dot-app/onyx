@@ -91,6 +91,19 @@ class _LoadedAgent:
         self.view_id = view_id
 
 
+class _TrackedRun:
+    """Keep execution ownership and completion tracking together across handoff."""
+
+    def __init__(self) -> None:
+        self.execution: Run | None = None
+        self.coordination: RunCoordination | None = None
+        self.completion: Future[RunState] = Future()
+        self.completion.set_running_or_notify_cancel()
+        self.cleanup: list[Future[None]] = []
+        self.observer_stop: threading.Event | None = None
+        self.restored_from_history = False
+
+
 class _CoordinatorState:
     """Execution ownership shared by coordinators with different branch access."""
 
@@ -98,15 +111,10 @@ class _CoordinatorState:
         # Shared identity metadata supports ancestry and saved response projection.
         self.registrations: dict[str, AgentInfo] = {}
         self.agents: dict[str, _LoadedAgent] = {}
-        self.bindings: dict[str, RunCoordination] = {}
-        self.runs: dict[str, Run] = {}
-        self.archived_run_ids: set[str] = set()
-        self.completions: dict[str, Future[RunState]] = {}
-        self.cleanup: dict[str, list[Future[None]]] = {}
+        self.tracked_runs: dict[str, _TrackedRun] = {}
         # Latest locally executed or released run, independent of archived history reads.
         self.latest: dict[str, RunState] = {}
         self.work = ExecutionWork()
-        self.completion_observers: dict[str, threading.Event] = {}
         self.closed = False
         self.lock = threading.RLock()
 
@@ -157,7 +165,8 @@ class AgentCoordinator:
     def run(self, run_id: str) -> Run:
         """Return a locally retained execution or completed result."""
         with self._state.lock:
-            run = self._state.runs.get(run_id)
+            tracked = self._state.tracked_runs.get(run_id)
+            run = tracked.execution if tracked is not None else None
         if run is None:
             raise ValueError("Run is not owned by this coordinator")
         return run
@@ -173,12 +182,16 @@ class AgentCoordinator:
         """Forget local execution; dependencies retain only its ID and completion."""
         snapshot = run.snapshot()
         with self._state.lock:
-            binding = self._state.bindings.pop(run.id, None)
-            self._state.runs.pop(run.id, None)
+            tracked = self._state.tracked_runs[run.id]
+            binding = tracked.coordination
+            tracked.coordination = None
+            tracked.execution = None
             self._state.agents.pop(run.agent_id, None)
             self._state.latest[run.agent_id] = snapshot
             has_waiters = any(
-                run.id in owner.children for owner in self._state.bindings.values()
+                run.id in entry.coordination.children
+                for entry in self._state.tracked_runs.values()
+                if entry.coordination is not None
             )
         if binding is not None:
             binding.close(released_run_ids=binding.children)
@@ -188,16 +201,19 @@ class AgentCoordinator:
     def observe_completion(self, run_id: str, *, agent_id: str) -> None:
         """Resolve a remote dependency from storage without retaining its execution."""
         with self._state.lock:
-            if self._state.closed or run_id in self._state.runs:
+            if self._state.closed:
                 return
-            if run_id in self._state.completion_observers:
+            tracked = self._state.tracked_runs[run_id]
+            if tracked.execution is not None:
+                return
+            if tracked.observer_stop is not None:
                 return
             if self._directory is None:
                 return
-            future = self._state.completions[run_id]
+            future = tracked.completion
             info = self._state.registrations[agent_id]
             stop = threading.Event()
-            self._state.completion_observers[run_id] = stop
+            tracked.observer_stop = stop
         parent_id = info.parent_id or ""
 
         def observe() -> None:
@@ -273,13 +289,17 @@ class AgentCoordinator:
             self.check_open()
             if restored.agent_id not in self._state.registrations:
                 raise ValueError("Completed run requires a registered agent")
-            existing = self._state.runs.get(restored.id)
+            tracked = self._state.tracked_runs.get(restored.id)
+            existing = tracked.execution if tracked is not None else None
             if existing is None:
-                self._state.runs[restored.id] = restored
-                self._state.archived_run_ids.add(restored.id)
-                completion: Future[RunState] = Future()
-                completion.set_result(snapshot.model_copy(deep=True))
-                self._state.completions[restored.id] = completion
+                if tracked is None:
+                    tracked = _TrackedRun()
+                    self._state.tracked_runs[restored.id] = tracked
+                else:
+                    tracked.completion = Future()
+                tracked.execution = restored
+                tracked.restored_from_history = True
+                tracked.completion.set_result(snapshot.model_copy(deep=True))
                 self._visible_run_ids.add(restored.id)
                 return restored
         if not existing.is_done or existing.snapshot() != snapshot:
@@ -289,7 +309,8 @@ class AgentCoordinator:
     def completion(self, run_id: str) -> Future[RunState]:
         """Complete after persistence; consumers must not mutate the shared result."""
         with self._state.lock:
-            future = self._state.completions.get(run_id)
+            tracked = self._state.tracked_runs.get(run_id)
+            future = tracked.completion if tracked is not None else None
         if future is None:
             raise ValueError("Run is not owned by this coordinator")
         return future
@@ -303,11 +324,12 @@ class AgentCoordinator:
             raise ValueError("Remote run has no agent identity")
         with self._state.lock:
             self.check_open()
-            future = self._state.completions.get(run_id)
+            tracked = self._state.tracked_runs.get(run_id)
+            future = tracked.completion if tracked is not None else None
             if future is None and not snapshot.status.is_terminal:
-                future = Future()
-                future.set_running_or_notify_cancel()
-                self._state.completions[run_id] = future
+                tracked = _TrackedRun()
+                self._state.tracked_runs[run_id] = tracked
+                future = tracked.completion
         if future is None:
             self.restore_completed(snapshot)
             future = self.completion(run_id)
@@ -319,14 +341,16 @@ class AgentCoordinator:
         self, run_id: str, callback: Callable[[], None]
     ) -> Future[None]:
         """Clean up local resources after completion or release, once workers drain."""
-        run = self.run(run_id)
-        with self._state.lock:
-            if run_id in self._state.archived_run_ids:
-                raise ValueError("Physical cleanup requires a locally owned execution")
         completion: Future[None] = Future()
         completion.set_running_or_notify_cancel()
         with self._state.lock:
-            self._state.cleanup.setdefault(run_id, []).append(completion)
+            tracked = self._state.tracked_runs.get(run_id)
+            if tracked is None or tracked.execution is None:
+                raise ValueError("Run is not owned by this coordinator")
+            if tracked.restored_from_history:
+                raise ValueError("Physical cleanup requires a locally owned execution")
+            run = tracked.execution
+            tracked.cleanup.append(completion)
 
         def start() -> None:
             def clean() -> None:
@@ -351,7 +375,8 @@ class AgentCoordinator:
 
     def cleanup_futures(self, run_id: str) -> list[Future[None]]:
         with self._state.lock:
-            return list(self._state.cleanup.get(run_id, ()))
+            tracked = self._state.tracked_runs.get(run_id)
+            return list(tracked.cleanup) if tracked is not None else []
 
     def complete(self, run: Run) -> None:
         """Save terminal output before resolving child completion."""
@@ -441,8 +466,9 @@ class AgentCoordinator:
         # Never acquire a run lock under the coordinator lock. Starts use the reverse order.
         with self._state.lock:
             active_runs = {
-                binding.run.agent_id: binding.run
-                for binding in self._state.bindings.values()
+                tracked.coordination.run.agent_id: tracked.coordination.run
+                for tracked in self._state.tracked_runs.values()
+                if tracked.coordination is not None
             }
             agent_ids = [
                 info.id
@@ -484,11 +510,13 @@ class AgentCoordinator:
                     )
                 )
             if any(
-                binding.run.agent_id == run.agent_id
-                for binding in self._state.bindings.values()
+                tracked.coordination.run.agent_id == run.agent_id
+                for tracked in self._state.tracked_runs.values()
+                if tracked.coordination is not None
             ):
                 raise RuntimeError("Agent is already running or draining")
-            if run.id in self._state.runs:
+            tracked = self._state.tracked_runs.get(run.id)
+            if tracked is not None and tracked.execution is not None:
                 raise RuntimeError("Run identity was already used")
             previous = self._state.latest.get(run.agent_id)
             if (
@@ -498,16 +526,18 @@ class AgentCoordinator:
             ):
                 raise RuntimeError("Run is already complete")
             binding = RunCoordination(self, run)
-            self._state.bindings[run.id] = binding
-            self._state.runs[run.id] = run
-            stop = self._state.completion_observers.pop(run.id, None)
-            completion = self._state.completions.get(run.id)
-            if completion is None or (stop is not None and stop.is_set()):
-                completion = Future()
-                completion.set_running_or_notify_cancel()
-                self._state.completions[run.id] = completion
+            if tracked is None:
+                tracked = _TrackedRun()
+                self._state.tracked_runs[run.id] = tracked
+            tracked.coordination = binding
+            tracked.execution = run
+            stop = tracked.observer_stop
             if stop is not None:
+                if stop.is_set():
+                    tracked.completion = Future()
+                    tracked.completion.set_running_or_notify_cancel()
                 stop.set()
+                tracked.observer_stop = None
             self._visible_run_ids.add(run.id)
         return binding
 
@@ -516,16 +546,28 @@ class AgentCoordinator:
             raise ValueError("Close timeout is outside its allowed bounds")
         with self._state.lock:
             self._state.closed = True
-            for stop in self._state.completion_observers.values():
-                stop.set()
-            bindings = list(self._state.bindings.values())
-        with self._state.lock:
-            released_ids = set(self._state.completions) - set(self._state.runs)
+            for tracked in self._state.tracked_runs.values():
+                if tracked.observer_stop is not None:
+                    tracked.observer_stop.set()
+            bindings = [
+                tracked.coordination
+                for tracked in self._state.tracked_runs.values()
+                if tracked.coordination is not None
+            ]
+            released_ids = {
+                run_id
+                for run_id, tracked in self._state.tracked_runs.items()
+                if tracked.execution is None
+            }
         for binding in bindings:
             binding.close(released_run_ids=released_ids)
             binding.run.cancel()
         with self._state.lock:
-            runs = list(self._state.runs.values())
+            runs = [
+                tracked.execution
+                for tracked in self._state.tracked_runs.values()
+                if tracked.execution is not None
+            ]
         deadline = time.monotonic() + timeout
         for run in runs:
             try:
@@ -539,15 +581,15 @@ class AgentCoordinator:
                 logger.warning("Agent ownership cleanup failed", exc_info=True)
         with self._state.lock:
             completions = [
-                future
-                for run_id, future in self._state.completions.items()
+                tracked.completion
+                for run_id, tracked in self._state.tracked_runs.items()
                 if run_id not in released_ids
             ]
             cleanup = [
                 future
-                for run_id, futures in self._state.cleanup.items()
+                for run_id, tracked in self._state.tracked_runs.items()
                 if run_id not in released_ids
-                for future in futures
+                for future in tracked.cleanup
             ]
         for completion in completions:
             try:
@@ -567,7 +609,8 @@ class AgentCoordinator:
             return False
         with self._state.lock:
             self._state.agents.clear()
-            self._state.bindings.clear()
+            for tracked in self._state.tracked_runs.values():
+                tracked.coordination = None
             self._state.latest.clear()
         return True
 
@@ -627,16 +670,18 @@ class AgentCoordinator:
         with self._state.lock:
             return next(
                 (
-                    binding.run
-                    for binding in reversed(self._state.bindings.values())
-                    if binding.run.agent_id == agent_id
+                    tracked.coordination.run
+                    for tracked in reversed(self._state.tracked_runs.values())
+                    if tracked.coordination is not None
+                    and tracked.coordination.run.agent_id == agent_id
                 ),
                 None,
             )
 
     def child_run(self, run_id: str, parent_id: str) -> Run | None:
         with self._state.lock:
-            run = self._state.runs.get(run_id)
+            tracked = self._state.tracked_runs.get(run_id)
+            run = tracked.execution if tracked is not None else None
         if run is None:
             return None
         if self._lookup(run.agent_id, parent_id) is None:
@@ -653,14 +698,15 @@ class AgentCoordinator:
         snapshot = run.snapshot() if is_child else None
         status = snapshot.status if snapshot is not None else run.status
         with self._state.lock:
+            tracked = self._state.tracked_runs[run.id]
+            tracked.coordination = None
             if status == RunStatus.RUNNING:
-                self._state.runs.pop(run.id, None)
+                tracked.execution = None
                 previous = self._state.latest.get(run.agent_id)
                 if previous is None or previous.run_id != run.id:
-                    self._state.completions.pop(run.id, None)
+                    del self._state.tracked_runs[run.id]
             if snapshot is not None and status != RunStatus.RUNNING:
                 self._state.latest[run.agent_id] = snapshot
-            self._state.bindings.pop(run.id, None)
             info = self._visible_agents.get(run.agent_id)
             if info is not None and status != RunStatus.RUNNING:
                 self._visible_agents[run.agent_id] = info.model_copy(
@@ -708,8 +754,9 @@ class AgentCoordinator:
             if loaded is not None and loaded.view_id == self._view_id:
                 return loaded.agent
             if any(
-                binding.run.agent_id == agent_id
-                for binding in self._state.bindings.values()
+                tracked.coordination.run.agent_id == agent_id
+                for tracked in self._state.tracked_runs.values()
+                if tracked.coordination is not None
             ):
                 raise RuntimeError("Agent is already running or draining")
             if (
@@ -765,7 +812,8 @@ class AgentCoordinator:
                 (item for item in self._state.latest.values() if item.run_id == run_id),
                 None,
             )
-            completion = self._state.completions.get(run_id)
+            tracked = self._state.tracked_runs.get(run_id)
+            completion = tracked.completion if tracked is not None else None
             if (
                 saved is None
                 and completion is not None
