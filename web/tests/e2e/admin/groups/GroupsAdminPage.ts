@@ -213,6 +213,11 @@ export class GroupsAdminPage {
     await row.getByRole("button").last().click();
   }
 
+  /** Flip one permission switch, matched by its row's display name. */
+  async togglePermission(displayName: string) {
+    await this.permissionSwitch(displayName).click();
+  }
+
   /** Save the edit form. */
   async submitEdit() {
     await this.saveButton.click();

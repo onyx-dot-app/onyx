@@ -273,7 +273,7 @@ test.describe("Groups page: permissions", () => {
       await expect(connectorsSwitch).toHaveAttribute("aria-checked", "false");
       await expect(documentSetsSwitch).toHaveAttribute("aria-checked", "false");
 
-      await documentSetsSwitch.click();
+      await groupsPage.togglePermission("Manage Document Sets");
       await expect(documentSetsSwitch).toHaveAttribute("aria-checked", "true");
       await expect(connectorsSwitch).toHaveAttribute("aria-checked", "false");
 
