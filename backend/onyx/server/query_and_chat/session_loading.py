@@ -7,7 +7,7 @@ from typing import Any, Literal, cast
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from onyx.agents.execution_records import RunStatus
+from onyx.agents.models import RunStatus
 from onyx.chat.citation_utils import extract_citation_order_from_text
 from onyx.chat.models import (
     ChatExecutionRecord,

@@ -6,11 +6,12 @@ from unittest.mock import patch
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from onyx.agents.execution_records import ExecutionStatus, RunStatus
 from onyx.agents.models import (
     AgentState,
+    ExecutionStatus,
     PreparedStep,
     RunState,
+    RunStatus,
     StepRecord,
     ToolCallContext,
     ToolExecutionRecord,

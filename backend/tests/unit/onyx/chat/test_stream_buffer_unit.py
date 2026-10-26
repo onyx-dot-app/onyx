@@ -418,7 +418,8 @@ def test_event_delivery_and_cache_writes_share_worker(
         assert next(output.reader) == Packet(
             placement=Placement(turn_index=0), obj=OverallStop(stop_reason="first")
         )
-        assert channel.tracker.wait_idle(timeout=0)
+        assert not channel.tracker.wait_idle(timeout=0)
+        assert output.events.has_pending_events
         # Cache I/O must not hold the publication lock used by execution/control.
         with ThreadPoolExecutor(max_workers=1) as executor:
             executor.submit(
@@ -515,6 +516,7 @@ def test_packet_bursts_flush_full_batches_before_the_timer(
     session_id = uuid4()
     output = ChatDelivery(_make_writer(cache, session_id))
     channel = EventDelivery(output.events)
+    rendered = Event()
     packets = [
         Packet(
             placement=Placement(turn_index=0, model_index=index % 2),
@@ -526,12 +528,14 @@ def test_packet_bursts_flush_full_batches_before_the_timer(
     def receive(event: AgentEvent) -> None:
         for packet in packets if single_event else [packets[int(event.run_id)]]:
             output.publish(packet)
+        if single_event or int(event.run_id) == len(packets) - 1:
+            rendered.set()
 
     channel.subscribe(receive)
     try:
         for index in range(1 if single_event else len(packets)):
             channel.publish(AgentStartEvent(run_id=str(index)))
-        assert channel.tracker.wait_idle(timeout=5)
+        assert rendered.wait(5)
         buffered = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
         assert buffered is not None and buffered.blocks and not buffered.gap
     finally:

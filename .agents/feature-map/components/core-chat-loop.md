@@ -166,6 +166,8 @@ Child agents and parallel tools use additional workers when needed.
 Model-history replay omits unfinished tool exchanges and orphaned results without changing recorded history.
 When one assistant message repeats a tool-call ID, replay omits those calls and their ambiguous result.
 Other calls and partial text remain available to the model.
+Replay removes unsigned thinking blocks while preserving signed and redacted blocks.
+Recorded partial output remains unchanged.
 
 All responses share one `ChatDelivery`. Its event dispatcher renders SDK events,
 publishes browser packets, and writes the replay buffer. `Emitter` stamps each
@@ -274,7 +276,7 @@ whenever you touch this component.
    Text, thinking-text, and argument deltas without mutable attachments are shared
    with observers. Other events are copied before publication returns and remain
    isolated between observers. The event queue is unbounded. Pending-event tracking
-   includes both queued events and events still being delivered.
+   includes queued events, active delivery, and listener output awaiting its flush.
    The live reader queue is unbounded: unread packets drain before completion.
    Disconnecting clears its backlog without stopping execution or replay storage.
 5. **Root finalization uses `ChatResponsePersistence`.** It reports one final

@@ -19,15 +19,13 @@ from onyx.agents.compaction import (
     working_messages,
 )
 from onyx.agents.events import AgentEvent
-from onyx.agents.execution_records import (
-    CompactionCheckpoint,
-    ExecutionStatus,
-    RunStatus,
-)
 from onyx.agents.models import (
     AgentState,
+    CompactionCheckpoint,
+    ExecutionStatus,
     PreparedStep,
     RunState,
+    RunStatus,
     StepInput,
 )
 from onyx.agents.runtime import Agent, Run, RunFailed, _compact_context

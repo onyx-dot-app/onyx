@@ -17,8 +17,7 @@ from onyx.agents.concurrency import (
     ExecutionWork,
     wait_operation,
 )
-from onyx.agents.execution_records import RunStatus
-from onyx.agents.models import AgentInfo, RunResult, RunState
+from onyx.agents.models import AgentInfo, RunResult, RunState, RunStatus
 from onyx.agents.runtime import (
     Agent,
     Run,
@@ -184,10 +183,10 @@ class AgentCoordinator:
         if binding is not None:
             binding.close(released_run_ids=binding.children)
         if has_waiters:
-            self.observe_completion(run.id)
+            self.observe_completion(run.id, agent_id=run.agent_id)
 
-    def observe_completion(self, run_id: str) -> None:
-        """Resolve a released dependency from storage without retaining its execution."""
+    def observe_completion(self, run_id: str, *, agent_id: str) -> None:
+        """Resolve a remote dependency from storage without retaining its execution."""
         with self._state.lock:
             if self._state.closed or run_id in self._state.runs:
                 return
@@ -196,12 +195,7 @@ class AgentCoordinator:
             if self._directory is None:
                 return
             future = self._state.completions[run_id]
-            snapshot = next(
-                state for state in self._state.latest.values() if state.run_id == run_id
-            )
-            if snapshot.agent_id is None:
-                raise ValueError("Released run has no agent identity")
-            info = self._state.registrations[snapshot.agent_id]
+            info = self._state.registrations[agent_id]
             stop = threading.Event()
             self._state.completion_observers[run_id] = stop
         parent_id = info.parent_id or ""
@@ -213,7 +207,7 @@ class AgentCoordinator:
                     if self.remote_run_status(run_id, parent_id).is_terminal:
                         directory = self._directory
                         if directory is None:
-                            raise ValueError("Released run storage is unavailable")
+                            raise ValueError("Remote run storage is unavailable")
                         result = directory.read_run(run_id, parent_id)
                         if (
                             result is None
@@ -222,16 +216,18 @@ class AgentCoordinator:
                             or not result.status.is_terminal
                         ):
                             raise ValueError(
-                                "Released run returned an invalid terminal result"
+                                "Remote run returned an invalid terminal result"
                             )
                         with self._state.lock:
                             if stop.is_set() or future.done():
                                 return
-                            self._state.latest[info.id] = result
+                            latest = self._state.latest.get(info.id)
+                            if latest is not None and latest.run_id == run_id:
+                                self._state.latest[info.id] = result
                         future.set_result(result.model_copy(deep=True))
                         return
                 except Exception:
-                    logger.exception("Could not read released run result; retrying")
+                    logger.exception("Could not read remote run result; retrying")
                 if time.monotonic() >= deadline:
                     with self._state.lock:
                         if stop.is_set() or future.done():
@@ -239,7 +235,7 @@ class AgentCoordinator:
                         # A new owner needs a fresh completion once observation expires.
                         stop.set()
                     future.set_exception(
-                        TimeoutError("Released run did not complete in time")
+                        TimeoutError("Remote run did not complete in time")
                     )
                     return
                 stop.wait(REMOTE_POLL_SECONDS)
@@ -303,11 +299,20 @@ class AgentCoordinator:
         if self.child_run(run_id, parent_id) is not None:
             return self.completion(run_id)
         snapshot = self.saved_run(run_id, parent_id)
+        if snapshot.agent_id is None:
+            raise ValueError("Remote run has no agent identity")
         with self._state.lock:
+            self.check_open()
             future = self._state.completions.get(run_id)
+            if future is None and not snapshot.status.is_terminal:
+                future = Future()
+                future.set_running_or_notify_cancel()
+                self._state.completions[run_id] = future
         if future is None:
             self.restore_completed(snapshot)
             future = self.completion(run_id)
+        elif not future.done():
+            self.observe_completion(run_id, agent_id=snapshot.agent_id)
         return future
 
     def add_completion_cleanup(
@@ -760,6 +765,14 @@ class AgentCoordinator:
                 (item for item in self._state.latest.values() if item.run_id == run_id),
                 None,
             )
+            completion = self._state.completions.get(run_id)
+            if (
+                saved is None
+                and completion is not None
+                and completion.done()
+                and completion.exception() is None
+            ):
+                saved = completion.result()
             visible = run_id in self._visible_run_ids
         if saved is not None and visible:
             if (
@@ -846,7 +859,7 @@ class RunCoordination:
                     self.run.track_child_work(run)
                 else:
                     self._include_predecessors(run)
-                    self._attach(run)
+                    self._attach(run.id)
         return run
 
     def _include_predecessors(self, run: Run) -> None:
@@ -868,8 +881,7 @@ class RunCoordination:
         for previous in reversed(predecessors):
             self.children[previous.id] = True
 
-    def _attach(self, run: Run) -> None:
-        run_id = run.id
+    def _attach(self, run_id: str) -> None:
         self.children[run_id] = False
         self._links.enter_context(
             self.run.cancellation_signal.on_cancel(
@@ -878,12 +890,13 @@ class RunCoordination:
         )
 
     def attach_children(self, run_ids: Sequence[str]) -> None:
-        """Reconnect foreground dependencies from live or archived terminal runs."""
-        children = self.child_runs(run_ids)
+        """Reconnect authorized foreground dependencies, including remote runs."""
+        for run_id in run_ids:
+            self.coordinator.child_completion(run_id, self.run.agent_id)
         with self._lock:
-            for run in children:
-                if run.id not in self.children:
-                    self._attach(run)
+            for run_id in run_ids:
+                if run_id not in self.children:
+                    self._attach(run_id)
 
     def observe_children(self, run_ids: Sequence[str]) -> None:
         """Mark failures consumed by a successful delegation completion callback."""
@@ -895,17 +908,6 @@ class RunCoordination:
     def observed_children(self) -> list[str]:
         with self._lock:
             return [run_id for run_id, observed in self.children.items() if observed]
-
-    def child_runs(self, run_ids: Sequence[str]) -> list[Run]:
-        """Resolve tool dependencies within this parent's authorized child view."""
-        runs = []
-        for run_id in run_ids:
-            run = self.coordinator.child_run(run_id, self.run.agent_id)
-            if run is None:
-                snapshot = self.coordinator.saved_run(run_id, self.run.agent_id)
-                run = self.coordinator.restore_completed(snapshot)
-            runs.append(run)
-        return runs
 
     def pending_children(self) -> list[str]:
         with self._lock:
@@ -1111,6 +1113,7 @@ class _ToolControl(AgentControl):
             run_id, self.owner.run.agent_id, load_archive=False
         )
         if latest is not None and latest.status.is_terminal:
+            self.owner.observe_children([run_id])
             return result_from_snapshot(latest)
 
         if timeout == 0:
@@ -1123,9 +1126,11 @@ class _ToolControl(AgentControl):
                 if coordinator.remote_run_status(
                     run_id, self.owner.run.agent_id
                 ).is_terminal:
-                    result = result_from_snapshot(
-                        coordinator.read_visible_run(run_id, self.owner.run.agent_id)
+                    state = coordinator.read_visible_run(
+                        run_id, self.owner.run.agent_id
                     )
+                    self.owner.observe_children([run_id])
+                    result = result_from_snapshot(state)
                     self.owner.check_tool_active(self.active)
                     return result
                 remaining = deadline - time.monotonic()
