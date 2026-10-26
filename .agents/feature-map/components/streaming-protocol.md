@@ -403,3 +403,11 @@ and configured thinking-tool output. Replay assigns sections in accepted content
 order. Citation removal also applies to citation-only and interrupted answers.
 Generated-message metadata supplies saved source references, including previously
 retrieved sources that the current response did not retrieve again.
+
+When a run ends, unfinished tool cards receive the same start and end packets as
+saved replay. This closes Python code-writing indicators when execution stops
+before a tool starts. Completed tool cards do not emit another end packet.
+Tool-card ownership includes the run ID, so child completion does not close a
+parent's cards. Completed coding tools emit final-answer packets without repeating
+the answer as thinking. Research reports emit once, whether supplied through
+progress or directly at completion.

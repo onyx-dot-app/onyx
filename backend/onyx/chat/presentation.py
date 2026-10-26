@@ -353,12 +353,16 @@ class ResponsePresenter:
         self.emitter = emitter
         self.layout = ResponseLayout()
         self.renderers: dict[str, MessageRenderer] = {}
-        self.tools: dict[tuple[str, str], ToolRenderer] = {}
+        self.tools: dict[tuple[str, str, str], ToolRenderer] = {}
 
     def consume(self, event: AgentEvent) -> None:
         output: list[Packet] = []
         parent = self.tools.get(
-            (event.parent_message_id or "", event.parent_tool_call_id or "")
+            (
+                event.parent_run_id or "",
+                event.parent_message_id or "",
+                event.parent_tool_call_id or "",
+            )
         )
         if isinstance(event, MessageStartEvent):
             if event.parent_run_id is None:
@@ -385,14 +389,13 @@ class ResponsePresenter:
                 if call.name != renderer.settings.think_tool
                 and call.name not in HIDDEN_TOOLS
             ]
-            if calls:
-                for call in calls:
-                    tool_placement = renderer.tool_placement(call.id)
-                    self.tools[(event.message_id, call.id)] = ToolRenderer(
-                        call, tool_placement, self.tool_ids.get(call.name)
-                    )
+            for call in calls:
+                tool_placement = renderer.tool_placement(call.id)
+                self.tools[(event.run_id, event.message_id, call.id)] = ToolRenderer(
+                    call, tool_placement, self.tool_ids.get(call.name)
+                )
         elif isinstance(event, (ToolStartEvent, ToolUpdateEvent, ToolEndEvent)):
-            tool = self.tools.get((event.message_id, event.tool_call.id))
+            tool = self.tools.get((event.run_id, event.message_id, event.tool_call.id))
             if tool is None:
                 return
             if isinstance(event, ToolStartEvent):
@@ -403,6 +406,9 @@ class ResponsePresenter:
                 output = tool.complete(event.result)
         elif isinstance(event, AgentEndEvent):
             # The response owner reports classified failures separately.
+            for key in tuple(self.tools):
+                if key[0] == event.run_id:
+                    output.extend(self.tools.pop(key).complete(None))
             if renderer := self.renderers.pop(event.run_id, None):
                 output.extend(renderer.finish())
             if event.parent_run_id is None:
