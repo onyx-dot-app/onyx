@@ -219,18 +219,16 @@ def verify_license_signature(license_data: str) -> LicensePayload:
 
     except InvalidSignature:
         logger.error("[verify_license] FAILED: Signature verification failed")
-        raise ValueError("Invalid license signature")
-    except json.JSONDecodeError as e:
-        logger.error("[verify_license] FAILED: JSON decode error: %s", e)
-        raise ValueError("Invalid license format: not valid JSON")
+        raise ValueError("Invalid license signature") from None
+    except json.JSONDecodeError:
+        logger.error("[verify_license] FAILED: JSON decode error")
+        raise ValueError("Invalid license format: not valid JSON") from None
     except (ValueError, KeyError, TypeError) as e:
-        logger.error(
-            "[verify_license] FAILED: Validation error: %s: %s", type(e).__name__, e
-        )
-        raise ValueError(f"Invalid license format: {type(e).__name__}: {e}")
+        logger.error("[verify_license] FAILED: Validation error: %s", type(e).__name__)
+        raise ValueError(f"Invalid license format: {type(e).__name__}") from None
     except Exception:
-        logger.exception("[verify_license] FAILED: Unexpected error")
-        raise ValueError("License verification failed: unexpected error")
+        logger.error("[verify_license] FAILED: Unexpected error")
+        raise ValueError("License verification failed: unexpected error") from None
 
 
 def _stored_tenant_id(stored_data: str) -> str | None:

@@ -2,6 +2,7 @@
 
 import base64
 import json
+import traceback
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
@@ -75,6 +76,22 @@ class TestVerifyLicenseSignature:
         assert result.tenant_id == "tenant_123"
         assert result.seats == 50
         assert result.plan_type == PlanType.MONTHLY
+
+    def test_invalid_payload_does_not_expose_input_in_errors(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        secret_marker = "private-license-input"
+        license_data = base64.b64encode(
+            json.dumps(
+                {"payload": {"seats": secret_marker}, "signature": secret_marker}
+            ).encode()
+        ).decode()
+
+        with pytest.raises(ValueError, match="Invalid license format") as exc_info:
+            verify_license_signature(license_data)
+
+        assert secret_marker not in caplog.text
+        assert secret_marker not in "".join(traceback.format_exception(exc_info.value))
 
     def test_invalid_signature(self) -> None:
         """Test that an invalid signature fails verification."""

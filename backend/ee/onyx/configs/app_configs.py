@@ -242,3 +242,5 @@ GATED_TENANTS_KEY = "gated_tenants"
 CLOUD_DATA_PLANE_URL = os.environ.get(
     "CLOUD_DATA_PLANE_URL", "https://cloud.onyx.app/api"
 )
+
+ONYX_LICENSE_FILE = os.environ.get("ONYX_LICENSE_FILE")

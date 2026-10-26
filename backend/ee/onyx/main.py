@@ -18,6 +18,7 @@ from ee.onyx.server.evals.api import router as evals_router
 from ee.onyx.server.features.hooks.api import router as hook_router
 from ee.onyx.server.gateway.api import router as llm_gateway_router
 from ee.onyx.server.license.api import router as license_router
+from ee.onyx.server.license.startup import seed_license_from_file
 from ee.onyx.server.log_export.api import router as log_export_router
 from ee.onyx.server.manage.standard_answer import router as standard_answer_router
 from ee.onyx.server.middleware.license_enforcement import (
@@ -71,6 +72,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     steps after."""
 
     async with lifespan_base(app):
+        seed_license_from_file()
         # seed the Onyx environment with LLMs, Assistants, etc. based on an optional
         # environment variable. Used to automate deployment for multiple environments.
         seed_db()

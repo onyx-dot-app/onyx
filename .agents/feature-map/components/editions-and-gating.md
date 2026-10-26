@@ -15,7 +15,7 @@
 `backend/onyx/db/action_policy.py`, `backend/onyx/server/settings/` (`api.py`,
 `store.py`, `models.py`, `tier_order.py`), `backend/ee/onyx/feature_flags/`
 (`factory.py`, `posthog_provider.py`), `backend/ee/onyx/server/license/`
-(`api.py`, `models.py`), `backend/ee/onyx/utils/tier.py`,
+(`api.py`, `models.py`, `startup.py`), `backend/ee/onyx/utils/tier.py`,
 `backend/ee/onyx/server/middleware/license_enforcement.py`, `backend/Dockerfile`
 
 ---
@@ -68,6 +68,8 @@ without overriding disabled actions.
 | Variable | Read in | Default | Effect |
 |---|---|---|---|
 | `MULTI_TENANT` | `backend/shared_configs/configs.py` | `false` | Cloud mode. Selects control-plane gating (`tenant_id_middleware`) over the self-hosted license middleware in `backend/ee/onyx/main.py:get_application`. Also gates whether `backend/onyx/feature_flags/factory.py:get_default_feature_flag_provider` even attempts the PostHog provider. |
+| `ONYX_LICENSE_FILE` | `backend/ee/onyx/configs/app_configs.py`, `backend/ee/onyx/server/license/startup.py:seed_license_from_file` | unset | Path to a signed license file. Self-hosted EE API startup verifies and stores it after database setup. Relative paths start at the API process working directory. Containers need a mount and a container-visible path. |
+| `ONYX_DEV_LICENSE` | `tools/ods/cmd/backend.go`, `backend/scripts/seed_dev_license.py:main` | unset | Development license blob used by existing ODS seed commands and CI. |
 
 No environment variable selects the edition. On a self-hosted deployment, none
 turns license enforcement off.
@@ -262,6 +264,24 @@ by `backend/ee/onyx/utils/tier.py:get_tier` and, for the UI, by the
 EE code loading is necessary but not sufficient for a paid feature to respond.
 With no license, `tier.py:_self_hosted_tier` resolves `Tier.COMMUNITY`.
 
+Self-hosted EE API startup calls
+`backend/ee/onyx/server/license/startup.py:seed_license_from_file` after the
+base lifespan initializes the database and tenant context, before EE data
+seeding or serving requests. `ONYX_LICENSE_FILE` is optional and also works
+outside development mode. Multi-tenant startup skips it before file access.
+The helper normalizes the file, then calls
+`backend/ee/onyx/utils/license.py:verify_and_store_license` to verify, store,
+and publish it. The existing store lock protects concurrent startup workers.
+A newer stored license survives repeated seeds. Missing, unreadable, empty,
+or invalid files log a nonsecret error and leave the stored license intact.
+Unexpected database errors propagate. Removing the setting does not delete
+the stored license. A configured file can restore a deleted license at the
+next startup, so remove the setting before deletion or downgrade.
+
+Existing ODS commands and CI can still pass a development license blob to
+`backend/scripts/seed_dev_license.py:main` through `ONYX_DEV_LICENSE`.
+The script uses the same normalization and guarded store.
+
 `GET /settings` reports the license state through
 `backend/ee/onyx/server/settings/api.py:apply_license_status_to_settings`
 (self-hosted). With no license in the cache or the DB, it sets
@@ -422,11 +442,13 @@ To exercise the CE path in a test, call `global_version.unset_ee()` and
 2. Confirm `GET http://localhost:3000/api/license` and
    `GET http://localhost:3000/api/admin/settings` behave as expected for the
    current tier.
-3. To unlock paid features locally, seed a license. Set `ONYX_DEV_LICENSE` to a
-   signed license and run `python -m scripts.seed_dev_license` from `backend/`
-   (`backend/scripts/seed_dev_license.py:main`). The script verifies the
-   signature, then stores the license. With an empty `ONYX_DEV_LICENSE` it does
-   nothing.
+3. To load a signed `.lic` file at API startup, set `ONYX_LICENSE_FILE` to
+   an absolute path visible to the API process. For local development, put
+   it in .vscode/.env. For containers, mount the file read-only and set the
+   container path. See deployment/docker_compose/README.md for an example.
+   Restart the API and confirm the expected tier through `/settings`.
+   To seed a blob directly, run `python -m scripts.seed_dev_license` from
+   `backend/` with `ONYX_DEV_LICENSE` set. With an empty blob, the script does nothing.
 4. A standard checkout cannot run the CE-only path, because it ships
    `backend/ee/onyx`. Use the test approach above to confirm that a versioned
    symbol resolves to the non-`ee.` module (see §9 for what changes).

@@ -16,10 +16,9 @@ import sys
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
-from ee.onyx.db.license import publish_license_metadata, upsert_license  # noqa: E402
 from ee.onyx.utils.license import (  # noqa: E402
     normalize_license_file,
-    verify_license_signature,
+    verify_and_store_license,
 )
 from onyx.db.engine.sql_engine import (  # noqa: E402
     SqlEngine,
@@ -34,17 +33,11 @@ def main() -> None:
         return
 
     license_data = normalize_license_file(blob)
-    verify_license_signature(license_data)
-
     # Publishing counts seats on a second session while this one is open, and
     # the Postgres cache holds its lock on another connection.
     SqlEngine.init_engine(pool_size=2, max_overflow=2)
     with get_session_with_current_tenant() as db_session:
-        upsert_license(db_session, license_data)
-        # A running instance would keep serving the old license from its cache.
-        # Published under the cache lock, so a refresh in flight cannot put the
-        # old entry back.
-        publish_license_metadata(db_session)
+        verify_and_store_license(db_session, license_data)
 
     print("Dev license seeded")
 

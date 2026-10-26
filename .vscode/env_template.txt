@@ -13,6 +13,10 @@ AUTH_TYPE=basic
 USER_AUTH_SECRET=""
 DEV_MODE=true
 
+# Optional signed .lic file to load when the API starts. Prefer an absolute path.
+# Relative paths start at the API process working directory.
+ONYX_LICENSE_FILE=""
+
 
 # Always keep these on for Dev.
 # Logs model prompts, reasoning, and answer to stdout.

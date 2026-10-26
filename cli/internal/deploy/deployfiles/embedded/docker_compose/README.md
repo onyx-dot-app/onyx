@@ -136,6 +136,50 @@ its `-dev` twin adds interactive debugging tools (vim, nano, curl, ps, psql) tha
 minimal. The web-server, model-server, and sandbox `-dev` tags are identical to their plain counterparts and exist so
 that one version string covers every image.
 
+### Load a license file at startup
+
+Self-hosted deployments can load a signed `.lic` file when the API server starts.
+This also works without network access.
+
+Set the container path in your deployment's `.env` file:
+
+```dotenv
+ONYX_LICENSE_FILE=/run/onyx/license.lic
+```
+
+Mount your license file into `api_server` with a Compose override:
+
+```yaml
+# docker-compose.override.yml
+services:
+  api_server:
+    volumes:
+      - type: bind
+        source: /absolute/path/to/onyx-license.lic
+        target: /run/onyx/license.lic
+        read_only: true
+        bind:
+          create_host_path: false
+```
+
+Replace `source` with the file's absolute host path. The API process must have permission to read the file.
+Use an absolute container path for `ONYX_LICENSE_FILE`. Relative paths start at the API process working directory.
+The environment setting does not mount the host file automatically.
+
+Start or recreate the API server with the override:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.override.yml up -d api_server
+```
+
+At each startup, Onyx verifies the file's signature and stores the license in PostgreSQL.
+It keeps a stored license that has a later issue time and updates the license cache.
+Missing, unreadable, empty, or invalid files produce an error log. The API continues with the stored license.
+Multi-tenant deployments ignore this setting.
+
+Removing `ONYX_LICENSE_FILE` does not delete the stored license. Remove the setting before you delete or downgrade a license.
+Otherwise, a later API restart can restore the license from the file.
+
 ### Self-hosted embedding models and air-gapped deployments
 The model-server image contains one embedding model: `ibm-granite/granite-embedding-97m-multilingual-r2`,
 the default for new installs. It works with no network access.

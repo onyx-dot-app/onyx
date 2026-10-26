@@ -132,6 +132,7 @@ here. Read the component that documents the setting in its env table.
 | `backend/onyx/db/fleet_telemetry.py` | observability, indexing-pipeline |
 | `backend/onyx/db/token_limit.py`, `server/token_rate_limits/`, `server/usage_limits.py`, `server/tenant_usage_limits.py` | rate-and-usage-limits |
 | `backend/ee/onyx/server/billing/`, `backend/ee/onyx/server/license/`, `backend/ee/onyx/utils/tier.py` | billing, editions-and-gating |
+| `backend/ee/onyx/server/license/startup.py`, `backend/ee/onyx/configs/app_configs.py`, `backend/ee/onyx/main.py` | editions-and-gating |
 | `backend/ee/onyx/db/community_downgrade.py` | billing, access-control |
 | `backend/ee/onyx/server/settings/api.py` | editions-and-gating |
 | `backend/ee/onyx/server/enterprise_settings/` | whitelabelling-and-theme |
