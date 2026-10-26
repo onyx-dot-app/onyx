@@ -31,7 +31,6 @@ from onyx.server.query_and_chat.session_loading import (
 )
 from onyx.server.query_and_chat.streaming_models import (
     AgentResponseDelta,
-    CustomToolDelta,
     MemoryToolNoAccess,
     OverallStop,
     PacketException,
@@ -128,10 +127,7 @@ def test_live_and_saved_tool_cards_share_public_content_without_tool_definition(
     assert "private" not in public_json
     assert "stale" not in public_json
     if kind == "error":
-        errors = [
-            packet.obj for packet in restored if isinstance(packet.obj, CustomToolDelta)
-        ]
-        assert errors[-1].data == "lookup failed"
+        assert "lookup failed" not in public_json
     if kind == "display_error":
         errors = [
             packet.obj for packet in restored if isinstance(packet.obj, PacketException)

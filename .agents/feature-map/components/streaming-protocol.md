@@ -376,6 +376,11 @@ Tests can use them to assert tool names and arguments without an environment fla
 Malformed model arguments use a generic tool card. They do not prevent the saved
 error or later answer from loading. Tools retain their existing error-display
 policy; a model-facing error alone does not request a browser error marker.
+Generic model-facing error text is not displayed. Explicit public error details and
+structured tool output retain their existing rendering.
 
 Live and saved answers retain citation metadata when the answer starts with a
 citation. Saved history hides the configured thinking tool, just as live output does.
+Coding-child reasoning uses `CodingAgentThinkingDelta`, including native thinking
+and configured thinking-tool output. Replay assigns sections in accepted content
+order. Citation removal also applies to citation-only and interrupted answers.

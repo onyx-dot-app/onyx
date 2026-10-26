@@ -282,11 +282,20 @@ def _load_history(
     messages: list[Message] = []
     for response in reversed(responses):
         question = response.parent_message
-        if question is None or question.message_type != MessageType.USER:
-            raise ValueError("Child response has no user instruction")
+        if (
+            question is None
+            or question.message_type != MessageType.USER
+            or question.chat_session_id != response.chat_session_id
+        ):
+            raise ValueError("Response has no question in its conversation")
         messages.append(
             UserMessage(
-                id=run_input_message_id(str(response.id), 0), content=question.message
+                id=(
+                    run_input_message_id(str(response.id), 0)
+                    if question.invoking_tool_call_id is not None
+                    else f"chat:{question.id}"
+                ),
+                content=question.message,
             )
         )
         messages.extend(messages_from_steps(read_response_steps(response)))

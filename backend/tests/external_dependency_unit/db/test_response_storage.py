@@ -12,6 +12,7 @@ from sqlalchemy import delete, event, func, inspect, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.unitofwork import UOWTransaction
 
+from onyx.agents.compaction import working_messages
 from onyx.agents.events import (
     MessageEndEvent,
     MessageStartEvent,
@@ -41,13 +42,14 @@ from onyx.chat.checkpoint import deserialize_checkpoint, serialize_checkpoint
 from onyx.chat.emitter import Emitter
 from onyx.chat.history_store import get_chat_history_store
 from onyx.chat.models import (
+    ChatMessageMetadata,
     ChatResponseSnapshot,
     CheckpointBinding,
     MessageRendering,
     ResponseRecord,
 )
 from onyx.chat.presentation import ResponsePresenter, project_response
-from onyx.chat.response import response_record
+from onyx.chat.response import response_record, response_snapshot
 from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
@@ -85,10 +87,20 @@ from onyx.db.chat_subagents import (
     lookup_session_agent,
 )
 from onyx.db.enums import IncognitoRecordMode
-from onyx.db.models import ChatMessage, ChatResponseItem, ChatSession, Tool
+from onyx.db.models import (
+    ChatMessage,
+    ChatMessage__SearchDoc,
+    ChatResponseItem,
+    ChatSession,
+    Tool,
+)
 from onyx.db.models import SearchDoc as StoredSearchDoc
 from onyx.db.models import ToolCall as StoredToolCall
-from onyx.deep_research.models import ResearchAgentCallResult
+from onyx.deep_research.models import (
+    ResearchAgentCallResult,
+    ResearchMessageMetadata,
+    ResearchPhase,
+)
 from onyx.file_store.models import ChatFileType, FileDescriptor
 from onyx.llm.models import (
     AssistantMessage,
@@ -109,6 +121,7 @@ from onyx.server.query_and_chat.session_loading import (
 )
 from onyx.server.query_and_chat.streaming_models import (
     AgentResponseDelta,
+    CitationInfo,
     CodingAgentFinal,
     ImageGenerationFinal,
     MemoryToolDelta,
@@ -196,6 +209,16 @@ def conversation(db_session: Session) -> Generator[ChatSession, None, None]:
     finally:
         event.remove(db_session, "after_flush", track_documents)
         db_session.rollback()
+        document_ids.update(
+            db_session.scalars(
+                select(ChatMessage__SearchDoc.search_doc_id)
+                .join(
+                    ChatMessage,
+                    ChatMessage.id == ChatMessage__SearchDoc.chat_message_id,
+                )
+                .where(ChatMessage.chat_session_id == session_id)
+            )
+        )
         db_session.execute(delete(ChatSession).where(ChatSession.id == session_id))
         if document_ids:
             db_session.execute(
@@ -332,6 +355,99 @@ def _child_record(
     )
     parent.child_runs.append(child)
     return child
+
+
+def test_metadata_sources_survive_storage_without_search_results(
+    db_session: Session, conversation: ChatSession, tool_record: Tool
+) -> None:
+    response = _response(db_session, conversation)
+    record = _record(response)
+    child_id = uuid4()
+    _child_record(db_session, record, child_id, "Child source [2].")
+    record.steps.append(
+        StepRecord(
+            message=AssistantMessage(
+                id=f"{record.run_id}:1", content=[TextContent(text="Root source [1].")]
+            ),
+            generation_status=ExecutionStatus.COMPLETE,
+        )
+    )
+    record.answer_step_index = 1
+    snapshot = response_snapshot(record)
+    documents = [
+        SearchDoc(
+            document_id=name,
+            chunk_ind=0,
+            semantic_identifier=name,
+            link=f"https://example.com/{name}",
+            blurb=name,
+            source_type=DocumentSource.GOOGLE_DRIVE,
+            boost=0,
+            hidden=False,
+            metadata={},
+            match_highlights=[],
+        )
+        for name in ("root-source", "child-source", "display-source")
+    ]
+    snapshot.steps[1].message.metadata = ChatMessageMetadata(
+        sources={1: documents[0]}, documents=[documents[2]]
+    )
+    snapshot.child_runs[0].steps[0].message.metadata = ResearchMessageMetadata(
+        phase=ResearchPhase.REPORT,
+        is_reasoning_model=False,
+        sources={2: documents[1]},
+    )
+    projected = project_response(
+        snapshot,
+        tool_ids={"delegate": tool_record.id},
+        registrations=[
+            AgentInfo(
+                id=str(child_id),
+                path="/root/research",
+                parent_id=str(conversation.id),
+                description="Research child",
+                restoration_config=None,
+            )
+        ],
+    )
+    assert set(projected.all_search_docs) == {doc.document_id for doc in documents}
+    assert projected.citation_to_doc == {1: documents[0]}
+    save_chat_turn(
+        message_text=projected.answer or "",
+        reasoning_tokens=projected.reasoning,
+        tool_calls=projected.tool_calls,
+        citation_to_doc=projected.citation_to_doc,
+        all_search_docs=projected.all_search_docs,
+        db_session=db_session,
+        assistant_message=response,
+        emitted_citations={
+            citation.citation_number for citation in projected.citation_info
+        },
+        response_record=projected.response,
+        presentation=projected.presentation,
+    )
+    db_session.expire_all()
+    assert {doc.document_id for doc in response.search_docs} == {
+        doc.document_id for doc in documents
+    }
+    assert response.citations and set(response.citations) == {"1"}
+    replay = translate_assistant_message_to_packets(response, db_session)
+    assert {
+        packet.obj.document_id
+        for packet in replay
+        if isinstance(packet.obj, CitationInfo)
+    } == {"root-source", "child-source"}
+    child = db_session.get(ChatSession, child_id)
+    assert child is not None
+    restored = _load_history(
+        db_session,
+        ChatBranch(
+            chat_session_id=conversation.id,
+            message_ids=visible_message_ids(db_session, response),
+        ),
+        child,
+    )
+    assert restored.sources[2].document_id == "child-source"
 
 
 def test_thinking_preserves_signed_content_and_final_display_text(
@@ -1353,6 +1469,19 @@ def test_compaction_saves_only_new_output_on_selected_ancestry(
         db_session, conversation.id, visible_message_ids(db_session, continued)
     )
     assert checkpoint_from_summary(selected) == checkpoint
+    history = _load_history(
+        db_session,
+        ChatBranch(
+            chat_session_id=conversation.id,
+            message_ids=visible_message_ids(db_session, continued),
+        ),
+        conversation,
+    )
+    assert history.checkpoint == checkpoint
+    assert history.messages[0].id == checkpoint.covered_through_message_id
+    compacted = working_messages(history.messages, history.checkpoint)
+    assert compacted[0].text == "Conversation summary:\nSummary"
+    assert compacted[1:] == history.messages[1:]
     alternate = _response(db_session, conversation)
     assert (
         find_summary_for_ancestry(

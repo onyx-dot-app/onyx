@@ -4,10 +4,14 @@ from collections.abc import Callable
 from typing import cast
 from uuid import UUID
 
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.chat.models import AvailableFiles, PromptMetadata, SearchParams
+from onyx.chat.models import (
+    AvailableFiles,
+    FileContextResult,
+    PromptMetadata,
+    SearchParams,
+)
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import DEFAULT_PERSONA_ID, FileOrigin
 from onyx.context.search.models import SearchDoc
@@ -33,7 +37,8 @@ from onyx.file_store.utils import (
     plaintext_file_name_for_id,
     store_plaintext,
 )
-from onyx.llm.models import Message, UserMessage
+from onyx.llm.models import UserMessage
+from onyx.prompts.chat_prompts import CONTENT_PENDING_NOTICE, CONTENT_UNAVAILABLE_NOTICE
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.tools.models import ChatFile, SearchToolUsage
 from onyx.utils.logger import setup_logger
@@ -378,28 +383,6 @@ def determine_search_params(
         persona_id_filter=persona_id_filter,
         search_usage=search_usage,
     )
-
-
-class FileContextResult(BaseModel):
-    """Result of building a file's LLM context representation."""
-
-    message: Message
-    tool_metadata: FileToolMetadata
-
-
-CONTENT_PENDING_NOTICE = (
-    "[This file is still being processed and its contents are not yet "
-    "available. Do not guess what it contains — tell the user the file is "
-    "still processing and to ask again in a moment.]"
-)
-
-
-CONTENT_UNAVAILABLE_NOTICE = (
-    "[No machine-readable text could be extracted from this file. It is "
-    "likely image-only (e.g. a scanned document) or in an unsupported "
-    "format. Its contents are not available to you — do not guess them. If "
-    "needed, ask the user for a text-based copy.]"
-)
 
 
 def build_file_context(
