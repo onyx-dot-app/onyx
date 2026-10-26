@@ -2,9 +2,16 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
-from onyx.chat.citation_processor import CitationMapping
 from onyx.context.search.models import SearchDoc
+from onyx.llm.models import ReasoningEffort
 from onyx.tools.models import ToolCallKickoff
+
+
+class ResearchConfiguration(BaseModel):
+    """Settings needed to rebuild a research agent for another run."""
+
+    language_section: str
+    reasoning_effort: ReasoningEffort
 
 
 class SpecialToolCalls(BaseModel):
@@ -20,7 +27,7 @@ class ResearchAgentCallFailure(BaseModel):
 class CombinedResearchAgentCallResult(BaseModel):
     # One entry per research agent call, in call order
     intermediate_reports: list[str | ResearchAgentCallFailure]
-    citation_mapping: CitationMapping
+    citation_mapping: dict[int, SearchDoc]
 
 
 class ResearchPhase(str, Enum):

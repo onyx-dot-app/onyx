@@ -12,7 +12,7 @@ from onyx.agents.models import (
     messages_from_steps,
 )
 from onyx.context.search.models import SearchDoc
-from onyx.deep_research.configuration import ResearchConfiguration
+from onyx.deep_research.models import ResearchConfiguration
 from onyx.llm.models import GenerationRequestParams, Message
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.tools.records import RecordedToolCallInfo
