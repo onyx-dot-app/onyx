@@ -81,6 +81,7 @@ const createOptimisticFile = (
     chat_file_type: ChatFileType.DOCUMENT,
     token_count: null,
     chunk_count: null,
+    content_ready: false,
     temp_id: tempId, // Store temp_id for mapping later
   };
 };

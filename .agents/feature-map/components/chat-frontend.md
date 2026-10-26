@@ -336,7 +336,10 @@ dropped files against the current model's image support
 a toast if the active model has no vision support. It then calls `beginUpload`
 (`lib/projects/providers.tsx:beginUpload`, which calls `lib/projects/svc.ts` for `POST /api/user/projects/file/upload`, see
 [[file-store-and-user-files]]) and appends the results to `currentMessageFiles` via
-`ProjectsProvider`.
+`ProjectsProvider`. Send stays disabled only while an attachment is still uploading, or
+is processing without usable text (`lib/projects/utils.ts:isFileBlockingSend`, which reads
+`content_ready` from the file snapshot). A file that is still indexing in the background
+does not block the turn.
 
 Chat CSV and spreadsheet file previews use `web/src/lib/csv.ts` for quoted-field validation.
 Craft uses the same parser with bounded preview limits; chat keeps its complete-file parsing contract.

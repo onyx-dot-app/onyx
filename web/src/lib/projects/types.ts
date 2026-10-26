@@ -41,6 +41,8 @@ export interface ProjectFile {
   chat_file_type: ChatFileType;
   token_count: number | null;
   chunk_count: number | null;
+  // Text is usable in chat before indexing ends; false on the UPLOADING placeholder.
+  content_ready: boolean;
   temp_id?: string | null;
 }
 

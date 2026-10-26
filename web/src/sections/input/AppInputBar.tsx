@@ -35,7 +35,7 @@ import { useProjectsContext } from "@/lib/projects/providers";
 import { useActiveProject, useProjects } from "@/lib/projects/hooks";
 import { FileCard } from "@/sections/cards/FileCard";
 import { ProjectFile } from "@/lib/projects/types";
-import { isFilePending } from "@/lib/projects/utils";
+import { isFileBlockingSend } from "@/lib/projects/utils";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import { ToolsPopover } from "@/lib/tools/components";
 import MCPConnectionPrompt from "@/lib/mcp/components/MCPConnectionPrompt";
@@ -365,9 +365,9 @@ const AppInputBar = React.memo(
     const { isLoading: isLoadingProjects } = useProjects();
     const activeProject = useActiveProject();
 
-    // A file isn't queryable until processing completes, so gate send on it.
-    const hasPendingFiles = useMemo(
-      () => currentMessageFiles.some((file) => isFilePending(file.status)),
+    // Gate send on files the model can't read yet; indexing may still be running.
+    const hasBlockingFiles = useMemo(
+      () => currentMessageFiles.some(isFileBlockingSend),
       [currentMessageFiles]
     );
 
@@ -763,11 +763,11 @@ const AppInputBar = React.memo(
               (chatState === "input" &&
                 !isVoicePlaybackControllable &&
                 !message) ||
-              hasPendingFiles ||
+              hasBlockingFiles ||
               isClassifying
             }
             tooltip={
-              hasPendingFiles
+              hasBlockingFiles
                 ? t("appInputBar.sendButton.processingFilesTooltip")
                 : undefined
             }
@@ -948,7 +948,7 @@ const AppInputBar = React.memo(
                               message &&
                               !disabled &&
                               !isClassifying &&
-                              !hasPendingFiles
+                              !hasBlockingFiles
                             ) {
                               submitMessage(message);
                             }
@@ -956,7 +956,7 @@ const AppInputBar = React.memo(
                             message.trim() &&
                             !disabled &&
                             !isClassifying &&
-                            !hasPendingFiles &&
+                            !hasBlockingFiles &&
                             queuedMessages.length < MAX_QUEUED_MESSAGES
                           ) {
                             enqueueCurrentMessage(message.trim());
@@ -1030,7 +1030,7 @@ const AppInputBar = React.memo(
                     prominence="tertiary"
                   />
                   <Button
-                    disabled={!message || isClassifying || hasPendingFiles}
+                    disabled={!message || isClassifying || hasBlockingFiles}
                     id="onyx-chat-input-send-button"
                     icon={isClassifying ? IconLoader : SvgSearch}
                     onClick={() => {

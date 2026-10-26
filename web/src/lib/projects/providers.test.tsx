@@ -4,7 +4,7 @@ import { NextIntlClientProvider } from "next-intl";
 import englishMessages from "@/i18n/messages/en.json";
 import { ProjectsProvider, useProjectsContext } from "@/lib/projects/providers";
 import { type ProjectFile, UserFileStatus } from "@/lib/projects/types";
-import { ChatFileType } from "@/app/app/interfaces";
+import { projectFile } from "@/lib/projects/__tests__/projectFileFixtures";
 
 const mockUploadFiles = jest.fn();
 const mockGetRecentFiles = jest.fn();
@@ -211,20 +211,14 @@ describe("ProjectsContext attached file status polling", () => {
   });
 
   function makePendingFile(id: string): ProjectFile {
-    return {
+    return projectFile({
       id,
       name: `${id}.txt`,
-      project_id: null,
-      user_id: null,
       file_id: `store-${id}`,
-      created_at: "2026-01-01T00:00:00Z",
       status: UserFileStatus.INDEXING,
-      file_type: "text/plain",
-      last_accessed_at: "2026-01-01T00:00:00Z",
-      chat_file_type: ChatFileType.PLAIN_TEXT,
       token_count: 10,
-      chunk_count: null,
-    };
+      content_ready: false,
+    });
   }
 
   function completedStatuses(ids: string[]): ProjectFile[] {

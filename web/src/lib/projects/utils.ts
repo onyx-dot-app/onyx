@@ -26,3 +26,8 @@ export function isFilePending(status: UserFileStatus): boolean {
     status === UserFileStatus.INDEXING
   );
 }
+
+/** True while a file can't be sent: still uploading, or processing with no usable text yet. */
+export function isFileBlockingSend(file: ProjectFile): boolean {
+  return isFilePending(file.status) && !file.content_ready;
+}

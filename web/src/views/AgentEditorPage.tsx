@@ -1179,6 +1179,7 @@ export default function AgentEditorPage({
                           chat_file_type: ChatFileType.DOCUMENT,
                           token_count: null,
                           chunk_count: null,
+                          content_ready: true,
                         };
                         return placeholder;
                       }

@@ -4,7 +4,7 @@ import AppInputBar, {
   type AppInputBarHandle,
 } from "@/sections/input/AppInputBar";
 import { type ProjectFile, UserFileStatus } from "@/lib/projects/types";
-import { ChatFileType } from "@/app/app/interfaces";
+import { projectFile } from "@/lib/projects/__tests__/projectFileFixtures";
 import { useLlmManager } from "@/lib/hooks";
 import { useToolConfiguration } from "@/lib/tools/hooks";
 import type { MinimalAgent } from "@/lib/agents/types";
@@ -97,10 +97,12 @@ function Composer({
   plugins,
   agentId = 0,
   inputBarRef,
+  onSubmit = jest.fn(),
 }: {
   plugins: readonly MemberPlugin[];
   agentId?: number;
   inputBarRef?: React.Ref<AppInputBarHandle>;
+  onSubmit?: (message: string) => void;
 }) {
   const configuration = useToolConfiguration(agentId);
   const llmManager = useLlmManager();
@@ -123,7 +125,7 @@ function Composer({
         toolConfiguration={configuration}
         llmManager={llmManager}
         stopGenerating={jest.fn()}
-        onSubmit={jest.fn()}
+        onSubmit={onSubmit}
         handleFileUpload={jest.fn()}
         deepResearchEnabled={false}
         toggleDeepResearch={jest.fn()}
@@ -184,23 +186,7 @@ test("custom agents retain the forced plugin pill without member metadata", asyn
 });
 
 describe("restore after a failed send", () => {
-  function projectFile(id: string): ProjectFile {
-    return {
-      id,
-      name: `${id}.txt`,
-      project_id: null,
-      user_id: null,
-      file_id: `${id}-file-id`,
-      created_at: "2026-01-01T00:00:00Z",
-      status: UserFileStatus.COMPLETED,
-      file_type: "text/plain",
-      last_accessed_at: "2026-01-01T00:00:00Z",
-      chat_file_type: ChatFileType.PLAIN_TEXT,
-      token_count: null,
-      chunk_count: null,
-    };
-  }
-  const failedFiles = [projectFile("failed-file")] satisfies ProjectFile[];
+  const failedFiles = [projectFile({ id: "failed-file" })];
 
   test("puts the message and files back into an empty composer", () => {
     const inputBarRef = createRef<AppInputBarHandle>();
@@ -224,12 +210,43 @@ describe("restore after a failed send", () => {
 
   test("keeps files attached while the send was pending", () => {
     mockProjectsContext.currentMessageFiles = [
-      projectFile("newer-file"),
-    ] satisfies ProjectFile[];
+      projectFile({ id: "newer-file" }),
+    ];
     const inputBarRef = createRef<AppInputBarHandle>();
     render(<Composer plugins={[]} inputBarRef={inputBarRef} />);
     act(() => inputBarRef.current?.restore("failed message", failedFiles));
     expect(screen.getByRole("textbox")).not.toHaveTextContent("failed message");
     expect(mockProjectsContext.setCurrentMessageFiles).not.toHaveBeenCalled();
+  });
+});
+
+describe("send gate on attached files", () => {
+  const sendButton = () =>
+    document.getElementById("onyx-chat-input-send-button");
+
+  test("a processing file whose text is ready leaves Send and Enter open", async () => {
+    mockProjectsContext.currentMessageFiles = [
+      projectFile({ status: UserFileStatus.PROCESSING, content_ready: true }),
+    ];
+    const onSubmit = jest.fn();
+    render(<Composer plugins={[]} onSubmit={onSubmit} />);
+    await setupUser().type(screen.getByRole("textbox"), "summarize this");
+    expect(sendButton()).toBeEnabled();
+    await setupUser().keyboard("{Enter}");
+    expect(onSubmit).toHaveBeenCalledWith("summarize this");
+  });
+
+  test("a processing file without usable text blocks Send and Enter", async () => {
+    mockProjectsContext.currentMessageFiles = [
+      projectFile({ status: UserFileStatus.PROCESSING, content_ready: false }),
+    ];
+    const onSubmit = jest.fn();
+    render(<Composer plugins={[]} onSubmit={onSubmit} />);
+    await setupUser().type(
+      screen.getByRole("textbox"),
+      "summarize this{Enter}"
+    );
+    expect(sendButton()).toBeDisabled();
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 });
