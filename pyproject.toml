@@ -48,7 +48,7 @@ backend = [
     "fastapi-users==15.0.4",
     "fastapi-users-db-sqlalchemy==7.0.0",
     "fastapi-limiter==0.1.6",
-    "fastmcp==3.2.0",
+    "fastmcp==3.4.10",
     "google-api-python-client==2.86.0",
     "google-auth-oauthlib==1.4.0",
     "google-cloud-storage>=3.0.0,<4.0.0",
