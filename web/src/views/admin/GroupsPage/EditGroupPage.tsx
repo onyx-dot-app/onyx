@@ -605,7 +605,10 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
 
   return (
     <>
-      <SettingsLayouts.Root loading={isLoading && !error}>
+      <SettingsLayouts.Root
+        loading={isLoading}
+        error={error ? t("edit.loadError.text") : false}
+      >
         <SettingsLayouts.Header
           icon={SvgUsers}
           title={t("edit.header.title")}
@@ -615,13 +618,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
         />
 
         <SettingsLayouts.Body>
-          {error && (
-            <Text as="p" secondaryBody text03>
-              {t("edit.loadError.text")}
-            </Text>
-          )}
-
-          {!isLoading && !error && group && (
+          {group && (
             <>
               {isDefaultGroup && (
                 <MessageCard
