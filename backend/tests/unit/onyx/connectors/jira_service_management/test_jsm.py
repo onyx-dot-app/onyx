@@ -21,6 +21,7 @@ from onyx.connectors.jira_service_management.connector import (
     _build_jsm_jql,
     _extract_request_type,
     _issue_to_document,
+    _parse_timestamp,
     _request_to_document,
 )
 from onyx.connectors.models import ConnectorMissingCredentialError
@@ -663,3 +664,19 @@ def test_get_request_comments_paginates_all_pages(mock_request: MagicMock) -> No
     assert len(comments) == 2
     assert [c["id"] for c in comments] == ["c1", "c2"]
     assert mock_request.call_count == 2
+
+
+def test_parse_timestamp_formats() -> None:
+    """Verify _parse_timestamp parses ISO strings with trailing Z, offsets, and naive timestamps."""
+    dt_z = _parse_timestamp("2026-10-15T12:30:00.000Z")
+    assert dt_z == datetime(2026, 10, 15, 12, 30, 0, tzinfo=timezone.utc)
+
+    dt_offset = _parse_timestamp("2026-10-15T14:30:00+02:00")
+    assert dt_offset == datetime(2026, 10, 15, 12, 30, 0, tzinfo=timezone.utc)
+
+    dt_naive = _parse_timestamp("2026-10-15T12:30:00")
+    assert dt_naive == datetime(2026, 10, 15, 12, 30, 0, tzinfo=timezone.utc)
+
+    assert _parse_timestamp(None) is None
+    assert _parse_timestamp("") is None
+    assert _parse_timestamp("not-a-timestamp") is None
