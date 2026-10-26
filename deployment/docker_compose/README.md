@@ -166,11 +166,27 @@ Replace `source` with the file's absolute host path. The API process must have p
 Use an absolute container path for `ONYX_LICENSE_FILE`. Relative paths start at the API process working directory.
 The environment setting does not mount the host file automatically.
 
-Start or recreate the API server with the override:
+Start or recreate the API server with your deployment's existing Compose files, in the same order.
+Append the license override last. For a standard deployment:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.override.yml up -d api_server
 ```
+
+For a production deployment:
+
+```bash
+docker compose -f docker-compose.prod.yml -f docker-compose.override.yml up -d api_server
+```
+
+For a Lite deployment:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml \
+  -f docker-compose.override.yml up -d api_server
+```
+
+Keep any other active overlays, such as Craft or dev ports, before the license override.
 
 At each startup, Onyx verifies the file's signature and stores the license in PostgreSQL.
 It keeps a stored license that has a later issue time and updates the license cache.
