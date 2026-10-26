@@ -278,9 +278,13 @@ class DirectoryConnector(
         return candidate
 
     def _document_id(self, relative_path: str) -> str:
-        normalized = self._normalize_relative_path(relative_path)
+        # Hash the raw relative path: distinct raw names are distinct byte
+        # strings and must get distinct ids (NFC/slash normalization would
+        # collide e.g. a root file `a\b.txt` with a nested `a/b.txt`). The
+        # normalized form stays in metadata and display (see _process_path).
+        self._validate_relative_path(relative_path)
         digest = hashlib.sha256(
-            f"{self.source_id}\0{normalized}".encode("utf-8")
+            f"{self.source_id}\0{relative_path}".encode("utf-8")
         ).hexdigest()
         return f"directory:{self.source_id}:{digest}"
 
@@ -362,11 +366,11 @@ class DirectoryConnector(
     ) -> Document | ConnectorFailure | None:
         normalized = self._normalize_relative_path(relative_path)
         absolute_path = self._absolute_path(relative_path)
-        document_id = self._document_id(normalized)
+        document_id = self._document_id(relative_path)
         source_link = self._source_link(normalized)
 
         def no_follow_opener(path: str, flags: int) -> int:
-            return os.open(path, flags | getattr(os, "O_NOFOLLOW", 0))
+            return os.open(path, flags | os.O_NOFOLLOW)
 
         try:
             with open(absolute_path, "rb", opener=no_follow_opener) as file_handle:
@@ -383,14 +387,14 @@ class DirectoryConnector(
 
                 if stat_before.st_size <= 0:
                     return self._failure_for_file(
-                        normalized, "Directory file is empty."
+                        relative_path, "Directory file is empty."
                     )
                 if (
                     self.max_file_size_bytes
                     and stat_before.st_size > self.max_file_size_bytes
                 ):
                     return self._failure_for_file(
-                        normalized,
+                        relative_path,
                         "Directory file exceeds configured max_file_size_mb "
                         f"({stat_before.st_size} bytes > "
                         f"{self.max_file_size_bytes} bytes).",
@@ -426,12 +430,12 @@ class DirectoryConnector(
             return None
         except OSError as error:
             return self._failure_for_file(
-                normalized, f"Failed to read directory file: {error}", error
+                relative_path, f"Failed to read directory file: {error}", error
             )
         except Exception as error:
             logger.exception("Failed to process directory file %s", normalized)
             return self._failure_for_file(
-                normalized, f"Failed to process directory file: {error}", error
+                relative_path, f"Failed to process directory file: {error}", error
             )
 
         if (
@@ -447,12 +451,12 @@ class DirectoryConnector(
             or stat_path_after.st_ctime_ns != stat_before.st_ctime_ns
         ):
             return self._failure_for_file(
-                normalized,
+                relative_path,
                 "Directory file changed while it was being processed; it will be retried.",
             )
         if not documents or not any(document.sections for document in documents):
             return self._failure_for_file(
-                normalized, "Onyx extracted no indexable content from the file."
+                relative_path, "Onyx extracted no indexable content from the file."
             )
 
         document = documents[0]

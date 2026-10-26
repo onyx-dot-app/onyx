@@ -451,3 +451,44 @@ def test_reindex_resolves_raw_path_from_uri(source_root: Path) -> None:
     results = list(connector.reindex([failure]))
     documents = _documents(results)
     assert len(documents) == 1
+
+
+def test_document_ids_distinguish_raw_names(source_root: Path) -> None:
+    """A root file ``a\\b.txt`` and a nested ``a/b.txt`` normalize to the
+    same NFC/slash form; their document ids must still differ because the
+    raw names are distinct byte strings (otherwise the second file
+    suppresses the first in the indexing pipeline)."""
+    (source_root / "a\\b.txt").write_text("root file")
+    (source_root / "a").mkdir()
+    (source_root / "a" / "b.txt").write_text("nested file")
+
+    connector = _make_connector(source_root, batch_size=10)
+    results = _run_to_completion(connector, start=0, end=time.time() + 10)
+
+    documents = _documents(results)
+    assert len(documents) == 2
+    assert len({document.id for document in documents}) == 2
+
+
+def test_produced_failure_keeps_raw_path_for_reindex(source_root: Path) -> None:
+    """A failure produced through load_from_checkpoint for an NFD-named file
+    must carry the raw name in its URI: reindex has to resolve the name the
+    filesystem stores, otherwise the retry is silently lost."""
+    name = unicodedata.normalize("NFD", "caf\u00e9.txt")
+    (source_root / name).write_text("")
+
+    connector = _make_connector(source_root, batch_size=10)
+    results = _run_to_completion(connector, start=0, end=time.time() + 10)
+    failures = [result for result in results if isinstance(result, ConnectorFailure)]
+    assert len(failures) == 1
+    assert connector._relative_path_from_failure(failures[0]) == name
+
+    retried = list(connector.reindex(failures))
+    # The file is still empty, so the retry fails again -- but it must be
+    # resolved and re-raised, not silently dropped.
+    assert len(retried) == 1
+    assert isinstance(retried[0], ConnectorFailure)
+    assert (
+        retried[0].failed_document.document_id
+        == failures[0].failed_document.document_id
+    )
