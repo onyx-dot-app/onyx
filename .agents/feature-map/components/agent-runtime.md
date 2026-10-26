@@ -2,7 +2,7 @@
 
 > Executes model and tool steps with explicit cancellation, ownership, and restoration boundaries.
 
-**Verified against:** `f4ae122a9b` (2026-10-26)
+**Verified against:** `c5a66d2465` (2026-10-26)
 **Domain:** core-loop
 **Edition:** CE
 **Owns:** `backend/onyx/agents/`
@@ -46,7 +46,7 @@ See `backend/onyx/agents/README.md` for the public contracts and usage.
 - Child cancellation failures do not skip siblings, retained local work, or parent completion.
 - Model events recheck cancellation under the execution lock before changing recorded state.
 - Result readiness, saved completion, suspension, and idle state have distinct meanings.
-- Recorded partial output survives even when replay excludes incomplete exchanges or unsigned thinking.
+- Recorded partial output survives even when replay excludes incomplete exchanges or thinking without replayable provider blocks.
 - Tool results and completion callbacks follow the original model-call order.
 - Run owns recorded mutations; tool scheduling receives explicit borrowed step data.
 - Collaborators lock borrowed step data with execution_lock and use recording methods for changes.
@@ -63,7 +63,7 @@ See `backend/onyx/agents/README.md` for the public contracts and usage.
 - A failed handoff save leaves the existing local owner intact.
 - Each tracked run retains completion and cleanup work when handoff releases its local execution.
 - Application directories authorize saved-run access, including cached results across views.
-- Listener failure does not fail execution or storage; event delivery can fail independently.
+- Listener and output-flush failures mark affected deliveries failed without failing execution or storage.
 - Closing delivery rejects new events; accepted events remain pending through buffered-output flushes.
 - Immutable deltas can be shared; mutable event payloads remain isolated between listeners.
 - Token-count caches belong to one run and retain only the current request text.

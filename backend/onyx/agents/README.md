@@ -26,7 +26,8 @@ identity and remaining step budget.
 
 `Agent.state` and `Run.snapshot()` return independent copies. Recorded steps retain
 accepted output, including partial output after cancellation. Model-history replay
-omits incomplete tool exchanges and unsigned provider thinking blocks. Recorded
+omits incomplete tool exchanges, unsigned provider thinking blocks, and thinking
+without provider blocks. Recorded
 output stays intact, including partial thinking after cancellation.
 
 ## Start a run
@@ -123,8 +124,8 @@ Text, thinking-text, and tool-argument deltas without mutable attachments are sh
 between listeners. Other events are copied to preserve listener isolation.
 Closing delivery rejects new events and releases listeners after accepted events
 drain. Close does not wait; idle tracking includes pending delivery and buffered-output
-flushes. Listener
-failures do not fail execution or storage. Inspect `run.delivery_failed` when
+flushes. Listener and buffered-output flush failures set the affected run’s
+`delivery_failed` flag without failing execution or storage. Inspect `run.delivery_failed` when
 delivery matters. Listeners must not wait for their own run to become idle.
 
 ## Child agents

@@ -213,10 +213,13 @@ class EventDispatcher:
             if flush_due and self._flush is not None:
                 try:
                     self._context.run(self._flush, final_flush)
-                except AgentCancelled:
-                    logger.debug("Agent event sink flush cancelled")
-                except Exception:
-                    logger.exception("Agent event sink flush failed")
+                except (AgentCancelled, Exception) as error:
+                    for channel in channel_event_counts:
+                        channel.failed.set()
+                    if isinstance(error, AgentCancelled):
+                        logger.debug("Agent event sink flush cancelled")
+                    else:
+                        logger.exception("Agent event sink flush failed")
                 last_flush = time.monotonic()
             if self._flush is None or flush_due:
                 with self._condition:

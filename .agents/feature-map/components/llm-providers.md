@@ -226,7 +226,8 @@ Provider request conversion keeps its existing wire format.
 `backend/onyx/agents/execution_records.py` supplies stable input-message IDs and model-history replay.
 Its `messages_for_model` function creates model context from recorded messages.
 It retains partial text and signed thinking, but omits tool calls without adjacent results.
-Unsigned provider thinking blocks are incomplete and cannot be replayed; signed and redacted blocks remain intact.
+Thinking without provider blocks and unsigned provider thinking blocks cannot be replayed.
+Signed and redacted blocks remain intact.
 It also removes orphaned or duplicate tool results and copies messages by default.
 Calls with duplicate IDs in one assistant message are ambiguous; replay omits them and their results.
 This helper prepares history without deleting the recorded output.
