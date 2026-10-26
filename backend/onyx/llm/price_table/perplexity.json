@@ -139,6 +139,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2024-01-01",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": false
     },
@@ -149,6 +150,7 @@
         "output": 8,
         "reasoning": 3
       },
+      "family": "sonar",
       "limit": {
         "context": 128000,
         "output": 32768
@@ -166,6 +168,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-02-01",
+      "status": "deprecated",
       "temperature": false,
       "tool_call": false
     },
@@ -194,6 +197,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2024-01-01",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": false
     },
@@ -222,6 +226,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2024-01-01",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": false
     }
