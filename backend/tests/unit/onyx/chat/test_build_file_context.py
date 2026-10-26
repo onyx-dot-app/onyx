@@ -7,7 +7,7 @@ to invent workarounds (web-searching for the document, guessing contents).
 
 import pytest
 
-from onyx.chat.chat_utils import (
+from onyx.chat.files import (
     CONTENT_PENDING_NOTICE,
     CONTENT_UNAVAILABLE_NOTICE,
     build_file_context,
@@ -67,7 +67,7 @@ def test_empty_pending_content_gets_pending_notice() -> None:
 def test_metadata_only_files_keep_tool_instructions(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("onyx.chat.chat_utils.DISABLE_VECTOR_DB", True)
+    monkeypatch.setattr("onyx.chat.files.DISABLE_VECTOR_DB", True)
     result = build_file_context(
         tool_file_id="abc",
         filename="sheet.xlsx",
@@ -90,7 +90,7 @@ def test_metadata_only_files_name_no_tool_when_reader_is_absent(
     available and must not promise anything — not read_file, and not the
     python or search tools either.
     """
-    monkeypatch.setattr("onyx.chat.chat_utils.DISABLE_VECTOR_DB", False)
+    monkeypatch.setattr("onyx.chat.files.DISABLE_VECTOR_DB", False)
     result = build_file_context(
         tool_file_id="abc",
         filename="sheet.xlsx",

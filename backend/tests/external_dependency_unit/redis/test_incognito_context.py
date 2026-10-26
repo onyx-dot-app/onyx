@@ -34,10 +34,10 @@ from onyx.chat.incognito_context import (
     save_incognito_context,
     teardown_incognito_session,
 )
-from onyx.chat.models import ChatLoadedFile, ChatMessageSimple, ToolCallSimple
+from onyx.chat.models import ChatMessageSimple, ToolCallSimple
 from onyx.chat.stream_buffer import _chunk_key
 from onyx.configs.constants import MessageType
-from onyx.file_store.models import ChatFileType
+from onyx.file_store.models import ChatFileType, ChatLoadedFile
 from onyx.redis.redis_pool import get_raw_redis_client, get_redis_client
 from onyx.redis.tenant_redis_client import TenantRedisClient
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR

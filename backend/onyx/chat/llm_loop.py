@@ -6,7 +6,6 @@ from typing import Any, Literal
 
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_utils import (
-    build_python_chat_files_from_search_docs,
     count_message_replay_tokens,
     create_tool_call_failure_messages,
     create_tool_call_failure_response,
@@ -20,12 +19,11 @@ from onyx.chat.citation_utils import (
     update_citation_processor_from_tool_response,
 )
 from onyx.chat.emitter import Emitter
+from onyx.chat.files import build_python_chat_files_from_search_docs
 from onyx.chat.llm_step import extract_tool_calls_from_response_text, run_llm_step
 from onyx.chat.models import (
     ChatMessageSimple,
     CitationMode,
-    ExtractedContextFiles,
-    FileToolMetadata,
     LlmStepResult,
     ToolCallSimple,
 )
@@ -43,6 +41,7 @@ from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.memory import UserMemoryContext, add_memory, update_memory_at_index
 from onyx.db.models import Persona
+from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.exceptions import ClassifiedLLMError
 from onyx.llm.interfaces import LLM, LLMUserIdentity

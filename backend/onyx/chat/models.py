@@ -1,13 +1,16 @@
 from collections.abc import Iterator
 from enum import Enum
-from typing import Any, Callable
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel
 
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
-from onyx.file_store.models import ChatFileType, InMemoryChatFile
+from onyx.file_store.models import (
+    ChatLoadedFile,
+    FileToolMetadata,
+)
 from onyx.server.query_and_chat.models import (
     MessageResponseIDInfo,
     MultiModelMessageResponseIDInfo,
@@ -133,47 +136,6 @@ class ChatFullResponse(BaseModel):
     error_msg: str | None = None
 
 
-class ChatLoadedFile(InMemoryChatFile):
-    content_text: str | None
-    token_count: int
-    # True while the user-file worker is still processing the file — its
-    # canonical plaintext (e.g. including image captions) doesn't exist yet.
-    content_pending: bool = False
-
-    # Named distinctly from the base ``lazy_from_descriptor`` so the subclass
-    # can require ``content_text`` / ``token_count`` without violating LSP on
-    # the override (ty correctly flag the broader subclass signature).
-    @classmethod
-    def lazy_loaded(
-        cls,
-        *,
-        file_id: str,
-        file_type: ChatFileType,
-        filename: str | None,
-        content_text: str | None,
-        token_count: int,
-        loader: Callable[[], bytes],
-        content_pending: bool = False,
-    ) -> "ChatLoadedFile":
-        """Construct a ``ChatLoadedFile`` whose ``content`` bytes are loaded
-        only on first access. ``content_text`` and ``token_count`` are passed
-        eagerly because they're cheap (DB lookup + cached plaintext store hit).
-        """
-        from onyx.file_store.models import install_lazy_content_loader
-
-        inst = cls(
-            file_id=file_id,
-            content=b"",
-            file_type=file_type,
-            filename=filename,
-            content_text=content_text,
-            token_count=token_count,
-            content_pending=content_pending,
-        )
-        install_lazy_content_loader(inst, loader)
-        return inst
-
-
 class ToolCallSimple(BaseModel):
     """Tool call for ChatMessageSimple representation (mirrors OpenAI format).
 
@@ -212,33 +174,6 @@ class ChatMessageSimple(BaseModel):
     file_id: str | None = None
 
 
-class ContextFileMetadata(BaseModel):
-    """Metadata for a context-injected file to enable citation support."""
-
-    file_id: str
-    filename: str
-    file_content: str
-
-
-class FileToolMetadata(BaseModel):
-    """Lightweight metadata for exposing files to the FileReaderTool.
-
-    Used when files cannot be loaded directly into context (project too large
-    or persona-attached user_files without direct-load path). The LLM receives
-    a listing of these so it knows which files it can read via ``read_file``.
-    """
-
-    file_id: str
-    filename: str
-    approx_char_count: int
-    # Whether this file's bytes reached ``chat_files_for_tools``, and so are
-    # available to tools that receive the files themselves (PythonTool).
-    # Messages dropped by summary truncation are filtered out of
-    # ``chat_history`` before ``load_all_chat_files`` runs, so their files are
-    # listed for the LLM but never staged. Only ``read_file`` can fetch those.
-    staged_for_tools: bool = True
-
-
 class ChatHistoryResult(BaseModel):
     """Result of converting chat history to simple format.
 
@@ -251,20 +186,6 @@ class ChatHistoryResult(BaseModel):
 
     simple_messages: list[ChatMessageSimple]
     all_injected_file_metadata: dict[str, FileToolMetadata]
-
-
-class ExtractedContextFiles(BaseModel):
-    """Result of attempting to load user files (from a project or persona) into context."""
-
-    file_texts: list[str]
-    image_files: list[ChatLoadedFile]
-    use_as_search_filter: bool
-    total_token_count: int
-    # Lightweight metadata for files exposed via FileReaderTool
-    # (populated when files don't fit in context and vector DB is disabled).
-    file_metadata: list[ContextFileMetadata]
-    uncapped_token_count: int | None
-    file_metadata_for_tool: list[FileToolMetadata] = []
 
 
 class SearchParams(BaseModel):

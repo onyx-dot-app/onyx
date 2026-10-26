@@ -1,9 +1,9 @@
 import re
 
 from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
-from onyx.chat.models import ContextFileMetadata
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
+from onyx.file_store.models import ContextFileMetadata
 from onyx.tools.constants import CITEABLE_TOOLS_NAMES
 from onyx.tools.models import ToolResponse
 

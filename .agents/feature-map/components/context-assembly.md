@@ -69,7 +69,7 @@ its token math to the frontend:
 | `GEN_AI_NUM_RESERVED_OUTPUT_TOKENS` | `configs/model_configs.py` | Minimum output allowance `TokenBudget.output_allowance` will reserve before it gives up on a cycle. |
 | `COMPRESSION_TRIGGER_RATIO` | `configs/chat_configs.py` | Default 0.75. Compress when chat-history tokens exceed this fraction of available space (`compression.py:get_compression_params`). |
 | `RECENT_MESSAGES_RATIO` | `compression.py` | Default 0.2. Fraction of the current history tokens kept verbatim (never summarized) when compressing. |
-| `DISABLE_VECTOR_DB` | referenced in `process_message.py:extract_context_files` | Changes whether oversized files fall back to search or to `FileReaderTool` metadata. |
+| `DISABLE_VECTOR_DB` | referenced in `files.py:extract_context_files` | Changes whether oversized files fall back to search or to `FileReaderTool` metadata. |
 
 No admin-configured setting overrides prompt text directly; the base system
 prompt is DB-backed (see §4.1) and editable per deployment.
@@ -130,6 +130,11 @@ This whole list is rebuilt from scratch on every LLM cycle inside one turn, not
 once per turn. A turn that runs three tool cycles calls
 `construct_message_history` three times, each with a growing
 `[tool calls and responses]` section and a freshly recomputed reminder.
+
+The file helpers in `chat/files.py` serve the existing chat engines.
+`chat/prompt_formatting.py` prepares shared runtime messages: it selects images,
+wraps reminders, and sets cache metadata. The existing engines still use
+`translate_history_to_basemessages`; switching engines is a separate change.
 
 ### 4.1 System prompt
 
@@ -201,11 +206,11 @@ where it appeared in turn *N*'s history.
 
 The two kinds take different load paths, and the product intent differs. The
 code preserves it. Project files (and persona-attached files) load through
-`process_message.py:extract_context_files`. User uploads do not. Attached files
+`files.py:extract_context_files`. User uploads do not. Attached files
 become history messages in `chat_utils.py:convert_chat_history`, one message per
 text file, tagged with `file_id`.
 
-`chat_utils.py:load_all_chat_files` reads attachment token counts and processing
+`files.py:load_all_chat_files` reads attachment token counts and processing
 status on the caller thread before starting content workers. Workers receive
 scalar values, so they cannot share the caller's database session. Plaintext
 loading stays parallel, with at most 16 workers; raw bytes stay lazy. While a
@@ -222,7 +227,7 @@ canonical plaintext.
   way the custom agent prompt does, and `chat/README.md` states that they must
   not be dropped by history truncation. Project files that fit are injected.
   Oversized sets are routed to search or file metadata by
-  `process_message.py:extract_context_files`. They are assumed to be central to
+  `files.py:extract_context_files`. They are assumed to be central to
   what the user is doing, not a needle-in-a-haystack fact to search for.
 
 At upload, every file is token-counted with the target LLM's tokenizer where
