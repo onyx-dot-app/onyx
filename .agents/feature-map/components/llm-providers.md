@@ -228,6 +228,7 @@ structured failures, and compaction checkpoints for the shared runtime.
 Its `messages_for_model` function creates model context from recorded messages.
 It retains partial text and thinking, but omits tool calls without adjacent results.
 It also removes orphaned or duplicate tool results and copies messages by default.
+Calls with duplicate IDs in one assistant message are ambiguous; replay omits them and their results.
 This helper prepares history without deleting the recorded output.
 Production chat does not call this module yet.
 

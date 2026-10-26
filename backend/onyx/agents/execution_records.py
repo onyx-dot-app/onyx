@@ -1,5 +1,6 @@
 """Recorded run outcomes, compaction checkpoints, and model-history replay rules."""
 
+from collections import Counter
 from enum import Enum
 
 from pydantic import BaseModel, Field
@@ -73,7 +74,7 @@ def completed_tool_call_ids(messages: list[Message], assistant_index: int) -> se
 def messages_for_model(
     messages: list[Message], *, copy_messages: bool = True
 ) -> list[Message]:
-    """Exclude unfinished tool calls while preserving recorded partial output.
+    """Exclude unfinished or ambiguous tool calls from model history.
 
     History truncation can drop an assistant tool call while leaving its
     result behind. Providers such as Ollama reject these orphaned results
@@ -86,7 +87,16 @@ def messages_for_model(
     for index, message in enumerate(messages):
         if isinstance(message, AssistantMessage):
             result_ids = completed_tool_call_ids(messages, index)
-            accepted = {call.id for call in message.tool_calls if call.id in result_ids}
+            call_counts = Counter(call.id for call in message.tool_calls)
+            accepted = {
+                call_id
+                for call_id, count in call_counts.items()
+                if count == 1 and call_id in result_ids
+            }
+            if any(count > 1 for count in call_counts.values()):
+                logger.warning(
+                    "Omitting ambiguous duplicate tool calls from model context"
+                )
             copy = message.model_copy(deep=copy_messages)
             copy.content = [
                 part
