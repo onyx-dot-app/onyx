@@ -1,5 +1,5 @@
 {
-  "version": "1.21",
+  "version": "1.22",
   "updated_at": "2026-10-26T00:00:00Z",
   "providers": {
     "openai": {
@@ -45,12 +45,8 @@
           "display_name": "Gemini 3.1 Pro"
         },
         {
-          "name": "gemini-3.8-flash",
-          "display_name": "Gemini 3.8 Flash"
-        },
-        {
-          "name": "gemini-4-argon",
-          "display_name": "Gemini 4 Argon"
+          "name": "gemini-3.1-flash-lite-preview",
+          "display_name": "Gemini 3.1 Flash Lite"
         }
       ]
     },
@@ -70,8 +66,8 @@
           "display_name": "DeepSeek V4.1 Flash 1017"
         },
         {
-          "name": "qwen/qwen3.8-flash",
-          "display_name": "Qwen3.8 Flash"
+          "name": "qwen/qwen3.8-max-0902",
+          "display_name": "Qwen3.8 Max"
         },
         {
           "name": "moonshotai/kimi-k3.1-pro",
