@@ -31,13 +31,13 @@ import { useOpalStrings } from "@opal/strings";
 /**
  * Content props — a discriminated union on `foldable` that enforces:
  *
- * - `foldable: true`  → `icon` and `children` are required (icon stays visible,
- *                        label + trailing icon fold away)
- * - `foldable?: false` → at least one of `icon` or `children` must be provided
+ * - `foldable: boolean` → `icon` and `children` are required (icon stays
+ *                          visible, label + trailing icon fold away when true)
+ * - `foldable?: false`   → at least one of `icon` or `children` must be provided
  */
 type SelectButtonContentProps =
   | {
-      foldable: true;
+      foldable: boolean;
       icon: IconFunctionComponent;
       children: string | RichStr;
     }
