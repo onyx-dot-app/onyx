@@ -1,12 +1,15 @@
 {
-  "version": "1.18",
-  "updated_at": "2026-10-19T00:00:00Z",
+  "version": "1.19",
+  "updated_at": "2026-10-26T00:00:00Z",
   "providers": {
     "openai": {
       "default_model": "gpt-6.1-sol",
       "additional_visible_models": [
         {
           "name": "gpt-6.1-sol"
+        },
+        {
+          "name": "gpt-6-sol"
         },
         {
           "name": "gpt-6-luna"
@@ -78,8 +81,8 @@
           "display_name": "Qwen3.8 Max 0902"
         },
         {
-          "name": "moonshotai/kimi-k3",
-          "display_name": "Kimi K3"
+          "name": "moonshotai/kimi-k3.1-pro",
+          "display_name": "Kimi K3.1 Pro"
         }
       ]
     }
