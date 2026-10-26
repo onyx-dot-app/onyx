@@ -5,8 +5,8 @@ from collections.abc import Mapping
 from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 
 from onyx.chat.citation_processor import DynamicCitationProcessor
-from onyx.chat.models import MessageRendering, PresentationMode
-from onyx.chat.response import message_thinking, tool_arguments_for_display
+from onyx.chat.models import CitationMode, MessageRendering, PresentationMode
+from onyx.chat.response import thinking_tool_text, tool_arguments_for_display
 from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.coding_agent.tool_definitions import (
     BASH_TOOL_NAME,
@@ -27,6 +27,7 @@ from onyx.llm.models import (
     GenerationContentEvent,
     TextContent,
     TextDeltaEvent,
+    ThinkingContent,
     ThinkingDeltaEvent,
     ToolCall,
     ToolCallDeltaEvent,
@@ -139,16 +140,28 @@ class MessageRenderer:
     def _append(self, text: str, *, thinking: bool = False) -> list[packets.Packet]:
         if not text or self.settings.mode == PresentationMode.SILENT:
             return []
+        if self.settings.mode == PresentationMode.CODING_THINKING or (
+            thinking and self.settings.mode == PresentationMode.CODING_ANSWER
+        ):
+            if self.parent is None:
+                raise ValueError("Coding output requires a parent tool placement")
+            if thinking:
+                self.reasoning += text
+            else:
+                self.answer += text
+            if self._answer_placement is None:
+                self._answer_placement = self.layout.next_section(self.parent)
+            return [
+                packets.Packet(
+                    placement=self._answer_placement,
+                    obj=packets.CodingAgentThinkingDelta(content=text),
+                )
+            ]
         if thinking:
             self.reasoning += text
             result = []
             if self._reasoning_placement is None:
-                self._reasoning_placement = (
-                    self.parent
-                    if self.settings.mode == PresentationMode.CODING_ANSWER
-                    and self.parent is not None
-                    else self.layout.next_section(self.parent)
-                )
+                self._reasoning_placement = self.layout.next_section(self.parent)
                 result.append(
                     packets.Packet(
                         placement=self._reasoning_placement,
@@ -166,19 +179,6 @@ class MessageRenderer:
             # The parent tool publishes the final answer in CodingAgentFinal.
             return []
         self.answer += text
-        if self.settings.mode == PresentationMode.CODING_THINKING:
-            if self.parent is None:
-                raise ValueError("Coding output requires a parent tool placement")
-            result = self._close_reasoning()
-            if self._answer_placement is None:
-                self._answer_placement = self.layout.next_section(self.parent)
-            result.append(
-                packets.Packet(
-                    placement=self._answer_placement,
-                    obj=packets.CodingAgentThinkingDelta(content=text),
-                )
-            )
-            return result
         result = []
         if self._answer_placement is None:
             result.extend(self._close_reasoning())
@@ -308,16 +308,69 @@ class MessageRenderer:
         text = "".join(
             block.text for block in message.content if isinstance(block, TextContent)
         )
-        thinking = message_thinking(message, self.settings.think_tool)
+        thinking_by_index: dict[int, str] = {}
+        for index, block in enumerate(message.content):
+            if isinstance(block, ThinkingContent):
+                thinking_by_index[index] = block.text
+            elif isinstance(block, ToolCall) and block.name == self.settings.think_tool:
+                thinking_by_index[index] = thinking_tool_text(block)
+        thinking = "".join(thinking_by_index.values())
         result = []
-        if thinking.startswith(self._raw_thinking):
+        text_chars_to_skip = (
+            len(self._raw_text) if text.startswith(self._raw_text) else len(text)
+        )
+        thinking_chars_to_skip = (
+            len(self._raw_thinking)
+            if thinking.startswith(self._raw_thinking)
+            else len(thinking)
+        )
+        parts: list[str] = []
+        pending_thinking = False
+
+        def flush_content() -> None:
+            if not parts:
+                return
+            content = "".join(parts)
+            parts.clear()
             result.extend(
-                self._append(thinking[len(self._raw_thinking) :], thinking=True)
+                self._append(content, thinking=True)
+                if pending_thinking
+                else self._content(content)
             )
-        if text.startswith(self._raw_text):
-            result.extend(self._content(text[len(self._raw_text) :]))
+
+        # Batch adjacent output without moving it across thinking or tool boundaries.
+        for index, block in enumerate(message.content):
+            if isinstance(block, TextContent):
+                content = block.text[text_chars_to_skip:]
+                text_chars_to_skip = max(0, text_chars_to_skip - len(block.text))
+                is_thinking = False
+            elif index in thinking_by_index:
+                thinking_text = thinking_by_index[index]
+                content = thinking_text[thinking_chars_to_skip:]
+                thinking_chars_to_skip = max(
+                    0, thinking_chars_to_skip - len(thinking_text)
+                )
+                is_thinking = True
+            else:
+                flush_content()
+                if isinstance(block, ToolCall) and block.name not in HIDDEN_TOOLS:
+                    result.extend(self._close_reasoning())
+                    self.tool_placement(block.id)
+                continue
+            if not content:
+                continue
+            if is_thinking != pending_thinking:
+                flush_content()
+                pending_thinking = is_thinking
+            parts.append(content)
+        flush_content()
         result.extend(self.finish())
-        if text and not self.answer and not self.reasoning:
+        if (
+            text
+            and not self.answer
+            and not self.reasoning
+            and self.settings.citation_mode != CitationMode.REMOVE
+        ):
             result.extend(self._append(text))
             if self._answer_placement is not None:
                 result.append(
@@ -635,7 +688,9 @@ class ToolRenderer:
             ]
         else:
             output = (
-                self.update(result.details, result.text) if result is not None else []
+                self.update(result.details, "" if result.is_error else result.text)
+                if result is not None
+                else []
             )
         if result is not None and isinstance(result.details, ToolExecutionError):
             output.append(

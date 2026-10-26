@@ -73,6 +73,13 @@ class PromptMetadata(CompactionMetadata):
     omit_tool_result_content: bool = False
 
 
+class FileContextResult(BaseModel):
+    """Result of building a file's LLM context representation."""
+
+    message: Message
+    tool_metadata: FileToolMetadata
+
+
 class CitationMode(str, Enum):
     """Defines how citations should be handled in the output.
 

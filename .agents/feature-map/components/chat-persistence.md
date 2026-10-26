@@ -578,3 +578,10 @@ Database response writers reject content-free sessions before writing response
 content. Durable child reservations enforce the same root-session rule. Content-free
 runs use in-memory coordination; their final saves retain usage without conversation
 content. Child sessions inherit the root's recording mode.
+
+Saved sources include documents referenced by root and child message display
+metadata, even when the response performs no new search. This preserves citation
+links and source cards when loading saved responses.
+
+Restored root questions retain `chat:<question-id>` IDs. Child instructions retain
+their run-input IDs. Saved compaction boundaries use these same IDs after reload.
