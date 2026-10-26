@@ -1,5 +1,5 @@
 {
-  "version": "1.22",
+  "version": "1.23",
   "updated_at": "2026-10-26T00:00:00Z",
   "providers": {
     "openai": {
@@ -45,8 +45,16 @@
           "display_name": "Gemini 3.1 Pro"
         },
         {
-          "name": "gemini-3.1-flash-lite-preview",
-          "display_name": "Gemini 3.1 Flash Lite"
+          "name": "gemini-4-argon",
+          "display_name": "Gemini 4 Argon"
+        },
+        {
+          "name": "gemini-3.8-flash",
+          "display_name": "Gemini 3.8 Flash"
+        },
+        {
+          "name": "gemini-3.5-flash-lite",
+          "display_name": "Gemini 3.5 Flash-Lite"
         }
       ]
     },
@@ -67,7 +75,7 @@
         },
         {
           "name": "qwen/qwen3.8-max-0902",
-          "display_name": "Qwen3.8 Max"
+          "display_name": "Qwen3.8 Max 0902"
         },
         {
           "name": "moonshotai/kimi-k3.1-pro",
