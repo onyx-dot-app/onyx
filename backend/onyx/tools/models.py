@@ -13,7 +13,6 @@ from onyx.configs.constants import MessageType
 from onyx.context.models import UserMemoryContext
 from onyx.context.search.models import (
     PersonaSearchInfo,
-    SearchDoc,
     SearchDocsResponse,
 )
 from onyx.file_store.models import (
@@ -21,9 +20,9 @@ from onyx.file_store.models import (
     maybe_materialize_lazy_content,
 )
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import (
-    CustomToolErrorInfo,
-    GeneratedImage,
+from onyx.tools.results import (
+    CustomToolCallSummary,
+    PythonExecutionFile,
 )
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
@@ -83,17 +82,6 @@ class SearchToolUsage(str, Enum):
     DISABLED = "disabled"
     ENABLED = "enabled"
     AUTO = "auto"
-
-
-class CustomToolUserFileSnapshot(BaseModel):
-    file_ids: list[str]  # References to saved images or CSVs
-
-
-class CustomToolCallSummary(BaseModel):
-    tool_name: str
-    response_type: str  # e.g., 'json', 'image', 'csv', 'graph'
-    tool_result: CustomToolUserFileSnapshot | JsonValue
-    error: CustomToolErrorInfo | None = None
 
 
 class ToolCallKickoff(BaseModel):
@@ -293,26 +281,6 @@ class MemoryToolResponseSnapshot(BaseModel):
     index: int | None = None
 
 
-class ToolCallInfo(BaseModel):
-    # The parent_tool_call_id is the actual generated tool call id
-    # It is NOT the DB ID which often does not exist yet when the ToolCallInfo is created
-    # None if attached to the Chat Message directly
-    parent_tool_call_id: str | None
-    turn_index: int
-    tab_index: int
-    tool_name: str
-    tool_call_id: str
-    tool_id: int
-    reasoning_tokens: str | None
-    tool_call_arguments: dict[str, Any]
-    tool_call_response: str
-    search_docs: list[SearchDoc] | None = None
-    generated_images: list[GeneratedImage] | None = None
-    generated_files: list[PythonExecutionFile] | None = None
-    # File-store ids of blobs custom tools saved during the call.
-    generated_file_ids: list[str] | None = None
-
-
 CHAT_SESSION_ID_PLACEHOLDER = "CHAT_SESSION_ID"
 MESSAGE_ID_PLACEHOLDER = "MESSAGE_ID"
 USER_ID_PLACEHOLDER = "USER_ID"
@@ -350,25 +318,3 @@ class LlmOpenUrlResult(BaseCiteableToolResult):
 
     type: Literal["open_url"] = "open_url"
     content: str
-
-
-class PythonExecutionFile(BaseModel):
-    """File generated during Python execution"""
-
-    filename: str
-    file_link: str
-
-
-class LlmPythonExecutionResult(BaseModel):
-    """Result from Python code execution"""
-
-    type: Literal["python_execution"] = "python_execution"
-
-    stdout: str
-    stderr: str
-    exit_code: int | None
-    timed_out: bool
-    generated_files: list[PythonExecutionFile]
-    error: str | None = None
-    # Set when some session files are absent
-    staging_notice: str | None = None

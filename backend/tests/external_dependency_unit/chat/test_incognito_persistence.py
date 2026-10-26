@@ -38,7 +38,7 @@ from onyx.db.file_record import (
 from onyx.db.models import ChatMessage, ChatSession, User
 from onyx.file_store.file_store import get_default_file_store
 from onyx.redis.redis_pool import get_redis_client
-from onyx.tools.models import ToolCallInfo
+from onyx.tools.records import ToolCallInfo
 from shared_configs.contextvars import CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR
 from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 

@@ -1,5 +1,4 @@
 from collections.abc import Iterator
-from enum import Enum
 from typing import Any
 from uuid import UUID
 
@@ -16,12 +15,9 @@ from onyx.server.query_and_chat.models import (
     MessageResponseIDInfo,
     MultiModelMessageResponseIDInfo,
 )
-from onyx.server.query_and_chat.streaming_models import (
-    CitationInfo,
-    GeneratedImage,
-    Packet,
-)
+from onyx.server.query_and_chat.streaming_models import CitationInfo, Packet
 from onyx.tools.models import SearchToolUsage, ToolCallKickoff
+from onyx.tools.results import GeneratedImage
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
 
 
@@ -40,29 +36,6 @@ class HistoryImageReplay(BaseModel):
     image_cap: int | None = None
     keep_image_indices: set[tuple[int, int]] | None = None
     dropped_image_count: int = 0
-
-
-class CitationMode(str, Enum):
-    """Defines how citations should be handled in the output.
-
-    REMOVE: Citations are completely removed from output text.
-            No CitationInfo objects are emitted.
-            Use case: When you need to remove citations from the output if they are not shared with the user
-            (e.g. in discord bot, public slack bot).
-
-    KEEP_MARKERS: Original citation markers like [1], [2] are preserved unchanged.
-                  No CitationInfo objects are emitted.
-                  Use case: When you need to track citations in research agent and later process
-                  them with collapse_citations() to renumber.
-
-    HYPERLINK: Citations are replaced with markdown links like [[1]](url).
-               CitationInfo objects are emitted for UI tracking.
-               Use case: Final reports shown to users with clickable links.
-    """
-
-    REMOVE = "remove"
-    KEEP_MARKERS = "keep_markers"
-    HYPERLINK = "hyperlink"
 
 
 class StreamingError(BaseModel):

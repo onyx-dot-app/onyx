@@ -17,7 +17,7 @@ from onyx.file_processing.file_types import guess_mime_type
 from onyx.file_store.models import FileDescriptor
 from onyx.natural_language_processing.utils import BaseTokenizer, get_tokenizer
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
-from onyx.tools.models import ToolCallInfo
+from onyx.tools.records import ToolCallInfo
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
 
