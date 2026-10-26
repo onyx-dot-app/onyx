@@ -63,7 +63,14 @@ from onyx.db.chat_subagents import (
     lookup_session_agent,
 )
 from onyx.db.enums import IncognitoRecordMode
-from onyx.db.models import ChatMessage, ChatResponseItem, ChatSession, Tool, User
+from onyx.db.models import (
+    ChatMessage,
+    ChatMessage__SearchDoc,
+    ChatResponseItem,
+    ChatSession,
+    Tool,
+    User,
+)
 from onyx.db.models import SearchDoc as StoredSearchDoc
 from onyx.db.models import ToolCall as StoredToolCall
 from onyx.llm.models import (
@@ -152,6 +159,16 @@ def conversation(db_session: Session) -> Generator[ChatSession, None, None]:
     finally:
         event.remove(db_session, "after_flush", track_documents)
         db_session.rollback()
+        document_ids.update(
+            db_session.scalars(
+                select(ChatMessage__SearchDoc.search_doc_id)
+                .join(
+                    ChatMessage,
+                    ChatMessage.id == ChatMessage__SearchDoc.chat_message_id,
+                )
+                .where(ChatMessage.chat_session_id == session_id)
+            )
+        )
         db_session.execute(delete(ChatSession).where(ChatSession.id == session_id))
         if document_ids:
             db_session.execute(
