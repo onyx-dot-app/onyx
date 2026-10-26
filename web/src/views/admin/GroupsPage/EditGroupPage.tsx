@@ -614,9 +614,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
           actions={headerActions}
         />
 
-        <SettingsLayouts.Body>
-          {isLoading && <IconLoader />}
-
+        <SettingsLayouts.Body loading={isLoading}>
           {error && (
             <Text as="p" secondaryBody text03>
               {t("edit.loadError.text")}

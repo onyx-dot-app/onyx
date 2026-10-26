@@ -985,10 +985,8 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                     )}
                   </SettingsLayouts.Header>
 
-                  <SettingsLayouts.Body>
-                    {credentialsLoading ? (
-                      <PageLoader />
-                    ) : credentialsFailed ? (
+                  <SettingsLayouts.Body loading={credentialsLoading}>
+                    {credentialsFailed ? (
                       // The same frame as PageLoader, so loading and failure sit
                       // in one place.
                       <PageCenter>

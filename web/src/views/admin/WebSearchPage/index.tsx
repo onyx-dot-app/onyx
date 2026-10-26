@@ -6,7 +6,6 @@ import { SettingsLayouts, toast } from "@opal/layouts";
 import { Content } from "@opal/layouts";
 import ProviderCard from "@/sections/admin/ProviderCard";
 import { FetchError } from "@/lib/fetcher";
-import { PageLoader } from "@opal/loaders";
 import { useWebSearchProviders } from "@/lib/webSearch/hooks";
 import { useCreateModal } from "@opal/components";
 import { SvgGlobe } from "@opal/icons";
@@ -299,22 +298,6 @@ export default function WebSearchPage() {
     );
   }
 
-  if (isLoading) {
-    return (
-      <SettingsLayouts.Root>
-        <SettingsLayouts.Header
-          icon={route.icon}
-          title={t("header.title")}
-          description={t("header.description")}
-          divider
-        />
-        <SettingsLayouts.Body>
-          <PageLoader />
-        </SettingsLayouts.Body>
-      </SettingsLayouts.Root>
-    );
-  }
-
   async function handleActivateSearchProvider(providerId: number) {
     try {
       await activateSearchProvider(providerId);
@@ -374,7 +357,7 @@ export default function WebSearchPage() {
           divider
         />
 
-        <SettingsLayouts.Body>
+        <SettingsLayouts.Body loading={isLoading}>
           <div className="flex w-full flex-col gap-3">
             <Content
               title={t("searchEngine.title")}

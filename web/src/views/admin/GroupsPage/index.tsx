@@ -1,6 +1,5 @@
 "use client";
 
-import { IconLoader } from "@opal/loaders";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useFocusOnMount, useGridNavigation, useHotkey } from "@opal/hooks";
 import { useRouter } from "next/navigation";
@@ -147,7 +146,7 @@ function GroupsPage() {
       </div>
 
       {/* The search row's own padding spaces it from the cards. */}
-      <SettingsLayouts.Body gap={0}>
+      <SettingsLayouts.Body gap={0} loading={isLoading}>
         <AdminListHeader
           hasItems={!isLoading && !error && manageableGroups.length > 0}
           searchQuery={searchQuery}
@@ -163,8 +162,6 @@ function GroupsPage() {
           inputRef={setSearchInput}
           onSearchKeyDown={handleSearchKeyDown}
         />
-
-        {isLoading && <IconLoader />}
 
         {error && (
           <IllustrationContent

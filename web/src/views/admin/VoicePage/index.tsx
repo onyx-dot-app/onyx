@@ -9,7 +9,6 @@ import {
   activateVoiceProvider,
   deactivateVoiceProvider,
 } from "@/lib/voice/svc";
-import { PageLoader } from "@opal/loaders";
 import { Content } from "@opal/layouts";
 import { MessageCard, Text } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
@@ -213,22 +212,6 @@ export default function VoicePage() {
   const hasActiveTTSProvider =
     providers?.some((p) => p.is_default_tts) ?? false;
 
-  if (isLoading) {
-    return (
-      <SettingsLayouts.Root>
-        <SettingsLayouts.Header
-          icon={route.icon}
-          title={t("header.title")}
-          description={t("header.description")}
-          divider
-        />
-        <SettingsLayouts.Body>
-          <PageLoader />
-        </SettingsLayouts.Body>
-      </SettingsLayouts.Root>
-    );
-  }
-
   const getModelStatus = (
     model: ModelDetails,
     mode: ProviderMode
@@ -253,7 +236,7 @@ export default function VoicePage() {
         description={t("header.description")}
         divider
       />
-      <SettingsLayouts.Body>
+      <SettingsLayouts.Body loading={isLoading}>
         <Section gap={8}>
           <Section gap={3}>
             <Content

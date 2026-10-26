@@ -163,26 +163,20 @@ export default function CraftPage() {
 
   // useSettings returns a default object while loading (and on error), which
   // lacks onyx_craft_available — don't misreport Craft as unavailable.
-  if (settings.isLoading || settings.error) {
+  if (settings.error) {
     return (
       <SettingsLayouts.Root>
         {header}
         <SettingsLayouts.Body>
-          {settings.error ? (
-            <Text as="p" secondaryBody text03>
-              {t("settingsLoadError.description")}
-            </Text>
-          ) : (
-            <div className="flex justify-center py-12">
-              <IconLoader className="h-6 w-6" />
-            </div>
-          )}
+          <Text as="p" secondaryBody text03>
+            {t("settingsLoadError.description")}
+          </Text>
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
     );
   }
 
-  if (!craftAvailable) {
+  if (!settings.isLoading && !craftAvailable) {
     return (
       <SettingsLayouts.Root>
         {header}
@@ -200,7 +194,7 @@ export default function CraftPage() {
   return (
     <SettingsLayouts.Root>
       {header}
-      <SettingsLayouts.Body>
+      <SettingsLayouts.Body loading={settings.isLoading}>
         <Card border="solid" rounding={4}>
           <Section alignItems="stretch" gap={2}>
             <InputHorizontal

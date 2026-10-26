@@ -605,10 +605,8 @@ export default function HooksPage() {
           description={t("page.description", { appName: settings.appName })}
           divider
         />
-        <SettingsLayouts.Body>
-          {isLoading ? (
-            <IconLoader />
-          ) : specsError || hooksError ? (
+        <SettingsLayouts.Body loading={isLoading}>
+          {specsError || hooksError ? (
             <Text font="secondary-body" color="text-03">
               {specsError
                 ? t("page.loadSpecsFailed.message")

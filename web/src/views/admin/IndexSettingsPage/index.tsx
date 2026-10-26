@@ -7,7 +7,6 @@ import { markdown } from "@opal/utils";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { mutate } from "swr";
-import { PageLoader } from "@opal/loaders";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
@@ -1322,24 +1321,6 @@ export default function IndexSettingsPage() {
     ]);
   }, [cancelReindexModal, t]);
 
-  if (
-    isLoadingCurrentModel ||
-    isLoadingSearchSettings ||
-    isLoadingLlmProviders
-  ) {
-    return (
-      <SettingsLayouts.Root>
-        <SettingsLayouts.Header
-          icon={route.icon}
-          title={adminRouteTitle(route)}
-        />
-        <SettingsLayouts.Body>
-          <PageLoader />
-        </SettingsLayouts.Body>
-      </SettingsLayouts.Root>
-    );
-  }
-
   return (
     <>
       {currentProvider && isCurrentCloudBased && (
@@ -1381,7 +1362,13 @@ export default function IndexSettingsPage() {
           description={t("header.description")}
         />
 
-        <SettingsLayouts.Body>
+        <SettingsLayouts.Body
+          loading={
+            isLoadingCurrentModel ||
+            isLoadingSearchSettings ||
+            isLoadingLlmProviders
+          }
+        >
           <Formik<IndexSettingsFormValues>
             enableReinitialize
             initialValues={initialFormValues}

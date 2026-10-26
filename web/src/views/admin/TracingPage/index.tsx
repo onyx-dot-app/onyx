@@ -7,7 +7,6 @@ import { SettingsLayouts } from "@opal/layouts";
 import { MessageCard } from "@opal/components";
 import ProviderCard from "@/sections/admin/ProviderCard";
 import { FetchError } from "@/lib/fetcher";
-import { PageLoader } from "@opal/loaders";
 import { useCreateModal } from "@opal/components";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useTracingProviders } from "@/lib/tracing/hooks";
@@ -26,9 +25,10 @@ const route = ADMIN_ROUTES.TRACING;
 
 interface ShellProps {
   children: ReactNode;
+  loading?: boolean;
 }
 
-function Shell({ children }: ShellProps) {
+function Shell({ children, loading }: ShellProps) {
   const t = useTranslations("admin.tracing");
   const adminRouteTitle = useAdminRouteTitle();
 
@@ -40,7 +40,7 @@ function Shell({ children }: ShellProps) {
         description={t("page.description")}
         divider
       />
-      <SettingsLayouts.Body>{children}</SettingsLayouts.Body>
+      <SettingsLayouts.Body loading={loading}>{children}</SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
 }
@@ -72,17 +72,9 @@ export default function TracingPage() {
     );
   }
 
-  if (isLoading) {
-    return (
-      <Shell>
-        <PageLoader />
-      </Shell>
-    );
-  }
-
   return (
     <>
-      <Shell>
+      <Shell loading={isLoading}>
         <div className="flex w-full flex-col gap-2">
           {TRACING_PROVIDER_ORDER.map((providerType) => {
             const detail = TRACING_PROVIDER_DETAILS[providerType];

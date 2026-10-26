@@ -28,7 +28,6 @@ import { tierAtLeast } from "@/lib/tiers/utils";
 import { deleteSSOProvider, setSSOProviderEnabled } from "@/lib/sso/svc";
 import { copyRedirectUri, SSO_PROVIDER_DETAILS } from "@/lib/sso/utils";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { PageLoader } from "@opal/loaders";
 import { useCreateModal } from "@opal/components";
 import { SSOProviderModal } from "@/sections/modals/sso/SSOProviderModal";
 
@@ -38,9 +37,10 @@ interface ShellProps {
   children: React.ReactNode;
   onAddProvider: () => void;
   addGated?: boolean;
+  loading?: boolean;
 }
 
-function Shell({ children, onAddProvider, addGated }: ShellProps) {
+function Shell({ children, onAddProvider, addGated, loading }: ShellProps) {
   const t = useTranslations("admin.ssoProviders");
   const adminRouteTitle = useAdminRouteTitle();
 
@@ -63,7 +63,7 @@ function Shell({ children, onAddProvider, addGated }: ShellProps) {
           </Button>,
         ]}
       />
-      <SettingsLayouts.Body>{children}</SettingsLayouts.Body>
+      <SettingsLayouts.Body loading={loading}>{children}</SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
 }
@@ -176,17 +176,13 @@ export default function SSOProvidersPage() {
     );
   }
 
-  if (isLoading) {
-    return (
-      <Shell onAddProvider={openCreateModal} addGated={addGated}>
-        <PageLoader />
-      </Shell>
-    );
-  }
-
   return (
     <>
-      <Shell onAddProvider={openCreateModal} addGated={addGated}>
+      <Shell
+        onAddProvider={openCreateModal}
+        addGated={addGated}
+        loading={isLoading}
+      >
         {!providers?.length ? (
           <IllustrationContent
             illustration={SvgNoResult}
