@@ -17,6 +17,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -181,7 +182,8 @@ function SettingsHeader({
   const [showShadow, setShowShadow] = useState(false);
   const { setPageTitle } = useContext(SettingsPageContext);
   const titleText = toPlainString(title);
-  useEffect(() => {
+  // Before paint, so an error state on mount already has the page name.
+  useLayoutEffect(() => {
     setPageTitle(titleText);
   }, [setPageTitle, titleText]);
   const headerRef = useRef<HTMLDivElement>(null);
