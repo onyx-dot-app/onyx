@@ -2,7 +2,7 @@
 
 > Executes model and tool steps with explicit cancellation, ownership, and restoration boundaries.
 
-**Verified against:** `f72c2c44b6` (2026-10-26)
+**Verified against:** `55a8f75b65` (2026-10-26)
 **Domain:** core-loop
 **Edition:** CE
 **Owns:** `backend/onyx/agents/`
@@ -69,7 +69,10 @@ exception; otherwise, it becomes a tool error. Parent cancellation still interru
 the wait with `AgentCancelled`.
 
 Handoff saves suspended state and releases the ownership adapter's reservation
-once. Release failure reports the cleanup error to local completion waiters.
+once. Local execution stays reserved until release finishes. Release failure
+reports the cleanup error to local waiters and pending parent dependencies.
+Saved state remains available for another resume. Completion publication uses
+the existing observer reservation, so a late remote read cannot replace the error.
 
 Tool progress omits failed results' model-facing text. Structured result details
 carry explicit public errors. Recorded results retain the model-facing text.

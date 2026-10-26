@@ -161,7 +161,7 @@ execution while retaining completion and cleanup tracking. Branch permissions
 remain separate from that record.
 
 The coordinator shares local ownership across views. Each view uses its directory
-to authorize access to saved agents and runs. It rejects competing local owners.
+to authorize access to saved agents and runs. It rejects competing local owners, including while ownership release is in progress.
 Closing the coordinator cancels owned runs and waits for execution, saving, and
 cleanup. A timeout leaves unfinished work owned.
 
@@ -203,7 +203,7 @@ boundaries, so execution can avoid repeating completed work.
 
 Handoff releases the ownership adapter's reservation after saving suspended state.
 The SDK calls release once; applications implement the storage operation. Failed
-release makes handoff and local completion waiters report the cleanup error.
+release makes handoff, local waiters, and pending parent dependencies report the cleanup error.
 A new owner can register the same run ID after release.
 
 `ExecutionCheckpoint` contains history and execution state. It does not serialize
