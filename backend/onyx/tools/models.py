@@ -10,12 +10,12 @@ from pydantic import BaseModel, ConfigDict, JsonValue, model_validator
 from onyx.chat.emitter import Emitter
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT, NUM_RETURNED_HITS
 from onyx.configs.constants import MessageType
+from onyx.context.models import UserMemoryContext
 from onyx.context.search.models import (
     PersonaSearchInfo,
     SearchDoc,
     SearchDocsResponse,
 )
-from onyx.db.memory import UserMemoryContext
 from onyx.file_store.models import (
     install_lazy_content_loader,
     maybe_materialize_lazy_content,

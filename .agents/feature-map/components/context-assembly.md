@@ -132,6 +132,8 @@ once per turn. A turn that runs three tool cycles calls
 `[tool calls and responses]` section and a freshly recomputed reminder.
 
 The file helpers in `chat/files.py` serve the existing chat engines.
+Their result model lives in `chat/models.py`; pending and unavailable file
+notices live in `prompts/chat_prompts.py`.
 `chat/prompt_formatting.py` prepares shared runtime messages: it selects images,
 wraps reminders, and sets cache metadata. The existing engines still use
 `translate_history_to_llm_format`; switching engines is a separate change.

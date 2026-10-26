@@ -37,9 +37,10 @@ from onyx.chat.prompt_utils import (
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
 from onyx.configs.constants import MessageType
+from onyx.context.models import UserMemoryContext
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.memory import UserMemoryContext, add_memory, update_memory_at_index
+from onyx.db.memory import add_memory, update_memory_at_index
 from onyx.db.models import Persona
 from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
 from onyx.llm.constants import LlmProviderNames

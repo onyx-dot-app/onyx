@@ -18,8 +18,8 @@ from onyx.chat.llm_loop import (
 )
 from onyx.chat.models import ChatMessageSimple, LlmStepResult, ToolCallSimple
 from onyx.configs.constants import DocumentSource, MessageType
+from onyx.context.models import UserInfo, UserMemoryContext
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
-from onyx.db.memory import UserInfo, UserMemoryContext
 from onyx.file_store.models import (
     ChatFileType,
     ChatLoadedFile,

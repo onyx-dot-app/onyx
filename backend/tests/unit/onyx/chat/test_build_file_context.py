@@ -7,12 +7,9 @@ to invent workarounds (web-searching for the document, guessing contents).
 
 import pytest
 
-from onyx.chat.files import (
-    CONTENT_PENDING_NOTICE,
-    CONTENT_UNAVAILABLE_NOTICE,
-    build_file_context,
-)
+from onyx.chat.files import build_file_context
 from onyx.file_store.models import ChatFileType
+from onyx.prompts.chat_prompts import CONTENT_PENDING_NOTICE, CONTENT_UNAVAILABLE_NOTICE
 
 
 def test_content_is_injected_verbatim() -> None:

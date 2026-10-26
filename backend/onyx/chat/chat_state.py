@@ -7,9 +7,9 @@ from uuid import UUID
 from onyx.cache.interface import CacheBackend
 from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.models import AvailableFiles, ChatMessageSimple, SearchParams
+from onyx.context.models import UserMemoryContext
 from onyx.context.search.models import SearchDoc
 from onyx.db.enums import IncognitoRecordMode
-from onyx.db.memory import UserMemoryContext
 from onyx.db.models import ChatMessage, Persona
 from onyx.file_store.models import (
     ChatLoadedFile,

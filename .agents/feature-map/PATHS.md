@@ -58,7 +58,7 @@ here. Read the component that documents the setting in its env table.
 | `backend/onyx/tools/tool_implementations/images/` | image-generation |
 | `backend/onyx/tools/tool_implementations/bash/`, `python/` | code-execution |
 | `backend/onyx/tools/tool_implementations/mcp/`, `custom/` | mcp-and-custom-tools |
-| `backend/onyx/tools/tool_implementations/memory/`, `backend/onyx/db/memory.py` | chat-preferences |
+| `backend/onyx/tools/tool_implementations/memory/`, `backend/onyx/db/memory.py`, `backend/onyx/context/models.py` | chat-preferences |
 | `backend/onyx/tools/tool_implementations/file_reader/` | file-store-and-user-files |
 | `backend/onyx/tools/tool_implementations/coding_agent/`, `backend/onyx/coding_agent/` | craft-sessions, tools-framework |
 | `backend/onyx/tools/fake_tools/`, `backend/onyx/deep_research/` | tools-framework |

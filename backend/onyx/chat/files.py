@@ -4,10 +4,14 @@ from collections.abc import Callable
 from typing import cast
 from uuid import UUID
 
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.chat.models import AvailableFiles, ChatMessageSimple, SearchParams
+from onyx.chat.models import (
+    AvailableFiles,
+    ChatMessageSimple,
+    FileContextResult,
+    SearchParams,
+)
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import (
     DEFAULT_PERSONA_ID,
@@ -40,6 +44,7 @@ from onyx.file_store.utils import (
     plaintext_file_name_for_id,
     store_plaintext,
 )
+from onyx.prompts.chat_prompts import CONTENT_PENDING_NOTICE, CONTENT_UNAVAILABLE_NOTICE
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.tools.models import ChatFile, SearchToolUsage
 from onyx.utils.logger import setup_logger
@@ -200,17 +205,6 @@ def resolve_context_user_files(
     return selected_files
 
 
-def _empty_extracted_context_files() -> ExtractedContextFiles:
-    return ExtractedContextFiles(
-        file_texts=[],
-        image_files=[],
-        use_as_search_filter=False,
-        total_token_count=0,
-        file_metadata=[],
-        uncapped_token_count=None,
-    )
-
-
 def _extract_text_from_in_memory_file(f: InMemoryChatFile) -> str | None:
     """Extract text content from an InMemoryChatFile.
 
@@ -269,7 +263,14 @@ def extract_context_files(
     # TODO(yuhong): I believe this is not handling all file types correctly.
 
     if not user_files:
-        return _empty_extracted_context_files()
+        return ExtractedContextFiles(
+            file_texts=[],
+            image_files=[],
+            use_as_search_filter=False,
+            total_token_count=0,
+            file_metadata=[],
+            uncapped_token_count=None,
+        )
 
     # Aggregate tokens for the file content that will be added
     # Skip tokens for those with metadata only
@@ -424,28 +425,6 @@ def determine_search_params(
         persona_id_filter=persona_id_filter,
         search_usage=search_usage,
     )
-
-
-class FileContextResult(BaseModel):
-    """Result of building a file's LLM context representation."""
-
-    message: ChatMessageSimple
-    tool_metadata: FileToolMetadata
-
-
-CONTENT_PENDING_NOTICE = (
-    "[This file is still being processed and its contents are not yet "
-    "available. Do not guess what it contains — tell the user the file is "
-    "still processing and to ask again in a moment.]"
-)
-
-
-CONTENT_UNAVAILABLE_NOTICE = (
-    "[No machine-readable text could be extracted from this file. It is "
-    "likely image-only (e.g. a scanned document) or in an unsupported "
-    "format. Its contents are not available to you — do not guess them. If "
-    "needed, ask the user for a text-based copy.]"
-)
 
 
 def build_file_context(

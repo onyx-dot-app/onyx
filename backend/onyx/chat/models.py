@@ -227,3 +227,10 @@ class AvailableFiles(BaseModel):
     user_file_ids: list[UUID] = []
     # IDs from the ``file_record`` table (chat-attached files).
     chat_file_ids: list[UUID] = []
+
+
+class FileContextResult(BaseModel):
+    """Result of building a file's LLM context representation."""
+
+    message: ChatMessageSimple
+    tool_metadata: FileToolMetadata
