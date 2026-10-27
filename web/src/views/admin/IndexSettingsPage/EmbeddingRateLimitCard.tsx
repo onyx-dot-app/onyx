@@ -4,9 +4,7 @@ import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { mutate } from "swr";
-import { Button, Card, InputTypeIn, Text } from "@opal/components";
-import { Hoverable } from "@opal/core";
-import { SvgRefreshCw } from "@opal/icons";
+import { Card, InputNumber } from "@opal/components";
 import { Content, InputHorizontal, toast } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -30,66 +28,14 @@ async function patchSettings(updates: Partial<Settings>): Promise<void> {
   }
 }
 
-/** A whole number in [1, max], or null. */
-function parseWholeNumber(value: string, max: number): number | null {
-  if (!/^\d+$/.test(value.trim())) return null;
-  const parsed = Number(value);
-  return parsed >= 1 && parsed <= max ? parsed : null;
-}
-
-interface LimitFieldProps {
-  name: string;
-  value: string;
-  defaultValue: string;
-  placeholder: string;
-  error: boolean;
-  onChange: (value: string) => void;
-  onCommit: (value: string) => void;
-}
-
-function LimitField({
-  name,
-  value,
-  defaultValue,
-  placeholder,
-  error,
-  onChange,
-  onCommit,
-}: LimitFieldProps) {
-  const t = useTranslations("admin.indexSettings.embeddingRateLimit");
-
-  return (
-    <div className="w-48">
-      <Hoverable.Root group={name} width="full">
-        <InputTypeIn
-          inputMode="numeric"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          variant={error ? "error" : undefined}
-          rightChildren={
-            value !== defaultValue ? (
-              <Hoverable.Item group={name} variant="appear-on-hover">
-                <Button
-                  icon={SvgRefreshCw}
-                  tooltip={t("restoreDefault")}
-                  prominence="internal"
-                  size="sm"
-                  onClick={() => onCommit(defaultValue)}
-                />
-              </Hoverable.Item>
-            ) : undefined
-          }
-          onBlur={() => onCommit(value)}
-        />
-      </Hoverable.Root>
-    </div>
-  );
+/** Whether a value is within the [1, max] bounds the fields clamp to. */
+function inRange(value: number, max: number): boolean {
+  return value >= 1 && value <= max;
 }
 
 /**
- * The global limit on indexing embedding requests. Each field saves on blur
- * and applies to the next embedding batch, without a re-index.
+ * The global limit on indexing embedding requests. Each field saves when it
+ * commits and applies to the next embedding batch, without a re-index.
  */
 export default function EmbeddingRateLimitCard() {
   const t = useTranslations("admin.indexSettings.embeddingRateLimit");
@@ -101,10 +47,9 @@ export default function EmbeddingRateLimitCard() {
     settings.embedding_rate_limit_period_seconds ??
     DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS;
 
-  const [requests, setRequests] = useState(
-    savedRequests === null ? "" : String(savedRequests)
-  );
-  const [period, setPeriod] = useState(String(savedPeriod));
+  // An empty request count means no limit.
+  const [requests, setRequests] = useState<number | null>(savedRequests);
+  const [period, setPeriod] = useState<number>(savedPeriod);
   // The values of the last save sent. Saves run one at a time, in order, so
   // the last one sent is the one that sticks.
   const lastSentRef = useRef<{
@@ -113,44 +58,31 @@ export default function EmbeddingRateLimitCard() {
   } | null>({ requests: savedRequests, period: savedPeriod });
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
 
-  // An empty request count means no limit.
-  const requestsValid =
-    requests.trim() === "" ||
-    parseWholeNumber(requests, MAX_EMBEDDING_RATE_LIMIT_REQUESTS) !== null;
-  const periodValid =
-    parseWholeNumber(period, MAX_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS) !== null;
-
-  function commit(nextRequests: string, nextPeriod: string) {
+  function commit(nextRequests: number | null, nextPeriod: number) {
     setRequests(nextRequests);
     setPeriod(nextPeriod);
-    const requestLimit =
-      nextRequests.trim() === ""
-        ? null
-        : parseWholeNumber(nextRequests, MAX_EMBEDDING_RATE_LIMIT_REQUESTS);
-    const periodSeconds = parseWholeNumber(
-      nextPeriod,
-      MAX_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS
-    );
+    // InputNumber reports each keystroke and clamps only on blur, so an
+    // out-of-range value is never sent; the clamped one saves instead.
     if (
-      (nextRequests.trim() !== "" && requestLimit === null) ||
-      periodSeconds === null
+      !inRange(nextRequests ?? 1, MAX_EMBEDDING_RATE_LIMIT_REQUESTS) ||
+      !inRange(nextPeriod, MAX_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS)
     ) {
       return;
     }
     const lastSent = lastSentRef.current;
     if (
       lastSent !== null &&
-      requestLimit === lastSent.requests &&
-      periodSeconds === lastSent.period
+      nextRequests === lastSent.requests &&
+      nextPeriod === lastSent.period
     ) {
       return;
     }
-    lastSentRef.current = { requests: requestLimit, period: periodSeconds };
+    lastSentRef.current = { requests: nextRequests, period: nextPeriod };
     saveQueueRef.current = saveQueueRef.current.then(async () => {
       try {
         await patchSettings({
-          embedding_rate_limit_requests: requestLimit,
-          embedding_rate_limit_period_seconds: periodSeconds,
+          embedding_rate_limit_requests: nextRequests,
+          embedding_rate_limit_period_seconds: nextPeriod,
         });
         router.refresh();
         await mutate(SWR_KEYS.settings);
@@ -184,17 +116,18 @@ export default function EmbeddingRateLimitCard() {
           <InputHorizontal
             title={t("requests.title")}
             description={t("requests.description")}
+            suffix="optional"
             withLabel
           >
-            <LimitField
-              name="embedding_rate_limit_requests"
-              value={requests}
-              defaultValue=""
-              placeholder={t("requests.placeholder")}
-              error={!requestsValid}
-              onChange={setRequests}
-              onCommit={(value) => commit(value, period)}
-            />
+            <div className="w-48">
+              <InputNumber
+                value={requests}
+                onChange={(value) => commit(value, period)}
+                min={1}
+                max={MAX_EMBEDDING_RATE_LIMIT_REQUESTS}
+                placeholder={t("requests.placeholder")}
+              />
+            </div>
           </InputHorizontal>
           <InputHorizontal
             title={t("period.title")}
@@ -202,30 +135,26 @@ export default function EmbeddingRateLimitCard() {
             suffix={t("period.suffix")}
             withLabel
           >
-            <LimitField
-              name="embedding_rate_limit_period_seconds"
-              value={period}
-              defaultValue={String(DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS)}
-              placeholder={String(DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS)}
-              error={!periodValid}
-              onChange={setPeriod}
-              onCommit={(value) => commit(requests, value)}
-            />
+            <div className="w-48">
+              <InputNumber
+                value={period}
+                onChange={(value) =>
+                  commit(
+                    requests,
+                    value ?? DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS
+                  )
+                }
+                min={1}
+                max={MAX_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS}
+                defaultValue={DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS}
+                showReset
+                allowEmpty={false}
+                placeholder={String(
+                  DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS
+                )}
+              />
+            </div>
           </InputHorizontal>
-          {!requestsValid && (
-            <Text font="secondary-body" color="status-error-05">
-              {t("validation.requests", {
-                max: MAX_EMBEDDING_RATE_LIMIT_REQUESTS,
-              })}
-            </Text>
-          )}
-          {!periodValid && (
-            <Text font="secondary-body" color="status-error-05">
-              {t("validation.period", {
-                max: MAX_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS,
-              })}
-            </Text>
-          )}
         </GeneralLayouts.Section>
       </Card>
     </GeneralLayouts.Section>

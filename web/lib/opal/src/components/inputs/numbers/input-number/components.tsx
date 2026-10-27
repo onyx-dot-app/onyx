@@ -248,6 +248,7 @@ export default function InputNumber({
             icon={SvgRevert}
             onClick={handleReset}
             prominence="tertiary"
+            size="sm"
           />
         )}
         {!plain && (
