@@ -7052,6 +7052,7 @@
           "title": "设置自定义 embedding 模型。"
         },
         "customModels": {
+          "hint": "使用 [Hugging Face](https://huggingface.co/models?library=sentence-transformers&sort=trending) 上提供的兼容 [SentenceTransformers](https://www.sbert.net/) 的模型。{appName} 会下载该模型以进行自托管设置。不保证兼容性。",
           "title": "自定义模型"
         },
         "foldModels": {

@@ -7052,6 +7052,7 @@
           "title": "إعداد نموذج تضمين مخصص."
         },
         "customModels": {
+          "hint": "استخدم نموذجًا متوافقًا مع [SentenceTransformers](https://www.sbert.net/) ومتاحًا على [Hugging Face](https://huggingface.co/models?library=sentence-transformers&sort=trending). سيقوم {appName} بتنزيل النموذج لإعداده للاستضافة الذاتية. التوافق غير مضمون.",
           "title": "النماذج المخصصة"
         },
         "foldModels": {

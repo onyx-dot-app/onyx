@@ -7052,6 +7052,7 @@
           "title": "Configurez un modèle d'embedding personnalisé."
         },
         "customModels": {
+          "hint": "Utilisez un modèle compatible avec [SentenceTransformers](https://www.sbert.net/) disponible sur [Hugging Face](https://huggingface.co/models?library=sentence-transformers&sort=trending). {appName} téléchargera le modèle pour le configurer en auto-hébergement. La compatibilité n’est pas garantie.",
           "title": "Modèles personnalisés"
         },
         "foldModels": {

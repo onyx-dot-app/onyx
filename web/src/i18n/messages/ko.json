@@ -7052,6 +7052,7 @@
           "title": "사용자 지정 embedding 모델을 설정하세요."
         },
         "customModels": {
+          "hint": "[Hugging Face](https://huggingface.co/models?library=sentence-transformers&sort=trending)에서 제공되는 [SentenceTransformers](https://www.sbert.net/) 호환 모델을 사용하세요. {appName}이(가) 셀프 호스팅을 위해 모델을 다운로드합니다. 호환성은 보장되지 않습니다.",
           "title": "사용자 지정 모델"
         },
         "foldModels": {
