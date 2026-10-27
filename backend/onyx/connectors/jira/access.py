@@ -30,6 +30,9 @@ def get_project_permissions(
         add_prefix: When True, prefix group IDs with source type (for indexing path).
                    When False (default), leave unprefixed (for permission sync path
                    where upsert_document_external_perms handles prefixing).
+        source: The connector's DocumentSource. Accepted for forward
+                compatibility; group-prefixing in the EE implementation is
+                left unchanged in this PR.
 
     Returns:
         ExternalAccess object for the page. None if EE is not enabled or no restrictions found.
@@ -41,7 +44,7 @@ def get_project_permissions(
 
     ee_get_project_permissions = cast(
         Callable[
-            [JiraSourceOperations, str, bool, DocumentSource],
+            [JiraSourceOperations, str, bool],
             ExternalAccess | None,
         ],
         fetch_versioned_implementation(
@@ -53,5 +56,4 @@ def get_project_permissions(
         source_operations,
         jira_project,
         add_prefix,
-        source,
     )
