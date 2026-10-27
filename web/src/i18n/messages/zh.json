@@ -10780,6 +10780,13 @@
         "proceedButton": {
           "label": "仍然创建连接器"
         }
+      },
+      "runLost": "检查已停止响应。请重试。",
+      "cancelButton": {
+        "label": "取消"
+      },
+      "cancelFailed": {
+        "toast": "无法取消检查。请重试。"
       }
     },
     "connectorEdit": {

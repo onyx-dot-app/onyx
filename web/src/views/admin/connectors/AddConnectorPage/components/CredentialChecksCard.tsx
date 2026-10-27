@@ -4,7 +4,7 @@ import type { CredentialRef } from "@/lib/credentials/types";
 import { CHECKS_CARD_ID } from "@/lib/connectors/checks/constants";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TextColor, TextFont } from "@onyx-ai/shared/contracts";
-import { ContentAction, Section } from "@opal/layouts";
+import { ContentAction, Section, toast } from "@opal/layouts";
 import { useFormatter, useTranslations } from "next-intl";
 import {
   Button,
@@ -296,6 +296,10 @@ interface CheckCardViewProps {
   stateCounts: Record<DraftCheckStateKind, number>;
   /** Starts the draft run again after it failed to run. A stored report has no rerun here. */
   onRerun?: () => void;
+  /** Stops the running run; shown only while the checks run. */
+  onCancel?: () => void;
+  /** Why the run failed to run, in place of the generic notice. */
+  failureReason?: string;
   /** Each increment opens the card and scrolls it into view. */
   expandRequest?: number;
 }
@@ -307,6 +311,8 @@ export function CheckCardView({
   expectedCount,
   stateCounts,
   onRerun,
+  onCancel,
+  failureReason,
   defaultCollapsed = false,
   expandRequest = 0,
 }: CheckCardViewProps) {
@@ -347,7 +353,7 @@ export function CheckCardView({
   const isRunning: boolean = status === "running";
   // A broken run outranks the counts.
   const notice: string | undefined =
-    status === "failedToRun" ? t("failedToRun") : undefined;
+    status === "failedToRun" ? (failureReason ?? t("failedToRun")) : undefined;
   const hasResults: boolean = results.length > 0;
   // A run that broke can still list checks: some finished first, or an
   // earlier run's results stay after a failed re-run.
@@ -398,6 +404,11 @@ export function CheckCardView({
       padding={1.5}
       rightChildren={
         <Section flexDirection="row" width="fit" height="fit" gap={0}>
+          {isRunning && onCancel !== undefined && (
+            <Button prominence="tertiary" onClick={onCancel}>
+              {t("cancelButton.label")}
+            </Button>
+          )}
           {(notice !== undefined || stateCounts.failed > 0) &&
             onRerun !== undefined && (
               // A run that broke or failed a check can be tried again without editing settings.
@@ -519,11 +530,19 @@ export default function CredentialChecksCard({
   ccPairId = null,
   expandRequest = 0,
 }: CredentialChecksCardProps) {
+  const t = useTranslations("admin.connectorChecks");
   const promptT = useTranslations("admin.connectorChecks.prompt");
   const { appName } = useSettings();
   useResetChecksOnCredentialChange({ source, credential });
   const checks = useConnectorChecks({ source, credential, ccPairId });
   useConnectorChecksAutoRun(checks);
+  const cancel = checks.cancel;
+  const failureReason: string | undefined =
+    checks.failure === null
+      ? undefined
+      : checks.failure.kind === "refused"
+        ? checks.failure.detail
+        : t("runLost");
   // No check applies to this source and access type: nothing to start.
   if (checks.plan?.checks.every((check) => check.state === "not_applicable")) {
     return null;
@@ -563,6 +582,13 @@ export default function CredentialChecksCard({
       expectedCount={checks.expectedCount}
       stateCounts={checks.stateCounts}
       onRerun={checks.rerun}
+      onCancel={
+        cancel === null
+          ? undefined
+          : () =>
+              void cancel().catch(() => toast.error(t("cancelFailed.toast")))
+      }
+      failureReason={failureReason}
       expandRequest={expandRequest}
     />
   );

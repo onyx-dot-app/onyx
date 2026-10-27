@@ -10780,6 +10780,13 @@
         "proceedButton": {
           "label": "그래도 커넥터 만들기"
         }
+      },
+      "runLost": "검사가 응답하지 않습니다. 다시 시도하세요.",
+      "cancelButton": {
+        "label": "취소"
+      },
+      "cancelFailed": {
+        "toast": "검사를 취소하지 못했습니다. 다시 시도하세요."
       }
     },
     "connectorEdit": {

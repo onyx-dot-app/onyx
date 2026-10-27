@@ -10780,6 +10780,13 @@
         "proceedButton": {
           "label": "Créer le connecteur quand même"
         }
+      },
+      "runLost": "Les vérifications ne répondent plus. Réessayez.",
+      "cancelButton": {
+        "label": "Annuler"
+      },
+      "cancelFailed": {
+        "toast": "Impossible d'annuler les vérifications. Réessayez."
       }
     },
     "connectorEdit": {

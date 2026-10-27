@@ -10780,6 +10780,13 @@
         "proceedButton": {
           "label": "それでもコネクタを作成"
         }
+      },
+      "runLost": "チェックが応答しなくなりました。もう一度お試しください。",
+      "cancelButton": {
+        "label": "キャンセル"
+      },
+      "cancelFailed": {
+        "toast": "チェックをキャンセルできませんでした。もう一度お試しください。"
       }
     },
     "connectorEdit": {
