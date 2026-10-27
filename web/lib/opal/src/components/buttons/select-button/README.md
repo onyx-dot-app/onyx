@@ -44,7 +44,6 @@ Tooltip
 | `onClear`        | `() => void`                                               | —                | With `chevron`: a clear (X) button replaces the chevron while selected |
 | `foldable`       | `boolean`                                                  | `false`          | Label + trailing icon collapse when not hovered                        |
 | `size`           | `SizeVariant`                                              | `"lg"`           | Size preset                                                            |
-| `width`          | `WidthVariant`                                             | —                | Width preset                                                           |
 | `justifyContent` | `"between"`                                                | —                | Icon + label to the left, trailing icon to the right edge              |
 | `labelFont`      | `TextFont`                                                 | size-derived     | Overrides the label font                                               |
 | `labelColor`     | `TextColor`                                                | variant's color  | Overrides the label color                                              |

@@ -25,6 +25,7 @@ import { Modal } from "@opal/components";
 import {
   Button,
   Card,
+  RowAction,
   Divider,
   InputMultiComboBox,
   Table,
@@ -49,7 +50,6 @@ import {
 import { copyText, escapeMarkdown, markdown } from "@opal/utils";
 import { useModal } from "@opal/components";
 import { ShareAccessRow } from "@/sections/modals/ShareAccessRow";
-import { TransferTrailingButton } from "@/sections/modals/ShareModalPermissionControls";
 import { SharePermissionMenu } from "@/lib/permissions/components";
 import {
   useSharePermissionOptions,
@@ -597,48 +597,22 @@ export function ShareAgentModal({
       })),
     ];
 
-    const transferButton = canTransfer ? (
-      <TransferTrailingButton onTransfer={() => setView("transfer")} />
-    ) : null;
-
-    // A non-actionable access level. The 2px start margin puts its icon where
-    // a permission menu's icon sits (the menu's 4px padding vs Content's 2px
-    // icon padding), so icons line up down the column.
-    function staticAccess(
-      icon: IconFunctionComponent,
-      label: string,
-      muted: boolean
-    ) {
-      return (
-        <div className="ms-0.5">
-          <Content
-            icon={icon}
-            title={label}
-            sizePreset="main-ui"
-            variant="section"
-            width="fit"
-            color={muted ? "muted" : undefined}
-          />
-        </div>
-      );
-    }
-
-    // The transfer button sits at the column's right edge, in line with the
-    // menus' chevrons.
-    const ownerLabel = (
-      <Section
-        flexDirection="row"
-        justifyContent="between"
-        gap={1}
-        height="auto"
+    // The owner level opens the transfer view when the viewer may transfer,
+    // and is static otherwise. RowAction keeps one box either way, so it
+    // lines up with the permission menus below it.
+    const ownerLabel = canTransfer ? (
+      <RowAction
+        icon={SvgUserManage}
+        rightIcon={SvgArrowExchange}
+        tooltip={tShare("transferOwnership.trailingButton.tooltip")}
+        onClick={() => setView("transfer")}
       >
-        {staticAccess(
-          SvgUserManage,
-          t("shareAgent.permission.owner.label"),
-          !canTransfer
-        )}
-        {transferButton}
-      </Section>
+        {t("shareAgent.permission.owner.label")}
+      </RowAction>
+    ) : (
+      <RowAction icon={SvgUserManage}>
+        {t("shareAgent.permission.owner.label")}
+      </RowAction>
     );
 
     const tableRows: ShareTableRow[] = [];
@@ -652,9 +626,13 @@ export function ShareAgentModal({
           count: agent.admin_count,
         }),
         icon: SvgUserManage,
-        trailing: agent.ownership_vacant
-          ? ownerLabel
-          : staticAccess(SvgEdit, t("shareAgent.permission.edit.label"), true),
+        trailing: agent.ownership_vacant ? (
+          ownerLabel
+        ) : (
+          <RowAction icon={SvgEdit}>
+            {t("shareAgent.permission.edit.label")}
+          </RowAction>
+        ),
       });
     }
     if (agent?.owner) {
@@ -705,8 +683,7 @@ export function ShareAgentModal({
             }
             options={permissionOptions}
             value={share.permission}
-            width="full"
-            justifyContent="between"
+            layout="row"
           />
         ),
       });
@@ -733,8 +710,7 @@ export function ShareAgentModal({
             }
             options={permissionOptions}
             value={share.permission}
-            width="full"
-            justifyContent="between"
+            layout="row"
           />
         ),
       });
@@ -766,10 +742,9 @@ export function ShareAgentModal({
       {
         kind: "display",
         id: "access",
-        // Fixed, so every row's access cell starts and ends at the same x.
-        // Wide enough for the longest label ("Ansehen & Chatten") with its
-        // icon and chevron.
-        width: { fixed: 184 },
+        // Fixed, so every row's access cell starts at the same x. Wide enough
+        // for the longest label ("Ansehen & Chatten") with its icon and chevron.
+        width: { fixed: 200 },
         hideable: false,
         cell: (row) => row.trailing,
       },

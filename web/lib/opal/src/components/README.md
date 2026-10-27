@@ -19,6 +19,7 @@ The barrel file at `index.ts` re-exports each component and its prop types. Each
 | [Button](./buttons/button/)                                       | Label and/or icon-only stateless button                                   | [README](./buttons/button/README.md)                          |
 | [AttachmentItemButton](./buttons/attachment-item-button/)         | File-like resource row: icon/image tile, content, center and action slots | [README](./buttons/attachment-item-button/README.md)          |
 | [SelectButton](./buttons/select-button/)                          | Stateful button: toggles, dropdown triggers (chevron) and filters         | [README](./buttons/select-button/README.md)                   |
+| [RowAction](./buttons/row-action/)                                | A row's value or action: button, dropdown trigger, link or static         | [README](./buttons/row-action/README.md)                      |
 | [Tag](./tag/)                                                     | Small colored label for status/category metadata                          | [README](./tag/README.md)                                     |
 | [InputDateRangePicker](./inputs/chrono/input-date-range-picker/)  | Preset date-range strip with a custom-range calendar popover              | [README](./inputs/chrono/input-date-range-picker/README.md)   |
 | [InputSingleUpload](./inputs/uploads/input-single-upload/)        | Upload control in the input chrome: pick, drop or paste                   | [README](./inputs/uploads/input-single-upload/README.md)      |
