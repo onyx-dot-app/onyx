@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, jest } from "@jest/globals";
+import { ApiError } from "@/api/errors";
 import { getChatSessionStatus } from "@/api/chat/sessions";
 import { waitForSessionIdle } from "@/chat/sessionReadiness";
 
@@ -40,3 +41,17 @@ describe("session readiness", () => {
     expect(await waitForSessionIdle("s", () => current, jest.fn())).toBe(false);
   });
 });
+
+it.each([401, 403, 404])(
+  "stops polling a permanent %s failure without declaring idle",
+  async (status) => {
+    jest.useFakeTimers();
+    const error = new ApiError({ status, detail: "Conversation unavailable" });
+    jest.mocked(getChatSessionStatus).mockRejectedValue(error);
+    await expect(waitForSessionIdle("s", () => true, jest.fn())).rejects.toBe(
+      error,
+    );
+    expect(getChatSessionStatus).toHaveBeenCalledTimes(1);
+    expect(jest.getTimerCount()).toBe(0);
+  },
+);

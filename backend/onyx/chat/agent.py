@@ -34,7 +34,7 @@ from onyx.chat.prompt_utils import (
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
 from onyx.context.models import UserMemoryContext
 from onyx.context.search.models import SearchDocsResponse
-from onyx.deep_research.models import ResearchAgentCallResult
+from onyx.deep_research.models import ResearchAgentCallResult, ResearchMessageMetadata
 from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
 from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
 from onyx.llm.models import (
@@ -104,14 +104,29 @@ class ChatAgent(Agent, RestorableFeature):
             if include_citations
             else CitationMode.REMOVE
         )
-        self.initial_citations = (
-            build_context_file_citation_mapping(context_files.file_metadata)
-            if context_files.file_metadata
-            else {}
+        # History owns existing numbers; adding or reordering project files must not reuse them.
+        for message in messages:
+            if isinstance(
+                message.metadata, (ChatMessageMetadata, ResearchMessageMetadata)
+            ):
+                self.citation_processor.update_citation_mapping(
+                    message.metadata.sources, update_duplicate_keys=True
+                )
+            if isinstance(message, ToolResultMessage):
+                update_citation_processor_from_tool_result(
+                    message, self.citation_processor
+                )
+        self.initial_citations = build_context_file_citation_mapping(
+            context_files.file_metadata, self.citation_processor.citation_to_doc
         )
-        self.citation_processor.update_citation_mapping(self.initial_citations)
+        self.citation_processor.update_citation_mapping(
+            self.initial_citations, update_duplicate_keys=True
+        )
         self.gathered_documents = list(self.initial_citations.values())
-        self.citation_mapping: dict[int, str] = {}
+        self.citation_mapping = {
+            number: doc.document_id
+            for number, doc in self.citation_processor.citation_to_doc.items()
+        }
         self.has_called_search_tool = False
         self.ran_image_gen = False
         self.persona = persona
@@ -194,15 +209,8 @@ class ChatAgent(Agent, RestorableFeature):
             if response.tool_name == SearchTool.NAME:
                 self.has_called_search_tool = True
             if isinstance(data, SearchDocsResponse):
-                self.citation_mapping.update(data.citation_mapping)
                 self.gathered_documents.extend(data.search_docs)
             elif isinstance(data, ResearchAgentCallResult):
-                self.citation_mapping.update(
-                    {
-                        number: doc.document_id
-                        for number, doc in data.citation_mapping.items()
-                    }
-                )
                 self.gathered_documents.extend(data.citation_mapping.values())
             if isinstance(data, ChatSearchResult):
                 existing = {file.filename for file in self.chat_files}
@@ -212,6 +220,10 @@ class ChatAgent(Agent, RestorableFeature):
             update_citation_processor_from_tool_result(
                 response, self.citation_processor
             )
+            if isinstance(data, (SearchDocsResponse, ResearchAgentCallResult)):
+                for number in data.citation_mapping:
+                    if source := self.citation_processor.citation_to_doc.get(number):
+                        self.citation_mapping[number] = source.document_id
         self.ran_image_gen = self.ran_image_gen or any(
             call.name in STOPPING_TOOLS_NAMES for call in message.tool_calls
         )
@@ -290,6 +302,10 @@ class ChatAgent(Agent, RestorableFeature):
                 custom_agent_prompt=prompt.custom_prompt,
                 reminder_message=prompt.reminder,
                 context_files=self.context_files.model_copy(deep=True),
+                context_file_citations={
+                    doc.document_id: number
+                    for number, doc in self.initial_citations.items()
+                },
                 token_counter=self.token_counter,
                 all_injected_file_metadata=dict(self.file_metadata)
                 if self.file_metadata

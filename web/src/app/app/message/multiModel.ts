@@ -1,5 +1,5 @@
-import { Message } from "@/app/app/interfaces";
-import { MultiModelResponse } from "@/app/app/message/interfaces";
+import { Message } from "@/app/app/types";
+import { MultiModelResponse } from "@/app/app/message/types";
 
 // The model that produced a message. Error responses carry the model that
 // failed, so they count for attribution too.

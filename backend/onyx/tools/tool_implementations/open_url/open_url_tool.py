@@ -416,6 +416,7 @@ MAX_URLS_PER_CALL = 10
 
 class OpenURLTool(Tool):
     merge_list_argument = URLS_FIELD
+    merge_list_limit = MAX_URLS_PER_CALL
 
     NAME = "open_url"
     DESCRIPTION = "Open and read the content of one or more URLs."

@@ -4,6 +4,8 @@ import * as React from "react";
 import { act, renderHook, waitFor } from "@testing-library/react-native";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
+import { ApiError } from "@/api/errors";
+import { toast } from "@/hooks/useToast";
 import { QUERY_KEYS } from "@/api/query-keys";
 import { getChatSession, getChatSessionStatus } from "@/api/chat/sessions";
 import {
@@ -25,6 +27,7 @@ jest.mock("@/state/session", () => ({
   useSession: (selector: (s: { serverUrl: string | null }) => unknown) =>
     selector({ serverUrl: "https://example.test" }),
 }));
+jest.mock("@/hooks/useToast", () => ({ toast: { error: jest.fn() } }));
 jest.mock("@/api/chat/stream", () => ({
   resumeChatMessage: jest.fn(),
   isPacket: (event: { obj?: unknown; placement?: unknown }) =>
@@ -167,6 +170,51 @@ describe("useChatSessionController", () => {
       currentSessionId: null,
       sessions: new Map(),
     });
+  });
+
+  it("preserves live output and enables input when the final history request fails after idle", async () => {
+    seedLiveSession(2);
+    resumeMock.mockReturnValue(
+      scripted([startPacket("Live answer"), endPacket()]),
+    );
+    getSessionMock.mockRejectedValueOnce(new Error("Request cancelled"));
+    renderHook(() => useChatSessionController("s1"), { wrapper });
+    await waitFor(() =>
+      expect(useChatSessionStore.getState().sessions.get("s1")?.chatState).toBe(
+        "input",
+      ),
+    );
+    expect(assistantText("s1", 2)).toBe("Live answer");
+    expect(
+      useChatSessionStore.getState().sessions.get("s1")?.abortController,
+    ).toBeNull();
+    expect(toast.error).toHaveBeenCalledWith(
+      "Could not refresh saved messages. Reopen this conversation to retry.",
+    );
+  });
+
+  it("stops recovery when the session is unavailable without claiming it is idle", async () => {
+    seedLiveSession(2);
+    resumeMock.mockReturnValue(
+      scripted([startPacket("Live answer"), endPacket()]),
+    );
+    jest
+      .mocked(getChatSessionStatus)
+      .mockRejectedValueOnce(
+        new ApiError({ status: 404, detail: "Conversation unavailable" }),
+      );
+    renderHook(() => useChatSessionController("s1"), { wrapper });
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("Conversation unavailable"),
+    );
+    expect(useChatSessionStore.getState().sessions.get("s1")?.chatState).toBe(
+      "unconfirmed",
+    );
+    expect(
+      useChatSessionStore.getState().sessions.get("s1")?.abortController,
+    ).toBeNull();
+    expect(getChatSessionStatus).toHaveBeenCalledTimes(1);
+    expect(getSessionMock).not.toHaveBeenCalled();
   });
 
   it("resumes an in-flight run then settles from the persisted session", async () => {

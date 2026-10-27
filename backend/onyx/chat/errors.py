@@ -29,11 +29,11 @@ class EmptyLLMResponseError(ClassifiedLLMError):
             client_error_msg=client_error_msg,
             error_code=error_code,
             is_retryable=is_retryable,
+            tool_choice=tool_choice,
+            finish_reason=finish_reason,
         )
         self.provider = provider
         self.model = model
-        self.tool_choice = tool_choice
-        self.finish_reason = finish_reason
 
 
 # LiteLLM maps these native policy blocks to content_filter, but gateways may
@@ -135,48 +135,57 @@ def chat_error(
 ) -> StreamingError:
     """Apply the same classification and credential redaction to every chat error."""
     details: dict[str, str | int | None] = {}
+    if llm is not None:
+        details.update(model=llm.config.model_name, provider=llm.config.model_provider)
     if model_index is not None:
         details["model_index"] = model_index
+    stack = None
     if isinstance(error, RunFailed):
         info = error.failure.llm_error
-        return StreamingError(
-            error=info.message if info else error.failure.message,
-            error_code=info.error_code if info else "AGENT_EXECUTION_FAILED",
-            is_retryable=info.is_retryable if info else False,
-            details=details,
-        )
-    if isinstance(error, OnyxError):
+        if info is None:
+            return StreamingError(
+                error=error.failure.message,
+                error_code="AGENT_EXECUTION_FAILED",
+                is_retryable=False,
+                details=details,
+            )
+    elif isinstance(error, OnyxError):
         return StreamingError(
             error=error.detail,
             error_code=error.error_code.code,
             is_retryable=error.status_code >= 500,
             details=details,
         )
-    if isinstance(error, ValueError) and llm is None:
+    elif isinstance(error, ValueError) and llm is None:
         return StreamingError(
             error=str(error),
             error_code="VALIDATION_ERROR",
             is_retryable=True,
             details=details,
         )
-    stack = "".join(traceback.format_exception(error))
-    if llm is None:
+    elif llm is None:
         return StreamingError(
             error="Failed to initialize the chat. Please check your configuration and try again.",
-            stack_trace=stack if DEV_MODE else None,
+            stack_trace="".join(traceback.format_exception(error))
+            if DEV_MODE
+            else None,
             error_code="INIT_FAILED",
             is_retryable=True,
             details=details,
         )
-    info = litellm_exception_to_safe_error(error, llm, fallback_to_error_msg=False)
-    details.update(model=llm.config.model_name, provider=llm.config.model_provider)
-    if isinstance(error, EmptyLLMResponseError):
+    else:
+        info = litellm_exception_to_safe_error(error, llm, fallback_to_error_msg=False)
+        if DEV_MODE:
+            stack = llm.redact_error("".join(traceback.format_exception(error)))
+    if info.tool_choice is not None:
         details.update(
-            tool_choice=error.tool_choice.value, finish_reason=error.finish_reason
+            tool_choice=info.tool_choice.value, finish_reason=info.finish_reason
         )
+    elif info.finish_reason is not None:
+        details["finish_reason"] = info.finish_reason
     return StreamingError(
         error=info.message,
-        stack_trace=llm.redact_error(stack) if DEV_MODE else None,
+        stack_trace=stack,
         error_code=info.error_code,
         is_retryable=info.is_retryable,
         details=details,

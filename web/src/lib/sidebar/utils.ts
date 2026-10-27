@@ -2,7 +2,7 @@
 
 import React from "react";
 import { toast } from "@opal/layouts";
-import { ChatSession } from "@/app/app/interfaces";
+import { ChatSession } from "@/app/app/types";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
 import { LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
 import { FoldableLogo } from "@/lib/app/components";

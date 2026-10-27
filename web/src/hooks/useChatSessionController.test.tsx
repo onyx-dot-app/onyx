@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { ReadonlyURLSearchParams } from "next/navigation";
 import useChatSessionController from "@/hooks/useChatSessionController";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
-import { BackendChatSession, Message } from "@/app/app/interfaces";
+import { BackendChatSession, Message } from "@/app/app/types";
 import {
   fetchSettledChatSession,
   waitForChatSessionIdle,

@@ -9,11 +9,11 @@ import {
   useRef,
 } from "react";
 import { FullChatState } from "@/app/app/message/messageComponents/types";
-import { Message } from "@/app/app/interfaces";
+import { Message } from "@/app/app/types";
 import { LlmManager } from "@/lib/hooks";
 import { RegenerationFactory } from "@/app/app/message/messageComponents/AgentMessage";
 import MultiModelPanel from "@/app/app/message/MultiModelPanel";
-import { MultiModelResponse } from "@/app/app/message/interfaces";
+import { MultiModelResponse } from "@/app/app/message/types";
 import { setPreferredResponse } from "@/app/app/services/lib";
 import {
   applyPreferredResponse,

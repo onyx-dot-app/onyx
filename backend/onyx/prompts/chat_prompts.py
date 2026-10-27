@@ -147,18 +147,3 @@ Provide a short name for the conversation. Refer to other messages in the conver
 IMPORTANT: DO NOT OUTPUT ANYTHING ASIDE FROM THE NAME. MAKE IT AS CONCISE AS POSSIBLE. NEVER USE MORE THAN 5 WORDS, LESS IS FINE.
 """.strip()
 # ruff: noqa: E501, W605 end
-
-
-CONTENT_PENDING_NOTICE = (
-    "[This file is still being processed and its contents are not yet "
-    "available. Do not guess what it contains — tell the user the file is "
-    "still processing and to ask again in a moment.]"
-)
-
-
-CONTENT_UNAVAILABLE_NOTICE = (
-    "[No machine-readable text could be extracted from this file. It is "
-    "likely image-only (e.g. a scanned document) or in an unsupported "
-    "format. Its contents are not available to you — do not guess them. If "
-    "needed, ask the user for a text-based copy.]"
-)

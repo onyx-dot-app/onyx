@@ -1,9 +1,9 @@
 import { act, render } from "@tests/setup/test-utils";
 import MultiModelResponseView from "@/app/app/message/MultiModelResponseView";
 import type { MultiModelPanelProps } from "@/app/app/message/MultiModelPanel";
-import type { MultiModelResponse } from "@/app/app/message/interfaces";
+import type { MultiModelResponse } from "@/app/app/message/types";
 import type { FullChatState } from "@/app/app/message/messageComponents/types";
-import type { Message } from "@/app/app/interfaces";
+import type { Message } from "@/app/app/types";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 
 const mockPanels = new Map<number, MultiModelPanelProps>();

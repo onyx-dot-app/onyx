@@ -216,18 +216,30 @@ async function runChatStream(
     if (stillOurs() && signal.aborted && !hadError) {
       appendUserCancelledStop(sessionId, agentNodeId);
     }
-    if (!stillOurs()) return;
-    store.getState().updateChatState(sessionId, "settling");
+  }
+  if (!stillOurs()) return;
+  store.getState().updateChatState(sessionId, "settling");
+  try {
     const idle = await waitForSessionIdle(sessionId, stillOurs, () => {
       store.getState().updateChatState(sessionId, "unconfirmed");
     });
     if (!idle || !stillOurs()) return;
     store.getState().updateChatState(sessionId, "input");
-    store.getState().setAbortController(sessionId, null);
     // name a new session once it streamed output; skip stop/abort and thrown transport failures
     if (autoName && !signal.aborted && sawStreaming && !hadError) {
       void nameNewSession(sessionId, autoName);
     }
+  } catch (error) {
+    if (!stillOurs()) return;
+    console.warn("Could not confirm chat readiness", error);
+    store.getState().updateChatState(sessionId, "unconfirmed");
+    toast.error(
+      error instanceof Error
+        ? error.message
+        : "This conversation is unavailable.",
+    );
+  } finally {
+    if (stillOurs()) store.getState().setAbortController(sessionId, null);
   }
 }
 

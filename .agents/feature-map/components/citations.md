@@ -167,8 +167,10 @@ behavior, not a style preference (`backend/onyx/chat/README.md`).
 ### 4.5 Parsing the stream: `DynamicCitationProcessor`
 
 `backend/onyx/chat/agent.py:ChatAgent` creates a `DynamicCitationProcessor` for prompt sources (mode
-`HYPERLINK` unless `include_citations=False`), seeds it with any project-file
-citation mapping (`build_context_file_citation_mapping`), and updates it after every
+`HYPERLINK` unless `include_citations=False`). It restores historical sources before
+allocating project-file citations (`build_context_file_citation_mapping`). Files reuse
+their existing number by file ID; new files receive unused numbers. Prompt documents,
+tool context, and rendering use the same mapping. The processor updates after every
 tool response via `citation_utils.py:update_citation_processor_from_tool_result`,
 which turns a `SearchDocsResponse.citation_mapping` (`dict[int, str]`, number to
 document id) into a `dict[int, SearchDoc]` by matching against

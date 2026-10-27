@@ -24,7 +24,10 @@ from onyx.llm.models import (
 )
 from onyx.tools.interface import Tool, merge_tool_arguments
 from onyx.tools.models import ToolContext
-from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
+from onyx.tools.tool_implementations.open_url.open_url_tool import (
+    MAX_URLS_PER_CALL,
+    OpenURLTool,
+)
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tracing.flows import LLMFlow
@@ -353,6 +356,60 @@ def test_real_retrieval_bindings_merge_their_public_argument(
         for message in run.snapshot().messages
         if isinstance(message, ToolResultMessage)
     ] == ["first", "second"]
+
+
+@pytest.mark.parametrize("sizes", [(5, 5), (6, 6), (6, 6, 4)])
+def test_open_url_batches_preserve_every_requested_page(
+    sizes: tuple[int, ...], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tool = OpenURLTool(
+        tool_id=1,
+        user=MagicMock(),
+        document_index=MagicMock(),
+        web_fetch_disabled=True,
+    )
+    executions: list[list[str]] = []
+
+    def execute(invocation: ToolInvocation, _context: ToolContext) -> ToolResult:
+        urls = invocation.arguments["urls"]
+        assert isinstance(urls, list)
+        batch: list[str] = []
+        for url in urls:
+            assert isinstance(url, str)
+            batch.append(url)
+        executions.append(batch)
+        return ToolResult(content="opened")
+
+    monkeypatch.setattr(tool, "_run", execute)
+    url_groups = [
+        [f"https://example.com/{index}/{page}" for page in range(size)]
+        for index, size in enumerate(sizes)
+    ]
+    calls = [
+        ToolCall(
+            id=str(index),
+            name=tool.name,
+            arguments={"urls": urls},
+        )
+        for index, urls in enumerate(url_groups)
+    ]
+    run = Agent(
+        FakeModelClient(lambda *_: AssistantMessage(content=calls)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[tool.bind(lambda: ToolContext())],
+    ).start(max_steps=1)
+    run.result(timeout=5)
+    assert run.wait_for_idle(5)
+    requested = [url for urls in url_groups for url in urls]
+    opened = [url for urls in executions for url in urls]
+    assert sorted(opened) == sorted(requested)
+    assert all(len(urls) <= MAX_URLS_PER_CALL for urls in executions)
+    assert len(executions) == (1 if sum(sizes) <= MAX_URLS_PER_CALL else 2)
+    assert [
+        message.tool_call_id
+        for message in run.snapshot().messages
+        if isinstance(message, ToolResultMessage)
+    ] == [call.id for call in calls]
 
 
 @pytest.mark.parametrize(

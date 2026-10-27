@@ -1,4 +1,4 @@
-import { ChatSessionSharedStatus } from "@/app/app/interfaces";
+import { ChatSessionSharedStatus } from "@/app/app/types";
 import {
   act,
   render,

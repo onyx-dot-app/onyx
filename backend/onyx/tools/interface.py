@@ -66,7 +66,11 @@ def parse_tool_arguments[T: BaseModel](
 
 
 def merge_tool_arguments(
-    first: dict[str, JsonValue], second: dict[str, JsonValue], *, field: str
+    first: dict[str, JsonValue],
+    second: dict[str, JsonValue],
+    *,
+    field: str,
+    max_items: int | None = None,
 ) -> dict[str, JsonValue] | None:
     """Combine nonempty string lists when all other arguments match."""
     if {key: value for key, value in first.items() if key != field} != {
@@ -79,6 +83,7 @@ def merge_tool_arguments(
     if (
         not left
         or not right
+        or (max_items is not None and len(left) + len(right) > max_items)
         or any(not isinstance(value, str) for value in left + right)
     ):
         return None
@@ -126,6 +131,7 @@ class Tool(abc.ABC):
 
     result_from_children: ToolResultFromChildren | None = None
     merge_list_argument: str | None = None
+    merge_list_limit: int | None = None
 
     def for_agent(self) -> "Tool":
         """Return an instance safe to bind to one agent's conversation."""
@@ -204,7 +210,9 @@ class Tool(abc.ABC):
             execute=lambda invocation: self.run(invocation, get_context()),
             execution_mode=self.execution_mode,
             merge_arguments=partial(
-                merge_tool_arguments, field=self.merge_list_argument
+                merge_tool_arguments,
+                field=self.merge_list_argument,
+                max_items=self.merge_list_limit,
             )
             if self.merge_list_argument is not None
             else None,

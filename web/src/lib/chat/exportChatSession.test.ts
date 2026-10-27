@@ -2,7 +2,7 @@ import {
   BackendChatSession,
   BackendMessage,
   ChatSessionSharedStatus,
-} from "@/app/app/interfaces";
+} from "@/app/app/types";
 import { downloadFile } from "@/lib/download";
 import { exportChatSession } from "./exportChatSession";
 

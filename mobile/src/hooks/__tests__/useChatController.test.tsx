@@ -5,6 +5,7 @@ import { act, renderHook, waitFor } from "@testing-library/react-native";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { router } from "expo-router";
 
+import { ApiError } from "@/api/errors";
 import {
   createChatSession,
   getChatSession,
@@ -818,6 +819,29 @@ describe("useChatController", () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  it("releases its controller without claiming idle when readiness returns a permanent error", async () => {
+    useChatSessionStore.getState().ensureSession("s1");
+    jest
+      .mocked(getChatSessionStatus)
+      .mockResolvedValueOnce({ is_processing: false })
+      .mockRejectedValueOnce(
+        new ApiError({ status: 403, detail: "Access denied" }),
+      );
+    streamMock.mockReturnValue(scripted([idInfo]));
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+    await act(async () => {
+      await result.current.submit("hi");
+    });
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("Access denied"),
+    );
+    expect(result.current.chatState).toBe("unconfirmed");
+    expect(
+      useChatSessionStore.getState().sessions.get("s1")?.abortController,
+    ).toBeNull();
+    expect(getChatSessionStatus).toHaveBeenCalledTimes(2);
   });
 
   it("does not release a newer owner after an old readiness check", async () => {

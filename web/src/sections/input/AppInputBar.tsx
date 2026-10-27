@@ -10,14 +10,14 @@ import React, {
 } from "react";
 import { useTranslations } from "next-intl";
 import { MinimalAgent } from "@/lib/agents/types";
-import { InputPrompt } from "@/app/app/interfaces";
+import { InputPrompt } from "@/app/app/types";
 import { LlmManager } from "@/lib/hooks";
 import usePromptShortcuts from "@/hooks/usePromptShortcuts";
 import { useContentEditable } from "@/hooks/useContentEditable";
 import useFilter from "@/hooks/useFilter";
 import { useAvailableSources } from "@/lib/connectors/hooks";
 import { MinimalOnyxDocument } from "@/lib/search/types";
-import { ChatState, MAX_QUEUED_MESSAGES } from "@/app/app/interfaces";
+import { ChatState, MAX_QUEUED_MESSAGES } from "@/app/app/types";
 import { useQueuedMessageNavigation } from "@/hooks/useQueuedMessageNavigation";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { effectiveChatForcedToolId } from "@/lib/plugins/chat";

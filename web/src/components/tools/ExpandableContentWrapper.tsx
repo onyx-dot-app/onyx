@@ -5,7 +5,7 @@ import { SvgDownloadCloud, SvgFold, SvgMaximize2, SvgX } from "@opal/icons";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import { FileDescriptor } from "@/app/app/interfaces";
+import { FileDescriptor } from "@/app/app/types";
 import { cn } from "@opal/utils";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import { MinimalOnyxDocument } from "@/lib/search/types";

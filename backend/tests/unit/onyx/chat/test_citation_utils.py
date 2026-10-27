@@ -14,8 +14,8 @@ from onyx.chat.citation_utils import (
 )
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc
+from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.llm.models import ToolResultMessage
-from onyx.tools.results import ResearchAgentCallResult
 
 # ============================================================================
 # Helper Functions

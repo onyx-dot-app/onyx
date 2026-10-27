@@ -194,6 +194,9 @@ fallback behaviour, it simply sits inactive until the admin activates it.
 
 ### 4.4 Fetch flow (`OpenURLTool.run`, `open_url_tool.py`)
 
+Each call reads at most `MAX_URLS_PER_CALL` URLs (10). Compatible calls merge only
+when their combined URL count fits that limit; larger groups execute separately.
+
 `open_url` tries up to three sources per URL, not strictly sequential, most run in
 parallel and merged:
 

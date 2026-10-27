@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { humanReadableFormat } from "@opal/time";
-import { BackendChatSession } from "@/app/app/interfaces";
+import { BackendChatSession } from "@/app/app/types";
 import { processRawChatHistory } from "@/app/app/services/lib";
 import { getLatestMessageChain } from "@/app/app/services/messageTree";
 import HumanMessage from "@/app/app/message/HumanMessage";
