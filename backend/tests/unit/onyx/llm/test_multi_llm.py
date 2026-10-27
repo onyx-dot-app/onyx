@@ -25,7 +25,13 @@ from onyx.llm.model_request import (
     UserMessage,
 )
 from onyx.llm.model_response import ModelResponse, ModelResponseStream
-from onyx.llm.models import NamedToolChoice, ReasoningEffort, ToolChoiceOptions, Usage
+from onyx.llm.models import (
+    NamedToolChoice,
+    ReasoningEffort,
+    ThinkingBlock,
+    ToolChoiceOptions,
+    Usage,
+)
 from onyx.llm.multi_llm import (
     LitellmLLM,
     LLMRateLimitError,
@@ -2842,20 +2848,20 @@ def _weather_tool_call_message() -> AssistantMessage:
     )
 
 
-def test_prompt_in_tool_loop_true() -> None:
-    from onyx.llm.multi_llm import _prompt_in_tool_loop
+def test_tool_loop_lacks_signed_thinking_true() -> None:
+    from onyx.llm.multi_llm import _tool_loop_lacks_signed_thinking
 
     messages: list[ChatCompletionMessage] = [
         UserMessage(content="What's the weather?"),
         _weather_tool_call_message(),
         ToolMessage(content="sunny", tool_call_id="tc_1"),
     ]
-    assert _prompt_in_tool_loop(messages) is True
+    assert _tool_loop_lacks_signed_thinking(messages, True) is True
 
 
-def test_prompt_in_tool_loop_false_after_completed_tool_turn() -> None:
+def test_tool_loop_lacks_signed_thinking_false_after_completed_tool_turn() -> None:
     """A tool call in an earlier, answered turn must not disable thinking."""
-    from onyx.llm.multi_llm import _prompt_in_tool_loop
+    from onyx.llm.multi_llm import _tool_loop_lacks_signed_thinking
 
     messages: list[ChatCompletionMessage] = [
         UserMessage(content="What's the weather?"),
@@ -2864,24 +2870,24 @@ def test_prompt_in_tool_loop_false_after_completed_tool_turn() -> None:
         AssistantMessage(content="It is sunny."),
         UserMessage(content="And tomorrow?"),
     ]
-    assert _prompt_in_tool_loop(messages) is False
+    assert _tool_loop_lacks_signed_thinking(messages, True) is False
 
 
-def test_prompt_in_tool_loop_false_no_tools() -> None:
-    from onyx.llm.multi_llm import _prompt_in_tool_loop
+def test_tool_loop_lacks_signed_thinking_false_no_tools() -> None:
+    from onyx.llm.multi_llm import _tool_loop_lacks_signed_thinking
 
     messages: list[ChatCompletionMessage] = [
         UserMessage(content="Hello"),
         AssistantMessage(content="Hi there!"),
     ]
-    assert _prompt_in_tool_loop(messages) is False
+    assert _tool_loop_lacks_signed_thinking(messages, True) is False
 
 
-def test_prompt_in_tool_loop_false_user_only() -> None:
-    from onyx.llm.multi_llm import _prompt_in_tool_loop
+def test_tool_loop_lacks_signed_thinking_false_user_only() -> None:
+    from onyx.llm.multi_llm import _tool_loop_lacks_signed_thinking
 
     messages: list[ChatCompletionMessage] = [UserMessage(content="Hello")]
-    assert _prompt_in_tool_loop(messages) is False
+    assert _tool_loop_lacks_signed_thinking(messages, True) is False
 
 
 def test_bedrock_claude_drops_thinking_when_thinking_blocks_missing() -> None:
@@ -2990,6 +2996,117 @@ def test_bedrock_claude_keeps_thinking_when_no_tool_history() -> None:
             "with tool_calls exist in history"
         )
         assert kwargs["thinking"]["type"] == "enabled"
+
+
+def _signed_weather_tool_call_message() -> AssistantMessage:
+    return _weather_tool_call_message().model_copy(
+        update={
+            "thinking_blocks": [
+                ThinkingBlock(thinking="Need the weather.", signature="sig-1")
+            ]
+        }
+    )
+
+
+def test_tool_loop_with_signed_thinking_does_not_lack_it() -> None:
+    from onyx.llm.multi_llm import _tool_loop_lacks_signed_thinking
+
+    messages: list[ChatCompletionMessage] = [
+        UserMessage(content="What's the weather?"),
+        _signed_weather_tool_call_message(),
+        ToolMessage(content="sunny", tool_call_id="tc_1"),
+    ]
+    assert _tool_loop_lacks_signed_thinking(messages, True) is False
+    # Providers that drop thinking_blocks cannot replay the signature.
+    assert _tool_loop_lacks_signed_thinking(messages, False) is True
+
+
+def test_tool_loop_with_unsigned_thinking_lacks_it() -> None:
+    from onyx.llm.multi_llm import _tool_loop_lacks_signed_thinking
+
+    unsigned = _weather_tool_call_message().model_copy(
+        update={"thinking_blocks": [ThinkingBlock(thinking="partial")]}
+    )
+    messages: list[ChatCompletionMessage] = [
+        UserMessage(content="What's the weather?"),
+        unsigned,
+        ToolMessage(content="sunny", tool_call_id="tc_1"),
+    ]
+    assert _tool_loop_lacks_signed_thinking(messages, True) is True
+
+
+def _bedrock_claude_llm() -> LitellmLLM:
+    return LitellmLLM(
+        api_key=None,
+        model_provider=LlmProviderNames.BEDROCK,
+        model_name="anthropic.claude-sonnet-4-20250514-v1:0",
+        max_input_tokens=200000,
+    )
+
+
+_WEATHER_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "Get the weather",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    }
+]
+
+
+def test_bedrock_claude_keeps_thinking_when_tool_loop_replays_signed_blocks() -> None:
+    messages: list[ChatCompletionMessage] = [
+        UserMessage(content="What's the weather?"),
+        _signed_weather_tool_call_message(),
+        ToolMessage(content="sunny", tool_call_id="tc_1"),
+    ]
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
+    ):
+        mock_completion.return_value = []
+        list(
+            _bedrock_claude_llm().stream_raw(
+                messages, tools=_WEATHER_TOOLS, reasoning_effort=ReasoningEffort.HIGH
+            )
+        )
+
+    kwargs = mock_completion.call_args.kwargs
+    assert kwargs["thinking"]["type"] == "enabled"
+    assert kwargs["messages"][1]["thinking_blocks"] == [
+        {"type": "thinking", "thinking": "Need the weather.", "signature": "sig-1"}
+    ]
+
+
+def test_bedrock_claude_strips_thinking_blocks_when_thinking_is_off() -> None:
+    """A forced tool turns budget thinking off, and Anthropic rejects
+    thinking blocks in a request without thinking."""
+    messages: list[ChatCompletionMessage] = [
+        UserMessage(content="What's the weather?"),
+        _signed_weather_tool_call_message(),
+        ToolMessage(content="sunny", tool_call_id="tc_1"),
+    ]
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
+    ):
+        mock_completion.return_value = []
+        list(
+            _bedrock_claude_llm().stream_raw(
+                messages,
+                tools=_WEATHER_TOOLS,
+                tool_choice=NamedToolChoice(name="get_weather"),
+                reasoning_effort=ReasoningEffort.HIGH,
+            )
+        )
+
+    kwargs = mock_completion.call_args.kwargs
+    assert "thinking" not in kwargs
+    assert all("thinking_blocks" not in msg for msg in kwargs["messages"])
 
 
 def test_bifrost_claude_includes_allowed_openai_params() -> None:

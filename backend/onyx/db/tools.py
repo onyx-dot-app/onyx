@@ -432,6 +432,7 @@ def create_tool_call_no_commit(
     reasoning_tokens: str | None = None,
     generated_images: list[dict] | None = None,
     tab_index: int = 0,
+    thinking_blocks: dict[str, Any] | None = None,
     add_only: bool = True,
 ) -> ToolCall:
     """
@@ -471,6 +472,8 @@ def create_tool_call_no_commit(
         tool_call_response=sanitize_json_like(tool_call_response),
         tool_call_tokens=tool_call_tokens,
         generated_images=sanitize_json_like(generated_images),
+        # Provider-signed: stored byte-for-byte.
+        thinking_blocks=thinking_blocks,
     )
 
     db_session.add(tool_call)

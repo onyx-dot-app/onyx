@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from enum import Enum
 from typing import Annotated, Literal
 
@@ -158,6 +159,27 @@ class RedactedThinkingBlock(BaseModel):
 
 
 AnyThinkingBlock = ThinkingBlock | RedactedThinkingBlock
+
+
+def signed_thinking_blocks(
+    blocks: Sequence[AnyThinkingBlock] | None,
+) -> list[AnyThinkingBlock]:
+    """Blocks a provider accepts on replay: an unsigned thinking block is incomplete."""
+    return [
+        block
+        for block in blocks or []
+        if not isinstance(block, ThinkingBlock) or block.signature
+    ]
+
+
+class ReplayableThinking(BaseModel):
+    """Signed thinking blocks and the model that minted them.
+
+    Signatures are only valid for that model, so replay skips them for others.
+    """
+
+    model: str
+    blocks: list[AnyThinkingBlock]
 
 
 class Usage(BaseModel):

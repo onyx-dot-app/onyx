@@ -154,6 +154,7 @@ separate share-link table.
 | `invoking_tool_call_id` | Nullable tool invocation that supplied a child input. This provenance link uses deferred NO ACTION on deletion. |
 | `request_params` | Requested reasoning effort plus the actual provider kwargs. Attribution, not content: kept even when `persist_content=False` (`chat/save_chat.py:save_chat_turn`). |
 | `reasoning_tokens` | See §5, reasoning attaches forward. |
+| `thinking_blocks` | Nullable JSONB `ReplayableThinking` (model key plus signed and redacted thinking blocks) of the answer step. Replayed only to the same model. Content: blank for `persist_content=False`. |
 | `message` | Text. Blank string for a content-free incognito row. |
 | `token_count` | |
 | `message_type` | `MessageType`: `SYSTEM` (root only, never sent to the LLM as-is), `USER`, `ASSISTANT`, `TOOL_CALL_RESPONSE`, `USER_REMINDER` (`configs/constants.py:MessageType`). |
@@ -178,6 +179,7 @@ separate share-link table.
 | `operation_status` | Nullable execution status for this tool call. |
 | `tool_call_id` | The provider-facing call id string (must round-trip to the LLM). |
 | `reasoning_tokens` | The reasoning that preceded this call. See §5. |
+| `thinking_blocks` | Nullable JSONB `ReplayableThinking` of the LLM step. Stored on the first call of each turn only, because parallel calls share one step. |
 | `tool_call_arguments` | JSONB. For a sub-agent, this is the agent's task/instructions. |
 | `result` | Nullable JSONB structured tool result, including content, outcome flags, and application details. |
 | `tool_call_response` | Text. For a sub-agent, this is its final report, not its internal steps (those are the nested `ToolCall` rows). |
@@ -373,7 +375,7 @@ incognito mode does not persist content skip the naming call.
    different turn number = sequential; a non-null `parent_tool_call_id` means
    this call happened *inside* an agent tool call, not as a retry of it.
 8. **Incognito must not persist content.** `save_chat_turn(...,
-   persist_content=False)` blanks `message`/`reasoning_tokens`, and drops
+   persist_content=False)` blanks `message`/`reasoning_tokens`/`thinking_blocks`, and drops
    `tool_calls`, `citation_to_doc`, `all_search_docs`, and
    `emitted_citations` before doing anything else. `request_params` is kept
    deliberately (attribution, not content). Any new field added to

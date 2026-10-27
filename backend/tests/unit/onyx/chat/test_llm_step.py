@@ -19,7 +19,14 @@ from onyx.file_store.models import ChatFileType
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.model_request import AssistantMessage, ToolMessage, UserMessage
-from onyx.llm.models import ImageContentPart, TextContentPart, ToolChoiceOptions
+from onyx.llm.models import (
+    ImageContentPart,
+    RedactedThinkingBlock,
+    ReplayableThinking,
+    TextContentPart,
+    ThinkingBlock,
+    ToolChoiceOptions,
+)
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.tool_parsing import XmlToolCallContentFilter, _resolve_tool_arguments
 from onyx.llm.well_known_providers.constants import (
@@ -1293,3 +1300,125 @@ class TestFinishReasonPropagation:
         result = self._run_stream([("Hello", None), (" world", "stop")])
         assert result.finish_reason == "stop"
         assert result.answer == "Hello world"
+
+
+class TestSignedThinkingReplay:
+    @staticmethod
+    def _run_stream(deltas: list[Any]) -> Any:
+        from onyx.chat.llm_step import run_llm_step_pkt_generator
+        from onyx.llm.model_response import ModelResponseStream, StreamingChoice
+
+        llm = MagicMock(spec=LitellmLLM)
+        llm.config = LLMConfig(
+            model_provider=LlmProviderNames.ANTHROPIC.value,
+            model_name="claude-fable-5",
+            temperature=0.0,
+            max_input_tokens=100_000,
+        )
+
+        def _gen(*_args: Any, **_kwargs: Any) -> Any:
+            for delta in deltas:
+                yield ModelResponseStream(
+                    id="chunk",
+                    created="0",
+                    choice=StreamingChoice(finish_reason=None, delta=delta),
+                )
+
+        llm.stream_raw = _gen
+
+        gen = run_llm_step_pkt_generator(
+            history=[],
+            tool_definitions=[],
+            tool_choice=ToolChoiceOptions.AUTO,
+            llm=llm,
+            placement=Placement(turn_index=0),
+            state_container=None,
+            citation_processor=None,
+        )
+        while True:
+            try:
+                next(gen)
+            except StopIteration as stop:
+                llm_step_result, _ = stop.value
+                return llm_step_result
+
+    def test_streamed_thinking_fragments_merge_with_their_signature(self) -> None:
+        from onyx.llm.model_response import Delta
+
+        result = self._run_stream(
+            [
+                Delta(
+                    reasoning_content="Let me ",
+                    thinking_blocks=[ThinkingBlock(thinking="Let me ")],
+                ),
+                Delta(
+                    reasoning_content="think.",
+                    thinking_blocks=[ThinkingBlock(thinking="think.")],
+                ),
+                Delta(thinking_blocks=[ThinkingBlock(signature="sig-1")]),
+                Delta(thinking_blocks=[RedactedThinkingBlock(data="opaque")]),
+                Delta(content="Answer"),
+            ]
+        )
+
+        assert result.thinking == ReplayableThinking(
+            model="anthropic/claude-fable-5",
+            blocks=[
+                ThinkingBlock(thinking="Let me think.", signature="sig-1"),
+                RedactedThinkingBlock(data="opaque"),
+            ],
+        )
+
+    def test_unsigned_thinking_is_not_replayable(self) -> None:
+        from onyx.llm.model_response import Delta
+
+        result = self._run_stream(
+            [
+                Delta(
+                    reasoning_content="cut off",
+                    thinking_blocks=[ThinkingBlock(thinking="cut off")],
+                ),
+                Delta(content="Answer"),
+            ]
+        )
+
+        assert result.thinking is None
+
+    @pytest.mark.parametrize(
+        "model_key, replayed",
+        [("anthropic/test-model", True), ("anthropic/other-model", False)],
+    )
+    def test_history_replays_thinking_only_to_the_minting_model(
+        self, model_key: str, replayed: bool
+    ) -> None:
+        blocks = [ThinkingBlock(thinking="plan", signature="sig-1")]
+        history = [
+            ChatMessageSimple(
+                message="Hi",
+                token_count=1,
+                message_type=MessageType.USER,
+            ),
+            ChatMessageSimple(
+                message="",
+                token_count=1,
+                message_type=MessageType.ASSISTANT,
+                tool_calls=[
+                    ToolCallSimple(
+                        tool_call_id="tc_1",
+                        tool_name="search",
+                        tool_arguments={},
+                        token_count=1,
+                    )
+                ],
+                thinking=ReplayableThinking(model=model_key, blocks=blocks),
+            ),
+        ]
+
+        translated = translate_history_to_llm_format(
+            history=history,
+            llm_config=_make_llm_config(LlmProviderNames.ANTHROPIC.value),
+        )
+
+        assistant = translated[-1]
+        assert isinstance(assistant, AssistantMessage)
+        assert assistant.thinking_blocks == (blocks if replayed else None)

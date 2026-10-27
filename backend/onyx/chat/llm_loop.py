@@ -1120,6 +1120,9 @@ def run_llm_loop(
                 reasoning_effort=reasoning_effort,
                 max_tokens=max_output_tokens,
             )
+            state_container.set_answer_thinking(
+                None if llm_step_result.tool_calls else llm_step_result.thinking
+            )
             if has_reasoned:
                 reasoning_cycles += 1
 
@@ -1351,6 +1354,7 @@ def run_llm_loop(
                     tool_call_id=tool_call.tool_call_id,
                     tool_id=tool.id,
                     reasoning_tokens=llm_step_result.reasoning,  # All tool calls from this loop share the same reasoning
+                    thinking=llm_step_result.thinking,
                     tool_call_arguments=tool_call.tool_args,
                     tool_call_response=saved_response,
                     search_docs=(
@@ -1403,6 +1407,7 @@ def run_llm_loop(
                     message_type=MessageType.ASSISTANT,
                     tool_calls=tool_calls_simple,
                     image_files=None,
+                    thinking=llm_step_result.thinking,
                 )
                 simple_chat_history.append(assistant_with_tools)
 

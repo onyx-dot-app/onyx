@@ -38,13 +38,19 @@ from onyx.llm.model_request import (
     UserMessage,
 )
 from onyx.llm.model_response import Delta
+from onyx.llm.models import AssistantMessage as GeneratedAssistantMessage
 from onyx.llm.models import (
     ImageContentPart,
     ImageUrlDetail,
     ReasoningEffort,
+    ReplayableThinking,
     TextContentPart,
+    ThinkingContent,
+    ThinkingDeltaEvent,
     ToolChoiceOptions,
     ToolDefinition,
+    apply_generation_event,
+    signed_thinking_blocks,
 )
 from onyx.llm.multi_llm import LitellmLLM, ProviderOperation
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
@@ -371,6 +377,26 @@ def _build_structured_assistant_message(msg: ChatMessageSimple) -> AssistantMess
         content=msg.message or None,
         tool_calls=tool_calls_list,
     )
+
+
+def thinking_replay_key(llm_config: LLMConfig) -> str:
+    return f"{llm_config.model_provider}/{llm_config.deployment_name or llm_config.model_name}"
+
+
+def _replayable_thinking(
+    generated: GeneratedAssistantMessage, llm_config: LLMConfig
+) -> ReplayableThinking | None:
+    blocks = signed_thinking_blocks(
+        [
+            block
+            for content in generated.content
+            if isinstance(content, ThinkingContent)
+            for block in content.blocks or []
+        ]
+    )
+    if not blocks:
+        return None
+    return ReplayableThinking(model=thinking_replay_key(llm_config), blocks=blocks)
 
 
 def _build_structured_tool_response_message(msg: ChatMessageSimple) -> ToolMessage:
@@ -727,7 +753,13 @@ def translate_history_to_llm_format(
             messages.append(reminder_msg)
 
         elif msg.message_type == MessageType.ASSISTANT:
-            messages.append(history_message_formatter.format_assistant_message(msg))
+            assistant_message = history_message_formatter.format_assistant_message(msg)
+            # Signatures verify only against the model that minted them.
+            if msg.thinking and msg.thinking.model == thinking_replay_key(llm_config):
+                assistant_message = assistant_message.model_copy(
+                    update={"thinking_blocks": msg.thinking.blocks}
+                )
+            messages.append(assistant_message)
 
         elif msg.message_type == MessageType.TOOL_CALL_RESPONSE:
             messages.append(history_message_formatter.format_tool_response_message(msg))
@@ -896,6 +928,7 @@ def run_llm_step_pkt_generator(
     reasoning_start = False
     answer_start = False
     accumulated_reasoning = ""
+    generated_thinking = GeneratedAssistantMessage()
     accumulated_answer = ""
     accumulated_raw_answer = ""
     stream_chunk_count = 0
@@ -1077,6 +1110,7 @@ def run_llm_step_pkt_generator(
                 not delta.content
                 and delta.reasoning_content is None
                 and not delta.tool_calls
+                and not delta.thinking_blocks
             ):
                 empty_chunk_count += 1
                 logger.warning(
@@ -1105,6 +1139,12 @@ def run_llm_step_pkt_generator(
                 if modified_delta is None:
                     continue
                 delta = modified_delta
+
+            if delta.thinking_blocks:
+                apply_generation_event(
+                    generated_thinking,
+                    ThinkingDeltaEvent(content_index=0, blocks=delta.thinking_blocks),
+                )
 
             # Should only happen once, frontend does not expect multiple
             # ReasoningStart or ReasoningDone packets.
@@ -1305,6 +1345,7 @@ def run_llm_step_pkt_generator(
             tool_calls=tool_calls or None,
             raw_answer=accumulated_raw_answer or None,
             finish_reason=terminal_finish_reason,
+            thinking=_replayable_thinking(generated_thinking, llm.config),
         ),
         has_reasoned,
     )

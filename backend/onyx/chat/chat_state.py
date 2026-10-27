@@ -19,7 +19,7 @@ from onyx.db.enums import IncognitoRecordMode
 from onyx.db.memory import UserMemoryContext
 from onyx.db.models import ChatMessage, Persona
 from onyx.llm.interfaces import LLM, LLMUserIdentity
-from onyx.llm.models import ReasoningEffort
+from onyx.llm.models import ReasoningEffort, ReplayableThinking
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.tools.models import ChatFile, PersonaToolConfiguration, ToolCallInfo
@@ -49,6 +49,8 @@ class ChatStateContainer:
         self.reasoning_tokens: str | None = None
         # This is accumulated during the streaming of the answer
         self.answer_tokens: str | None = None
+        # Signed thinking of the LLM step that produced the answer
+        self.answer_thinking: ReplayableThinking | None = None
         # Store citation mapping for building citation_docs_info during partial saves
         self.citation_to_doc: CitationMapping = {}
         # True if this turn is a clarification question (deep research flow)
@@ -72,6 +74,14 @@ class ChatStateContainer:
         """Set the reasoning tokens from the final answer generation."""
         with self._lock:
             self.reasoning_tokens = reasoning
+
+    def set_answer_thinking(self, thinking: ReplayableThinking | None) -> None:
+        with self._lock:
+            self.answer_thinking = thinking
+
+    def get_answer_thinking(self) -> ReplayableThinking | None:
+        with self._lock:
+            return self.answer_thinking
 
     def set_answer_tokens(self, answer: str | None) -> None:
         """Set the answer tokens from the final answer generation."""

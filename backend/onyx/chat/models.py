@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import ChatFileType, InMemoryChatFile
+from onyx.llm.models import ReplayableThinking
 from onyx.server.query_and_chat.models import (
     MessageResponseIDInfo,
     MultiModelMessageResponseIDInfo,
@@ -210,6 +211,8 @@ class ChatMessageSimple(BaseModel):
     # When this message represents an injected text file, this is the file's ID.
     # Used to detect which file messages survive context-window truncation.
     file_id: str | None = None
+    # Only for ASSISTANT messages
+    thinking: ReplayableThinking | None = None
 
 
 class ContextFileMetadata(BaseModel):
@@ -286,6 +289,7 @@ class LlmStepResult(BaseModel):
     # "length", "tool_calls", "content_filter"). Lets downstream classification
     # distinguish a model refusal from a genuinely empty provider response.
     finish_reason: str | None = None
+    thinking: ReplayableThinking | None = None
 
 
 class AvailableFiles(BaseModel):

@@ -363,6 +363,13 @@ tool-calling params, and reasoning params accordingly. On a `BadRequestError`
 naming a rejected kwarg, a retry ladder (`_retry_attempts`) strips that kwarg
 and retries with a narrower request, up to the ladder's length.
 
+Claude thinking stays on in a tool loop when the latest tool-call message
+carries signed `thinking_blocks` and the provider accepts them
+(`_tool_loop_lacks_signed_thinking`). Otherwise thinking is skipped for that
+request. Any attempt sent without `thinking` has its `thinking_blocks`
+removed. The chat path captures, saves, and replays these blocks
+(`backend/onyx/chat/README.md`, "Signed thinking replay").
+
 `LLMConfig.supports_images` records the resolved image capability. A configured
 `supports_image_input=True` overrides catalog values. Configured `False` permits
 catalog fallback. Unknown catalog capability stays `None`. Direct client callers

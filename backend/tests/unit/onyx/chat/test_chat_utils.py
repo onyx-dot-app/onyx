@@ -14,6 +14,7 @@ from onyx.chat.models import ChatLoadedFile
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.db.models import ChatMessage
 from onyx.file_store.models import ChatFileType
+from onyx.llm.models import RedactedThinkingBlock, ReplayableThinking, ThinkingBlock
 from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
 
 
@@ -274,6 +275,7 @@ class TestConvertChatHistory:
         msg.token_count = token_count
         msg.files = None
         msg.tool_calls = None
+        msg.thinking_blocks = None
         return msg
 
     def test_attaches_project_images_to_last_user_message_only_once(
@@ -332,6 +334,7 @@ class TestConvertChatHistory:
         tool_call.tool_call_tokens = 12
         tool_call.generated_images = None
         tool_call.tool_call_response = "original tool output"
+        tool_call.thinking_blocks = None
 
         assistant_msg = self._make_chat_message("final answer", MessageType.ASSISTANT)
         assistant_msg.tool_calls = [tool_call]
@@ -358,3 +361,49 @@ class TestConvertChatHistory:
         assert len(tool_responses) == 1
         assert tool_responses[0].message == TOOL_CALL_RESPONSE_CROSS_MESSAGE
         assert tool_responses[0].token_count == len(TOOL_CALL_RESPONSE_CROSS_MESSAGE)
+
+    def test_persisted_thinking_loads_into_history(self) -> None:
+        tool_step = ReplayableThinking(
+            model="anthropic/claude-fable-5",
+            blocks=[ThinkingBlock(thinking="search first", signature="sig-1")],
+        )
+        answer_step = ReplayableThinking(
+            model="anthropic/claude-fable-5",
+            blocks=[RedactedThinkingBlock(data="opaque")],
+        )
+        tool_calls = []
+        for tool_id, thinking in ((1, tool_step.model_dump()), (2, None)):
+            tool_call = MagicMock()
+            tool_call.turn_number = 0
+            tool_call.tool_id = tool_id
+            tool_call.tool_call_id = f"call-{tool_id}"
+            tool_call.tool_call_arguments = {}
+            tool_call.tool_call_tokens = 1
+            tool_call.generated_images = None
+            tool_call.tool_call_response = "output"
+            tool_call.thinking_blocks = thinking
+            tool_calls.append(tool_call)
+
+        assistant_msg = self._make_chat_message("final answer", MessageType.ASSISTANT)
+        assistant_msg.tool_calls = tool_calls
+        assistant_msg.thinking_blocks = answer_step.model_dump()
+
+        result = convert_chat_history(
+            chat_history=cast(
+                list[ChatMessage],
+                [
+                    self._make_chat_message("A question", MessageType.USER),
+                    assistant_msg,
+                ],
+            ),
+            files=[],
+            context_image_files=[],
+            additional_context=None,
+            token_counter=lambda s: len(s),
+            tool_id_to_name_map={1: "internal_search", 2: "web_search"},
+        )
+
+        assistants = [
+            m for m in result.simple_messages if m.message_type == MessageType.ASSISTANT
+        ]
+        assert [m.thinking for m in assistants] == [tool_step, answer_step]

@@ -97,6 +97,7 @@ from onyx.llm.models import (
     ToolChoiceOptions,
     Usage,
     resolve_reasoning_effort,
+    signed_thinking_blocks,
 )
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.llm.utils import build_litellm_passthrough_kwargs, collect_credential_values
@@ -557,18 +558,24 @@ def _messages_contain_tool_content(messages: list[dict[str, Any]]) -> bool:
     return False
 
 
-def _prompt_in_tool_loop(prompt: list[ChatCompletionMessage]) -> bool:
-    """True when the latest assistant message called tools.
+def _tool_loop_lacks_signed_thinking(
+    prompt: list[ChatCompletionMessage], replays_thinking_blocks: bool
+) -> bool:
+    """True when the latest assistant message called tools without signed thinking.
 
     With thinking on, Anthropic requires that message to start with its signed
-    thinking block, which we cannot always replay. Earlier turns' thinking
-    blocks are optional, so tool calls there do not matter.
+    thinking block. Earlier turns' thinking blocks are optional, so tool calls
+    there do not matter.
     """
     from onyx.llm.model_request import AssistantMessage as ProviderAssistantMessage
 
     for msg in reversed(prompt):
         if isinstance(msg, ProviderAssistantMessage):
-            return bool(msg.tool_calls)
+            if not msg.tool_calls:
+                return False
+            return not (
+                replays_thinking_blocks and signed_thinking_blocks(msg.thinking_blocks)
+            )
     return False
 
 
@@ -1026,6 +1033,10 @@ class LitellmLLM(LLM):
             model_identity_names,
             self._api_surface,
         )
+        replays_thinking_blocks = is_claude_model and (
+            self._model_provider in _THINKING_BLOCK_PROVIDERS
+            or self._api_surface is LlmApiSurface.ANTHROPIC_MESSAGES
+        )
 
         # Always-thinking Claude models accept no off spelling, so off there
         # means the least reasoning they take rather than the API's default.
@@ -1080,7 +1091,9 @@ class LitellmLLM(LLM):
                     # Only a gateway routes Claude here, and it still translates
                     # to Anthropic, so the signed-thinking-block constraint
                     # described below applies to these requests too.
-                    send_reasoning = not _prompt_in_tool_loop(prompt)
+                    send_reasoning = not _tool_loop_lacks_signed_thinking(
+                        prompt, replays_thinking_blocks
+                    )
                 else:
                     # OpenAI API does not accept reasoning params for GPT 5 chat
                     # models (neither reasoning nor reasoning_effort are accepted)
@@ -1104,11 +1117,13 @@ class LitellmLLM(LLM):
                 ReasoningParamStyle.ANTHROPIC_ADAPTIVE,
                 ReasoningParamStyle.ANTHROPIC_BUDGET,
             ):
-                # Mid tool loop, Anthropic requires the signed thinking block
-                # we may not have, so skip thinking there. LiteLLM's
+                # Mid tool loop, Anthropic requires the signed thinking block,
+                # so skip thinking when we cannot replay it. LiteLLM's
                 # modify_params workaround doesn't cover all providers
                 # (notably Bedrock).
-                in_tool_loop = _prompt_in_tool_loop(prompt)
+                in_tool_loop = _tool_loop_lacks_signed_thinking(
+                    prompt, replays_thinking_blocks
+                )
 
                 if reasoning_style is ReasoningParamStyle.ANTHROPIC_ADAPTIVE:
                     # No signed blocks to lose, and without it Claude 5 picks
@@ -1275,13 +1290,7 @@ class LitellmLLM(LLM):
 
             messages = _prompt_to_dicts(prompt)
 
-            if not (
-                is_claude_model
-                and (
-                    self._model_provider in _THINKING_BLOCK_PROVIDERS
-                    or self._api_surface is LlmApiSurface.ANTHROPIC_MESSAGES
-                )
-            ):
+            if not replays_thinking_blocks:
                 messages = _strip_thinking_blocks_from_messages(messages)
 
             # Bedrock's Converse API requires toolConfig when messages
@@ -1357,7 +1366,13 @@ class LitellmLLM(LLM):
                         base_url=self._api_base or None,
                         api_version=api_version,
                         custom_llm_provider=self._custom_llm_provider or None,
-                        messages=messages,
+                        # Replayed thinking needs thinking on, which a retry
+                        # or a skipped thinking param can leave off.
+                        messages=(
+                            messages
+                            if "thinking" in opts
+                            else _strip_thinking_blocks_from_messages(messages)
+                        ),
                         # None (omitted) rather than [] — some OpenAI-compatible
                         # servers reject requests with an empty tools array.
                         tools=tools or None,

@@ -1995,6 +1995,7 @@ def llm_loop_completion_handle(
     # direct attribute access is not thread-safe — use the provided getters.
     answer_tokens = state_container.get_answer_tokens()
     reasoning_tokens = state_container.get_reasoning_tokens()
+    answer_thinking = state_container.get_answer_thinking()
     request_params = state_container.get_request_params()
     citation_to_doc = state_container.get_citation_to_doc()
     tool_calls = state_container.get_tool_calls()
@@ -2052,6 +2053,8 @@ def llm_loop_completion_handle(
             emitted_citations=emitted_citations,
             pre_answer_processing_time=pre_answer_processing_time,
             persist_content=keeps_content,
+            # A stopped answer gets a suffix the thinking did not produce.
+            answer_thinking=answer_thinking if completed_normally else None,
         )
 
         # Incognito: the answer lives only in the ephemeral store, and

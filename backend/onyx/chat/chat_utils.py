@@ -45,6 +45,7 @@ from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType, FileDescriptor
 from onyx.file_store.utils import plaintext_file_name_for_id, store_plaintext
+from onyx.llm.models import ReplayableThinking
 from onyx.prompts.chat_prompts import (
     ADDITIONAL_CONTEXT_PROMPT,
     NON_VISION_IMAGE_MARKER,
@@ -698,6 +699,16 @@ def convert_chat_history(
                             message_type=MessageType.ASSISTANT,
                             tool_calls=tool_calls_simple,
                             image_files=None,
+                            thinking=next(
+                                (
+                                    ReplayableThinking.model_validate(
+                                        tool_call.thinking_blocks
+                                    )
+                                    for tool_call in turn_tool_calls
+                                    if tool_call.thinking_blocks
+                                ),
+                                None,
+                            ),
                         )
                     )
 
@@ -730,6 +741,11 @@ def convert_chat_history(
                     token_count=chat_message.token_count,
                     message_type=MessageType.ASSISTANT,
                     image_files=None,
+                    thinking=(
+                        ReplayableThinking.model_validate(chat_message.thinking_blocks)
+                        if chat_message.thinking_blocks
+                        else None
+                    ),
                 )
             )
         else:

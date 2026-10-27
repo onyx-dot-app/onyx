@@ -238,6 +238,36 @@ so that the Emitter can emit individual tokens as soon as they arrive. It also k
 do not all come at once (reasoning, answers, tool calls are all built up token by token). This layer also tracks the different
 tool calls and returns that to the LLM Loop to execute.
 
+## Signed thinking replay
+
+Claude extended thinking returns signed thinking blocks. With thinking on, Anthropic requires the latest
+assistant tool-call message to start with its signed block. Onyx keeps the blocks so thinking stays on for
+the whole session and the prompt-cache prefix stays the same between steps and turns.
+
+```mermaid
+flowchart TD
+    P[Provider stream] -->|Delta.thinking_blocks| S["run_llm_step<br/>merge fragments + signature<br/>keep signed and redacted blocks"]
+    S -->|"LlmStepResult.thinking<br/>(ReplayableThinking: model key + blocks)"| L[run_llm_loop]
+    L -->|in turn| H["ChatMessageSimple.thinking<br/>on the tool-call message"]
+    L -->|answer step| C[ChatStateContainer.answer_thinking]
+    L -->|tool step| T[ToolCallInfo.thinking]
+    C --> D1[(chat_message.thinking_blocks)]
+    T --> D2[("tool_call.thinking_blocks<br/>first call of each turn")]
+    D1 -->|next turn| R[create_chat_history_chain]
+    D2 -->|next turn| R
+    R --> H
+    H --> X["translate_history_to_llm_format<br/>attach only if model key matches"]
+    X -->|AssistantMessage.thinking_blocks| M["LitellmLLM._completion<br/>thinking stays on when the tool-call message has signed blocks"]
+    M --> P
+```
+
+- `thinking_replay_key` (`llm_step.py`) is `provider/deployment_or_model`. Signatures verify only against the
+  model that minted them, so blocks from another model are not sent.
+- `multi_llm.py:_tool_loop_lacks_signed_thinking` turns thinking off only when the latest tool-call message
+  has no signed blocks, or the provider does not accept `thinking_blocks`.
+- A request sent without `thinking` (for example, budget thinking with a forced tool) has its
+  `thinking_blocks` removed.
+
 ## Things to know
 
 - Packets are labeled with a "turn_index" field as part of the Placement of the packet. This is not the same as the backend

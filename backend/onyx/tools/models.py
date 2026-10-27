@@ -20,6 +20,7 @@ from onyx.file_store.models import (
     install_lazy_content_loader,
     maybe_materialize_lazy_content,
 )
+from onyx.llm.models import ReplayableThinking
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     CustomToolErrorInfo,
@@ -311,6 +312,8 @@ class ToolCallInfo(BaseModel):
     generated_files: list[PythonExecutionFile] | None = None
     # File-store ids of blobs custom tools saved during the call.
     generated_file_ids: list[str] | None = None
+    # Shared by every tool call of one LLM step.
+    thinking: ReplayableThinking | None = None
 
 
 CHAT_SESSION_ID_PLACEHOLDER = "CHAT_SESSION_ID"
