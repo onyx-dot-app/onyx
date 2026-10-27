@@ -22,7 +22,7 @@ class JiraServiceManagementConnector(JiraConnector):
         return JSM_PROJECT_TYPE_JQL_FILTER
 
     def validate_connector_settings(self) -> None:
-        if self.source_operations is None:
+        if self._source_operations is None:
             raise ConnectorValidationError("Credentials must be loaded first")
 
         if self.jql_query:
