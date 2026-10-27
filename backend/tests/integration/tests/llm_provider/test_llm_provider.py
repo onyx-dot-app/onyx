@@ -2411,9 +2411,9 @@ def test_keep_existing_models_preserves_unsent_models(
 
 def test_max_document_tokens_uses_selected_model(
     reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
 ) -> None:
     """The pre-session context budget follows the model the user selected."""
-    admin_user = UserManager.create(name="admin_user")
     # litellm lists gpt-4 with an 8K input window, far below the default model's.
     provider = LLMProviderManager.create(
         user_performing_action=admin_user, model_names=["gpt-4"]
