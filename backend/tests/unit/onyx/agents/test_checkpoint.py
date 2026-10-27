@@ -34,6 +34,7 @@ from onyx.chat.checkpoint import CHECKPOINT_PAYLOAD_TYPES
 from onyx.chat.models import PromptMetadata
 from onyx.chat.presentation import message_presentation
 from onyx.chat.response_models import (
+    ChatSearchResult,
     CheckpointBinding,
     MessageRendering,
     PresentationMode,
@@ -52,6 +53,7 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
+from onyx.tools.models import ChatFile
 from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.checkpoint_storage import CheckpointStorage, SavedCheckpoint
 from tests.unit.onyx.agents.fakes import FakeModelClient
@@ -490,3 +492,29 @@ def test_checkpoint_round_trip_keeps_image_references_without_loading_bytes(
     assert metadata.image_files[0].file_id == image.file_id
     assert metadata.image_files[0].content == image.content
     assert reads == [image.file_id]
+
+
+def test_checkpoint_json_round_trip_preserves_inline_binary_search_files() -> None:
+    content = b"\xff\x00\x80binary"
+    captured = checkpoint()
+    result = captured.run_state.steps[0].tools["search"].result
+    assert result is not None
+    result.details = ChatSearchResult(
+        search_docs=[],
+        citation_mapping={},
+        staged_files=[ChatFile(filename="inline.bin", content=content)],
+    )
+    storage = CheckpointStorage({**codec().payload_types, **CHECKPOINT_PAYLOAD_TYPES})
+    serialized = storage.save(
+        captured.run_state,
+        captured.agent_state,
+        CheckpointBinding(tenant_id="tenant", response_id=captured.run_state.run_id),
+    )
+    restored = storage.load(serialized)
+    restored_result = restored.run_state.steps[0].tools["search"].result
+    assert restored_result is not None
+    assert isinstance(restored_result.details, ChatSearchResult)
+    file = restored_result.details.staged_files[0]
+    assert file.file_id is None
+    assert file.filename == "inline.bin"
+    assert file.content == content

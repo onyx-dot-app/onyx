@@ -35,6 +35,8 @@ def publish_checkpoint__no_commit(
     *,
     expected_ownership_version: int | None,
 ) -> int:
+    if data.binding.response_id != str(message_id):
+        raise ValueError("Checkpoint binding does not match its response")
     response = _lock_response(session, message_id)
     if not record_mode_persists_content(response.chat_session.incognito_record_mode):
         raise ValueError("Content-free responses cannot store execution checkpoints")
@@ -80,6 +82,10 @@ def claim_checkpoint__no_commit(
 def check_checkpoint_owner__no_commit(
     session: Session, message_id: int, ownership_version: int | None
 ) -> None:
+    """Check the checkpoint version; callers enforce the live cache ownership lease.
+
+    Initial executions may repeat terminal saves for lifecycle and display storage.
+    """
     configure_response_transaction__no_commit(session)
     response = _lock_response(session, message_id)
     row = session.get(ChatResponseCheckpoint, message_id, populate_existing=True)
