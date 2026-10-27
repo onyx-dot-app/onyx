@@ -13,6 +13,12 @@ package release
 //	R8 branch on workflow_dispatch -> test run
 //	R9 branch on push            -> not a test run
 //	R10 name with a slash        -> sanitized for Docker
+//	R11 edge tag                 -> web + sandbox
+//	R12 dev-build tag            -> web + sandbox, not a test run
+//	R13 dev-build with "cloud"   -> never a cloud tag
+//
+// Every tag that deploys a full stack builds the sandbox image: test runs,
+// stable, beta, cloud, nightly, edge and dev builds.
 
 import (
 	"strings"
@@ -41,7 +47,7 @@ func TestClassify_routesTagsToBuilds(t *testing.T) {
 			name: "R1 highest stable",
 			ref:  "v4.10.1",
 			want: Classification{
-				BuildDesktop: true, BuildWeb: true,
+				BuildDesktop: true, BuildWeb: true, BuildSandbox: true,
 				IsStable: true, IsLatest: true,
 			},
 		},
@@ -49,7 +55,7 @@ func TestClassify_routesTagsToBuilds(t *testing.T) {
 			name: "R2 older stable",
 			ref:  "v4.9.0",
 			want: Classification{
-				BuildDesktop: true, BuildWeb: true,
+				BuildDesktop: true, BuildWeb: true, BuildSandbox: true,
 				IsStable: true,
 			},
 		},
@@ -57,40 +63,40 @@ func TestClassify_routesTagsToBuilds(t *testing.T) {
 			name: "R3 beta",
 			ref:  "v4.11.0-beta.1",
 			want: Classification{
-				BuildWeb: true,
-				IsBeta:   true, IsBetaStandalone: true,
+				BuildWeb: true, BuildSandbox: true,
+				IsBeta: true, IsBetaStandalone: true,
 			},
 		},
 		{
 			name: "R4 legacy bare beta",
 			ref:  "v4.11.0-beta",
 			want: Classification{
-				BuildWeb: true,
-				IsBeta:   true, IsBetaStandalone: true,
+				BuildWeb: true, BuildSandbox: true,
+				IsBeta: true, IsBetaStandalone: true,
 			},
 		},
 		{
 			name: "R5 cloud",
 			ref:  "v4.11.0-cloud.2",
-			want: Classification{BuildWebCloud: true, IsCloudTag: true},
+			want: Classification{BuildWebCloud: true, BuildSandbox: true, IsCloudTag: true},
 		},
 		{
 			name: "R6 cloud substring",
 			ref:  "cloud-experiment",
-			want: Classification{BuildWebCloud: true, IsCloudTag: true},
+			want: Classification{BuildWebCloud: true, BuildSandbox: true, IsCloudTag: true},
 		},
 		{
 			name: "R7 nightly on workflow_dispatch",
 			ref:  "nightly-latest",
 			// A nightly is a production tag, so dispatching it is a real run.
 			event: "workflow_dispatch",
-			want:  Classification{BuildWeb: true},
+			want:  Classification{BuildWeb: true, BuildSandbox: true},
 		},
 		{
 			name:  "R8 branch on workflow_dispatch",
 			ref:   "my-branch",
 			event: "workflow_dispatch",
-			want:  Classification{BuildWeb: true, IsTestRun: true},
+			want:  Classification{BuildWeb: true, BuildSandbox: true, IsTestRun: true},
 		},
 		{
 			name: "R9 branch on push",
@@ -101,6 +107,23 @@ func TestClassify_routesTagsToBuilds(t *testing.T) {
 			name: "R10 slash in the name",
 			ref:  "release/v4.5",
 			want: Classification{BuildWeb: true},
+		},
+		{
+			name: "R11 edge",
+			ref:  "edge",
+			want: Classification{BuildWeb: true, BuildSandbox: true},
+		},
+		{
+			name: "R12 dev build",
+			ref:  "dev-build-python-agent-sdk-c86bc0e",
+			want: Classification{BuildWeb: true, BuildSandbox: true},
+		},
+		{
+			name: "R13 dev build named cloud",
+			ref:  "dev-build-cloud-fix-c86bc0e",
+			// A cloud tag dispatches the cloud deployment, so a dev build
+			// must never become one.
+			want: Classification{BuildWeb: true, BuildSandbox: true},
 		},
 	}
 	for _, tc := range cases {
@@ -148,6 +171,7 @@ func TestClassification_gitHubOutputRendersEveryKey(t *testing.T) {
 		"build-web-cloud=false",
 		"build-backend=true",
 		"build-model-server=true",
+		"build-sandbox=false",
 		"is-cloud-tag=false",
 		"is-beta=false",
 		"is-beta-standalone=false",

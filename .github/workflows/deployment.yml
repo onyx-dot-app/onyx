@@ -29,6 +29,7 @@ jobs:
       build-web-cloud: ${{ steps.check.outputs.build-web-cloud }}
       build-backend: ${{ steps.check.outputs.build-backend }}
       build-model-server: ${{ steps.check.outputs.build-model-server }}
+      build-sandbox: ${{ steps.check.outputs.build-sandbox }}
       is-cloud-tag: ${{ steps.check.outputs.is-cloud-tag }}
       is-beta: ${{ steps.check.outputs.is-beta }}
       is-beta-standalone: ${{ steps.check.outputs.is-beta-standalone }}
@@ -253,7 +254,7 @@ jobs:
   check-version-tag:
     runs-on: ubuntu-slim
     timeout-minutes: 10
-    if: ${{ !startsWith(github.ref_name, 'nightly-latest') && github.ref_name != 'edge' && github.event_name != 'workflow_dispatch' }}
+    if: ${{ !startsWith(github.ref_name, 'nightly-latest') && github.ref_name != 'edge' && !startsWith(github.ref_name, 'dev-build-') && github.event_name != 'workflow_dispatch' }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
@@ -1620,7 +1621,7 @@ jobs:
     needs:
       - determine-builds
       - audit-gate
-    if: needs.determine-builds.outputs.is-test-run == 'true' || (needs.determine-builds.outputs.is-stable == 'true' || needs.determine-builds.outputs.is-beta-standalone == 'true' || needs.determine-builds.outputs.is-cloud-tag == 'true' || startsWith(github.ref_name, 'nightly-latest') || github.ref_name == 'edge')
+    if: needs.determine-builds.outputs.build-sandbox == 'true'
     runs-on: ubuntu-slim
     timeout-minutes: 10
     environment: release
