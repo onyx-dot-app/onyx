@@ -16,7 +16,7 @@ interface SettleChatSessionOptions {
   completeRendering?: boolean;
 }
 
-function preserveFailedMessages(
+export function preserveFailedMessages(
   saved: Map<number, Message>,
   local: Map<number, Message>
 ): Map<number, Message> {

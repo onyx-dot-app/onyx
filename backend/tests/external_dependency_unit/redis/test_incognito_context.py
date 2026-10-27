@@ -21,6 +21,7 @@ from redis.lock import Lock as RedisLock
 from onyx.agents.models import ExecutionStatus, RunStatus, StepRecord
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackendType
+from onyx.chat import incognito_context
 from onyx.chat.incognito_context import (
     _PENDING_TEARDOWNS_KEY,
     INCOGNITO_CONTEXT_TTL_SECONDS,
@@ -126,6 +127,42 @@ def test_corrupt_value_degrades_and_is_overwritable() -> None:
     assert load_incognito_context(session_id).messages[0].text == "fresh start"
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        b'{"messages":[{"role":"unknown","content":"private"}]}',
+        b'{"messages":[{"role":"user","content":"private",'
+        b'"metadata":{"token_count":"invalid"}}]}',
+    ],
+)
+def test_invalid_stored_message_is_not_replayed(payload: bytes) -> None:
+    session_id = uuid4()
+    get_cache_backend().set(_context_key(session_id), payload)
+
+    assert load_incognito_context(session_id).messages == []
+    assert _save(session_id, [_message("fresh start")])
+    assert load_incognito_context(session_id).messages[0].text == "fresh start"
+
+
+def test_loaded_messages_are_isolated_from_other_loads_and_saved_state() -> None:
+    session_id = uuid4()
+    assistant = AssistantMessage(
+        content=[AgentToolCall(id="call", name="search", arguments={"limit": 5})],
+        metadata=PromptMetadata(token_count=12),
+    )
+    assert _save(session_id, [assistant])
+    first = load_incognito_context(session_id)
+    second = load_incognito_context(session_id)
+    loaded = first.messages[0]
+    assert isinstance(loaded, AssistantMessage)
+
+    loaded.tool_calls[0].arguments["limit"] = 10
+    prompt_metadata(loaded).token_count = 99
+
+    assert second.messages == [assistant]
+    assert load_incognito_context(session_id).messages == [assistant]
+
+
 def test_ttl_is_set_and_slides_on_save() -> None:
     session_id = uuid4()
     client = get_redis_client()
@@ -153,6 +190,52 @@ def test_teardown_ends_the_context_and_fences_writers() -> None:
     # Loads empty, and the tombstone refuses any save from an in-flight turn.
     assert load_incognito_context(session_id).messages == []
     assert not _save(session_id, [_message("resurrected")])
+    assert load_incognito_context(session_id).messages == []
+
+
+@pytest.mark.parametrize("during_decode", [False, True])
+def test_teardown_during_read_hides_fetched_content(during_decode: bool) -> None:
+    session_id = uuid4()
+    assert _save(session_id, [_message("private")])
+    cache = get_cache_backend()
+    get = cache.get
+
+    def get_then_end_session(key: str) -> bytes | None:
+        content = get(key)
+        cache.set(_tombstone_key(session_id), 1)
+        return content
+
+    decode_state = incognito_context._decode_state
+
+    def decode_then_end_session(raw: bytes) -> IncognitoState:
+        state = decode_state(raw)
+        cache.set(_tombstone_key(session_id), 1)
+        return state
+
+    with patch("onyx.chat.incognito_context.get_cache_backend", return_value=cache):
+        if during_decode:
+            with patch.object(
+                incognito_context, "_decode_state", side_effect=decode_then_end_session
+            ):
+                assert load_incognito_context(session_id).messages == []
+        else:
+            with patch.object(cache, "get", side_effect=get_then_end_session):
+                assert load_incognito_context(session_id).messages == []
+
+
+def test_teardown_during_update_prevents_commit() -> None:
+    session_id = uuid4()
+    assert _save(session_id, [_message("private")])
+    cache = get_cache_backend()
+    before = cache.get(_context_key(session_id))
+
+    def update(state: IncognitoState | None) -> IncognitoState:
+        assert state is not None
+        cache.set(_tombstone_key(session_id), 1)
+        return state.model_copy(update={"version": state.version + 1})
+
+    assert not _update_incognito_state(session_id, update)
+    assert cache.get(_context_key(session_id)) == before
     assert load_incognito_context(session_id).messages == []
 
 

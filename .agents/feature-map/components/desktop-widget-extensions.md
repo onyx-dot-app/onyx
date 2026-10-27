@@ -469,6 +469,7 @@ The widget keeps Send disabled after a STOP packet and after delivery ends.
 `widget/src/services/api-service.ts:ApiService.waitForSessionIdle` confirms server idle
 through the authenticated session status endpoint. Failed checks retry without enabling
 Send. Each request has a ten-second deadline; the wait has no overall deadline.
+Each poll owns an abort controller and timer, including on supported browsers without `AbortSignal.any` or `AbortSignal.timeout`.
 Each poll resolves the current credential. Reset replaces the request controller;
 an old callback cannot change the new conversation. Before acknowledgement, a failed
 send removes its optimistic message and restores the draft if the input is empty.

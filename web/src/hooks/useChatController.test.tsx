@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { ReadonlyURLSearchParams } from "next/navigation";
 import useChatController from "@/hooks/useChatController";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
-import { sendMessage } from "@/app/app/services/lib";
+import { createChatSession, sendMessage } from "@/app/app/services/lib";
 import type { LlmManager } from "@/lib/hooks";
 import { waitForChatSessionIdle } from "@/lib/chat/sessionReadiness";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
@@ -53,6 +53,8 @@ jest.mock("@/app/app/services/lib", () => ({
   updateLlmOverrideForChatSession: jest.fn(),
   processRawChatHistory: jest.fn(() => new Map()),
   sendMessage: jest.fn(),
+  createChatSession: jest.fn(),
+  buildChatUrl: () => "/app?chatId=session",
   ChatSendRejectedError: class extends Error {},
 }));
 jest.mock("@/lib/chat/sessionReadiness", () => ({
@@ -87,6 +89,7 @@ const toolConfiguration: ToolConfigurationHandle = {
 const originalFetch = global.fetch;
 afterEach(() => {
   global.fetch = originalFetch;
+  jest.restoreAllMocks();
   jest.clearAllMocks();
 });
 
@@ -121,56 +124,67 @@ function createLlmManager(): LlmManager {
   };
 }
 
-test("Stop during preference persistence prevents the pending send from dispatching afterward", async () => {
-  const preferences = Promise.withResolvers<void>();
-  const llmManager = createLlmManager();
-  llmManager.persistOverrides = jest.fn(() => preferences.promise);
-  global.fetch = jest.fn(async () => new Response(null, { status: 200 }));
-  useChatSessionStore.setState({
-    sessions: new Map(),
-    currentSessionId: "session",
-  });
-  useChatSessionStore.getState().createSession("session");
-  const { result } = renderHook(() =>
-    useChatController({
-      llmManager,
-      toolConfiguration,
-      activeAgent: undefined,
-      availableAgents: [],
-      existingChatSessionId: "session",
-      selectedDocuments: [],
-      searchParams: new ReadonlyURLSearchParams(),
-      resetInputBar: jest.fn(),
-      restoreInputBar: jest.fn(),
-    })
-  );
-
-  let pendingSend: Promise<void> | undefined;
-  act(() => {
-    pendingSend = result.current.onSubmit({
-      message: "Do not send this after Stop",
-      currentMessageFiles: [],
-      deepResearch: false,
+test.each([false, true])(
+  "Stop during preference persistence prevents a pending send (new session: %s)",
+  async (isNewSession) => {
+    const preferences = Promise.withResolvers<void>();
+    const llmManager = createLlmManager();
+    llmManager.persistOverrides = jest.fn(() => preferences.promise);
+    global.fetch = jest.fn(async () => new Response(null, { status: 200 }));
+    useChatSessionStore.setState({
+      sessions: new Map(),
+      currentSessionId: isNewSession ? null : "session",
     });
-  });
-  expect(llmManager.persistOverrides).toHaveBeenCalledWith("session");
-  expect(
-    useChatSessionStore.getState().sessions.get("session")?.chatState
-  ).toBe("loading");
-  await act(async () => result.current.stopGenerating());
-  expect(
-    useChatSessionStore.getState().sessions.get("session")?.chatState
-  ).toBe("input");
+    if (!isNewSession) useChatSessionStore.getState().createSession("session");
+    jest.mocked(createChatSession).mockResolvedValue("session");
+    const { result } = renderHook(() =>
+      useChatController({
+        llmManager,
+        toolConfiguration,
+        activeAgent: undefined,
+        availableAgents: [],
+        existingChatSessionId: isNewSession ? null : "session",
+        selectedDocuments: [],
+        searchParams: new ReadonlyURLSearchParams(),
+        resetInputBar: jest.fn(),
+        restoreInputBar: jest.fn(),
+      })
+    );
 
-  await act(async () => {
-    preferences.resolve();
-    await pendingSend;
-  });
-  expect(sendMessage).not.toHaveBeenCalled();
-  expect(
-    useChatSessionStore.getState().sessions.get("session")?.chatState
-  ).toBe("input");
-});
+    let pendingSend: Promise<void> | undefined;
+    act(() => {
+      pendingSend = result.current.onSubmit({
+        message: "Do not send this after Stop",
+        currentMessageFiles: [],
+        deepResearch: false,
+      });
+    });
+    await waitFor(() =>
+      expect(llmManager.persistOverrides).toHaveBeenCalledWith("session")
+    );
+    expect(
+      useChatSessionStore.getState().sessions.get("")?.abortController
+    ).not.toBe(
+      useChatSessionStore.getState().sessions.get("session")?.abortController
+    );
+    expect(
+      useChatSessionStore.getState().sessions.get("session")?.chatState
+    ).toBe("loading");
+    await act(async () => result.current.stopGenerating());
+    expect(
+      useChatSessionStore.getState().sessions.get("session")?.chatState
+    ).toBe("input");
+
+    await act(async () => {
+      preferences.resolve();
+      await pendingSend;
+    });
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect(
+      useChatSessionStore.getState().sessions.get("session")?.chatState
+    ).toBe("input");
+  }
+);
 
 test("Stop drains multi-model packets and finishes every panel before releasing incognito input", async () => {
   const tail = Promise.withResolvers<void>();

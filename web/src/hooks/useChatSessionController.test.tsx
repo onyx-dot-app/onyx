@@ -288,9 +288,32 @@ test.each([false, true])(
     store.createSession("session");
     const acknowledgement = Promise.reject(new TypeError("Connection lost"));
     void acknowledgement.catch(() => {});
+    const question: Message = {
+      nodeId: 1,
+      type: "user",
+      message: "Keep this failed question",
+      files: [],
+      packets: [],
+      toolCall: null,
+      parentNodeId: null,
+      latestChildNodeId: 2,
+    };
+    const failure: Message = {
+      ...question,
+      nodeId: 2,
+      type: "error",
+      message: "The send was rejected",
+      parentNodeId: 1,
+      latestChildNodeId: null,
+      isRetryable: true,
+    };
     store.updateSessionData("session", {
       chatState: "unconfirmed",
       sendAcknowledged: acknowledgement,
+      messageTree: new Map([
+        [1, question],
+        [2, failure],
+      ]),
     });
     jest.mocked(global.fetch).mockResolvedValue({
       ok: true,
@@ -305,8 +328,73 @@ test.each([false, true])(
     );
     expect(waitForChatSessionIdle).toHaveBeenCalledWith("session");
     expect(fetchSettledChatSession).toHaveBeenCalledWith("session");
+    expect(
+      useChatSessionStore.getState().sessions.get("session")?.messageTree
+    ).toEqual(
+      new Map([
+        [1, question],
+        [2, failure],
+      ])
+    );
   }
 );
+
+test("recovery replay does not mutate retained local messages", async () => {
+  const finish = deferred<void>();
+  const previousAnswer: Message = {
+    nodeId: 42,
+    messageId: 42,
+    type: "assistant",
+    message: "Previously displayed answer",
+    files: [],
+    packets: [],
+    packetCount: 3,
+    toolCall: null,
+    parentNodeId: null,
+    latestChildNodeId: 43,
+  };
+  const failure: Message = {
+    ...previousAnswer,
+    nodeId: 43,
+    type: "error",
+    parentNodeId: 42,
+    latestChildNodeId: null,
+  };
+  const localMessages = new Map([
+    [42, previousAnswer],
+    [43, failure],
+  ]);
+  const store = useChatSessionStore.getState();
+  store.createSession("session");
+  store.updateSessionData("session", {
+    chatState: "unconfirmed",
+    messageTree: localMessages,
+  });
+  jest.mocked(global.fetch).mockResolvedValue({
+    ok: true,
+    json: async () => ({
+      ...backendSession(true),
+      current_stream: { stream_id: 42 },
+    }),
+  } as Response);
+  jest.mocked(resumeStream).mockImplementation(async function* () {
+    await finish.promise;
+    yield {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: { type: "stop" },
+    };
+  });
+  jest.mocked(waitForChatSessionIdle).mockResolvedValue();
+  mountController();
+  try {
+    await waitFor(() => expect(resumeStream).toHaveBeenCalled());
+    expect(previousAnswer.message).toBe("Previously displayed answer");
+    expect(previousAnswer.packetCount).toBe(3);
+    expect(localMessages.get(42)).toBe(previousAnswer);
+  } finally {
+    await act(async () => finish.resolve());
+  }
+});
 
 test("Stop targets the replay response and waits for its incognito tail", async () => {
   const finish = deferred<void>();
