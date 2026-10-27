@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { TurnGroup } from "../transformers";
+import { TurnGroup } from "@/app/app/message/messageComponents/timeline/transformers";
+import { isDisplayPacket, isToolPacket } from "@/app/app/services/packetUtils";
 import {
   PacketType,
   SearchToolPacket,
@@ -59,7 +60,9 @@ export function useTimelineHeader(
       return { headerText: thinkingHeader, hasPackets, userStopped };
     }
 
-    const firstPacket = currentStep.packets[0];
+    const firstPacket = currentStep.packets.find(
+      (packet) => isToolPacket(packet, false) || isDisplayPacket(packet)
+    );
     if (!firstPacket) {
       return { headerText: thinkingHeader, hasPackets, userStopped };
     }

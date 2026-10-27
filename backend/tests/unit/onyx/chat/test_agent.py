@@ -35,6 +35,7 @@ from onyx.llm.models import (
 )
 from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
 from onyx.tools.models import ChatFile
+from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.utils.fleet_query_telemetry import QueryMode, QueryObservation
 from tests.unit.onyx.agents.fakes import EchoTool, ScriptedLLM, run_agent
@@ -329,7 +330,10 @@ def test_cancelled_source_file_staging_drains_before_completion(
     assert stage_calls == 1
 
 
-def test_chat_reuses_completed_search_artifacts_without_duplicate_documents() -> None:
+@pytest.mark.parametrize("tool_name", [WebSearchTool.NAME, SearchTool.NAME])
+def test_chat_reuses_completed_search_artifacts_without_duplicate_documents(
+    tool_name: str,
+) -> None:
     runs: list[Run] = []
     document = SearchDoc(
         document_id="reference",
@@ -347,11 +351,11 @@ def test_chat_reuses_completed_search_artifacts_without_duplicate_documents() ->
         messages=[
             UserMessage(content="Find evidence"),
             AssistantMessage(
-                content=[ToolCall(id="search", name=WebSearchTool.NAME, arguments={})]
+                content=[ToolCall(id="search", name=tool_name, arguments={})]
             ),
             ToolResultMessage(
                 tool_call_id="search",
-                tool_name=WebSearchTool.NAME,
+                tool_name=tool_name,
                 content="Evidence [4]",
                 details=SearchDocsResponse(
                     search_docs=[document], citation_mapping={4: "reference"}
@@ -386,6 +390,7 @@ def test_chat_reuses_completed_search_artifacts_without_duplicate_documents() ->
         assert feature.citation_mapping == {4: "reference"}
         assert feature.citation_processor.citation_to_doc == {4: document}
         assert feature.gathered_documents == [document]
+        assert not feature._tool_context().skip_search_query_expansion
 
 
 @pytest.mark.parametrize("replace_base", [False, True])

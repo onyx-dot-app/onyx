@@ -21,6 +21,7 @@ import {
 } from "@/app/app/message/multiModel";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import useScreenSize from "@/hooks/useScreenSize";
+import { getLatestMessageChain } from "@/app/app/services/messageTree";
 import { cn } from "@opal/utils";
 
 export interface MultiModelResponseViewProps {
@@ -139,6 +140,41 @@ export default function MultiModelResponseView({
   }, []);
   const parentNodeId = parentMessage?.nodeId;
   const [hiddenPanels, setHiddenPanels] = useState<Set<number>>(new Set());
+  const sessionIdAtMount = useRef(
+    useChatSessionStore.getState().currentSessionId
+  );
+  const [completedResponses, setCompletedResponses] = useState<Set<number>>(
+    new Set()
+  );
+  const handleResponseComplete = useCallback((nodeId: number) => {
+    setCompletedResponses((completed) =>
+      completed.has(nodeId) ? completed : new Set([...completed, nodeId])
+    );
+  }, []);
+  useEffect(() => {
+    if (readOnly || responses.length === 0) return;
+    // Hidden panels and errors have no animated answer to drain.
+    if (
+      !responses.every(
+        (response) =>
+          !response.isGenerating &&
+          (response.errorMessage ||
+            hiddenPanels.has(response.modelIndex) ||
+            completedResponses.has(response.nodeId))
+      )
+    )
+      return;
+    const sessionId = sessionIdAtMount.current;
+    if (!sessionId) return;
+    const store = useChatSessionStore.getState();
+    const session = store.sessions.get(sessionId);
+    if (!session || session.chatState === "loading") return;
+    const latest = getLatestMessageChain(session.messageTree).at(-1);
+    if (!responses.some((response) => response.nodeId === latest?.nodeId))
+      return;
+    store.setLatestMessageRenderComplete(sessionId, true);
+  }, [responses, completedResponses, hiddenPanels, readOnly]);
+
   // Controls animation: false = panels at start position, true = panels at peek position
   const [selectionEntered, setSelectionEntered] = useState(
     () => preferredIndex !== null
@@ -600,6 +636,7 @@ export default function MultiModelResponseView({
         onMessageSelection,
         onRegenerate,
         parentMessage,
+        onComplete: handleResponseComplete,
       },
       errorMessage: response.errorMessage,
       errorCode: response.errorCode,
@@ -624,6 +661,7 @@ export default function MultiModelResponseView({
       onRegenerate,
       parentMessage,
       isGenerating,
+      handleResponseComplete,
     ]
   );
 

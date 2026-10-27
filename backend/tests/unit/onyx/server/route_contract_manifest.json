@@ -200,6 +200,7 @@
   "GET /build/user-library/tree": "basic",
   "GET /chat/available-context-tokens/{session_id}": "current_chat_accessible_user",
   "GET /chat/chat-session/{session_id}/resume-stream": "read:chat +anonymous",
+  "GET /chat/chat-session/{session_id}/status": "read:chat +anonymous",
   "GET /chat/file/{file_id:path}": "basic",
   "GET /chat/get-chat-session/{session_id}": "read:chat +anonymous",
   "GET /chat/get-user-chat-sessions": "read:chat",

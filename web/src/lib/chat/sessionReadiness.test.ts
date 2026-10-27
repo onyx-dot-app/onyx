@@ -67,3 +67,13 @@ test("healthy long-running work stays busy beyond two minutes", async () => {
   await check;
   expect(completed).toHaveBeenCalledTimes(1);
 });
+
+test("a response without a valid processing state never reports idle", async () => {
+  jest.spyOn(global, "fetch").mockResolvedValue({
+    ok: true,
+    json: async () => ({}),
+  } as Response);
+  await expect(waitForChatSessionIdle("invalid-session")).rejects.toThrow(
+    "Session readiness response is invalid"
+  );
+});

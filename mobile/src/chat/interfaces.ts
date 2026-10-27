@@ -2,7 +2,8 @@ import { Packet } from "./streamingModels";
 
 export type MessageType = "user" | "assistant" | "system" | "error";
 
-export type ChatState = "input" | "loading" | "streaming" | "uploading";
+export type ChatState =
+  "input" | "loading" | "streaming" | "uploading" | "settling" | "unconfirmed";
 
 export enum ChatFileType {
   IMAGE = "image",

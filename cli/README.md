@@ -316,3 +316,15 @@ and in `tools/requirements/build-constraints.in`, and the compiled `build-constr
 ### Versioning
 
 Versions are derived from git tags with the `cli/` prefix (e.g. `cli/v0.1.0`). The tag is parsed by `internal/_version.py` and injected into the Go binary via `-ldflags` at build time.
+
+### Chat completion and cancellation
+
+The interactive client keeps the current request active until the server confirms that
+its session is idle. A STOP packet or a closed connection does not confirm a saved turn.
+Failed readiness checks keep Send blocked and retry. Failed drafts remain in the input.
+The `ask` command confirms idle before naming the saved conversation.
+
+Cancellation waits for the response ID before sending Stop. The request owns that ID,
+so a delayed Stop cannot cancel a later turn. If acknowledgement never arrives,
+cancellation closes delivery after ten seconds without sending an unscoped Stop.
+For acknowledged runs, delivery closes after the bounded Stop request completes.

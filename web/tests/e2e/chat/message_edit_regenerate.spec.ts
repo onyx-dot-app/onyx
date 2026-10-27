@@ -30,62 +30,30 @@ test.describe("Message Edit and Regenerate Tests", () => {
     });
     await sendMessage(page, `What is 2+2? ${nonce}`);
 
-    // Test cancel editing
-    let userMessage = page.locator("#onyx-human-message").first();
-    await userMessage.hover();
-    let editButton = userMessage
-      .locator('[data-testid="HumanMessage/edit-button"]')
-      .first();
-    await editButton.click();
+    await chat.editHumanMessage("This edit will be cancelled");
+    await chat.cancelHumanMessageEdit();
+    await chat.expectHumanMessage("What is 2+2?");
+    await expect(chat.humanMessage()).not.toContainText(
+      "This edit will be cancelled"
+    );
 
-    let textarea = userMessage.locator("textarea");
-    await textarea.fill("This edit will be cancelled");
-
-    const cancelButton = userMessage.locator('button:has-text("Cancel")');
-    await cancelButton.click();
-
-    // Verify original message is preserved
-    await expect(userMessage).toContainText("What is 2+2?");
-    await expect(userMessage).not.toContainText("This edit will be cancelled");
-
-    // Edit the message for real
-    await userMessage.hover();
-    editButton = userMessage
-      .locator('[data-testid="HumanMessage/edit-button"]')
-      .first();
-    await editButton.click();
-
-    textarea = userMessage.locator("textarea");
-    await textarea.fill(`What is 3+3? ${nonce}`);
-
-    let submitButton = userMessage.locator('button:has-text("Submit")');
-    await submitButton.click();
+    await chat.editHumanMessage(`What is 3+3? ${nonce}`);
+    await chat.submitHumanMessageEdit();
 
     await chat.expectCompleteAnswers(1);
     await expect(chat.aiMessage()).toContainText("Six.");
     await chat.expectCopyButton();
 
     // Verify edited message is displayed
-    await expect(userMessage).toContainText("What is 3+3?");
+    await chat.expectHumanMessage("What is 3+3?");
 
     // Verify version switcher appears and shows 2/2
     let messageSwitcher = page.getByTestId("MessageSwitcher/container").first();
     await expect(messageSwitcher).toBeVisible();
     await expect(messageSwitcher).toContainText("2/2");
 
-    // Edit again to create a third version
-    userMessage = page.locator("#onyx-human-message").first();
-    await userMessage.hover();
-    editButton = userMessage
-      .locator('[data-testid="HumanMessage/edit-button"]')
-      .first();
-    await editButton.click();
-
-    textarea = userMessage.locator("textarea");
-    await textarea.fill(`What is 4+4? ${nonce}`);
-
-    submitButton = userMessage.locator('button:has-text("Submit")');
-    await submitButton.click();
+    await chat.editHumanMessage(`What is 4+4? ${nonce}`);
+    await chat.submitHumanMessageEdit();
 
     await chat.expectCompleteAnswers(1);
     await expect(chat.aiMessage()).toContainText("Eight.");
@@ -225,6 +193,7 @@ test.describe("Message Edit and Regenerate Tests", () => {
   });
 
   test("Message editing with files", async ({ page }) => {
+    const chat = new ChatPage(page);
     const testFileName = `test-edit-${Date.now()}.txt`;
     const testFileContent = "This is a test file for editing with attachments.";
     const buffer = Buffer.from(testFileContent, "utf-8");
@@ -268,21 +237,8 @@ test.describe("Message Edit and Regenerate Tests", () => {
     const messageContent = await humanMessage.textContent();
     expect(messageContent).toContain("Summarize this file");
 
-    // Hover and click the edit button
-    await humanMessage.hover();
-    const editButton = humanMessage
-      .locator('[data-testid="HumanMessage/edit-button"]')
-      .first();
-    await expect(editButton).toBeVisible();
-    await editButton.click();
-
-    // Edit the message text
-    const textarea = humanMessage.locator("textarea");
-    await textarea.fill("What does this file contain?");
-
-    // Submit the edit
-    const submitButton = humanMessage.locator('button:has-text("Submit")');
-    await submitButton.click();
+    await chat.editHumanMessage("What does this file contain?");
+    await chat.submitHumanMessageEdit();
 
     // Wait for the new AI response to complete
     await page.waitForSelector('[data-testid="AgentMessage/copy-button"]', {
