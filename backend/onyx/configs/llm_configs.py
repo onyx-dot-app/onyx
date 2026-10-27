@@ -22,11 +22,9 @@ def get_image_extraction_and_analysis_enabled() -> bool:
 
 
 def get_image_analysis_max_size_mb() -> int:
-    """Get image analysis max size MB setting from workspace settings or fallback to environment variable"""
+    """The workspace image analysis max size in MB, or the default if settings cannot load."""
     try:
-        settings = load_settings()
-        if settings.image_analysis_max_size_mb is not None:
-            return settings.image_analysis_max_size_mb
+        return load_settings().image_analysis_max_size_mb
     except Exception:
         pass
 

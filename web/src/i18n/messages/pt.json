@@ -6996,8 +6996,8 @@
         }
       },
       "maxImageSize": {
-        "description": "Imagens acima deste tamanho serão ignoradas para limitar o uso de recursos.",
-        "suffix": "(MB)",
+        "description": "Imagens acima deste tamanho são redimensionadas antes da análise.",
+        "suffix": "MB",
         "title": "Tamanho máximo de imagem para análise"
       },
       "modal": {

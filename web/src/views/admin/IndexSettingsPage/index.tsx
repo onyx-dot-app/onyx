@@ -27,6 +27,7 @@ import {
   MessageCard,
   SelectCard,
   Spacer,
+  InputNumber,
   InputSwitch,
   Tabs,
   Text,
@@ -72,7 +73,7 @@ import {
   CLOUD_BASED_PROVIDERS,
   CUSTOM_PROVIDER,
   DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB,
-  MAX_IMAGE_SIZE_OPTIONS,
+  MAX_IMAGE_ANALYSIS_MAX_SIZE_MB,
   SELF_HOSTED_PROVIDERS,
 } from "@/lib/searchSettings/constants";
 import {
@@ -2204,6 +2205,7 @@ export default function IndexSettingsPage() {
                             title={t("vectorQuantization.title")}
                             description={t("vectorQuantization.description")}
                             withLabel
+                            fillInput
                           >
                             <InputSingleSelectField
                               name="vector_quantization"
@@ -2325,6 +2327,7 @@ export default function IndexSettingsPage() {
                                 description={t("contextualModel.description")}
                                 disabled={!values.enable_contextual_rag}
                                 withLabel
+                                fillInput
                               >
                                 <SimpleModelSelector
                                   providers={filterModelConfigurations(
@@ -2423,6 +2426,7 @@ export default function IndexSettingsPage() {
                                 description={t("captioningModel.description")}
                                 disabled={!values.image_processing_enabled}
                                 withLabel
+                                fillInput
                               >
                                 <SimpleModelSelector
                                   nullable
@@ -2457,32 +2461,31 @@ export default function IndexSettingsPage() {
                             >
                               <InputHorizontal
                                 title={t("maxImageSize.title")}
-                                suffix={t("maxImageSize.suffix")}
                                 description={t("maxImageSize.description")}
                                 disabled={!values.image_processing_enabled}
                                 withLabel
+                                fillInput
                               >
-                                <InputSingleSelect
-                                  value={String(
-                                    values.image_processing_max_size_mb
-                                  )}
-                                  onValueChange={(value) =>
+                                <InputNumber
+                                  value={values.image_processing_max_size_mb}
+                                  onChange={(value) =>
                                     void setFieldValue(
                                       "image_processing_max_size_mb",
-                                      parseInt(value, 10)
+                                      value ??
+                                        DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB
                                     )
                                   }
+                                  min={1}
+                                  max={MAX_IMAGE_ANALYSIS_MAX_SIZE_MB}
+                                  defaultValue={
+                                    DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB
+                                  }
+                                  allowEmpty={false}
+                                  suffix={t("maxImageSize.suffix")}
+                                  placeholder={String(
+                                    DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB
+                                  )}
                                   disabled={!values.image_processing_enabled}
-                                  defaultOption="20"
-                                  placeholder={tInputSelect(
-                                    "placeholder.fallback"
-                                  )}
-                                  options={MAX_IMAGE_SIZE_OPTIONS.map(
-                                    (size) => ({
-                                      value: size,
-                                      title: size,
-                                    })
-                                  )}
                                 />
                               </InputHorizontal>
                             </Disabled>
