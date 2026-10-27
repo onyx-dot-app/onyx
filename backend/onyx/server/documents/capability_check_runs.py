@@ -1,6 +1,7 @@
 """Starting granular capability-check runs: mark the scope RUNNING, then enqueue."""
 
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -80,6 +81,10 @@ logger = setup_logger()
 _ENQUEUE_MARGIN_SECONDS = 60
 # How long a draft start waits for a concurrent start of the same draft key.
 _DRAFT_START_LOCK_WAIT_SECONDS = 10
+# A manual run replaces a live run older than this. Double clicks and other
+# tabs re-trigger within seconds; a Re-run minutes later asks for a fresh run,
+# e.g. of a run a worker restart left behind.
+_MANUAL_RERUN_REPLACES_AFTER = timedelta(minutes=5)
 
 
 class CapabilityRunEnqueueError(Exception):
@@ -146,8 +151,9 @@ def start_capability_check_run(
     authorizes the user for the connector's pair.
 
     Returns the RUNNING row, or None when an unexpired run is already in flight
-    (nothing is enqueued then). Commits before enqueueing, so the worker can
-    only observe the RUNNING mark.
+    (nothing is enqueued then). A manual trigger also replaces a run older than
+    ``_MANUAL_RERUN_REPLACES_AFTER``. Commits before enqueueing, so the worker
+    can only observe the RUNNING mark.
 
     Raises:
         OnyxError: The user may not use the credential with this config.
@@ -168,7 +174,11 @@ def start_capability_check_run(
         connector_id=connector_id,
         source=source,
         trigger=trigger,
-        active_within=capability_check_run_stale_after(source),
+        active_within=(
+            min(_MANUAL_RERUN_REPLACES_AFTER, capability_check_run_stale_after(source))
+            if trigger == CapabilityCheckTrigger.MANUAL
+            else capability_check_run_stale_after(source)
+        ),
     )
     if row is None:
         return None

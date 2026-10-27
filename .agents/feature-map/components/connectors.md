@@ -512,13 +512,20 @@ within the blocking budget blocks the pairing. A check whose dependency did not
 finish in the budget counts as unfinished too, whatever its own result. Indexing and perm-sync attempts keep
 the legacy validation. Full runs execute as the `RUN_CAPABILITY_CHECKS` Celery task
 on the `capability_checks` queue. A beat task, `CHECK_FOR_STALE_CAPABILITY_RUNS`,
-retires dead runs. Draft runs on an unsaved form (`/admin/connector-checks/runs`)
+retires dead runs. A manual Re-run replaces a run started more than five minutes
+earlier (`capability_check_runs.py:_MANUAL_RERUN_REPLACES_AFTER`); system
+triggers wait out the full staleness bound. Draft runs on an unsaved form (`/admin/connector-checks/runs`)
 reuse their result at creation when the form is unchanged. A check the draft
 run is still running is not started again: the draft task marks its pending
 results in flight, creation waits for them within its blocking budget, and the
 background run of unfinished checks waits for them too. A newer run with the
 same draft key supersedes an older one, and the cancel endpoint does the same
-without a successor: the task stops before its next check. The plan endpoint
+without a successor: the task stops before its next check. The checks card
+offers Cancel while a draft run runs. It shows the server's reason when a start
+is refused, and it stops polling a run when a poll fails, does not settle within
+`DRAFT_RUN_POLL_TIMEOUT_MS`, or still reads running after
+`DRAFT_RUN_CLIENT_DEADLINE_MS` (`web/src/lib/connectors/checks/hooks.ts`); the
+run then reads as failed to run. The plan endpoint
 (`/admin/connector-checks/plan`) lists the same checks without a credential or a
 run, so the form can tell which checks exist and which are required first.
 
