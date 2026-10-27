@@ -4,7 +4,6 @@ import "@opal/components/buttons/select-button/styles.css";
 import { Interactive, type InteractiveStatefulProps } from "@opal/core";
 import type {
   ContainerSizeVariants,
-  ExtremaSizeVariants,
   IconFunctionComponent,
   RichStr,
   Rounding,
@@ -90,9 +89,6 @@ type SelectButtonProps = InteractiveStatefulProps &
     /** Tooltip text shown on hover. */
     tooltip?: string;
 
-    /** Width preset. `"fit"` shrink-wraps, `"full"` stretches to parent width. */
-    width?: ExtremaSizeVariants;
-
     /**
      * Content justify mode. When `"between"`, icon + label group left and the
      * trailing icon pushes to the right edge. Default keeps all items in a
@@ -129,7 +125,6 @@ function SelectButton({
   size = "lg",
   type = "button",
   foldable,
-  width,
   justifyContent,
   labelFont,
   labelColor,
@@ -185,7 +180,6 @@ function SelectButton({
       <Interactive.Container
         type={type}
         size={size}
-        width={width}
         rounding={roundingOverride ?? (isLarge ? 3 : size === "2xs" ? 1 : 2)}
       >
         {isBetween ? (
@@ -232,9 +226,9 @@ function SelectButton({
   );
 
   const withClear = onClear ? (
-    // Hugs the button (or fills, with width="full") so the clear button sits
+    // Hugs the button so the clear button sits
     // over the chevron, not at the edge of a wider container.
-    <div className={cn("relative", width === "full" ? "w-full" : "w-fit")}>
+    <div className="relative w-fit">
       {button}
       {showClear && (
         <div className="absolute end-2 top-1/2 -translate-y-1/2">

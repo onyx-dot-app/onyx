@@ -11440,6 +11440,12 @@
         "transfer": {
           "label": "Transfer",
           "title": "Transfer *{name}*"
+        },
+        "people": {
+          "label": "People with access"
+        },
+        "ownerOption": {
+          "disabledTooltip": "Owner cannot be unshared."
         }
       },
       "viewer": {

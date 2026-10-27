@@ -18,6 +18,12 @@ export {
   type SelectButtonProps,
 } from "@opal/components/buttons/select-button/components";
 
+/* RowAction */
+export {
+  RowAction,
+  type RowActionProps,
+} from "@opal/components/buttons/row-action/components";
+
 /* AttachmentItemButton */
 export {
   AttachmentItemButton,

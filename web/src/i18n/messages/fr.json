@@ -11440,6 +11440,12 @@
         "transfer": {
           "label": "Transférer",
           "title": "Transférer *{name}*"
+        },
+        "people": {
+          "label": "Personnes ayant accès"
+        },
+        "ownerOption": {
+          "disabledTooltip": "Impossible de retirer le partage au propriétaire."
         }
       },
       "viewer": {

@@ -11440,6 +11440,12 @@
         "transfer": {
           "label": "转移",
           "title": "转移 *{name}*"
+        },
+        "people": {
+          "label": "有权访问的人员"
+        },
+        "ownerOption": {
+          "disabledTooltip": "无法取消与所有者的共享。"
         }
       },
       "viewer": {

@@ -7,7 +7,7 @@ import useShareableGroups, {
   type MinimalUserGroupSnapshot,
 } from "@/hooks/useShareableGroups";
 import useShareableUsers from "@/hooks/useShareableUsers";
-import { toast } from "@opal/layouts";
+import { Content, InputPadder, Section, toast } from "@opal/layouts";
 import { useAgent } from "@/lib/agents/hooks";
 import type { FullAgent, PersonaSharePermission } from "@/lib/agents/types";
 import {
@@ -22,7 +22,21 @@ import { can } from "@/lib/permissions/resource-actions";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
 import { Modal } from "@opal/components";
-import { Button, CopyButton, Divider, Text } from "@opal/components";
+import {
+  Button,
+  Card,
+  CopyButton,
+  IconContainer,
+  RowAction,
+  Divider,
+  InputMultiComboBox,
+  Table,
+  Text,
+  type SelectOption,
+  type TableColumn,
+  type TagItem,
+} from "@opal/components";
+import type { IconFunctionComponent } from "@opal/types";
 import {
   SvgArrowExchange,
   SvgArrowLeft,
@@ -36,12 +50,6 @@ import {
 } from "@opal/icons";
 import { escapeMarkdown, markdown } from "@opal/utils";
 import { useModal } from "@opal/components";
-import { AddPeoplePicker } from "@/sections/modals/AddPeoplePicker";
-import { ShareAccessRow } from "@/sections/modals/ShareAccessRow";
-import {
-  StaticPermissionLabel,
-  TransferTrailingButton,
-} from "@/sections/modals/ShareModalPermissionControls";
 import { SharePermissionMenu } from "@/lib/permissions/components";
 import {
   useSharePermissionOptions,
@@ -58,6 +66,48 @@ import {
 } from "@/sections/modals/TransferOwnershipView";
 
 type ShareModalView = "share" | "transfer";
+
+// Layout of the access column and the general-access row. The row mirrors a
+// people row, so its icon, scope label and access menu line up with them.
+
+/** px per rem, to turn a px width into `Section`'s rem width. */
+const PX_PER_REM = 16;
+
+/** The Opal table cell's horizontal padding, per side (`px-1`). */
+const TABLE_CELL_PADDING_PX = 4;
+
+/**
+ * The access column's fixed width, shared by the general-access row and the
+ * people table. Wide enough for the longest label ("Ansehen & Chatten") with
+ * its icon and chevron.
+ */
+const ACCESS_COLUMN_WIDTH_PX = 200;
+
+/** The access menu's width: the column less its cell padding. */
+const ACCESS_MENU_WIDTH_PX = ACCESS_COLUMN_WIDTH_PX - 2 * TABLE_CELL_PADDING_PX;
+
+/** General-access row padding, a spacing step: 4px, the people rows' inset. */
+const SCOPE_ROW_PADDING = 1;
+
+/**
+ * Padding around the scope icon, a spacing step: 8px around its 20px box
+ * makes a 36px slot, a RowAction's height, so the glyph sits where the
+ * people rows' icons do.
+ */
+const SCOPE_ICON_PADDING = 2;
+
+/** One row of the people table: the admins, an owner, or a share. */
+interface ShareTableRow {
+  id: string;
+  name: string;
+  description?: string;
+  icon: IconFunctionComponent;
+  trailing: React.ReactNode;
+}
+
+// Picker option values carry the share kind, since user and group ids overlap.
+const USER_OPTION_PREFIX = "user:";
+const GROUP_OPTION_PREFIX = "group:";
 
 export type ShareDraftState = BaseShareDraftState<PersonaSharePermission>;
 
@@ -133,6 +183,7 @@ export function ShareAgentModal({
   userIds = [],
 }: ShareAgentModalProps) {
   const t = useTranslations("agents.modals");
+  const tShare = useTranslations("chat.modals.share");
   const shareAgentModal = useModal();
   const permissionOptions = useSharePermissionOptions();
   const scopeOptions = useShareScopeOptions();
@@ -195,8 +246,7 @@ export function ShareAgentModal({
   const [stagedGroups, setStagedGroups] = useState<MinimalUserGroupSnapshot[]>(
     []
   );
-  const [stagedPermission, setStagedPermission] =
-    useState<PersonaSharePermission>("VIEWER");
+  const [query, setQuery] = useState("");
   const [transferTarget, setTransferTarget] =
     useState<TransferOwnershipTarget>(null);
   const [view, setView] = useState<ShareModalView>("share");
@@ -212,7 +262,7 @@ export function ShareAgentModal({
       setTransferTarget(null);
       setStagedUsers([]);
       setStagedGroups([]);
-      setStagedPermission("VIEWER");
+      setQuery("");
       hydratedFromAgentRef.current = false;
 
       if (!agentId) {
@@ -259,13 +309,9 @@ export function ShareAgentModal({
 
   const effectiveState = useMemo(
     () =>
-      applyStagedShares(
-        draftState,
-        stagedUsers,
-        stagedGroups,
-        stagedPermission
-      ),
-    [draftState, stagedGroups, stagedPermission, stagedUsers]
+      // New picks join as viewers; each row's menu changes that
+      applyStagedShares(draftState, stagedUsers, stagedGroups, "VIEWER"),
+    [draftState, stagedGroups, stagedUsers]
   );
 
   const canEditShares = !agentId
@@ -282,15 +328,6 @@ export function ShareAgentModal({
   const isDirty =
     serializeDraftState(effectiveState) !==
     serializeDraftState(modalInitialState);
-
-  const existingUserIds = useMemo(
-    () => new Set(draftState.userShares.map((share) => share.user.id)),
-    [draftState.userShares]
-  );
-  const existingGroupIds = useMemo(
-    () => new Set(draftState.groupShares.map((share) => share.group_id)),
-    [draftState.groupShares]
-  );
 
   const agentName = agent?.name ?? t("shareAgent.agentFallback.name");
 
@@ -415,6 +452,38 @@ export function ShareAgentModal({
     closeModal();
   }, [agentId, closeModal, currentUser, removeUserShare, t]);
 
+  function pickShareOption(value: string) {
+    if (value.startsWith(USER_OPTION_PREFIX)) {
+      const userId = value.slice(USER_OPTION_PREFIX.length);
+      const user = shareableUsers.find((candidate) => candidate.id === userId);
+      if (user) {
+        setStagedUsers((currentUsers) => [...currentUsers, user]);
+      }
+      return;
+    }
+    const groupId = Number(value.slice(GROUP_OPTION_PREFIX.length));
+    const group = shareableGroups.find((candidate) => candidate.id === groupId);
+    if (group) {
+      setStagedGroups((currentGroups) => [...currentGroups, group]);
+    }
+  }
+
+  // Picking a shared row again in the search removes its access, like the
+  // row's own Remove action
+  function unpickShareOption(value: string) {
+    if (value.startsWith(USER_OPTION_PREFIX)) {
+      const userId = value.slice(USER_OPTION_PREFIX.length);
+      // On a saved agent, self-removal applies at once, so leave it to the
+      // row's Remove action
+      if (agentId && userId === currentUser?.id) {
+        return;
+      }
+      removeUserShare(userId);
+      return;
+    }
+    removeGroupShare(Number(value.slice(GROUP_OPTION_PREFIX.length)));
+  }
+
   async function handleSave() {
     if (!isDirty) {
       closeModal();
@@ -519,228 +588,311 @@ export function ShareAgentModal({
         ? SvgUsers
         : SvgLock;
 
-    // The picker + status row + people table sit on a white plate over the
-    // modal's tinted body, per the mock
-    return (
-      <div className="flex w-full flex-col gap-2 rounded-12 bg-background-tint-00 p-1">
-        {canEditShares ? (
-          <AddPeoplePicker
-            existingGroupIds={existingGroupIds}
-            existingUserIds={existingUserIds}
-            groups={canGroupShare ? shareableGroups : []}
-            onAddGroup={(group) => {
-              setStagedGroups((currentGroups) => [...currentGroups, group]);
-            }}
-            onAddUser={(user) => {
-              setStagedUsers((currentUsers) => [...currentUsers, user]);
-            }}
-            onRemoveGroup={(groupId) => {
-              setStagedGroups((currentGroups) =>
-                currentGroups.filter((group) => group.id !== groupId)
-              );
-            }}
-            onRemoveUser={(userId) => {
-              setStagedUsers((currentUsers) =>
-                currentUsers.filter((user) => user.id !== userId)
-              );
-            }}
-            onStagedPermissionChange={setStagedPermission}
-            stagedGroups={stagedGroups}
-            stagedPermission={stagedPermission}
-            stagedUsers={stagedUsers}
-            users={shareableUsers}
-          />
-        ) : null}
+    // The owner (a user or a group) shows as selected and cannot be
+    // unselected: it already has its own row and is not a share.
+    const ownerTooltip = t("shareAgent.ownerOption.disabledTooltip");
+    const shareOptions: SelectOption[] = [
+      ...shareableUsers.map((user) => ({
+        value: `${USER_OPTION_PREFIX}${user.id}`,
+        title: user.email,
+        icon: SvgUser,
+        ...(user.id === agent?.owner?.id && {
+          disabled: true,
+          tooltip: ownerTooltip,
+        }),
+      })),
+      ...(canGroupShare
+        ? shareableGroups.map((group) => ({
+            value: `${GROUP_OPTION_PREFIX}${group.id}`,
+            title: group.name,
+            icon: SvgUsers,
+            ...(group.id === agent?.owner_group?.id && {
+              disabled: true,
+              tooltip: ownerTooltip,
+            }),
+          }))
+        : []),
+    ];
+    // Shared people show as selected options; the table lists them
+    const pickedTags: TagItem[] = [
+      ...(agent?.owner
+        ? [
+            {
+              id: `${USER_OPTION_PREFIX}${agent.owner.id}`,
+              label: agent.owner.email,
+              locked: true,
+            },
+          ]
+        : []),
+      ...(agent?.owner_group
+        ? [
+            {
+              id: `${GROUP_OPTION_PREFIX}${agent.owner_group.id}`,
+              label: agent.owner_group.name,
+              locked: true,
+            },
+          ]
+        : []),
+      ...effectiveState.userShares.map((share) => ({
+        id: `${USER_OPTION_PREFIX}${share.user.id}`,
+        label: share.user.email,
+      })),
+      ...effectiveState.groupShares.map((share) => ({
+        id: `${GROUP_OPTION_PREFIX}${share.group_id}`,
+        label: share.group_name,
+      })),
+    ];
 
-        {/* Mock anatomy: icon + scope trigger on the left, org-permission
-            trigger on the right — no label or description text */}
-        <ShareAccessRow
-          icon={scopeIcon}
-          titleSlot={
-            <SharePermissionMenu
-              ariaLabel={t("shareAgent.scopeMenu.ariaLabel")}
-              // Stays visible so the current scope still reads; only changing it is gated.
-              disabled={!canEditShares || !canPublish}
-              showTriggerIcon={false}
-              onChange={(scope) => {
-                setDraftState((currentDraftState) => ({
-                  ...currentDraftState,
-                  isPublic: scope === "PUBLIC",
-                }));
-              }}
-              options={scopeOptions}
-              value={effectiveState.isPublic ? "PUBLIC" : "PRIVATE"}
-            />
-          }
-          rightChildren={
-            <SharePermissionMenu
-              ariaLabel={t("shareAgent.publicPermissionMenu.ariaLabel")}
-              disabled={!canEditShares || !canPublish}
-              onChange={(permission) => {
-                setDraftState((currentDraftState) => ({
-                  ...currentDraftState,
-                  publicPermission: permission,
-                }));
-              }}
-              options={permissionOptions}
-              value={effectiveState.publicPermission}
-            />
-          }
-        />
+    // The owner level opens the transfer view when the viewer may transfer,
+    // and is static otherwise. RowAction keeps one box either way, so it
+    // lines up with the permission menus below it.
+    const ownerLabel = canTransfer ? (
+      <RowAction
+        icon={SvgUserManage}
+        rightIcon={SvgArrowExchange}
+        tooltip={tShare("transferOwnership.trailingButton.tooltip")}
+        onClick={() => setView("transfer")}
+      >
+        {t("shareAgent.permission.owner.label")}
+      </RowAction>
+    ) : (
+      <RowAction icon={SvgUserManage}>
+        {t("shareAgent.permission.owner.label")}
+      </RowAction>
+    );
 
-        <Divider paddingParallel={0} paddingPerpendicular={0} />
-
-        {/* Admins always appear and always hold edit access (ENG-4175);
-            on vacant agents this row carries the transfer affordance */}
-        {agent ? (
-          <ShareAccessRow
-            description={t("shareAgent.admins.description", {
-              count: agent.admin_count,
+    const tableRows: ShareTableRow[] = [];
+    // Admins always appear and always hold edit access (ENG-4175); on vacant
+    // agents this row carries the transfer affordance
+    if (agent) {
+      tableRows.push({
+        id: "admins",
+        name: t("shareAgent.admins.title"),
+        description: t("shareAgent.admins.description", {
+          count: agent.admin_count,
+        }),
+        icon: SvgUserManage,
+        trailing: agent.ownership_vacant ? (
+          ownerLabel
+        ) : (
+          <RowAction icon={SvgEdit}>
+            {t("shareAgent.permission.edit.label")}
+          </RowAction>
+        ),
+      });
+    }
+    if (agent?.owner) {
+      tableRows.push({
+        id: "owner",
+        name:
+          currentUser && agent.owner.id === currentUser.id
+            ? t("shareAgent.row.you.title", { email: agent.owner.email })
+            : agent.owner.email,
+        icon: SvgUser,
+        trailing: ownerLabel,
+      });
+    }
+    if (agent?.owner_group) {
+      tableRows.push({
+        id: "owner-group",
+        name: agent.owner_group.name,
+        icon: SvgUsers,
+        trailing: ownerLabel,
+      });
+    }
+    for (const share of effectiveState.userShares) {
+      const isCurrentUser = currentUser?.id === share.user.id;
+      tableRows.push({
+        id: `${USER_OPTION_PREFIX}${share.user.id}`,
+        name: isCurrentUser
+          ? t("shareAgent.row.you.title", { email: share.user.email })
+          : share.user.email,
+        icon: SvgUser,
+        trailing: (
+          <SharePermissionMenu
+            ariaLabel={t("shareAgent.row.updateAccess.ariaLabel", {
+              name: share.user.email,
             })}
-            icon={SvgUserManage}
-            rightChildren={
-              agent.ownership_vacant ? (
-                <StaticPermissionLabel
-                  icon={SvgUserManage}
-                  label={t("shareAgent.permission.owner.label")}
-                />
-              ) : (
-                <StaticPermissionLabel
-                  icon={SvgEdit}
-                  label={t("shareAgent.permission.edit.label")}
-                  muted
-                />
-              )
+            disabled={!canEditShares && !isCurrentUser}
+            onChange={
+              canEditShares
+                ? (permission) =>
+                    updateUserSharePermission(share.user.id, permission)
+                : undefined
             }
-            trailing={
-              agent.ownership_vacant && canTransfer ? (
-                <TransferTrailingButton
-                  onTransfer={() => setView("transfer")}
-                />
-              ) : undefined
+            onRemove={
+              isCurrentUser
+                ? handleSelfRemove
+                : canEditShares
+                  ? () => removeUserShare(share.user.id)
+                  : undefined
             }
-            title={t("shareAgent.admins.title")}
+            options={permissionOptions}
+            value={share.permission}
+            layout="row"
           />
-        ) : null}
-
-        {agent?.owner ? (
-          <ShareAccessRow
-            avatarInitial={agent.owner.email.charAt(0).toUpperCase()}
-            icon={SvgUser}
-            rightChildren={
-              <StaticPermissionLabel
-                icon={SvgUserManage}
-                label={t("shareAgent.permission.owner.label")}
-                muted={!canTransfer}
-              />
+        ),
+      });
+    }
+    for (const share of effectiveState.groupShares) {
+      tableRows.push({
+        id: `${GROUP_OPTION_PREFIX}${share.group_id}`,
+        name: share.group_name,
+        icon: SvgUsers,
+        trailing: (
+          <SharePermissionMenu
+            ariaLabel={t("shareAgent.row.updateAccess.ariaLabel", {
+              name: share.group_name,
+            })}
+            disabled={!canEditShares}
+            onChange={
+              canEditShares
+                ? (permission) =>
+                    updateGroupSharePermission(share.group_id, permission)
+                : undefined
             }
-            trailing={
-              canTransfer ? (
-                <TransferTrailingButton
-                  onTransfer={() => setView("transfer")}
-                />
-              ) : undefined
+            onRemove={
+              canEditShares ? () => removeGroupShare(share.group_id) : undefined
             }
-            title={
-              currentUser && agent.owner.id === currentUser.id
-                ? t("shareAgent.row.you.title", { email: agent.owner.email })
-                : agent.owner.email
-            }
+            options={permissionOptions}
+            value={share.permission}
+            layout="row"
           />
-        ) : null}
+        ),
+      });
+    }
 
-        {agent?.owner_group ? (
-          <ShareAccessRow
-            avatarIcon={SvgUsers}
-            icon={SvgUsers}
-            rightChildren={
-              <StaticPermissionLabel
-                icon={SvgUserManage}
-                label={t("shareAgent.permission.owner.label")}
-                muted={!canTransfer}
-              />
-            }
-            trailing={
-              canTransfer ? (
-                <TransferTrailingButton
-                  onTransfer={() => setView("transfer")}
-                />
-              ) : undefined
-            }
-            title={agent.owner_group.name}
+    const columns: TableColumn<ShareTableRow>[] = [
+      {
+        kind: "qualifier",
+        content: "icon",
+        icon: (row) => row.icon,
+        background: true,
+      },
+      {
+        kind: "data",
+        field: "name",
+        title: t("shareAgent.people.label"),
+        weight: 60,
+        sortable: false,
+        hideable: false,
+        cell: (name, row) => (
+          <Content
+            title={name}
+            description={row.description}
+            sizePreset="main-ui"
+            variant="section"
           />
-        ) : null}
+        ),
+      },
+      {
+        kind: "display",
+        id: "access",
+        // Fixed, so every row's access cell starts at the same x.
+        width: { fixed: ACCESS_COLUMN_WIDTH_PX },
+        hideable: false,
+        cell: (row) => row.trailing,
+      },
+    ];
 
-        {effectiveState.userShares.map((share) => {
-          const isCurrentUser = currentUser?.id === share.user.id;
+    const scopeMenu = (
+      <SharePermissionMenu
+        ariaLabel={t("shareAgent.scopeMenu.ariaLabel")}
+        // Stays visible so the current scope still reads; only changing it is gated.
+        disabled={!canEditShares || !canPublish}
+        showTriggerIcon={false}
+        onChange={(scope) => {
+          setDraftState((currentDraftState) => ({
+            ...currentDraftState,
+            isPublic: scope === "PUBLIC",
+          }));
+        }}
+        options={scopeOptions}
+        value={effectiveState.isPublic ? "PUBLIC" : "PRIVATE"}
+        layout="row"
+      />
+    );
+    const scopeAccessMenu = (
+      <SharePermissionMenu
+        ariaLabel={t("shareAgent.publicPermissionMenu.ariaLabel")}
+        disabled={!canEditShares || !canPublish}
+        onChange={(permission) => {
+          setDraftState((currentDraftState) => ({
+            ...currentDraftState,
+            publicPermission: permission,
+          }));
+        }}
+        options={permissionOptions}
+        value={effectiveState.publicPermission}
+        layout="row"
+      />
+    );
 
-          return (
-            <ShareAccessRow
-              avatarInitial={share.user.email.charAt(0).toUpperCase()}
-              icon={SvgUser}
-              key={share.user.id}
-              rightChildren={
-                <SharePermissionMenu
-                  ariaLabel={t("shareAgent.row.updateAccess.ariaLabel", {
-                    name: share.user.email,
-                  })}
-                  disabled={!canEditShares && !isCurrentUser}
-                  onChange={
-                    canEditShares
-                      ? (permission) =>
-                          updateUserSharePermission(share.user.id, permission)
-                      : undefined
-                  }
-                  onRemove={
-                    isCurrentUser
-                      ? handleSelfRemove
-                      : canEditShares
-                        ? () => removeUserShare(share.user.id)
-                        : undefined
-                  }
-                  options={permissionOptions}
-                  value={share.permission}
-                />
-              }
-              title={
-                isCurrentUser
-                  ? t("shareAgent.row.you.title", { email: share.user.email })
-                  : share.user.email
-              }
+    // The card adds 0.5rem and each row's own padding the other 0.5rem
+    return (
+      <Card padding={2}>
+        <Section gap={2} height="auto" alignItems="stretch">
+          {canEditShares ? (
+            <InputMultiComboBox
+              focusOnMount
+              value={query}
+              onChange={setQuery}
+              onAdd={() => undefined}
+              tags={pickedTags}
+              showTags={false}
+              options={shareOptions}
+              onSelectOption={(option) => pickShareOption(option.value)}
+              onRemoveTag={unpickShareOption}
+              placeholder={tShare("addPeople.searchInput.placeholder")}
             />
-          );
-        })}
+          ) : null}
 
-        {effectiveState.groupShares.map((share) => (
-          <ShareAccessRow
-            avatarIcon={SvgUsers}
-            icon={SvgUsers}
-            key={share.group_id}
-            rightChildren={
-              <SharePermissionMenu
-                ariaLabel={t("shareAgent.row.updateAccess.ariaLabel", {
-                  name: share.group_name,
-                })}
-                disabled={!canEditShares}
-                onChange={
-                  canEditShares
-                    ? (permission) =>
-                        updateGroupSharePermission(share.group_id, permission)
-                    : undefined
-                }
-                onRemove={
-                  canEditShares
-                    ? () => removeGroupShare(share.group_id)
-                    : undefined
-                }
-                options={permissionOptions}
-                value={share.permission}
-              />
-            }
-            title={share.group_name}
-          />
-        ))}
-      </div>
+          {/* General access: the scope icon, the scope menu, and what that
+            scope may do. Shaped like a people row (12px corners, 4px inset)
+            with the access menu in a column-width slot, so it lines up
+            with the menus below. */}
+          <Card padding={SCOPE_ROW_PADDING} color="background-tint-01">
+            {/* No gap: the 36px icon slot plus the menu's own 8px padding
+              put the scope label at the people rows' text x (50px). */}
+            <Section
+              flexDirection="row"
+              justifyContent="start"
+              gap={0}
+              height="auto"
+            >
+              <Section width="fit" height="auto" padding={SCOPE_ICON_PADDING}>
+                <IconContainer icon={scopeIcon} />
+              </Section>
+              {/* Takes the space left over, and can shrink below its label */}
+              <Section height="auto" className="min-w-0 flex-1">
+                {scopeMenu}
+              </Section>
+              <Section
+                width={ACCESS_MENU_WIDTH_PX / PX_PER_REM}
+                height="auto"
+                // ms-1 keeps the two menus apart; the right edge stays put
+                className="ms-1 shrink-0"
+              >
+                {scopeAccessMenu}
+              </Section>
+            </Section>
+          </Card>
+
+          <Divider paddingParallel={0} paddingPerpendicular={0} />
+
+          {tableRows.length > 0 ? (
+            <Table
+              label={t("shareAgent.people.label")}
+              items={tableRows}
+              columns={columns}
+              getRowId={(row) => row.id}
+              pageSize={false}
+              prominence="secondary"
+              header={false}
+            />
+          ) : null}
+        </Section>
+      </Card>
     );
   }
 
@@ -765,23 +917,27 @@ export function ShareAgentModal({
           }
         />
 
-        <Modal.Body>
+        <Modal.Body padding={2}>
           {view === "transfer" ? (
-            <TransferOwnershipView
-              agent={agent}
-              // Handing an agent to a group attaches it to that group, so it answers to
-              // MANAGE_AGENTS like group sharing does; transfer to a user stays open.
-              groups={canGroupShare ? shareableGroups : []}
-              onSelectedTargetChange={setTransferTarget}
-              selectedTarget={transferTarget}
-              users={transferableUsers}
-            />
+            <InputPadder>
+              <TransferOwnershipView
+                agent={agent}
+                // Handing an agent to a group attaches it to that group, so it answers to
+                // MANAGE_AGENTS like group sharing does; transfer to a user stays open.
+                groups={canGroupShare ? shareableGroups : []}
+                onSelectedTargetChange={setTransferTarget}
+                selectedTarget={transferTarget}
+                users={transferableUsers}
+              />
+            </InputPadder>
           ) : agentId && !hydratedFromAgentRef.current ? (
-            <div className="flex w-full items-center justify-center py-6">
-              <Text color="text-03" font="secondary-body">
-                {t("shareAgent.loading.description")}
-              </Text>
-            </div>
+            <InputPadder>
+              <Section height="auto" padding={6}>
+                <Text color="text-03" font="secondary-body">
+                  {t("shareAgent.loading.description")}
+                </Text>
+              </Section>
+            </InputPadder>
           ) : (
             renderShareRows()
           )}
