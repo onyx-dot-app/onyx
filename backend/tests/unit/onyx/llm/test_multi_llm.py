@@ -609,8 +609,8 @@ def test_claude_adaptive_thinking_uses_output_config(
         assert "budget_tokens" not in kwargs["thinking"]
 
 
-def test_claude_adaptive_thinking_sends_output_config_after_tool_call() -> None:
-    # No signed blocks to replay costs us `thinking`, not the effort.
+def test_claude_adaptive_thinking_stays_on_after_tool_call() -> None:
+    # The requested setting is sent on every request of the tool loop.
     llm = LitellmLLM(
         api_key="test_key",
         model_provider=LlmProviderNames.LITELLM_PROXY,
@@ -630,7 +630,7 @@ def test_claude_adaptive_thinking_sends_output_config_after_tool_call() -> None:
         list(llm.stream_raw(_tool_cycle_prompt(), reasoning_effort=ReasoningEffort.LOW))
 
         kwargs = mock_completion.call_args.kwargs
-        assert "thinking" not in kwargs
+        assert kwargs["thinking"] == {"type": "adaptive"}
         assert kwargs["output_config"] == {"effort": "low"}
 
 
@@ -2891,10 +2891,9 @@ def test_prompt_in_tool_loop_false_user_only() -> None:
     assert _prompt_in_tool_loop(messages) is False
 
 
-def test_bedrock_claude_drops_thinking_when_thinking_blocks_missing() -> None:
-    """When thinking is enabled but assistant messages with tool_calls lack
-    thinking_blocks, the thinking param must be dropped to avoid the Bedrock
-    BadRequestError about missing thinking blocks."""
+def test_bedrock_claude_keeps_thinking_when_thinking_blocks_missing() -> None:
+    """Bedrock accepts a tool-call message without thinking blocks, so the
+    requested thinking stays on through the tool loop."""
     llm = LitellmLLM(
         api_key=None,
         model_provider=LlmProviderNames.BEDROCK,
@@ -2947,8 +2946,8 @@ def test_bedrock_claude_drops_thinking_when_thinking_blocks_missing() -> None:
         )
 
         kwargs = mock_completion.call_args.kwargs
-        assert "thinking" not in kwargs, (
-            "thinking param should be dropped when thinking_blocks are missing "
+        assert kwargs["thinking"]["type"] == "enabled", (
+            "thinking stays on when thinking_blocks are missing "
             "from assistant messages with tool_calls"
         )
 

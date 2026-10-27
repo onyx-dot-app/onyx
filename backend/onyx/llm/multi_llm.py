@@ -1104,20 +1104,17 @@ class LitellmLLM(LLM):
                 ReasoningParamStyle.ANTHROPIC_ADAPTIVE,
                 ReasoningParamStyle.ANTHROPIC_BUDGET,
             ):
-                # Mid tool loop, Anthropic requires the signed thinking block
-                # we may not have, so skip thinking there. LiteLLM's
-                # modify_params workaround doesn't cover all providers
-                # (notably Bedrock).
-                in_tool_loop = _prompt_in_tool_loop(prompt)
-
+                # Thinking is sent on every request of the tool loop. Anthropic
+                # and Bedrock accept a tool-call message without thinking
+                # blocks, and LiteLLM's drop of the param is patched out
+                # (_patch_anthropic_keeps_requested_thinking).
                 if reasoning_style is ReasoningParamStyle.ANTHROPIC_ADAPTIVE:
                     # No signed blocks to lose, and without it Claude 5 picks
                     # its own effort rather than ours.
                     optional_kwargs["output_config"] = {
                         "effort": ANTHROPIC_ADAPTIVE_REASONING_EFFORT[reasoning_effort],
                     }
-                    if not in_tool_loop:
-                        optional_kwargs["thinking"] = {"type": "adaptive"}
+                    optional_kwargs["thinking"] = {"type": "adaptive"}
                 else:
                     budget_tokens: int | None = ANTHROPIC_REASONING_EFFORT_BUDGET.get(
                         reasoning_effort
@@ -1125,10 +1122,8 @@ class LitellmLLM(LLM):
                     # thinking.type=enabled is rejected alongside a forced
                     # tool_choice (only adaptive thinking supports forced tool
                     # use), so skip thinking for a NamedToolChoice.
-                    if (
-                        budget_tokens is not None
-                        and not in_tool_loop
-                        and not isinstance(tool_choice, NamedToolChoice)
+                    if budget_tokens is not None and not isinstance(
+                        tool_choice, NamedToolChoice
                     ):
                         if max_tokens is not None:
                             response_reserve = max(1, GEN_AI_NUM_RESERVED_OUTPUT_TOKENS)
