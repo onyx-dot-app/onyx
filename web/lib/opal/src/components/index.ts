@@ -18,17 +18,11 @@ export {
   type SelectButtonProps,
 } from "@opal/components/buttons/select-button/components";
 
-/* OpenButton */
+/* RowAction */
 export {
-  OpenButton,
-  type OpenButtonProps,
-} from "@opal/components/buttons/open-button/components";
-
-/* FilterButton */
-export {
-  FilterButton,
-  type FilterButtonProps,
-} from "@opal/components/buttons/filter-button/components";
+  RowAction,
+  type RowActionProps,
+} from "@opal/components/buttons/row-action/components";
 
 /* AttachmentItemButton */
 export {
@@ -151,6 +145,13 @@ export {
 
 /* Fold */
 export { Fold, type FoldProps } from "@opal/components/fold/components";
+
+/* Enter */
+export {
+  Enter,
+  type EnterProps,
+  type EnterVariant,
+} from "@opal/components/enter/components";
 
 /* IconTooltip */
 export {

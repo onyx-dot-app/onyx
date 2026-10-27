@@ -217,6 +217,22 @@ designation and endpoints have been removed.
 
 ## 4. How it works
 
+### Shared messages and model-history replay
+
+`backend/onyx/llm/models.py:MessageRole` gives shared messages enum-based roles.
+System, user, assistant, and tool-result messages accept and serialize the existing role strings.
+Provider request conversion keeps its existing wire format.
+
+`backend/onyx/agents/execution_records.py` supplies stable input-message IDs and model-history replay.
+Its `messages_for_model` function creates model context from recorded messages.
+It retains partial text and signed thinking, but omits tool calls without adjacent results.
+Unsigned provider thinking blocks are incomplete and cannot be replayed; signed and redacted blocks remain intact.
+It also removes orphaned or duplicate tool results and copies messages by default.
+Calls with duplicate IDs in one assistant message are ambiguous; replay omits them and their results.
+This helper prepares history without deleting the recorded output.
+Production chat does not call this module yet.
+
+
 ### 4.1 Resolving which model answers a turn: `get_llm_for_persona`
 
 `factory.py:get_llm_for_persona(persona, user, llm_override, additional_headers, policy_fn)`
@@ -389,6 +405,12 @@ call fragments are keyed by `index`: an early chunk carries `id` and
 reading any single chunk's `tool_calls` as complete
 truncates the call.
 
+Shared tool-call events contain incremental content. Starts carry the call ID and
+name; deltas carry only new `arguments_delta` text. Ends carry the finalized
+`ToolCall`. `apply_generation_event` retains unfinished text in `raw_arguments`.
+The accumulator parses arguments at completion. Consumers must wait for completion
+before executing a call. Raw provider streaming and its chat consumers are unchanged.
+
 Both response converters use `model_response.py:_usage_from_usage_data` to normalize
 usage for cost accounting and tracing. A missing or null `cache_read_input_tokens`
 falls back to `prompt_tokens_details.cached_tokens`. An explicit zero takes precedence
@@ -408,8 +430,9 @@ LiteLLM's stream wrapper overwrites chunk models with the requested name) and
 records it with `tracing/llm_utils.py:record_llm_routed_model` on the generation
 span. `_track_llm_cost` and the usage processors pass it as
 `compute_cost_cents(served_model=...)`: the catalog is priced by the served
-model, an admin cost override on the router name still wins, and the ledger key
-stays the router name.
+model, an admin cost override on the router's model configuration still wins
+(`compute_cost_cents(model_configuration_id=...)`), and the ledger key stays the
+router name.
 
 ### 4.6 Retries
 

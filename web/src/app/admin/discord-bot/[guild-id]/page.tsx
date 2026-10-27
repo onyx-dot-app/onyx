@@ -311,11 +311,6 @@ export default function Page({ params }: Props) {
         default_persona_id: personaId,
       });
       refreshGuild();
-      toast.success(
-        personaId
-          ? t("defaultAgent.updated.toast")
-          : t("defaultAgent.cleared.toast")
-      );
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : t("defaultAgent.updateError.toast")

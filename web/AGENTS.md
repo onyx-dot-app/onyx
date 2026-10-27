@@ -55,6 +55,14 @@ refresh-components import that Opal replaces. Migrate a file to Opal when you ed
   subset of it.
 - **Padding over margin.** Use a component's `padding` prop before wrapping it in a `<div>`. If a
   library component has no such prop, add one to the component instead of adding a wrapper.
+- **Inputs sit 1rem from their container's edge.** Build the 1rem from two 0.5rem steps, not from
+  absolute positioning:
+  - Give the container 0.5rem, for example `Modal.Body padding={2}`.
+  - A naked input (no card around it): wrap it in `InputPadder`, which adds the other 0.5rem. Put
+    `InputDivider` between naked groups.
+  - A covered input: to group inputs visually, put them in a white, borderless `<Card padding={2}>`.
+    The card adds 0.5rem, and the input's own 0.5rem internal padding adds the rest. Do not wrap
+    inputs inside the card in `InputPadder`.
 - **Data fetching:** `useSWR`, on the client, inside the component that needs the data, with a
   loader while pending. Do not fetch at the top of the page and pass data down.
 

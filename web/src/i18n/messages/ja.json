@@ -1257,7 +1257,6 @@
         "description": "今後の分類・レビュー機能に使用するモデルを選択します。Onyx はまだこのモデルを使用しません。",
         "clear": "解除",
         "notConfigured": "未設定",
-        "saved": "判断モデルを更新しました",
         "saveFailed": "判断モデルを更新できませんでした"
       },
       "header": {
@@ -2849,18 +2848,14 @@
         "indexingStartUnexpectedError": "インデックス作成の開始中に予期しないエラーが発生しました",
         "indexingUpdateStarted": "インデックスの更新を開始しました",
         "nameUpdateFailed": "コネクター名を更新できませんでした",
-        "nameUpdated": "コネクター名を更新しました",
         "noUnresolvedErrors": "再試行する未解決のエラーはありません。",
         "pruningFrequencyUpdateFailed": "コネクターのプルーニング頻度を更新できませんでした",
-        "pruningFrequencyUpdated": "コネクターのプルーニング頻度を更新しました",
         "refreshFrequencyUpdateFailed": "コネクターの更新頻度を変更できませんでした",
-        "refreshFrequencyUpdated": "コネクターの更新頻度を変更しました",
         "targetedReindexFailed": "対象を指定した再インデックス作成に失敗しました: {message}",
         "targetedReindexRunning": "{count, plural, one {# 件のエラー} other {# 件のエラー}}を再試行しています…",
         "targetedReindexDone": "再試行が完了しました。{resolved, plural, one {# 件のエラー} other {# 件のエラー}}が解決しました。",
         "targetedReindexPartial": "再試行が完了しました。{resolved, plural, one {# 件のエラー} other {# 件のエラー}}が解決し、{failing, plural, one {# 件のドキュメント} other {# 件のドキュメント}}は引き続き失敗しています。",
         "targetedReindexIncomplete": "再試行は完了しませんでした。未解決のエラーは一覧に残ります。",
-        "checkFrequencyUpdated": "コネクタのチェック頻度を更新しました",
         "checkFrequencyUpdateFailed": "コネクタのチェック頻度を更新できませんでした",
         "runResolved": "解決済みにしました。",
         "runResolveFailed": "解決できませんでした: {message}",
@@ -3444,9 +3439,6 @@
           },
           "shareFailed": {
             "toast": "このアカウントを使用できるユーザーを変更できませんでした。もう一度お試しください。"
-          },
-          "renameSaved": {
-            "toast": "アカウント名を変更しました。"
           },
           "renameFailed": {
             "toast": "このアカウントの名前を変更できませんでした。もう一度お試しください。"
@@ -4868,9 +4860,6 @@
       }
     },
     "costOverrides": {
-      "allProviders": {
-        "label": "すべてのプロバイダー"
-      },
       "deleteModal": {
         "description": "**{model}**（{provider}）の利用は再び組み込み価格で計算されます。",
         "submit": {
@@ -4944,12 +4933,6 @@
     },
     "craft": {
       "accessCell": {
-        "disabledSuccess": {
-          "message": "このユーザーの Craft を無効にしました"
-        },
-        "enabledSuccess": {
-          "message": "このユーザーの Craft を有効にしました"
-        },
         "error": {
           "message": "Craft のアクセス権を更新できませんでした"
         }
@@ -5064,14 +5047,8 @@
         "resetError": {
           "message": "既定のモデルをクリアできませんでした"
         },
-        "resetSuccess": {
-          "message": "Craft の既定のモデルをクリアしました"
-        },
         "saveError": {
           "message": "既定のモデルを保存できませんでした"
-        },
-        "saveSuccess": {
-          "message": "Craft の既定のモデルを保存しました"
         }
       },
       "header": {
@@ -5450,9 +5427,6 @@
         }
       },
       "defaultAgent": {
-        "cleared": {
-          "toast": "既定のエージェントを解除しました"
-        },
         "section": {
           "description": "オーバーライドがない限り、ボットがすべてのチャンネルで使用するエージェントです。",
           "title": "既定のエージェント"
@@ -5465,9 +5439,6 @@
         },
         "updateError": {
           "toast": "エージェントを更新できませんでした"
-        },
-        "updated": {
-          "toast": "既定のエージェントを更新しました"
         }
       },
       "error": {
@@ -5520,15 +5491,9 @@
         "deleted": {
           "toast": "サーバー設定を削除しました"
         },
-        "disabled": {
-          "toast": "サーバーを無効にしました"
-        },
         "empty": {
           "description": "まずはサーバー設定を作成してください。",
           "title": "設定済みの Discord サーバーはまだありません"
-        },
-        "enabled": {
-          "toast": "サーバーを有効にしました"
         },
         "fallbackName": "サーバー #{id}",
         "notRegistered": {
@@ -5652,9 +5617,6 @@
       "score": {
         "notANumber": {
           "toast": "スコアは数値で入力してください"
-        },
-        "updated": {
-          "toast": "スコアを更新しました！"
         }
       },
       "sets": {
@@ -6079,8 +6041,7 @@
           "label": "（デフォルト）"
         },
         "toasts": {
-          "renameFailed": "グループの名前を変更できませんでした",
-          "renamed": "グループ名を「{name}」に変更しました"
+          "renameFailed": "グループの名前を変更できませんでした"
         },
         "viewGroup": {
           "label": "グループを表示"
@@ -6159,8 +6120,6 @@
         "toasts": {
           "deleteFailed": "グループを削除できませんでした",
           "deleted": "グループ「{name}」を削除しました",
-          "managerAssigned": "マネージャーを割り当てました",
-          "managerRevoked": "マネージャー権限を取り消しました",
           "managerUpdateFailed": "マネージャーを更新できませんでした",
           "membersStranded": "一部のメンバーがどのグループにも所属しなくなります。先に別のグループへ追加してください。",
           "syncing": "このグループは現在同期中です。しばらく待ってからもう一度お試しください。",
@@ -6182,8 +6141,7 @@
           "text": "グループを作成して、ユーザーを整理しアクセス権を管理しましょう。"
         },
         "loadError": {
-          "description": "詳細はコンソールを確認してください。",
-          "title": "グループを読み込めませんでした。"
+          "description": "詳細はコンソールを確認してください。"
         },
         "newGroup": {
           "label": "新しいグループ"
@@ -6638,9 +6596,6 @@
       "deselectError": {
         "message": "選択を解除できませんでした"
       },
-      "deselectSuccess": {
-        "message": "{title} の選択を解除しました"
-      },
       "disconnectError": {
         "message": "接続を解除できませんでした"
       },
@@ -6811,9 +6766,6 @@
       },
       "setDefaultError": {
         "message": "デフォルトに設定できませんでした"
-      },
-      "setDefaultSuccess": {
-        "message": "{title} をデフォルトに設定しました"
       }
     },
     "indexSettings": {
@@ -7373,8 +7325,7 @@
           },
           "placeholder": "モードを選択",
           "toasts": {
-            "error": "検索アクセスモードを更新できませんでした。",
-            "success": "検索アクセスモードを{mode}に設定しました。"
+            "error": "検索アクセスモードを更新できませんでした。"
           }
         },
         "loadError": {
@@ -7401,7 +7352,6 @@
           "period": "1 から {max, number} までの整数の秒数を入力してください。"
         },
         "toasts": {
-          "saved": "レート制限を保存しました。",
           "failed": "レート制限を保存できませんでした。"
         }
       },
@@ -8455,9 +8405,6 @@
         "error": "SCIM token のステータスを読み込めませんでした。"
       },
       "modal": {
-        "copied": {
-          "message": "token をクリップボードにコピーしました"
-        },
         "copyFailed": {
           "error": "token をコピーできませんでした"
         },
@@ -8718,9 +8665,7 @@
       },
       "toasts": {
         "securitySettingsUpdateFailed": "セキュリティ設定を更新できませんでした",
-        "securitySettingsUpdated": "セキュリティ設定を更新しました",
-        "settingsUpdateFailed": "設定を更新できませんでした",
-        "settingsUpdated": "設定を更新しました"
+        "settingsUpdateFailed": "設定を更新できませんでした"
       },
       "placeholders": {
         "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
@@ -8842,8 +8787,7 @@
       "page": {
         "description": "サービスアカウントを使用して、{appName} API にプログラムからアクセスします。",
         "error": {
-          "description": "詳細はコンソールを確認してください。",
-          "title": "サービスアカウントの読み込みに失敗しました。"
+          "description": "詳細はコンソールを確認してください。"
         }
       },
       "regenerateModal": {
@@ -8894,7 +8838,6 @@
       "toasts": {
         "deleteFailed": "API キーの削除に失敗しました。",
         "deleteFailedWithDetail": "API キーの削除に失敗しました: {detail}",
-        "keyCopied": "API キーをクリップボードにコピーしました。",
         "regenerateFailed": "API キーの再生成に失敗しました。",
         "regenerateFailedWithDetail": "API キーの再生成に失敗しました: {detail}"
       },
@@ -9301,9 +9244,6 @@
         "fieldUpdateFailed": {
           "toast": "コネクターの {field} の更新に失敗しました"
         },
-        "fieldUpdated": {
-          "toast": "コネクターの {field} を更新しました"
-        },
         "updateTokensButton": {
           "label": "Token を更新"
         }
@@ -9328,9 +9268,7 @@
         "gatedTooltip": "複数の SSO プロバイダーを有効にできるのは、Business プランまたは Enterprise プランです。"
       },
       "copyRedirectUri": {
-        "tooltip": "リダイレクト URI をコピー",
-        "successToast": "リダイレクト URI をコピーしました",
-        "errorToast": "コピーできませんでした"
+        "tooltip": "リダイレクト URI をコピー"
       },
       "deleteProvider": {
         "tooltip": "削除"
@@ -10049,8 +9987,7 @@
         }
       },
       "loadError": {
-        "description": "トレース設定を読み込めません。",
-        "title": "トレース設定の読み込みに失敗しました"
+        "description": "トレース設定を読み込めません。"
       },
       "page": {
         "description": "オブザーバビリティプラットフォームを接続して、LLM 呼び出しを監視・評価します。"
@@ -10818,7 +10755,6 @@
         "title": "各ユーザーは設定 → LLM ゲートウェイで独自のトークンと接続情報を設定します。"
       },
       "toasts": {
-        "settingsUpdated": "設定を更新しました",
         "settingsUpdateFailed": "設定の更新に失敗しました"
       }
     },
@@ -11501,14 +11437,18 @@
         },
         "toasts": {
           "accessRemoved": "アクセス権を削除しました。",
-          "copyLinkFailed": "リンクのコピーに失敗しました。",
-          "linkCopied": "リンクをコピーしました。",
           "ownershipTransferred": "オーナー権限を譲渡しました。",
           "sharingUpdated": "共有設定を更新しました。"
         },
         "transfer": {
           "label": "譲渡",
           "title": "*{name}* を譲渡"
+        },
+        "people": {
+          "label": "アクセスできるユーザー"
+        },
+        "ownerOption": {
+          "disabledTooltip": "オーナーの共有は解除できません。"
         }
       },
       "viewer": {
@@ -16088,6 +16028,12 @@
     "settingsHeader": {
       "cancel": "キャンセル"
     },
+    "settingsBody": {
+      "error": {
+        "title": "{page} を読み込めませんでした",
+        "description": "問題が発生しました。しばらくしてからもう一度お試しください。"
+      }
+    },
     "table": {
       "alwaysShown": "常に表示",
       "ascending": "昇順",
@@ -16742,8 +16688,7 @@
         "title": "エージェント"
       },
       "craft": {
-        "label": "Craft",
-        "businessTag": "Business"
+        "label": "Craft"
       },
       "exploreAgents": {
         "label": "エージェントを探す"

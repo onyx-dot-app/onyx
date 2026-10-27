@@ -27,7 +27,7 @@ A tab inside a sidebar needs no `folded` prop. `SidebarRoot` publishes its fold 
 
 The label stays in the DOM while folded. It is hidden with `visibility: hidden`, which keeps it out of the accessibility tree and out of the tab order, so a screen reader never announces it.
 
-Pass `folded` only to override the sidebar — outside a sidebar, in Storybook, or in a skeleton. It sets `data-folded` on the tab itself, which wins over the sidebar.
+Pass `folded` only to override the sidebar — outside a sidebar, or in a skeleton. It sets `data-folded` on the tab itself, which wins over the sidebar.
 
 The folded-name tooltip is the one part that stays in JS: CSS cannot arm a tooltip. It lives in a small wrapper that subscribes to the fold state on the tab's behalf, so a fold re-renders the wrapper and nothing below it. The wrapper keeps the tooltip mounted and passes `suppressed` while the tab is unfolded, so hover stays Radix's to track and an unfolded tab holds no hover state of its own.
 

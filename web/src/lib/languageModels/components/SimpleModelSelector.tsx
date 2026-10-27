@@ -213,7 +213,12 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
           shown.flatMap((option) => providerIdByValue.get(option.value) ?? [])
         ),
       ];
-      modelPaging.loadMore(shownProviderIds).catch(console.error);
+      // A caller's filter can hide every loaded model of a provider that has
+      // more pages, so with no shown provider left to page, page any.
+      modelPaging
+        .loadMore(shownProviderIds)
+        .then((loaded) => (loaded ? undefined : modelPaging.loadMore()))
+        .catch(console.error);
     },
     [modelPaging, trimmedQuery, providerIdByValue]
   );

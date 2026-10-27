@@ -1,6 +1,5 @@
 "use client";
 
-import { IconLoader } from "@opal/loaders";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useFocusOnMount, useGridNavigation, useHotkey } from "@opal/hooks";
 import { useRouter } from "next/navigation";
@@ -18,8 +17,6 @@ import { hasPermission } from "@/lib/permissions/utils";
 import { can } from "@/lib/permissions/resource-actions";
 import GroupsList from "./GroupsList";
 import AdminListHeader from "@/sections/admin/AdminListHeader";
-import { IllustrationContent } from "@opal/layouts";
-import SvgNoResult from "@opal/illustrations/no-result";
 import { useSettings } from "@/lib/settings/hooks";
 
 function GroupsPage() {
@@ -115,7 +112,10 @@ function GroupsPage() {
   }
 
   return (
-    <SettingsLayouts.Root>
+    <SettingsLayouts.Root
+      loading={isLoading}
+      error={error ? t("list.loadError.description") : false}
+    >
       <div data-testid="groups-page-heading">
         <SettingsLayouts.Header icon={SvgUsers} title={t("page.title")} divider>
           <MessageCard
@@ -163,16 +163,6 @@ function GroupsPage() {
           inputRef={setSearchInput}
           onSearchKeyDown={handleSearchKeyDown}
         />
-
-        {isLoading && <IconLoader />}
-
-        {error && (
-          <IllustrationContent
-            illustration={SvgNoResult}
-            title={t("list.loadError.title")}
-            description={t("list.loadError.description")}
-          />
-        )}
 
         {!isLoading && !error && groups && (
           <div ref={listRef}>

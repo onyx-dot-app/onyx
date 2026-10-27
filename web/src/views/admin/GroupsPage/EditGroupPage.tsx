@@ -282,11 +282,6 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       try {
         await setGroupManager(groupId, userId, makeManager);
         await refreshGroupLists(mutate);
-        toast.success(
-          makeManager
-            ? t("edit.toasts.managerAssigned")
-            : t("edit.toasts.managerRevoked")
-        );
       } catch (err) {
         console.error("Failed to update manager:", err);
         toast.error(
@@ -605,7 +600,10 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
 
   return (
     <>
-      <SettingsLayouts.Root>
+      <SettingsLayouts.Root
+        loading={isLoading}
+        error={error ? t("edit.loadError.text") : false}
+      >
         <SettingsLayouts.Header
           icon={SvgUsers}
           title={t("edit.header.title")}
@@ -615,15 +613,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
         />
 
         <SettingsLayouts.Body>
-          {isLoading && <IconLoader />}
-
-          {error && (
-            <Text as="p" secondaryBody text03>
-              {t("edit.loadError.text")}
-            </Text>
-          )}
-
-          {!isLoading && !error && group && (
+          {group && (
             <>
               {isDefaultGroup && (
                 <MessageCard
