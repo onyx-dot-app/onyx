@@ -2453,6 +2453,8 @@ def test_port_task_enqueued_at_highest_priority() -> None:
 def test_reindex_finalizing_needs_every_connector_port_success(
     db_session: Session, cc_pair_and_port_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
+    """The reindex finalizes only once every connector's latest port is SUCCESS,
+    and only for a port-flow FUTURE that does not swap INSTANT."""
     cc_pair, future_id = cc_pair_and_port_future
     future = db_session.get(SearchSettings, future_id)
     assert future is not None
@@ -2487,6 +2489,8 @@ def test_reindex_finalizing_needs_every_connector_port_success(
 def test_docfetching_priority_finalizing(
     db_session: Session, cc_pair_and_port_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
+    """FUTURE fetch tasks go out HIGH while the reindex finalizes; PRESENT
+    refreshes keep MEDIUM, and first-time indexing stays HIGH."""
     cc_pair, future_id = cc_pair_and_port_future
     future = db_session.get(SearchSettings, future_id)
     assert future is not None

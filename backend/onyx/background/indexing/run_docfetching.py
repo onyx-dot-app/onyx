@@ -116,6 +116,9 @@ from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
 
 logger = setup_logger(propagate=False)
 
+# How often a running FUTURE attempt re-checks whether the reindex finalizes.
+_FINALIZING_RECHECK_INTERVAL_S = 60
+
 INDEXING_TRACER_NUM_PRINT_ENTRIES = 5
 
 
@@ -639,6 +642,12 @@ def connector_document_extraction(
             docprocessing_priority = OnyxCeleryPriority.HIGH
         else:
             docprocessing_priority = OnyxCeleryPriority.MEDIUM
+        # A FUTURE attempt that started before the last port finished re-checks
+        # while it runs, so its later batches get the finalizing boost too.
+        recheck_finalizing = (
+            not is_primary and docprocessing_priority != OnyxCeleryPriority.HIGH
+        )
+        last_finalizing_check = time.monotonic()
 
         earliest_index_time = (
             db_connector.indexing_start.timestamp()
@@ -850,6 +859,20 @@ def connector_document_extraction(
                         index_attempt.search_settings.status,
                         index_attempt_id,
                     )
+                    if (
+                        recheck_finalizing
+                        and time.monotonic() - last_finalizing_check
+                        >= _FINALIZING_RECHECK_INTERVAL_S
+                    ):
+                        last_finalizing_check = time.monotonic()
+                        if reindex_finalizing(
+                            db_session_tmp,
+                            db_session_tmp.get(
+                                SearchSettings, index_attempt.search_settings_id
+                            ),
+                        ):
+                            docprocessing_priority = OnyxCeleryPriority.HIGH
+                            recheck_finalizing = False
 
                 # save record of any failures at the connector level
                 if failure is not None:
