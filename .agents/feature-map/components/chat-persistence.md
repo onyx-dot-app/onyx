@@ -103,6 +103,21 @@ Its `ownership_version` changes when a checkpoint is published or claimed, preve
 The runtime revision inside `state` tracks execution changes and serves a separate purpose.
 Current application writers do not use checkpoints yet.
 
+`chat/checkpoint.py` encodes suspended execution as typed JSON alongside the saved response.
+It retains completed tool results, pending input, progress, and compaction state.
+Stable payload tags restore application types without importing classes named in stored data.
+History and response digests reject changed inputs or outputs during reconstruction.
+The tenant and response binding checks identity; callers must still authorize access.
+`chat/response_models.py:ResponseCheckpoint` defines this stored payload.
+
+`db/chat_checkpoint.py` publishes and claims checkpoints under a response row lock.
+A claim increments the ownership version and changes SUSPENDED to RUNNING.
+Competing claimers cannot both acquire the checkpoint.
+A failed reconstruction can release its claim while its ownership version still matches.
+Finalization removes checkpoint state. Each caller owns its database transaction.
+These APIs prepare later runtime adoption; no production endpoint resumes computation yet.
+
+
 Migration `9d8f310ac672` adds nullable execution metadata to existing chat tables.
 It adds child-session links, response status and failures, and tool results.
 Current writers keep their existing behavior.

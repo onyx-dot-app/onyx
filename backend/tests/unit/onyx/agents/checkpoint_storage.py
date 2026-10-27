@@ -1,0 +1,111 @@
+"""Exercise resume through the response records and checkpoint data stored by chat."""
+
+from collections.abc import Mapping
+from unittest.mock import patch
+
+from pydantic import BaseModel, JsonValue, TypeAdapter
+
+from onyx.agents.models import AgentState, ExecutionCheckpoint, RunState, RunStatus
+from onyx.chat.checkpoint import (
+    _CheckpointSerializer,
+    deserialize_checkpoint,
+    serialize_checkpoint,
+)
+from onyx.chat.response import response_record, response_snapshot
+from onyx.chat.response_models import (
+    CheckpointBinding,
+    ResponseCheckpoint,
+    ResponseRecord,
+)
+from onyx.llm.models import Message, ToolResult
+
+
+class SavedCheckpoint(BaseModel):
+    response: ResponseRecord
+    response_details: list[JsonValue]
+    checkpoint: ResponseCheckpoint | None
+    history: list[dict[str, JsonValue]]
+    context: AgentState
+    binding: CheckpointBinding
+
+
+class CheckpointStorage:
+    def __init__(self, payload_types: Mapping[str, type[BaseModel]]) -> None:
+        self.payload_types = payload_types
+        self.serializer = _CheckpointSerializer(payload_types)
+
+    def save(
+        self, run_state: RunState, agent_state: AgentState, binding: CheckpointBinding
+    ) -> str:
+        # Child responses are stored independently and resolved through the directory.
+        run_state = run_state.model_copy(deep=True, update={"child_runs": []})
+        response = response_record(run_state)
+        with patch(
+            "onyx.chat.checkpoint.CHECKPOINT_PAYLOAD_TYPES",
+            self.payload_types,
+        ):
+            checkpoint = (
+                serialize_checkpoint(
+                    ExecutionCheckpoint(run_state=run_state, agent_state=agent_state),
+                    response,
+                    binding,
+                )
+                if run_state.status == RunStatus.SUSPENDED
+                else None
+            )
+        # Preserve typed result details independently, as the database column does.
+        response_details: list[JsonValue] = []
+        for message in [*response.input_messages, *response.messages]:
+            response_details.append(
+                self.serializer.encode_payload(message.details)
+                if isinstance(message, ToolResult)
+                else None
+            )
+            if isinstance(message, ToolResult):
+                message.details = None
+        return SavedCheckpoint(
+            response=response,
+            response_details=response_details,
+            checkpoint=checkpoint,
+            context=agent_state.model_copy(update={"messages": []}),
+            history=[
+                self.serializer.encode_message(message)
+                for message in agent_state.messages
+            ],
+            binding=binding,
+        ).model_dump_json()
+
+    def load(
+        self, serialized: str, *, expected_binding: CheckpointBinding | None = None
+    ) -> ExecutionCheckpoint:
+        saved = SavedCheckpoint.model_validate_json(serialized)
+        for message, details in zip(
+            [*saved.response.input_messages, *saved.response.messages],
+            saved.response_details,
+            strict=True,
+        ):
+            if isinstance(message, ToolResult):
+                message.details = self.serializer.decode_payload(details)
+        context = saved.context
+        for raw in saved.history:
+            metadata = raw.pop("metadata", None)
+            details = raw.pop("details", None)
+            message = TypeAdapter(Message).validate_python(raw)
+            message.metadata = self.serializer.decode_payload(metadata)
+            if isinstance(message, ToolResult):
+                message.details = self.serializer.decode_payload(details)
+            context.messages.append(message)
+        if saved.checkpoint is None:
+            return ExecutionCheckpoint(
+                agent_state=context, run_state=response_snapshot(saved.response)
+            )
+        with patch(
+            "onyx.chat.checkpoint.CHECKPOINT_PAYLOAD_TYPES",
+            self.payload_types,
+        ):
+            return deserialize_checkpoint(
+                saved.checkpoint,
+                saved.response,
+                context,
+                expected_binding or saved.binding,
+            )

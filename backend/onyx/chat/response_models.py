@@ -1,9 +1,17 @@
 """Detached accepted responses and their application presentation settings."""
 
 from enum import Enum
+from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    field_serializer,
+    field_validator,
+)
 
 from onyx.agents.models import (
     AgentInfo,
@@ -13,10 +21,12 @@ from onyx.agents.models import (
     StepRecord,
     messages_from_steps,
 )
-from onyx.context.search.models import SearchDoc
+from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.deep_research.models import ResearchConfiguration
 from onyx.llm.models import GenerationRequestParams, Message
 from onyx.server.query_and_chat.streaming_models import CitationInfo
+from onyx.tools.file_snapshot import SavedChatFile
+from onyx.tools.models import ChatFile
 from onyx.tools.records import RecordedToolCallInfo
 
 
@@ -219,3 +229,59 @@ class SessionAncestor(BaseModel):
     id: UUID
     agent_name: str | None
     parent_id: UUID | None
+
+
+class ChatSearchResult(SearchDocsResponse):
+    """Search documents with files staged before the tool result is committed."""
+
+    staged_files: list[ChatFile]
+
+    @field_serializer("staged_files")
+    def serialize_staged_files(self, files: list[ChatFile]) -> list[SavedChatFile]:
+        return [SavedChatFile.capture(file) for file in files]
+
+    @field_validator("staged_files", mode="before")
+    @classmethod
+    def restore_staged_files(cls, value: object) -> list[ChatFile]:
+        if not isinstance(value, list):
+            raise ValueError("Staged files must be a list")
+        return [
+            file
+            if isinstance(file, ChatFile)
+            else SavedChatFile.model_validate(file).restore()
+            for file in value
+        ]
+
+
+class CheckpointBinding(BaseModel):
+    """Application identity; validating this record does not authorize access."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    tenant_id: str
+    response_id: str
+
+
+class MessagePayload(BaseModel):
+    metadata: JsonValue = None
+    details: JsonValue = None
+    cacheable: bool = False
+
+
+class ResponseCheckpoint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    version: Literal[1] = 1
+    history_digest: str
+    response_digest: str
+    binding: CheckpointBinding
+    revision: int
+    progress: dict[str, JsonValue]
+    compaction_checkpoint: CompactionCheckpoint | None
+    # Request display settings are saved by chat finalization, after execution ends.
+    request_params: GenerationRequestParams | None
+    message_payloads: list[MessagePayload]
+    input_payloads: list[MessagePayload]
+
+
+class SavedCheckpoint(BaseModel):
+    ownership_version: int
+    data: ResponseCheckpoint
