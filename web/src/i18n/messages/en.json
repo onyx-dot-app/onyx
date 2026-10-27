@@ -11503,6 +11503,9 @@
         },
         "people": {
           "label": "People with access"
+        },
+        "ownerOption": {
+          "disabledTooltip": "Owner cannot be unshared."
         }
       },
       "viewer": {

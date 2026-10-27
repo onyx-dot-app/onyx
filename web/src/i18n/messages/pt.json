@@ -11503,6 +11503,9 @@
         },
         "people": {
           "label": "Pessoas com acesso"
+        },
+        "ownerOption": {
+          "disabledTooltip": "Não é possível remover o compartilhamento do proprietário."
         }
       },
       "viewer": {

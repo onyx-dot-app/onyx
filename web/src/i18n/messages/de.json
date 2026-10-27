@@ -11503,6 +11503,9 @@
         },
         "people": {
           "label": "Personen mit Zugriff"
+        },
+        "ownerOption": {
+          "disabledTooltip": "Die Freigabe für den Eigentümer kann nicht aufgehoben werden."
         }
       },
       "viewer": {

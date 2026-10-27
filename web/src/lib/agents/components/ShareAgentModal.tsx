@@ -600,22 +600,51 @@ export function ShareAgentModal({
         ? SvgUsers
         : SvgLock;
 
+    // The owner (a user or a group) shows as selected and cannot be
+    // unselected: it already has its own row and is not a share.
+    const ownerTooltip = t("shareAgent.ownerOption.disabledTooltip");
     const shareOptions: SelectOption[] = [
       ...shareableUsers.map((user) => ({
         value: `${USER_OPTION_PREFIX}${user.id}`,
         title: user.email,
         icon: SvgUser,
+        ...(user.id === agent?.owner?.id && {
+          disabled: true,
+          tooltip: ownerTooltip,
+        }),
       })),
       ...(canGroupShare
         ? shareableGroups.map((group) => ({
             value: `${GROUP_OPTION_PREFIX}${group.id}`,
             title: group.name,
             icon: SvgUsers,
+            ...(group.id === agent?.owner_group?.id && {
+              disabled: true,
+              tooltip: ownerTooltip,
+            }),
           }))
         : []),
     ];
     // Shared people show as selected options; the table lists them
     const pickedTags: TagItem[] = [
+      ...(agent?.owner
+        ? [
+            {
+              id: `${USER_OPTION_PREFIX}${agent.owner.id}`,
+              label: agent.owner.email,
+              locked: true,
+            },
+          ]
+        : []),
+      ...(agent?.owner_group
+        ? [
+            {
+              id: `${GROUP_OPTION_PREFIX}${agent.owner_group.id}`,
+              label: agent.owner_group.name,
+              locked: true,
+            },
+          ]
+        : []),
       ...effectiveState.userShares.map((share) => ({
         id: `${USER_OPTION_PREFIX}${share.user.id}`,
         label: share.user.email,

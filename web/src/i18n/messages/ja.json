@@ -11503,6 +11503,9 @@
         },
         "people": {
           "label": "アクセスできるユーザー"
+        },
+        "ownerOption": {
+          "disabledTooltip": "オーナーの共有は解除できません。"
         }
       },
       "viewer": {

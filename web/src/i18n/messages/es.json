@@ -11503,6 +11503,9 @@
         },
         "people": {
           "label": "Personas con acceso"
+        },
+        "ownerOption": {
+          "disabledTooltip": "No se puede dejar de compartir con el propietario."
         }
       },
       "viewer": {
