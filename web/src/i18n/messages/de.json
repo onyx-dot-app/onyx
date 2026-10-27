@@ -7092,6 +7092,20 @@
         },
         "title": "Multipass-Indexierung"
       },
+      "openaiCompatible": {
+        "apiUrl": {
+          "description": "Die Basis-URL Ihres OpenAI-kompatiblen Endpunkts, zum Beispiel http://localhost:8000/v1. {appName} hängt den Pfad /embeddings an.",
+          "title": "API-Basis-URL"
+        },
+        "modelName": {
+          "description": "{appName} verbindet sich mit diesem Modell auf Ihrem OpenAI-kompatiblen Endpunkt."
+        },
+        "reducedDimension": {
+          "description": "Kürzere Vektoren anfordern. Nur Modelle, die mit Matryoshka Representation Learning trainiert wurden, unterstützen dies. Kürzere Vektoren brauchen weniger Speicher und sind schneller durchsuchbar. Leer lassen, um die volle Größe des Modells zu verwenden.",
+          "placeholder": "z. B. 1024",
+          "title": "Embedding-Dimensionen"
+        }
+      },
       "progressBanner": {
         "attentionButton": {
           "label": "Einheiten anzeigen, die Aufmerksamkeit erfordern"
@@ -7218,6 +7232,7 @@
         "modelDimPositive": "Muss eine positive ganze Zahl sein",
         "modelDimRequired": "Modelldimension ist erforderlich",
         "modelNameRequired": "Modellname ist erforderlich",
+        "reducedDimensionTooLarge": "Muss kleiner als die Modelldimension sein",
         "serviceAccountJsonInvalid": "Muss eine gültige JSON-Datei für ein Google-Dienstkonto sein",
         "serviceAccountJsonRequired": "Dienstkonto-JSON ist erforderlich",
         "targetUrlRequired": "Ziel-URL ist erforderlich",

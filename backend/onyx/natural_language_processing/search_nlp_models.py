@@ -557,7 +557,11 @@ class CloudEmbedding:
         return api_key
 
     async def _embed_openai(
-        self, texts: list[str], model: str | None, reduced_dimension: int | None
+        self,
+        texts: list[str],
+        model: str | None,
+        reduced_dimension: int | None,
+        base_url: str | None = None,
     ) -> list[Embedding]:
         if not model:
             model = DEFAULT_OPENAI_MODEL
@@ -568,6 +572,7 @@ class CloudEmbedding:
         client = openai.AsyncOpenAI(
             api_key=self._resolve_api_key(),
             timeout=OPENAI_EMBEDDING_TIMEOUT,
+            base_url=base_url,
             max_retries=(
                 0 if self.policy.counts_every_request else openai.DEFAULT_MAX_RETRIES
             ),
@@ -965,6 +970,14 @@ class CloudEmbedding:
         try:
             if self.provider == EmbeddingProvider.OPENAI:
                 return await self._embed_openai(texts, model_name, reduced_dimension)
+            elif self.provider == EmbeddingProvider.OPENAI_COMPATIBLE:
+                if not model_name or not self.api_url:
+                    raise ValueError(
+                        "Model name and API base URL are required for OpenAI-compatible embedding."
+                    )
+                return await self._embed_openai(
+                    texts, model_name, reduced_dimension, base_url=self.api_url
+                )
             elif self.provider == EmbeddingProvider.AZURE:
                 return await self._embed_azure(texts, f"azure/{deployment_name}")
             elif self.provider == EmbeddingProvider.LITELLM:
@@ -986,7 +999,7 @@ class CloudEmbedding:
             else:
                 raise ValueError(f"Unsupported provider: {self.provider}")
         except openai.AuthenticationError:
-            raise AuthenticationError(provider="OpenAI")
+            raise AuthenticationError(provider=self.provider.value)
         except (ConnectorStopSignal, EmbeddingWaitTimeoutError):
             # Raised while waiting for a rate limit; never retried.
             raise

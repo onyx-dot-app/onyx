@@ -7092,6 +7092,20 @@
         },
         "title": "Indexación multipaso"
       },
+      "openaiCompatible": {
+        "apiUrl": {
+          "description": "La URL base de tu endpoint compatible con OpenAI, por ejemplo http://localhost:8000/v1. {appName} añade la ruta /embeddings.",
+          "title": "URL base de la API"
+        },
+        "modelName": {
+          "description": "{appName} se conectará a este modelo en tu endpoint compatible con OpenAI."
+        },
+        "reducedDimension": {
+          "description": "Solicita vectores más cortos. Solo los modelos entrenados con Matryoshka Representation Learning lo admiten. Los vectores más cortos ocupan menos almacenamiento y se buscan más rápido. Déjalo vacío para usar el tamaño completo del modelo.",
+          "placeholder": "p. ej., 1024",
+          "title": "Dimensiones de embedding"
+        }
+      },
       "progressBanner": {
         "attentionButton": {
           "label": "Ver las unidades que requieren atención"
@@ -7218,6 +7232,7 @@
         "modelDimPositive": "Debe ser un número entero positivo",
         "modelDimRequired": "La dimensión del modelo es obligatoria",
         "modelNameRequired": "El nombre del modelo es obligatorio",
+        "reducedDimensionTooLarge": "Debe ser menor que la dimensión del modelo",
         "serviceAccountJsonInvalid": "Debe ser un archivo JSON válido de cuenta de servicio de Google",
         "serviceAccountJsonRequired": "El JSON de la cuenta de servicio es obligatorio",
         "targetUrlRequired": "La URL de destino es obligatoria",

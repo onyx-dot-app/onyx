@@ -7092,6 +7092,20 @@
         },
         "title": "Multipass Indexing"
       },
+      "openaiCompatible": {
+        "apiUrl": {
+          "description": "The base URL of your OpenAI-compatible endpoint, for example http://localhost:8000/v1. {appName} adds the /embeddings path.",
+          "title": "API Base URL"
+        },
+        "modelName": {
+          "description": "{appName} will connect to this model on your OpenAI-compatible endpoint."
+        },
+        "reducedDimension": {
+          "description": "Request shorter vectors. Only models trained with Matryoshka Representation Learning support this. Shorter vectors use less storage and search faster. Leave empty to use the full size of the model.",
+          "placeholder": "e.g., 1024",
+          "title": "Embedding Dimensions"
+        }
+      },
       "progressBanner": {
         "attentionButton": {
           "label": "View units needing attention"
@@ -7218,6 +7232,7 @@
         "modelDimPositive": "Must be a positive integer",
         "modelDimRequired": "Model dimension is required",
         "modelNameRequired": "Model name is required",
+        "reducedDimensionTooLarge": "Must be smaller than the model dimension",
         "serviceAccountJsonInvalid": "Must be a valid Google service account JSON file",
         "serviceAccountJsonRequired": "Service account JSON is required",
         "targetUrlRequired": "Target URL is required",

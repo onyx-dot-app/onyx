@@ -981,6 +981,7 @@ export default function IndexSettingsPage() {
       normalize: currentEmbeddingModel.normalize,
       queryPrefix: currentEmbeddingModel.query_prefix,
       passagePrefix: currentEmbeddingModel.passage_prefix,
+      reducedDimension: currentEmbeddingModel.reduced_dimension,
     };
   }, [currentEmbeddingModel]);
 

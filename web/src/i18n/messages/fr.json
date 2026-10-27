@@ -7092,6 +7092,20 @@
         },
         "title": "Indexation multi-passes"
       },
+      "openaiCompatible": {
+        "apiUrl": {
+          "description": "L'URL de base de votre point de terminaison compatible OpenAI, par exemple http://localhost:8000/v1. {appName} ajoute le chemin /embeddings.",
+          "title": "URL de base de l'API"
+        },
+        "modelName": {
+          "description": "{appName} se connectera à ce modèle sur votre point de terminaison compatible OpenAI."
+        },
+        "reducedDimension": {
+          "description": "Demander des vecteurs plus courts. Seuls les modèles entraînés avec Matryoshka Representation Learning le permettent. Les vecteurs plus courts occupent moins d'espace et accélèrent la recherche. Laissez vide pour utiliser la taille complète du modèle.",
+          "placeholder": "ex. : 1024",
+          "title": "Dimensions d'embedding"
+        }
+      },
       "progressBanner": {
         "attentionButton": {
           "label": "Voir les unités à vérifier"
@@ -7218,6 +7232,7 @@
         "modelDimPositive": "Doit être un entier positif",
         "modelDimRequired": "La dimension du modèle est obligatoire",
         "modelNameRequired": "Le nom du modèle est obligatoire",
+        "reducedDimensionTooLarge": "Doit être inférieur à la dimension du modèle",
         "serviceAccountJsonInvalid": "Doit être un fichier JSON de compte de service Google valide",
         "serviceAccountJsonRequired": "Le JSON du compte de service est obligatoire",
         "targetUrlRequired": "L'URL cible est obligatoire",

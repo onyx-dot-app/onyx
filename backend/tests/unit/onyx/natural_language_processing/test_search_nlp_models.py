@@ -4,6 +4,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
+import openai
 import pytest
 import requests
 from google.auth.credentials import Credentials
@@ -85,6 +86,40 @@ async def test_openai_embedding(
 
         assert result == sample_embeddings
         mock_client.embeddings.create.assert_called_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("reduced_dimension", "expected_dimensions"),
+    [(1024, 1024), (None, openai.omit)],
+)
+async def test_openai_compatible_embedding_sends_base_url_and_dimensions(
+    reduced_dimension: int | None, expected_dimensions: object
+) -> None:
+    created = MagicMock()
+    created.data = [MagicMock(embedding=[0.1, 0.2])]
+    client = MagicMock()
+    client.embeddings.create = AsyncMock(return_value=created)
+
+    with patch.object(openai, "AsyncOpenAI", return_value=client) as make_client:
+        async with CloudEmbedding(
+            "fake-key",
+            EmbeddingProvider.OPENAI_COMPATIBLE,
+            api_url="https://embed.example.com/v1",
+        ) as embedding:
+            result = await embedding.embed(
+                texts=["a"],
+                text_type=EmbedTextType.PASSAGE,
+                model_name="qwen3-embedding-8b",
+                reduced_dimension=reduced_dimension,
+            )
+
+    assert result == [[0.1, 0.2]]
+    assert make_client.call_args.kwargs["base_url"] == "https://embed.example.com/v1"
+    assert client.embeddings.create.call_args.kwargs["model"] == "qwen3-embedding-8b"
+    assert (
+        client.embeddings.create.call_args.kwargs["dimensions"] is expected_dimensions
+    )
 
 
 def _build_google_embed_response(
@@ -848,8 +883,6 @@ async def test_openai_sdk_retries_are_off_when_the_policy_counts_requests(
     block_on_provider_rate_limit: bool, expected_retries: int
 ) -> None:
     """SDK retries would send requests that take no rate limit slot."""
-    import openai
-
     policy = EmbeddingRequestPolicy(
         retry_backoff=EmbeddingRetryBackoff(scale_seconds=0, max_seconds=0),
         retry_tries=1,
