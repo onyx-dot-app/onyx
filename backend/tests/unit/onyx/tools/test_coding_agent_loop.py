@@ -163,7 +163,7 @@ def run_agent(
     llm = ScriptedLLM(steps)
     packets: list[Packet] = []
     presenter = ResponsePresenter(Emitter(packets.append))
-    presenter.tools[("parent-message", "coding-call")] = ToolRenderer(
+    presenter.tools[("parent-run", "parent-message", "coding-call")] = ToolRenderer(
         ToolCall(id="coding-call", name=CODING_AGENT_TOOL_NAME, arguments={}),
         Placement(turn_index=TURN_INDEX, tab_index=TAB_INDEX),
         tool_id=1,
