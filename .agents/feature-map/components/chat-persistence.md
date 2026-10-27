@@ -106,11 +106,13 @@ Current application writers do not use checkpoints yet.
 `chat/checkpoint.py` encodes suspended execution as typed JSON alongside the saved response.
 It retains completed tool results, pending input, progress, and compaction state.
 Stable payload tags restore application types without importing classes named in stored data.
+Prompt images store file references. Restoration loads their bytes only when requested.
 History and response digests reject changed inputs or outputs during reconstruction.
 The tenant and response binding checks identity; callers must still authorize access.
 `chat/response_models.py:ResponseCheckpoint` defines this stored payload.
 
 `db/chat_checkpoint.py` publishes and claims checkpoints under a response row lock.
+Publication rejects content-free incognito sessions before writing checkpoint content.
 A claim increments the ownership version and changes SUSPENDED to RUNNING.
 Competing claimers cannot both acquire the checkpoint.
 A failed reconstruction can release its claim while its ownership version still matches.

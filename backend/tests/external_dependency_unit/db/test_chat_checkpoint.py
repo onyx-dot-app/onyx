@@ -6,6 +6,7 @@ from threading import Barrier
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import event
 from sqlalchemy.orm import Session
 
 from onyx.agents.models import RunStatus
@@ -18,6 +19,7 @@ from onyx.db.chat_checkpoint import (
     publish_checkpoint__no_commit,
     release_checkpoint_claim__no_commit,
 )
+from onyx.db.enums import IncognitoRecordMode
 from onyx.db.models import ChatMessage, ChatResponseCheckpoint, ChatSession
 
 
@@ -239,3 +241,50 @@ def test_competing_publications_preserve_one_checkpoint(
         value for value in published if value is not None
     )
     assert saved.ownership_version == 2
+
+
+@pytest.mark.parametrize("existing_checkpoint", [False, True])
+def test_content_free_sessions_reject_checkpoint_content_before_writes(
+    db_session: Session, committed_response: int, existing_checkpoint: bool
+) -> None:
+    response = db_session.get(ChatMessage, committed_response)
+    assert response is not None
+    response.chat_session.incognito_record_mode = IncognitoRecordMode.USAGE_ONLY
+    if existing_checkpoint:
+        db_session.add(
+            ChatResponseCheckpoint(
+                chat_message_id=response.id, ownership_version=1, state={}
+            )
+        )
+    db_session.commit()
+    checkpoint = checkpoint_data(response.id)
+    checkpoint.progress = {"private": "answer"}
+    statements: list[str] = []
+
+    def capture(statement: str, **_event: object) -> None:
+        statements.append(statement)
+
+    engine = db_session.get_bind()
+    event.listen(engine, "before_cursor_execute", capture, named=True)
+    try:
+        with pytest.raises(ValueError, match="Content-free"):
+            publish_checkpoint__no_commit(
+                db_session,
+                response.id,
+                checkpoint,
+                expected_ownership_version=1 if existing_checkpoint else None,
+            )
+        db_session.flush()
+    finally:
+        event.remove(engine, "before_cursor_execute", capture)
+    assert not any(
+        statement.lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
+        for statement in statements
+    )
+    assert response.response_status == RunStatus.RUNNING
+    saved = db_session.get(ChatResponseCheckpoint, response.id)
+    if existing_checkpoint:
+        assert saved is not None and saved.state == {}
+        assert saved.ownership_version == 1
+    else:
+        assert saved is None

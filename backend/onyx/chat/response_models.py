@@ -21,6 +21,7 @@ from onyx.agents.models import (
     StepRecord,
     messages_from_steps,
 )
+from onyx.agents.tools import InputDecision
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.deep_research.models import ResearchConfiguration
 from onyx.llm.models import GenerationRequestParams, Message
@@ -251,6 +252,19 @@ class ChatSearchResult(SearchDocsResponse):
             else SavedChatFile.model_validate(file).restore()
             for file in value
         ]
+
+
+class CheckpointPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tag: str
+    value: dict[str, JsonValue]
+
+
+class CheckpointToolAnswer(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    request_id: str
+    decision: InputDecision
+    result: dict[str, JsonValue] | None = None
 
 
 class CheckpointBinding(BaseModel):
