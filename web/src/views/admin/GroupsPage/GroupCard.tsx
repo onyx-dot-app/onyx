@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import type { UserGroup } from "@/lib/types";
 import { SvgChevronRight, SvgUser, SvgUserManage, SvgUsers } from "@opal/icons";
 import { ContentAction, toast } from "@opal/layouts";
-import { Button, SelectCard } from "@opal/components";
+import { RowAction, SelectCard } from "@opal/components";
 import {
   isBuiltInGroup,
   buildGroupDescription,
@@ -69,20 +69,19 @@ function GroupCard({ group }: GroupCardProps) {
         editable={!isSyncing && canManage}
         onTitleChange={!isSyncing && canManage ? handleRename : undefined}
         rightChildren={
-          <Button
+          // Repeats the card's action: a click reaches the card's
+          // `openGroup`, and the card is the tab stop.
+          <RowAction
             rightIcon={SvgChevronRight}
-            prominence="tertiary"
             tooltip={t("card.viewGroup.label")}
             disabled={!canManageMembers}
-            // Repeats the card's action: a click bubbles to the card's
-            // `openGroup`, and the card is the tab stop.
-            tabIndex={-1}
+            width="fit"
           >
             {formatMemberCount(
               group.users.filter((u) => u.is_active).length,
               t
             )}
-          </Button>
+          </RowAction>
         }
       />
     </SelectCard>

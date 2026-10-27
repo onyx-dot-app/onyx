@@ -10,6 +10,7 @@ import {
   Divider,
   Modal,
   OverflowText,
+  RowAction,
   SelectCard,
   Text,
   Tooltip,
@@ -277,26 +278,17 @@ export default function AuthenticationAccountCard({
     if (action !== undefined) return action;
     if (selected) {
       return (
-        <Button
-          variant="action"
-          prominence="tertiary"
-          rightIcon={SvgCheckSquare}
-          tabIndex={-1}
-        >
+        <RowAction variant="action" rightIcon={SvgCheckSquare} width="fit">
           {t("selected.label")}
-        </Button>
+        </RowAction>
       );
     }
     if (selectable) {
-      // Repeats the card's own action, so it leaves the tab order.
+      // Repeats the card's own action, so it is static.
       return (
-        <Button
-          prominence="tertiary"
-          rightIcon={SvgArrowRightCircle}
-          tabIndex={-1}
-        >
+        <RowAction rightIcon={SvgArrowRightCircle} width="fit">
           {t("useButton.label")}
-        </Button>
+        </RowAction>
       );
     }
     return (
