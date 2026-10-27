@@ -4183,6 +4183,24 @@
             }
           }
         },
+        "jira_service_management": {
+          "description": "配置 Jira Service Management 连接器",
+          "subtext": "索引一个 Jira Service Management 项目中的工单。",
+          "fields": {
+            "jira_base_url": {
+              "description": "Jira 实例的基础 URL（例如 https://your-domain.atlassian.net）。"
+            },
+            "project_key": {
+              "description": "要索引的 Jira Service Management 项目键（例如 SUP）。"
+            },
+            "jql_query": {
+              "description": "添加条件以筛选工单。范围仍限定为所选项目。"
+            },
+            "comment_email_blacklist": {
+              "description": "不会索引来自这些地址的评论。"
+            }
+          }
+        },
         "salesforce": {
           "description": "配置 Salesforce 连接器",
           "fields": {

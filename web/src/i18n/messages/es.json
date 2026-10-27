@@ -4183,6 +4183,24 @@
             }
           }
         },
+        "jira_service_management": {
+          "description": "Configurar el conector de Jira Service Management",
+          "subtext": "Indexa los tickets de un proyecto de Jira Service Management.",
+          "fields": {
+            "jira_base_url": {
+              "description": "La URL base de tu instancia de Jira (p. ej., https://your-domain.atlassian.net)."
+            },
+            "project_key": {
+              "description": "La clave del proyecto de Jira Service Management que se va a indexar (p. ej., SUP)."
+            },
+            "jql_query": {
+              "description": "Añade condiciones para limitar los tickets. El ámbito sigue siendo el proyecto seleccionado."
+            },
+            "comment_email_blacklist": {
+              "description": "No se indexarán los comentarios de estas direcciones."
+            }
+          }
+        },
         "salesforce": {
           "description": "Configurar conector de Salesforce",
           "fields": {

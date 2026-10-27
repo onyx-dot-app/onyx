@@ -4183,6 +4183,24 @@
             }
           }
         },
+        "jira_service_management": {
+          "description": "Configure Jira Service Management connector",
+          "subtext": "Index tickets from one Jira Service Management project.",
+          "fields": {
+            "jira_base_url": {
+              "description": "The base URL of your Jira instance (e.g., https://your-domain.atlassian.net)."
+            },
+            "project_key": {
+              "description": "The key of the Jira Service Management project to index (e.g., SUP)."
+            },
+            "jql_query": {
+              "description": "Add conditions to limit tickets. The selected project remains in scope."
+            },
+            "comment_email_blacklist": {
+              "description": "Comments from these addresses will not be indexed."
+            }
+          }
+        },
         "salesforce": {
           "description": "Configure Salesforce connector",
           "fields": {

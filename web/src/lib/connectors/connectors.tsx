@@ -1107,51 +1107,47 @@ export const connectorConfigs: Record<
     advanced_values: [],
   },
   jira_service_management: {
-    description: "Configure Jira Service Management connector",
-    subtext: "Index tickets from one Jira Service Management project.",
+    description: "connectors.jira_service_management.description",
+    subtext: "connectors.jira_service_management.subtext",
     values: [
       {
         type: "text",
-        query: "Enter the Jira base URL:",
-        label: "Jira Base URL",
+        label: "connectors.jira.fields.jira_base_url.label",
         name: "jira_base_url",
         optional: false,
         description:
-          "The base URL of your Jira instance (e.g., https://your-domain.atlassian.net)",
+          "connectors.jira_service_management.fields.jira_base_url.description",
       },
       {
         type: "text",
-        query: "Enter the service desk project key:",
-        label: "Project Key",
+        label: "connectors.jira.fields.project_key.label",
         name: "project_key",
         optional: false,
         description:
-          "The key of the Jira Service Management project to index (e.g., SUP).",
+          "connectors.jira_service_management.fields.project_key.description",
       },
       {
         type: "checkbox",
-        query: "Using scoped token?",
-        label: "Using scoped token",
+        label: "connectors.shared.fields.scoped_token.label",
         name: "scoped_token",
         optional: true,
         default: false,
       },
       {
         type: "text",
-        query: "Enter an optional JQL filter:",
-        label: "JQL Filter",
+        label: "connectors.jira.fields.jql_query.label",
         name: "jql_query",
         optional: true,
         description:
-          "Add conditions to limit tickets. The selected project remains in scope.",
+          "connectors.jira_service_management.fields.jql_query.description",
       },
       {
         type: "list",
-        query: "Enter email addresses to skip in comments:",
-        label: "Comment Email Blacklist",
+        label: "connectors.jira.fields.comment_email_blacklist.label",
         name: "comment_email_blacklist",
         optional: true,
-        description: "Comments from these addresses will not be indexed.",
+        description:
+          "connectors.jira_service_management.fields.comment_email_blacklist.description",
       },
     ],
     advanced_values: [],

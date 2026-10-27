@@ -4183,6 +4183,24 @@
             }
           }
         },
+        "jira_service_management": {
+          "description": "Jira Service Management 커넥터 구성",
+          "subtext": "하나의 Jira Service Management 프로젝트에서 티켓을 인덱싱합니다.",
+          "fields": {
+            "jira_base_url": {
+              "description": "Jira 인스턴스의 기본 URL입니다(예: https://your-domain.atlassian.net)."
+            },
+            "project_key": {
+              "description": "인덱싱할 Jira Service Management 프로젝트의 키입니다(예: SUP)."
+            },
+            "jql_query": {
+              "description": "조건을 추가하여 티켓 범위를 좁힙니다. 범위는 선택한 프로젝트로 제한됩니다."
+            },
+            "comment_email_blacklist": {
+              "description": "이 주소에서 작성된 댓글은 인덱싱되지 않습니다."
+            }
+          }
+        },
         "salesforce": {
           "description": "Salesforce 커넥터 구성",
           "fields": {
