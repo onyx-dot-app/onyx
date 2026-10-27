@@ -57,6 +57,7 @@ def test_stored_key_is_not_sent_to_a_new_url(stored_provider: DATestUser) -> Non
     # Older callers echo the masked key back.
     echoed_mask = _put_provider(user, api_key=masked_key, api_url=OTHER_URL)
     assert echoed_mask.status_code == 400
+    assert "Enter the API key again" in echoed_mask.json()["detail"]
 
     # The credential test fills in the stored key, so it must refuse a new URL
     # before it sends any request.
@@ -88,3 +89,34 @@ def test_url_changes_with_the_key_or_edits_without_a_new_url_still_save(
     )
     assert with_key.status_code == 200
     assert _get_provider(user)["api_url"] == OTHER_URL
+
+
+def test_vertex_location_must_be_a_region_name(admin_user: DATestUser) -> None:
+    # google-genai builds https://{location}-aiplatform.googleapis.com/, so a
+    # crafted location would send the stored credential's token to another host.
+    vertex_config = {
+        "auth_method": "service_account_json",
+        "location": "attacker.example/x?",
+    }
+
+    probe = client.post(
+        f"{EMBEDDING_URL}/test-embedding",
+        json={
+            "provider_type": "google",
+            "vertex_config": vertex_config,
+            "model_name": "gemini-embedding-001",
+        },
+        headers=admin_user.headers,
+    )
+    assert probe.status_code == 422
+
+    saved = client.put(
+        f"{EMBEDDING_URL}/embedding-provider",
+        json={
+            "provider_type": "google",
+            "api_key_changed": False,
+            "vertex_config": vertex_config,
+        },
+        headers=admin_user.headers,
+    )
+    assert saved.status_code == 422
