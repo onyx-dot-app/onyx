@@ -2,16 +2,16 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { Button, InputTypeIn, Text } from "@opal/components";
+import { Button, InputTypeIn, SelectCard, Text } from "@opal/components";
 import {
   OnboardingState,
   OnboardingActions,
   OnboardingStep,
 } from "@/lib/onboarding/types";
 import { InputAvatar } from "@opal/components";
-import { cn, clickOnKeyDown } from "@opal/utils";
+import { cn } from "@opal/utils";
 import { SvgCheckCircle, SvgEdit, SvgUser } from "@opal/icons";
-import { InputHorizontal } from "@opal/layouts";
+import { Content, InputHorizontal, Section } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
 import { useSettings } from "@/lib/settings/hooks";
 
@@ -68,48 +68,57 @@ const NameStep = React.memo(
       </div>
     ) : (
       <Hoverable.Root group="nameStep" width="full">
-        <div
-          className={containerClasses}
+        <SelectCard
+          state="empty"
+          padding={2}
+          rounding={4}
           onClick={handleEdit}
-          onKeyDown={clickOnKeyDown(handleEdit)}
           aria-label={t("nameStep.edit.ariaLabel")}
-          role="button"
-          tabIndex={0}
         >
-          <div
-            className={cn("flex items-center gap-1", !isActive && "opacity-50")}
+          <Section
+            flexDirection="row"
+            justifyContent="between"
+            alignItems="center"
+            height="auto"
           >
-            <InputAvatar
-              className={cn(
-                "flex items-center justify-center bg-background-neutral-inverted-00",
-                "w-5 h-5"
+            <Content
+              icon={({ className, style }) => (
+                <InputAvatar
+                  style={style}
+                  className={cn(
+                    className,
+                    "flex items-center justify-center bg-background-neutral-inverted-00"
+                  )}
+                >
+                  <Text as="p" font="secondary-body" color="text-inverted-05">
+                    {userName?.[0]?.toUpperCase()}
+                  </Text>
+                </InputAvatar>
               )}
-            >
-              <Text as="p" font="secondary-body" color="text-inverted-05">
-                {userName?.[0]?.toUpperCase()}
-              </Text>
-            </InputAvatar>
-            <Text as="p" font="main-ui-action" color="text-04">
-              {userName}
-            </Text>
-          </div>
-          <div className="p-1 flex items-center gap-1">
-            <Hoverable.Item group="nameStep" variant="appear-on-hover">
-              <Button
-                prominence="internal"
-                size="sm"
-                icon={SvgEdit}
-                tooltip={t("nameStep.edit.tooltip")}
-              />
-            </Hoverable.Item>
-            <SvgCheckCircle
-              className={cn(
-                "w-4 h-4 stroke-status-success-05",
-                !isActive && "opacity-50"
-              )}
+              title={userName ?? ""}
+              sizePreset="main-ui"
+              variant="section"
             />
-          </div>
-        </div>
+            <Section
+              flexDirection="row"
+              alignItems="center"
+              gap={1}
+              padding={1}
+              width="fit"
+              height="auto"
+            >
+              <Hoverable.Item group="nameStep" variant="appear-on-hover">
+                <Button
+                  prominence="internal"
+                  size="md"
+                  icon={SvgEdit}
+                  tooltip={t("nameStep.edit.tooltip")}
+                />
+              </Hoverable.Item>
+              <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
+            </Section>
+          </Section>
+        </SelectCard>
       </Hoverable.Root>
     );
   }

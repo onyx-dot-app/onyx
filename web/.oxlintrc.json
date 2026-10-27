@@ -578,7 +578,6 @@
         "src/lib/onboarding/components/LLMProviderCard.tsx",
         "src/lib/onboarding/components/NonAdminStep.tsx",
         "src/lib/onboarding/components/LLMStep.tsx",
-        "src/lib/onboarding/components/NameStep.tsx",
         "src/sections/plugins/ChatPluginsPopover.tsx",
         "src/sections/plugins/CraftAppEditorTabs.tsx",
         "src/sections/plugins/ExternalAppLifecycleMenu.tsx",

@@ -2,14 +2,20 @@
 
 import React, { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
-import { InputTypeIn, Text } from "@opal/components";
+import { InputTypeIn, SelectCard, Text } from "@opal/components";
 import { updateUserPersonalization } from "@/lib/users/svc";
 import { useUser } from "@/providers/UserProvider";
 import { Button } from "@opal/components";
 import { InputAvatar } from "@opal/components";
-import { cn, clickOnKeyDown } from "@opal/utils";
+import { cn } from "@opal/utils";
 import { SvgCheckCircle, SvgEdit, SvgUser, SvgX } from "@opal/icons";
-import { ContentAction, InputHorizontal, Section, toast } from "@opal/layouts";
+import {
+  Content,
+  ContentAction,
+  InputHorizontal,
+  Section,
+  toast,
+} from "@opal/layouts";
 import { Hoverable } from "@opal/core";
 import { useSettings } from "@/lib/settings/hooks";
 
@@ -132,42 +138,57 @@ export default function NonAdminStep() {
         </div>
       ) : (
         <Hoverable.Root group="nonAdminName" width="full">
-          <div
-            className={containerClasses}
-            aria-label={t("nameStep.edit.ariaLabel")}
-            role="button"
-            tabIndex={0}
+          <SelectCard
+            state="empty"
+            padding={2}
+            rounding={4}
             onClick={handleEdit}
-            onKeyDown={clickOnKeyDown(handleEdit)}
+            aria-label={t("nameStep.edit.ariaLabel")}
           >
-            <div className="flex items-center gap-1">
-              <InputAvatar
-                className={cn(
-                  "flex items-center justify-center bg-background-neutral-inverted-00",
-                  "w-5 h-5"
+            <Section
+              flexDirection="row"
+              justifyContent="between"
+              alignItems="center"
+              height="auto"
+            >
+              <Content
+                icon={({ className, style }) => (
+                  <InputAvatar
+                    style={style}
+                    className={cn(
+                      className,
+                      "flex items-center justify-center bg-background-neutral-inverted-00"
+                    )}
+                  >
+                    <Text as="p" font="secondary-body" color="text-inverted-05">
+                      {savedName?.[0]?.toUpperCase()}
+                    </Text>
+                  </InputAvatar>
                 )}
+                title={savedName}
+                sizePreset="main-ui"
+                variant="section"
+              />
+              <Section
+                flexDirection="row"
+                alignItems="center"
+                gap={1}
+                padding={1}
+                width="fit"
+                height="auto"
               >
-                <Text as="p" font="secondary-body" color="text-inverted-05">
-                  {savedName?.[0]?.toUpperCase()}
-                </Text>
-              </InputAvatar>
-              <Text as="p" font="main-ui-action" color="text-04">
-                {savedName}
-              </Text>
-            </div>
-            <div className="p-1 flex items-center gap-1">
-              {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-              <Hoverable.Item group="nonAdminName" variant="appear-on-hover">
-                <Button
-                  prominence="internal"
-                  size="sm"
-                  icon={SvgEdit}
-                  tooltip={t("nameStep.edit.tooltip")}
-                />
-              </Hoverable.Item>
-              <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
-            </div>
-          </div>
+                <Hoverable.Item group="nonAdminName" variant="appear-on-hover">
+                  <Button
+                    prominence="internal"
+                    size="md"
+                    icon={SvgEdit}
+                    tooltip={t("nameStep.edit.tooltip")}
+                  />
+                </Hoverable.Item>
+                <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
+              </Section>
+            </Section>
+          </SelectCard>
         </Hoverable.Root>
       )}
     </>
