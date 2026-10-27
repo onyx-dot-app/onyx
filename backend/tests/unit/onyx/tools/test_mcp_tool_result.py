@@ -11,7 +11,8 @@ from onyx.db.enums import MCPAuthenticationType, MCPOAuthProviderMode
 from onyx.db.models import MCPServer
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
-from onyx.tools.models import CustomToolCallSummary, ToolResponse
+from onyx.tools.models import ToolResponse
+from onyx.tools.results import CustomToolCallSummary
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 
 

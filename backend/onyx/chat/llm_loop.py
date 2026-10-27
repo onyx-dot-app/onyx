@@ -23,7 +23,6 @@ from onyx.chat.files import build_python_chat_files_from_search_docs
 from onyx.chat.llm_step import extract_tool_calls_from_response_text, run_llm_step
 from onyx.chat.models import (
     ChatMessageSimple,
-    CitationMode,
     LlmStepResult,
     ToolCallSimple,
 )
@@ -34,6 +33,7 @@ from onyx.chat.prompt_utils import (
     get_default_base_system_prompt,
     process_prompt_template,
 )
+from onyx.chat.response_models import CitationMode
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
 from onyx.configs.constants import MessageType
@@ -68,14 +68,13 @@ from onyx.tools.constants import CITEABLE_TOOLS_NAMES, FILE_READER_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import (
     ChatFile,
-    CustomToolCallSummary,
-    CustomToolUserFileSnapshot,
     MemoryToolResponseSnapshot,
     PythonToolRichResponse,
-    ToolCallInfo,
     ToolCallKickoff,
     ToolResponse,
 )
+from onyx.tools.records import ToolCallInfo
+from onyx.tools.results import CustomToolCallSummary, CustomToolUserFileSnapshot
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool

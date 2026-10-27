@@ -65,7 +65,8 @@ from onyx.server.query_and_chat.streaming_models import (
 )
 from onyx.tools.fake_tools.research_agent import run_research_agent_calls
 from onyx.tools.interface import Tool
-from onyx.tools.models import ToolCallInfo, ToolCallKickoff
+from onyx.tools.models import ToolCallKickoff
+from onyx.tools.records import ToolCallInfo
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool

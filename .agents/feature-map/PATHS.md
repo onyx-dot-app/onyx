@@ -36,6 +36,7 @@ here. Read the component that documents the setting in its env table.
 
 | Path | Component(s) |
 |---|---|
+| `backend/onyx/chat/response_models.py` | chat-persistence |
 | `backend/onyx/chat/files.py`, `backend/onyx/chat/prompt_formatting.py` | context-assembly |
 | `backend/onyx/chat/llm_loop.py`, `backend/onyx/chat/llm_step.py`, `backend/onyx/chat/process_message.py`, `backend/onyx/chat/chat_state.py`, `backend/onyx/chat/chat_processing_checker.py`, `backend/onyx/chat/stop_signal_checker.py` | core-chat-loop |
 | `backend/onyx/chat/emitter.py`, `stream_buffer.py` | core-chat-loop, streaming-protocol |
@@ -51,6 +52,7 @@ here. Read the component that documents the setting in its env table.
 
 | Path | Component(s) |
 |---|---|
+| `backend/onyx/tools/results.py`, `backend/onyx/tools/records.py` | tools-framework |
 | `backend/onyx/tools/interface.py`, `models.py`, `tool_constructor.py`, `tool_runner.py`, `built_in_tools.py`, `tool_name.py` | tools-framework |
 | `backend/onyx/tools/tool_implementations/search/`, `backend/onyx/tools/tool_implementations/search_like_tool_utils.py` | internal-search, tools-framework |
 | `backend/onyx/tools/tool_implementations/web_search/`, `backend/onyx/tools/tool_implementations/open_url/` | web-search |
