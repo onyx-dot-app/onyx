@@ -124,7 +124,7 @@ function RowAction({
           height="auto"
         >
           <Section flexDirection="row" gap={1} width="fit" height="auto">
-            {iconWrapper(Icon, "lg", true)}
+            {iconWrapper(Icon, "lg", false)}
             <Text
               font="main-ui-action"
               color="inherit"

@@ -25,6 +25,7 @@ import { Modal } from "@opal/components";
 import {
   Button,
   Card,
+  IconContainer,
   RowAction,
   Divider,
   InputMultiComboBox,
@@ -66,20 +67,36 @@ import {
 
 type ShareModalView = "share" | "transfer";
 
+// Layout of the access column and the general-access row. The row mirrors a
+// people row, so its icon, scope label and access menu line up with them.
+
+/** px per rem, to turn a px width into `Section`'s rem width. */
+const PX_PER_REM = 16;
+
+/** The Opal table cell's horizontal padding, per side (`px-1`). */
+const TABLE_CELL_PADDING_PX = 4;
+
+/**
+ * The access column's fixed width, shared by the general-access row and the
+ * people table. Wide enough for the longest label ("Ansehen & Chatten") with
+ * its icon and chevron.
+ */
+const ACCESS_COLUMN_WIDTH_PX = 200;
+
+/** The access menu's width: the column less its cell padding. */
+const ACCESS_MENU_WIDTH_PX = ACCESS_COLUMN_WIDTH_PX - 2 * TABLE_CELL_PADDING_PX;
+
+/** General-access row padding, a spacing step: 4px, the people rows' inset. */
+const SCOPE_ROW_PADDING = 1;
+
+/**
+ * Padding around the scope icon, a spacing step: 8px around its 20px box
+ * makes a 36px slot, a RowAction's height, so the glyph sits where the
+ * people rows' icons do.
+ */
+const SCOPE_ICON_PADDING = 2;
+
 /** One row of the people table: the admins, an owner, or a share. */
-// The access column's fixed width, shared by the scope row and the people
-// table so their menus line up. Wide enough for the longest label
-// ("Ansehen & Chatten") with its icon and chevron.
-const ACCESS_COLUMN_WIDTH = 200;
-
-/** The general-access row: a one-row table shaped like the people table. */
-interface ScopeTableRow {
-  id: string;
-  icon: IconFunctionComponent;
-  scope: React.ReactNode;
-  access: React.ReactNode;
-}
-
 interface ShareTableRow {
   id: string;
   name: string;
@@ -755,72 +772,44 @@ export function ShareAgentModal({
         kind: "display",
         id: "access",
         // Fixed, so every row's access cell starts at the same x.
-        width: { fixed: ACCESS_COLUMN_WIDTH },
+        width: { fixed: ACCESS_COLUMN_WIDTH_PX },
         hideable: false,
         cell: (row) => row.trailing,
       },
     ];
 
-    // Same qualifier and access columns as the people table, so the scope
-    // row's menus line up with the rows below the divider.
-    const scopeColumns: TableColumn<ScopeTableRow>[] = [
-      {
-        kind: "qualifier",
-        content: "icon",
-        icon: (row) => row.icon,
-        background: true,
-      },
-      {
-        kind: "display",
-        id: "scope",
-        width: { weight: 60 },
-        hideable: false,
-        cell: (row) => row.scope,
-      },
-      {
-        kind: "display",
-        id: "access",
-        width: { fixed: ACCESS_COLUMN_WIDTH },
-        hideable: false,
-        cell: (row) => row.access,
-      },
-    ];
-    const scopeRow: ScopeTableRow = {
-      id: "scope",
-      icon: scopeIcon,
-      scope: (
-        <SharePermissionMenu
-          ariaLabel={t("shareAgent.scopeMenu.ariaLabel")}
-          // Stays visible so the current scope still reads; only changing it is gated.
-          disabled={!canEditShares || !canPublish}
-          showTriggerIcon={false}
-          onChange={(scope) => {
-            setDraftState((currentDraftState) => ({
-              ...currentDraftState,
-              isPublic: scope === "PUBLIC",
-            }));
-          }}
-          options={scopeOptions}
-          value={effectiveState.isPublic ? "PUBLIC" : "PRIVATE"}
-          layout="row"
-        />
-      ),
-      access: (
-        <SharePermissionMenu
-          ariaLabel={t("shareAgent.publicPermissionMenu.ariaLabel")}
-          disabled={!canEditShares || !canPublish}
-          onChange={(permission) => {
-            setDraftState((currentDraftState) => ({
-              ...currentDraftState,
-              publicPermission: permission,
-            }));
-          }}
-          options={permissionOptions}
-          value={effectiveState.publicPermission}
-          layout="row"
-        />
-      ),
-    };
+    const scopeMenu = (
+      <SharePermissionMenu
+        ariaLabel={t("shareAgent.scopeMenu.ariaLabel")}
+        // Stays visible so the current scope still reads; only changing it is gated.
+        disabled={!canEditShares || !canPublish}
+        showTriggerIcon={false}
+        onChange={(scope) => {
+          setDraftState((currentDraftState) => ({
+            ...currentDraftState,
+            isPublic: scope === "PUBLIC",
+          }));
+        }}
+        options={scopeOptions}
+        value={effectiveState.isPublic ? "PUBLIC" : "PRIVATE"}
+        layout="row"
+      />
+    );
+    const scopeAccessMenu = (
+      <SharePermissionMenu
+        ariaLabel={t("shareAgent.publicPermissionMenu.ariaLabel")}
+        disabled={!canEditShares || !canPublish}
+        onChange={(permission) => {
+          setDraftState((currentDraftState) => ({
+            ...currentDraftState,
+            publicPermission: permission,
+          }));
+        }}
+        options={permissionOptions}
+        value={effectiveState.publicPermission}
+        layout="row"
+      />
+    );
 
     // The card adds 0.5rem and each row's own padding the other 0.5rem
     return (
@@ -841,15 +830,36 @@ export function ShareAgentModal({
             />
           ) : null}
 
-          <Table
-            label={t("shareAgent.scopeMenu.ariaLabel")}
-            items={[scopeRow]}
-            columns={scopeColumns}
-            getRowId={(row) => row.id}
-            pageSize={false}
-            prominence="secondary"
-            header={false}
-          />
+          {/* General access: the scope icon, the scope menu, and what that
+            scope may do. Shaped like a people row (12px corners, 4px inset)
+            with the access menu in a column-width slot, so it lines up
+            with the menus below. */}
+          <Card padding={SCOPE_ROW_PADDING} color="background-tint-01">
+            {/* No gap: the 36px icon slot plus the menu's own 8px padding
+              put the scope label at the people rows' text x (50px). */}
+            <Section
+              flexDirection="row"
+              justifyContent="start"
+              gap={0}
+              height="auto"
+            >
+              <Section width="fit" height="auto" padding={SCOPE_ICON_PADDING}>
+                <IconContainer icon={scopeIcon} />
+              </Section>
+              {/* Takes the space left over, and can shrink below its label */}
+              <Section height="auto" className="min-w-0 flex-1">
+                {scopeMenu}
+              </Section>
+              <Section
+                width={ACCESS_MENU_WIDTH_PX / PX_PER_REM}
+                height="auto"
+                // ms-1 keeps the two menus apart; the right edge stays put
+                className="ms-1 shrink-0"
+              >
+                {scopeAccessMenu}
+              </Section>
+            </Section>
+          </Card>
 
           <Divider paddingParallel={0} paddingPerpendicular={0} />
 
