@@ -48,8 +48,9 @@ and Voyage cloud models). LiteLLM, Azure, Bifrost and OpenAI-compatible endpoint
 listed after the registry providers in the cloud tab. When the current or staged model is
 one of these cloud models, the picker shows it as a card. The OpenAI-compatible setup can
 request shorter vectors (`reduced_dimension`, sent as the OpenAI `dimensions` parameter);
-a re-index keeps the stored value. A search for that model's name also finds it. Custom
-Hugging Face models are listed after the registry models in the self-hosted tab. A legacy
+a re-index keeps the stored value. A search for that model's name also finds it. The
+self-hosted tab shows an Add Custom Model card after the registry models, for a
+Hugging Face model that is not in the list. A legacy
 model (for example nomic, E5, Cohere v3) shows
 only while it is the current model. It can re-index, but it cannot be chosen as a new
 target. Before the re-index starts, the API embeds a fixed test string with the stored
