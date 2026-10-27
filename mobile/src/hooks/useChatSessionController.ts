@@ -171,8 +171,11 @@ async function runResumeStream(
           settled.packets,
         );
         const saved = getMessageByMessageId(messages, runId);
-        // Transport errors may not appear in saved history. Preserve only this response's error.
-        if (current?.type === "error" && saved) {
+        const hasSavedAnswer =
+          saved?.type === "assistant" &&
+          (saved.message.length > 0 || saved.files.length > 0);
+        // Final saved answers are authoritative; partial packets alone do not prove a successful save.
+        if (current?.type === "error" && saved && !hasSavedAnswer) {
           messages.set(saved.nodeId, {
             ...saved,
             type: "error",

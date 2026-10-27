@@ -17,6 +17,8 @@ from onyx.chat.models import IncognitoState, PersonaPromptConfig, PromptMetadata
 from onyx.chat.presentation import ResponsePresenter, project_response
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
+from onyx.deep_research.models import ResearchAgentCallResult
+from onyx.deep_research.tool_definitions import RESEARCH_AGENT_TOOL_NAME
 from onyx.file_store.models import ExtractedContextFiles
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.model_response import (
@@ -330,9 +332,11 @@ def test_cancelled_source_file_staging_drains_before_completion(
     assert stage_calls == 1
 
 
-@pytest.mark.parametrize("tool_name", [WebSearchTool.NAME, SearchTool.NAME])
+@pytest.mark.parametrize(
+    "tool_name", [WebSearchTool.NAME, SearchTool.NAME, RESEARCH_AGENT_TOOL_NAME]
+)
 @pytest.mark.parametrize("incognito", [False, True])
-def test_chat_reuses_completed_search_artifacts_without_duplicate_documents(
+def test_chat_reuses_completed_source_artifacts_without_duplicate_documents(
     tool_name: str,
     incognito: bool,
 ) -> None:
@@ -356,7 +360,11 @@ def test_chat_reuses_completed_search_artifacts_without_duplicate_documents(
             tool_call_id="search",
             tool_name=tool_name,
             content="Evidence [4]",
-            details=SearchDocsResponse(
+            details=ResearchAgentCallResult(
+                intermediate_report="Evidence [4]", citation_mapping={4: document}
+            )
+            if tool_name == RESEARCH_AGENT_TOOL_NAME
+            else SearchDocsResponse(
                 search_docs=[document], citation_mapping={4: "reference"}
             ),
         ),
@@ -386,16 +394,28 @@ def test_chat_reuses_completed_search_artifacts_without_duplicate_documents(
         token_counter=len,
     )
     for _ in range(2):
+        output: queue.Queue[Packet] = queue.Queue()
         run_agent(
             feature,
             runs=runs,
             messages=[UserMessage(content="Explain the evidence")],
             max_steps=1,
+            listener=ResponsePresenter(
+                Emitter(model_idx=0, publish=output.put_nowait)
+            ).consume,
         )
         assert feature.citation_mapping == {4: "reference"}
         assert feature.citation_processor.citation_to_doc == {4: document}
         assert feature.gathered_documents == [document]
         assert not feature._tool_context().skip_search_query_expansion
+        assert feature._tool_context().next_citation_num == 5
+        projection = project_response(runs[-1].snapshot(), tool_ids={})
+        assert projection.answer is not None
+        assert "[[4]](https://example.com/reference)" in projection.answer
+        assert any(
+            packet.obj.type == "citation_info" and packet.obj.document_id == "reference"
+            for packet in output.queue
+        )
 
 
 @pytest.mark.parametrize("replace_base", [False, True])

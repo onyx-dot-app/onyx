@@ -31,24 +31,27 @@ def test_compacted_tool_history_preserves_answer_and_source(
     )
     history: list[Message] = [
         UserMessage(
-            content="What was Harbor's actual September revenue? Give the dollar amount with citation [1]. Ignore forecasts."
+            id="question",
+            content="What was Harbor's actual September revenue? Give the dollar amount with citation [1]. Ignore forecasts.",
         )
     ]
     for index in range(4):
         call_id = f"source-{index}"
         history.append(
             AssistantMessage(
+                id=f"generation-{index}",
                 content=[
                     ToolCall(
                         id=call_id,
                         name="search",
                         arguments={"query": "Harbor September revenue"},
                     )
-                ]
+                ],
             )
         )
         history.append(
             ToolResultMessage(
+                id=f"result-{index}",
                 tool_call_id=call_id,
                 tool_name="search",
                 content=(
