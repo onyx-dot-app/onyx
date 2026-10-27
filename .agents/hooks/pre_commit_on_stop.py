@@ -79,7 +79,6 @@ def _head_reflog(repo: Path) -> bytes:
 
 
 def _changed_beyond_merge(repo: Path, result: str, *merge_args: str) -> set[str]:
-    """Files in commit `result` that differ from Git's automatic merge result."""
     automatic = subprocess.run(
         ["git", "merge-tree", "--write-tree", *merge_args],
         cwd=repo,
@@ -100,7 +99,6 @@ def _merge_resolution_files(repo: Path, merge: str) -> set[str]:
 
 
 _Entry = tuple[str, str, str]  # (before, after, action)
-_Original = tuple[str, str]  # (commit, author and subject)
 
 # `git pull --rebase` names its start entry after the pull command.
 _REBASE_STEP = re.compile(r"(?:rebase|pull .*?)(?: -i)? \((?P<step>[a-z]+)\):")
@@ -112,7 +110,6 @@ _COMMIT_ACTIONS = (
     "revert:",
     "rebase (continue):",
 )
-_IDENTITY = "%an%x00%ae%x00%s"
 
 
 def _reflog_entries(chunk: bytes) -> list[_Entry]:
@@ -130,49 +127,15 @@ def _rebase_step(action: str) -> str | None:
     return match["step"] if match else None
 
 
-def _rebase_originals(repo: Path, original_tip: str, onto: str) -> list[_Original]:
-    """Commits a rebase replays, oldest first."""
-    log = _git(
-        repo,
-        "log",
-        "--reverse",
-        f"--format=%H%x00{_IDENTITY}",
-        f"{onto}..{original_tip}",
-    )
-    return [
-        (commit, identity)
-        for commit, _, identity in (line.partition("\0") for line in log.splitlines())
-    ]
-
-
-def _claim_original(
-    repo: Path, replayed: str, originals: list[_Original]
-) -> tuple[str | None, list[_Original]]:
-    """The oldest unclaimed original with the replayed commit's author and subject.
-
-    Replays keep their order, so claiming the oldest match pairs repeated
-    subjects correctly. A manual `git commit` during a rebase gets a new author
-    date, so the date is not part of the match.
-    """
-    identity = _git(repo, "show", "-s", f"--format={_IDENTITY}", replayed).strip()
-    index = next(
-        (i for i, (_, candidate) in enumerate(originals) if candidate == identity),
-        None,
-    )
-    if index is None:
-        return None, originals
-    return originals[index][0], originals[:index] + originals[index + 1 :]
-
-
-def _rebase_entries_in_progress(earlier: list[_Entry]) -> list[_Entry]:
-    """Entries of a rebase that started before the turn and has not ended."""
-    for index in reversed(range(len(earlier))):
-        step = _rebase_step(earlier[index][2])
+def _rebase_in_progress(earlier: list[_Entry]) -> tuple[str, str] | None:
+    """(original tip, onto) of a rebase that started before the turn."""
+    for before, after, action in reversed(earlier):
+        step = _rebase_step(action)
         if step in ("finish", "abort"):
-            return []
+            return None
         if step == "start":
-            return earlier[index:]
-    return []
+            return before, after
+    return None
 
 
 def _committed_files(repo: Path, offset: int, digest: str) -> set[str]:
@@ -180,30 +143,20 @@ def _committed_files(repo: Path, offset: int, digest: str) -> set[str]:
     log = _head_reflog(repo)
     if hashlib.sha256(log[:offset]).hexdigest() != digest:
         return set()  # The reflog was expired or rewritten during the turn.
-    carried = _rebase_entries_in_progress(_reflog_entries(log[:offset]))
+    rebase = _rebase_in_progress(_reflog_entries(log[:offset]))
     files: set[str] = set()
-    originals: list[_Original] | None = None  # Set while a rebase is in progress.
-    for index, (before, after, action) in enumerate(
-        carried + _reflog_entries(log[offset:])
-    ):
-        in_turn = index >= len(carried)
+    for before, after, action in _reflog_entries(log[offset:]):
         step = _rebase_step(action)
         if step == "start":
-            originals = _rebase_originals(repo, before, after)
-        elif step in ("finish", "abort"):
-            originals = None
-        elif originals is not None and (step or action.startswith("commit:")):
-            original, originals = _claim_original(repo, after, originals)
-            if not in_turn:
-                continue
-            if original is None:
-                # Work the rebase did not replay, such as a commit at an edit stop.
-                files |= _git_paths(repo, "diff", "--name-only", before, after)
-            else:
-                files |= _changed_beyond_merge(
-                    repo, after, "--merge-base", f"{original}^", before, original
-                )
-        elif not in_turn:
+            rebase = (before, after)
+        elif step == "abort":
+            rebase = None
+        elif step == "finish" and rebase:
+            # Clean replays, squashes and fixups match the automatic merge.
+            original_tip, onto = rebase
+            files |= _changed_beyond_merge(repo, after, onto, original_tip)
+            rebase = None
+        elif rebase:
             continue
         elif action.startswith("commit (merge):"):
             files |= _merge_resolution_files(repo, after)

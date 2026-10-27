@@ -251,6 +251,25 @@ def test_rebase_pairs_repeated_subjects_in_order(repo: Path) -> None:
     assert _checked(repo) == {"base.txt"}
 
 
+def test_clean_autosquash_checks_nothing(repo: Path) -> None:
+    _commit(repo, "local.txt")
+    _commit(repo, "other.txt")
+    (repo / "local.txt").write_text("fixed\n")
+    _git(repo, "commit", "-qam", "fixup! Update local.txt")
+    _start(repo)
+    _git(
+        repo,
+        "-c",
+        "sequence.editor=true",
+        "rebase",
+        "-qi",
+        "--autosquash",
+        "HEAD~3",
+    )
+    _stop(repo)
+    assert _checked(repo) == set()
+
+
 def test_linked_worktree_uses_its_own_reflog(repo: Path) -> None:
     linked = repo.parent / "linked"
     _git(repo, "worktree", "add", "-b", "linked", str(linked))
