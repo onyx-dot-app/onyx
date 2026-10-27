@@ -176,7 +176,7 @@ def test_deletion_stop_timeout_cancels_the_prune(
     redis_connector = _queue_prune(db_session, cc_pair)
     # The deletion beat already signaled stop, and its wait timed out.
     redis_connector.stop.set_fence(True)
-    redis_connector.redis.set(redis_connector.stop.timeout_key, time.time() - 1)
+    redis_connector.redis.set(redis_connector.stop.deadline_key, time.time() - 1)
 
     _run_deletion_beat(cc_pair, monkeypatch)
 
@@ -205,6 +205,38 @@ def test_deleting_a_paused_pair_revokes_and_waits_for_blocking_tasks(
     assert not redis_connector.stop.timed_out
     assert redis_connector.prune.fenced
     assert _prune_status(db_session, cc_pair) == SyncStatus.IN_PROGRESS
+
+
+def test_the_deletion_wait_keeps_the_key_older_beats_read(
+    cc_pair: ConnectorCredentialPair,
+) -> None:
+    redis_connector = RedisConnector(get_current_tenant_id(), cc_pair.id)
+    redis_connector.stop.set_timeout()
+
+    # Older beats treat the timeout key's presence as "still waiting".
+    ttl = redis_connector.redis.ttl(redis_connector.stop.timeout_key)
+    assert 0 < ttl <= redis_connector.stop.TIMEOUT_TTL
+
+
+def test_resume_clears_the_deletion_wait(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    admin: User,
+) -> None:
+    _set_status(db_session, cc_pair, ConnectorCredentialPairStatus.DELETING)
+    redis_connector = RedisConnector(get_current_tenant_id(), cc_pair.id)
+    redis_connector.stop.set_fence(True)
+    redis_connector.stop.set_timeout()
+
+    update_cc_pair_status(
+        cc_pair.id,
+        CCStatusUpdateRequest(status=ConnectorCredentialPairStatus.ACTIVE),
+        user=admin,
+        db_session=db_session,
+    )
+
+    assert not redis_connector.stop.fenced
+    assert not redis_connector.stop.timeout_set
 
 
 def test_pause_cancels_a_queued_prune(
