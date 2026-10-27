@@ -9,10 +9,10 @@ from functools import partial, wraps
 from types import TracebackType
 from typing import Any, TypeVar, cast
 
-import aioboto3
 import httpx
 import requests
 import voyageai
+from aiobotocore.session import get_session
 from cohere import AsyncClient as CohereAsyncClient
 from cohere.core.api_error import ApiError
 from httpx import HTTPError
@@ -1097,11 +1097,12 @@ async def cohere_rerank_aws(
     aws_access_key_id: str,
     aws_secret_access_key: str,
 ) -> list[float]:
-    session = aioboto3.Session(
-        aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key
-    )
-    async with session.client(
-        "bedrock-runtime", region_name=region_name
+    session = get_session()
+    async with session.create_client(
+        "bedrock-runtime",
+        region_name=region_name,
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
     ) as bedrock_client:
         body = json.dumps(
             {
