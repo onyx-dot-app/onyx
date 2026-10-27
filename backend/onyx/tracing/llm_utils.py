@@ -40,6 +40,7 @@ def llm_generation_span(
         tools=tools,
         parent=parent,
         content_mode=content_mode,
+        model_configuration_id=llm.config.model_configuration_id,
     ) as span:
         if input_messages is not None and span.content_mode == TraceContentMode.FULL:
             if isinstance(input_messages, Sequence) and not isinstance(
@@ -65,6 +66,7 @@ def traced_llm_call(
     tools: Sequence[Mapping[str, Any]] | None = None,
     parent: Any | None = None,
     content_mode: TraceContentMode | None = None,
+    model_configuration_id: int | None = None,
 ) -> Iterator[Span[GenerationSpanData]]:
     """Open a generation span for call sites that don't go through ``LLM``.
 
@@ -73,6 +75,9 @@ def traced_llm_call(
     that already go through an ``LLM`` subclass, use
     :func:`llm_generation_span` instead — it pulls model and provider straight
     off the ``LLM`` config.
+
+    Pass ``model_configuration_id`` when the call runs a saved model
+    configuration, so its admin cost override prices the usage.
     """
     # Build extra_config first, then overlay authoritative keys so callers
     # cannot accidentally override ``flow`` / ``model_provider``.
@@ -86,6 +91,7 @@ def traced_llm_call(
         tools=tools,
         parent=parent,
         content_mode=content_mode,
+        model_configuration_id=model_configuration_id,
     ) as span:
         if input_messages is not None and span.content_mode == TraceContentMode.FULL:
             if isinstance(input_messages, Sequence) and not isinstance(

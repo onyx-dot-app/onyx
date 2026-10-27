@@ -1257,7 +1257,6 @@
         "description": "اختر نموذجًا لميزات التصنيف والمراجعة المستقبلية. لا يستخدم Onyx هذا النموذج بعد.",
         "clear": "مسح",
         "notConfigured": "غير مُعدّ",
-        "saved": "تم تحديث نموذج القرار",
         "saveFailed": "تعذّر تحديث نموذج القرار"
       },
       "header": {
@@ -2846,18 +2845,14 @@
         "indexingStartUnexpectedError": "حدث خطأ غير متوقع أثناء محاولة بدء الفهرسة",
         "indexingUpdateStarted": "بدأ تحديث الفهرسة بنجاح",
         "nameUpdateFailed": "فشل تحديث اسم الموصل",
-        "nameUpdated": "تم تحديث اسم الموصل بنجاح",
         "noUnresolvedErrors": "لا توجد أخطاء غير محلولة لإعادة المحاولة.",
         "pruningFrequencyUpdateFailed": "فشل تحديث تكرار تقليم الموصل",
-        "pruningFrequencyUpdated": "تم تحديث تكرار تقليم الموصل بنجاح",
         "refreshFrequencyUpdateFailed": "فشل تحديث تكرار تحديث الموصل",
-        "refreshFrequencyUpdated": "تم تحديث تكرار تحديث الموصل بنجاح",
         "targetedReindexFailed": "فشلت إعادة الفهرسة الموجهة: {message}",
         "targetedReindexRunning": "جارٍ إعادة محاولة {count, plural, one {خطأ واحد} other {# أخطاء}}…",
         "targetedReindexDone": "انتهت إعادة المحاولة. حُلّ {resolved, plural, one {خطأ واحد} other {# أخطاء}}.",
         "targetedReindexPartial": "انتهت إعادة المحاولة. حُلّ {resolved, plural, one {خطأ واحد} other {# أخطاء}}، ولا يزال {failing, plural, one {مستند واحد} other {# مستندات}} يفشل.",
         "targetedReindexIncomplete": "لم تكتمل إعادة المحاولة. تبقى الأخطاء غير المحلولة في القائمة.",
-        "checkFrequencyUpdated": "تم تحديث معدل فحص الموصّل بنجاح",
         "checkFrequencyUpdateFailed": "فشل تحديث معدل فحص الموصّل",
         "runResolved": "تم وضع علامة «تم الحل».",
         "runResolveFailed": "تعذّر الحل: {message}",
@@ -3441,9 +3436,6 @@
           },
           "shareFailed": {
             "toast": "تعذّر تغيير من يمكنه استخدام هذا الحساب. حاول مرة أخرى."
-          },
-          "renameSaved": {
-            "toast": "تمت إعادة تسمية الحساب."
           },
           "renameFailed": {
             "toast": "تعذّرت إعادة تسمية هذا الحساب. حاول مرة أخرى."
@@ -4865,9 +4857,6 @@
       }
     },
     "costOverrides": {
-      "allProviders": {
-        "label": "جميع الموفرين"
-      },
       "deleteModal": {
         "description": "سيُحتسب استخدام **{model}** ({provider}) بالسعر المدمج مرة أخرى.",
         "submit": {
@@ -4941,12 +4930,6 @@
     },
     "craft": {
       "accessCell": {
-        "disabledSuccess": {
-          "message": "تم تعطيل Craft للمستخدم"
-        },
-        "enabledSuccess": {
-          "message": "تم تفعيل Craft للمستخدم"
-        },
         "error": {
           "message": "فشل تحديث صلاحية الوصول إلى Craft"
         }
@@ -5061,14 +5044,8 @@
         "resetError": {
           "message": "تعذّر مسح النموذج الافتراضي"
         },
-        "resetSuccess": {
-          "message": "تم مسح نموذج Craft الافتراضي"
-        },
         "saveError": {
           "message": "تعذّر حفظ النموذج الافتراضي"
-        },
-        "saveSuccess": {
-          "message": "تم حفظ نموذج Craft الافتراضي"
         }
       },
       "header": {
@@ -5447,9 +5424,6 @@
         }
       },
       "defaultAgent": {
-        "cleared": {
-          "toast": "تم مسح الوكيل الافتراضي"
-        },
         "section": {
           "description": "الوكيل الذي يستخدمه البوت في جميع القنوات ما لم يُتجاوز.",
           "title": "الوكيل الافتراضي"
@@ -5462,9 +5436,6 @@
         },
         "updateError": {
           "toast": "فشل تحديث الوكيل"
-        },
-        "updated": {
-          "toast": "تم تحديث الوكيل الافتراضي"
         }
       },
       "error": {
@@ -5517,15 +5488,9 @@
         "deleted": {
           "toast": "تم حذف تهيئة الخادم"
         },
-        "disabled": {
-          "toast": "تم تعطيل الخادم"
-        },
         "empty": {
           "description": "أنشئ تهيئة خادم للبدء.",
           "title": "لا توجد خوادم Discord مهيأة بعد"
-        },
-        "enabled": {
-          "toast": "تم تفعيل الخادم"
         },
         "fallbackName": "الخادم رقم {id}",
         "notRegistered": {
@@ -5649,9 +5614,6 @@
       "score": {
         "notANumber": {
           "toast": "يجب أن تكون النقاط رقمًا"
-        },
-        "updated": {
-          "toast": "تم تحديث النقاط!"
         }
       },
       "sets": {
@@ -6076,8 +6038,7 @@
           "label": "(افتراضية)"
         },
         "toasts": {
-          "renameFailed": "فشلت إعادة تسمية المجموعة",
-          "renamed": "أُعيدت تسمية المجموعة إلى \"{name}\""
+          "renameFailed": "فشلت إعادة تسمية المجموعة"
         },
         "viewGroup": {
           "label": "عرض المجموعة"
@@ -6156,8 +6117,6 @@
         "toasts": {
           "deleteFailed": "فشل حذف المجموعة",
           "deleted": "حُذفت المجموعة \"{name}\"",
-          "managerAssigned": "تم تعيين مدير",
-          "managerRevoked": "أُلغيت صلاحية المدير",
           "managerUpdateFailed": "فشل تحديث المدير",
           "membersStranded": "سيبقى بعض هؤلاء الأعضاء دون مجموعة. أضفهم إلى مجموعة أخرى أولًا.",
           "syncing": "هذه المجموعة قيد المزامنة حاليًا. يرجى الانتظار قليلًا والمحاولة مرة أخرى.",
@@ -6179,8 +6138,7 @@
           "text": "أنشئ مجموعات لتنظيم المستخدمين وإدارة الوصول."
         },
         "loadError": {
-          "description": "يرجى مراجعة وحدة التحكم لمزيد من التفاصيل.",
-          "title": "فشل تحميل المجموعات."
+          "description": "يرجى مراجعة وحدة التحكم لمزيد من التفاصيل."
         },
         "newGroup": {
           "label": "مجموعة جديدة"
@@ -6635,9 +6593,6 @@
       "deselectError": {
         "message": "فشل إلغاء التحديد"
       },
-      "deselectSuccess": {
-        "message": "أُلغي تحديد {title}"
-      },
       "disconnectError": {
         "message": "فشل قطع الاتصال"
       },
@@ -6808,9 +6763,6 @@
       },
       "setDefaultError": {
         "message": "فشل تعيين الافتراضي"
-      },
-      "setDefaultSuccess": {
-        "message": "تم تعيين {title} كافتراضي"
       }
     },
     "indexSettings": {
@@ -7370,8 +7322,7 @@
           },
           "placeholder": "اختر وضعًا",
           "toasts": {
-            "error": "تعذّر تحديث وضع الوصول إلى البحث.",
-            "success": "تم تعيين وضع الوصول إلى البحث إلى {mode}."
+            "error": "تعذّر تحديث وضع الوصول إلى البحث."
           }
         },
         "loadError": {
@@ -7398,7 +7349,6 @@
           "period": "أدخل عددًا صحيحًا من الثواني من 1 إلى {max, number}."
         },
         "toasts": {
-          "saved": "تم حفظ حد المعدل.",
           "failed": "تعذّر حفظ حد المعدل."
         }
       },
@@ -8452,9 +8402,6 @@
         "error": "فشل تحميل حالة رمز SCIM."
       },
       "modal": {
-        "copied": {
-          "message": "نُسخ الرمز إلى الحافظة"
-        },
         "copyFailed": {
           "error": "فشل نسخ الرمز"
         },
@@ -8715,9 +8662,7 @@
       },
       "toasts": {
         "securitySettingsUpdateFailed": "فشل تحديث إعدادات الأمان",
-        "securitySettingsUpdated": "تم تحديث إعدادات الأمان",
-        "settingsUpdateFailed": "فشل تحديث الإعدادات",
-        "settingsUpdated": "تم تحديث الإعدادات"
+        "settingsUpdateFailed": "فشل تحديث الإعدادات"
       },
       "placeholders": {
         "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
@@ -8839,8 +8784,7 @@
       "page": {
         "description": "استخدم حسابات الخدمة للوصول برمجيًا إلى {appName} API.",
         "error": {
-          "description": "يرجى مراجعة وحدة التحكم لمزيد من التفاصيل.",
-          "title": "فشل تحميل حسابات الخدمة."
+          "description": "يرجى مراجعة وحدة التحكم لمزيد من التفاصيل."
         }
       },
       "regenerateModal": {
@@ -8891,7 +8835,6 @@
       "toasts": {
         "deleteFailed": "فشل حذف مفتاح API.",
         "deleteFailedWithDetail": "فشل حذف مفتاح API: {detail}",
-        "keyCopied": "نُسخ مفتاح API إلى الحافظة.",
         "regenerateFailed": "فشلت إعادة توليد مفتاح API.",
         "regenerateFailedWithDetail": "فشلت إعادة توليد مفتاح API: {detail}"
       },
@@ -9298,9 +9241,6 @@
         "fieldUpdateFailed": {
           "toast": "فشل تحديث {field} للموصل"
         },
-        "fieldUpdated": {
-          "toast": "تم تحديث {field} للموصل بنجاح"
-        },
         "updateTokensButton": {
           "label": "تحديث الرموز"
         }
@@ -9325,9 +9265,7 @@
         "gatedTooltip": "تفعيل عدة موفري SSO متاح في خطة Business أو Enterprise."
       },
       "copyRedirectUri": {
-        "tooltip": "نسخ عنوان إعادة التوجيه",
-        "successToast": "تم نسخ عنوان URI لإعادة التوجيه",
-        "errorToast": "تعذّر النسخ"
+        "tooltip": "نسخ عنوان إعادة التوجيه"
       },
       "deleteProvider": {
         "tooltip": "حذف"
@@ -10046,8 +9984,7 @@
         }
       },
       "loadError": {
-        "description": "تعذّر تحميل تهيئة التتبع.",
-        "title": "فشل تحميل إعدادات التتبع"
+        "description": "تعذّر تحميل تهيئة التتبع."
       },
       "page": {
         "description": "اربط منصات المراقبة لرصد استدعاءات LLM وتقييمها."
@@ -10815,7 +10752,6 @@
         "title": "يقوم كل مستخدم بتكوين رمزه الخاص وتفاصيل الاتصال ضمن الإعدادات → بوابة LLM."
       },
       "toasts": {
-        "settingsUpdated": "تم تحديث الإعدادات",
         "settingsUpdateFailed": "فشل تحديث الإعدادات"
       }
     },
@@ -11498,14 +11434,18 @@
         },
         "toasts": {
           "accessRemoved": "تمت إزالة صلاحية الوصول.",
-          "copyLinkFailed": "فشل نسخ الرابط.",
-          "linkCopied": "تم نسخ الرابط.",
           "ownershipTransferred": "تم نقل الملكية.",
           "sharingUpdated": "تم تحديث المشاركة."
         },
         "transfer": {
           "label": "نقل",
           "title": "نقل *{name}*"
+        },
+        "people": {
+          "label": "الأشخاص الذين لديهم حق الوصول"
+        },
+        "ownerOption": {
+          "disabledTooltip": "لا يمكن إلغاء مشاركة المالك."
         }
       },
       "viewer": {
@@ -16085,6 +16025,12 @@
     "settingsHeader": {
       "cancel": "إلغاء"
     },
+    "settingsBody": {
+      "error": {
+        "title": "تعذّر تحميل {page}",
+        "description": "حدث خطأ ما. حاول مرة أخرى بعد قليل."
+      }
+    },
     "table": {
       "alwaysShown": "معروض دائمًا",
       "ascending": "تصاعدي",
@@ -16739,8 +16685,7 @@
         "title": "الوكلاء"
       },
       "craft": {
-        "label": "Craft",
-        "businessTag": "الأعمال"
+        "label": "Craft"
       },
       "exploreAgents": {
         "label": "استكشاف الوكلاء"

@@ -13,6 +13,7 @@ from litellm.types.utils import Function as LiteLLMFunction
 
 import onyx.llm.model_request
 from onyx.llm.constants import LlmProviderNames
+from onyx.llm.cost_overrides import CostOverrideRates
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.llm.model_request import (
@@ -3676,7 +3677,7 @@ def test_track_llm_cost_prices_cache_creation_at_write_rate(
     )
     monkeypatch.setattr(
         "onyx.llm.cost.cost_overrides.get_override",
-        lambda _session, _model, _provider: None,
+        lambda _session, _model_configuration_id: None,
     )
     increment_usage = MagicMock()
     monkeypatch.setattr("onyx.db.usage.increment_usage", increment_usage)
@@ -3694,6 +3695,61 @@ def test_track_llm_cost_prices_cache_creation_at_write_rate(
     assert increment_usage.call_args.args[2] == pytest.approx(1.05)
 
 
+def test_track_llm_cost_applies_override_for_its_model_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    llm = LitellmLLM(
+        api_key="managed-key",
+        model_provider=LlmProviderNames.OPENAI,
+        model_name="gpt-4o",
+        max_input_tokens=128000,
+        model_configuration_id=42,
+    )
+
+    @contextmanager
+    def _fake_session() -> Iterator[Any]:
+        yield MagicMock()
+
+    monkeypatch.setattr(
+        "onyx.server.usage_limits.is_usage_limits_enabled", lambda: True
+    )
+    monkeypatch.setattr(
+        "onyx.server.usage_limits.is_onyx_managed_api_key", lambda _key: True
+    )
+    monkeypatch.setattr(
+        "onyx.db.engine.sql_engine.get_session_with_current_tenant", _fake_session
+    )
+    looked_up: list[int] = []
+
+    def _get_override(
+        _session: Any, model_configuration_id: int
+    ) -> CostOverrideRates | None:
+        looked_up.append(model_configuration_id)
+        return CostOverrideRates(
+            input_cost_per_mtok=1.0,
+            output_cost_per_mtok=2.0,
+            cache_read_cost_per_mtok=None,
+        )
+
+    monkeypatch.setattr("onyx.llm.cost.cost_overrides.get_override", _get_override)
+    increment_usage = MagicMock()
+    monkeypatch.setattr("onyx.db.usage.increment_usage", increment_usage)
+
+    llm._track_llm_cost(
+        Usage(
+            prompt_tokens=1_000_000,
+            completion_tokens=1_000_000,
+            total_tokens=2_000_000,
+            cache_read_input_tokens=0,
+            cache_creation_input_tokens=0,
+        )
+    )
+
+    assert looked_up == [42]
+    # $1 in + $2 out at the override rates.
+    assert increment_usage.call_args.args[2] == pytest.approx(300.0)
+
+
 def _router_llm() -> LitellmLLM:
     return LitellmLLM(
         api_key="test_key",
@@ -3701,6 +3757,7 @@ def _router_llm() -> LitellmLLM:
         model_name="openrouter/auto",
         max_input_tokens=100000,
         is_router=True,
+        model_configuration_id=7,
     )
 
 
@@ -3739,10 +3796,12 @@ def test_track_llm_cost_prices_routed_model(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(
         "onyx.db.engine.sql_engine.get_session_with_current_tenant", _fake_session
     )
-    priced: list[tuple[str, str | None]] = []
+    priced: list[tuple[str, str | None, int | None]] = []
 
     def _compute(**kwargs: Any) -> tuple[float, float]:
-        priced.append((kwargs["model"], kwargs["served_model"]))
+        priced.append(
+            (kwargs["model"], kwargs["served_model"], kwargs["model_configuration_id"])
+        )
         return 1.0, 1.0
 
     monkeypatch.setattr("onyx.llm.multi_llm.compute_cost_cents", _compute)
@@ -3759,9 +3818,10 @@ def test_track_llm_cost_prices_routed_model(monkeypatch: pytest.MonkeyPatch) -> 
     llm._track_llm_cost(usage, "deepseek/deepseek-v4-flash")
     llm._track_llm_cost(usage)
 
+    # The router's configuration id keys its override on every call.
     assert priced == [
-        ("openrouter/auto", "deepseek/deepseek-v4-flash"),
-        ("openrouter/auto", None),
+        ("openrouter/auto", "deepseek/deepseek-v4-flash", 7),
+        ("openrouter/auto", None, 7),
     ]
 
 

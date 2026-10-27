@@ -322,6 +322,44 @@ class NullFilteredString(TypeDecorator):
         return value
 
 
+# Releases without migration ca7cc9a98a6b write RECLAIMED as this value on every
+# database. The migration rewrites it to "RECLAIMED", but those releases can still
+# write it beside this version during a rolling deploy, or after a rollback; the
+# migration does not run again on the next upgrade.
+_SHORT_RECLAIMED_DB_VALUE = "RECLAIMD"
+
+
+class IndexReclaimStatusType(TypeDecorator):
+    """Stores an IndexReclaimStatus by member name, as a non-native Enum does, and
+    also reads _SHORT_RECLAIMED_DB_VALUE as RECLAIMED.
+
+    A SQL comparison with RECLAIMED misses rows that hold the short value. Compare
+    with the other statuses instead."""
+
+    impl = String
+    cache_ok = True
+
+    def process_bind_param(
+        self,
+        value: IndexReclaimStatus | None,
+        dialect: Dialect,  # noqa: ARG002
+    ) -> str | None:
+        if value is None:
+            return None
+        return value.name
+
+    def process_result_value(
+        self,
+        value: str | None,
+        dialect: Dialect,  # noqa: ARG002
+    ) -> IndexReclaimStatus | None:
+        if value is None:
+            return None
+        if value == _SHORT_RECLAIMED_DB_VALUE:
+            return IndexReclaimStatus.RECLAIMED
+        return IndexReclaimStatus[value]
+
+
 """
 Auth/Authz (users, permissions, access) Tables
 """
@@ -2364,9 +2402,9 @@ class SearchSettings(Base):
 
     # Old-index reclamation (see reclaim helpers in db/search_settings.py).
     # NULL = not reclaim-tracked; set to PENDING at reindex submit on the current
-    # PRESENT (the future PAST).
+    # PRESENT (the future PAST). The length matches migration ca7cc9a98a6b.
     reclaim_status: Mapped[IndexReclaimStatus | None] = mapped_column(
-        Enum(IndexReclaimStatus, native_enum=False), nullable=True
+        IndexReclaimStatusType(64), nullable=True
     )
     # Soak anchor: when the index stopped being read (port drained), NOT swap time —
     # so INSTANT backfills (which read PAST post-swap) anchor correctly.
@@ -6614,12 +6652,10 @@ class ModelCostOverride(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
-    # litellm-style model name (e.g. "gpt-6-sol").
-    model: Mapped[str] = mapped_column(String, nullable=False)
-    # Empty string (not NULL) for a provider-agnostic override, so the unique key
-    # below works on every Postgres version without NULLS NOT DISTINCT (PG15+).
-    provider: Mapped[str] = mapped_column(
-        String, nullable=False, default="", server_default=""
+    # One override per model configuration; it goes away with its model.
+    model_configuration_id: Mapped[int] = mapped_column(
+        ForeignKey("model_configuration.id", ondelete="CASCADE"),
+        nullable=False,
     )
 
     # Rates in USD per million tokens.
@@ -6644,10 +6680,14 @@ class ModelCostOverride(Base):
         nullable=False,
     )
 
+    model_configuration: Mapped["ModelConfiguration"] = relationship(
+        "ModelConfiguration"
+    )
+
     __table_args__ = (
-        # provider+model so the same model can be priced per provider.
         UniqueConstraint(
-            "provider", "model", name="uq_model_cost_override_provider_model"
+            "model_configuration_id",
+            name="uq_model_cost_override_model_configuration_id",
         ),
     )
 

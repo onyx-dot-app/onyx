@@ -1257,7 +1257,6 @@
         "description": "Select a model for future classification and review features. Onyx does not use this model yet.",
         "clear": "Clear",
         "notConfigured": "Not configured",
-        "saved": "Decision model updated",
         "saveFailed": "Failed to update decision model"
       },
       "header": {
@@ -2846,18 +2845,14 @@
         "indexingStartUnexpectedError": "An unexpected error occurred while trying to start indexing",
         "indexingUpdateStarted": "Indexing update started successfully",
         "nameUpdateFailed": "Failed to update connector name",
-        "nameUpdated": "Connector name updated successfully",
         "noUnresolvedErrors": "No unresolved errors to retry.",
         "pruningFrequencyUpdateFailed": "Failed to update connector pruning frequency",
-        "pruningFrequencyUpdated": "Connector pruning frequency updated successfully",
         "refreshFrequencyUpdateFailed": "Failed to update connector refresh frequency",
-        "refreshFrequencyUpdated": "Connector refresh frequency updated successfully",
         "targetedReindexFailed": "Targeted reindex failed: {message}",
         "targetedReindexRunning": "Retrying {count, plural, one {# error} other {# errors}}…",
         "targetedReindexDone": "Retry finished. {resolved, plural, one {# error} other {# errors}} resolved.",
         "targetedReindexPartial": "Retry finished. {resolved, plural, one {# error} other {# errors}} resolved, {failing, plural, one {# document} other {# documents}} still failing.",
         "targetedReindexIncomplete": "The retry did not finish. Unresolved errors stay in the list.",
-        "checkFrequencyUpdated": "Connector check frequency updated successfully",
         "checkFrequencyUpdateFailed": "Failed to update connector check frequency",
         "runResolved": "Marked resolved.",
         "runResolveFailed": "Could not resolve: {message}",
@@ -3441,9 +3436,6 @@
           },
           "shareFailed": {
             "toast": "Couldn't change who can use this account. Try again."
-          },
-          "renameSaved": {
-            "toast": "Account renamed."
           },
           "renameFailed": {
             "toast": "Couldn't rename this account. Try again."
@@ -4865,9 +4857,6 @@
       }
     },
     "costOverrides": {
-      "allProviders": {
-        "label": "All providers"
-      },
       "deleteModal": {
         "description": "Usage of **{model}** ({provider}) will be priced at the built-in rate again.",
         "submit": {
@@ -4941,12 +4930,6 @@
     },
     "craft": {
       "accessCell": {
-        "disabledSuccess": {
-          "message": "Craft disabled for user"
-        },
-        "enabledSuccess": {
-          "message": "Craft enabled for user"
-        },
         "error": {
           "message": "Failed to update Craft access"
         }
@@ -5061,14 +5044,8 @@
         "resetError": {
           "message": "Failed to clear the default model"
         },
-        "resetSuccess": {
-          "message": "Craft default model cleared"
-        },
         "saveError": {
           "message": "Failed to save the default model"
-        },
-        "saveSuccess": {
-          "message": "Craft default model saved"
         }
       },
       "header": {
@@ -5447,9 +5424,6 @@
         }
       },
       "defaultAgent": {
-        "cleared": {
-          "toast": "Default agent cleared"
-        },
         "section": {
           "description": "The agent used by the bot in all channels unless overridden.",
           "title": "Default Agent"
@@ -5462,9 +5436,6 @@
         },
         "updateError": {
           "toast": "Failed to update agent"
-        },
-        "updated": {
-          "toast": "Default agent updated"
         }
       },
       "error": {
@@ -5517,15 +5488,9 @@
         "deleted": {
           "toast": "Server configuration deleted"
         },
-        "disabled": {
-          "toast": "Server disabled"
-        },
         "empty": {
           "description": "Create a server configuration to get started.",
           "title": "No Discord servers configured yet"
-        },
-        "enabled": {
-          "toast": "Server enabled"
         },
         "fallbackName": "Server #{id}",
         "notRegistered": {
@@ -5649,9 +5614,6 @@
       "score": {
         "notANumber": {
           "toast": "Score must be a number"
-        },
-        "updated": {
-          "toast": "Updated score!"
         }
       },
       "sets": {
@@ -6076,8 +6038,7 @@
           "label": "(Default)"
         },
         "toasts": {
-          "renameFailed": "Failed to rename group",
-          "renamed": "Group renamed to \"{name}\""
+          "renameFailed": "Failed to rename group"
         },
         "viewGroup": {
           "label": "View group"
@@ -6156,8 +6117,6 @@
         "toasts": {
           "deleteFailed": "Failed to delete group",
           "deleted": "Group \"{name}\" deleted",
-          "managerAssigned": "Manager assigned",
-          "managerRevoked": "Manager revoked",
           "managerUpdateFailed": "Failed to update manager",
           "membersStranded": "Some of those members would be left without a group. Add them to another group first.",
           "syncing": "This group is currently syncing. Please wait a moment and try again.",
@@ -6179,8 +6138,7 @@
           "text": "Create groups to organize users and manage access."
         },
         "loadError": {
-          "description": "Please check the console for more details.",
-          "title": "Failed to load groups."
+          "description": "Please check the console for more details."
         },
         "newGroup": {
           "label": "New Group"
@@ -6635,9 +6593,6 @@
       "deselectError": {
         "message": "Failed to deselect"
       },
-      "deselectSuccess": {
-        "message": "{title} deselected"
-      },
       "disconnectError": {
         "message": "Failed to disconnect"
       },
@@ -6808,9 +6763,6 @@
       },
       "setDefaultError": {
         "message": "Failed to set default"
-      },
-      "setDefaultSuccess": {
-        "message": "{title} set as default"
       }
     },
     "indexSettings": {
@@ -7370,8 +7322,7 @@
           },
           "placeholder": "Select a mode",
           "toasts": {
-            "error": "Could not update the search access mode.",
-            "success": "Search access mode set to {mode}."
+            "error": "Could not update the search access mode."
           }
         },
         "loadError": {
@@ -7398,7 +7349,6 @@
           "period": "Enter a whole number of seconds from 1 to {max, number}."
         },
         "toasts": {
-          "saved": "Rate limit saved.",
           "failed": "Could not save the rate limit."
         }
       },
@@ -8452,9 +8402,6 @@
         "error": "Failed to load SCIM token status."
       },
       "modal": {
-        "copied": {
-          "message": "Token copied to clipboard"
-        },
         "copyFailed": {
           "error": "Failed to copy token"
         },
@@ -8715,9 +8662,7 @@
       },
       "toasts": {
         "securitySettingsUpdateFailed": "Failed to update security settings",
-        "securitySettingsUpdated": "Security settings updated",
-        "settingsUpdateFailed": "Failed to update settings",
-        "settingsUpdated": "Settings updated"
+        "settingsUpdateFailed": "Failed to update settings"
       },
       "placeholders": {
         "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
@@ -8839,8 +8784,7 @@
       "page": {
         "description": "Use service accounts to programmatically access {appName} API.",
         "error": {
-          "description": "Please check the console for more details.",
-          "title": "Failed to load service accounts."
+          "description": "Please check the console for more details."
         }
       },
       "regenerateModal": {
@@ -8891,7 +8835,6 @@
       "toasts": {
         "deleteFailed": "Failed to delete API Key.",
         "deleteFailedWithDetail": "Failed to delete API Key: {detail}",
-        "keyCopied": "API key copied to clipboard.",
         "regenerateFailed": "Failed to regenerate API Key.",
         "regenerateFailedWithDetail": "Failed to regenerate API Key: {detail}"
       },
@@ -9298,9 +9241,6 @@
         "fieldUpdateFailed": {
           "toast": "Failed to update connector {field}"
         },
-        "fieldUpdated": {
-          "toast": "Connector {field} updated successfully"
-        },
         "updateTokensButton": {
           "label": "Update Tokens"
         }
@@ -9325,9 +9265,7 @@
         "gatedTooltip": "Multiple enabled SSO providers are available on the Business or Enterprise plan."
       },
       "copyRedirectUri": {
-        "tooltip": "Copy redirect URI",
-        "successToast": "Redirect URI copied",
-        "errorToast": "Could not copy"
+        "tooltip": "Copy redirect URI"
       },
       "deleteProvider": {
         "tooltip": "Delete"
@@ -10046,8 +9984,7 @@
         }
       },
       "loadError": {
-        "description": "Unable to load tracing configuration.",
-        "title": "Failed to load tracing settings"
+        "description": "Unable to load tracing configuration."
       },
       "page": {
         "description": "Connect observability platforms to monitor and evaluate LLM calls."
@@ -10815,7 +10752,6 @@
         "title": "Each user configures their own token and connection details under Settings → LLM Gateway."
       },
       "toasts": {
-        "settingsUpdated": "Settings updated",
         "settingsUpdateFailed": "Failed to update settings"
       }
     },
@@ -11498,14 +11434,18 @@
         },
         "toasts": {
           "accessRemoved": "Access removed.",
-          "copyLinkFailed": "Failed to copy link.",
-          "linkCopied": "Copied link.",
           "ownershipTransferred": "Ownership transferred.",
           "sharingUpdated": "Sharing updated."
         },
         "transfer": {
           "label": "Transfer",
           "title": "Transfer *{name}*"
+        },
+        "people": {
+          "label": "People with access"
+        },
+        "ownerOption": {
+          "disabledTooltip": "Owner cannot be unshared."
         }
       },
       "viewer": {
@@ -16085,6 +16025,12 @@
     "settingsHeader": {
       "cancel": "Cancel"
     },
+    "settingsBody": {
+      "error": {
+        "title": "{page} failed to load",
+        "description": "Something went wrong. Try again in a moment."
+      }
+    },
     "table": {
       "alwaysShown": "Always Shown",
       "ascending": "Ascending",
@@ -16739,8 +16685,7 @@
         "title": "Agents"
       },
       "craft": {
-        "label": "Craft",
-        "businessTag": "Business"
+        "label": "Craft"
       },
       "exploreAgents": {
         "label": "Explore Agents"

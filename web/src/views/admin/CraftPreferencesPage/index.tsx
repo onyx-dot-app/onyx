@@ -155,7 +155,6 @@ export default function CraftPreferencesPage() {
     try {
       await setDefaultCraftModel(selection.providerId, selection.modelName);
       await refreshLlmProviderCaches(mutateScoped);
-      toast.success(t("defaultModel.saveSuccess.message"));
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : t("defaultModel.saveError.message")
@@ -170,7 +169,6 @@ export default function CraftPreferencesPage() {
     try {
       await deleteDefaultCraftModel();
       await refreshLlmProviderCaches(mutateScoped);
-      toast.success(t("defaultModel.resetSuccess.message"));
     } catch (err) {
       toast.error(
         err instanceof Error
@@ -214,26 +212,7 @@ export default function CraftPreferencesPage() {
 
   // useSettings returns a default object while loading (and on error), which
   // lacks onyx_craft_available — don't misreport Craft as unavailable.
-  if (settings.isLoading || settings.error) {
-    return (
-      <SettingsLayouts.Root>
-        {header}
-        <SettingsLayouts.Body>
-          {settings.error ? (
-            <Text as="p" font="secondary-body" color="text-03">
-              {t("settingsLoadError.description")}
-            </Text>
-          ) : (
-            <div className="flex justify-center py-12">
-              <IconLoader className="h-6 w-6" />
-            </div>
-          )}
-        </SettingsLayouts.Body>
-      </SettingsLayouts.Root>
-    );
-  }
-
-  if (!craftAvailable) {
+  if (!settings.isLoading && !settings.error && !craftAvailable) {
     return (
       <SettingsLayouts.Root>
         {header}
@@ -249,7 +228,10 @@ export default function CraftPreferencesPage() {
   }
 
   return (
-    <SettingsLayouts.Root>
+    <SettingsLayouts.Root
+      loading={settings.isLoading}
+      error={settings.error ? t("settingsLoadError.description") : false}
+    >
       {header}
       <SettingsLayouts.Body>
         <Card border="solid" rounding={4}>

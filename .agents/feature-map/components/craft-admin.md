@@ -81,8 +81,6 @@ the existing payload; managed-app credentials remain hidden and unchanged.
 New drafts close without a discard confirmation. Existing saved edits keep
 their confirmation in the same frame, without a width or position change.
 Creation still advances to the existing optional skills step after persistence.
-`web/src/sections/plugins/CraftAppSetupModal.stories.tsx` covers built-in,
-managed, and custom configuration, permissions, and skills states.
 
 On **Preferences**, the admin sets a workspace default model for Craft
 sessions and a free-text "organization instructions" block that every Craft

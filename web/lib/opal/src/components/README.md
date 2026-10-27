@@ -7,36 +7,36 @@ High-level UI components built on the [`@opal/core`](../core/) primitives. Every
 Components are exposed via:
 
 ```ts
-import { Button, SelectButton, OpenButton, Tag } from "@opal/components";
+import { Button, SelectButton, Tag } from "@opal/components";
 ```
 
 The barrel file at `index.ts` re-exports each component and its prop types. Each component imports its own `styles.css` internally.
 
 ## Components
 
-| Component                                      | Description                                                  | Docs                                           |
-| ---------------------------------------------- | ------------------------------------------------------------ | ---------------------------------------------- |
-| [Button](./buttons/button/)                    | Label and/or icon-only stateless button                      | [README](./buttons/button/README.md)           |
-| [AttachmentItemButton](./buttons/attachment-item-button/) | File-like resource row: icon/image tile, content, center and action slots | [README](./buttons/attachment-item-button/README.md) |
-| [SelectButton](./buttons/select-button/)       | Stateful toggle button with optional foldable content        | [README](./buttons/select-button/README.md)    |
-| [OpenButton](./buttons/open-button/)           | Trigger button with rotating chevron for popovers            | [README](./buttons/open-button/README.md)      |
-| [Tag](./tag/)                                  | Small colored label for status/category metadata             | [README](./tag/README.md)                      |
-| [InputDateRangePicker](./inputs/chrono/input-date-range-picker/) | Preset date-range strip with a custom-range calendar popover | [README](./inputs/chrono/input-date-range-picker/README.md) |
-| [InputSingleUpload](./inputs/uploads/input-single-upload/)              | Upload control in the input chrome: pick, drop or paste      | [README](./inputs/uploads/input-single-upload/README.md)        |
-| [InputMultiUpload](./inputs/uploads/input-multi-upload/)                | Upload control for many files, shown as removable tags       | [README](./inputs/uploads/input-multi-upload/README.md)         |
-| [InputAvatar](./inputs/input-avatar/)          | Avatar frame with primary input chrome                       | [README](./inputs/input-avatar/README.md)      |
-| [InputImage](./inputs/input-image/)            | Circular image dropzone with edit overlay                    | [README](./inputs/input-image/README.md)       |
-| [InputKeyValue](./inputs/input-key-value/)     | Key/value pair editor with validation                        | [README](./inputs/input-key-value/README.md)   |
-| [InputSingleSelect](./inputs/dropdowns/input-single-select/) | Pick one from a set; nothing to type, like a native select | [README](./inputs/dropdowns/input-single-select/README.md) |
-| [InputSingleComboBox](./inputs/dropdowns/input-single-combo-box/) | Pick one from a set by typing to filter, with closed/open set modes | [README](./inputs/dropdowns/input-single-combo-box/README.md) |
-| [InputMultiSelect](./inputs/dropdowns/input-multi-select/) | Pick several from a set as chips; nothing to type | [README](./inputs/dropdowns/input-multi-select/README.md) |
-| [InputMultiComboBox](./inputs/dropdowns/input-multi-combo-box/) | Pick several from a set as chips beside a filtering text input | [README](./inputs/dropdowns/input-multi-combo-box/README.md) |
-| [InputTypeInTag](./inputs/texts/input-type-in-tag/) | Chips-in-input free tagging (Figma Input/Tags) | [README](./inputs/texts/input-type-in-tag/README.md) |
-| [InputCheckbox](./inputs/booleans/input-checkbox/) | Checkbox with checked/indeterminate states | [README](./inputs/booleans/input-checkbox/README.md) |
-| [InputSwitch](./inputs/booleans/input-switch/) | On/off toggle switch | [README](./inputs/booleans/input-switch/README.md) |
-| [InputNumber](./inputs/numbers/input-number/)          | Number field with steppers and reset                         | [README](./inputs/numbers/input-number/README.md)      |
-| [InputCurrency](./inputs/numbers/input-currency/) | Segmented currency amount field (whole . fraction) | [README](./inputs/numbers/input-currency/README.md) |
-| [InputList](./inputs/input-list/)   | Type-and-Enter list builder with removable chips below       | [README](./inputs/input-list/README.md)  |
+| Component                                                         | Description                                                               | Docs                                                          |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| [Button](./buttons/button/)                                       | Label and/or icon-only stateless button                                   | [README](./buttons/button/README.md)                          |
+| [AttachmentItemButton](./buttons/attachment-item-button/)         | File-like resource row: icon/image tile, content, center and action slots | [README](./buttons/attachment-item-button/README.md)          |
+| [SelectButton](./buttons/select-button/)                          | Stateful button: toggles, dropdown triggers (chevron) and filters         | [README](./buttons/select-button/README.md)                   |
+| [RowAction](./buttons/row-action/)                                | A row's value or action: button, dropdown trigger, link or static         | [README](./buttons/row-action/README.md)                      |
+| [Tag](./tag/)                                                     | Small colored label for status/category metadata                          | [README](./tag/README.md)                                     |
+| [InputDateRangePicker](./inputs/chrono/input-date-range-picker/)  | Preset date-range strip with a custom-range calendar popover              | [README](./inputs/chrono/input-date-range-picker/README.md)   |
+| [InputSingleUpload](./inputs/uploads/input-single-upload/)        | Upload control in the input chrome: pick, drop or paste                   | [README](./inputs/uploads/input-single-upload/README.md)      |
+| [InputMultiUpload](./inputs/uploads/input-multi-upload/)          | Upload control for many files, shown as removable tags                    | [README](./inputs/uploads/input-multi-upload/README.md)       |
+| [InputAvatar](./inputs/input-avatar/)                             | Avatar frame with primary input chrome                                    | [README](./inputs/input-avatar/README.md)                     |
+| [InputImage](./inputs/input-image/)                               | Circular image dropzone with edit overlay                                 | [README](./inputs/input-image/README.md)                      |
+| [InputKeyValue](./inputs/input-key-value/)                        | Key/value pair editor with validation                                     | [README](./inputs/input-key-value/README.md)                  |
+| [InputSingleSelect](./inputs/dropdowns/input-single-select/)      | Pick one from a set; nothing to type, like a native select                | [README](./inputs/dropdowns/input-single-select/README.md)    |
+| [InputSingleComboBox](./inputs/dropdowns/input-single-combo-box/) | Pick one from a set by typing to filter, with closed/open set modes       | [README](./inputs/dropdowns/input-single-combo-box/README.md) |
+| [InputMultiSelect](./inputs/dropdowns/input-multi-select/)        | Pick several from a set as chips; nothing to type                         | [README](./inputs/dropdowns/input-multi-select/README.md)     |
+| [InputMultiComboBox](./inputs/dropdowns/input-multi-combo-box/)   | Pick several from a set as chips beside a filtering text input            | [README](./inputs/dropdowns/input-multi-combo-box/README.md)  |
+| [InputTypeInTag](./inputs/texts/input-type-in-tag/)               | Chips-in-input free tagging (Figma Input/Tags)                            | [README](./inputs/texts/input-type-in-tag/README.md)          |
+| [InputCheckbox](./inputs/booleans/input-checkbox/)                | Checkbox with checked/indeterminate states                                | [README](./inputs/booleans/input-checkbox/README.md)          |
+| [InputSwitch](./inputs/booleans/input-switch/)                    | On/off toggle switch                                                      | [README](./inputs/booleans/input-switch/README.md)            |
+| [InputNumber](./inputs/numbers/input-number/)                     | Number field with steppers and reset                                      | [README](./inputs/numbers/input-number/README.md)             |
+| [InputCurrency](./inputs/numbers/input-currency/)                 | Segmented currency amount field (whole . fraction)                        | [README](./inputs/numbers/input-currency/README.md)           |
+| [InputList](./inputs/input-list/)                                 | Type-and-Enter list builder with removable chips below                    | [README](./inputs/input-list/README.md)                       |
 
 ## Adding new components
 

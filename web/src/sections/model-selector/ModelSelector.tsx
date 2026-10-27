@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useMemo, useRef } from "react";
 import { useTranslations } from "next-intl";
-import { Popover, OpenButton } from "@opal/components";
+import { Popover, SelectButton } from "@opal/components";
 import { getModelIcon } from "@/lib/languageModels/utils";
 import { GLOBAL_DEFAULT_LLM_OPTION } from "@/lib/languageModels/options";
 import { useSettings } from "@/lib/settings/hooks";
@@ -35,7 +35,7 @@ export interface ModelSelectorProps {
   requiresImageInput?: boolean;
 
   /**
-   * Custom trigger element. When omitted the default OpenButton (icon +
+   * Custom trigger element. When omitted the default SelectButton (icon +
    * display name) is rendered.
    */
   renderTrigger?: () => React.ReactNode;
@@ -188,9 +188,9 @@ export default function ModelSelector({
           {renderTrigger ? (
             renderTrigger()
           ) : (
-            <OpenButton disabled={disabled} icon={triggerIcon}>
+            <SelectButton chevron disabled={disabled} icon={triggerIcon}>
               {currentDisplayName}
-            </OpenButton>
+            </SelectButton>
           )}
         </Popover.Trigger>
       </div>

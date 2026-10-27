@@ -1257,7 +1257,6 @@
         "description": "향후 분류 및 검토 기능에 사용할 모델을 선택하세요. Onyx는 아직 이 모델을 사용하지 않습니다.",
         "clear": "해제",
         "notConfigured": "설정되지 않음",
-        "saved": "판단 모델이 업데이트되었습니다",
         "saveFailed": "판단 모델을 업데이트하지 못했습니다"
       },
       "header": {
@@ -2846,18 +2845,14 @@
         "indexingStartUnexpectedError": "인덱싱을 시작하는 중 예기치 않은 오류가 발생했습니다",
         "indexingUpdateStarted": "인덱싱 업데이트를 시작했습니다",
         "nameUpdateFailed": "커넥터 이름을 업데이트하지 못했습니다",
-        "nameUpdated": "커넥터 이름을 업데이트했습니다",
         "noUnresolvedErrors": "다시 시도할 미해결 오류가 없습니다.",
         "pruningFrequencyUpdateFailed": "커넥터 정리 주기를 업데이트하지 못했습니다",
-        "pruningFrequencyUpdated": "커넥터 정리 주기를 업데이트했습니다",
         "refreshFrequencyUpdateFailed": "커넥터 새로 고침 주기를 업데이트하지 못했습니다",
-        "refreshFrequencyUpdated": "커넥터 새로 고침 주기를 업데이트했습니다",
         "targetedReindexFailed": "대상 지정 재인덱싱에 실패했습니다: {message}",
         "targetedReindexRunning": "{count, plural, one {오류 #개} other {오류 #개}}를 다시 시도하는 중…",
         "targetedReindexDone": "다시 시도가 끝났습니다. {resolved, plural, one {오류 #개} other {오류 #개}}가 해결되었습니다.",
         "targetedReindexPartial": "다시 시도가 끝났습니다. {resolved, plural, one {오류 #개} other {오류 #개}}가 해결되었고 {failing, plural, one {문서 #개} other {문서 #개}}는 여전히 실패합니다.",
         "targetedReindexIncomplete": "다시 시도가 끝나지 않았습니다. 해결되지 않은 오류는 목록에 남습니다.",
-        "checkFrequencyUpdated": "커넥터 검사 주기가 업데이트되었습니다",
         "checkFrequencyUpdateFailed": "커넥터 검사 주기를 업데이트하지 못했습니다",
         "runResolved": "해결됨으로 표시했습니다.",
         "runResolveFailed": "해결하지 못했습니다: {message}",
@@ -3441,9 +3436,6 @@
           },
           "shareFailed": {
             "toast": "이 계정을 사용할 수 있는 사용자를 변경하지 못했습니다. 다시 시도하세요."
-          },
-          "renameSaved": {
-            "toast": "계정 이름을 변경했습니다."
           },
           "renameFailed": {
             "toast": "이 계정의 이름을 변경할 수 없습니다. 다시 시도하세요."
@@ -4865,9 +4857,6 @@
       }
     },
     "costOverrides": {
-      "allProviders": {
-        "label": "모든 제공업체"
-      },
       "deleteModal": {
         "description": "**{model}**({provider}) 사용량은 다시 기본 제공 가격으로 계산됩니다.",
         "submit": {
@@ -4941,12 +4930,6 @@
     },
     "craft": {
       "accessCell": {
-        "disabledSuccess": {
-          "message": "사용자의 Craft를 사용 중지했습니다"
-        },
-        "enabledSuccess": {
-          "message": "사용자의 Craft를 사용 설정했습니다"
-        },
         "error": {
           "message": "Craft 접근 권한을 업데이트하지 못했습니다"
         }
@@ -5061,14 +5044,8 @@
         "resetError": {
           "message": "기본 모델을 지우지 못했습니다"
         },
-        "resetSuccess": {
-          "message": "Craft 기본 모델을 지웠습니다"
-        },
         "saveError": {
           "message": "기본 모델을 저장하지 못했습니다"
-        },
-        "saveSuccess": {
-          "message": "Craft 기본 모델을 저장했습니다"
         }
       },
       "header": {
@@ -5447,9 +5424,6 @@
         }
       },
       "defaultAgent": {
-        "cleared": {
-          "toast": "기본 에이전트를 해제했습니다"
-        },
         "section": {
           "description": "재정의하지 않는 한 봇이 모든 채널에서 사용하는 에이전트입니다.",
           "title": "기본 에이전트"
@@ -5462,9 +5436,6 @@
         },
         "updateError": {
           "toast": "에이전트를 업데이트하지 못했습니다"
-        },
-        "updated": {
-          "toast": "기본 에이전트를 업데이트했습니다"
         }
       },
       "error": {
@@ -5517,15 +5488,9 @@
         "deleted": {
           "toast": "서버 설정을 삭제했습니다"
         },
-        "disabled": {
-          "toast": "서버를 사용 중지했습니다"
-        },
         "empty": {
           "description": "시작하려면 서버 설정을 만드세요.",
           "title": "아직 설정된 Discord 서버가 없습니다"
-        },
-        "enabled": {
-          "toast": "서버를 사용 설정했습니다"
         },
         "fallbackName": "서버 #{id}",
         "notRegistered": {
@@ -5649,9 +5614,6 @@
       "score": {
         "notANumber": {
           "toast": "점수는 숫자여야 합니다"
-        },
-        "updated": {
-          "toast": "점수를 업데이트했습니다!"
         }
       },
       "sets": {
@@ -6076,8 +6038,7 @@
           "label": "(기본)"
         },
         "toasts": {
-          "renameFailed": "그룹 이름 변경에 실패했습니다",
-          "renamed": "그룹 이름을 \"{name}\"(으)로 변경했습니다"
+          "renameFailed": "그룹 이름 변경에 실패했습니다"
         },
         "viewGroup": {
           "label": "그룹 보기"
@@ -6156,8 +6117,6 @@
         "toasts": {
           "deleteFailed": "그룹 삭제에 실패했습니다",
           "deleted": "그룹 \"{name}\"을(를) 삭제했습니다",
-          "managerAssigned": "관리자를 지정했습니다",
-          "managerRevoked": "관리자 권한을 해제했습니다",
           "managerUpdateFailed": "관리자 변경에 실패했습니다",
           "membersStranded": "일부 멤버가 어떤 그룹에도 속하지 않게 됩니다. 먼저 다른 그룹에 추가하세요.",
           "syncing": "이 그룹은 현재 동기화 중입니다. 잠시 후 다시 시도하세요.",
@@ -6179,8 +6138,7 @@
           "text": "그룹을 만들어 사용자를 정리하고 접근 권한을 관리하세요."
         },
         "loadError": {
-          "description": "자세한 내용은 콘솔을 확인하세요.",
-          "title": "그룹을 불러오지 못했습니다."
+          "description": "자세한 내용은 콘솔을 확인하세요."
         },
         "newGroup": {
           "label": "새 그룹"
@@ -6635,9 +6593,6 @@
       "deselectError": {
         "message": "선택 해제에 실패했습니다"
       },
-      "deselectSuccess": {
-        "message": "{title} 선택을 해제했습니다"
-      },
       "disconnectError": {
         "message": "연결 해제에 실패했습니다"
       },
@@ -6808,9 +6763,6 @@
       },
       "setDefaultError": {
         "message": "기본값 설정에 실패했습니다"
-      },
-      "setDefaultSuccess": {
-        "message": "{title}을(를) 기본값으로 설정했습니다"
       }
     },
     "indexSettings": {
@@ -7370,8 +7322,7 @@
           },
           "placeholder": "모드 선택",
           "toasts": {
-            "error": "검색 액세스 모드를 업데이트할 수 없습니다.",
-            "success": "검색 액세스 모드를 {mode}(으)로 설정했습니다."
+            "error": "검색 액세스 모드를 업데이트할 수 없습니다."
           }
         },
         "loadError": {
@@ -7398,7 +7349,6 @@
           "period": "1부터 {max, number}까지의 정수 초를 입력하세요."
         },
         "toasts": {
-          "saved": "요청 한도를 저장했습니다.",
           "failed": "요청 한도를 저장하지 못했습니다."
         }
       },
@@ -8452,9 +8402,6 @@
         "error": "SCIM token 상태를 불러오지 못했습니다."
       },
       "modal": {
-        "copied": {
-          "message": "Token을 클립보드에 복사했습니다"
-        },
         "copyFailed": {
           "error": "Token을 복사하지 못했습니다"
         },
@@ -8715,9 +8662,7 @@
       },
       "toasts": {
         "securitySettingsUpdateFailed": "보안 설정을 업데이트하지 못했습니다",
-        "securitySettingsUpdated": "보안 설정을 업데이트했습니다",
-        "settingsUpdateFailed": "설정을 업데이트하지 못했습니다",
-        "settingsUpdated": "설정을 업데이트했습니다"
+        "settingsUpdateFailed": "설정을 업데이트하지 못했습니다"
       },
       "placeholders": {
         "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
@@ -8839,8 +8784,7 @@
       "page": {
         "description": "서비스 계정을 사용하여 {appName} API에 프로그래밍 방식으로 접근하세요.",
         "error": {
-          "description": "자세한 내용은 콘솔을 확인하세요.",
-          "title": "서비스 계정을 불러오지 못했습니다."
+          "description": "자세한 내용은 콘솔을 확인하세요."
         }
       },
       "regenerateModal": {
@@ -8891,7 +8835,6 @@
       "toasts": {
         "deleteFailed": "API 키를 삭제하지 못했습니다.",
         "deleteFailedWithDetail": "API 키를 삭제하지 못했습니다: {detail}",
-        "keyCopied": "API 키를 클립보드에 복사했습니다.",
         "regenerateFailed": "API 키를 재생성하지 못했습니다.",
         "regenerateFailedWithDetail": "API 키를 재생성하지 못했습니다: {detail}"
       },
@@ -9298,9 +9241,6 @@
         "fieldUpdateFailed": {
           "toast": "커넥터 {field}을(를) 업데이트하지 못했습니다"
         },
-        "fieldUpdated": {
-          "toast": "커넥터 {field}을(를) 업데이트했습니다"
-        },
         "updateTokensButton": {
           "label": "token 업데이트"
         }
@@ -9325,9 +9265,7 @@
         "gatedTooltip": "여러 SSO 공급자를 동시에 사용하려면 Business 또는 Enterprise 요금제가 필요합니다."
       },
       "copyRedirectUri": {
-        "tooltip": "리디렉션 URI 복사",
-        "successToast": "리디렉션 URI를 복사했습니다",
-        "errorToast": "복사할 수 없습니다"
+        "tooltip": "리디렉션 URI 복사"
       },
       "deleteProvider": {
         "tooltip": "삭제"
@@ -10046,8 +9984,7 @@
         }
       },
       "loadError": {
-        "description": "추적 구성을 불러올 수 없습니다.",
-        "title": "추적 설정을 불러오지 못했습니다"
+        "description": "추적 구성을 불러올 수 없습니다."
       },
       "page": {
         "description": "관측 플랫폼을 연결하여 LLM 호출을 모니터링하고 평가하세요."
@@ -10815,7 +10752,6 @@
         "title": "각 사용자는 설정 → LLM 게이트웨이에서 자체 토큰과 연결 정보를 구성합니다."
       },
       "toasts": {
-        "settingsUpdated": "설정을 업데이트했습니다",
         "settingsUpdateFailed": "설정을 업데이트하지 못했습니다"
       }
     },
@@ -11498,14 +11434,18 @@
         },
         "toasts": {
           "accessRemoved": "액세스 권한이 제거되었습니다.",
-          "copyLinkFailed": "링크를 복사하지 못했습니다.",
-          "linkCopied": "링크를 복사했습니다.",
           "ownershipTransferred": "소유권이 이전되었습니다.",
           "sharingUpdated": "공유 설정이 업데이트되었습니다."
         },
         "transfer": {
           "label": "이전",
           "title": "*{name}* 이전"
+        },
+        "people": {
+          "label": "액세스 권한이 있는 사용자"
+        },
+        "ownerOption": {
+          "disabledTooltip": "소유자의 공유는 해제할 수 없습니다."
         }
       },
       "viewer": {
@@ -16085,6 +16025,12 @@
     "settingsHeader": {
       "cancel": "취소"
     },
+    "settingsBody": {
+      "error": {
+        "title": "{page}을(를) 불러오지 못했습니다",
+        "description": "문제가 발생했습니다. 잠시 후 다시 시도하세요."
+      }
+    },
     "table": {
       "alwaysShown": "항상 표시",
       "ascending": "오름차순",
@@ -16739,8 +16685,7 @@
         "title": "에이전트"
       },
       "craft": {
-        "label": "Craft",
-        "businessTag": "Business"
+        "label": "Craft"
       },
       "exploreAgents": {
         "label": "에이전트 둘러보기"
