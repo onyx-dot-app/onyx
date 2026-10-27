@@ -25,18 +25,32 @@ function isBodyInit(body: unknown): body is BodyInit {
   );
 }
 
-async function buildHeaders(
+export async function buildHeaders(
   init: ApiFetchInit | undefined,
   hasJsonBody: boolean,
 ): Promise<Headers> {
+  const signal = init?.signal;
+  const aborted = new Error("Request cancelled");
+  aborted.name = "AbortError";
+  if (signal?.aborted) throw aborted;
   const headers = new Headers(init?.headers);
   if (!headers.has("Accept")) headers.set("Accept", "application/json");
   if (hasJsonBody && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
   if (init?.auth !== false) {
-    const token =
-      init?.auth === "stored" ? await getToken() : await getValidToken();
+    const credentials = init?.auth === "stored" ? getToken() : getValidToken();
+    // Cancel this request's wait without cancelling the shared token refresh.
+    const token = await (signal
+      ? new Promise<string | null>((resolve, reject) => {
+          const onAbort = () => reject(aborted);
+          signal.addEventListener("abort", onAbort, { once: true });
+          void credentials
+            .then(resolve, reject)
+            .finally(() => signal.removeEventListener("abort", onAbort));
+        })
+      : credentials);
+    if (signal?.aborted) throw aborted;
     if (token && !headers.has("Authorization")) {
       headers.set("Authorization", `Bearer ${token}`);
     }

@@ -118,6 +118,7 @@ class MessageRenderer:
         self._raw_thinking = ""
         self._finished = False
         self.tool_placements: dict[str, Placement] = {}
+        self._last_tool_placement: Placement | None = None
         self._argument_streams: dict[int, ToolCall] = {}
         self.citation_processor = (
             DynamicCitationProcessor(citation_mode=settings.citation_mode)
@@ -140,6 +141,8 @@ class MessageRenderer:
     def _append(self, text: str, *, thinking: bool = False) -> list[packets.Packet]:
         if not text or self.settings.mode == PresentationMode.SILENT:
             return []
+        # Tool tabs cannot span an intervening text or reasoning section.
+        self._last_tool_placement = None
         if self.settings.mode == PresentationMode.CODING_THINKING or (
             thinking and self.settings.mode == PresentationMode.CODING_ANSWER
         ):
@@ -237,12 +240,14 @@ class MessageRenderer:
                     self._answer_placement = self.layout.next_section(self.parent)
                 self.tool_placements[call_id] = self._answer_placement
                 return self._answer_placement
-            first = next(iter(self.tool_placements.values()), None)
-            self.tool_placements[call_id] = (
-                first.model_copy(update={"tab_index": len(self.tool_placements)})
-                if first is not None and self.parent is None
+            previous = self._last_tool_placement
+            placement = (
+                previous.model_copy(update={"tab_index": previous.tab_index + 1})
+                if previous is not None and self.parent is None
                 else self.layout.next_section(self.parent)
             )
+            self.tool_placements[call_id] = placement
+            self._last_tool_placement = placement
         return self.tool_placements[call_id]
 
     def consume(self, event: GenerationContentEvent) -> list[packets.Packet]:

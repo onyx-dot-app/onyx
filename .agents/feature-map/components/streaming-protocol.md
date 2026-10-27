@@ -143,6 +143,8 @@ whether delivered through a progress update or directly at completion.
 - `tab_index`: disambiguates parallel tool calls that share a `turn_index`, so
   each gets its own tab in the UI
   (`backend/onyx/chat/renderer.py:MessageRenderer.tool_placement`).
+  Text or reasoning between tool calls starts a new section; only consecutive
+  top-level calls share tabs.
 - `sub_turn_index`: nesting level for a tool that calls other tools; `None` at
   the top level.
 - `model_index`: which model produced the packet in a multi-model turn (`0`,

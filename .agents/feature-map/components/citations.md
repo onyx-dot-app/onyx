@@ -173,6 +173,8 @@ tool response via `citation_utils.py:update_citation_processor_from_tool_result`
 which turns a `SearchDocsResponse.citation_mapping` (`dict[int, str]`, number to
 document id) into a `dict[int, SearchDoc]` by matching against
 `search_docs_response.search_docs`.
+Research results carry the number-to-document mapping directly. Ordinary chat restores it
+when replaying a research turn, preserving its links and reserving its citation numbers for later searches.
 
 `backend/onyx/chat/renderer.py:MessageRenderer._content` feeds answer text to
 `citation_processor.process_token`. The processor holds

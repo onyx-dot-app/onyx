@@ -3,6 +3,7 @@ import re
 from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
+from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.file_store.models import ContextFileMetadata
 from onyx.llm.models import ToolResultMessage
 from onyx.tools.constants import CITEABLE_TOOLS_NAMES
@@ -12,8 +13,11 @@ def update_citation_processor_from_tool_result(
     tool_response: ToolResultMessage,
     citation_processor: DynamicCitationProcessor,
 ) -> None:
-    """Add citeable search artifacts to the citation lookup."""
+    """Add source references from search results and research reports."""
     data = tool_response.details
+    if isinstance(data, ResearchAgentCallResult):
+        citation_processor.update_citation_mapping(data.citation_mapping)
+        return
     if tool_response.tool_name not in CITEABLE_TOOLS_NAMES or not isinstance(
         data, SearchDocsResponse
     ):

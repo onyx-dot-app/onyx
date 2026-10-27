@@ -607,6 +607,8 @@ releasing input. Server idleness alone does not mean the local response is compl
 Settlement belongs to both the request controller and its reader. Replacing the reader
 with replay prevents an earlier settlement from releasing input or replacing history.
 Recovery preserves the latest unsaved failed turn during both initial history loading and settlement.
+Saved answers replace local errors when history contains successful final text or files.
+Saved failures and empty response placeholders retain local retry details; packets alone do not confirm a successful save.
 Manual completion checks belong to their sessions; switching chats does not disable another chat's controls.
 Chat, search, and voice submission preserve drafts while readiness is unconfirmed.
 
