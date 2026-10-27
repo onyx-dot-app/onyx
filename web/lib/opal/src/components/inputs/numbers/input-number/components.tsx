@@ -135,10 +135,14 @@ export default function InputNumber({
   const normalizePrecision = (newValue: number) =>
     Number(newValue.toFixed(decimalPlaces));
 
+  // A typed value is not clamped until it settles, so a step from it can still
+  // be out of range; clamp to both bounds.
+  const clampToBounds = (n: number) =>
+    Math.min(max ?? Infinity, Math.max(min ?? -Infinity, n));
+
   const handleIncrement = () => {
     if (canIncrement) {
-      const newValue = normalizePrecision(effectiveValue + step);
-      const next = max !== undefined ? Math.min(newValue, max) : newValue;
+      const next = clampToBounds(normalizePrecision(effectiveValue + step));
       onChange(next);
       onCommit?.(next);
     }
@@ -146,8 +150,7 @@ export default function InputNumber({
 
   const handleDecrement = () => {
     if (canDecrement) {
-      const newValue = normalizePrecision(effectiveValue - step);
-      const next = min !== undefined ? Math.max(newValue, min) : newValue;
+      const next = clampToBounds(normalizePrecision(effectiveValue - step));
       onChange(next);
       onCommit?.(next);
     }
@@ -195,7 +198,10 @@ export default function InputNumber({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key !== "Enter") return;
+    // Enter that confirms an IME composition is not a commit.
+    if (e.key !== "Enter" || e.nativeEvent.isComposing || e.keyCode === 229) {
+      return;
+    }
     // Settle in place; an enclosing form must not submit the unclamped value.
     e.preventDefault();
     settle();
