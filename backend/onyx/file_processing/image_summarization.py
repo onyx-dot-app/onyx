@@ -185,15 +185,18 @@ def _resize_image_if_needed(image_data: bytes) -> bytes:
         return image_data
 
     with Image.open(BytesIO(image_data)) as img:
+        # A JPEG is decoded at a reduced scale, so a large photo never loads at
+        # full size. Other formats ignore this.
+        img.draft(img.mode, (_RESIZED_MAX_DIMENSION_PX, _RESIZED_MAX_DIMENSION_PX))
         # The saved JPEG drops the EXIF orientation tag, so the rotation is
         # applied to the pixels first.
-        upright = ImageOps.exif_transpose(img)
-        upright.thumbnail(
+        ImageOps.exif_transpose(img, in_place=True)
+        img.thumbnail(
             (_RESIZED_MAX_DIMENSION_PX, _RESIZED_MAX_DIMENSION_PX),
             Image.Resampling.LANCZOS,
         )
         output = BytesIO()
-        _to_jpeg_compatible(upright).save(output, format="JPEG", quality=85)
+        _to_jpeg_compatible(img).save(output, format="JPEG", quality=85)
         return output.getvalue()
 
 
