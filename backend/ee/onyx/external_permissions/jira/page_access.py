@@ -616,7 +616,6 @@ def get_project_permissions(
     source_operations: JiraSourceOperations,
     jira_project: str,
     add_prefix: bool = False,
-    source: DocumentSource = DocumentSource.JIRA,
 ) -> ExternalAccess | None:
     """
     Get project permissions from Jira.

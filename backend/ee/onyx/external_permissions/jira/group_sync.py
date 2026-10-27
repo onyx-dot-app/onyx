@@ -144,14 +144,9 @@ def jira_group_sync(
     if not jira_base_url:
         raise ValueError("No jira_base_url found in connector config")
 
-    doc_source = (
-        DocumentSource.JIRA_SERVICE_MANAGEMENT
-        if cc_pair.connector.source == DocumentSource.JIRA_SERVICE_MANAGEMENT
-        else DocumentSource.JIRA
-    )
     source_operations = JiraSourceOperations(
         credentials_provider=OnyxStaticCredentialsProvider(
-            None, doc_source.value, credential_json(cc_pair)
+            None, DocumentSource.JIRA.value, credential_json(cc_pair)
         ),
         connector_specific_config={
             "jira_base_url": jira_base_url,
