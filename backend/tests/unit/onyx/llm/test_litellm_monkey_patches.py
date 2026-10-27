@@ -224,9 +224,9 @@ def test_responses_transform_response_preserves_reasoning_summary_sections() -> 
 
 def test_responses_transform_response_maps_incomplete_reply_to_empty_message() -> None:
     """A reasoning model that spends max_output_tokens on reasoning returns an
-    incomplete reply with no message item. Upstream raises; the patch returns
-    an empty message with the truncation as finish_reason, as streaming does,
-    and keeps the reasoning summary."""
+    incomplete reply with no message item. Upstream maps it to an empty message
+    with the truncation as finish_reason; the patch keeps the reasoning summary
+    readable with newlines between its parts."""
     result = _invoke_transform_response(
         _build_responses_response(
             output=[_reasoning_item("thinking about lighthouses", "ran out of budget")],
@@ -315,6 +315,7 @@ def test_responses_chunk_parser_ignores_empty_tool_argument_delta() -> None:
     )
     tool_calls = real.choices[0].delta.tool_calls
     assert tool_calls is not None
+    assert isinstance(tool_calls[0], ChatCompletionDeltaToolCall)
     tool_call = tool_calls[0]
     assert isinstance(tool_call, ChatCompletionDeltaToolCall)
     assert tool_call.function.arguments == '{"query": "onboarding"}'
