@@ -7350,18 +7350,14 @@
         "description": "Limita cuántas solicitudes de embedding envía la indexación en una ventana de tiempo, entre todos los workers de indexación. Al llegar al límite, la indexación espera y vuelve a intentarlo en lugar de fallar, así los workers toman menos trabajo nuevo. Un lote solo falla si espera demasiado. Las consultas de búsqueda no tienen límite.",
         "requests": {
           "title": "Solicitudes por ventana",
-          "description": "Déjalo vacío para no tener límite.",
-          "placeholder": "Sin límite"
+          "description": "El máximo de solicitudes de embedding que la indexación puede enviar en una ventana. Déjalo vacío para no tener límite.",
+          "placeholder": "Sin límite",
+          "suffix": "solicitudes"
         },
         "period": {
           "title": "Duración de la ventana",
-          "description": "Por ejemplo, 60 para un límite por minuto.",
-          "suffix": "(segundos)"
-        },
-        "restoreDefault": "Restaurar valor predeterminado",
-        "validation": {
-          "requests": "Introduce un número entero de 1 a {max, number}, o deja el campo vacío para no tener límite.",
-          "period": "Introduce un número entero de segundos de 1 a {max, number}."
+          "description": "Cuánto dura una ventana. Usa 60 para un límite por minuto.",
+          "suffix": "segundos"
         },
         "toasts": {
           "failed": "No se pudo guardar el límite."

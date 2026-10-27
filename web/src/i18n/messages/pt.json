@@ -7350,18 +7350,14 @@
         "description": "Limita quantas requisições de embedding a indexação envia em uma janela de tempo, entre todos os workers de indexação. No limite, a indexação espera e tenta novamente em vez de falhar, então os workers pegam menos trabalho novo. Um lote só falha se esperar demais. Consultas de pesquisa não têm limite.",
         "requests": {
           "title": "Requisições por janela",
-          "description": "Deixe vazio para não ter limite.",
-          "placeholder": "Sem limite"
+          "description": "O máximo de requisições de embedding que a indexação pode enviar em uma janela. Deixe vazio para não ter limite.",
+          "placeholder": "Sem limite",
+          "suffix": "requisições"
         },
         "period": {
           "title": "Duração da janela",
-          "description": "Por exemplo, 60 para um limite por minuto.",
-          "suffix": "(segundos)"
-        },
-        "restoreDefault": "Restaurar padrão",
-        "validation": {
-          "requests": "Insira um número inteiro de 1 a {max, number}, ou deixe o campo vazio para não ter limite.",
-          "period": "Insira um número inteiro de segundos de 1 a {max, number}."
+          "description": "Quanto tempo dura uma janela. Use 60 para um limite por minuto.",
+          "suffix": "segundos"
         },
         "toasts": {
           "failed": "Não foi possível salvar o limite."

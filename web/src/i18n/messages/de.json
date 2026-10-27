@@ -7350,18 +7350,14 @@
         "description": "Begrenzt, wie viele Embedding-Anfragen die Indexierung in einem Zeitfenster sendet, über alle Indexierungs-Worker hinweg. Beim Erreichen des Limits wartet die Indexierung und versucht es erneut, statt fehlzuschlagen, sodass Worker weniger neue Arbeit annehmen. Ein Batch schlägt nur fehl, wenn er zu lange wartet. Suchanfragen sind nicht begrenzt.",
         "requests": {
           "title": "Anfragen pro Zeitfenster",
-          "description": "Leer lassen für kein Limit.",
-          "placeholder": "Kein Limit"
+          "description": "Die maximale Anzahl an Embedding-Anfragen, die die Indexierung in einem Zeitfenster senden darf. Leer lassen für kein Limit.",
+          "placeholder": "Kein Limit",
+          "suffix": "Anfragen"
         },
         "period": {
           "title": "Länge des Zeitfensters",
-          "description": "Zum Beispiel 60 für ein Limit pro Minute.",
-          "suffix": "(Sekunden)"
-        },
-        "restoreDefault": "Standard wiederherstellen",
-        "validation": {
-          "requests": "Geben Sie eine ganze Zahl von 1 bis {max, number} ein, oder lassen Sie das Feld für kein Limit leer.",
-          "period": "Geben Sie eine ganze Zahl von Sekunden von 1 bis {max, number} ein."
+          "description": "Wie lange ein Zeitfenster dauert. Verwenden Sie 60 für ein Limit pro Minute.",
+          "suffix": "Sekunden"
         },
         "toasts": {
           "failed": "Das Limit konnte nicht gespeichert werden."

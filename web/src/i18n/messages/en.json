@@ -7346,22 +7346,18 @@
         }
       },
       "embeddingRateLimit": {
-        "title": "Embedding rate limit",
+        "title": "Embedding Rate Limit",
         "description": "Limits how many embedding requests indexing sends in a time window, across all indexing workers. At the limit, indexing waits and tries again instead of failing, so workers take less new work. A batch fails only if it waits too long. Search queries are not limited.",
         "requests": {
-          "title": "Requests per window",
-          "description": "Leave empty for no limit.",
-          "placeholder": "No limit"
+          "title": "Requests per Window",
+          "description": "The most embedding requests indexing can send in one window. Leave empty for no limit.",
+          "placeholder": "No limit",
+          "suffix": "requests"
         },
         "period": {
-          "title": "Window length",
-          "description": "For example, 60 for a limit per minute.",
-          "suffix": "(seconds)"
-        },
-        "restoreDefault": "Restore default",
-        "validation": {
-          "requests": "Enter a whole number from 1 to {max, number}, or leave the field empty for no limit.",
-          "period": "Enter a whole number of seconds from 1 to {max, number}."
+          "title": "Window Length",
+          "description": "How long one window lasts. Use 60 for a per-minute limit.",
+          "suffix": "seconds"
         },
         "toasts": {
           "failed": "Could not save the rate limit."
