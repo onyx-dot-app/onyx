@@ -614,7 +614,7 @@ function OpenAICompatibleProviderModal({
     apiUrl: Yup.string()
       .trim()
       .required(t("validation.apiBaseUrlRequired"))
-      .url(t("validation.urlInvalid")),
+      .test("http-url", t("validation.urlInvalid"), isHttpUrl),
     apiKey: isEditing
       ? Yup.string().trim()
       : Yup.string().trim().required(t("validation.apiKeyRequired")),
@@ -657,7 +657,7 @@ function OpenAICompatibleProviderModal({
           await testAndSaveProviderCredentials({
             provider,
             apiKey,
-            apiUrl: values.apiUrl,
+            apiUrl: values.apiUrl.trim(),
             modelName: values.modelName.trim(),
             unknownErrorMessage: t("toasts.unknownError"),
           })
@@ -666,8 +666,9 @@ function OpenAICompatibleProviderModal({
             modelName: values.modelName.trim(),
             modelDim: values.modelDim,
             normalize: values.normalize,
-            queryPrefix: values.queryPrefix || null,
-            passagePrefix: values.passagePrefix || null,
+            // The cloud embedding path rejects prefixes, so none are offered.
+            queryPrefix: null,
+            passagePrefix: null,
             reducedDimension: values.reducedDimension.trim()
               ? Number(values.reducedDimension)
               : null,
@@ -690,6 +691,7 @@ function OpenAICompatibleProviderModal({
           modelNameSubDescription={t("openaiCompatible.modelName.description", {
             appName,
           })}
+          showPrefixes={false}
         />
 
         {/* Editing saves the connection only; it does not stage a model. */}
