@@ -84,6 +84,18 @@ Other tool errors remain available to the model for recovery.
 These APIs prepare the shared runtime transition. Production chat, research,
 coding, and session reload still use their existing execution and loading paths.
 
+### Independent delivery primitives
+
+`ChatDelivery` owns packet publication and replay writes. Its `ChatStream` reader
+can detach without stopping delivery. A shared publication lock keeps live packets
+and replay batches in the same order. Cache writes run outside that lock, so slow
+storage does not block control packets.
+
+Closing delivery drains accepted events before sealing publication. Replay backlog
+limits and cache failures mark the buffer incomplete. Readers must reload saved
+history when replay has a gap. These primitives are additive; production chat
+still uses its existing worker and reader lifecycle.
+
 ## 3. Data model
 
 This component has no tables. Packets are never written to Postgres; the chat
