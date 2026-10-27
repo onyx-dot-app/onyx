@@ -2,7 +2,7 @@ from typing import Any
 
 from sqlalchemy import select
 
-from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import DocumentSource, MessageType
 from onyx.db.chat_response import read_response_steps
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import ChatMessage
@@ -205,9 +205,16 @@ def test_research_think_step_takes_one_sub_turn(
             )
         }
         research_call = tool_calls[_RESEARCH_CALL_ID]
-        child_response = db_session.scalar(
+        child_instruction = db_session.scalar(
             select(ChatMessage).where(
                 ChatMessage.invoking_tool_call_id == research_call.id
+            )
+        )
+        assert child_instruction is not None
+        child_response = db_session.scalar(
+            select(ChatMessage).where(
+                ChatMessage.parent_message_id == child_instruction.id,
+                ChatMessage.message_type == MessageType.ASSISTANT,
             )
         )
         assert child_response is not None

@@ -334,10 +334,9 @@ config serde defaults in `config.rs`, and alt-menu/shortcut logic in
 `expect_used`/`panic`, so most failure paths are required to return
 `Result` rather than panic.
 
-**Widget** has no test files under `widget/` (`find
-widget/src -iname '*.test.*' -o -iname '*spec*'` returns nothing). The
-closest to a check is `bun run type-check` (`tsc --noEmit`,
-`widget/package.json`).
+**Widget** tests cover session readiness and failed drafts:
+`cd widget && bun test tests/readiness.test.ts`.
+Run `bun run type-check` for TypeScript checks (`widget/package.json`).
 
 **Chrome extension** has no test files or build tooling at all; it is loaded
 unpacked directly from source. There is no `type-check` or lint script in
@@ -453,10 +452,10 @@ repository. Verification below is manual.
   issues"). A backend change that emits one packet type the widget doesn't
   recognize as `Packet`-shaped will end the entire stream for every widget
   user, not just log a warning.
-- **There is no test coverage at all for the widget or the extension.** A
-  regression in either is only caught by the manual steps in §8, and the
-  extension has no type-checking step either, since it ships plain
-  unbundled JavaScript.
+- **Widget readiness has automated coverage** in `widget/tests/readiness.test.ts`,
+  including cleanup delays, failed status checks, stale requests, and failed drafts.
+  Other widget behavior and extension behavior still require the manual checks in §8.
+  The extension has no type-checking step; it ships plain, unbundled JavaScript.
 
 ---
 
@@ -471,4 +470,6 @@ The widget keeps Send disabled after a STOP packet and after delivery ends.
 through the authenticated session status endpoint. Failed checks retry without enabling
 Send. Each request has a ten-second deadline; the wait has no overall deadline.
 Each poll resolves the current credential. Reset replaces the request controller;
-an old callback cannot change the new conversation. Failed sends retain their draft.
+an old callback cannot change the new conversation. Before acknowledgement, a failed
+send removes its optimistic message and restores the draft if the input is empty.
+After acknowledgement, the widget keeps the accepted message without restoring a duplicate draft.

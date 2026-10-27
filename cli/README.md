@@ -321,7 +321,9 @@ Versions are derived from git tags with the `cli/` prefix (e.g. `cli/v0.1.0`). T
 
 The interactive client keeps the current request active until the server confirms that
 its session is idle. A STOP packet or a closed connection does not confirm a saved turn.
-Failed readiness checks keep Send blocked and retry. Failed drafts remain in the input.
+Temporary readiness failures keep Send blocked and retry. Unsupported or denied requests
+stop polling and show an error; use `/new` to start another conversation.
+Failed drafts remain in the input.
 The `ask` command confirms idle before naming the saved conversation.
 
 Cancellation waits for the response ID before sending Stop. The request owns that ID,

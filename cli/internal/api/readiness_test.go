@@ -2,9 +2,11 @@ package api_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -172,5 +174,48 @@ func TestCancelledDeliveryWaitsForStopRequest(t *testing.T) {
 	case <-deliveryDone:
 		t.Fatal("delivery closed before Stop completed; the CLI can exit without cancelling the run")
 	case <-time.After(20 * time.Millisecond):
+	}
+}
+
+func TestIdleWaitRetriesTransientFailures(t *testing.T) {
+	for _, status := range []int{http.StatusRequestTimeout, http.StatusTooManyRequests, http.StatusServiceUnavailable} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			calls := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				if calls == 1 {
+					w.WriteHeader(status)
+					return
+				}
+				fmt.Fprint(w, `{"is_processing":false}`)
+			}))
+			defer server.Close()
+			ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+			defer cancel()
+			if err := api.WaitForChatSessionIdle(ctx, testutil.NewClient(server.URL), "session"); err != nil {
+				t.Fatal(err)
+			}
+			if calls != 2 {
+				t.Fatalf("requests = %d, want 2", calls)
+			}
+		})
+	}
+}
+
+func TestIdleWaitRejectsUnsupportedReadinessEndpoint(t *testing.T) {
+	for _, status := range []int{http.StatusNotFound, http.StatusMethodNotAllowed} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			calls := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls++; w.WriteHeader(status) }))
+			defer server.Close()
+			err := api.WaitForChatSessionIdle(t.Context(), testutil.NewClient(server.URL), "session")
+			var apiErr *api.OnyxAPIError
+			if !errors.As(err, &apiErr) || apiErr.StatusCode != status || !strings.Contains(err.Error(), "readiness endpoint unavailable") {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if calls != 1 {
+				t.Fatalf("unsupported endpoint retried %d times", calls)
+			}
+		})
 	}
 }

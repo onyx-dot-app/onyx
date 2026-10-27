@@ -401,6 +401,10 @@ func (c *Client) IsChatSessionProcessing(ctx context.Context, sessionID string) 
 		IsProcessing *bool `json:"is_processing"`
 	}
 	if err := c.doJSON(ctx, "GET", "/chat/chat-session/"+sessionID+"/status", nil, &status); err != nil {
+		var apiErr *OnyxAPIError
+		if errors.As(err, &apiErr) && (apiErr.StatusCode == http.StatusNotFound || apiErr.StatusCode == http.StatusMethodNotAllowed) {
+			return true, fmt.Errorf("session or readiness endpoint unavailable; use a server with the chat readiness API: %w", err)
+		}
 		return true, err
 	}
 	if status.IsProcessing == nil {
@@ -413,10 +417,13 @@ func (c *Client) IsChatSessionProcessing(ctx context.Context, sessionID string) 
 func WaitForChatSessionIdle(ctx context.Context, client ClientAPI, sessionID string) error {
 	for {
 		processing, err := client.IsChatSessionProcessing(ctx, sessionID)
-		if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if err != nil && !IsRetryableReadinessError(err) {
 			return err
 		}
-		if !processing {
+		if err == nil && !processing {
 			return nil
 		}
 		select {
