@@ -47,6 +47,11 @@ which each individual user separately authorizes their own Slack account. In a
 Slack bot context only, the tenant's Slack bot token is used instead. Web users
 always need their own OAuth token.
 
+All Slack hosts come from `SLACK_API_URL` (`configs/slack_configs.py`): the OAuth
+authorize and token URLs, the Web API base, result permalinks, and the message
+links that `extract_slack_message_urls` parses. Set it to
+`https://slack-gov.com/api/` for GovSlack.
+
 ---
 
 ## 2. Surfaces
