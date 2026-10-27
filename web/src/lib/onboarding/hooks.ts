@@ -111,6 +111,15 @@ function useOnboardingState(activeAgent?: MinimalAgent): {
       isButtonActive: false,
     });
 
+    // A name already filled in (saved earlier or typed before) lets the
+    // Name step continue without another keystroke.
+    if (state.currentStep === OnboardingStep.Welcome) {
+      dispatch({
+        type: OnboardingActionType.SET_BUTTON_ACTIVE,
+        isButtonActive: !!state.data.userName?.trim(),
+      });
+    }
+
     if (state.currentStep === OnboardingStep.Name) {
       const hasProviders = (state.data.llmProviders?.length ?? 0) > 0;
       if (hasProviders) {
