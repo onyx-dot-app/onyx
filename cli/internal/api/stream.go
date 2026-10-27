@@ -163,10 +163,24 @@ func (c *Client) SendMessageStream(
 				}
 			}
 			if event != nil {
-				select {
-				case ch <- event:
-				case <-ctx.Done():
-					// Continue reading for acknowledgement; the cancellation worker is bounded.
+				switch event.(type) {
+				case models.SessionCreatedEvent, models.MessageIDEvent:
+					// The caller needs these IDs to settle and continue a cancelled turn.
+					select {
+					case ch <- event:
+						continue
+					default:
+					}
+					select {
+					case ch <- event:
+					case <-streamCtx.Done():
+					}
+				default:
+					select {
+					case ch <- event:
+					case <-ctx.Done():
+						// Continue reading for acknowledgement; the cancellation worker is bounded.
+					}
 				}
 			}
 		}

@@ -410,9 +410,7 @@ class ChatDelivery:
         except Exception:
             logger.exception("Chat delivery could not finalize")
             self.report_gap()
-            if not self.finished.done():
-                self.finished.set_result(None)
-            self._finish_live()
+            self._flush_replay(final=True)
             return
         if not self.events.has_pending_events:
             self._finish_live()

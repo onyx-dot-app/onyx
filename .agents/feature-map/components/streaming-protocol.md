@@ -194,7 +194,7 @@ chat generator still runs through Starlette's thread pool for each yielded packe
 ### 4.5 Buffering and resume
 
 `ChatDelivery` sends packets to the live reader and stages serialized lines for
-`StreamBufferWriter`. The event worker drains a full 256-line batch immediately,
+`StreamBufferWriter`. The event worker flushes a batch when it reaches 32 KiB,
 including when one event produces many packets. It also flushes smaller batches
 every 50 ms. Cache I/O runs outside the publication lock, so control and
 persistence threads can keep publishing while a cache write blocks.
@@ -202,10 +202,12 @@ persistence threads can keep publishing while a cache write blocks.
 `StreamBufferWriter` compresses lines into cache chunks, flushing at 32 KiB or
 when the delivery worker requests a flush. `mark_done` finalizes replay retention
 or deletes content-free incognito buffers.
+If the event worker cannot start during completion, the caller performs the same
+cleanup and marks replay incomplete before releasing delivery ownership.
 
 Replay overflow, cache errors, and storage limits make the stream non-resumable;
 they do not fail live delivery. `STREAM_GAP` reports missing live output, such as
-reader overflow or failed agent-event delivery. Completion checks unfinished
+failed agent-event delivery. Completion checks unfinished
 events separately from cache cleanup, so a slow final cache write does not
 produce a false live-stream error.
 

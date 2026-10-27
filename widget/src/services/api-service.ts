@@ -62,15 +62,16 @@ export class ApiService {
     onUnconfirmed: () => void
   ): Promise<void> {
     while (!signal.aborted) {
+      const controller = new AbortController();
+      const onAbort = () => controller.abort();
+      signal.addEventListener("abort", onAbort, { once: true });
+      const timeout = setTimeout(onAbort, READINESS_REQUEST_TIMEOUT_MS);
       try {
         const response = await fetch(
           `${this.backendUrl}/chat/chat-session/${sessionId}/status`,
           {
             headers: await this.getHeaders(),
-            signal: AbortSignal.any([
-              signal,
-              AbortSignal.timeout(READINESS_REQUEST_TIMEOUT_MS),
-            ]),
+            signal: controller.signal,
           }
         );
         if (!response.ok) throw new Error("Cannot confirm chat readiness");
@@ -87,6 +88,9 @@ export class ApiService {
       } catch (error) {
         if (signal.aborted) throw error;
         onUnconfirmed();
+      } finally {
+        clearTimeout(timeout);
+        signal.removeEventListener("abort", onAbort);
       }
       if (signal.aborted) break;
       await new Promise<void>((resolve) => {

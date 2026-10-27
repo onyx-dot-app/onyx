@@ -1,13 +1,16 @@
 from collections.abc import Iterator
 from enum import Enum
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from pydantic import (
     BaseModel,
+    BeforeValidator,
     ConfigDict,
     Field,
     JsonValue,
+    PlainSerializer,
+    TypeAdapter,
     field_serializer,
     field_validator,
 )
@@ -63,6 +66,7 @@ from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultTyp
 from onyx.tools.tool_implementations.search.models import SearchToolState
 
 MAX_DISCOVERED_AGENTS = 128
+_MESSAGE_ADAPTER = TypeAdapter(Message)
 
 
 class PromptMetadata(CompactionMetadata):
@@ -228,9 +232,38 @@ class IncognitoAgentResponse(BaseModel):
     agents: list[IncognitoAgentState] = Field(default_factory=list)
 
 
+def _read_incognito_message(value: dict[str, JsonValue] | Message) -> Message:
+    if not isinstance(value, dict):
+        return value
+    data = dict(value)
+    metadata = PromptMetadata.model_validate(data.pop("metadata", {}))
+    message = _MESSAGE_ADAPTER.validate_python(data)
+    message.metadata = metadata
+    return message
+
+
+def serialize_incognito_message(message: Message) -> dict[str, JsonValue]:
+    """Store replay text and prompt metadata without tool details or file bytes."""
+    metadata = (
+        message.metadata
+        if isinstance(message.metadata, PromptMetadata)
+        else PromptMetadata()
+    )
+    data: dict[str, JsonValue] = message.model_dump(mode="json", exclude={"details"})
+    data["metadata"] = metadata.model_dump(exclude={"image_files", "image_token_count"})
+    return data
+
+
+IncognitoMessage = Annotated[
+    Message,
+    BeforeValidator(_read_incognito_message),
+    PlainSerializer(serialize_incognito_message),
+]
+
+
 class IncognitoState(BaseModel):
     version: int = Field(default=0, ge=0, le=999_999_999_999_999)
-    messages: list[dict[str, JsonValue]] = Field(default_factory=list)
+    messages: list[IncognitoMessage] = Field(default_factory=list)
     previous_run_id: str | None = None
     responses: dict[str, IncognitoAgentResponse] = Field(default_factory=dict)
 
