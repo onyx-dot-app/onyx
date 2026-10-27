@@ -86,8 +86,8 @@ class Settings(BaseModel):
 
     # Image processing settings
     image_extraction_and_analysis_enabled: bool | None = True
-    # Images above this size are resized before analysis. None means the default.
-    image_analysis_max_size_mb: int | None = Field(
+    # Images above this size are resized before analysis.
+    image_analysis_max_size_mb: int = Field(
         default=DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB,
         ge=1,
         le=MAX_IMAGE_ANALYSIS_MAX_SIZE_MB,
@@ -149,8 +149,10 @@ class Settings(BaseModel):
     @field_validator("image_analysis_max_size_mb", mode="before")
     @classmethod
     def _clamp_image_analysis_max_size_mb(cls, value: object) -> object:
-        # Clamp, not reject: a stored value from before the bound must still
-        # load, or load_settings falls back to blank settings.
+        # Clamp, not reject: a stored value from before the bound (or a stored
+        # null) must still load, or load_settings falls back to blank settings.
+        if value is None:
+            return DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB
         if isinstance(value, int) and not isinstance(value, bool):
             return min(max(value, 1), MAX_IMAGE_ANALYSIS_MAX_SIZE_MB)
         return value

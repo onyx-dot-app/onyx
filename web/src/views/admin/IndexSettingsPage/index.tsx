@@ -700,8 +700,7 @@ interface IndexSettingsFormValues extends EmbeddingModelSelection {
   vector_quantization: VectorQuantization;
   image_processing_enabled: boolean;
   image_processing_model_configuration_id: number | null;
-  /** Null means the backend default. */
-  image_processing_max_size_mb: number | null;
+  image_processing_max_size_mb: number;
 }
 
 /**
@@ -1097,7 +1096,9 @@ export default function IndexSettingsPage() {
       image_processing_enabled:
         settings.image_extraction_and_analysis_enabled ?? false,
       image_processing_model_configuration_id: captioningModelConfigId,
-      image_processing_max_size_mb: settings.image_analysis_max_size_mb ?? null,
+      image_processing_max_size_mb:
+        settings.image_analysis_max_size_mb ??
+        DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB,
     }),
     [
       savedSelection,
@@ -2461,7 +2462,6 @@ export default function IndexSettingsPage() {
                               <InputHorizontal
                                 title={t("maxImageSize.title")}
                                 description={t("maxImageSize.description")}
-                                suffix="optional"
                                 disabled={!values.image_processing_enabled}
                                 withLabel
                                 fillInput
@@ -2471,11 +2471,16 @@ export default function IndexSettingsPage() {
                                   onChange={(value) =>
                                     void setFieldValue(
                                       "image_processing_max_size_mb",
-                                      value
+                                      value ??
+                                        DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB
                                     )
                                   }
                                   min={1}
                                   max={MAX_IMAGE_ANALYSIS_MAX_SIZE_MB}
+                                  defaultValue={
+                                    DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB
+                                  }
+                                  allowEmpty={false}
                                   suffix={t("maxImageSize.suffix")}
                                   placeholder={String(
                                     DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB

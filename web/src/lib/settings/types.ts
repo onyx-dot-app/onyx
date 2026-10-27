@@ -48,7 +48,7 @@ export interface Settings {
 
   // Image processing settings
   image_extraction_and_analysis_enabled?: boolean;
-  image_analysis_max_size_mb?: number | null;
+  image_analysis_max_size_mb?: number;
 
   // Global limit on indexing embedding requests; null means no limit
   embedding_rate_limit_requests?: number | null;
