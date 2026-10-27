@@ -73,7 +73,9 @@ class AsanaConnector(LoadConnector, PollConnector):
             raise ConnectorMissingCredentialError("Asana")
 
         try:
-            self.asana_client.workspaces_api.get_workspace(self.workspace_id, {})
+            self.asana_client.workspaces_api.get_workspace(
+                self.workspace_id, {}, _request_timeout=(5, 15)
+            )
         except ApiException as api_err:
             status = api_err.status
             if status == 401:
