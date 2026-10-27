@@ -7320,7 +7320,7 @@
           "description": "How search decides which documents a user can see.",
           "enforcePending": "Enforce is set and starts when the update completes.",
           "enforceUnavailable": "Available after the search index update completes.",
-          "label": "Search access mode",
+          "label": "Search Access Mode",
           "options": {
             "enforce": {
               "description": "Search uses connector-level access.",
