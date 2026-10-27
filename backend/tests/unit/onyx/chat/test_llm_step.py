@@ -1369,6 +1369,27 @@ class TestSignedThinkingReplay:
             ],
         )
 
+    def test_signature_chunk_with_full_text_is_not_duplicated(self) -> None:
+        from onyx.llm.model_response import Delta
+
+        result = self._run_stream(
+            [
+                Delta(thinking_blocks=[ThinkingBlock(thinking="Let me ")]),
+                Delta(thinking_blocks=[ThinkingBlock(thinking="think.")]),
+                Delta(
+                    thinking_blocks=[
+                        ThinkingBlock(thinking="Let me think.", signature="sig-1")
+                    ]
+                ),
+                Delta(content="Answer"),
+            ]
+        )
+
+        assert result.thinking is not None
+        assert result.thinking.blocks == [
+            ThinkingBlock(thinking="Let me think.", signature="sig-1")
+        ]
+
     def test_unsigned_thinking_is_not_replayable(self) -> None:
         from onyx.llm.model_response import Delta
 

@@ -497,7 +497,12 @@ def apply_generation_event(message: AssistantMessage, event: GenerationEvent) ->
                     and isinstance(last, ThinkingBlock)
                     and not last.signature
                 ):
-                    last.thinking += block.thinking
+                    # LiteLLM's Anthropic stream resends the full text with
+                    # the signature; a provider that does not sends a suffix.
+                    if block.signature and block.thinking.startswith(last.thinking):
+                        last.thinking = block.thinking
+                    else:
+                        last.thinking += block.thinking
                     last.signature = block.signature
                 else:
                     content.blocks.append(block.model_copy(deep=True))
