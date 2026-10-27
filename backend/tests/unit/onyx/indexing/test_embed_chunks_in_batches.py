@@ -77,7 +77,6 @@ def _make_index_chunk(doc_id: str, chunk_id: int) -> IndexChunk:
             full_embedding=[0.1] * 10,
             mini_chunk_embeddings=[],
         ),
-        title_embedding=None,
     )
 
 

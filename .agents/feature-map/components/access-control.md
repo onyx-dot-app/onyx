@@ -65,7 +65,7 @@ and §9).
 | `web/src/app/admin/groups/`, `admin/groups2/` | User group management (create, rename, membership, agents). Two generations of the same UI coexist; both call the same backend. |
 | `web/src/app/admin/documents/sets` | Document set management. |
 | `web/src/app/admin/users/` | User list, role assignment. |
-| `web/src/app/admin/scim/` | SCIM provisioning config (`ScimSyncCard.tsx`, `svc.ts`). |
+| `web/src/views/admin/ScimPage/` | SCIM provisioning config (`ScimSyncCard.tsx`, `svc.ts`). |
 
 ### Backend endpoints
 
@@ -155,7 +155,10 @@ OpenSearch chunk document
 - `UserGroup` (`onyx/db/models.py`, EE-managed via `ee/onyx/db/user_group.py`):
   a named group. Two are seeded and protected as "default": Admin and Basic
   (`onyx/db/user_group.py:assert_group_config_is_editable`,
-  `assert_not_shared_with_default_group`). Sharing a resource with the Basic
+  `assert_not_shared_with_default_group`). The one write a default group takes
+  besides membership is the permission toggle on Basic, limited to
+  `auth/permissions.py:DEFAULT_GROUP_TOGGLEABLE_PERMISSIONS`
+  (`onyx/db/user_group.py:assert_group_permissions_editable`). Sharing a resource with the Basic
   default group is refused outright: use the resource's own `is_public` flag
   instead, since Basic holds every user. The Community downgrade
   (`ee/onyx/db/community_downgrade.py:remove_custom_user_groups__no_commit`,
@@ -241,10 +244,14 @@ indexing/adapters/document_indexing_adapter.py:DocumentIndexingAdapter.prepare_e
                     - user_groups from fetch_user_groups_for_documents (the data-access
                       groups of the document's PRIVATE cc-pairs; PUBLIC cc-pairs give their
                       manage groups, which changes nothing; perm-synced pairs give none)
-                    - external_user_emails / external_user_group_ids from the Document row
-                    - is_public widened to True if the document is public in the source
-                      system, or "censoring only" applies for this source (see §4.5), or
-                      one of its external groups is in fetch_public_external_group_ids
+                    - only when a live (non-DELETING) cc-pair of the document is
+                      perm-synced (db/document.py:get_document_access_types):
+                      external_user_emails / external_user_group_ids from the Document
+                      row, and is_public widened to True if the document is public in
+                      the source system, or "censoring only" applies for this source
+                      (see §4.5), or one of its external groups is in
+                      fetch_public_external_group_ids. Otherwise the source columns
+                      are stale or connector-supplied and are ignored.
 
 DocMetadataAwareIndexChunk.from_index_chunk(access=<DocumentAccess>, ...)
   └─ opensearch_document_index.py:generate_opensearch_filtered_access_control_list(access)
@@ -318,8 +325,12 @@ invocation, inside the single DB session opened at the top of `run()`
 ### 4.3a Query-time cc-pair access filter
 
 A `SYNC_RESTRICTED` pair needs the workspace setting `allow_connector_group_restrictions`
-(`/admin/security`, default off, Business tier to turn on). `cc_pair.py:_assert_sync_restricted_allowed`
-rejects a pair that uses it while the setting is off.
+(`/admin/security`, default off, Business tier to turn on).
+`onyx/connectors/pairing_access.py:validate_pairing_access` rejects a pair that uses it
+while the setting is off. It also rejects a pair that becomes `SYNC_RESTRICTED` before
+the `cc_pair_ids` backfill of the current index is complete, because the guard below
+cannot hide chunks that do not have `cc_pair_ids` yet. A pair that is already
+`SYNC_RESTRICTED` can still change its groups while a new index runs its backfill.
 
 A second filter works from the cc-pair a chunk belongs to instead of from the
 ACL snapshot stored on the chunk. `onyx/db/connector_credential_pair.py:get_cc_pair_access_sets_for_user`
@@ -330,15 +341,33 @@ sorts every live cc-pair into three sets for the acting user:
 - **ACL** pairs: `SYNC` pairs, and `SYNC_RESTRICTED` pairs where the user is in
   a data-access group. These need a public chunk or a `user_email:` or
   `external_group:` match.
-- **Hidden restricted** pairs: `SYNC_RESTRICTED` pairs that grant the user
-  nothing.
+- **Hidden restricted** pairs: guarded pairs that grant the user nothing
+  (`connector_credential_pair.py:_guarded_cc_pair_clause`). A guarded pair is a
+  `SYNC_RESTRICTED` pair, or a pair marked as awaiting its first permission
+  sync (`ConnectorCredentialPair.perm_sync_pending_since`). A marked pair is
+  in neither the open nor the ACL set for any user
+  (`connector_credential_pair.py:_granting_cc_pair_clause`), because its chunks
+  can still carry the access of its previous access type, such as
+  `public=true`.
+
+`connector_edit_requests.py:apply_access_change__no_commit` sets the mark when
+a pair enters `SYNC` or `SYNC_RESTRICTED` from `PUBLIC` or `PRIVATE`, and only
+for a source with a doc permission sync
+(`ee/onyx/external_permissions/sync_params.py:source_requires_doc_sync`).
+Salesforce checks access after search (§4.5) and gets no mark. The
+doc-permission-sync beat clears the mark
+(`ee/onyx/background/celery/tasks/doc_permission_syncing/tasks.py:clear_caught_up_perm_sync_pending_marks`)
+once a doc permission sync and, for a source with one, an external group sync
+that started after the mark succeed, and no indexed document of the pair waits
+for metadata sync (`db/document.py:build_cc_pair_has_unsynced_documents_clause`).
+It clears a mark on a source with no doc permission sync at once.
 
 `access_filters.py:build_access_filters_for_user` returns these sets as
 `CCPairAccessFilter` on `UserAccessFilters`. `onyx/access/cc_pair_access.py:get_cc_pair_access_mode`
 picks the `CCPairAccessMode`:
 
-- `OFF`: the filter is not used. It is built only to hide `SYNC_RESTRICTED`
-  pairs from the ACL filter.
+- `OFF`: the filter is not used. It is built only to hide guarded pairs
+  (`SYNC_RESTRICTED` and marked pairs) from the ACL filter.
 - `SHADOW`: results use the ACL filter. The cc-pair filter is only compared and
   logged. This is the mode when `ENABLE_CC_PAIR_ACCESS_FILTER` (or the Redis
   override `cc_pair_access_filter` / `enabled`) is on and the `ENFORCE`
@@ -347,9 +376,15 @@ picks the `CCPairAccessMode`:
   the Redis-only flag `cc_pair_access_filter` / `enforce`, and a finished `cc_pair_ids` backfill
   (`document_index/opensearch/cc_pair_ids_backfill.py:is_cc_pair_ids_backfill_complete`).
 
+Both flags live in the cache (`OnyxRuntime`). On a self-hosted deployment, an
+admin sets them with the mode dropdown on Index Settings
+(`PUT /search-settings/cc-pair-access-mode`). That route refuses `ENFORCE` before
+the backfill is complete. It refuses every change in a multi-tenant deployment,
+because there the flags are shared by all tenants and operators own them.
+
 In `_get_search_filters`, `_get_cc_pair_access_visibility_filter` replaces the
 ACL clause only in `ENFORCE` mode. In every other mode the ACL clause stays,
-plus `_get_restricted_cc_pair_guard`, which removes chunks of hidden restricted
+plus `_get_restricted_cc_pair_guard`, which removes chunks of hidden guarded
 pairs unless another pair of the chunk grants access. Chunks with no cc-pair
 (user files) fall back to the ACL filter. `user_can_access_chat_file` applies the
 same rule in Python.
@@ -393,23 +428,40 @@ access, not field-level access, at index time; a user may be allowed to see a
 record but not every field on it. For these sources,
 `_get_access_for_documents` marks the document `is_public` at the index level
 ("is_only_censored" in the EE `_get_access_for_documents`, when a source's
-`perm_sync_config.censoring_config` is set but `doc_sync_config` is not) so it
-passes the ACL clause for everyone, then narrows the actual field content after
-retrieval:
+`perm_sync_config.censoring_config` is set but `doc_sync_config` is not, and
+the document is indexed under a perm-synced cc-pair per
+`db/document.py:get_document_access_types`) so it passes the ACL clause for
+everyone, then narrows the actual field content after retrieval. A document
+the same source indexes under only private or public cc-pairs keeps those
+ACLs:
 
 `ee/onyx/external_permissions/post_query_censoring.py:_post_query_chunk_censoring`
-groups the retrieved chunks by source, and for each source with censoring
-enabled, calls that source's `censor_chunks_for_source` function
-(`CensoringFuncType`, `perm_sync_types.py`) with the user's email. A chunk
-missing from the censoring function's output is dropped, not degraded; a
-censoring function that raises drops every chunk for that source rather than
-leaking anything. Anonymous users get every chunk from a censored source
-dropped outright, without calling the censoring function at all.
+selects the retrieved chunks whose document is not under a public cc-pair and
+is under a perm-synced one, has no cc-pair left, or is under only private
+cc-pairs of a source whose `CensoringConfig.censors_private_connectors` is set
+(`_get_censored_document_ids`, fail closed), groups them by source,
+and for each source calls that source's `censor_chunks_for_source` function
+(`CensoringFuncType`, `perm_sync_types.py`) with the user's email. Every other
+chunk passes through untouched. A chunk missing from the censoring function's
+output is dropped, not degraded; a censoring function that raises drops every
+censored chunk for that source rather than leaking anything. Anonymous users
+get every censored chunk dropped outright, without calling the censoring
+function at all. A document under both a public and a perm-synced cc-pair is
+public at the index level and is not censored, since the public cc-pair
+already grants everyone the whole record. One under both a private and a
+perm-synced cc-pair is public at the index level and censored, so the source's
+own check decides. Salesforce sets `censors_private_connectors`, so its
+private-only documents are censored as well: indexes built before the ACL was
+keyed on access type still hold the open ACL for them.
 
-This runs inside `search_pipeline` (`context/search/pipeline.py`), after the
-index query returns and before results reach rank fusion, via
+`access/access.py:censor_chunks_for_user` wraps the EE hook via
 `fetch_ee_implementation_or_noop`, so it is a genuine no-op in CE, not a
-degraded check.
+degraded check. Every path that hands chunk content to a user runs it, since
+the index ACL alone lets censoring-only chunks through: `search_pipeline`
+(`context/search/pipeline.py`, after the index query returns and before rank
+fusion), the `/document/document-size-info` and `/document/chunk-info` reads
+(`server/documents/document.py`), and the Open URL tool's indexed-document
+fetch (`tools/tool_implementations/open_url/open_url_tool.py`).
 
 ---
 
@@ -659,7 +711,8 @@ verified by "it still returns documents"; it is verified by a second user
   `SHADOW` logs disagreements and still returns ACL-filtered results. `ENFORCE`
   needs the Redis flag and a complete `cc_pair_ids` backfill, so a tenant can
   have the master flag on and still run the ACL filter. A `SYNC_RESTRICTED`
-  pair is hidden in every mode, because the ACL alone cannot express it.
+  pair, and a pair awaiting its first permission sync, is hidden in every
+  mode, because the ACL alone cannot express it.
 - **Read-side and write-side ACL changes roll out differently.**
   `_get_acl_for_user` runs on each query, so a change takes effect on the next
   request. `_get_access_for_documents` computes the ACL stored on each indexed

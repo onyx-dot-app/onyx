@@ -1,8 +1,8 @@
 import { OnyxDocument } from "@/lib/search/types";
+import { getSourceDisplayName } from "@/lib/connectors/utils";
 import { SubQuestionDetail } from "@/app/app/interfaces";
 import { StreamingCitation } from "@/app/app/services/streamingModels";
 import { ValidSources } from "@/lib/connectors/types/source";
-import { getSourceDisplayName } from "@/lib/sources";
 import { SourceInfo } from "./SourceTagDetailsCard";
 
 const MAX_TITLE_LENGTH = 40;

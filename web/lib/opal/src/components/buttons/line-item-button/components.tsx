@@ -8,6 +8,7 @@ import type {
   Rounding,
 } from "@opal/types";
 import { Tooltip, type TooltipSide } from "@opal/components";
+import type { TagProps } from "@opal/components/tag/components";
 import {
   type ContentActionProps,
   type ContentVariant,
@@ -61,6 +62,12 @@ type RowContentProps = {
    * `heading` variant with a `main-*` size preset.
    */
   suffix?: string;
+
+  /**
+   * Tag beside the title, like a plan badge. Shown only by the `heading`
+   * variant with a `main-*` size preset.
+   */
+  tag?: TagProps;
 
   /**
    * Cap the description at N lines and truncate the rest. Unset wraps without
@@ -137,8 +144,8 @@ type LineItemButtonOwnProps = Pick<
     /** Container width. @default "full" */
     width?: ExtremaSizeVariants;
 
-    /** Tooltip text shown on hover. */
-    tooltip?: string;
+    /** Tooltip shown on hover. Accepts markdown, e.g. a link. */
+    tooltip?: string | RichStr;
 
     /** Which side the tooltip appears on. @default "top" */
     tooltipSide?: TooltipSide;
@@ -184,6 +191,7 @@ function LineItemButton({
   description,
   descriptionMaxLines,
   suffix,
+  tag,
   rightChildren,
   sizePreset,
   variant,
@@ -269,6 +277,7 @@ function LineItemButton({
               description,
               descriptionMaxLines,
               suffix,
+              tag,
               rightChildren,
               sizePreset,
               variant,

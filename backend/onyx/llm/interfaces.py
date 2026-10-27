@@ -4,6 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import (
     AssistantMessage,
     GenerationEvent,
@@ -22,7 +23,9 @@ class LLMUserIdentity(BaseModel):
 class GenerationContext(BaseModel):
     """Call policy shared by the provider request and its tracing span."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+
+    cancellation: CancellationSignal | None = None
 
     # Streaming idle reads only; invoke uses its total deadline.
     stall_timeout_s: int | None = Field(default=None, gt=0)
@@ -58,6 +61,9 @@ class LLMConfig(BaseModel):
     reasoning_effort_max: ReasoningEffort | None = None
     # Admin-configured flag, for models the catalog does not know.
     supports_reasoning: bool = False
+    # The saved model configuration this LLM runs, when there is one. Admin
+    # cost overrides are keyed on it.
+    model_configuration_id: int | None = None
     # This disables the "model_" protected namespace for pydantic
     model_config = {"protected_namespaces": ()}
 
@@ -77,11 +83,11 @@ class LLM(abc.ABC):
     def invoke(
         self, request: GenerationRequest, context: GenerationContext | None = None
     ) -> AssistantMessage:
-        """Return one complete response, or raise ``LLMTimeoutError`` at the total deadline.
+        """Return one complete response, or raise ``LLMTimeoutError`` when its deadline is checked.
 
         ``context.total_timeout_s`` defaults to ``LLM_INVOKE_TIMEOUT_S``. The
-        timeout is always finite: our Celery pools disable Celery's own time
-        limits, so a call that never ends would hold its worker thread forever.
+        timeout is always finite because our Celery pools disable Celery's own
+        time limits. Provider reads can delay deadline checks.
         The call records its own generation span; set ``context.flow`` to tag it.
         """
         raise NotImplementedError

@@ -34,6 +34,7 @@ from onyx.db.relationships import delete_document_references_from_kg
 from onyx.db.search_settings import get_active_search_settings
 from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.interfaces import MetadataUpdateRequest
+from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 
@@ -111,7 +112,8 @@ def document_by_cc_pair_cleanup_task(
     document_id: str,
     connector_id: int,
     credential_id: int,
-    tenant_id: str,  # noqa: ARG001 — kept on the celery task signature
+    tenant_id: str,
+    prune_cc_pair_id: int | None = None,
 ) -> bool:
     """Remove one document relationship and reconcile its index metadata.
 
@@ -303,6 +305,16 @@ def document_by_cc_pair_cleanup_task(
                     db_session, connector_id, credential_id, document_id
                 )
                 db_session.commit()
+            if prune_cc_pair_id is not None:
+                # The count is advisory, so a Redis failure must not change the outcome.
+                try:
+                    RedisConnector(
+                        tenant_id, prune_cc_pair_id
+                    ).prune.increment_failed_docs()
+                except Exception:
+                    task_logger.exception(
+                        f"Could not count the failed prune doc: cc_pair={prune_cc_pair_id} doc={document_id}"
+                    )
             completion_status = OnyxCeleryTaskCompletionStatus.NON_RETRYABLE_EXCEPTION
         else:
             # Exponential backoff from 2^4 to 2^6 ... i.e. 16, 32, 64

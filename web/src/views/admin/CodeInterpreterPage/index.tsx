@@ -14,16 +14,15 @@ import {
 } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Section } from "@/layouts/general-layouts";
-import { Button, SelectCard } from "@opal/components";
+import { Button, Popover, SelectCard } from "@opal/components";
 import { Card, Content, ContentAction } from "@opal/layouts";
-import { Disabled, Hoverable } from "@opal/core";
+import { Hoverable } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import useCodeInterpreter, {
   type CodeInterpreterHealthStatus,
 } from "@/hooks/useCodeInterpreter";
 import { updateCodeInterpreter } from "@/views/admin/CodeInterpreterPage/svc";
-import { cn } from "@opal/utils";
 
 const route = ADMIN_ROUTES.CODE_INTERPRETER;
 
@@ -35,22 +34,26 @@ type StatusLabelKey =
 
 const STATUS_CONFIG: Record<
   CodeInterpreterHealthStatus,
-  { labelKey: StatusLabelKey; icon: typeof SvgCheckCircle; iconColor: string }
+  {
+    labelKey: StatusLabelKey;
+    icon: typeof SvgCheckCircle;
+    color: "success" | "danger";
+  }
 > = {
   healthy: {
     labelKey: "status.healthy.label",
     icon: SvgCheckCircle,
-    iconColor: "text-status-success-05!",
+    color: "success",
   },
   unhealthy: {
     labelKey: "status.unhealthy.label",
     icon: SvgXOctagon,
-    iconColor: "text-status-error-05!",
+    color: "danger",
   },
   connection_lost: {
     labelKey: "status.connectionLost.label",
     icon: SvgXOctagon,
-    iconColor: "text-status-error-05!",
+    color: "danger",
   },
 };
 
@@ -66,13 +69,17 @@ function CheckingStatus() {
       flexDirection="row"
       justifyContent="end"
       alignItems="center"
-      gap={1}
       padding={2}
     >
-      <Text mainUiAction text03>
-        {t("status.checking.label")}
-      </Text>
-      <IconLoader />
+      <Content
+        sizePreset="main-ui"
+        variant="body"
+        orientation="reverse"
+        width="fit"
+        icon={IconLoader}
+        title={t("status.checking.label")}
+        color="muted"
+      />
     </Section>
   );
 }
@@ -80,13 +87,16 @@ function CheckingStatus() {
 interface ConnectionStatusProps {
   status: CodeInterpreterHealthStatus | undefined;
   isLoading: boolean;
-  onIconHover: (hovered: boolean) => void;
+  /** Called when the pointer enters or leaves a failed status. */
+  onErrorHover: (hovered: boolean) => void;
 }
 
+/** The status in the card's corner. A failed status is the trigger of the
+ * page's error popover, which opens on hover. */
 function ConnectionStatus({
   status,
   isLoading,
-  onIconHover,
+  onErrorHover,
 }: ConnectionStatusProps) {
   const t = useTranslations("admin.codeInterpreter");
 
@@ -94,28 +104,102 @@ function ConnectionStatus({
     return <CheckingStatus />;
   }
 
-  const { labelKey, icon: Icon, iconColor } = STATUS_CONFIG[status];
-  const hasError = status !== "healthy";
+  const { labelKey, icon, color } = STATUS_CONFIG[status];
+  const statusContent = (
+    <Content
+      sizePreset="main-ui"
+      variant="body"
+      orientation="reverse"
+      width="fit"
+      icon={icon}
+      title={t(labelKey)}
+      color={color}
+    />
+  );
 
   return (
     <Section
       flexDirection="row"
       justifyContent="end"
       alignItems="center"
-      gap={1}
       padding={2}
     >
-      <Text mainUiAction text03>
-        {t(labelKey)}
-      </Text>
-      <div
-        onMouseEnter={() => hasError && onIconHover(true)}
-        onMouseLeave={() => onIconHover(false)}
-        className={cn(hasError && "cursor-pointer")}
-      >
-        <Icon size={16} className={iconColor} />
-      </div>
+      {status === "healthy" ? (
+        statusContent
+      ) : (
+        <Popover.Trigger asChild>
+          {/* Keyboard users reach the error details too: focus opens them like
+              hover does, and Enter or Space toggles them. */}
+          <div
+            role="button"
+            tabIndex={0}
+            className="cursor-pointer rounded-08 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-border-04"
+            // The click toggles the popover; it must not also reconnect.
+            onClick={(event) => event.stopPropagation()}
+            onMouseEnter={() => onErrorHover(true)}
+            onMouseLeave={() => onErrorHover(false)}
+            onFocus={() => onErrorHover(true)}
+            onBlur={() => onErrorHover(false)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                event.currentTarget.click();
+              }
+            }}
+          >
+            {statusContent}
+          </div>
+        </Popover.Trigger>
+      )}
     </Section>
+  );
+}
+
+interface CardActionsProps {
+  disabled: boolean;
+  isReconnecting: boolean;
+  onDisconnect: () => void;
+  onReconnect: () => void;
+}
+
+/** The card's disconnect and refresh (reconnect) buttons. */
+function CardActions({
+  disabled,
+  isReconnecting,
+  onDisconnect,
+  onReconnect,
+}: CardActionsProps) {
+  const t = useTranslations("admin.codeInterpreter");
+
+  return (
+    <div className="px-1 pb-1">
+      <Section flexDirection="row" justifyContent="end" gap={1}>
+        <Hoverable.Item group="code-interpreter/Card">
+          <Button
+            disabled={disabled}
+            prominence="tertiary"
+            size="md"
+            icon={SvgUnplug}
+            onClick={(event) => {
+              event.stopPropagation();
+              onDisconnect();
+            }}
+            tooltip={t("card.disconnectButton.tooltip")}
+          />
+        </Hoverable.Item>
+        <Button
+          disabled={disabled}
+          prominence="tertiary"
+          size="md"
+          icon={isReconnecting ? IconLoader : SvgRefreshCw}
+          onClick={(event) => {
+            event.stopPropagation();
+            onReconnect();
+          }}
+          tooltip={t("card.refreshButton.tooltip")}
+        />
+      </Section>
+    </div>
   );
 }
 
@@ -126,28 +210,41 @@ function ConnectionStatus({
 export default function CodeInterpreterPage() {
   const t = useTranslations("admin.codeInterpreter");
   const { status, error, isEnabled, isLoading, refetch } = useCodeInterpreter();
-  const isHealthy = status === "healthy";
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
-  const [showErrorMenu, setShowErrorMenu] = useState(false);
-  const fadeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isErrorOpen, setIsErrorOpen] = useState(false);
+  const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasError = !!status && status !== "healthy";
+  const isConnectionLost = status === "connection_lost";
 
+  useEffect(
+    () => () => {
+      if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
+    },
+    []
+  );
+
+  // The error popover stays open while the pointer is on the status or the
+  // popover, and closes a second after it leaves both.
   function handleErrorHover(hovered: boolean) {
-    if (fadeTimeoutRef.current) {
-      clearTimeout(fadeTimeoutRef.current);
-      fadeTimeoutRef.current = null;
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current);
+      closeTimeoutRef.current = null;
     }
     if (hovered) {
-      setShowErrorMenu(true);
-    } else {
-      fadeTimeoutRef.current = setTimeout(() => {
-        setShowErrorMenu(false);
-        fadeTimeoutRef.current = null;
-      }, 1000);
+      setIsErrorOpen(true);
+      return;
     }
+    closeTimeoutRef.current = setTimeout(() => {
+      setIsErrorOpen(false);
+      closeTimeoutRef.current = null;
+    }, 1000);
   }
 
+  // Every card click and the refresh button reconnect: they re-enable the
+  // server and check it again.
   async function handleToggle(enabled: boolean) {
+    if (enabled && isReconnecting) return;
     setIsReconnecting(enabled);
     try {
       const response = await updateCodeInterpreter({ enabled });
@@ -160,19 +257,11 @@ export default function CodeInterpreterPage() {
         return;
       }
       setShowDisconnectModal(false);
-      refetch();
+      await refetch();
     } finally {
       setIsReconnecting(false);
     }
   }
-
-  useEffect(() => {
-    return () => {
-      if (fadeTimeoutRef.current) {
-        clearTimeout(fadeTimeoutRef.current);
-      }
-    };
-  }, []);
 
   return (
     <SettingsLayouts.Root>
@@ -185,120 +274,117 @@ export default function CodeInterpreterPage() {
 
       <SettingsLayouts.Body>
         {isEnabled || isLoading ? (
-          <Hoverable.Root
-            group="code-interpreter/Card"
-            interaction={showDisconnectModal ? "hover" : "rest"}
-          >
-            <SelectCard state="filled" padding={2} rounding={4}>
-              <Card.Header>
-                <ContentAction
-                  sizePreset="main-ui"
-                  variant="section"
-                  icon={SvgTerminal}
-                  title={t("card.title")}
-                  description={t("card.description")}
+          <Popover open={hasError && isErrorOpen} onOpenChange={setIsErrorOpen}>
+            <Hoverable.Root
+              group="code-interpreter/Card"
+              interaction={showDisconnectModal ? "hover" : "rest"}
+            >
+              {/* The error popover opens under the whole card, not the status. */}
+              <Popover.Anchor>
+                <SelectCard
+                  state={isConnectionLost ? "empty" : "filled"}
                   padding={2}
-                  rightChildren={
-                    <Section alignItems="end" gap={0}>
-                      <ConnectionStatus
-                        status={status}
-                        isLoading={isLoading}
-                        onIconHover={handleErrorHover}
-                      />
-                      <div className="px-1 pb-1">
-                        <Section
-                          flexDirection="row"
-                          justifyContent="end"
-                          gap={1}
-                        >
-                          <Disabled disabled={isLoading}>
-                            <Hoverable.Item group="code-interpreter/Card">
-                              <Button
-                                prominence="tertiary"
-                                size="md"
-                                icon={SvgUnplug}
-                                onClick={() => setShowDisconnectModal(true)}
-                                tooltip={t("card.disconnectButton.tooltip")}
-                              />
-                            </Hoverable.Item>
-                          </Disabled>
-                          <Button
-                            disabled={isLoading}
-                            prominence="tertiary"
-                            size="md"
-                            icon={SvgRefreshCw}
-                            onClick={refetch}
-                            tooltip={t("card.refreshButton.tooltip")}
+                  rounding={4}
+                  onClick={isLoading ? undefined : () => handleToggle(true)}
+                >
+                  <Card.Header>
+                    <ContentAction
+                      sizePreset="main-ui"
+                      variant="section"
+                      icon={SvgTerminal}
+                      title={t("card.title")}
+                      strikethrough={isConnectionLost}
+                      description={t("card.description")}
+                      padding={2}
+                      rightChildren={
+                        <Section alignItems="end" gap={0}>
+                          <ConnectionStatus
+                            status={status}
+                            isLoading={isLoading}
+                            onErrorHover={handleErrorHover}
+                          />
+                          <CardActions
+                            disabled={isLoading || isReconnecting}
+                            isReconnecting={isReconnecting}
+                            onDisconnect={() => setShowDisconnectModal(true)}
+                            onReconnect={() => void handleToggle(true)}
                           />
                         </Section>
-                      </div>
+                      }
+                    />
+                  </Card.Header>
+                </SelectCard>
+              </Popover.Anchor>
+            </Hoverable.Root>
+            <Popover.Content
+              align="end"
+              width={60}
+              padding={2}
+              gap={2}
+              // A hover popover must not take focus from the page.
+              onOpenAutoFocus={(event) => event.preventDefault()}
+              onCloseAutoFocus={(event) => event.preventDefault()}
+              onMouseEnter={() => handleErrorHover(true)}
+              onMouseLeave={() => handleErrorHover(false)}
+            >
+              <Content
+                sizePreset="main-ui"
+                variant="section"
+                icon={SvgXOctagon}
+                color="danger"
+                titleColor="text-04"
+                title={
+                  status === "connection_lost"
+                    ? t("errorCard.connectionLost.title")
+                    : t("errorCard.generic.title")
+                }
+                description={error}
+              />
+            </Popover.Content>
+          </Popover>
+        ) : (
+          <Hoverable.Root group="code-interpreter/Card" interaction="rest">
+            <SelectCard
+              state="empty"
+              padding={2}
+              rounding={4}
+              onClick={() => handleToggle(true)}
+            >
+              <ContentAction
+                sizePreset="main-ui"
+                variant="section"
+                icon={SvgTerminal}
+                title={t("card.disconnectedTitle")}
+                description={t("card.description")}
+                padding={2}
+                rightChildren={
+                  isReconnecting ? (
+                    <Section alignItems="end" gap={0}>
+                      <CheckingStatus />
+                      {/* "Checking…" already shows the loader. */}
+                      <CardActions
+                        disabled
+                        isReconnecting={false}
+                        onDisconnect={() => setShowDisconnectModal(true)}
+                        onReconnect={() => void handleToggle(true)}
+                      />
                     </Section>
-                  }
-                />
-              </Card.Header>
+                  ) : (
+                    <Button
+                      prominence="tertiary"
+                      rightIcon={SvgArrowExchange}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void handleToggle(true);
+                      }}
+                    >
+                      {t("card.reconnectButton.label")}
+                    </Button>
+                  )
+                }
+              />
             </SelectCard>
           </Hoverable.Root>
-        ) : (
-          <SelectCard
-            state="empty"
-            padding={2}
-            rounding={4}
-            onClick={() => handleToggle(true)}
-          >
-            <ContentAction
-              sizePreset="main-ui"
-              variant="section"
-              icon={SvgTerminal}
-              title={t("card.disconnectedTitle")}
-              description={t("card.description")}
-              padding={2}
-              rightChildren={
-                isReconnecting ? (
-                  <CheckingStatus />
-                ) : (
-                  <Button
-                    prominence="tertiary"
-                    rightIcon={SvgArrowExchange}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleToggle(true);
-                    }}
-                  >
-                    {t("card.reconnectButton.label")}
-                  </Button>
-                )
-              }
-            />
-          </SelectCard>
-        )}
-        {showErrorMenu && !isHealthy && (
-          <Section
-            flexDirection="row"
-            justifyContent="end"
-            onMouseEnter={() => handleErrorHover(true)}
-            onMouseLeave={() => handleErrorHover(false)}
-          >
-            <div className="w-[15rem]">
-              <SelectCard state="filled" padding={2} rounding={4}>
-                <Content
-                  icon={(props) => (
-                    <SvgXOctagon
-                      {...props}
-                      className={cn(props.className, "text-status-error-05!")}
-                    />
-                  )}
-                  title={
-                    status === "connection_lost"
-                      ? t("errorCard.connectionLost.title")
-                      : t("errorCard.generic.title")
-                  }
-                  description={error}
-                  variant="section"
-                  sizePreset="main-ui"
-                />
-              </SelectCard>
-            </div>
-          </Section>
         )}
       </SettingsLayouts.Body>
 

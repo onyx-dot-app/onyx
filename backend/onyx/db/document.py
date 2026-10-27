@@ -30,6 +30,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine.util import TransactionalContext
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.expression import null
 
 from onyx.configs.constants import DEFAULT_BOOST, DocumentSource
@@ -49,6 +50,7 @@ from onyx.db.models import (
     ConnectorCredentialPair,
     Credential,
     DocumentByConnectorCredentialPair,
+    FileRecord,
     User,
 )
 from onyx.db.models import Document as DbDocument
@@ -59,6 +61,7 @@ from onyx.db.relationships import (
 from onyx.db.tag import delete_document_tags_for_documents__no_commit
 from onyx.db.utils import DocumentRow, SortOrder, model_to_dict
 from onyx.document_index.document_metadata import DocumentMetadata
+from onyx.file_processing.file_types import OnyxFileExtensions, OnyxMimeTypes
 from onyx.file_store.staging import delete_files_best_effort
 from onyx.kg.models import KGStage
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
@@ -308,6 +311,106 @@ def get_document_ids_for_cc_pair_batch(
     return list(db_session.execute(stmt).scalars().all())
 
 
+class TabularRechunkTarget(NamedTuple):
+    document: DbDocument
+    connector_id: int
+    credential_id: int
+    # MIME type of the stored raw file. Names the format when the document's
+    # own name carries no extension, as Drive-sourced spreadsheets often do.
+    file_type: str | None
+
+
+def get_oversized_tabular_documents(
+    db_session: Session,
+    *,
+    chunk_count_above: int,
+    after_doc_id: str | None,
+    limit: int,
+) -> list[TabularRechunkTarget]:
+    """An ordered page of tabular documents still holding more chunks than the
+    current chunker could produce for one, with the cc-pair to re-index under.
+
+    Same cursor contract as `get_document_ids_for_cc_pair_batch`: ids
+    `> after_doc_id` ascending, capped at `limit`. Every page is an ordered
+    document_pkey scan, so the migration costs one pass of the table over its
+    whole life rather than a sort per run.
+
+    Left out: documents whose raw file was never stored, because only a crawl
+    can rebuild their sections, documents whose cc-pairs are all DELETING, and
+    hidden documents, whose head `id_based_retrieval` will not return.
+    """
+    # One row per document, lowest cc-pair winning, as any of them would write
+    # the same chunks. A LATERAL, not DISTINCT ON: that would order the join by
+    # (id, connector_id, credential_id) and lose the ordered scan.
+    cc_pair = (
+        select(
+            DocumentByConnectorCredentialPair.connector_id,
+            DocumentByConnectorCredentialPair.credential_id,
+        )
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                ConnectorCredentialPair.connector_id
+                == DocumentByConnectorCredentialPair.connector_id,
+                ConnectorCredentialPair.credential_id
+                == DocumentByConnectorCredentialPair.credential_id,
+            ),
+        )
+        .where(
+            DocumentByConnectorCredentialPair.id == DbDocument.id,
+            ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING,
+        )
+        .order_by(
+            DocumentByConnectorCredentialPair.connector_id,
+            DocumentByConnectorCredentialPair.credential_id,
+        )
+        .limit(1)
+        .lateral("cc_pair")
+    )
+
+    stmt = (
+        select(
+            DbDocument,
+            cc_pair.c.connector_id,
+            cc_pair.c.credential_id,
+            FileRecord.file_type,
+        )
+        .select_from(DbDocument)
+        .outerjoin(FileRecord, FileRecord.file_id == DbDocument.file_id)
+        # Inner: a document whose cc-pairs are all DELETING yields no row.
+        .join(cc_pair, true())
+        .where(
+            DbDocument.chunk_count > chunk_count_above,
+            DbDocument.file_id.isnot(None),
+            DbDocument.hidden.is_(False),
+            or_(
+                # A Drive sheet's name often has no extension; its type does.
+                FileRecord.file_type.in_(sorted(OnyxMimeTypes.TABULAR_MIME_TYPES)),
+                *[
+                    func.lower(DbDocument.semantic_id).like(f"%{extension}")
+                    for extension in sorted(OnyxFileExtensions.TABULAR_EXTENSIONS)
+                ],
+            ),
+        )
+        .order_by(DbDocument.id)
+        .limit(limit)
+    )
+    if after_doc_id is not None:
+        stmt = stmt.where(DbDocument.id > after_doc_id)
+
+    return [
+        TabularRechunkTarget(
+            document=document,
+            connector_id=connector_id,
+            credential_id=credential_id,
+            file_type=file_type,
+        )
+        for document, connector_id, credential_id, file_type in db_session.execute(
+            stmt
+        ).all()
+    ]
+
+
 class PortedScope(NamedTuple):
     connector_id: int
     credential_id: int
@@ -436,7 +539,7 @@ def get_documents_for_connector_credential_pair_limited_columns(
     for row in rows:
         doc_row = DocumentRow(
             id=row.id,
-            doc_metadata=row.doc_metadata,
+            doc_metadata=row.doc_metadata or {},
             external_user_group_ids=row.external_user_group_ids or [],
             external_user_emails=row.external_user_emails or [],
         )
@@ -844,6 +947,55 @@ def get_document_counts_for_cc_pairs(
         (connector_id, credential_id, cnt)
         for (connector_id, credential_id), cnt in aggregated_counts.items()
     ]
+
+
+def count_documents_by_cc_pair_ids(
+    db_session: Session, cc_pair_ids: list[int]
+) -> dict[int, int]:
+    """Number of documents of each cc-pair, indexed or not. cc-pairs with no
+    documents are left out."""
+    if not cc_pair_ids:
+        return {}
+    stmt = (
+        select(ConnectorCredentialPair.id, func.count())
+        .join(
+            DocumentByConnectorCredentialPair,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == ConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .where(ConnectorCredentialPair.id.in_(cc_pair_ids))
+        .group_by(ConnectorCredentialPair.id)
+    )
+    return dict(db_session.execute(stmt).tuples().all())
+
+
+def count_documents_for_cc_pair_up_to(
+    db_session: Session, cc_pair_id: int, up_to_doc_id: str
+) -> int:
+    """Number of documents of the cc-pair whose ID is <= up_to_doc_id: the
+    documents a cursor scan in ID order has passed."""
+    stmt = (
+        select(func.count())
+        .select_from(DocumentByConnectorCredentialPair)
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == ConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .where(
+            ConnectorCredentialPair.id == cc_pair_id,
+            DocumentByConnectorCredentialPair.id <= up_to_doc_id,
+        )
+    )
+    return db_session.scalar(stmt) or 0
 
 
 def get_document_counts_for_all_cc_pairs(
@@ -1290,6 +1442,34 @@ def mark_cc_pair_documents_for_sync__no_commit(
             DbDocument.chunk_count.is_not(None),
         )
         .values(last_modified=datetime.now(timezone.utc))
+    )
+
+
+def build_cc_pair_has_unsynced_documents_clause() -> ColumnElement[bool]:
+    """EXISTS over the indexed documents of the enclosing query's
+    ConnectorCredentialPair row that wait for metadata sync: the documents
+    mark_cc_pair_documents_for_sync__no_commit marks, not yet synced.
+
+    Documents with a NULL chunk_count (indexed before the column existed) are
+    left out. Metadata sync skips their chunks and still marks them synced, so
+    waiting for them protects nothing. Only a re-index rewrites their access,
+    and the perm-sync-pending guarantee does not cover them."""
+    return (
+        select(DocumentByConnectorCredentialPair.id)
+        .join(DbDocument, DbDocument.id == DocumentByConnectorCredentialPair.id)
+        .where(
+            DocumentByConnectorCredentialPair.connector_id
+            == ConnectorCredentialPair.connector_id,
+            DocumentByConnectorCredentialPair.credential_id
+            == ConnectorCredentialPair.credential_id,
+            DbDocument.chunk_count.is_not(None),
+            or_(
+                DbDocument.last_modified > DbDocument.last_synced,
+                DbDocument.last_synced.is_(None),
+            ),
+        )
+        .correlate(ConnectorCredentialPair)
+        .exists()
     )
 
 
@@ -1788,6 +1968,35 @@ def get_document_sources(
     return {doc_id: source for doc_id, source in results}  # noqa: C416  # unpacking types the SQLAlchemy Row
 
 
+def get_document_access_types(
+    db_session: Session,
+    document_ids: list[str],
+) -> dict[str, set[AccessType]]:
+    """Access types of every cc_pair each document is indexed under, except
+    ones being deleted."""
+    stmt: Select[tuple[str, AccessType]] = (
+        select(
+            DocumentByConnectorCredentialPair.id,
+            ConnectorCredentialPair.access_type,
+        )
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == ConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .where(DocumentByConnectorCredentialPair.id.in_(document_ids))
+        .where(ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING)
+    )
+    access_types: dict[str, set[AccessType]] = defaultdict(set)
+    for doc_id, access_type in db_session.execute(stmt).all():
+        access_types[doc_id].add(access_type)
+    return dict(access_types)
+
+
 def fetch_chunk_counts_for_documents(
     document_ids: list[str],
     db_session: Session,
@@ -1892,3 +2101,27 @@ def delete_document_by_id__no_commit(
     cc pair associations, feedback, tags).
     """
     delete_documents_complete__no_commit(db_session, [document_id])
+
+
+def get_indexed_documents_for_cc_pair_with_id_containing(
+    db_session: Session,
+    connector_id: int,
+    credential_id: int,
+    id_substring: str,
+) -> list[DbDocument]:
+    """The cc-pair's indexed documents whose id contains ``id_substring``
+    (matched as a literal, not as a pattern)."""
+    stmt = (
+        select(DbDocument)
+        .join(
+            DocumentByConnectorCredentialPair,
+            DocumentByConnectorCredentialPair.id == DbDocument.id,
+        )
+        .where(
+            DocumentByConnectorCredentialPair.connector_id == connector_id,
+            DocumentByConnectorCredentialPair.credential_id == credential_id,
+            DocumentByConnectorCredentialPair.has_been_indexed.is_(True),
+            DbDocument.id.contains(id_substring, autoescape=True),
+        )
+    )
+    return list(db_session.execute(stmt).scalars().all())

@@ -204,10 +204,7 @@ test.describe("Chat Preferences Admin Page @exclusive", () => {
       ).slice(0, 300)}`
     );
 
-    // Wait for success toast
-    await expect(page.getByText("Tools updated").first()).toBeVisible({
-      timeout: 5000,
-    });
+    expect(patchResp.ok()).toBeTruthy();
 
     // Refresh page to verify persistence
     await page.reload();
@@ -254,10 +251,7 @@ test.describe("Chat Preferences Admin Page @exclusive", () => {
       ).slice(0, 300)}`
     );
 
-    // Wait for success toast
-    await expect(page.getByText("Tools updated").first()).toBeVisible({
-      timeout: 5000,
-    });
+    expect(patchResp.ok()).toBeTruthy();
 
     // Refresh page to verify persistence
     await page.reload();
@@ -308,10 +302,7 @@ test.describe("Chat Preferences Admin Page @exclusive", () => {
       ).slice(0, 300)}`
     );
 
-    // Wait for success toast
-    await expect(page.getByText("Tools updated").first()).toBeVisible({
-      timeout: 5000,
-    });
+    expect(patchResp.ok()).toBeTruthy();
 
     // Refresh page to verify persistence
     await page.reload();

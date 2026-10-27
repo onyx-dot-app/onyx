@@ -3,9 +3,15 @@
  */
 
 import { parseErrorDetail } from "@/lib/fetcher";
+import * as yup from "yup";
+import type {
+  MCPProbeProgress,
+  MCPUserPreferences,
+  MCPUserPreferencesRequest,
+} from "@/lib/mcp/types";
 import {
+  MCPOAuthDiscovery,
   MCPServer,
-  MCPServerCreateRequest,
   MCPServerUpdateRequest,
   MCPServerStatus,
   MCPAuthenticationType,
@@ -13,12 +19,166 @@ import {
   MCPOAuthProviderMode,
   MCPTransportType,
   MCPAuthTemplate,
+  MCPSetupProbeResult,
 } from "@/lib/mcp/types";
-import type { ApiResponse, ToolSnapshot } from "@/lib/tools/types";
+import type { ToolSnapshot } from "@/lib/tools/types";
 import {
   updateToolsStatus,
   type ToolStatusUpdateResponse,
 } from "@/lib/tools/svc";
+
+export async function updateMCPUserPreferences(
+  serverId: number,
+  preferences: MCPUserPreferencesRequest
+): Promise<MCPUserPreferences> {
+  const response = await fetch(`/api/mcp/server/${serverId}/preferences`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(preferences),
+  });
+  if (!response.ok) {
+    throw new Error(
+      await parseErrorDetail(response, "Failed to save MCP preferences")
+    );
+  }
+  return yup
+    .object({
+      enabled_in_chat: yup.boolean().defined(),
+      enabled_in_craft: yup.boolean().defined(),
+    })
+    .validateSync(await response.json(), { strict: true });
+}
+
+const probeTransport = yup
+  .mixed<MCPTransportType.STREAMABLE_HTTP | MCPTransportType.SSE>()
+  .oneOf([MCPTransportType.STREAMABLE_HTTP, MCPTransportType.SSE])
+  .defined();
+const progressSchema = yup.object({
+  type: yup.mixed<"progress">().oneOf(["progress"]).defined(),
+  stage: yup
+    .mixed<MCPProbeProgress["stage"]>()
+    .oneOf(["contacting_server", "authentication"])
+    .defined(),
+  state: yup
+    .mixed<MCPProbeProgress["state"]>()
+    .oneOf(["pending", "success", "error"])
+    .defined(),
+});
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Validates untrusted probe JSON at the stream boundary.
+function parseProbeResult(value: unknown): MCPSetupProbeResult {
+  const { kind } = yup
+    .object({ kind: yup.string().defined() })
+    .validateSync(value, { strict: true });
+  switch (kind) {
+    case "public":
+      return yup
+        .object({
+          kind: yup.mixed<"public">().oneOf(["public"]).defined(),
+          transport: probeTransport,
+          tool_count: yup.number().integer().min(0).defined(),
+          server_name: yup.string().defined(),
+        })
+        .validateSync(value, { strict: true });
+    case "oauth":
+      return yup
+        .object({
+          kind: yup.mixed<"oauth">().oneOf(["oauth"]).defined(),
+          transport: probeTransport.nullable(),
+          discovery: yup
+            .object({
+              status: yup
+                .mixed<MCPOAuthDiscovery["status"]>()
+                .oneOf(["metadata_found", "metadata_missing", "unreachable"])
+                .defined(),
+              supports_automatic_registration: yup
+                .boolean()
+                .nullable()
+                .defined(),
+              authorization_endpoint: yup.string().nullable().defined(),
+              token_endpoint: yup.string().nullable().defined(),
+            })
+            .defined(),
+        })
+        .validateSync(value, { strict: true });
+    case "auth_unknown":
+      return yup
+        .object({
+          kind: yup.mixed<"auth_unknown">().oneOf(["auth_unknown"]).defined(),
+          transport: probeTransport.nullable(),
+        })
+        .validateSync(value, { strict: true });
+    case "unreachable":
+      return yup
+        .object({
+          kind: yup.mixed<"unreachable">().oneOf(["unreachable"]).defined(),
+          reason: yup
+            .mixed<"blocked" | "connection_failed">()
+            .oneOf(["blocked", "connection_failed"])
+            .defined(),
+        })
+        .validateSync(value, { strict: true });
+    default:
+      throw new Error("Invalid MCP probe result");
+  }
+}
+
+export async function streamMCPServerProbe(
+  serverUrl: string,
+  onProgress: (event: MCPProbeProgress) => void,
+  signal?: AbortSignal
+): Promise<MCPSetupProbeResult> {
+  const response = await fetch("/api/admin/mcp/probe", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ server_url: serverUrl }),
+    signal,
+  });
+  if (!response.ok || !response.body) throw new Error("MCP probe failed");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result: MCPSetupProbeResult | undefined;
+  function consume(line: string) {
+    if (!line.trim()) return;
+    const value: unknown = JSON.parse(line);
+    const event = yup
+      .object({
+        type: yup
+          .mixed<"progress" | "result">()
+          .oneOf(["progress", "result"])
+          .defined(),
+      })
+      .validateSync(value, { strict: true });
+    if (result) throw new Error("Unexpected MCP probe event");
+    if (event.type === "progress")
+      onProgress(progressSchema.validateSync(value, { strict: true }));
+    else
+      result = parseProbeResult(
+        yup
+          .object({ result: yup.mixed().defined() })
+          .validateSync(value, { strict: true }).result
+      );
+  }
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      buffer += decoder.decode(value, { stream: !done });
+      if (buffer.length > 65536) throw new Error("Invalid MCP probe stream");
+      let newline: number;
+      while ((newline = buffer.indexOf("\n")) !== -1) {
+        consume(buffer.slice(0, newline));
+        buffer = buffer.slice(newline + 1);
+      }
+      if (done) break;
+    }
+    consume(buffer);
+    if (!result) throw new Error("Incomplete MCP probe stream");
+    return result;
+  } finally {
+    await reader.cancel();
+    reader.releaseLock();
+  }
+}
 
 /**
  * Delete an MCP server
@@ -45,8 +205,7 @@ export async function refreshMCPServerTools(
     `/api/admin/mcp/server/${serverId}/tools/snapshots?source=mcp`
   );
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(errorText || "Failed to refresh tools");
+    throw new Error(await parseErrorDetail(response, "Failed to load tools"));
   }
 
   return await response.json();
@@ -59,28 +218,6 @@ export async function disableAllServerTools(
   toolIds: number[]
 ): Promise<ToolStatusUpdateResponse> {
   return updateToolsStatus(toolIds, false);
-}
-
-/**
- * Create a new MCP server with basic information
- */
-export async function createMCPServer(
-  data: MCPServerCreateRequest
-): Promise<MCPServer> {
-  const response = await fetch("/api/admin/mcp/server", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(data),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(errorText || "Failed to create MCP server");
-  }
-
-  return await response.json();
 }
 
 /**
@@ -121,26 +258,13 @@ export async function updateMCPServerStatus(
   );
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(errorText || "Failed to update MCP server status");
+    throw new Error(
+      await parseErrorDetail(response, "Failed to update MCP server status")
+    );
   }
 }
 
-interface UpsertMCPServerResponse {
-  server_id: number;
-  server_name: string;
-  server_url: string;
-  auth_type: string;
-  auth_performer: string;
-  oauth_provider_mode?: MCPOAuthProviderMode;
-  oauth_authorization_endpoint?: string;
-  oauth_token_endpoint?: string;
-  oauth_scopes_override?: string[];
-  oauth_additional_auth_params?: Record<string, string>;
-  no_user_authentication_required: boolean;
-}
-
-export async function upsertMCPServer(serverData: {
+export interface MCPSetupRequest {
   name: string;
   description?: string;
   server_url: string;
@@ -149,9 +273,11 @@ export async function upsertMCPServer(serverData: {
   auth_performer: MCPAuthenticationPerformer;
   api_token?: string;
   api_token_changed?: boolean;
+  oauth_setup_mode?: "automatic" | "own_client";
   oauth_client_id?: string;
   oauth_client_secret?: string;
   oauth_provider_mode?: MCPOAuthProviderMode;
+  oauth_cimd_enabled?: boolean;
   oauth_authorization_endpoint?: string;
   oauth_token_endpoint?: string;
   oauth_scopes_override?: string[];
@@ -162,34 +288,35 @@ export async function upsertMCPServer(serverData: {
   oauth_client_id_changed?: boolean;
   oauth_client_secret_changed?: boolean;
   auth_template?: MCPAuthTemplate;
+  auth_template_headers_changed?: Record<string, boolean>;
   admin_credentials?: Record<string, string>;
   // Per-key analogue of `oauth_client_*_changed` for `admin_credentials`.
   admin_credentials_changed?: Record<string, boolean>;
   existing_server_id?: number;
-}): Promise<ApiResponse<UpsertMCPServerResponse>> {
-  try {
-    const response = await fetch("/api/admin/mcp/servers/create", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(serverData),
-    });
+  is_public?: boolean;
+  groups?: number[];
+  users?: string[];
+  available_in_craft?: boolean;
+  enable_chat?: boolean;
+  users_can_manage_policies?: boolean;
+  action_policies?: MCPServerUpdateRequest["action_policies"];
+}
 
-    if (!response.ok) {
-      const errorDetail = (await response.json()).detail;
-      return {
-        data: null,
-        error: `Failed to create MCP server: ${errorDetail}`,
-      };
-    }
+export type MCPSetupResponse =
+  | { status: "connected"; server: MCPServer }
+  | { status: "authorization_required"; authorization_url: string };
 
-    const result: UpsertMCPServerResponse = await response.json();
-    return { data: result, error: null };
-  } catch (error) {
-    console.error("Error creating MCP server:", error);
-    return { data: null, error: `Error creating MCP server: ${error}` };
-  }
+export async function setupMCPServer(
+  payload: MCPSetupRequest
+): Promise<MCPSetupResponse> {
+  const response = await fetch("/api/admin/mcp/setup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok)
+    throw await readMCPOAuthError(response, "connection_failed");
+  return response.json();
 }
 
 // ── User-side connect flows (shared by chat and the Craft Apps page) ────────
@@ -216,6 +343,66 @@ export function getMCPUserOAuthNavigationUrl(
     : response.redirect_url;
 }
 
+export type MCPOAuthFailureReason =
+  | "client_registration_failed"
+  | "client_metadata_rejected"
+  | "discovery_failed"
+  | "connection_failed"
+  | "oauth_failed";
+
+export class MCPOAuthError extends Error {
+  constructor(
+    message: string,
+    readonly reason: MCPOAuthFailureReason
+  ) {
+    super(message);
+  }
+}
+
+async function readMCPOAuthError(
+  response: Response,
+  fallbackReason: "connection_failed" | "oauth_failed" = "oauth_failed"
+): Promise<Error> {
+  const fallback =
+    fallbackReason === "connection_failed"
+      ? "Could not connect to the MCP server. Check the server settings and try again."
+      : "Could not start OAuth sign-in. Check the server settings and try again.";
+  const body: unknown = await response.json().catch(() => null);
+  if (!body || typeof body !== "object")
+    return new MCPOAuthError(fallback, fallbackReason);
+  const detail =
+    "detail" in body &&
+    typeof body.detail === "string" &&
+    !/<(?:!doctype|html|head|body)[\s>]/i.test(body.detail)
+      ? body.detail
+      : fallback;
+  const reason = "oauth_error" in body ? body.oauth_error : undefined;
+  if (
+    reason === "client_registration_failed" ||
+    reason === "client_metadata_rejected" ||
+    reason === "discovery_failed" ||
+    reason === "connection_failed" ||
+    reason === "oauth_failed"
+  ) {
+    return new MCPOAuthError(detail, reason);
+  }
+  return detail === fallback
+    ? new MCPOAuthError(fallback, fallbackReason)
+    : new Error(detail);
+}
+
+export async function discoverMCPOAuth(
+  serverId: number
+): Promise<MCPOAuthDiscovery> {
+  const response = await fetch("/api/admin/mcp/oauth/discover", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ server_id: serverId }),
+  });
+  if (!response.ok) throw new Error("Could not check OAuth setup support");
+  return response.json();
+}
+
 /** Start OAuth or return the internal destination when already authenticated. */
 export async function startMCPUserOAuth(
   serverId: number,
@@ -233,9 +420,7 @@ export async function startMCPUserOAuth(
     }),
   });
   if (!res.ok) {
-    throw new Error(
-      await parseErrorDetail(res, "Failed to start authorization")
-    );
+    throw await readMCPOAuthError(res);
   }
   return res.json();
 }
@@ -252,10 +437,13 @@ export interface MCPOAuthCallbackResponse {
  * provider's authorization code for tokens and store them for the current
  * user. The code + state are single-use — call at most once per callback. */
 export async function completeMCPUserOAuth(
-  code: string,
-  state: string
+  code: string | null,
+  state: string,
+  error?: string
 ): Promise<MCPOAuthCallbackResponse> {
-  const params = new URLSearchParams({ code, state });
+  const params = new URLSearchParams({ state });
+  if (code) params.set("code", code);
+  if (error) params.set("error", error);
   const res = await fetch(`/api/mcp/oauth/callback?${params.toString()}`, {
     method: "POST",
   });

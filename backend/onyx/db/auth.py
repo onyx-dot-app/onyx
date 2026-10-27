@@ -1,10 +1,11 @@
 from collections.abc import AsyncGenerator, Callable
 from typing import Any, TypeVar
+from uuid import UUID
 
 from fastapi import Depends
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from fastapi_users_db_sqlalchemy.access_token import SQLAlchemyAccessTokenDatabase
-from sqlalchemy import Select, func
+from sqlalchemy import Select, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import Session
@@ -113,3 +114,17 @@ async def get_access_token_db(
     session: AsyncSession = Depends(get_async_session),
 ) -> AsyncGenerator[SQLAlchemyAccessTokenDatabase, None]:
     yield SQLAlchemyAccessTokenDatabase(session, AccessToken)
+
+
+async def delete_access_tokens_for_user(
+    db_session: AsyncSession, user_id: UUID, keep_token: str | None = None
+) -> None:
+    stmt = delete(AccessToken).where(
+        AccessToken.user_id == user_id  # ty: ignore[invalid-argument-type]
+    )
+    if keep_token is not None:
+        stmt = stmt.where(
+            AccessToken.token != keep_token  # ty: ignore[invalid-argument-type]
+        )
+    await db_session.execute(stmt)
+    await db_session.commit()

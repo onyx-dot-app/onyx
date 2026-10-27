@@ -3,6 +3,8 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from onyx.oauth.models import PKCESupport, SafeOAuthReturnPath
+
 
 class OAuthConfigCreate(BaseModel):
     name: str
@@ -12,6 +14,7 @@ class OAuthConfigCreate(BaseModel):
     client_secret: str
     scopes: list[str] | None = None
     additional_params: dict[str, Any] | None = None
+    supports_pkce: bool = False
 
 
 class OAuthConfigUpdate(BaseModel):
@@ -22,6 +25,7 @@ class OAuthConfigUpdate(BaseModel):
     client_secret: str | None = None
     scopes: list[str] | None = None
     additional_params: dict[str, Any] | None = None
+    supports_pkce: bool | None = None
     clear_client_id: bool = False
     clear_client_secret: bool = False
 
@@ -32,6 +36,7 @@ class OAuthConfigSnapshot(BaseModel):
     authorization_url: str
     token_url: str
     scopes: list[str] | None
+    supports_pkce: bool
     has_client_credentials: bool  # NEVER expose actual client_id or client_secret
     tool_count: int  # Number of tools using this config
     created_at: datetime
@@ -40,7 +45,7 @@ class OAuthConfigSnapshot(BaseModel):
 
 class OAuthInitiateRequest(BaseModel):
     oauth_config_id: int
-    return_path: str = "/chat"  # Where to redirect after OAuth flow
+    return_path: SafeOAuthReturnPath = "/chat"
 
 
 class OAuthInitiateResponse(BaseModel):
@@ -48,9 +53,29 @@ class OAuthInitiateResponse(BaseModel):
     state: str  # OAuth state parameter for CSRF protection
 
 
+class OAuthPKCESupportRequest(BaseModel):
+    authorization_url: str
+    token_url: str
+
+
+class OAuthPKCESupportResponse(BaseModel):
+    status: PKCESupport
+
+
+class OAuthTestInitiateRequest(OAuthPKCESupportRequest):
+    oauth_config_id: int | None = None
+    client_id: str | None = None
+    client_secret: str | None = None
+    scopes: list[str] | None = None
+    supports_pkce: bool = False
+
+
+class OAuthTestCallbackResponse(BaseModel):
+    supports_pkce: bool
+
+
 class OAuthCallbackResponse(BaseModel):
     redirect_url: str
-    error: str | None = None
 
 
 class OAuthTokenStatus(BaseModel):

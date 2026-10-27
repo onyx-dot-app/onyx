@@ -110,6 +110,8 @@ const EE_ROUTES = [
   "/admin/performance/custom-analytics",
   "/admin/standard-answer",
   "/admin/export-logs",
+  "/admin/scim",
+  "/admin/service-accounts",
   "/agents/stats",
 ];
 

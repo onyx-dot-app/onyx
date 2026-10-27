@@ -4,6 +4,7 @@ import type {
 } from "@/app/craft/v1/apps/registry";
 import type { BuiltinSkill, CustomSkill } from "@/lib/skills/types";
 import {
+  MCPConnectionStatus,
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
   MCPServerStatus,
@@ -22,6 +23,7 @@ export function builtinFixture(over: Partial<BuiltinSkill> = {}): BuiltinSkill {
     is_personal: false,
     enabled: true,
     can_toggle: false,
+    installation_policy: "AVAILABLE",
     author_user_id: null,
     author_email: null,
     owner: null,
@@ -49,6 +51,7 @@ export function customFixture(over: Partial<CustomSkill> = {}): CustomSkill {
     is_personal: false,
     enabled: true,
     can_toggle: true,
+    installation_policy: "AVAILABLE",
     author_user_id: null,
     author_email: null,
     owner: null,
@@ -90,7 +93,7 @@ export function mcpServerFixture(
     owner: "admin@example.com",
     auth_type: MCPAuthenticationType.API_TOKEN,
     auth_performer: MCPAuthenticationPerformer.PER_USER,
-    user_can_authenticate: true,
+    connection_status: MCPConnectionStatus.CONNECTED,
     craft_connected: true,
     status: MCPServerStatus.CONNECTED,
     is_public: true,

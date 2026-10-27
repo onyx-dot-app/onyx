@@ -1,8 +1,8 @@
 import { render, screen, waitFor } from "@tests/setup/test-utils";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { useLanguageModels } from "@/lib/languageModels/hooks";
 import { useSettings } from "@/lib/settings/hooks";
-import { Tier } from "@/lib/settings/types";
+import { Tier } from "@/lib/tiers/types";
 import LLMGatewayPage from "@/app/app/settings/llm-gateway/page";
 
 const mockReplace = jest.fn();
@@ -10,7 +10,8 @@ const mockReplace = jest.fn();
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ replace: mockReplace }),
 }));
-jest.mock("@/hooks/useTierAtLeast", () => ({
+jest.mock("@/lib/tiers/hooks", () => ({
+  ...jest.requireActual("@/lib/tiers/hooks"),
   useTierAtLeast: jest.fn(),
 }));
 jest.mock("@/lib/languageModels/hooks", () => ({

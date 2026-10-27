@@ -14,7 +14,9 @@ type ConnectorUpsert struct {
 	InputType               string         `json:"input_type"`
 	ConnectorSpecificConfig map[string]any `json:"connector_specific_config"`
 	RefreshFreq             *int64         `json:"refresh_freq"`
-	PruneFreq               *int64         `json:"prune_freq"`
+	// Omitted when unset: Onyx then defaults it on create and keeps it on
+	// update, where an explicit null would turn pruning off.
+	PruneFreq               *int64         `json:"prune_freq,omitempty"`
 	IndexingStart           *string        `json:"indexing_start"`
 	AccessType              string         `json:"access_type"`
 	Groups                  []int64        `json:"groups"`

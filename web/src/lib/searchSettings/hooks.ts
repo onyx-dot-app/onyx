@@ -13,6 +13,7 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
+  CCPairIdsBackfillStatus,
   ConfiguredEmbeddingProvider,
   EmbeddingModelResponse,
   LLMContextualCost,
@@ -90,6 +91,20 @@ export function useLLMContextualCosts() {
 }
 
 /** Combined connector + user-file re-index progress; polls when pollIntervalMs > 0. */
+/**
+ * Fetch the progress of the backfill that adds cc-pair IDs to the chunks of
+ * the current index. Polls every 10 s while it runs and every 60 s after.
+ */
+export function useCCPairIdsBackfillStatus() {
+  return useSWR<CCPairIdsBackfillStatus>(
+    SWR_KEYS.ccPairIdsBackfillProgress,
+    errorHandlingFetcher,
+    {
+      refreshInterval: (latestData) => (latestData?.completed ? 60000 : 10000),
+    }
+  );
+}
+
 export function useReindexProgress({
   pollIntervalMs = 0,
 }: { pollIntervalMs?: number } = {}) {

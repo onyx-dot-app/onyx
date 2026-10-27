@@ -4,7 +4,18 @@ from uuid import UUID
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from onyx.db.models import User, VoiceProvider
+from onyx.db.enums import LLMModelFlowType
+from onyx.db.llm import (
+    fetch_llm_provider_by_zoom_voice_provider_id,
+    remove_llm_provider,
+)
+from onyx.db.models import (
+    LLMModelFlow,
+    LLMProvider,
+    ModelConfiguration,
+    User,
+    VoiceProvider,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.voice.interface import normalize_provider_type
@@ -87,16 +98,25 @@ def upsert_voice_provider(
     default_voice: str | None = None,
     activate_stt: bool = False,
     activate_tts: bool = False,
+    link_decision_provider: bool = False,
 ) -> VoiceProvider:
     """Create or update a voice provider."""
     provider: VoiceProvider | None = None
 
     if provider_id is not None:
-        provider = fetch_voice_provider_by_id(db_session, provider_id)
+        provider = fetch_voice_provider_by_id(db_session, provider_id, for_update=True)
         if provider is None:
             raise OnyxError(
                 OnyxErrorCode.NOT_FOUND,
                 f"No voice provider with id {provider_id} exists.",
+            )
+        if (
+            normalize_provider_type(provider.provider_type) == "zoom"
+            and normalize_provider_type(provider_type) != "zoom"
+        ):
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "A shared Zoom connection cannot change provider type.",
             )
     else:
         provider = VoiceProvider()
@@ -123,6 +143,12 @@ def upsert_voice_provider(
 
     db_session.flush()
 
+    if normalize_provider_type(provider_type) == "zoom" and (
+        link_decision_provider
+        or fetch_llm_provider_by_zoom_voice_provider_id(db_session, provider.id)
+    ):
+        ensure_zoom_decision_provider(db_session, provider)
+
     if activate_stt:
         set_default_stt_provider(db_session=db_session, provider_id=provider.id)
     if activate_tts:
@@ -132,10 +158,81 @@ def upsert_voice_provider(
     return provider
 
 
+def ensure_zoom_decision_provider(
+    db_session: Session, voice: VoiceProvider
+) -> LLMProvider:
+    provider = fetch_llm_provider_by_zoom_voice_provider_id(db_session, voice.id)
+    if provider is None:
+        provider = LLMProvider(
+            name=voice.name,
+            provider="zoom_ai",
+            zoom_voice_provider_id=voice.id,
+            is_public=True,
+            is_auto_mode=False,
+        )
+        db_session.add(provider)
+        db_session.flush()
+    provider.name = voice.name
+    for name, label in (
+        ("zoom-decisions", "Zoom Decisions"),
+        ("zoom-decisions-pro", "Zoom Decisions Pro"),
+    ):
+        model = db_session.scalar(
+            select(ModelConfiguration).where(
+                ModelConfiguration.llm_provider_id == provider.id,
+                ModelConfiguration.name == name,
+            )
+        )
+        if model is None:
+            model = ModelConfiguration(
+                llm_provider_id=provider.id,
+                name=name,
+                display_name=label,
+                is_visible=False,
+            )
+            db_session.add(model)
+            db_session.flush()
+        flow = db_session.scalar(
+            select(LLMModelFlow).where(
+                LLMModelFlow.model_configuration_id == model.id,
+                LLMModelFlow.llm_model_flow_type == LLMModelFlowType.DECISION,
+            )
+        )
+        if flow is None:
+            db_session.add(
+                LLMModelFlow(
+                    model_configuration_id=model.id,
+                    llm_model_flow_type=LLMModelFlowType.DECISION,
+                    is_default=False,
+                )
+            )
+    db_session.flush()
+    return provider
+
+
 def delete_voice_provider(db_session: Session, provider_id: int) -> None:
     """Delete a voice provider by ID."""
-    provider = fetch_voice_provider_by_id(db_session, provider_id)
+    provider = fetch_voice_provider_by_id(db_session, provider_id, for_update=True)
     if provider:
+        linked = db_session.scalars(
+            select(LLMProvider).where(LLMProvider.zoom_voice_provider_id == provider_id)
+        ).all()
+        for decision in linked:
+            selected = db_session.scalar(
+                select(LLMModelFlow.id)
+                .join(ModelConfiguration)
+                .where(
+                    ModelConfiguration.llm_provider_id == decision.id,
+                    LLMModelFlow.is_default.is_(True),
+                )
+                .limit(1)
+            )
+            if selected is not None:
+                raise OnyxError(
+                    OnyxErrorCode.RESOURCE_IN_USE,
+                    "Clear the selected decision model before removing this Zoom connection.",
+                )
+            remove_llm_provider(db_session, decision.id, commit=False)
         db_session.delete(provider)
         db_session.flush()
 

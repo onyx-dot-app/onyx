@@ -2,7 +2,7 @@
 
 **Import:** `import { InputTime, type TimeValue } from "@opal/components";`
 
-Segmented 24-hour time field on the shared `.opal-input` chrome, the Figma `Input/Time`. Mono `HH:MM:SS` segments accept typed input (auto-advance, backspace to the previous segment, commit on blur or Enter once the segments form a valid time), and invalid drafts revert to the committed value. No picker surface, the field is the whole interaction.
+Segmented 24-hour time field on the shared `.opal-input` chrome, the Figma `Input/Time`. Mono `HH:MM:SS` segments accept typed input (auto-advance, backspace to the previous segment, Left/Right arrows across segment edges, commit on blur or Enter once the segments form a valid time), and invalid drafts revert to the committed value. No picker surface, the field is the whole interaction.
 
 ```tsx
 <InputTime value={time} onChange={setTime} clearable />

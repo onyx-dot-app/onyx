@@ -57,15 +57,6 @@ def build_document_id(user_id: UUID, path: str) -> str:
     return f"CRAFT_FILE__{user_id}__{path_hash}"
 
 
-def list_user_files(db_session: Session, user_id: UUID) -> list[DbDocument]:
-    """Return all CRAFT_FILE documents for a user."""
-    return get_documents_by_source(
-        db_session=db_session,
-        source=DocumentSource.CRAFT_FILE,
-        creator_id=user_id,
-    )
-
-
 def fetch_user_file_for_user(
     db_session: Session, doc_id: str, user_id: UUID
 ) -> DbDocument:
@@ -187,7 +178,9 @@ def set_sync_disabled(
 
     if (doc.doc_metadata or {}).get("is_directory") and doc.semantic_id:
         prefix = doc.semantic_id + "/"
-        for child in list_user_files(db_session, user_id):
+        for child in get_documents_by_source(
+            db_session=db_session, source=DocumentSource.CRAFT_FILE, creator_id=user_id
+        ):
             if child.semantic_id and child.semantic_id.startswith(prefix):
                 child_meta = dict(child.doc_metadata or {})
                 child_meta["sync_disabled"] = sync_disabled
@@ -303,7 +296,8 @@ def get_or_create_craft_connector(db_session: Session, user: User) -> tuple[int,
     credential = None
     for cred in existing_credentials:
         if (
-            cred.source == DocumentSource.CRAFT_FILE
+            cred.user_id == user.id
+            and cred.source == DocumentSource.CRAFT_FILE
             and cred.name == USER_LIBRARY_CREDENTIAL_NAME
         ):
             credential = cred

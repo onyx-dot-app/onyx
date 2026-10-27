@@ -2,8 +2,7 @@ import type { useTranslations } from "next-intl";
 import { SvgGlobe, SvgUserKey } from "@opal/icons";
 import { SvgGoogle } from "@opal/logos";
 import type { IconFunctionComponent } from "@opal/types";
-import { toast } from "@opal/layouts";
-import { SSOProviderType } from "@/lib/sso/interfaces";
+import { SSOProviderType } from "@/lib/sso/types";
 
 export type SSOTranslate = ReturnType<
   typeof useTranslations<"admin.ssoProviders">
@@ -59,8 +58,6 @@ export interface SSOConfigField {
   descriptionKey: SSOMessageKey;
   optional?: boolean;
   placeholderKey?: SSOMessageKey;
-  // URLs, PEM markers and ids are not translated.
-  placeholder?: string;
 }
 
 const CLIENT_ID_FIELD: SSOConfigField = {
@@ -108,7 +105,7 @@ export const CONFIG_FIELDS_BY_TYPE: Record<SSOProviderType, SSOConfigField[]> =
         labelKey: "configFields.openidConfigUrl.label",
         kind: "text",
         descriptionKey: "configFields.openidConfigUrl.description",
-        placeholder: "https://example.com/.well-known/openid-configuration",
+        placeholderKey: "configFields.openidConfigUrl.placeholder",
       },
       {
         name: "require_verified_email",
@@ -125,28 +122,28 @@ export const CONFIG_FIELDS_BY_TYPE: Record<SSOProviderType, SSOConfigField[]> =
         labelKey: "configFields.idpEntityId.label",
         kind: "text",
         descriptionKey: "configFields.idpEntityId.description",
-        placeholder: "https://idp.example.com/entity",
+        placeholderKey: "configFields.idpEntityId.placeholder",
       },
       {
         name: "idp_sso_url",
         labelKey: "configFields.idpSsoUrl.label",
         kind: "text",
         descriptionKey: "configFields.idpSsoUrl.description",
-        placeholder: "https://idp.example.com/sso",
+        placeholderKey: "configFields.idpSsoUrl.placeholder",
       },
       {
         name: "idp_x509_cert",
         labelKey: "configFields.idpX509Cert.label",
         kind: "textarea",
         descriptionKey: "configFields.idpX509Cert.description",
-        placeholder: "-----BEGIN CERTIFICATE-----",
+        placeholderKey: "configFields.idpX509Cert.placeholder",
       },
       {
         name: "sp_entity_id",
         labelKey: "configFields.spEntityId.label",
         kind: "text",
         descriptionKey: "configFields.spEntityId.description",
-        placeholder: "onyx",
+        placeholderKey: "configFields.spEntityId.placeholder",
       },
       {
         name: "sp_x509_cert",
@@ -154,7 +151,7 @@ export const CONFIG_FIELDS_BY_TYPE: Record<SSOProviderType, SSOConfigField[]> =
         kind: "textarea",
         descriptionKey: "configFields.spX509Cert.description",
         optional: true,
-        placeholder: "-----BEGIN CERTIFICATE-----",
+        placeholderKey: "configFields.spX509Cert.placeholder",
       },
       {
         name: "sp_private_key",
@@ -162,7 +159,7 @@ export const CONFIG_FIELDS_BY_TYPE: Record<SSOProviderType, SSOConfigField[]> =
         kind: "password",
         descriptionKey: "configFields.spPrivateKey.description",
         optional: true,
-        placeholder: "-----BEGIN PRIVATE KEY-----",
+        placeholderKey: "configFields.spPrivateKey.placeholder",
       },
       {
         name: "email_attribute",
@@ -174,15 +171,3 @@ export const CONFIG_FIELDS_BY_TYPE: Record<SSOProviderType, SSOConfigField[]> =
       },
     ],
   };
-
-export async function copyRedirectUri(
-  redirectUri: string,
-  t: SSOTranslate
-): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(redirectUri);
-    toast.success(t("copyRedirectUri.successToast"));
-  } catch {
-    toast.error(t("copyRedirectUri.errorToast"));
-  }
-}

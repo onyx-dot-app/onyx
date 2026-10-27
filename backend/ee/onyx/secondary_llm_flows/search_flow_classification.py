@@ -18,7 +18,7 @@ from onyx.utils.timing import log_function_time
 logger = setup_logger()
 
 
-@log_function_time(print_only=True)
+@log_function_time()
 def classify_is_search_flow(
     query: str,
     llm: LLM,

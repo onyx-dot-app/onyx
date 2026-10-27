@@ -19,12 +19,11 @@ concurrency:
 on:
   schedule:
     - cron: "0 7 * * *"   # 07:00 UTC nightly
-  merge_group:
   pull_request:
-    # NOTE: Intentionally no `paths:` filter. Trigger-level `paths:` is ignored
-    # for `merge_group`, so we always trigger and let the `changes` job below
-    # decide whether the real test job runs (matches the docker-compose lane
-    # cadence; this lane is expensive and must not run on every PR).
+    # NOTE: Intentionally no `paths:` filter. We always trigger and let the
+    # `changes` job below decide whether the real test job runs (matches the
+    # docker-compose lane cadence; this lane is expensive and must not run on
+    # every PR).
   push:
     tags:
       - "v*.*.*"
@@ -42,6 +41,10 @@ env:
   S3_AWS_SECRET_ACCESS_KEY: "minioadmin"
 
   SANDBOX_BACKEND: "kubernetes"
+  SANDBOX_TEST_ISOLATED_DEPLOYMENT: "true"
+  SANDBOX_TEST_RUN_ID: ${{ github.run_id }}
+  # Shared by the test process and the deployed cleanup worker (900s default).
+  SANDBOX_RESOURCE_GRACE_SECONDS: "180"
   SANDBOX_NAMESPACE: "onyx-sandboxes"
   SANDBOX_SERVICE_ACCOUNT_NAME: "sandbox"
   SANDBOX_CONTAINER_IMAGE: "localhost:5001/onyx-sandbox:ci"
@@ -82,7 +85,7 @@ env:
 
 jobs:
   changes:
-    # Gates the expensive test job. On pull_request / merge_group we use
+    # Gates the expensive test job. On pull_request we use
     # paths-filter; on schedule / push (tags) / workflow_dispatch the filter is
     # skipped and the output defaults to `true` so the lane runs.
     runs-on: ubuntu-latest
@@ -94,13 +97,13 @@ jobs:
       craft_k8s: ${{ steps.filter.outputs.craft_k8s || 'true' }}
     steps:
       - name: Checkout code
-        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        if: github.event_name == 'pull_request'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
       - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
         id: filter
-        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        if: github.event_name == 'pull_request'
         with:
           filters: |
             craft_k8s:
@@ -157,6 +160,7 @@ jobs:
             shard="${base#test_}"
             entries="${entries}{\"path\":\"${f}\",\"name\":\"${shard}\"},"
           done
+          entries="${entries}{\"path\":\"backend/tests/integration/tests/craft/k8s/cleanup\",\"name\":\"cleanup-resources\"},"
           if [ -z "${entries}" ]; then
             echo "::error::no craft k8s test files discovered"
             exit 1
@@ -513,12 +517,16 @@ jobs:
           set -eo pipefail
           kubectl create namespace "${HELM_RELEASE_NAMESPACE}" \
             --dry-run=client -o yaml | kubectl apply -f -
+          kubectl label namespace "${HELM_RELEASE_NAMESPACE}" \
+            "onyx.app/cleanup-test-run=${SANDBOX_TEST_RUN_ID}" --overwrite
           kubectl config set-context --current --namespace="${HELM_RELEASE_NAMESPACE}"
 
           for attempt in 1 2 3; do
             if helm upgrade --install onyx deployment/helm/charts/onyx \
               -n "${HELM_RELEASE_NAMESPACE}" \
               -f deployment/helm/charts/onyx/values-ci.yaml \
+              --set "celery_worker_heavy.logLevel=DEBUG" \
+              --set-string "configMap.SANDBOX_RESOURCE_GRACE_SECONDS=${SANDBOX_RESOURCE_GRACE_SECONDS}" \
               --set "api.image.repository=localhost:5001/onyx-backend" \
               --set "api.image.tag=ci" \
               --set "celery_shared.image.repository=localhost:5001/onyx-backend" \

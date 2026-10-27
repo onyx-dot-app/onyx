@@ -15,10 +15,6 @@ from mcp.client.auth.utils import (
 from mcp.shared.auth import OAuthClientInformationFull
 from pydantic import AnyUrl
 
-from onyx.auth.oauth_token_manager import (
-    OAuthFlowParams,
-    build_oauth_authorization_url,
-)
 from onyx.cache.factory import get_cache_backend
 from onyx.db.enums import MCPTransport
 from onyx.db.models import MCPServer
@@ -28,15 +24,22 @@ from onyx.oauth.authorization_attempt import (
     AuthorizationAttemptStore,
     generate_authorization_state,
 )
+from onyx.oauth.protocol import (
+    OAuthFlowParams,
+    build_authorization_url,
+    validate_authorization_params,
+)
 from onyx.server.features.mcp.client import initialize_mcp_client
-from onyx.server.features.mcp.client_metadata import mcp_oauth_redirect_uri
+from onyx.server.features.mcp.client_metadata import (
+    is_mcp_oauth_cimd_client_id,
+    mcp_oauth_redirect_uri,
+)
 from onyx.server.features.mcp.credentials import (
     mcp_oauth_client_information_fingerprint,
     mcp_oauth_connection_headers_fingerprint,
 )
 from onyx.server.features.mcp.models import (
     DENYLISTED_MCP_HEADERS,
-    RESERVED_MCP_OAUTH_AUTHORIZATION_PARAMS,
     MCPOAuthFlowState,
     MCPOAuthServerSnapshot,
     MCPPendingOAuthAuthorization,
@@ -52,10 +55,18 @@ from onyx.server.features.mcp.ssrf import (
     mcp_ssrf_httpx_client_factory,
 )
 from onyx.utils.logger import setup_logger
+from onyx.utils.url import SSRFException
 
 logger = setup_logger()
 
 MCP_OAUTH_FLOW_TTL_SECONDS = 10 * 60
+CLIENT_METADATA_CHECK_TIMEOUT_SECONDS = 5.0
+MCP_OAUTH_ATTEMPTS = AuthorizationAttemptStore(
+    cache_backend_provider=get_cache_backend,
+    namespace="mcp",
+    payload_type=MCPOAuthFlowState,
+    ttl_seconds=MCP_OAUTH_FLOW_TTL_SECONDS,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,15 +96,14 @@ def _known_provider_flow_params(
             "Known-provider OAuth requires oauth_authorization_endpoint, "
             "oauth_token_endpoint, and a non-empty client_id.",
         )
-    reserved_params = RESERVED_MCP_OAUTH_AUTHORIZATION_PARAMS.intersection(
-        mcp_server.oauth_additional_auth_params or {}
-    )
-    if reserved_params:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "Known-provider OAuth additional parameters cannot override: "
-            f"{', '.join(sorted(reserved_params))}",
+    try:
+        validate_authorization_params(
+            mcp_server.oauth_authorization_endpoint,
+            mcp_server.oauth_additional_auth_params,
+            owns_resource=True,
         )
+    except ValueError as error:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(error)) from error
     return OAuthFlowParams(
         authorization_url=mcp_server.oauth_authorization_endpoint,
         token_url=mcp_server.oauth_token_endpoint,
@@ -112,6 +122,7 @@ def _snapshot_server_configuration(
         auth_type=mcp_server.auth_type,
         auth_performer=mcp_server.auth_performer,
         provider_mode=mcp_server.oauth_provider_mode,
+        cimd_enabled=mcp_server.oauth_cimd_enabled,
         transport=mcp_server.transport,
         authorization_endpoint=mcp_server.oauth_authorization_endpoint,
         token_endpoint=mcp_server.oauth_token_endpoint,
@@ -178,15 +189,6 @@ def validate_mcp_oauth_flow_configuration(
         )
 
 
-def mcp_oauth_attempt_store() -> AuthorizationAttemptStore[MCPOAuthFlowState]:
-    return AuthorizationAttemptStore(
-        get_cache_backend(),
-        namespace="mcp",
-        payload_type=MCPOAuthFlowState,
-        ttl_seconds=MCP_OAUTH_FLOW_TTL_SECONDS,
-    )
-
-
 async def _start_oauth_from_well_known_metadata(
     oauth_provider: OAuthClientProvider,
     server_url: str,
@@ -214,7 +216,8 @@ async def _start_oauth_from_well_known_metadata(
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "OAuth auto-discovery could not find protected resource metadata at "
-            "the MCP server's well-known URI.",
+            "the MCP server's well-known URI. Check the URL or enter OAuth endpoints manually.",
+            extra={"oauth_error": "discovery_failed"},
         )
 
     async with mcp_oauth_challenge_httpx_client_factory(
@@ -224,6 +227,40 @@ async def _start_oauth_from_well_known_metadata(
         timeout,
     ) as client:
         await client.get(server_url)
+
+
+async def validate_client_metadata_authorization(
+    authorization_url: str, client_id: str | None
+) -> None:
+    """Pre-fetch the authorization URL so a provider that cannot read the CIMD
+    document fails here, not on its error page. Network errors fail open."""
+    if not is_mcp_oauth_cimd_client_id(client_id):
+        return
+    try:
+        async with (
+            asyncio.timeout(CLIENT_METADATA_CHECK_TIMEOUT_SECONDS),
+            mcp_ssrf_httpx_client_factory() as client,
+            # Only the status matters, so the page body is never read.
+            client.stream("GET", authorization_url, follow_redirects=False) as response,
+        ):
+            status_code = response.status_code
+    except (httpx.HTTPError, SSRFException, TimeoutError):
+        # The browser may reach a provider this server cannot.
+        logger.warning(
+            "Could not pre-check the MCP OAuth authorization request", exc_info=True
+        )
+        return
+    # 5xx counts too: Sentry and Canva answer 500 for an unreadable document.
+    if status_code < 400:
+        return
+    logger.warning("MCP OAuth authorization pre-check failed: status=%s", status_code)
+    raise OnyxError(
+        OnyxErrorCode.INVALID_INPUT,
+        "The OAuth provider could not use this instance's client metadata document. "
+        "If this instance is not reachable from the public internet, turn off "
+        "'Use client metadata document' and connect again.",
+        extra={"oauth_error": "client_metadata_rejected"},
+    )
 
 
 def start_known_provider_oauth_flow(
@@ -240,14 +277,19 @@ def start_known_provider_oauth_flow(
     pkce = PKCEParameters.generate()
     redirect_uri = mcp_oauth_redirect_uri()
     resource = mcp_server.server_url if include_resource_param else None
-    authorization_url = build_oauth_authorization_url(
-        _known_provider_flow_params(mcp_server, client_information),
-        redirect_uri,
-        state,
+    params = _known_provider_flow_params(mcp_server, client_information)
+    authorization_url = build_authorization_url(
+        authorization_url=params.authorization_url,
+        client_id=params.client_id,
+        redirect_uri=redirect_uri,
+        state=state,
+        scope=" ".join(params.scopes) if params.scopes else None,
+        additional_params=params.additional_params,
         code_challenge=pkce.code_challenge,
         resource=resource,
+        owns_resource=True,
     )
-    mcp_oauth_attempt_store().store(
+    MCP_OAUTH_ATTEMPTS.store(
         owner_id=user_id,
         state=state,
         payload=_build_mcp_oauth_attempt_payload(
@@ -291,7 +333,10 @@ async def _start_auto_discovery_oauth_flow_once(
                 OnyxErrorCode.INVALID_INPUT,
                 "MCP OAuth discovery did not produce a redirect URI.",
             )
-        mcp_oauth_attempt_store().store(
+        await validate_client_metadata_authorization(
+            authorization.authorization_url, context.client_info.client_id
+        )
+        MCP_OAUTH_ATTEMPTS.store(
             owner_id=user_id,
             state=authorization.state,
             payload=_build_mcp_oauth_attempt_payload(
@@ -327,14 +372,32 @@ async def _start_auto_discovery_oauth_flow_once(
         transport if use_authenticated_connection else MCPTransport.STREAMABLE_HTTP
     )
 
+    return await run_oauth_discovery(
+        oauth_provider=oauth_provider,
+        server_url=mcp_server.server_url,
+        connection_headers=oauth_connection_headers,
+        transport=probe_transport,
+        use_authenticated_connection=use_authenticated_connection,
+    )
+
+
+async def run_oauth_discovery(
+    *,
+    oauth_provider: OAuthClientProvider,
+    server_url: str,
+    connection_headers: dict[str, str],
+    transport: MCPTransport,
+    use_authenticated_connection: bool = False,
+) -> OAuthStartResult:
+    """Probe a connection, then fall back to protected-resource discovery."""
     try:
         async with asyncio.timeout(OAUTH_HTTP_TIMEOUT_SECONDS):
             try:
                 authorization = await run_with_authorization_handoff(
                     initialize_mcp_client(
-                        mcp_server.server_url,
-                        connection_headers=oauth_connection_headers,
-                        transport=probe_transport,
+                        server_url,
+                        connection_headers=connection_headers,
+                        transport=transport,
                         auth=oauth_provider,
                     )
                 )
@@ -361,8 +424,8 @@ async def _start_auto_discovery_oauth_flow_once(
             authorization = await run_with_authorization_handoff(
                 _start_oauth_from_well_known_metadata(
                     oauth_provider,
-                    mcp_server.server_url,
-                    oauth_connection_headers,
+                    server_url,
+                    connection_headers,
                 )
             )
             if authorization is not None:
@@ -370,12 +433,14 @@ async def _start_auto_discovery_oauth_flow_once(
     except TimeoutError as error:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            "Timed out during MCP OAuth discovery.",
+            "Timed out during MCP OAuth discovery. Check the server URL and try again.",
+            extra={"oauth_error": "connection_failed"},
         ) from error
 
     raise OnyxError(
         OnyxErrorCode.INVALID_INPUT,
-        "OAuth auto-discovery did not produce an authorization redirect.",
+        "OAuth auto-discovery did not produce an authorization redirect. Check the provider settings.",
+        extra={"oauth_error": "discovery_failed"},
     )
 
 

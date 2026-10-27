@@ -49,8 +49,8 @@ The project's context panel shows a live token count for its files and a
 warning when that count exceeds the available context, but this is advisory,
 not authoritative. Removing a file from a project, or deleting the project
 itself, does not delete the file. Attaching a custom agent to a chat inside a
-project overrides the project's own instructions entirely, which is easy to
-miss because nothing in the UI calls this out.
+project combines the agent's files and instructions with the project's. Agent
+instructions take precedence when they conflict with project instructions.
 
 ---
 
@@ -180,16 +180,14 @@ not a needle-in-a-haystack fact worth risking a silent drop to save space.
 
 ### 4.4 Path B: retrieved
 
-At or above the ceiling, the files are flagged `use_as_search_filter=True`
-(`process_message.py:extract_context_files`), and
-`process_message.py:determine_search_params` sets `SearchParams.project_id_filter`
-to the active project's id (only for the default persona; see §4.5) and turns
-the search tool `SearchToolUsage.ENABLED` for the turn. The model must retrieve
-project content through the internal search tool
-([[tools-framework]], [[internal-search]]) instead of reading it from the
-prompt. `context/search/models.py:UserFileFilters.project_id_filter` is what
-the document index applies: it scopes search to the project's files, it does
-not additionally search team knowledge alongside them.
+At or above the ceiling, the combined files are flagged `use_as_search_filter=True`
+(`process_message.py:extract_context_files`). `determine_search_params` sets
+`project_id_filter` for the project and `persona_id_filter` for a custom agent.
+The index combines these scopes with OR, alongside the agent's configured
+knowledge, and retains access checks. A default agent in a project enables
+internal search for overflow; custom agents retain their configured tools.
+Combining files does not enable tools absent from the agent. Overflow retrieval
+requires internal search; tabular-file access requires an appropriate file tool.
 
 **Project files are always vectorized on upload, independent of this
 decision.** Indexing runs through
@@ -209,28 +207,18 @@ own the file at enrichment time (`user_file_id_to_project_ids`, fetched via
 
 ### 4.5 Project instructions and persona precedence
 
-`chat_utils.py:get_custom_agent_prompt(persona, chat_session)` resolves the
-custom agent prompt for a turn:
+`chat_utils.py:get_custom_agent_prompt(persona, chat_session)` includes project
+instructions alongside custom-agent instructions. Agent instructions take
+precedence when they conflict. If the agent replaces the base system prompt,
+its instructions stay in the system message and project instructions remain
+in a separate context message. Empty agent instructions do not discard project
+instructions.
 
-1. If the active persona is not the default persona
-   (`persona.id != DEFAULT_PERSONA_ID`), its own `system_prompt` is used,
-   **even inside a project**, unless `persona.replace_base_system_prompt` is
-   set, in which case there is no separate custom agent prompt at all (it
-   becomes the whole system prompt).
-2. Only if the default persona is active does it fall back to
-   `chat_session.project.instructions`.
-
-**Verified: a custom persona fully supersedes the project.** This is stated
-twice in the source: once in `get_custom_agent_prompt`'s own docstring, and
-independently in `process_message.py:resolve_context_user_files`'s docstring,
-which extends the same precedence to files: "A custom persona fully
-supersedes the project... its files are never loaded and never made
-searchable." `resolve_context_user_files` and `determine_search_params` both
-implement this a second time in code (`if persona.id != DEFAULT_PERSONA_ID:
-return list(persona.user_files)`), so a project attached to a chat running a
-custom agent contributes nothing to that turn: no instructions, no files, no
-search scoping. The project still shows the chat in `ProjectChatSessionList`
-(§4.6); it is purely organizational in that case.
+`process_message.py:resolve_context_user_files` combines project files and
+custom-agent files, removing duplicates by `UserFile.id`. This selection feeds
+prompt context, `read_file`, and Python file staging. Historical chat
+attachments remain available separately. The combined token count decides
+whether files fit inline or require retrieval (§4.4).
 
 ### 4.6 The session relationship
 
@@ -332,12 +320,9 @@ the margin with which path a given turn actually takes. See §9.
    threshold mid-conversation (by growing, or by the user switching to a
    smaller-context model) must not break citation resolution across that
    boundary.
-3. **A custom persona fully supersedes project instructions and project
-   files**, verified in both `chat_utils.py:get_custom_agent_prompt` and
-   `process_message.py:resolve_context_user_files`. Any new code path that
-   reads project state for a turn must check `persona.id != DEFAULT_PERSONA_ID`
-   the same way, or it will leak project content into a custom-agent turn that
-   is supposed to be fully agent-scoped.
+3. **Custom agents retain project context.** Prompt loading and tools use the
+   same combined file selection. Retrieval includes both scopes when files
+   overflow. Agent instructions take precedence over conflicting project instructions.
 4. **Unlinking or deleting a project must not leave a stale project scope on
    an indexed chunk.** `project_sync_user_file_impl` must run to completion
    (or be retried) after any `Project__UserFile` change, or a chunk's stored
@@ -374,7 +359,7 @@ the margin with which path a given turn actually takes. See §9.
   pipeline for project files.
 - [[internal-search]]: `project_id_filter` composition and how the search
   tool is gated on/off for a project turn.
-- [[agents-personas]]: persona precedence over project instructions and
+- [[agents-personas]]: agent/project instruction composition and
   files; `Persona__UserFile` is the parallel join this component's
   `Project__UserFile` sits next to.
 - [[chat-persistence]]: `ChatSession.project_id` is a column on a table that
@@ -398,7 +383,7 @@ the margin with which path a given turn actually takes. See §9.
 |---|---|
 | changes the inline threshold (the 60% ceiling or `reserved_token_count`) | [[context-assembly]] §4.8's reservation ordering; re-verify a project just below the old ceiling does not silently flip to retrieval-only for existing users without a status change they can see |
 | changes project file indexing (`UserFileIndexingAdapter`, `PROCESS_SINGLE_USER_FILE`, project sync) | [[indexing-pipeline]], [[internal-search]]'s `project_id_filter` composition, and citation resolution across the inline/retrieval boundary (contract 2) |
-| changes instruction precedence (`get_custom_agent_prompt`, `resolve_context_user_files`) | [[agents-personas]]; re-verify the two independent implementations of the precedence rule (prompt resolution and file resolution) still agree, since one changing without the other reintroduces a project leak into custom-agent turns |
+| changes agent/project context (`get_custom_agent_prompt`, `resolve_context_user_files`) | [[agents-personas]], [[context-assembly]]; verify both instruction sources, combined file selection, tool access, and overflow retrieval |
 | changes deletion or unlinking (`delete_project`, `delete_user_file`, `unlink_user_file_from_project`) | [[file-store-and-user-files]] contract 4; re-verify a project delete still never touches a `UserFile` row, and an unlink still triggers `project_sync_user_file_impl` rather than leaving `needs_project_sync=True` unresolved |
 | adds a project-level setting (sharing, a token cap, a new instruction field) | §5 contract 6: there is currently no sharing model at all; decide explicitly whether the new setting is per-user or introduces the first multi-user project state |
 | changes how the frontend resolves the active project (`useActiveProject`, `PARAMS_TO_SKIP`) | `AppPage.tsx`'s deep-research gate, which depends on `activeProject === null`; a resolution bug here can silently enable or disable deep research for the wrong sessions |
@@ -435,9 +420,9 @@ tests. See `backend/AGENTS.md` for the authoritative commands.
    `PROCESSING` → `COMPLETED` (`GET /user/projects/file/statuses`), and that a
    question depending on it now triggers an internal search tool call instead
    of being answered from raw context.
-5. Attach a custom agent to the chat and ask a question the project
-   instructions would normally answer. Confirm the agent's own instructions
-   win and the project's instructions have no visible effect.
+5. Attach a custom agent with its own files. Confirm answers can use files
+   from both sources, inline and through retrieval. Check both instruction
+   sources and confirm agent instructions win when they conflict.
 6. Unlink the small file from the project. Confirm it still appears under
    "recent" files (unassociated), and that a follow-up question scoped to the
    project no longer surfaces content from it.
@@ -449,8 +434,8 @@ tests. See `backend/AGENTS.md` for the authoritative commands.
 - A project below the threshold answers from context with no tool call; a
   project above it triggers a visible search tool call, and both answers cite
   correctly.
-- A custom agent attached to a project-scoped chat never reflects the
-  project's instructions or files.
+- A custom agent inside a project uses both file sets and both instruction
+  sources, with agent instructions taking precedence on conflicts.
 - Unlinking or deleting never removes a `UserFile`, its blob, or leaves an
   index entry still scoped to a project it was removed from.
 
@@ -458,12 +443,9 @@ tests. See `backend/AGENTS.md` for the authoritative commands.
 
 ## 9. Footguns
 
-- **A custom persona fully supersedes the project.** Attaching a custom agent
-  to a chat inside a project silently drops the project's instructions and
-  files from that turn, with no indication in the UI that this happened. This
-  is intentional (`chat_utils.py:get_custom_agent_prompt`,
-  `process_message.py:resolve_context_user_files`), not a bug, but it is the
-  single most surprising behavior in this component.
+- **File selection must agree across prompt and tools.** Resolving project
+  files and agent files independently can omit one source or count duplicates.
+  Reuse `resolve_context_user_files` and test overflow as well as inline context.
 - **The token count shown in the project context panel is not the number the
   inline/retrieval decision actually uses.** `get_project_token_count`'s sum
   compares against a rough UI estimate

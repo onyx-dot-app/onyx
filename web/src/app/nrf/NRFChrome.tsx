@@ -5,7 +5,7 @@ import { ensureHrefProtocol } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import type { Components } from "react-markdown";
 import Text from "@/refresh-components/texts/Text";
-import { Button, Dropdown, OpenButton } from "@opal/components";
+import { Button, Dropdown, SelectButton } from "@opal/components";
 import { SvgBubbleText, SvgSearchMenu, SvgSidebar } from "@opal/icons";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { useIsSearchModeAvailable } from "@/lib/settings/hooks";
@@ -13,8 +13,8 @@ import { useCustomFooterContent } from "@/lib/app/hooks";
 import { useAppPosition } from "@/lib/position/hooks";
 import type { AppMode } from "@/providers/QueryControllerProvider";
 import { useQueryController } from "@/providers/QueryControllerProvider";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import { useSidebarState } from "@opal/layouts";
 import useScreenSize from "@/hooks/useScreenSize";
 import { useTranslations } from "next-intl";
@@ -122,7 +122,8 @@ export default function NRFChrome() {
           {showModeToggle && (
             <Dropdown open={modePopoverOpen} onOpenChange={setModePopoverOpen}>
               <Dropdown.Trigger asChild>
-                <OpenButton
+                <SelectButton
+                  chevron
                   aria-label={t("appChrome.modeButton.ariaLabel")}
                   icon={
                     effectiveMode === "search" ? SvgSearchMenu : SvgBubbleText
@@ -132,7 +133,7 @@ export default function NRFChrome() {
                   {effectiveMode === "search"
                     ? t("appChrome.mode.search.label")
                     : t("appChrome.mode.chat.label")}
-                </OpenButton>
+                </SelectButton>
               </Dropdown.Trigger>
               <Dropdown.Data
                 label={t("appChrome.modeButton.ariaLabel")}

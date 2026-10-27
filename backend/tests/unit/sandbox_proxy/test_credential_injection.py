@@ -13,9 +13,8 @@ from onyx.sandbox_proxy.credential_injection import (
     CredentialInjectionDispatcher,
     CredentialResolver,
     CredentialUnavailableError,
-    InjectionContext,
-    InjectionOutcome,
 )
+from onyx.sandbox_proxy.models import InjectionContext, InjectionOutcome
 from tests.unit.sandbox_proxy.conftest import (
     RecordingCredentialResolver,
     make_flow,

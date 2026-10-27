@@ -106,7 +106,7 @@ def test_hmr_route_uses_shared_cookie_websocket_auth() -> None:
     route = next(
         r
         for r in public_build_router.routes
-        if isinstance(r, APIWebSocketRoute) and "webpack-hmr" in r.path
+        if isinstance(r, APIWebSocketRoute) and "{hmr_endpoint}" in r.path
     )
     dependency_calls = [d.call for d in route.dependant.dependencies]
     assert current_user_from_websocket_cookie in dependency_calls

@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getSourceMetadata, isValidSource } from "@/lib/connectors/utils";
 import { usePathname, useSearchParams } from "next/navigation";
 import { AdminPageTitle } from "@/components/admin/Title";
-import { getSourceMetadata, isValidSource } from "@/lib/sources";
 import { ValidSources } from "@/lib/connectors/types/source";
 import CardSection from "@/components/admin/CardSection";
 import { handleOAuthAuthorizationResponse } from "@/lib/oauth_utils";

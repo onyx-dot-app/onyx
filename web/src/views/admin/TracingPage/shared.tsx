@@ -1,6 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { useField } from "formik";
 import { markdown } from "@opal/utils";
 import { InputVertical } from "@opal/layouts";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
@@ -14,10 +15,13 @@ interface SecretFieldProps {
 export function SecretField({ field }: SecretFieldProps) {
   const t = useTranslations("admin.tracing");
   const label = t(field.labelKey);
+  // On edit, the initial value is the stored masked key.
+  const [, meta] = useField<string>(field.name);
 
   return (
     <InputVertical
-      title={field.optional ? t("field.optional.title", { label }) : label}
+      title={label}
+      suffix={field.optional ? "optional" : undefined}
       withLabel={field.name}
       subDescription={
         field.descriptionKey ? markdown(t(field.descriptionKey)) : undefined
@@ -25,11 +29,8 @@ export function SecretField({ field }: SecretFieldProps) {
     >
       <PasswordInputTypeInField
         name={field.name}
-        placeholder={
-          field.placeholderKey
-            ? t(field.placeholderKey)
-            : (field.placeholder ?? label)
-        }
+        placeholder={field.placeholderKey ? t(field.placeholderKey) : label}
+        existingValue={meta.initialValue}
       />
     </InputVertical>
   );
@@ -45,7 +46,8 @@ export function ConfigField({ field }: ConfigFieldProps) {
 
   return (
     <InputVertical
-      title={field.optional ? t("field.optional.title", { label }) : label}
+      title={label}
+      suffix={field.optional ? "optional" : undefined}
       withLabel={field.name}
       subDescription={
         field.descriptionKey ? markdown(t(field.descriptionKey)) : undefined
@@ -53,11 +55,7 @@ export function ConfigField({ field }: ConfigFieldProps) {
     >
       <InputTypeInField
         name={field.name}
-        placeholder={
-          field.placeholderKey
-            ? t(field.placeholderKey)
-            : (field.placeholder ?? "")
-        }
+        placeholder={field.placeholderKey ? t(field.placeholderKey) : ""}
       />
     </InputVertical>
   );

@@ -149,7 +149,7 @@ Iterate on `sandbox_proxy/` code with the VSCode debugger attached.
 
 4. **Provision a sandbox** via the API as you normally would, and
    trigger a gated action (e.g. a Slack `chat.postMessage`). Set
-   breakpoints in `gate.py`, `addons/gate.py`, `identity_docker.py`,
+   breakpoints in `gate.py`, `addons/gate.py`, `sandbox_identity/docker.py`,
    etc.
 
 ## Smoke-check commands

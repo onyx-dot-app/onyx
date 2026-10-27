@@ -1,13 +1,8 @@
-"""Chat turn that exercises the search tool path.
+"""Search turns with repeatable answer sizes and retrieval rounds.
 
-The `-tools1` model knob makes the mock LLM answer the first AUTO-tool-choice
-cycle with an `internal_search` tool call, so Onyx genuinely executes the
-search tool: query expansion, embedding model server, OpenSearch
-retrieval, document streaming. The follow-up LLM call (tool result in
-history) streams the final answer.
-
-The `<prefix>:first_search_doc` milestone measures time to the first
-document batch — i.e. real retrieval-stack latency under load.
+The representative model drives real query expansion, embedding, retrieval,
+classification, and document streaming. ONYX_SEARCH_MODEL selects explicit
+stress or reliability profiles when needed.
 """
 
 from __future__ import annotations
@@ -22,4 +17,6 @@ class ChatWithSearchUser(OnyxChatUser):
     weight = 20
 
     scenario_prefix: str = "search"
-    mock_model: str | None = os.environ.get("ONYX_SEARCH_MODEL", "mock-tools1")
+    mock_model: str | None = os.environ.get(
+        "ONYX_SEARCH_MODEL", "mock-profile-search-v1"
+    )

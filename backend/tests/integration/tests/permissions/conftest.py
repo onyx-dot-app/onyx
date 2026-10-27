@@ -83,7 +83,7 @@ def permission_admin_user(module_reset: None) -> DATestUser:  # noqa: ARG001
 def permission_basic_user(
     permission_admin_user: DATestUser,  # noqa: ARG001
 ) -> DATestUser:
-    """Second registered user — joins the default Basic user group with only basic permissions."""
+    """Second registered user. Joins the default Basic group and holds only its grants."""
     return UserManager.create(name="perm_basic")
 
 

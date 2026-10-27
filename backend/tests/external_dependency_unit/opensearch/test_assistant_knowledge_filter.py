@@ -254,3 +254,23 @@ class TestAssistantKnowledgeFilter:
             "No knowledge-scope clause should be produced when every knowledge "
             "input is empty/None"
         )
+
+
+def test_custom_agent_and_project_knowledge_form_one_union() -> None:
+    filters: list[dict[str, Any]] = _get_search_filters(
+        source_types=[DocumentSource.GITHUB],
+        attached_document_ids=[ATTACHED_DOCUMENT_ID],
+        hierarchy_node_ids=[HIERARCHY_NODE_ID],
+        persona_id_filter=PERSONA_ID,
+        document_sets=["engineering"],
+        project_id_filter=PROJECT_ID,
+    )
+    knowledge: dict[str, Any] | None = _find_knowledge_filter(filters)
+    assert knowledge is not None
+    assert knowledge["bool"]["minimum_should_match"] == 1
+    assert len(knowledge["bool"]["should"]) == 5
+    assert all(field in str(knowledge) for field in KNOWLEDGE_FILTER_SCHEMA_FIELDS)
+    assert "user_email:test@example.com" not in str(knowledge)
+    assert "user_email:test@example.com" in str(filters)
+    assert DocumentSource.GITHUB.value not in str(knowledge)
+    assert DocumentSource.GITHUB.value in str(filters)

@@ -1,9 +1,11 @@
+import json
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from onyx.access.cc_pair_access import get_cc_pair_access_mode
 from onyx.auth.permissions import require_permission
 from onyx.background.celery.tasks.index_reclaim.tasks import enqueue_index_reclaim
 from onyx.background.celery.tasks.port.tasks import (
@@ -11,6 +13,7 @@ from onyx.background.celery.tasks.port.tasks import (
     resume_paused_port_unit,
 )
 from onyx.background.celery.versioned_apps.client import app as client_app
+from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import (
     DISABLE_INDEX_UPDATE_ON_SWAP,
     DISABLE_VECTOR_DB,
@@ -18,6 +21,7 @@ from onyx.configs.app_configs import (
     OLD_INDEX_RECLAIM_ENABLED,
 )
 from onyx.context.search.models import (
+    CCPairAccessMode,
     ContextualRagModelUpdateResponse,
     SavedSearchSettings,
     SearchSettingsCreationRequest,
@@ -25,23 +29,30 @@ from onyx.context.search.models import (
 from onyx.db.connector_credential_pair import (
     compute_wont_port_cc_pair_ids,
     fetch_indexable_standard_connector_credential_pair_ids,
+    get_connector_credential_pair_from_id,
     get_connector_credential_pairs,
     get_last_successful_attempt_poll_range_end,
     resync_cc_pair,
 )
+from onyx.db.document import (
+    count_documents_by_cc_pair_ids,
+    count_documents_for_cc_pair_up_to,
+)
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
     IndexReclaimStatus,
+    LLMModelFlowType,
     Permission,
     SwitchoverType,
     VectorQuantization,
 )
 from onyx.db.index_attempt import create_synthetic_seed_attempt, expire_index_attempts
 from onyx.db.llm import (
-    fetch_default_contextual_rag_model,
+    fetch_default_model,
     update_default_contextual_model,
     update_no_default_contextual_rag_provider,
 )
+from onyx.db.models import CloudEmbeddingProvider as CloudEmbeddingProviderModel
 from onyx.db.models import IndexModelStatus, SearchSettings, User
 from onyx.db.port_attempt import (
     ReindexErrorRow,
@@ -59,6 +70,7 @@ from onyx.db.search_settings import (
     find_unreclaimed_past_by_index_name,
     get_current_search_settings,
     get_embedding_provider_from_provider_type,
+    get_search_settings_by_id,
     get_secondary_search_settings,
     mark_abandoned_future_for_reclaim__no_commit,
     set_reclaim_intent_on_current__no_commit,
@@ -67,6 +79,9 @@ from onyx.db.search_settings import (
 )
 from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.interfaces import TenantState
+from onyx.document_index.opensearch.cc_pair_ids_backfill import (
+    load_cc_pair_ids_backfill_progress,
+)
 from onyx.document_index.opensearch.client import OpenSearchClient
 from onyx.document_index.opensearch.constants import LUCENE_SCALAR_QUANTIZATION
 from onyx.document_index.opensearch.index_reclaim import (
@@ -80,13 +95,19 @@ from onyx.file_processing.unstructured import (
     get_unstructured_api_key,
     update_unstructured_api_key,
 )
-from onyx.natural_language_processing.search_nlp_models import clean_model_name
+from onyx.indexing.port_reembed import ReembedStrategy, select_reembed_strategy
+from onyx.natural_language_processing.embedding_auth import build_embedding_auth
 from onyx.server.manage.embedding.models import SearchSettingsDeleteRequest
+from onyx.server.manage.embedding.probe import probe_embedding_dimension
 from onyx.server.manage.models import (
+    CCPairAccessModeUpdateRequest,
+    CCPairIdsBackfillStatus,
     FullModelVersionResponse,
+    ReindexProgress,
     UnstructuredApiKeyRequest,
 )
 from onyx.server.models import IdReturn
+from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.server.utils_vector_db import require_vector_db
 from onyx.utils.audit import (
     AuditAction,
@@ -101,6 +122,15 @@ from shared_configs.configs import (
     PRESERVED_SEARCH_FIELDS,
 )
 from shared_configs.contextvars import get_current_tenant_id
+from shared_configs.embedding_models import (
+    EmbeddingModelSpec,
+    EmbeddingModelStatus,
+    embedding_model_match_key,
+    find_embedding_model_spec,
+    selectable_embedding_model_specs,
+)
+from shared_configs.enums import EmbeddingProvider
+from shared_configs.utils import clean_model_name
 
 router = APIRouter(prefix="/search-settings")
 logger = setup_logger()
@@ -117,15 +147,32 @@ def set_new_search_settings(
     Only one re-index runs at a time. This raises CONFLICT instead of superseding an
     existing one: either a secondary FUTURE is already in flight, or an INSTANT
     switchover is still backfilling the live index. Cancel the running re-index first.
+
+    Embedding models only move forward: legacy models are refused as a new target,
+    except for a re-index with the PRESENT model (see _check_embedding_model_target).
     """
     if search_settings_new.index_name:
         logger.warning("Index name was specified by request, this is not suggested")
 
     # Disallow contextual RAG for cloud deployments.
     if MULTI_TENANT and search_settings_new.enable_contextual_rag:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Contextual RAG disabled in Onyx Cloud",
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, "Contextual RAG disabled in Onyx Cloud"
+        )
+
+    spec = find_embedding_model_spec(
+        search_settings_new.provider_type, search_settings_new.model_name
+    )
+    selectable_spec = (
+        spec
+        if spec is not None and spec.status == EmbeddingModelStatus.SELECTABLE
+        else None
+    )
+    # A selectable model gets its canonical name: the probe, the model server and
+    # the tokenizer match it exactly.
+    if selectable_spec is not None:
+        search_settings_new = search_settings_new.model_copy(
+            update={"model_name": selectable_spec.model_name}
         )
 
     # Validate cloud provider exists or create new LiteLLM provider.
@@ -135,10 +182,19 @@ def set_new_search_settings(
         )
 
         if cloud_provider is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"No embedding provider exists for cloud embedding type {search_settings_new.provider_type}",
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                f"No embedding provider exists for cloud embedding type {search_settings_new.provider_type}",
             )
+
+        # Before the PRESENT row lock below: the probe is a network call. Nothing
+        # is written yet, so end the read transaction instead of idling in it.
+        if (
+            search_settings_new.provider_type == EmbeddingProvider.BIFROST
+            or selectable_spec is not None
+        ):
+            db_session.commit()
+            _validate_cloud_embedding_model(search_settings_new, cloud_provider)
 
     validate_contextual_rag_model(
         model_configuration_id=search_settings_new.contextual_rag_model_configuration_id,
@@ -173,6 +229,10 @@ def set_new_search_settings(
             OnyxErrorCode.CONFLICT,
             "A re-index is already in progress. Cancel it before starting a new one.",
         )
+
+    # Upgrade-only: a new target must be the PRESENT model or a selectable model.
+    # Runs before anything below writes or commits.
+    _check_embedding_model_target(search_settings_new, search_settings)
 
     if search_settings_new.index_name is None:
         search_values = search_settings_new.model_dump()
@@ -278,6 +338,186 @@ def set_new_search_settings(
     # Atomic: FUTURE row, its seeds, and the reclaim intent become visible together.
     db_session.commit()
     return IdReturn(id=new_search_settings.id)
+
+
+def _validate_cloud_embedding_model(
+    search_settings_new: SearchSettingsCreationRequest,
+    cloud_provider: CloudEmbeddingProviderModel,
+) -> None:
+    """Prove the model embeds at the set dimension with the stored credentials, so
+    a bad key, region or model ID (a gateway accepts any) fails before indexing
+    starts."""
+    api_key: str | None = (
+        cloud_provider.api_key.get_value(apply_mask=False)
+        if cloud_provider.api_key is not None
+        else None
+    )
+    dimension: int = probe_embedding_dimension(
+        provider_type=cloud_provider.provider_type,
+        api_key=api_key,
+        api_url=cloud_provider.api_url,
+        model_name=search_settings_new.model_name,
+        auth=build_embedding_auth(
+            cloud_provider.provider_type, api_key, cloud_provider.vertex_config
+        ),
+        api_version=cloud_provider.api_version,
+        deployment_name=cloud_provider.deployment_name,
+        reduced_dimension=search_settings_new.reduced_dimension,
+    )
+    if dimension != search_settings_new.final_embedding_dim:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"The model {search_settings_new.model_name} returns {dimension}-dimension "
+            f"vectors, but the search settings expect "
+            f"{search_settings_new.final_embedding_dim}.",
+        )
+
+
+# Providers whose model list Onyx owns. Only SELECTABLE registry models are valid
+# new targets for them. LiteLLM, Azure and Bifrost take free-form names, so they
+# stay open.
+_REGISTRY_ONLY_CLOUD_PROVIDERS = frozenset(
+    {
+        EmbeddingProvider.OPENAI,
+        EmbeddingProvider.COHERE,
+        EmbeddingProvider.GOOGLE,
+        EmbeddingProvider.VOYAGE,
+    }
+)
+
+
+def _embedding_provider_label(provider_type: EmbeddingProvider | None) -> str:
+    return provider_type.value if provider_type is not None else "self-hosted"
+
+
+def _selectable_embedding_models_hint() -> str:
+    names_by_provider: dict[str, list[str]] = {}
+    for spec in selectable_embedding_model_specs():
+        names_by_provider.setdefault(
+            _embedding_provider_label(spec.provider_type), []
+        ).append(spec.model_name)
+    return "; ".join(
+        f"{provider_label}: {', '.join(names)}"
+        for provider_label, names in names_by_provider.items()
+    )
+
+
+def _not_selectable_error(
+    request: SearchSettingsCreationRequest, spec: EmbeddingModelSpec | None
+) -> OnyxError:
+    model = (
+        f"'{request.model_name}' ({_embedding_provider_label(request.provider_type)})"
+    )
+    if spec is not None:
+        reason = (
+            f"{model} is a legacy embedding model. Existing indexes on it keep "
+            "working, but it can't be chosen for a new index."
+        )
+    else:
+        reason = f"{model} is not an embedding model that Onyx supports."
+    return OnyxError(
+        OnyxErrorCode.INVALID_INPUT,
+        f"{reason} Choose one of these models: {_selectable_embedding_models_hint()}. "
+        "A re-index with the current model is still allowed.",
+    )
+
+
+def _validate_selectable_embedding_request(
+    request: SearchSettingsCreationRequest, spec: EmbeddingModelSpec
+) -> None:
+    """A selectable model must use the registry's settings: the index and the
+    embedding code depend on them."""
+    problems: list[str] = []
+    if request.model_dim != spec.model_dim:
+        problems.append(f"model_dim must be {spec.model_dim}, not {request.model_dim}")
+    if request.normalize != spec.normalize:
+        problems.append(f"normalize must be {spec.normalize}")
+    if (request.query_prefix or "") != spec.query_prefix:
+        problems.append(f"query_prefix must be {spec.query_prefix!r}")
+    if (request.passage_prefix or "") != spec.passage_prefix:
+        problems.append(f"passage_prefix must be {spec.passage_prefix!r}")
+    if request.reduced_dimension is not None:
+        if MULTI_TENANT:
+            problems.append("reduced_dimension is not supported in Onyx Cloud")
+        elif not spec.supports_reduced_dimension:
+            problems.append("this model does not support reduced_dimension")
+        elif not 0 < request.reduced_dimension < spec.model_dim:
+            problems.append(
+                f"reduced_dimension must be between 1 and {spec.model_dim - 1}"
+            )
+    if problems:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Invalid settings for embedding model '{spec.model_name}': "
+            f"{'; '.join(problems)}.",
+        )
+
+
+def _check_embedding_model_target(
+    request: SearchSettingsCreationRequest, present: SearchSettings
+) -> None:
+    """Upgrade-only rules for a new embedding target. Allowed: the PRESENT model
+    (legacy included), a selectable model with the registry settings, and any
+    model of a provider whose list Onyx does not own (custom HF models, LiteLLM,
+    Azure, Bifrost). Other OpenAI, Cohere, Google and Voyage models and legacy
+    self-hosted models raise OnyxError(INVALID_INPUT)."""
+    spec = find_embedding_model_spec(request.provider_type, request.model_name)
+    selectable_spec = (
+        spec
+        if spec is not None and spec.status == EmbeddingModelStatus.SELECTABLE
+        else None
+    )
+    is_present_model = embedding_model_match_key(
+        request.provider_type, request.model_name
+    ) == embedding_model_match_key(present.provider_type, present.model_name)
+
+    # The model server ignores reduced_dimension, so a self-hosted index with it
+    # gets vectors of the wrong size. A re-index keeps a stored value.
+    if (
+        request.provider_type is None
+        and request.reduced_dimension is not None
+        and not (
+            is_present_model and request.reduced_dimension == present.reduced_dimension
+        )
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Self-hosted embedding models do not support reduced_dimension: the "
+            "model server returns vectors of the full dimension.",
+        )
+
+    # A re-index with the PRESENT model (quantization, contextual RAG, switchover).
+    # Stored rows often differ from the registry (e.g. empty prefixes), so only
+    # the dimension is checked. Tenants share the index of a model, so
+    # MULTI_TENANT also keeps reduced_dimension.
+    if is_present_model:
+        allowed_dims = {present.model_dim}
+        if selectable_spec is not None:
+            allowed_dims.add(selectable_spec.model_dim)
+        if request.model_dim not in allowed_dims:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"A re-index with the current model must keep its dimension: "
+                f"model_dim must be {' or '.join(str(d) for d in sorted(allowed_dims))}, "
+                f"not {request.model_dim}.",
+            )
+        if MULTI_TENANT and request.reduced_dimension != present.reduced_dimension:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "reduced_dimension can't be changed in Onyx Cloud: "
+                "all tenants on a model share its index.",
+            )
+        return
+
+    if selectable_spec is not None:
+        _validate_selectable_embedding_request(request, selectable_spec)
+        return
+
+    # Any spec left here is LEGACY.
+    if request.provider_type in _REGISTRY_ONLY_CLOUD_PROVIDERS or (
+        request.provider_type is None and spec is not None
+    ):
+        raise _not_selectable_error(request, spec)
 
 
 def _validate_vector_quantization_supported(
@@ -555,17 +795,169 @@ def _active_port_settings(db_session: Session) -> SearchSettings | None:
     return None
 
 
+def _port_reembeds(db_session: Session, target: SearchSettings) -> bool:
+    """Whether the port into `target` re-embeds, by the rule the port itself uses.
+    The source is the recorded backfill source after an INSTANT swap, otherwise
+    the live PRESENT, as in run_port_attempt."""
+    source: SearchSettings | None = (
+        get_search_settings_by_id(db_session, target.port_backfill_source_id)
+        if target.port_backfill_source_id is not None
+        else get_current_search_settings(db_session)
+    )
+    if source is None:
+        return True
+    return select_reembed_strategy(source, target) is not ReembedStrategy.COPY_VECTORS
+
+
 @router.get("/reindex-progress")
 def get_reindex_progress(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
-) -> ReindexProgressCounts:
+) -> ReindexProgress:
     target = _active_port_settings(db_session)
     if target is None:
-        return ReindexProgressCounts(
-            total=0, waiting=0, in_progress=0, completed=0, failed=0, paused=0
+        return ReindexProgress(
+            total=0,
+            waiting=0,
+            in_progress=0,
+            completed=0,
+            failed=0,
+            paused=0,
+            reembeds=True,
         )
-    return get_reindex_progress_counts(db_session, target.id)
+    counts: ReindexProgressCounts = get_reindex_progress_counts(db_session, target.id)
+    return ReindexProgress(
+        **counts.model_dump(), reembeds=_port_reembeds(db_session, target)
+    )
+
+
+_BACKFILL_DOC_COUNTS_TTL_S = 60
+
+
+def _cached_document_counts(
+    db_session: Session, search_settings: SearchSettings, cc_pair_ids: list[int]
+) -> dict[int, int]:
+    """Document counts of the cc-pairs for the backfill status. Counting a large
+    snapshot is slow, and the card polls it, so counts are cached briefly per
+    tenant and index generation. A cache failure only costs a recount."""
+    key = (
+        f"cc_pair_ids_backfill_doc_counts:{search_settings.id}:"
+        f"{search_settings.index_name}"
+    )
+    cache = get_cache_backend()
+    try:
+        raw = cache.get(key)
+        if raw is not None:
+            cached = {int(k): v for k, v in json.loads(raw).items()}
+            if set(cc_pair_ids) <= cached.keys():
+                return {cc_pair_id: cached[cc_pair_id] for cc_pair_id in cc_pair_ids}
+    except Exception:
+        logger.warning("Failed to read cached backfill document counts", exc_info=True)
+
+    counts = count_documents_by_cc_pair_ids(db_session, cc_pair_ids)
+    # Store zeros too, so a cached entry answers for every requested cc-pair.
+    counts = {cc_pair_id: counts.get(cc_pair_id, 0) for cc_pair_id in cc_pair_ids}
+    try:
+        cache.set(key, json.dumps(counts), ex=_BACKFILL_DOC_COUNTS_TTL_S)
+    except Exception:
+        logger.warning("Failed to cache backfill document counts", exc_info=True)
+    return counts
+
+
+@router.get("/cc-pair-ids-backfill-progress")
+def get_cc_pair_ids_backfill_status(
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> CCPairIdsBackfillStatus:
+    search_settings = get_current_search_settings(db_session)
+    progress = load_cc_pair_ids_backfill_progress(search_settings)
+    status = CCPairIdsBackfillStatus(
+        index_name=search_settings.index_name,
+        started=progress.pending_cc_pair_ids is not None,
+        completed=progress.completed,
+        total_cc_pairs=None,
+        pending_cc_pairs=None,
+        total_documents=None,
+        completed_documents=None,
+        remaining_documents=None,
+        current_cc_pair_name=None,
+        access_mode=get_cc_pair_access_mode(db_session) or CCPairAccessMode.OFF,
+        filter_enabled=OnyxRuntime.get_cc_pair_access_filter_enabled(),
+        enforce_requested=OnyxRuntime.get_cc_pair_access_filter_enforce(),
+        mode_editable=not MULTI_TENANT,
+    )
+    pending = progress.pending_cc_pair_ids
+    if not pending:
+        return status
+
+    snapshot = progress.snapshot_cc_pair_ids
+    doc_counts = _cached_document_counts(
+        db_session, search_settings, snapshot or pending
+    )
+    current_cc_pair = get_connector_credential_pair_from_id(
+        db_session=db_session, cc_pair_id=pending[0]
+    )
+    current_done = (
+        count_documents_for_cc_pair_up_to(
+            db_session, pending[0], progress.last_document_id
+        )
+        if progress.last_document_id is not None
+        else 0
+    )
+    pending_documents = sum(doc_counts.get(cc_pair_id, 0) for cc_pair_id in pending)
+    status.pending_cc_pairs = len(pending)
+    status.remaining_documents = max(pending_documents - current_done, 0)
+    status.current_cc_pair_name = current_cc_pair.name if current_cc_pair else None
+    if snapshot is not None:
+        status.total_cc_pairs = len(snapshot)
+        status.total_documents = sum(doc_counts.values())
+        status.completed_documents = status.total_documents - status.remaining_documents
+    return status
+
+
+@router.put("/cc-pair-access-mode")
+def update_cc_pair_access_mode(
+    request: CCPairAccessModeUpdateRequest,
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> CCPairIdsBackfillStatus:
+    """Sets the search access mode of a self-hosted deployment. ENFORCE takes
+    effect only once the cc_pair_ids backfill is complete, so it is refused
+    before then."""
+    if MULTI_TENANT:
+        # The flags are shared by every tenant of a multi-tenant deployment.
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "The search access mode is operator-controlled in multi-tenant "
+            "deployments.",
+        )
+    if request.mode == CCPairAccessMode.ENFORCE and not (
+        load_cc_pair_ids_backfill_progress(
+            get_current_search_settings(db_session)
+        ).completed
+    ):
+        raise OnyxError(
+            OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+            "Connector-level access can be enforced only after the search index "
+            "update is complete.",
+        )
+
+    previous_mode = get_cc_pair_access_mode(db_session) or CCPairAccessMode.OFF
+    OnyxRuntime.set_cc_pair_access_filter_flags(
+        enabled=request.mode != CCPairAccessMode.OFF,
+        enforce=request.mode == CCPairAccessMode.ENFORCE,
+    )
+    logger.info(
+        "Updated the cc-pair access mode: %s -> %s", previous_mode, request.mode
+    )
+    emit_audit_event(
+        AuditAction.CC_PAIR_ACCESS_MODE_CHANGE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="search_settings",
+        extra={"previous_mode": previous_mode.value, "mode": request.mode.value},
+    )
+    return get_cc_pair_ids_backfill_status(_=user, db_session=db_session)
 
 
 @router.get("/reindex-errors")
@@ -650,9 +1042,9 @@ def _validate_forward_only_update(
     current: SearchSettings,
     requested: SavedSearchSettings,
 ) -> None:
-    """Rejects anything but the one change PRESENT takes without a re-index: a
-    new Contextual Retrieval model, or Contextual Retrieval turned off with
-    its model left as it is."""
+    """Rejects anything but a Contextual Retrieval change, the only change
+    PRESENT takes without a re-index: on with a model, a new model while on,
+    or off with the model left as it is."""
     if requested.enable_contextual_rag:
         if requested.contextual_rag_model_configuration_id is None:
             raise OnyxError(
@@ -660,6 +1052,11 @@ def _validate_forward_only_update(
                 "Select a Contextual Retrieval model.",
             )
         model_configuration_id = requested.contextual_rag_model_configuration_id
+    elif not current.enable_contextual_rag:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Contextual Retrieval is already off.",
+        )
     else:
         model_configuration_id = current.contextual_rag_model_configuration_id
 
@@ -672,8 +1069,8 @@ def _validate_forward_only_update(
     if requested != expected:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            "Only the Contextual Retrieval model can be changed, or Contextual "
-            "Retrieval turned off, without re-indexing.",
+            "Only Contextual Retrieval and its model can be changed without "
+            "re-indexing.",
         )
 
 
@@ -683,9 +1080,10 @@ def update_saved_search_settings(
     user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> ContextualRagModelUpdateResponse:
-    """Applies a Contextual Retrieval change to PRESENT without a re-index: a
-    new model, or off. Documents already indexed keep their generated context
-    until they are updated or re-indexed."""
+    """Applies a Contextual Retrieval change to PRESENT without a re-index: on
+    with a model, a new model, or off. Only documents indexed from now on take
+    the change; the rest keep the context they have until they are updated or
+    re-indexed."""
     # Disallow contextual RAG for cloud deployments
     if MULTI_TENANT and search_settings.enable_contextual_rag:
         raise OnyxError(
@@ -706,13 +1104,6 @@ def update_saved_search_settings(
             "Contextual Retrieval.",
         )
 
-    if not current.enable_contextual_rag:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "Contextual Retrieval must be enabled before it can be changed "
-            "without re-indexing.",
-        )
-
     _validate_forward_only_update(current, search_settings)
     if search_settings.enable_contextual_rag:
         validate_contextual_rag_model(
@@ -727,12 +1118,14 @@ def update_saved_search_settings(
             "Retrieval on. Unset it and restart to turn Contextual Retrieval off.",
         )
 
+    # Read before the commit expires the row.
+    previous_enable_contextual_rag = current.enable_contextual_rag
     previous_model_configuration_id = current.contextual_rag_model_configuration_id
     update_current_search_settings(
         search_settings=search_settings,
         db_session=db_session,
-        # The flag is normally fixed for the life of an index. Turning it off
-        # is the one change this endpoint applies to it.
+        # The flag is normally fixed for the life of an index. This endpoint
+        # is the one writer that changes it on PRESENT.
         preserved_fields=[
             field
             for field in PRESERVED_SEARCH_FIELDS
@@ -757,9 +1150,10 @@ def update_saved_search_settings(
             "previous_model_configuration_id": previous_model_configuration_id,
             "model_configuration_id": search_settings.contextual_rag_model_configuration_id,
             **(
-                {}
+                {"enable_contextual_rag": search_settings.enable_contextual_rag}
                 if search_settings.enable_contextual_rag
-                else {"enable_contextual_rag": False}
+                != previous_enable_contextual_rag
+                else {}
             ),
         },
     )
@@ -799,7 +1193,7 @@ def validate_contextual_rag_model(
     if model_configuration_id is None:
         if (
             enable_contextual_rag
-            and fetch_default_contextual_rag_model(db_session) is None
+            and fetch_default_model(db_session, LLMModelFlowType.CONTEXTUAL_RAG) is None
         ):
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT,
@@ -809,10 +1203,16 @@ def validate_contextual_rag_model(
         return
     from onyx.db.models import ModelConfiguration
 
-    if not db_session.get(ModelConfiguration, model_configuration_id):
+    model = db_session.get(ModelConfiguration, model_configuration_id)
+    if model is None:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             f"model_configuration id={model_configuration_id} not found",
+        )
+    if LLMModelFlowType.CHAT not in model.llm_model_flow_types:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Contextual Retrieval requires a chat model",
         )
 
 

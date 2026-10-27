@@ -394,7 +394,7 @@ class TestOAuthToolIntegrationPriority:
         llm = get_default_llm()
 
         # Mock the token refresh response
-        mock_response = Mock()
+        mock_response = Mock(status_code=200)
         mock_response.json.return_value = {
             "access_token": "refreshed_token_67890",
             "refresh_token": "refresh_token_12345",

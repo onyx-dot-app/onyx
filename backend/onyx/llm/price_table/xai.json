@@ -1257,12 +1257,10 @@
       "modalities": {
         "input": [
           "text",
-          "image",
-          "pdf"
+          "image"
         ],
         "output": [
-          "image",
-          "pdf"
+          "image"
         ]
       },
       "mode": "image_generation",
@@ -1307,12 +1305,10 @@
       "modalities": {
         "input": [
           "text",
-          "image",
-          "pdf"
+          "image"
         ],
         "output": [
-          "image",
-          "pdf"
+          "image"
         ]
       },
       "mode": "image_generation",
@@ -1320,6 +1316,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2026-04-03",
+      "status": "deprecated",
       "temperature": false,
       "tool_call": false
     },
@@ -1352,8 +1349,7 @@
         "input": [
           "text",
           "image",
-          "video",
-          "pdf"
+          "video"
         ],
         "output": [
           "video"
@@ -1382,8 +1378,7 @@
         "input": [
           "text",
           "image",
-          "audio",
-          "pdf"
+          "audio"
         ],
         "output": [
           "video"
@@ -1419,8 +1414,7 @@
       "modalities": {
         "input": [
           "text",
-          "image",
-          "pdf"
+          "image"
         ],
         "output": [
           "video"
@@ -1441,6 +1435,27 @@
       },
       "mode": "video_generation",
       "name": "grok-imagine-video-1.5-preview"
+    },
+    "grok-voice-2.0": {
+      "cost": {
+        "second_input": 0.001333333333333
+      },
+      "mode": "realtime",
+      "name": "grok-voice-2.0"
+    },
+    "grok-voice-3.0": {
+      "cost": {
+        "second_input": 0.001333333333333
+      },
+      "mode": "realtime",
+      "name": "grok-voice-3.0"
+    },
+    "grok-voice-latest": {
+      "cost": {
+        "second_input": 0.001333333333333
+      },
+      "mode": "realtime",
+      "name": "grok-voice-latest"
     },
     "grok-voice-transcribe-1.0": {
       "cost": {

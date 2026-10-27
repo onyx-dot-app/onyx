@@ -1,0 +1,41 @@
+from typing import Any
+
+from pydantic import BaseModel
+
+
+class JiraIssueIdPage(BaseModel):
+    """One page of a Cloud enhanced JQL search. ``next_page_token`` is None on
+    the last page."""
+
+    issue_ids: list[str]
+    next_page_token: str | None
+
+
+class JiraGroupPage(BaseModel):
+    """The group names ``groups/picker`` returns. ``total`` is the number of
+    groups that match, which can be larger than the names returned."""
+
+    group_names: list[str]
+    total: int | None
+
+
+class JiraGroupMemberSample(BaseModel):
+    """The first page of members of the first listed groups. ``complete`` is
+    True when those pages are every member of every listed group."""
+
+    members: list[dict[str, Any]]
+    complete: bool
+    # The groups whose first page was read.
+    groups_read: int
+
+
+class JiraProjectSample(BaseModel):
+    """The projects a permission check reads, in probe order. ``total`` is the
+    number of projects in scope, or None when the probe could not count them."""
+
+    project_keys: list[str]
+    total: int | None
+
+    @property
+    def covers_scope(self) -> bool:
+        return self.total is not None and len(self.project_keys) >= self.total

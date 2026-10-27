@@ -152,8 +152,9 @@ class AssistantKnowledgeFilters(BaseModel):
 
 
 class CCPairAccessMode(str, Enum):
-    # The cc-pair filter is off. It is built only to hide SYNC_RESTRICTED
-    # pairs from the old ACL filter.
+    # The cc-pair filter is off. It is built only to hide guarded pairs
+    # (SYNC_RESTRICTED, or awaiting a first permission sync) from the old ACL
+    # filter.
     OFF = "off"
     # Results use the old ACL filter; the cc-pair filter is only compared.
     SHADOW = "shadow"
@@ -172,9 +173,10 @@ class CCPairAccessFilter(BaseModel):
     # The user's user_email: and external_group: entries. No group: entries,
     # since group access comes from open_cc_pair_ids.
     user_acl: list[str]
-    # SYNC_RESTRICTED pairs that grant the user nothing. The old ACL filter
-    # cannot express the restriction, so it hides their chunks unless an open
-    # or ACL pair of the chunk grants access.
+    # Guarded pairs that grant the user nothing: SYNC_RESTRICTED pairs, and
+    # pairs awaiting a first permission sync, whose chunks can still be
+    # public. The old ACL filter cannot express this, so it hides their chunks
+    # unless an open or ACL pair of the chunk grants access.
     hidden_restricted_cc_pair_ids: list[int] = []
 
 

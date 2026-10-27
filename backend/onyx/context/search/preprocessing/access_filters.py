@@ -10,7 +10,7 @@ from onyx.context.search.models import (
 )
 from onyx.db.connector_credential_pair import (
     get_cc_pair_access_sets_for_user,
-    has_sync_restricted_cc_pairs,
+    has_guarded_cc_pairs,
 )
 from onyx.db.models import User
 
@@ -28,7 +28,7 @@ def _build_cc_pair_access_filter(
 ) -> CCPairAccessFilter | None:
     mode = get_cc_pair_access_mode(db_session)
     if mode is None:
-        if not has_sync_restricted_cc_pairs(db_session):
+        if not has_guarded_cc_pairs(db_session):
             return None
         mode = CCPairAccessMode.OFF
     access_sets = get_cc_pair_access_sets_for_user(db_session, user)

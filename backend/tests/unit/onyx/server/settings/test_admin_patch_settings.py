@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 from pydantic import ValidationError
 
+from onyx.db.enums import SupportedLanguage
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.settings import api as settings_api
@@ -28,6 +29,7 @@ def _patch_settings(
     *,
     ee: bool = False,
     tier: Tier = Tier.COMMUNITY,
+    db_session: Any = None,
 ) -> Settings:
     stored: list[Settings] = []
     monkeypatch.setattr(
@@ -44,7 +46,9 @@ def _patch_settings(
 
         monkeypatch.setattr(tier_module, "get_tier", lambda: tier)
     settings_api.admin_patch_settings(
-        Settings.model_validate(payload), current_user=MagicMock()
+        Settings.model_validate(payload),
+        current_user=MagicMock(),
+        db_session=db_session or MagicMock(),
     )
     assert len(stored) == 1
     return stored[0]
@@ -121,3 +125,64 @@ def test_llm_gateway_enabled_updates_on_business_tier(
         tier=Tier.BUSINESS,
     )
     assert result.llm_gateway_enabled is False
+
+
+def test_routing_target_must_be_a_router(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "onyx.db.llm.fetch_model_configuration_by_id",
+        lambda *_a, **_k: MagicMock(is_router=False),
+    )
+    with pytest.raises(OnyxError) as exc_info:
+        _patch_settings(
+            {"model_routing_model_configuration_id": 3},
+            Settings(),
+            monkeypatch,
+        )
+    assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
+
+
+def test_routing_target_marks_hidden_router_visible(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marked: list[MagicMock] = []
+    invalidated: list[bool] = []
+    monkeypatch.setattr(
+        "onyx.db.llm.fetch_model_configuration_by_id",
+        lambda *_a, **_k: MagicMock(is_router=True),
+    )
+    monkeypatch.setattr(
+        settings_api,
+        "mark_model_configuration_visible",
+        lambda _s, mc: marked.append(mc) or True,
+    )
+    monkeypatch.setattr(
+        settings_api,
+        "invalidate_provider_listing_cache",
+        lambda: invalidated.append(True),
+    )
+    result = _patch_settings(
+        {"model_routing_model_configuration_id": 3},
+        Settings(),
+        monkeypatch,
+    )
+    assert result.model_routing_model_configuration_id == 3
+    assert len(marked) == 1
+    assert invalidated == [True]
+
+
+def test_default_language_updates_and_is_preserved(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = _patch_settings({"default_language": "fr"}, Settings(), monkeypatch)
+    assert result.default_language == SupportedLanguage.FR
+
+    # A patch to an unrelated field keeps the workspace language.
+    preserved = _patch_settings({"company_name": "x"}, result, monkeypatch)
+    assert preserved.default_language == SupportedLanguage.FR
+
+
+def test_unsupported_default_language_rejected() -> None:
+    with pytest.raises(ValidationError):
+        Settings.model_validate({"default_language": "xx"})

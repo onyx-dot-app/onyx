@@ -18,7 +18,7 @@ test.describe("Appearance Theme Settings @exclusive", () => {
   test.beforeEach(async ({ page, eeEnabled }) => {
     test.skip(
       !eeEnabled,
-      "Enterprise license not active — skipping theme tests"
+      "Enterprise license not active. Skipping theme tests"
     );
 
     // Fresh session — the eeEnabled fixture already logged in to check the

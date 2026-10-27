@@ -208,7 +208,7 @@ func (r *llmProviderResource) Schema(_ context.Context, _ resource.SchemaRequest
 					Attributes: map[string]schema.Attribute{
 						"name": schema.StringAttribute{
 							Required:            true,
-							MarkdownDescription: "Model name as known to the provider, e.g. `gpt-5-mini`.",
+							MarkdownDescription: "Model name as known to the provider, e.g. `gpt-6-luna`.",
 						},
 						"is_visible": schema.BoolAttribute{
 							Optional:            true,

@@ -101,6 +101,8 @@ class GenerationSpanData(SpanData):
         "_request_params",
         "model",
         "model_config",
+        "routed_model",
+        "model_configuration_id",
         "image_count",
         "usage",
         "time_to_first_action_seconds",
@@ -118,6 +120,8 @@ class GenerationSpanData(SpanData):
         time_to_first_action_seconds: float | None = None,
         tools: Sequence[Mapping[str, Any]] | None = None,
         request_params: Mapping[str, Any] | None = None,
+        routed_model: str | None = None,
+        model_configuration_id: int | None = None,
     ):
         if image_count is not None and image_count < 1:
             raise ValueError("image_count must be positive")
@@ -127,6 +131,10 @@ class GenerationSpanData(SpanData):
         self.reasoning = reasoning
         self.model = model
         self.model_config = model_config
+        # Model a router actually served; prices the call when set.
+        self.routed_model = routed_model
+        # The saved model configuration; admin cost overrides are keyed on it.
+        self.model_configuration_id = model_configuration_id
         self.image_count = image_count
         self.usage = usage
         self.time_to_first_action_seconds = time_to_first_action_seconds
@@ -145,6 +153,8 @@ class GenerationSpanData(SpanData):
             "reasoning": self.reasoning,
             "model": self.model,
             "model_config": self.model_config,
+            "routed_model": self.routed_model,
+            "model_configuration_id": self.model_configuration_id,
             "image_count": self.image_count,
             "usage": self.usage,
             "time_to_first_action_seconds": self.time_to_first_action_seconds,

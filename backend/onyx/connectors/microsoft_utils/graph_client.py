@@ -82,18 +82,6 @@ def backoff_seconds(attempt: int, retry_after: str | None) -> float:
     return base / 2 + random.uniform(0, base / 2)
 
 
-def graph_error_code(response: requests.Response | None) -> str:
-    if response is None:
-        return "<no response>"
-    try:
-        return response.json().get("error", {}).get("code") or "<no code>"
-    except Exception:
-        logger.debug(
-            "Failed to parse Graph error code from response body", exc_info=True
-        )
-        return "<no code>"
-
-
 def log_and_raise_for_status(response: requests.Response) -> None:
     """Log the response text and raise for status.
 
@@ -191,6 +179,18 @@ def sleep_and_retry(
             raise e
 
 
+def retry_wait(
+    response: requests.Response, attempt: int, max_retries: int
+) -> float | None:
+    """How long to wait before retrying this answer, or None when it is final:
+    a status Graph asks us to retry, with retries left, waits Retry-After."""
+    if response.status_code not in GRAPH_API_RETRYABLE_STATUSES:
+        return None
+    if attempt >= max_retries:
+        return None
+    return backoff_seconds(attempt, response.headers.get("Retry-After"))
+
+
 def graph_api_get_json(
     get_access_token: Callable[[], str],
     url: str,
@@ -213,18 +213,17 @@ def graph_api_get_json(
                 params=params,
                 timeout=REQUEST_TIMEOUT_SECONDS,
             )
-            if response.status_code in GRAPH_API_RETRYABLE_STATUSES:
-                if attempt < GRAPH_API_MAX_RETRIES:
-                    wait = backoff_seconds(attempt, response.headers.get("Retry-After"))
-                    logger.warning(
-                        "Graph API %s on attempt %s, retrying in %.1fs: %s",
-                        response.status_code,
-                        attempt + 1,
-                        wait,
-                        url,
-                    )
-                    time.sleep(wait)
-                    continue
+            wait = retry_wait(response, attempt, GRAPH_API_MAX_RETRIES)
+            if wait is not None:
+                logger.warning(
+                    "Graph API %s on attempt %s, retrying in %.1fs: %s",
+                    response.status_code,
+                    attempt + 1,
+                    wait,
+                    url,
+                )
+                time.sleep(wait)
+                continue
             log_and_raise_for_status(response)
             # ValueError covers the empty/non-JSON 2xx bodies Graph
             # intermittently returns under load.

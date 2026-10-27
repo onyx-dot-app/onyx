@@ -1,14 +1,17 @@
 import importlib
 from enum import Enum
 from typing import Any, Type
+from uuid import UUID
 
 import pydantic
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from onyx.auth.permissions import has_global_permission
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.constants import DocumentSource
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
+from onyx.connectors.capability_checks.models import ProposedPairingValidation
 from onyx.connectors.capability_checks.recorder import (
     record_blocking_validation_outcome,
 )
@@ -22,13 +25,22 @@ from onyx.connectors.interfaces import (
     CredentialsConnector,
     LoadConnector,
     PollConnector,
+    prune_listing_honors_indexing_start,
 )
 from onyx.connectors.models import InputType
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.db.connector import fetch_connector_by_id
-from onyx.db.credentials import backend_update_credential_json, fetch_credential_by_id
-from onyx.db.enums import AccessType, CapabilityCheckTrigger
-from onyx.db.models import Credential
+from onyx.db.connector_credential_pair import get_cc_pairs_using_credential
+from onyx.db.credentials import (
+    CREDENTIAL_PERMISSIONS_TO_IGNORE,
+    backend_update_credential_json,
+    fetch_credential_by_id,
+    fetch_credential_by_id_for_user,
+)
+from onyx.db.enums import AccessType, CapabilityCheckTrigger, Permission
+from onyx.db.models import ConnectorCredentialPair, Credential, User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.staging import RawFileCallback
 from onyx.utils.credential_audit import emit_credential_access
 from onyx.utils.logger import setup_logger
@@ -108,6 +120,38 @@ def identify_connector_class(
     _validate_connector_supports_input_type(connector, input_type, source)
 
     return connector
+
+
+def source_supports_windowed_runs(source: DocumentSource) -> bool:
+    """True if the source's connector fetches only a requested time window.
+    ConnectorRunner gives the window to checkpointed and poll connectors; a
+    load-state-only connector fetches everything, so a windowed backfill of
+    it is a full run. A source without a connector class (e.g. the ingestion
+    API) runs nothing."""
+    if source not in CONNECTOR_CLASS_MAP:
+        return False
+    connector_class = _load_connector_class(source)
+    return issubclass(connector_class, (CheckpointedConnector, PollConnector))
+
+
+def source_has_settings_probe(source: DocumentSource) -> bool:
+    """True if the source's connector overrides ``validate_connector_settings``.
+    The default is a no-op that reaches nothing, so it tests nothing."""
+    if source not in CONNECTOR_CLASS_MAP:
+        return False
+    connector_class = _load_connector_class(source)
+    return (
+        connector_class.validate_connector_settings
+        is not BaseConnector.validate_connector_settings
+    )
+
+
+def source_prune_honors_indexing_start(source: DocumentSource) -> bool:
+    """True if a prune of the source removes documents older than the
+    indexing start. A source without a connector class prunes nothing."""
+    if source not in CONNECTOR_CLASS_MAP:
+        return False
+    return prune_listing_honors_indexing_start(_load_connector_class(source))
 
 
 def validate_connector_config(
@@ -259,6 +303,143 @@ def validate_credential_binding(
     )
 
 
+def _bound_values(
+    binding_class: type[CredentialBinding] | None,
+    connector_specific_config: dict[str, Any],
+) -> dict[str, Any] | None:
+    """The config's credential-bound values as the binding model compares them
+    (``CredentialBinding.comparison_values``). None when they do not
+    validate."""
+    if binding_class is None:
+        return {}
+    try:
+        return binding_class.model_validate(
+            connector_specific_config
+        ).comparison_values()
+    except pydantic.ValidationError:
+        return None
+
+
+def credential_use_refusal(
+    db_session: Session,
+    *,
+    user: User,
+    credential: Credential,
+    source: DocumentSource,
+    connector_specific_config: dict[str, Any] | None,
+    current_pair: ConnectorCredentialPair | None = None,
+) -> OnyxError | None:
+    """The rule for every use of a credential with a ``source`` config: a
+    pairing, a credential swap, an edit and every check run. Returns the error
+    that refuses the use, or None when the use is allowed. Uses go through
+    ``assert_user_can_use_credential``; the binding check and the account list
+    report the refusal instead.
+
+    The use is allowed when one of these is true:
+
+    - ``current_pair`` uses the credential with the same bound values. The
+      caller has authorized the user for that pair, so the use adds nothing.
+    - The user owns the credential, or it has no owner and the user holds
+      MANAGE_CONNECTORS globally (an admin).
+    - The user can see the credential (it is shared with them) and its source
+      has no credential-bound fields other than ``credential_derived_fields``,
+      so no setting can send it elsewhere.
+    - The user can see the credential and the bound values equal those of a
+      pair that uses it. The pairs record the values the credential is used
+      with; a shared credential of a bound source with no pair is for its
+      owner only. A config of None (a config-less run) supplies no bound
+      values but still needs such a pair.
+    - The user can see the credential and its source has no real secret
+      (``CREDENTIAL_PERMISSIONS_TO_IGNORE``).
+
+    ``validate_credential_binding`` is a different check: it compares the
+    values with what the credential itself records.
+
+    The refusal is CREDENTIAL_NOT_FOUND when the user cannot see the
+    credential and INSUFFICIENT_PERMISSIONS when the bound values match no
+    pair.
+    """
+    binding_class = _credential_binding_class(source)
+
+    def _matches(pair: ConnectorCredentialPair) -> bool:
+        if connector_specific_config is None:
+            return True
+        requested = _bound_values(binding_class, connector_specific_config)
+        return requested is not None and requested == _bound_values(
+            binding_class, pair.connector.connector_specific_config
+        )
+
+    if (
+        current_pair is not None
+        and current_pair.credential_id == credential.id
+        and current_pair.connector.source == source
+        and _matches(current_pair)
+    ):
+        return None
+
+    if (
+        fetch_credential_by_id_for_user(
+            credential.id, user, db_session, include_own_drafts=True
+        )
+        is None
+    ):
+        return OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            f"Credential {credential.id} does not exist or is not accessible.",
+        )
+    if credential.user_id == user.id or (
+        credential.user_id is None
+        and has_global_permission(user, Permission.MANAGE_CONNECTORS)
+    ):
+        return None
+    if credential.source in CREDENTIAL_PERMISSIONS_TO_IGNORE:
+        return None
+    bound_fields = (
+        sorted(
+            set(binding_class.model_fields) - binding_class.credential_derived_fields
+        )
+        if binding_class
+        else []
+    )
+    if not bound_fields:
+        return None
+    if any(
+        _matches(pair)
+        for pair in get_cc_pairs_using_credential(db_session, credential.id, source)
+    ):
+        return None
+
+    return OnyxError(
+        OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+        f"Credential {credential.id} is shared with you. You can use it only "
+        "with the settings of a connector that already uses it "
+        f"({', '.join(bound_fields)}).",
+    )
+
+
+def assert_user_can_use_credential(
+    db_session: Session,
+    *,
+    user: User,
+    credential: Credential,
+    source: DocumentSource,
+    connector_specific_config: dict[str, Any] | None,
+    current_pair: ConnectorCredentialPair | None = None,
+) -> None:
+    """Raises the refusal of ``credential_use_refusal``. Call it before
+    anything builds a connector with the credential."""
+    refusal = credential_use_refusal(
+        db_session,
+        user=user,
+        credential=credential,
+        source=source,
+        connector_specific_config=connector_specific_config,
+        current_pair=current_pair,
+    )
+    if refusal is not None:
+        raise refusal
+
+
 class CredentialBindingFieldErrorKind(str, Enum):
     MISSING = "missing"
     INVALID = "invalid"
@@ -318,17 +499,146 @@ def validate_connector_credential_bindings(
     source: DocumentSource,
     connector_specific_config: dict[str, Any],
     db_session: Session,
+    *,
+    user: User,
 ) -> None:
-    """Raises ``ConnectorValidationError`` if the config cannot be used with a
-    credential the connector is already paired with. Config edits call this;
-    pairing checks the binding in ``validate_ccpair_for_user``."""
+    """Checks a config edit against every credential the connector is already
+    paired with. Pairing checks the same in ``validate_ccpair_for_user``.
+
+    Raises:
+        OnyxError: ``assert_user_can_use_credential`` refuses the user.
+        ConnectorValidationError: The config cannot be used with a credential.
+    """
     connector = fetch_connector_by_id(connector_id, db_session)
     if connector is None:
         return
     for cc_pair in connector.credentials:
+        assert_user_can_use_credential(
+            db_session,
+            user=user,
+            credential=cc_pair.credential,
+            source=source,
+            connector_specific_config=connector_specific_config,
+            current_pair=cc_pair,
+        )
         validate_credential_binding(
             source, connector_specific_config, cc_pair.credential
         )
+
+
+# Pairing validation does not apply to these sources.
+_SOURCES_WITHOUT_PAIRING_VALIDATION = frozenset(
+    {DocumentSource.INGESTION_API, DocumentSource.MOCK_CONNECTOR}
+)
+# Pairing and edit validations run the named checks; indexing and perm-sync
+# attempts keep the legacy validation.
+_NAMED_CHECK_TRIGGERS = frozenset(
+    {
+        CapabilityCheckTrigger.CC_PAIR_VALIDATION,
+        CapabilityCheckTrigger.CONNECTOR_CONFIG_UPDATE,
+    }
+)
+
+
+def _build_and_validate_connector(
+    db_session: Session,
+    *,
+    source: DocumentSource,
+    input_type: InputType | None,
+    connector_specific_config: dict[str, Any],
+    credential: Credential,
+    access_type: AccessType,
+    run_legacy_validation: bool,
+) -> None:
+    """Checks the credential binding and builds the connector. Construction
+    validates parts of the config (for example the Microsoft hosts), so it
+    gates the named checks too. With ``run_legacy_validation``, also runs the
+    connector's settings validation, and its perm-sync validation for a
+    perm-synced access type."""
+    validate_credential_binding(source, connector_specific_config, credential)
+    runnable_connector = instantiate_connector(
+        db_session=db_session,
+        source=source,
+        input_type=input_type,
+        connector_specific_config=connector_specific_config,
+        credential=credential,
+    )
+    if not run_legacy_validation:
+        return
+    runnable_connector.validate_connector_settings()
+    if access_type.is_perm_synced():
+        runnable_connector.validate_perm_sync()
+
+
+def validate_proposed_pairing(
+    db_session: Session,
+    *,
+    connector_id: int | None,
+    cc_pair_id: int | None,
+    source: DocumentSource,
+    input_type: InputType | None,
+    connector_specific_config: dict[str, Any],
+    credential: Credential,
+    access_type: AccessType,
+    user_id: UUID,
+) -> ProposedPairingValidation:
+    """Validates a proposed pairing as creation does, from the given values
+    instead of the stored connector.
+
+    ``cc_pair_id`` is the pair an edit proposes this state for, so fresh
+    results of its dry runs are reused; None for a new pairing.
+
+    Writes no capability report, starts no background run, and records no
+    validation outcome. Like any construction, ``instantiate_connector`` can
+    still store a credential that the connector refreshed.
+    """
+    if INTEGRATION_TESTS_MODE or source in _SOURCES_WITHOUT_PAIRING_VALIDATION:
+        return ProposedPairingValidation()
+
+    # Inline imports: see validate_ccpair_for_user.
+    from onyx.connectors.capability_checks.creation import (
+        run_named_checks_within_budget,
+    )
+    from onyx.connectors.capability_checks.registry import (
+        has_named_capability_checks,
+    )
+
+    use_named_checks = has_named_capability_checks(source)
+    try:
+        _build_and_validate_connector(
+            db_session,
+            source=source,
+            input_type=input_type,
+            connector_specific_config=connector_specific_config,
+            credential=credential,
+            access_type=access_type,
+            run_legacy_validation=not use_named_checks,
+        )
+    except ValidationError as e:
+        return ProposedPairingValidation(validation_error=str(e))
+    except Exception as e:
+        logger.exception(
+            "Unexpected error while validating a proposed %s pairing", source
+        )
+        return ProposedPairingValidation(validation_error=str(e))
+
+    if not use_named_checks:
+        return ProposedPairingValidation()
+    run = run_named_checks_within_budget(
+        connector_id=connector_id,
+        cc_pair_id=cc_pair_id,
+        source=source,
+        input_type=input_type,
+        connector_specific_config=connector_specific_config,
+        credential=credential,
+        access_type=access_type,
+        user_id=user_id,
+    )
+    return ProposedPairingValidation(
+        check_results=run.finished_results,
+        unfinished_check_ids=run.unfinished_check_ids,
+        unfinished_checks=run.unfinished_checks,
+    )
 
 
 def validate_ccpair_for_user(
@@ -338,11 +648,13 @@ def validate_ccpair_for_user(
     db_session: Session,
     enforce_creation: bool = True,
     trigger: CapabilityCheckTrigger = CapabilityCheckTrigger.CC_PAIR_VALIDATION,
+    *,
+    user: User | None,
 ) -> bool:
-    if INTEGRATION_TESTS_MODE:
-        return True
-
-    # Validate the connector settings
+    """Validates pairing the connector with the credential. ``user`` is who
+    asks for the pairing, held to ``assert_user_can_use_credential`` before
+    anything builds the connector; None only for system work on an existing
+    pair (for example a perm-sync attempt)."""
     connector = fetch_connector_by_id(connector_id, db_session)
     credential = fetch_credential_by_id(
         credential_id,
@@ -351,21 +663,66 @@ def validate_ccpair_for_user(
 
     if not connector:
         raise ValueError("Connector not found")
-
-    if (
-        connector.source == DocumentSource.INGESTION_API
-        or connector.source == DocumentSource.MOCK_CONNECTOR
-    ):
-        return True
-
     if not credential:
         raise ValueError("Credential not found")
 
-    # Plain values for the closure: it runs inside exception handlers, where
-    # lazy ORM attribute loads can raise (e.g. ``PendingRollbackError``) and
-    # replace the exception being handled.
-    source = connector.source
-    connector_specific_config = connector.connector_specific_config
+    if user is not None:
+        assert_user_can_use_credential(
+            db_session,
+            user=user,
+            credential=credential,
+            source=connector.source,
+            connector_specific_config=connector.connector_specific_config,
+        )
+
+    if (
+        INTEGRATION_TESTS_MODE
+        or connector.source in _SOURCES_WITHOUT_PAIRING_VALIDATION
+    ):
+        return True
+
+    return validate_and_record_pairing(
+        db_session,
+        connector_id=connector_id,
+        cc_pair_id=None,
+        source=connector.source,
+        input_type=connector.input_type,
+        connector_specific_config=connector.connector_specific_config,
+        credential=credential,
+        access_type=access_type,
+        enforce_creation=enforce_creation,
+        trigger=trigger,
+        user_id=user.id if user is not None else None,
+    )
+
+
+def validate_and_record_pairing(
+    db_session: Session,
+    *,
+    connector_id: int,
+    cc_pair_id: int | None,
+    source: DocumentSource,
+    input_type: InputType | None,
+    connector_specific_config: dict[str, Any],
+    credential: Credential,
+    access_type: AccessType,
+    enforce_creation: bool,
+    trigger: CapabilityCheckTrigger,
+    user_id: UUID | None,
+) -> bool:
+    """Validates a pairing from the given values and records the outcome as
+    the pairing's capability report under ``trigger``. ``cc_pair_id`` is the
+    edited pair whose fresh dry-run results are reused; None for a new
+    pairing. ``user_id`` is who asks for it, whose check skips are reused. An edit passes its proposed values before it writes them.
+
+    Raises:
+        ValidationError: The binding, the construction or a required check
+            failed and ``enforce_creation`` is True. An unexpected error is
+            raised as ``ConnectorValidationError``.
+    """
+    if INTEGRATION_TESTS_MODE or source in _SOURCES_WITHOUT_PAIRING_VALIDATION:
+        return True
+    credential_id = credential.id
 
     def _record_outcome(error: Exception | None, perm_sync_validated: bool) -> None:
         # Best-effort scribe for the outcome below; never raises and never
@@ -390,27 +747,19 @@ def validate_ccpair_for_user(
         has_named_capability_checks,
     )
 
-    # Creation and credential swap run the named checks; indexing and perm-sync
-    # attempts keep the legacy validation.
-    use_named_checks = (
-        trigger == CapabilityCheckTrigger.CC_PAIR_VALIDATION
-        and has_named_capability_checks(source)
+    use_named_checks = trigger in _NAMED_CHECK_TRIGGERS and has_named_capability_checks(
+        source
     )
     try:
-        validate_credential_binding(source, connector_specific_config, credential)
-        # Construction validates parts of the config (for example the Microsoft
-        # hosts), so it gates both paths.
-        runnable_connector = instantiate_connector(
-            db_session=db_session,
-            source=connector.source,
-            input_type=connector.input_type,
-            connector_specific_config=connector.connector_specific_config,
+        _build_and_validate_connector(
+            db_session,
+            source=source,
+            input_type=input_type,
+            connector_specific_config=connector_specific_config,
             credential=credential,
+            access_type=access_type,
+            run_legacy_validation=not use_named_checks,
         )
-        if not use_named_checks:
-            runnable_connector.validate_connector_settings()
-            if access_type.is_perm_synced():
-                runnable_connector.validate_perm_sync()
     except ValidationError as e:
         _record_outcome(e, perm_sync_validated=False)
         raise
@@ -425,12 +774,15 @@ def validate_ccpair_for_user(
     if use_named_checks:
         return validate_pairing_with_named_checks(
             connector_id=connector_id,
+            cc_pair_id=cc_pair_id,
+            trigger=trigger,
             source=source,
-            input_type=connector.input_type,
+            input_type=input_type,
             connector_specific_config=connector_specific_config,
             credential=credential,
             access_type=access_type,
             enforce_creation=enforce_creation,
+            user_id=user_id,
         )
 
     _record_outcome(None, perm_sync_validated=access_type.is_perm_synced())

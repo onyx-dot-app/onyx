@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, SerializeAsAny
 
 
 class LLMErrorInfo(BaseModel):
@@ -195,12 +195,23 @@ AssistantContent = Annotated[
 
 
 class BaseMessage(BaseModel):
+    id: str | None = None
+    metadata: SerializeAsAny[BaseModel] | None = Field(default=None, exclude=True)
+    estimated_tokens: int | None = Field(default=None, exclude=True)
     # Marks a stable prompt prefix for provider prompt caching; never sent as content.
     cacheable: bool = Field(default=False, exclude=True)
 
 
+class MessageRole(str, Enum):
+    SYSTEM = "system"
+    USER = "user"
+    ASSISTANT = "assistant"
+    TOOL_RESULT = "tool_result"
+    TOOL = "tool"
+
+
 class SystemMessage(BaseMessage):
-    role: Literal["system"] = "system"
+    role: Literal[MessageRole.SYSTEM] = MessageRole.SYSTEM
     content: str
 
     @property
@@ -209,7 +220,7 @@ class SystemMessage(BaseMessage):
 
 
 class UserMessage(BaseMessage):
-    role: Literal["user"] = "user"
+    role: Literal[MessageRole.USER] = MessageRole.USER
     content: str | list[ContentPart]
 
     @property
@@ -218,7 +229,7 @@ class UserMessage(BaseMessage):
 
 
 class AssistantMessage(BaseMessage):
-    role: Literal["assistant"] = "assistant"
+    role: Literal[MessageRole.ASSISTANT] = MessageRole.ASSISTANT
     content: list[AssistantContent] = Field(default_factory=list)
     stop_reason: str | None = None
     error_message: str | None = None
@@ -250,16 +261,21 @@ class AssistantMessage(BaseMessage):
         return [block for block in self.content if isinstance(block, ToolCall)]
 
 
-class ToolResultMessage(BaseMessage):
-    role: Literal["tool_result"] = "tool_result"
-    # Provider tool messages carry text only.
+class ToolResult(BaseMessage):
     content: str
-    tool_call_id: str
-    tool_name: str
+    details: SerializeAsAny[BaseModel] | None = None
+    is_error: bool = False
+    terminate: bool = False
 
     @property
     def text(self) -> str:
         return self.content
+
+
+class ToolResultMessage(ToolResult):
+    role: Literal[MessageRole.TOOL_RESULT] = MessageRole.TOOL_RESULT
+    tool_call_id: str
+    tool_name: str
 
 
 Message = Annotated[
@@ -332,7 +348,7 @@ class GenerationDoneEvent(GenerationLifecycleEvent):
 class GenerationErrorEvent(GenerationLifecycleEvent):
     type: Literal["error"] = "error"
     usage: Usage | None = None
-    stop_reason: Literal["error"] = "error"
+    stop_reason: Literal["error", "aborted"] = "error"
     error_message: str
 
 
@@ -352,20 +368,32 @@ class ThinkingDeltaEvent(GenerationTextEvent):
 
 class GenerationToolCallEvent(_Event):
     content_index: int = Field(ge=0)
-    tool_call: ToolCall
-    argument_deltas: dict[str, str] = Field(default_factory=dict)
 
 
 class ToolCallStartEvent(GenerationToolCallEvent):
     type: Literal["tool_call_start"] = "tool_call_start"
+    tool_call_id: str
+    tool_name: str
 
 
 class ToolCallDeltaEvent(GenerationToolCallEvent):
     type: Literal["tool_call_delta"] = "tool_call_delta"
+    arguments_delta: str
 
 
 class ToolCallEndEvent(GenerationToolCallEvent):
     type: Literal["tool_call_end"] = "tool_call_end"
+    tool_call: ToolCall
+
+
+GenerationContentEvent = Annotated[
+    TextDeltaEvent
+    | ThinkingDeltaEvent
+    | ToolCallStartEvent
+    | ToolCallDeltaEvent
+    | ToolCallEndEvent,
+    Field(discriminator="type"),
+]
 
 
 GenerationEvent = Annotated[
@@ -400,16 +428,29 @@ def apply_generation_event(message: AssistantMessage, event: GenerationEvent) ->
     index = event.content_index
     if index > len(message.content):
         raise ValueError("Generation update skips a content block")
-    if isinstance(event, GenerationToolCallEvent):
-        block = event.tool_call.model_copy(deep=True)
+    if isinstance(event, ToolCallStartEvent):
+        if index != len(message.content):
+            raise ValueError("Tool start targets existing content")
+        message.content.append(
+            ToolCall(
+                id=event.tool_call_id,
+                name=event.tool_name,
+                arguments={},
+                raw_arguments="",
+                arguments_complete=False,
+            )
+        )
+        return
+    if isinstance(event, (ToolCallDeltaEvent, ToolCallEndEvent)):
         if index == len(message.content):
-            if not isinstance(event, ToolCallStartEvent):
-                raise ValueError("Tool update requires a started call")
-            message.content.append(block)
+            raise ValueError("Tool update requires a started call")
+        block = message.content[index]
+        if not isinstance(block, ToolCall):
+            raise ValueError("Tool update targets non-tool content")
+        if isinstance(event, ToolCallDeltaEvent):
+            block.raw_arguments = (block.raw_arguments or "") + event.arguments_delta
         else:
-            if not isinstance(message.content[index], ToolCall):
-                raise ValueError("Tool update targets non-tool content")
-            message.content[index] = block
+            message.content[index] = event.tool_call.model_copy(deep=True)
         return
     if index == len(message.content):
         message.content.append(

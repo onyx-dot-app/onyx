@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Any, cast
 from unittest import mock
 
+import pytest
 from litellm.completion_extras.litellm_responses_transformation.transformation import (
     LiteLLMResponsesTransformationHandler,
     OpenAiResponsesToChatCompletionStreamIterator,
@@ -360,11 +361,11 @@ def test_bridge_check_delegates_without_prefix() -> None:
 
     apply_monkey_patches()
     model_info, model = litellm_main.responses_api_bridge_check(
-        model="gpt-4o",
+        model="gpt-6-sol",
         custom_llm_provider="openai",
     )
     assert model_info.get("mode") != "responses"
-    assert model == "gpt-4o"
+    assert model == "gpt-6-sol"
 
 
 def test_openai_should_fake_stream_streams_natively_on_registry_miss() -> None:
@@ -378,7 +379,7 @@ def test_openai_should_fake_stream_streams_natively_on_registry_miss() -> None:
         side_effect=Exception("This model isn't mapped yet"),
     ) as get_model_info_mock:
         result = config.should_fake_stream(
-            model="bedrock_mantle/openai.gpt-5.6-sol",
+            model="bedrock_mantle/openai.gpt-6.1-sol",
             stream=True,
             custom_llm_provider="openai",
         )
@@ -474,12 +475,13 @@ _TOOL_HISTORY: list[Any] = [
 ]
 
 
-def test_disabled_thinking_survives_tool_call_history() -> None:
+@pytest.mark.parametrize("off_type", ["disabled", "between_tools"])
+def test_disabled_thinking_survives_tool_call_history(off_type: str) -> None:
     """Upstream drops any thinking param once tool calls arrive without thinking
-    blocks. Disabled thinking cannot cause the error that guard exists for, and
+    blocks. Off thinking cannot cause the error that guard exists for, and
     dropping it hands the Claude 5 line back its default effort."""
-    body = _anthropic_body({"type": "disabled"}, list(_TOOL_HISTORY))
-    assert body["thinking"] == {"type": "disabled"}
+    body = _anthropic_body({"type": off_type}, list(_TOOL_HISTORY))
+    assert body["thinking"] == {"type": off_type}
 
 
 def test_enabled_thinking_still_dropped_after_tool_calls() -> None:
@@ -503,13 +505,126 @@ def _converse_fields(thinking: dict[str, str], messages: list[Any]) -> Any:
     return data.get("additionalModelRequestFields")
 
 
-def test_converse_keeps_disabled_thinking_after_tool_calls() -> None:
+@pytest.mark.parametrize("off_type", ["disabled", "between_tools"])
+def test_converse_keeps_disabled_thinking_after_tool_calls(off_type: str) -> None:
     """Converse carries its own copy of the upstream drop, and puts thinking
     under additionalModelRequestFields rather than at the top level."""
-    fields = _converse_fields({"type": "disabled"}, list(_TOOL_HISTORY))
-    assert fields == {"thinking": {"type": "disabled"}}
+    fields = _converse_fields({"type": off_type}, list(_TOOL_HISTORY))
+    assert fields == {"thinking": {"type": off_type}}
 
 
 def test_converse_still_drops_enabled_thinking_after_tool_calls() -> None:
     fields = _converse_fields({"type": "adaptive"}, list(_TOOL_HISTORY))
     assert not (fields or {}).get("thinking")
+
+
+def test_openrouter_chunk_parser_keeps_served_model() -> None:
+    from litellm.llms.openrouter.chat.transformation import (
+        OpenRouterChatCompletionStreamingHandler,
+    )
+
+    apply_monkey_patches()
+    handler = OpenRouterChatCompletionStreamingHandler(
+        streaming_response=iter([]), sync_stream=True
+    )
+    chunk = {
+        "id": "gen-1",
+        "created": 1762544600,
+        "model": "deepseek/deepseek-v4-flash",
+        "choices": [{"index": 0, "delta": {"content": "hi"}, "finish_reason": None}],
+    }
+
+    parsed = handler.chunk_parser(chunk)
+
+    assert parsed.provider_specific_fields == {
+        "routed_model": "deepseek/deepseek-v4-flash"
+    }
+
+
+def _gemini_thinking_config(model: str, reasoning_effort: str) -> Any:
+    from litellm.llms.vertex_ai.gemini.vertex_and_google_ai_studio_gemini import (
+        VertexGeminiConfig,
+    )
+
+    apply_monkey_patches()
+    config = VertexGeminiConfig()
+    assert "reasoning_effort" in config.get_supported_openai_params(model)
+    params = config.map_openai_params(
+        non_default_params={"reasoning_effort": reasoning_effort},
+        optional_params={},
+        model=model,
+        drop_params=False,
+    )
+    return params["thinkingConfig"]
+
+
+def test_gemini_4_maps_reasoning_to_thinking_level() -> None:
+    assert _gemini_thinking_config("gemini-4-argon", "low") == {
+        "thinkingLevel": "low",
+        "includeThoughts": True,
+    }
+
+
+@pytest.mark.parametrize(
+    "model,level",
+    [
+        ("gemini-4-argon", "medium"),
+        ("gemini-3.1-pro-preview", "medium"),
+        ("gemini-3-pro-preview", "high"),
+    ],
+)
+def test_gemini_medium_effort_thinking_level(model: str, level: str) -> None:
+    assert _gemini_thinking_config(model, "medium")["thinkingLevel"] == level
+
+
+def test_gemini_2_keeps_thinking_budget() -> None:
+    assert "thinkingBudget" in _gemini_thinking_config("gemini-2.5-flash", "low")
+
+
+def test_gemini_candidate_without_content_yields_empty_choice() -> None:
+    from litellm.llms.vertex_ai.gemini.vertex_and_google_ai_studio_gemini import (
+        VertexGeminiConfig,
+    )
+
+    apply_monkey_patches()
+    response = ModelResponse()
+    response.choices = []
+    VertexGeminiConfig._process_candidates(
+        [{"finishReason": "MAX_TOKENS", "index": 0}], response, {}
+    )
+    assert [(c.finish_reason, c.message.content) for c in response.choices] == [
+        ("length", None)
+    ]
+
+
+def test_gemini_candidate_without_content_does_not_inherit_prior_candidate() -> None:
+    from litellm.llms.vertex_ai.gemini.vertex_and_google_ai_studio_gemini import (
+        VertexGeminiConfig,
+    )
+
+    apply_monkey_patches()
+    response = ModelResponse()
+    response.choices = []
+    VertexGeminiConfig._process_candidates(
+        [
+            {
+                "content": {
+                    "role": "model",
+                    "parts": [
+                        {"text": "hi"},
+                        {"functionCall": {"name": "search", "args": {}}},
+                    ],
+                },
+                "finishReason": "STOP",
+            },
+            {"finishReason": "MAX_TOKENS"},
+        ],
+        response,
+        {},
+    )
+    first, second = response.choices
+    assert first.message.content == "hi"
+    assert first.message.tool_calls
+    assert (second.index, second.finish_reason) == (1, "length")
+    assert second.message.content is None
+    assert not second.message.tool_calls
