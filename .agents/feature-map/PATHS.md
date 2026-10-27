@@ -44,6 +44,7 @@ here. Read the component that documents the setting in its env table.
 | `backend/onyx/chat/prompt_utils.py`, `compression.py`, `incognito*.py`, `backend/onyx/llm/token_budget.py` | context-assembly |
 | `backend/onyx/prompts/`, `backend/ee/onyx/prompts/` | context-assembly, agents-personas |
 | `backend/onyx/chat/citation_processor.py`, `citation_utils.py` | citations |
+| `backend/onyx/db/chat_response.py`, `backend/onyx/db/chat_subagents.py`, `backend/onyx/db/chat_display.py` | chat-persistence |
 | `backend/onyx/chat/save_chat.py`, `backend/onyx/db/chat.py`, `db/chat_search.py`, `db/feedback.py` | chat-persistence |
 | `backend/onyx/server/query_and_chat/chat_backend.py`, `models.py`, `session_loading.py`, `chat_utils.py` | core-chat-loop, chat-persistence |
 | `backend/onyx/server/query_and_chat/streaming_models.py`, `placement.py` | streaming-protocol |

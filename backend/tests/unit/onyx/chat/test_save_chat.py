@@ -1,6 +1,6 @@
 """Tests for save_chat.py.
 
-Covers _extract_referenced_file_descriptors and sanitization in save_chat_turn.
+Covers extract_referenced_file_descriptors and sanitization in save_chat_turn.
 """
 
 from unittest.mock import MagicMock
@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 from pytest import MonkeyPatch
 
 from onyx.chat import save_chat
-from onyx.chat.save_chat import _extract_referenced_file_descriptors
+from onyx.db.chat_display import extract_referenced_file_descriptors
 from onyx.file_store.models import ChatFileType
 from onyx.tools.records import ToolCallInfo
 from onyx.tools.results import PythonExecutionFile
@@ -32,12 +32,12 @@ def _make_tool_call_info(
     )
 
 
-# ---- _extract_referenced_file_descriptors tests ----
+# ---- extract_referenced_file_descriptors tests ----
 
 
 def test_returns_empty_when_no_generated_files() -> None:
     tool_call = _make_tool_call_info(generated_files=None)
-    result = _extract_referenced_file_descriptors([tool_call], "some message")
+    result = extract_referenced_file_descriptors([tool_call], "some message")
     assert result == []
 
 
@@ -49,7 +49,7 @@ def test_returns_empty_when_file_not_referenced() -> None:
         )
     ]
     tool_call = _make_tool_call_info(generated_files=files)
-    result = _extract_referenced_file_descriptors([tool_call], "Here is your answer.")
+    result = extract_referenced_file_descriptors([tool_call], "Here is your answer.")
     assert result == []
 
 
@@ -66,7 +66,7 @@ def test_extracts_referenced_file() -> None:
         f"Here is the chart: [chart.png](http://localhost/api/chat/file/{file_id})"
     )
 
-    result = _extract_referenced_file_descriptors([tool_call], message)
+    result = extract_referenced_file_descriptors([tool_call], message)
 
     assert len(result) == 1
     assert result[0]["id"] == file_id
@@ -89,7 +89,7 @@ def test_generated_spreadsheet_is_tabular_without_system_mime_types(
     tool_call = _make_tool_call_info(generated_files=files)
     message = f"[report.xlsx](http://localhost/api/chat/file/{file_id})"
 
-    result = _extract_referenced_file_descriptors([tool_call], message)
+    result = extract_referenced_file_descriptors([tool_call], message)
 
     assert len(result) == 1
     assert result[0]["type"] == ChatFileType.TABULAR
@@ -111,7 +111,7 @@ def test_filters_unreferenced_files() -> None:
     tool_call = _make_tool_call_info(generated_files=files)
     message = f"Here is the chart: [chart.png](http://localhost/api/chat/file/{referenced_id})"
 
-    result = _extract_referenced_file_descriptors([tool_call], message)
+    result = extract_referenced_file_descriptors([tool_call], message)
 
     assert len(result) == 1
     assert result[0]["id"] == referenced_id
@@ -139,7 +139,7 @@ def test_extracts_from_multiple_tool_calls() -> None:
     )
     message = f"[plot.png](http://localhost/api/chat/file/{id_1}) and [report.csv](http://localhost/api/chat/file/{id_2})"
 
-    result = _extract_referenced_file_descriptors([tc1, tc2], message)
+    result = extract_referenced_file_descriptors([tc1, tc2], message)
 
     assert len(result) == 2
     ids = {d["id"] for d in result}
@@ -157,7 +157,7 @@ def test_csv_file_type() -> None:
     tool_call = _make_tool_call_info(generated_files=files)
     message = f"[data.csv](http://localhost/api/chat/file/{file_id})"
 
-    result = _extract_referenced_file_descriptors([tool_call], message)
+    result = extract_referenced_file_descriptors([tool_call], message)
 
     assert len(result) == 1
     assert result[0]["type"] == ChatFileType.TABULAR
@@ -174,7 +174,7 @@ def test_unknown_extension_defaults_to_plain_text() -> None:
     tool_call = _make_tool_call_info(generated_files=files)
     message = f"[output.xyz](http://localhost/api/chat/file/{file_id})"
 
-    result = _extract_referenced_file_descriptors([tool_call], message)
+    result = extract_referenced_file_descriptors([tool_call], message)
 
     assert len(result) == 1
     assert result[0]["type"] == ChatFileType.PLAIN_TEXT
@@ -194,7 +194,7 @@ def test_skips_tool_calls_without_generated_files() -> None:
     )
     message = f"[result.png](http://localhost/api/chat/file/{file_id})"
 
-    result = _extract_referenced_file_descriptors(
+    result = extract_referenced_file_descriptors(
         [tc_no_files, tc_empty, tc_with_files], message
     )
 

@@ -10,7 +10,7 @@ from onyx.agents.models import (
     ToolExecutionRecord,
 )
 from onyx.chat.presentation import project_response, replay_response
-from onyx.chat.response_models import ResponseRecord
+from onyx.chat.response_models import ResponseRecord, ToolReplayData
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.llm.models import AssistantMessage, TextContent, ToolCall, ToolResultMessage
@@ -19,7 +19,6 @@ from onyx.server.query_and_chat.streaming_models import (
     OverallStop,
     SearchToolDocumentsDelta,
 )
-from onyx.tools.records import RecordedToolCallInfo
 
 
 def test_missing_message_identity_preserves_content_without_inventing_tool_records() -> (
@@ -109,22 +108,10 @@ def test_replay_restores_saved_search_documents_and_parent_tabs_without_mutation
             )
         ],
     )
-    tool = RecordedToolCallInfo(
-        message_id="root-message",
-        parent_tool_call_id=None,
-        turn_index=0,
-        tab_index=1,
-        tool_name="internal_search",
-        tool_call_id="search",
-        tool_id=1,
-        reasoning_tokens=None,
-        tool_call_arguments={},
-        tool_call_response="Evidence",
-        search_docs=[document],
-    )
+    tool = ToolReplayData(tool_id=1, search_docs=[document])
     before = response.model_dump_json()
     packets = replay_response(
-        response, {tool.execution_key: tool}, {}, {"doc": document}
+        response, {("root-message", "search"): tool}, {}, {"doc": document}
     )
     assert response.model_dump_json() == before
     sources = [

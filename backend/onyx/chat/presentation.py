@@ -33,6 +33,7 @@ from onyx.chat.response_models import (
     PresentationMode,
     ResponseRecord,
     ToolHistorySnapshot,
+    ToolReplayData,
 )
 from onyx.coding_agent.tool_definitions import CODING_AGENT_TOOL_NAME
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
@@ -427,7 +428,7 @@ class ResponsePresenter:
 
 def replay_response(
     response: ResponseRecord,
-    records: Mapping[tuple[str, str], RecordedToolCallInfo],
+    records: Mapping[tuple[str, str], ToolReplayData],
     settings: dict[str, MessageRendering],
     documents: Mapping[str, SearchDoc],
     layout: ResponseLayout | None = None,
