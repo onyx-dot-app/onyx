@@ -825,6 +825,7 @@ def _patch_responses_api_bridge_check() -> None:
         tools: Optional[list[Any]] = None,
         reasoning_effort: Optional[Any] = None,
         reasoning_summary: Optional[Any] = None,
+        api_base: Optional[str] = None,
     ) -> tuple[dict, str]:
         if model.startswith("responses/"):
             return {"mode": "responses"}, model.removeprefix("responses/")
@@ -835,6 +836,7 @@ def _patch_responses_api_bridge_check() -> None:
             tools=tools,
             reasoning_effort=reasoning_effort,
             reasoning_summary=reasoning_summary,
+            api_base=api_base,
         )
 
     _patched_responses_api_bridge_check.__name__ = "_patched_responses_api_bridge_check"
