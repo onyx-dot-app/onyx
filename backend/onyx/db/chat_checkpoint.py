@@ -10,6 +10,7 @@ from onyx.db.chat_response import (
     configure_response_transaction__no_commit,
     finish_checkpoint__no_commit,
 )
+from onyx.db.enums import record_mode_persists_content
 from onyx.db.models import ChatMessage, ChatResponseCheckpoint
 
 _JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
@@ -35,6 +36,8 @@ def publish_checkpoint__no_commit(
     expected_ownership_version: int | None,
 ) -> int:
     response = _lock_response(session, message_id)
+    if not record_mode_persists_content(response.chat_session.incognito_record_mode):
+        raise ValueError("Content-free responses cannot store execution checkpoints")
     if response.response_status is None or response.response_status.is_terminal:
         raise ValueError("Only an active response can pause")
     row = session.get(ChatResponseCheckpoint, message_id, populate_existing=True)

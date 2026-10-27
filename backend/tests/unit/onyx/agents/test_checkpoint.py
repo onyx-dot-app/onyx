@@ -31,12 +31,14 @@ from onyx.agents.tools import (
     ToolInvocation,
 )
 from onyx.chat.checkpoint import CHECKPOINT_PAYLOAD_TYPES
+from onyx.chat.models import PromptMetadata
 from onyx.chat.presentation import message_presentation
 from onyx.chat.response_models import (
     CheckpointBinding,
     MessageRendering,
     PresentationMode,
 )
+from onyx.file_store.models import ChatFileType, ChatLoadedFile
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
@@ -446,3 +448,45 @@ def test_checkpoint_rejects_changed_saved_content(changed: str) -> None:
         )
     with pytest.raises(ValueError, match=f"Checkpoint {changed} changed"):
         storage.load(saved.model_dump_json())
+
+
+def test_checkpoint_round_trip_keeps_image_references_without_loading_bytes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    image = ChatLoadedFile(
+        file_id="image-file",
+        file_type=ChatFileType.IMAGE,
+        filename="image.png",
+        content=b"\x89PNG\xff",
+        content_text=None,
+        token_count=85,
+    )
+    captured = checkpoint()
+    captured.run_state.input_messages[0].metadata = PromptMetadata(
+        image_files=[image],
+        image_token_count=85,
+        should_cache=True,
+    )
+    reads: list[str] = []
+
+    def load(file_id: str) -> bytes:
+        reads.append(file_id)
+        return image.content
+
+    monkeypatch.setattr("onyx.tools.file_snapshot.read_checkpoint_file", load)
+    storage = CheckpointStorage({**codec().payload_types, **CHECKPOINT_PAYLOAD_TYPES})
+    serialized = storage.save(
+        captured.run_state,
+        captured.agent_state,
+        CheckpointBinding(tenant_id="tenant", response_id=captured.run_state.run_id),
+    )
+    restored = storage.load(serialized)
+    metadata = restored.run_state.input_messages[0].metadata
+    assert isinstance(metadata, PromptMetadata)
+    assert metadata.image_token_count == 85
+    assert metadata.should_cache
+    assert reads == []
+    assert metadata.image_files is not None
+    assert metadata.image_files[0].file_id == image.file_id
+    assert metadata.image_files[0].content == image.content
+    assert reads == [image.file_id]

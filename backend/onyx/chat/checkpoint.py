@@ -4,7 +4,7 @@ import hashlib
 import json
 from collections.abc import Mapping
 
-from pydantic import BaseModel, ConfigDict, JsonValue, TypeAdapter
+from pydantic import BaseModel, JsonValue, TypeAdapter
 
 from onyx.agents.models import (
     AgentState,
@@ -13,13 +13,15 @@ from onyx.agents.models import (
     RunState,
     RunStatus,
 )
-from onyx.agents.tools import HumanToolAnswer, InputDecision
+from onyx.agents.tools import HumanToolAnswer
 from onyx.chat.models import PromptMetadata
 from onyx.chat.response import response_snapshot
 from onyx.chat.response_models import (
     ChatMessageMetadata,
     ChatSearchResult,
     CheckpointBinding,
+    CheckpointPayload,
+    CheckpointToolAnswer,
     MessagePayload,
     MessageRendering,
     ResponseCheckpoint,
@@ -28,6 +30,7 @@ from onyx.chat.response_models import (
 from onyx.context.search.models import SearchDocsResponse
 from onyx.deep_research.models import ResearchMessageMetadata
 from onyx.llm.models import Message, ToolResult
+from onyx.tools.file_snapshot import SavedLoadedFile
 from onyx.tools.results import (
     CodingAgentCallResult,
     CustomToolCallSummary,
@@ -41,6 +44,7 @@ from onyx.tools.results import (
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 
 _JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
+_SAVED_IMAGES = TypeAdapter(list[SavedLoadedFile])
 
 
 CHECKPOINT_PAYLOAD_TYPES: dict[str, type[BaseModel]] = {
@@ -60,19 +64,6 @@ CHECKPOINT_PAYLOAD_TYPES: dict[str, type[BaseModel]] = {
     "tool.error.v1": ToolExecutionError,
     "tool.image.v1": FinalImageGenerationResponse,
 }
-
-
-class _Payload(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    tag: str
-    value: dict[str, JsonValue]
-
-
-class _EncodedAnswer(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    request_id: str
-    decision: InputDecision
-    result: dict[str, JsonValue] | None = None
 
 
 def _dump(model: BaseModel, *, exclude: set[str] | None = None) -> dict[str, JsonValue]:
@@ -101,15 +92,34 @@ class _CheckpointSerializer:
         tag = self._tags.get(type(value))
         if tag is None:
             raise ValueError("Checkpoint contains an unregistered payload type")
-        return _dump(_Payload(tag=tag, value=_dump(value)))
+        if isinstance(value, PromptMetadata):
+            # Files are reloaded by ID; checkpoint JSON must not contain image bytes.
+            data = _dump(value, exclude={"image_files"})
+            data["image_files"] = (
+                [_dump(SavedLoadedFile.capture(file)) for file in value.image_files]
+                if value.image_files is not None
+                else None
+            )
+        else:
+            data = _dump(value)
+        return _dump(CheckpointPayload(tag=tag, value=data))
 
     def decode_payload(self, value: JsonValue) -> BaseModel | None:
         if value is None:
             return None
-        payload = _Payload.model_validate(value)
+        payload = CheckpointPayload.model_validate(value)
         schema = self._types.get(payload.tag)
         if schema is None:
             raise ValueError(f"Unknown checkpoint payload tag: {payload.tag}")
+        if schema is PromptMetadata:
+            images = payload.value.pop("image_files", None)
+            metadata = PromptMetadata.model_validate(payload.value)
+            metadata.image_files = (
+                [file.restore() for file in _SAVED_IMAGES.validate_python(images)]
+                if images is not None
+                else None
+            )
+            return metadata
         return schema.model_validate(payload.value)
 
     def encode_message(self, message: Message | ToolResult) -> dict[str, JsonValue]:
@@ -138,7 +148,7 @@ class _CheckpointSerializer:
         return data
 
     def decode_answer(self, value: JsonValue) -> HumanToolAnswer:
-        encoded = _EncodedAnswer.model_validate(value)
+        encoded = CheckpointToolAnswer.model_validate(value)
         return HumanToolAnswer(
             request_id=encoded.request_id,
             decision=encoded.decision,
