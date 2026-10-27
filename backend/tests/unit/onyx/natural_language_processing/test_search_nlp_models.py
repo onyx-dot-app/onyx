@@ -1,3 +1,4 @@
+import json
 from collections.abc import AsyncGenerator, Iterator
 from threading import Lock
 from typing import Any
@@ -18,6 +19,7 @@ from onyx.natural_language_processing.search_nlp_models import (
     EmbeddingRequestPolicy,
     EmbeddingRetryBackoff,
     clean_model_name,
+    cohere_rerank_aws,
 )
 from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfig
 from shared_configs.enums import EmbeddingProvider, EmbedTextType
@@ -852,3 +854,54 @@ async def test_openai_sdk_retries_are_off_when_the_policy_counts_requests(
             await embedding._embed_openai(["a"], "text-embedding-3-small", None)
 
     assert make_client.call_args.kwargs["max_retries"] == expected_retries
+
+
+@pytest.mark.asyncio
+async def test_cohere_rerank_aws_scores_follow_document_order() -> None:
+    body = MagicMock()
+    body.read = AsyncMock(
+        return_value=json.dumps(
+            {
+                "results": [
+                    {"index": 1, "relevance_score": 0.2},
+                    {"index": 0, "relevance_score": 0.9},
+                ]
+            }
+        ).encode()
+    )
+    bedrock_client = MagicMock()
+    bedrock_client.invoke_model = AsyncMock(return_value={"body": body})
+    client_context = MagicMock()
+    client_context.__aenter__ = AsyncMock(return_value=bedrock_client)
+    client_context.__aexit__ = AsyncMock(return_value=None)
+    session = MagicMock()
+    session.create_client.return_value = client_context
+
+    with patch(
+        "onyx.natural_language_processing.search_nlp_models.get_session",
+        return_value=session,
+    ):
+        scores = await cohere_rerank_aws(
+            query="q",
+            docs=["first", "second"],
+            model_name="cohere.rerank-v3-5:0",
+            region_name="us-east-1",
+            aws_access_key_id="key-id",
+            aws_secret_access_key="secret",
+        )
+
+    assert scores == [0.9, 0.2]
+    session.create_client.assert_called_once_with(
+        "bedrock-runtime",
+        region_name="us-east-1",
+        aws_access_key_id="key-id",
+        aws_secret_access_key="secret",
+    )
+    request = bedrock_client.invoke_model.call_args.kwargs
+    assert request["modelId"] == "cohere.rerank-v3-5:0"
+    assert json.loads(request["body"]) == {
+        "query": "q",
+        "documents": ["first", "second"],
+        "api_version": 2,
+    }
+    client_context.__aexit__.assert_awaited_once()

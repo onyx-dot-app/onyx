@@ -3,7 +3,7 @@ LiteLLM Monkey Patches
 
 This module addresses the following issues in LiteLLM:
 
-Status checked against LiteLLM v1.93.0 (2026-07-20):
+Status checked against LiteLLM v1.100.4 (2026-10-27):
 
 1. Ollama Streaming Reasoning Content (_patch_ollama_chunk_parser):
    - LiteLLM's chunk_parser doesn't properly handle reasoning content in streaming
@@ -11,10 +11,9 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
    - Processes native "thinking" field from Ollama responses
    - Also handles <think>...</think> tags in content for models that use that format
    - Tracks reasoning state to properly separate thinking from regular content
-   STATUS: STILL NEEDED - Upstream v1.85.1 adopted the truthy check on thinking and the
-           elif→if fix for simultaneous thinking+content chunks, but still does not track
-           <think>...</think> tag boundaries within content. Our `_in_think_tag_block`
-           state is required to correctly classify content that crosses a </think> boundary.
+   STATUS: STILL NEEDED - Upstream v1.100.4 strips the tags and flips its started/finished
+           flags, but classifies a whole chunk one way, so text before and after a </think>
+           in the same chunk lands together. Our `_in_think_tag_block` state splits it.
 
 2. Reasoning Summary Newlines (_patch_responses_reasoning_summary_newlines):
    - LiteLLM passes through reasoning_summary_text.delta content as-is without
@@ -26,22 +25,15 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
    - Also turns empty function_call_arguments.delta events into no-op chunks;
      Anthropic-backed gateways open tool-call streams with an empty delta and
      upstream raises ValueError on falsy deltas
-   STATUS: STILL NEEDED - Upstream does not insert separators between summary sections,
-           does not guard against null output in terminal events, and rejects empty
-           tool-argument deltas.
+   STATUS: STILL NEEDED - v1.100.4 guards null output in terminal events and skips empty
+           tool-argument deltas, but still inserts no separators between summary sections.
 
 3. OpenAI Responses API Non-Streaming (_patch_openai_responses_transform_response):
    - LiteLLM's transform_response joins multiple reasoning summary parts with spaces
    - We prefer double newlines for readability
-   - Also returns an empty assistant message with finish_reason "length" when the
-     response is incomplete (max_output_tokens) and carries no message item, e.g.
-     a reasoning model that spent the whole budget on reasoning. Upstream raises
-     ValueError there, which surfaces as APIConnectionError; streaming returns an
-     empty message for the same reply.
-   STATUS: STILL NEEDED - Upstream now uses " ".join() instead of discarding earlier
-           parts, but we override to use "\\n\\n".join() for readable section breaks.
-           The incomplete-reply handling is fixed upstream in v1.99.0 (BerriAI/litellm
-           PR #37710); drop _incomplete_response_as_empty_message once we are on >= 1.99.0.
+   STATUS: STILL NEEDED - v1.100.4 joins the parts with " "; we override to
+           "\\n\\n".join() for readable section breaks. It also maps an incomplete reply
+           with no message item to an empty message itself, so that part of the patch is gone.
 
 4. Responses API Fake Streaming (_patch_openai_responses_should_fake_stream):
    - LiteLLM fake-streams (MockResponsesAPIStreamingIterator) any responses-API
@@ -52,7 +44,8 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
    - Patched on the base OpenAIResponsesAPIConfig; AzureOpenAIResponsesAPIConfig
      inherits it (no upstream override). Models the registry explicitly marks
      supports_native_streaming=False (e.g. o1-pro) keep the fake stream
-   STATUS: STILL NEEDED - v1.93.0 treats a registry miss as "cannot stream".
+   STATUS: STILL NEEDED - v1.100.4 still treats a registry miss as "cannot stream":
+           supports_native_streaming returns False when the lookup fails.
 
 # Note: 5 and 6 suppress a warning and may fix usage info but are not strictly required
 5. Responses API Usage Format Mismatch (_patch_responses_api_usage_format):
@@ -70,7 +63,7 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
    - This replaces the proper ResponseAPIUsage object with a dict, causing Pydantic
      serialization warnings
    STATUS: STILL NEEDED - Upstream still mutates result.response.usage in place via
-         setattr in v1.93.0. Our patch rebuilds the response via model_construct so the
+         setattr in v1.100.4. Our patch rebuilds the response via model_construct so the
          original ResponseAPIUsage object is preserved. Handles ResponseCompletedEvent,
          ResponseIncompleteEvent, and ResponseFailedEvent (matching upstream), and
          tolerates result.response being a plain dict (validation-fallback payloads
@@ -86,7 +79,7 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
    - The prefix is only ever set deliberately (Onyx API-surface routing for
      OpenAI-compatible gateways such as Bifrost and Portkey), so honor it
      unconditionally and pass the remainder through as the literal model id
-   STATUS: STILL NEEDED - v1.93.0 consults the registry before honoring the prefix.
+   STATUS: STILL NEEDED - v1.100.4 consults the registry before honoring the prefix.
 
 8. Disabled Thinking Dropped On Tool Turns (_patch_anthropic_keeps_disabled_thinking):
    - AnthropicConfig.transform_request drops the thinking param when the last
@@ -102,7 +95,8 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
      AmazonConverseConfig._transform_request_helper, and keeps thinking under
      additionalModelRequestFields rather than at the top level, so both transforms
      are wrapped
-   STATUS: STILL NEEDED - v1.93.0 gates on presence, not on the thinking type.
+   STATUS: STILL NEEDED - v1.100.4 gates on presence, not on the thinking type, in both
+           transforms.
 
 9. OpenRouter Routed Model Lost In Streams (_patch_openrouter_routed_model):
    - OpenRouter stream chunks carry the model a router (openrouter/auto) actually
@@ -110,12 +104,13 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
      requested name, so routed calls cannot be priced
    - Our patch keeps the served name in provider_specific_fields["routed_model"],
      which the wrapper copies through to the consumer
-   STATUS: STILL NEEDED - v1.93.0 only preserves chunk models for Azure.
+   STATUS: STILL NEEDED - v1.100.4 only preserves chunk models for Azure.
 
 """
 
 import time
 import uuid
+from collections.abc import Mapping
 from typing import Any, List, Optional, cast
 
 from litellm.completion_extras.litellm_responses_transformation.transformation import (
@@ -385,81 +380,6 @@ def _patch_responses_reasoning_summary_newlines() -> None:
     )
 
 
-_INCOMPLETE_REASON_TO_FINISH_REASON = {
-    "max_output_tokens": "length",
-    "content_filter": "content_filter",
-}
-
-
-def _incomplete_response_as_empty_message(
-    model: str, raw_response: Any, model_response: Any
-) -> Any | None:
-    """Build the chat response for an incomplete Responses API reply whose
-    output holds nothing but reasoning items, or None for any other reply.
-
-    A reasoning model can spend all of max_output_tokens on reasoning. The
-    reply is then "incomplete" with no message item, upstream finds no
-    choices and raises. Streaming returns an empty message for the same
-    reply; mirror that, keep the reasoning summary, and report the truncation
-    as the finish reason. Every other shape, including an incomplete reply
-    that does carry a message, goes through upstream untouched.
-    """
-    from litellm.responses.utils import ResponseAPILoggingUtils
-    from litellm.types.llms.openai import ResponsesAPIResponse
-    from litellm.types.utils import Choices, Message
-    from openai.types.responses.response_reasoning_item import ResponseReasoningItem
-
-    if not isinstance(raw_response, ResponsesAPIResponse):
-        return None
-    if raw_response.error is not None:
-        return None
-    details = raw_response.incomplete_details
-    if details is None or not details.reason:
-        return None
-    if not raw_response.output or not all(
-        isinstance(item, ResponseReasoningItem) for item in raw_response.output
-    ):
-        return None
-
-    summary_texts: list[str] = [
-        summary.text
-        for item in raw_response.output
-        if isinstance(item, ResponseReasoningItem)
-        for summary in item.summary
-        if summary.text
-    ]
-    model_response.choices = [
-        Choices(
-            finish_reason=_INCOMPLETE_REASON_TO_FINISH_REASON.get(
-                details.reason, "stop"
-            ),
-            index=0,
-            message=Message(
-                content=None,
-                role="assistant",
-                reasoning_content="\n\n".join(summary_texts) or None,
-            ),
-        )
-    ]
-    model_response.model = model
-    model_response.usage = (
-        ResponseAPILoggingUtils._transform_response_api_usage_to_chat_usage(
-            raw_response.usage
-        )
-    )
-    # Same as upstream's completed path: keep provider headers (x-request-id)
-    # so a truncated reply is as traceable as a complete one.
-    hidden_params = getattr(  # ods: ignore[getattr]
-        raw_response, "_hidden_params", None
-    )
-    if hidden_params:
-        model_response._hidden_params = {
-            **(model_response._hidden_params or {}),
-            **hidden_params,
-        }
-    return model_response
-
-
 def _patch_openai_responses_transform_response() -> None:
     """
     Patches LiteLLMResponsesTransformationHandler.transform_response to properly
@@ -495,12 +415,6 @@ def _patch_openai_responses_transform_response() -> None:
     ) -> Any:
         from litellm.types.llms.openai import ResponsesAPIResponse
         from openai.types.responses.response_reasoning_item import ResponseReasoningItem
-
-        incomplete = _incomplete_response_as_empty_message(
-            model, raw_response, model_response
-        )
-        if incomplete is not None:
-            return incomplete
 
         result = original_transform_response(
             self,
@@ -805,6 +719,7 @@ def _patch_responses_api_bridge_check() -> None:
         tools: Optional[list[Any]] = None,
         reasoning_effort: Optional[Any] = None,
         reasoning_summary: Optional[Any] = None,
+        api_base: Optional[str] = None,
     ) -> tuple[dict, str]:
         if model.startswith("responses/"):
             return {"mode": "responses"}, model.removeprefix("responses/")
@@ -815,6 +730,7 @@ def _patch_responses_api_bridge_check() -> None:
             tools=tools,
             reasoning_effort=reasoning_effort,
             reasoning_summary=reasoning_summary,
+            api_base=api_base,
         )
 
     _patched_responses_api_bridge_check.__name__ = "_patched_responses_api_bridge_check"
@@ -897,6 +813,7 @@ def _patch_anthropic_keeps_disabled_thinking() -> None:
             messages: Optional[list[Any]] = None,
             headers: Optional[dict] = None,
             drop_params: bool = False,
+            litellm_params: Optional[Mapping[str, object]] = None,
         ) -> Any:
             thinking = _thinking_off(optional_params)
             data = original_request_helper(
@@ -907,6 +824,7 @@ def _patch_anthropic_keeps_disabled_thinking() -> None:
                 messages=messages,
                 headers=headers,
                 drop_params=drop_params,
+                litellm_params=litellm_params,
             )
             if thinking is not None:
                 fields = data.get("additionalModelRequestFields") or {}
