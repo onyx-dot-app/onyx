@@ -105,6 +105,22 @@ type SelectButtonProps = InteractiveStatefulProps &
     /** Override the default rounding derived from `size`. */
     rounding?: Rounding;
 
+    /**
+     * Content justify mode. When `"between"`, icon + label group left and the
+     * trailing icon pushes to the right edge. Default keeps all items in a
+     * tight row.
+     */
+    justifyContent?: "between";
+
+    /** Override the label font (defaults to the size-derived body font). */
+    labelFont?: TextFont;
+
+    /** Override the label color (defaults to the variant's interactive color). */
+    labelColor?: TextColor;
+
+    /** Override the default rounding derived from `size`. */
+    rounding?: Rounding;
+
     /** Which side the tooltip appears on. */
     tooltipSide?: TooltipSide;
 

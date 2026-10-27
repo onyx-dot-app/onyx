@@ -200,7 +200,6 @@ export default function SecurityHardeningPage() {
             rollbackOnError: true,
           }
         );
-        toast.success(t("toasts.settingsUpdated"));
       } catch (err) {
         console.error("Failed to update workspace settings", err);
         const message =
@@ -263,7 +262,6 @@ export default function SecurityHardeningPage() {
             revalidate: false,
           });
         }
-        toast.success(t("toasts.securitySettingsUpdated"));
       } catch (error) {
         // Re-sync from the server (the source of truth) rather than a possibly
         // stale local snapshot — a late failure must not clobber other edits

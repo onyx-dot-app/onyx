@@ -25,6 +25,7 @@ import { Modal } from "@opal/components";
 import {
   Button,
   Card,
+  CopyButton,
   IconContainer,
   RowAction,
   Divider,
@@ -40,7 +41,6 @@ import {
   SvgArrowExchange,
   SvgArrowLeft,
   SvgEdit,
-  SvgLink,
   SvgLock,
   SvgOrganization,
   SvgShare,
@@ -48,7 +48,7 @@ import {
   SvgUserManage,
   SvgUsers,
 } from "@opal/icons";
-import { copyText, escapeMarkdown, markdown } from "@opal/utils";
+import { escapeMarkdown, markdown } from "@opal/utils";
 import { useModal } from "@opal/components";
 import { SharePermissionMenu } from "@/lib/permissions/components";
 import {
@@ -422,19 +422,6 @@ export function ShareAgentModal({
       ),
     }));
   }, []);
-
-  const handleCopyLink = useCallback(async () => {
-    if (!agentId) {
-      return;
-    }
-
-    try {
-      await copyText(`${window.location.origin}/app?agentId=${agentId}`);
-      toast.success(t("shareAgent.toasts.linkCopied"));
-    } catch {
-      toast.error(t("shareAgent.toasts.copyLinkFailed"));
-    }
-  }, [agentId, t]);
 
   const handleSelfRemove = useCallback(async () => {
     // Create mode (no saved agent): mutate the local draft only.
@@ -973,13 +960,14 @@ export function ShareAgentModal({
               {t("shareAgent.back.label")}
             </Button>
           ) : agentId ? (
-            <Button
-              icon={SvgLink}
-              onClick={handleCopyLink}
+            <CopyButton
               prominence="secondary"
+              getCopyText={() =>
+                `${window.location.origin}/app?agentId=${agentId}`
+              }
             >
               {t("shareAgent.copyLink.label")}
-            </Button>
+            </CopyButton>
           ) : (
             <span aria-hidden />
           )}

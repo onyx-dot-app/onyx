@@ -96,7 +96,6 @@ function AccessModeSelect({ status }: BackfillStatusProps) {
       await mutate(SWR_KEYS.ccPairIdsBackfillProgress, updated, {
         revalidate: false,
       });
-      toast.success(t("toasts.success", { mode: t(`options.${value}.title`) }));
     } catch (error) {
       toast.error(
         error instanceof Error && error.message

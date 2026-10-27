@@ -40,7 +40,6 @@ export default function ScimModal({
   async function copyToClipboard(text: string) {
     try {
       await navigator.clipboard.writeText(text);
-      toast.success(t("modal.copied.message"));
     } catch {
       toast.error(t("modal.copyFailed.error"));
     }
@@ -127,12 +126,13 @@ export default function ScimModal({
                   </Button>
                 }
                 submit={
-                  <Button
+                  <CopyButton
                     ref={focusOnMount}
-                    onClick={() => copyToClipboard(view.rawToken)}
+                    prominence="primary"
+                    getCopyText={() => view.rawToken}
                   >
                     {t("modal.token.copy.label")}
-                  </Button>
+                  </CopyButton>
                 }
               />
             </Modal.Footer>

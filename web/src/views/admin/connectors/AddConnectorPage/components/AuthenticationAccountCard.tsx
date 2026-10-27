@@ -230,7 +230,6 @@ export default function AuthenticationAccountCard({
         if (waitingSave()?.sharing == null && !unsentGroupEditsRef.current) {
           setSharing(storedSharing);
         }
-        if (target.name !== null) toast.success(t("renameSaved.toast"));
       } catch {
         if (
           target.sharing &&
