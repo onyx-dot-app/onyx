@@ -189,8 +189,15 @@ def _resize_image_if_needed(image_data: bytes, max_size_mb: int) -> bytes:
             img.thumbnail((1024, 1024), Image.Resampling.LANCZOS)
             output = BytesIO()
 
+            # JPEG has no alpha or palette, so flatten other modes onto white.
+            rgb = img
+            if img.mode != "RGB":
+                rgba = img.convert("RGBA")
+                rgb = Image.new("RGB", rgba.size, (255, 255, 255))
+                rgb.paste(rgba, mask=rgba.getchannel("A"))
+
             # Save with lower quality for compression
-            img.save(output, format="JPEG", quality=85)
+            rgb.save(output, format="JPEG", quality=85)
             resized_data = output.getvalue()
 
             return resized_data
