@@ -21,6 +21,7 @@ import json
 import warnings
 
 import pytest
+from pydantic import JsonValue
 
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.litellm_singleton import litellm
@@ -58,7 +59,7 @@ def test_streaming_parallel_tool_calls_land_in_distinct_slots(
     """
     llm = _build_openai_llm(CI_OPENAI_MODEL, test_secrets[TestSecret.OPENAI_API_KEY])
 
-    tools = [
+    tools: list[dict[str, JsonValue]] = [
         {
             "type": "function",
             "function": {
