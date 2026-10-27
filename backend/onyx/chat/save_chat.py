@@ -86,6 +86,7 @@ def _create_and_link_tool_calls(
         thinking_blocks = None
         if (
             tool_call_info.thinking
+            and tool_call_info.thinking.blocks
             and tool_call_info.turn_index not in turns_with_thinking
         ):
             turns_with_thinking.add(tool_call_info.turn_index)
@@ -229,7 +230,9 @@ def save_chat_turn(
             sanitize_string(reasoning_tokens) if reasoning_tokens else reasoning_tokens
         )
         assistant_message.thinking_blocks = (
-            answer_thinking.model_dump() if answer_thinking else None
+            answer_thinking.model_dump()
+            if answer_thinking and answer_thinking.blocks
+            else None
         )
     else:
         assistant_message.message = ""

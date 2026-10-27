@@ -264,7 +264,9 @@ flowchart TD
 - `thinking_replay_key` (`llm_step.py`) is `provider/deployment_or_model`. Signatures verify only against the
   model that minted them, so blocks from another model are not sent.
 - `multi_llm.py:_tool_loop_lacks_signed_thinking` turns thinking off only when the latest tool-call message
-  has no signed blocks, or the provider does not accept `thinking_blocks`.
+  has no signed blocks, or the provider does not accept `thinking_blocks`. A step that streamed no
+  reasoning at all records an empty block list: the model chose not to think, so thinking stays on.
+  Empty lists are not saved to the database.
 - A request sent without `thinking` (for example, budget thinking with a forced tool) has its
   `thinking_blocks` removed.
 

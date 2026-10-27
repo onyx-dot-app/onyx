@@ -2873,6 +2873,18 @@ def test_tool_loop_lacks_signed_thinking_false_after_completed_tool_turn() -> No
     assert _tool_loop_lacks_signed_thinking(messages, True) is False
 
 
+def test_tool_loop_lacks_signed_thinking_false_when_model_did_not_think() -> None:
+    from onyx.llm.multi_llm import _tool_loop_lacks_signed_thinking
+
+    messages: list[ChatCompletionMessage] = [
+        UserMessage(content="What's the weather?"),
+        _weather_tool_call_message().model_copy(update={"thinking_blocks": []}),
+        ToolMessage(content="sunny", tool_call_id="tc_1"),
+    ]
+    assert _tool_loop_lacks_signed_thinking(messages, True) is False
+    assert _tool_loop_lacks_signed_thinking(messages, False) is True
+
+
 def test_tool_loop_lacks_signed_thinking_false_no_tools() -> None:
     from onyx.llm.multi_llm import _tool_loop_lacks_signed_thinking
 

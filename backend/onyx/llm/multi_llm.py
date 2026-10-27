@@ -564,8 +564,9 @@ def _tool_loop_lacks_signed_thinking(
     """True when the latest assistant message called tools without signed thinking.
 
     With thinking on, Anthropic requires that message to start with its signed
-    thinking block. Earlier turns' thinking blocks are optional, so tool calls
-    there do not matter.
+    thinking block if the model thought. An empty block list marks a step where
+    the model chose not to think. Earlier turns' thinking blocks are optional,
+    so tool calls there do not matter.
     """
     from onyx.llm.model_request import AssistantMessage as ProviderAssistantMessage
 
@@ -573,8 +574,10 @@ def _tool_loop_lacks_signed_thinking(
         if isinstance(msg, ProviderAssistantMessage):
             if not msg.tool_calls:
                 return False
-            return not (
-                replays_thinking_blocks and signed_thinking_blocks(msg.thinking_blocks)
+            if not replays_thinking_blocks or msg.thinking_blocks is None:
+                return True
+            return bool(msg.thinking_blocks) and not signed_thinking_blocks(
+                msg.thinking_blocks
             )
     return False
 

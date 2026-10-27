@@ -1447,6 +1447,23 @@ class TestSignedThinkingReplay:
 
         assert result.thinking is None
 
+    def test_reasoning_without_blocks_is_not_replayable(self) -> None:
+        from onyx.llm.model_response import Delta
+
+        result = self._run_stream(
+            [Delta(reasoning_content="stripped by a gateway"), Delta(content="Hi")]
+        )
+
+        assert result.thinking is None
+
+    def test_step_without_reasoning_records_empty_thinking(self) -> None:
+        from onyx.llm.model_response import Delta
+
+        result = self._run_stream([Delta(content="Answer")])
+
+        assert result.thinking is not None
+        assert result.thinking.blocks == []
+
     @pytest.mark.parametrize(
         "model_key, replayed",
         [("anthropic/test-model", True), ("anthropic/other-model", False)],

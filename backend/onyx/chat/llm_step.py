@@ -384,7 +384,7 @@ def thinking_replay_key(llm_config: LLMConfig) -> str:
 
 
 def _replayable_thinking(
-    generated: GeneratedAssistantMessage, llm_config: LLMConfig
+    generated: GeneratedAssistantMessage, llm_config: LLMConfig, reasoned: bool
 ) -> ReplayableThinking | None:
     blocks = signed_thinking_blocks(
         [
@@ -394,8 +394,10 @@ def _replayable_thinking(
             for block in content.blocks or []
         ]
     )
-    if not blocks:
+    if not blocks and reasoned:
         return None
+    # No blocks and no reasoning: the model chose not to think, so the step
+    # needs no block for thinking to stay on.
     return ReplayableThinking(model=thinking_replay_key(llm_config), blocks=blocks)
 
 
@@ -1349,7 +1351,11 @@ def run_llm_step_pkt_generator(
             tool_calls=tool_calls or None,
             raw_answer=accumulated_raw_answer or None,
             finish_reason=terminal_finish_reason,
-            thinking=_replayable_thinking(generated_thinking, llm.config),
+            thinking=_replayable_thinking(
+                generated_thinking,
+                llm.config,
+                reasoned=bool(accumulated_reasoning or generated_thinking.content),
+            ),
         ),
         has_reasoned,
     )
