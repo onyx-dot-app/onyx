@@ -1298,8 +1298,7 @@ test.describe("Index Settings: empty-registry providers @exclusive", () => {
 // Bring-your-own model cards (ENG-4417)
 //
 // LiteLLM, Azure and Bifrost list no registry models. The picker must still
-// show the configured model as a card, and open the bring-your-own section
-// that holds it.
+// show the configured model as a card.
 // ---------------------------------------------------------------------------
 
 const BIFROST_MODEL = "openai/text-embedding-3-small";
@@ -1364,7 +1363,6 @@ test.describe("Index Settings: bring-your-own model cards @exclusive", () => {
     await indexSettings.submitProviderSetup();
 
     await indexSettings.expectModelStaged();
-    await indexSettings.expectBringYourOwnSectionOpen();
     await indexSettings.expectModelCardState(
       "bifrost",
       BIFROST_MODEL,
@@ -1375,9 +1373,7 @@ test.describe("Index Settings: bring-your-own model cards @exclusive", () => {
     );
   });
 
-  test("a current Bifrost model opens the bring-your-own section on its card", async ({
-    page,
-  }) => {
+  test("a current Bifrost model shows as its card", async ({ page }) => {
     const current = await getCurrentSearchSettings(page);
     await page.route(CURRENT_SEARCH_SETTINGS_API, async (route) => {
       await route.fulfill({
@@ -1419,7 +1415,6 @@ test.describe("Index Settings: bring-your-own model cards @exclusive", () => {
     await indexSettings.goto();
     await indexSettings.expandModelPicker();
 
-    await indexSettings.expectBringYourOwnSectionOpen();
     await indexSettings.expectModelCardState(
       "bifrost",
       BIFROST_MODEL,

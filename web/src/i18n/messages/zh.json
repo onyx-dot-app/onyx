@@ -7045,11 +7045,6 @@
         "addCustomModel": {
           "label": "添加自定义模型"
         },
-        "bringYourOwn": {
-          "cloudDescription": "连接 LiteLLM 代理、Azure OpenAI 部署、Bifrost 网关或 OpenAI 兼容端点。模型名称由您自行填写。对于 LiteLLM、Azure 和 OpenAI 兼容端点，还需填写维度。",
-          "selfHostedDescription": "运行上方列表中没有的 Hugging Face 嵌入模型。模型名称、维度和前缀由您自行填写。",
-          "title": "高级：使用自己的模型或代理"
-        },
         "cloudTab": {
           "label": "云端"
         },
@@ -7057,6 +7052,7 @@
           "title": "设置自定义 embedding 模型。"
         },
         "customModels": {
+          "hint": "使用 [Hugging Face](https://huggingface.co/models?library=sentence-transformers&sort=trending) 上提供的兼容 [SentenceTransformers](https://www.sbert.net/) 的模型。{appName} 会下载该模型以进行自托管设置。不保证兼容性。",
           "title": "自定义模型"
         },
         "foldModels": {

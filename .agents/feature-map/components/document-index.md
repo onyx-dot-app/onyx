@@ -44,13 +44,14 @@ for thresholds, timeouts, and recovery behavior.
 An admin experiences it directly on the embedding-model page. They pick a new
 embedding model and start a re-index. The picker lists only the selectable models of
 the registry (self-hosted Granite, Voyage 4 Nano and Nemotron; Cohere, OpenAI, Google
-and Voyage cloud models). Custom Hugging Face models, LiteLLM, Azure, Bifrost and
-OpenAI-compatible endpoints are in an Advanced section. It is collapsed by default, but
-the cloud section opens when the current or staged model is one of these cloud models,
-and shows that model as a card. The OpenAI-compatible setup can request shorter vectors
-(`reduced_dimension`, sent as the OpenAI `dimensions` parameter); a re-index keeps the
-stored value. A search for that model's name also finds it. The admin can still close the
-section. A legacy model (for example nomic, E5, Cohere v3) shows
+and Voyage cloud models). LiteLLM, Azure, Bifrost and OpenAI-compatible endpoints are
+listed after the registry providers in the cloud tab. When the current or staged model is
+one of these cloud models, the picker shows it as a card. The OpenAI-compatible setup can
+request shorter vectors (`reduced_dimension`, sent as the OpenAI `dimensions` parameter);
+a re-index keeps the stored value. A search for that model's name also finds it. The
+self-hosted tab shows an Add Custom Model card after the registry models, for a
+Hugging Face model that is not in the list. A legacy
+model (for example nomic, E5, Cohere v3) shows
 only while it is the current model. It can re-index, but it cannot be chosen as a new
 target. Before the re-index starts, the API embeds a fixed test string with the stored
 provider settings for Bifrost, OpenAI-compatible and every selectable cloud model. From that point,

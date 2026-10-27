@@ -7045,11 +7045,6 @@
         "addCustomModel": {
           "label": "カスタムモデルを追加"
         },
-        "bringYourOwn": {
-          "cloudDescription": "LiteLLM プロキシ、Azure OpenAI デプロイメント、Bifrost ゲートウェイ、または OpenAI 互換エンドポイントを接続します。モデル名はご自身で指定します。LiteLLM、Azure、OpenAI 互換エンドポイントでは次元も指定します。",
-          "selfHostedDescription": "上の一覧にない Hugging Face の埋め込みモデルを実行します。モデル名、次元、プレフィックスはご自身で指定します。",
-          "title": "詳細設定: 独自のモデルまたはプロキシを使用"
-        },
         "cloudTab": {
           "label": "クラウド型"
         },
@@ -7057,6 +7052,7 @@
           "title": "カスタム embedding モデルを設定します。"
         },
         "customModels": {
+          "hint": "[Hugging Face](https://huggingface.co/models?library=sentence-transformers&sort=trending) で公開されている [SentenceTransformers](https://www.sbert.net/) 互換のモデルを使用してください。{appName} はセルフホスティング用にモデルをダウンロードします。互換性は保証されません。",
           "title": "カスタムモデル"
         },
         "foldModels": {

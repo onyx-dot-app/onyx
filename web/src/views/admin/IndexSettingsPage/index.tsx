@@ -40,7 +40,6 @@ import {
   SvgClock,
   SvgCloud,
   SvgEmpty,
-  SvgExpand,
   SvgExternalLink,
   SvgFold,
   SvgPlusCircle,
@@ -635,60 +634,6 @@ function EmbeddingModelCard({
   );
 }
 
-interface BringYourOwnSectionProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  description: string | RichStr;
-  children: React.ReactNode;
-}
-
-/**
- * Low-prominence, collapsible home for the bring-your-own options (LiteLLM,
- * Azure, Bifrost, custom self-hosted models), below the registry models.
- */
-function BringYourOwnSection({
-  open,
-  onOpenChange,
-  description,
-  children,
-}: BringYourOwnSectionProps) {
-  const t = useTranslations("admin.indexSettings");
-  return (
-    <GeneralLayouts.Section gap={1} alignItems="stretch">
-      <GeneralLayouts.Section
-        flexDirection="row"
-        justifyContent="start"
-        height="fit"
-        className="mt-2"
-      >
-        <Button
-          prominence="tertiary"
-          rightIcon={open ? SvgFold : SvgExpand}
-          aria-expanded={open}
-          onClick={() => onOpenChange(!open)}
-        >
-          {t("modelPicker.bringYourOwn.title")}
-        </Button>
-      </GeneralLayouts.Section>
-      {open && (
-        <>
-          <GeneralLayouts.Section
-            alignItems="start"
-            width="auto"
-            height="fit"
-            className="mx-2 mb-1"
-          >
-            <Text font="secondary-body" color="text-03" as="p">
-              {description}
-            </Text>
-          </GeneralLayouts.Section>
-          {children}
-        </>
-      )}
-    </GeneralLayouts.Section>
-  );
-}
-
 interface CustomModelGroupProps {
   onAddCustomModel: () => void;
 }
@@ -696,6 +641,7 @@ interface CustomModelGroupProps {
 /** Self-hosted models entered by hand ("Add Custom Model"). */
 function CustomModelGroup({ onAddCustomModel }: CustomModelGroupProps) {
   const t = useTranslations("admin.indexSettings");
+  const { appName } = useSettings();
   return (
     <GeneralLayouts.Section gap={1}>
       <GeneralLayouts.Section
@@ -738,6 +684,11 @@ function CustomModelGroup({ onAddCustomModel }: CustomModelGroupProps) {
           center
         />
       </SelectCard>
+      <div className="px-3 pt-1 pb-2">
+        <Text font="secondary-body" color="text-03" as="p">
+          {markdown(t("modelPicker.customModels.hint", { appName }))}
+        </Text>
+      </div>
     </GeneralLayouts.Section>
   );
 }
@@ -936,12 +887,6 @@ export default function IndexSettingsPage() {
     null
   );
 
-  // The admin's explicit toggle of the bring-your-own section; null until
-  // they toggle it.
-  const [bringYourOwnOpen, setBringYourOwnOpen] = useState<boolean | null>(
-    null
-  );
-
   const { data: secondarySearchSettings } = useSecondarySearchSettings();
   // INSTANT switchover swaps immediately — no secondary settings — and backfills on the
   // current index. The reindex-progress endpoint still reports that active port target,
@@ -1033,7 +978,6 @@ export default function IndexSettingsPage() {
     [currentModelRef]
   );
   const [query, setQuery] = useState("");
-  const isSearching = query.trim() !== "";
   // The search runs over the visible groups, so it cannot find a hidden
   // legacy model.
   const { matchesQuery, filteredSelfHostedProviders, customModelMatched } =
@@ -1474,17 +1418,6 @@ export default function IndexSettingsPage() {
                       resolveProviderName(values.model_name, null),
                   }
                 : null;
-              // A search that matches a bring-your-own option shows it. The
-              // cloud section also opens by default when it holds the staged
-              // or current model, so that model's card is in view.
-              const holdsBringYourOwnModel = [
-                stagedModelRef,
-                currentModelRef,
-              ].some((ref) => ref && isBringYourOwnProvider(ref.providerName));
-              const cloudBringYourOwnExpanded =
-                isSearching || (bringYourOwnOpen ?? holdsBringYourOwnModel);
-              const selfHostedBringYourOwnExpanded =
-                isSearching || (bringYourOwnOpen ?? false);
               const existingModelFor = (provider: EmbeddingProvider) =>
                 currentEmbeddingModel?.provider_type === provider.providerName
                   ? (currentEmbeddingModelSpec ?? undefined)
@@ -1501,12 +1434,15 @@ export default function IndexSettingsPage() {
                     .map((model) => model.modelName)
                 )
               );
-              const filteredCloudProviders = filteredCloud.filter(
-                (p) => !isBringYourOwnProvider(p.providerName)
-              );
-              const filteredBringYourOwnProviders = filteredCloud.filter((p) =>
-                isBringYourOwnProvider(p.providerName)
-              );
+              // Registry providers first, bring-your-own options after them.
+              const filteredCloudProviders = [
+                ...filteredCloud.filter(
+                  (p) => !isBringYourOwnProvider(p.providerName)
+                ),
+                ...filteredCloud.filter((p) =>
+                  isBringYourOwnProvider(p.providerName)
+                ),
+              ];
               const renderCloudProviderGroup = (
                 provider: EmbeddingProvider
               ) => (
@@ -2031,28 +1967,13 @@ export default function IndexSettingsPage() {
                               expandedContent={
                                 <>
                                   <Tabs.Content value={MODEL_TAB_CLOUD}>
-                                    {filteredCloudProviders.length > 0 ||
-                                    filteredBringYourOwnProviders.length > 0 ? (
+                                    {filteredCloudProviders.length > 0 ? (
                                       <GeneralLayouts.Section
                                         gap={2}
                                         padding={2}
                                       >
                                         {filteredCloudProviders.map(
                                           renderCloudProviderGroup
-                                        )}
-                                        {filteredBringYourOwnProviders.length >
-                                          0 && (
-                                          <BringYourOwnSection
-                                            open={cloudBringYourOwnExpanded}
-                                            onOpenChange={setBringYourOwnOpen}
-                                            description={t(
-                                              "modelPicker.bringYourOwn.cloudDescription"
-                                            )}
-                                          >
-                                            {filteredBringYourOwnProviders.map(
-                                              renderCloudProviderGroup
-                                            )}
-                                          </BringYourOwnSection>
                                         )}
                                       </GeneralLayouts.Section>
                                     ) : (
@@ -2102,22 +2023,20 @@ export default function IndexSettingsPage() {
                                           )
                                         )}
 
-                                        {customModelMatched && (
-                                          <BringYourOwnSection
-                                            open={
-                                              selfHostedBringYourOwnExpanded
-                                            }
-                                            onOpenChange={setBringYourOwnOpen}
-                                            description={t(
-                                              "modelPicker.bringYourOwn.selfHostedDescription"
-                                            )}
-                                          >
-                                            <CustomModelGroup
-                                              onAddCustomModel={() =>
-                                                customModelModal.toggle(true)
-                                              }
+                                        {customModelMatched &&
+                                          filteredSelfHostedProviders.length >
+                                            0 && (
+                                            <Divider
+                                              paddingParallel={2}
+                                              paddingPerpendicular={1}
                                             />
-                                          </BringYourOwnSection>
+                                          )}
+                                        {customModelMatched && (
+                                          <CustomModelGroup
+                                            onAddCustomModel={() =>
+                                              customModelModal.toggle(true)
+                                            }
+                                          />
                                         )}
                                       </GeneralLayouts.Section>
                                     ) : (

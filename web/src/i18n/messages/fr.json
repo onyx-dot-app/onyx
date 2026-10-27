@@ -7045,11 +7045,6 @@
         "addCustomModel": {
           "label": "Ajouter un modèle personnalisé"
         },
-        "bringYourOwn": {
-          "cloudDescription": "Connectez un proxy LiteLLM, un déploiement Azure OpenAI, une passerelle Bifrost ou un point de terminaison compatible OpenAI. Vous indiquez vous-même le nom du modèle. Pour LiteLLM, Azure et les points de terminaison compatibles OpenAI, vous indiquez aussi la dimension.",
-          "selfHostedDescription": "Exécutez un modèle d'embedding Hugging Face absent de la liste ci-dessus. Vous indiquez vous-même le nom, la dimension et les préfixes du modèle.",
-          "title": "Avancé : utiliser votre propre modèle ou proxy"
-        },
         "cloudTab": {
           "label": "Dans le cloud"
         },
@@ -7057,6 +7052,7 @@
           "title": "Configurez un modèle d'embedding personnalisé."
         },
         "customModels": {
+          "hint": "Utilisez un modèle compatible avec [SentenceTransformers](https://www.sbert.net/) disponible sur [Hugging Face](https://huggingface.co/models?library=sentence-transformers&sort=trending). {appName} téléchargera le modèle pour le configurer en auto-hébergement. La compatibilité n’est pas garantie.",
           "title": "Modèles personnalisés"
         },
         "foldModels": {
