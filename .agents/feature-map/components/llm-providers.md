@@ -409,7 +409,8 @@ name; deltas carry only new `arguments_delta` text. Ends carry the finalized
 The accumulator parses arguments at completion. Consumers must wait for completion
 before executing a call. Raw provider streaming and its chat consumers are unchanged.
 
-Both response converters use `model_response.py:_usage_from_usage_data` to normalize
+Both response converters validate provider payloads through `_ProviderResponse` and use
+`model_response.py:_ProviderUsage.to_usage` to normalize
 usage for cost accounting and tracing. A missing or null `cache_read_input_tokens`
 falls back to `prompt_tokens_details.cached_tokens`. An explicit zero takes precedence
 over the nested count. Missing counts become zero.
@@ -457,6 +458,19 @@ Shared messages can carry an identity and local metadata/token estimates. Metada
 estimates are excluded from serialization. ToolResult adds typed details and error/termination
 flags; raw message dumps include their defaults. Provider serialization forwards only the
 existing provider message fields, not execution identities or result details.
+
+### Provider validation and prompt accounting
+
+Provider response validation preserves usage-only chunks, optional tool calls, and
+signed or redacted thinking blocks. Shared request serialization rejects tool results
+without a call ID. Recovery retains non-text content beside recovered tool calls.
+The raw response and streaming interfaces remain available to existing engines and gateways.
+
+Shared-client spans record cacheable prefix length and prepared-message count.
+Token estimates use prepared metadata and never reload image contents for tracing.
+If a complex prefix lacks estimates, tracing omits its token count instead of using
+an incomplete text-only estimate. Token counters cache up to 1,024 text values per
+counter. Different counters do not share prompt contents or cached counts.
 
 ### 4.7 Tracing
 

@@ -26,3 +26,18 @@ contain message snapshots. A successful generation ends with `GenerationDoneEven
 This contract applies to `LLM.stream`. The lower-level `stream_raw` method keeps
 its provider chunk format. Existing chat and gateway consumers of raw chunks
 continue to accumulate those chunks separately.
+
+## Provider validation and tracing
+
+Provider payload models validate complete responses and streamed chunks before
+conversion. They preserve optional fields, usage-only chunks, and provider-signed
+thinking blocks. Tool-call recovery keeps surrounding text and non-text content.
+Shared request serialization requires an ID on every tool result.
+
+Shared-client generation spans record the cacheable prefix length and prepared
+message count. Token estimates come from prepared metadata; tracing does not load
+image bytes again. It omits a prefix token estimate when complex content has no
+estimate. Token counters keep a bounded cache local to each counter.
+
+These changes preserve the raw request and response APIs used by current chat,
+research, coding, and gateway callers. Application runtime adoption is separate.
