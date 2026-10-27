@@ -339,6 +339,66 @@ test.each([false, true])(
   }
 );
 
+test.each([false, true])(
+  "incognito recovery preserves successful local content while confirming readiness (busy: %s)",
+  async (busy) => {
+    const idle = deferred<void>();
+    const question: Message = {
+      nodeId: 1,
+      messageId: 1,
+      type: "user",
+      message: "Keep this private question",
+      files: [],
+      packets: [],
+      toolCall: null,
+      parentNodeId: null,
+      latestChildNodeId: 2,
+    };
+    const answer: Message = {
+      ...question,
+      nodeId: 2,
+      messageId: 2,
+      type: "assistant",
+      message: "Keep this private answer",
+      parentNodeId: 1,
+      latestChildNodeId: null,
+    };
+    const localMessages = new Map([
+      [1, question],
+      [2, answer],
+    ]);
+    const store = useChatSessionStore.getState();
+    store.createSession("session", { incognito: true });
+    store.updateSessionData("session", {
+      chatState: "unconfirmed",
+      messageTree: localMessages,
+    });
+    jest.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ ...backendSession(busy), incognito: true }),
+    } as Response);
+    jest.mocked(processRawChatHistory).mockReturnValue(
+      new Map([
+        [1, { ...question, message: "" }],
+        [2, { ...answer, message: "" }],
+      ])
+    );
+    jest.mocked(waitForChatSessionIdle).mockReturnValue(idle.promise);
+    mountController();
+    await waitFor(() =>
+      expect(waitForChatSessionIdle).toHaveBeenCalledWith("session")
+    );
+    expect(
+      useChatSessionStore.getState().sessions.get("session")?.messageTree
+    ).toBe(localMessages);
+    await act(async () => idle.resolve());
+    const recovered = useChatSessionStore.getState().sessions.get("session")!;
+    expect(recovered.chatState).toBe("input");
+    expect(recovered.messageTree).toBe(localMessages);
+    expect(fetchSettledChatSession).toHaveBeenCalledWith("session");
+  }
+);
+
 test("recovery replay does not mutate retained local messages", async () => {
   const finish = deferred<void>();
   const previousAnswer: Message = {

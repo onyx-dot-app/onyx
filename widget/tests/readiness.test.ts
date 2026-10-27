@@ -119,6 +119,67 @@ describe("widget readiness", () => {
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
   });
 
+  it("retries credential resolution after the readiness deadline", async () => {
+    const setTimer = globalThis.setTimeout;
+    spyOn(globalThis, "setTimeout").mockImplementation(
+      (callback, delay, ...args) =>
+        setTimer(callback, delay === 10_000 ? 0 : delay, ...args)
+    );
+    let resolveToken!: (token: string) => void;
+    const firstToken = new Promise<string>((resolve) => {
+      resolveToken = resolve;
+    });
+    const tokenProvider = mock(async () => "renewed").mockImplementationOnce(
+      () => firstToken
+    );
+    globalThis.fetch = mock(async () =>
+      Response.json({ is_processing: false })
+    ) as typeof fetch;
+    const unconfirmed = mock(() => {});
+    const api = new ApiService("https://onyx.test/api", tokenProvider);
+    await api.waitForSessionIdle(
+      "session",
+      new AbortController().signal,
+      unconfirmed
+    );
+    resolveToken("expired");
+    await Bun.sleep(0);
+    expect(unconfirmed).toHaveBeenCalledTimes(1);
+    expect(tokenProvider).toHaveBeenCalledTimes(2);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(globalThis.fetch).toHaveBeenCalledWith(expect.any(String), {
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer renewed",
+      },
+      signal: expect.any(AbortSignal),
+    });
+  });
+
+  it("aborts readiness while the credential provider is pending", async () => {
+    let resolveToken!: (token: string) => void;
+    const token = new Promise<string>((resolve) => {
+      resolveToken = resolve;
+    });
+    globalThis.fetch = mock(async () =>
+      Response.json({ is_processing: false })
+    ) as typeof fetch;
+    const controller = new AbortController();
+    const unconfirmed = mock(() => {});
+    const api = new ApiService("https://onyx.test/api", () => token);
+    const pending = api.waitForSessionIdle(
+      "session",
+      controller.signal,
+      unconfirmed
+    );
+    controller.abort();
+    await expect(pending).rejects.toThrow("Request cancelled");
+    resolveToken("late");
+    await Bun.sleep(0);
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(unconfirmed).not.toHaveBeenCalled();
+  });
+
   it("cancels polling when a reset replaces the conversation", async () => {
     const controller = new AbortController();
     globalThis.fetch = mock(async () => {
@@ -204,7 +265,13 @@ describe("widget readiness", () => {
   });
   it("removes an unacknowledged optimistic prompt before retrying", async () => {
     const widget = new OnyxChatWidget();
-    widget["config"] = { backendUrl: "https://onyx.test/api", apiKey: "key" };
+    widget["config"] = {
+      backendUrl: "https://onyx.test/api",
+      apiKey: "key",
+      mode: "inline",
+    };
+    const compactInput = spyOn(widget, "renderCompactInput");
+    const messages = spyOn(widget, "renderMessages");
     widget["inputValue"] = "retry me";
     const api = new ApiService("https://onyx.test/api", async () => "key");
     api.createChatSession = mock(async () => "session");
@@ -216,6 +283,10 @@ describe("widget readiness", () => {
     await widget["sendMessage"]();
     expect(widget["messages"]).toHaveLength(0);
     expect(widget["inputValue"]).toBe("retry me");
+    expect(widget["error"]).toBe("offline");
+    widget.render();
+    expect(compactInput).not.toHaveBeenCalled();
+    expect(messages).toHaveBeenCalled();
     api.streamMessage = mock(async function* () {
       yield { obj: { user_message_id: 1, reserved_assistant_message_id: 2 } };
     });

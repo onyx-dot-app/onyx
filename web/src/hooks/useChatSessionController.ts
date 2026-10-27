@@ -267,7 +267,9 @@ export default function useChatSessionController({
         .sessions.get(chatSession.chat_session_id)?.messageTree;
       let newMessageMap =
         recovering && localMessages
-          ? preserveFailedMessages(savedMessages, localMessages)
+          ? isIncognito
+            ? localMessages
+            : preserveFailedMessages(savedMessages, localMessages)
           : savedMessages;
       const currentStream = chatSession.current_stream;
       const resumedMessage = currentStream

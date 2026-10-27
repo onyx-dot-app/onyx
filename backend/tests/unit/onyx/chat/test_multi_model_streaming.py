@@ -3196,6 +3196,20 @@ def test_invalid_chat_settings_return_actionable_errors(
         with pytest.raises(OnyxError) as raised:
             create_chat_agent(setup, MagicMock(), 0, CancellationSignal(), True)
     assert raised.value.error_code == OnyxErrorCode.BAD_REQUEST
-    packet = chat_error(raised.value, setup.responses[0].llm)
+    packet = chat_error(raised.value, setup.responses[0].llm, model_index=1)
+    assert packet.details == {"model_index": 1}
     assert packet.error == detail
     assert not packet.is_retryable
+
+
+@pytest.mark.parametrize("model_index", [None, 0, 1])
+@pytest.mark.parametrize(
+    "error", [ValueError("Invalid settings"), RuntimeError("Failed")]
+)
+def test_initialization_errors_preserve_model_identity(
+    error: Exception, model_index: int | None
+) -> None:
+    packet = chat_error(error, model_index=model_index)
+    assert packet.details == (
+        {"model_index": model_index} if model_index is not None else {}
+    )
