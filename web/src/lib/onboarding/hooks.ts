@@ -1,14 +1,14 @@
 "use client";
 
 import { useReducer, useCallback, useEffect, useRef, useState } from "react";
-import { onboardingReducer, initialState } from "@/sections/onboarding/reducer";
+import { onboardingReducer, initialState } from "@/lib/onboarding/reducer";
 import {
   OnboardingActions,
   OnboardingActionType,
   OnboardingData,
   OnboardingState,
   OnboardingStep,
-} from "@/interfaces/onboarding";
+} from "@/lib/onboarding/types";
 import { updateUserPersonalization } from "@/lib/users/svc";
 import { useUser } from "@/providers/UserProvider";
 import { MinimalAgent } from "@/lib/agents/types";

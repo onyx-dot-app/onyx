@@ -76,8 +76,8 @@ import { getProjectTokenCount } from "@/lib/projects/svc";
 import { cn } from "@opal/utils";
 import Suggestions from "@/sections/Suggestions";
 import OnboardingFlow from "@/sections/onboarding/OnboardingFlow";
-import { OnboardingStep } from "@/interfaces/onboarding";
-import { useShowOnboarding } from "@/hooks/useShowOnboarding";
+import { OnboardingStep } from "@/lib/onboarding/types";
+import { useShowOnboarding } from "@/lib/onboarding/hooks";
 import { SvgChevronDown, SvgFileText } from "@opal/icons";
 import { Button, ShadowDiv, Spacer } from "@opal/components";
 import {

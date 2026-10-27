@@ -9,7 +9,7 @@ import {
   OnboardingActions,
   OnboardingState,
   OnboardingStep,
-} from "@/interfaces/onboarding";
+} from "@/lib/onboarding/types";
 import { useUser } from "@/providers/UserProvider";
 import NonAdminStep from "./components/NonAdminStep";
 

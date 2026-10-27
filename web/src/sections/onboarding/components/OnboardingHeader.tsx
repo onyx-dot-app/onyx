@@ -2,12 +2,12 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { STEP_CONFIG } from "@/sections/onboarding/constants";
+import { STEP_CONFIG } from "@/lib/onboarding/constants";
 import {
   OnboardingActions,
   OnboardingState,
   OnboardingStep,
-} from "@/interfaces/onboarding";
+} from "@/lib/onboarding/types";
 import Text from "@/refresh-components/texts/Text";
 import { Button, Card } from "@opal/components";
 import { SvgProgressCircle, SvgX } from "@opal/icons";

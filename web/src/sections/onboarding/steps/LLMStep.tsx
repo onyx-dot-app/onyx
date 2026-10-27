@@ -10,7 +10,7 @@ import {
   OnboardingActions,
   OnboardingState,
   OnboardingStep,
-} from "@/interfaces/onboarding";
+} from "@/lib/onboarding/types";
 import { WellKnownLLMProviderDescriptor } from "@/lib/languageModels/types";
 import { getProvider } from "@/lib/languageModels/utils";
 import { useProviderNames } from "@/lib/languageModels/useProviderNames";
