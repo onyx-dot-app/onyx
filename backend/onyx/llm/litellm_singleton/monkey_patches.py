@@ -130,6 +130,7 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
 import re
 import time
 import uuid
+from collections.abc import Mapping
 from typing import Any, List, Optional, cast
 
 from litellm.completion_extras.litellm_responses_transformation.transformation import (
@@ -916,6 +917,7 @@ def _patch_anthropic_keeps_disabled_thinking() -> None:
             messages: Optional[list[Any]] = None,
             headers: Optional[dict] = None,
             drop_params: bool = False,
+            litellm_params: Optional[Mapping[str, object]] = None,
         ) -> Any:
             thinking = _thinking_off(optional_params)
             data = original_request_helper(
@@ -926,6 +928,7 @@ def _patch_anthropic_keeps_disabled_thinking() -> None:
                 messages=messages,
                 headers=headers,
                 drop_params=drop_params,
+                litellm_params=litellm_params,
             )
             if thinking is not None:
                 fields = data.get("additionalModelRequestFields") or {}
