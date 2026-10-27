@@ -512,9 +512,12 @@ def apply_generation_event(message: AssistantMessage, event: GenerationEvent) ->
                 ):
                     # LiteLLM's Anthropic stream resends the full text with
                     # the signature in a chunk that adds no text delta.
-                    if block.signature and not event.text:
-                        last.thinking = block.thinking or last.thinking
-                    else:
+                    resent_in_full = (
+                        block.signature
+                        and not event.text
+                        and block.thinking == last.thinking
+                    )
+                    if not resent_in_full:
                         last.thinking += block.thinking
                     last.signature = block.signature
                 else:
