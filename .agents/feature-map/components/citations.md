@@ -193,6 +193,7 @@ in its `citations` list.
 
 `backend/onyx/chat/agent.py:ChatAgent` maintains the known source mapping for prompts.
 The renderer records only citations that appear in displayed text.
+Intermediate reports list only the mapped sources cited in the report, including when citation markers remain unformatted.
 `backend/onyx/chat/presentation.py:project_response` rebuilds the saved display from
 recorded messages with the same renderer. It carries source documents and emitted
 citation information into persistence.

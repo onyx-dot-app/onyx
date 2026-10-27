@@ -781,7 +781,7 @@ const AppInputBar = React.memo(
           <Button
             disabled={
               chatState === "cancelling" ||
-              isCheckingCompletion ||
+              (isCheckingCompletion && chatState === "unconfirmed") ||
               (chatState === "input" &&
                 !isVoicePlaybackControllable &&
                 !message) ||
@@ -797,7 +797,7 @@ const AppInputBar = React.memo(
             }
             id="onyx-chat-input-send-button"
             icon={
-              isCheckingCompletion
+              isCheckingCompletion && chatState === "unconfirmed"
                 ? IconLoader
                 : chatState === "unconfirmed"
                   ? SvgRefreshCw

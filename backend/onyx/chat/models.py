@@ -31,7 +31,7 @@ from onyx.configs.constants import MessageType
 from onyx.context.models import UserMemoryContext
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.db.enums import IncognitoRecordMode
-from onyx.deep_research.models import ResearchConfiguration
+from onyx.deep_research.models import ResearchAgentCallResult, ResearchConfiguration
 from onyx.file_store.models import (
     ChatLoadedFile,
     ExtractedContextFiles,
@@ -43,6 +43,7 @@ from onyx.llm.models import (
     GenerationRequestParams,
     Message,
     ReasoningEffort,
+    ToolResultMessage,
 )
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.server.query_and_chat.models import (
@@ -67,6 +68,9 @@ from onyx.tools.tool_implementations.search.models import SearchToolState
 
 MAX_DISCOVERED_AGENTS = 128
 _MESSAGE_ADAPTER = TypeAdapter(Message)
+_INCOGNITO_SOURCE_DETAILS = TypeAdapter(
+    Annotated[SearchDocsResponse | ResearchAgentCallResult, Field(discriminator="type")]
+)
 
 
 class PromptMetadata(CompactionMetadata):
@@ -237,13 +241,16 @@ def _read_incognito_message(value: dict[str, JsonValue] | Message) -> Message:
         return value
     data = dict(value)
     metadata = PromptMetadata.model_validate(data.pop("metadata", {}))
+    details = data.pop("details", None)
     message = _MESSAGE_ADAPTER.validate_python(data)
     message.metadata = metadata
+    if details is not None and isinstance(message, ToolResultMessage):
+        message.details = _INCOGNITO_SOURCE_DETAILS.validate_python(details)
     return message
 
 
 def serialize_incognito_message(message: Message) -> dict[str, JsonValue]:
-    """Store replay text and prompt metadata without tool details or file bytes."""
+    """Retain replay text and citation sources, excluding execution files and state."""
     metadata = (
         message.metadata
         if isinstance(message.metadata, PromptMetadata)
@@ -251,6 +258,13 @@ def serialize_incognito_message(message: Message) -> dict[str, JsonValue]:
     )
     data: dict[str, JsonValue] = message.model_dump(mode="json", exclude={"details"})
     data["metadata"] = metadata.model_dump(exclude={"image_files", "image_token_count"})
+    if isinstance(message, ToolResultMessage):
+        if isinstance(message.details, SearchDocsResponse):
+            data["details"] = message.details.model_dump(
+                mode="json", include={"type", "search_docs", "citation_mapping"}
+            )
+        elif isinstance(message.details, ResearchAgentCallResult):
+            data["details"] = message.details.model_dump(mode="json")
     return data
 
 

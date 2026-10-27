@@ -323,6 +323,7 @@ The interactive client keeps the current request active until the server confirm
 its session is idle. A STOP packet or a closed connection does not confirm a saved turn.
 Temporary readiness failures keep Send blocked and retry. Unsupported or denied requests
 stop polling and show an error. Session, agent, and model pickers remain available while Send is blocked.
+Reopening the active session preserves its live messages and readiness check.
 Failed drafts remain in the input.
 The `ask` command confirms idle before naming the saved conversation.
 

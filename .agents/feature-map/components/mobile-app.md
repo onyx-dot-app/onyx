@@ -77,7 +77,7 @@ redirects imperatively based on `resolveAuthGate` (`components/auth/authRoute.ts
 | `GET /chat/chat-session/{id}/resume-stream?cursor=` | `api/chat/stream.ts:resumeChatMessage` |
 | `GET /chat/get-chat-session/{id}` | `api/chat/sessions.ts` |
 | `GET /chat/chat-session/{id}/status` | `api/chat/sessions.ts:getChatSessionStatus`, polled by `chat/sessionReadiness.ts:waitForSessionIdle`. Send stays blocked until `is_processing` is `false`. |
-| `POST /chat/stop-chat-session/{id}?stream_id=` | `api/chat/sessions.ts:stopChatSession`, called from `hooks/useChatController.ts:stop`. `stream_id` is the reserved assistant message id; the app waits for the ID packet before sending Stop. |
+| `POST /chat/stop-chat-session/{id}?stream_id=` | `api/chat/sessions.ts:stopChatSession`, called from `hooks/useChatController.ts:stop`. `stream_id` is the reserved assistant message id; the app waits for the ID packet before sending Stop. Failed Stop requests can be retried for the same response. |
 | `POST /chat/create-chat-session`, `GET /chat/get-user-chat-sessions` | `api/chat/sessions.ts` |
 | `GET /auth/type` | `api/auth/useAuthConfig.ts` |
 | `GET /llm/persona/{id}/providers`, `GET /tool`, `GET/PUT /user/assistant/preferences` | `api/chat/llm.ts`, `api/tools.ts`, `api/chat/agentPreferences.ts` |

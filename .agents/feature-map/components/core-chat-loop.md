@@ -204,6 +204,8 @@ to the independent CHAT_NAMING designation.
 The chat control thread polls Stop and ownership state. It observes response worker
 and persistence outcomes, then releases session admission after work and delivery finish.
 A failed response reports its error without discarding other models' output.
+The message renderer closes answer sections at thinking and visible-tool boundaries.
+Later text starts a new section in both live output and saved-history replay.
 
 See [[file-store-and-user-files]] §4.4 for project/persona file-loading
 session boundaries.

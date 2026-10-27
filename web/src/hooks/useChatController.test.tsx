@@ -188,6 +188,9 @@ test.each([false, true])(
 
 test("Stop drains multi-model packets and finishes every panel before releasing incognito input", async () => {
   const tail = Promise.withResolvers<void>();
+  jest.spyOn(Promise, "withResolvers").mockImplementation(() => {
+    throw new Error("Promise.withResolvers is unavailable");
+  });
   const llmManager = createLlmManager();
   global.fetch = jest.fn(async () => new Response(null, { status: 200 }));
   useChatSessionStore.setState({

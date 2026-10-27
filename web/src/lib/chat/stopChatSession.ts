@@ -27,8 +27,9 @@ export async function stopChatSession(
   // Abort local preparation; a dispatched send must acknowledge before Stop.
   if (!sendAcknowledged) controller.abort();
 
+  let streamId: number | null | undefined;
   try {
-    const streamId = await sendAcknowledged;
+    streamId = await sendAcknowledged;
     if (!ownsStop()) return;
     if (streamId !== null) {
       const query = streamId === undefined ? "" : `?stream_id=${streamId}`;
@@ -44,7 +45,8 @@ export async function stopChatSession(
   } catch (error) {
     if (!ownsStop()) return;
     useChatSessionStore.getState().updateSessionData(sessionId, {
-      chatState: "unconfirmed",
+      // A failed Stop leaves the accepted stream available for another Stop.
+      chatState: typeof streamId === "number" ? "streaming" : "unconfirmed",
       queuedMessagesPaused: true,
       uncaughtError: errorMessage,
     });

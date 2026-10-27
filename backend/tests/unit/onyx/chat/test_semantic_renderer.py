@@ -80,6 +80,7 @@ from onyx.server.query_and_chat.streaming_models import (
     CodingAgentThinkingDelta,
     CustomToolDelta,
     CustomToolStart,
+    IntermediateReportCitedDocs,
     IntermediateReportDelta,
     OverallStop,
     Packet,
@@ -310,6 +311,91 @@ def test_interrupted_text_is_not_duplicated_and_matches_reload() -> None:
     )
     assert sum(isinstance(p.obj, AgentResponseStart) for p in output) == 1
     assert isinstance(output[-1].obj, SectionEnd)
+
+
+@pytest.mark.parametrize("boundary", ["thinking", "tool"])
+@pytest.mark.parametrize("streamed_blocks", [0, 1, 2, 3])
+def test_interleaved_answer_sections_preserve_content_order(
+    boundary: str, streamed_blocks: int
+) -> None:
+    call = ToolCall(id="search", name="internal_search", arguments={})
+    message = AssistantMessage(
+        content=[
+            TextContent(text="Before ["),
+            ThinkingContent(text="Check") if boundary == "thinking" else call,
+            TextContent(text="After"),
+        ]
+    )
+    renderer = MessageRenderer(
+        MessageRendering(citation_mode=CitationMode.HYPERLINK), {}, ResponseLayout()
+    )
+    events = [
+        TextDeltaEvent(content_index=0, text="Before ["),
+        ThinkingDeltaEvent(content_index=1, text="Check")
+        if boundary == "thinking"
+        else ToolCallStartEvent(
+            content_index=1, tool_call_id=call.id, tool_name=call.name
+        ),
+        TextDeltaEvent(content_index=2, text="After"),
+    ]
+    output = [
+        packet
+        for event in events[:streamed_blocks]
+        for packet in renderer.consume(event)
+    ]
+    output.extend(renderer.complete(message))
+    sections: dict[int, str] = {}
+    for packet in output:
+        if isinstance(packet.obj, AgentResponseDelta):
+            section = packet.placement.turn_index
+            sections[section] = sections.get(section, "") + packet.obj.content
+    assert sections == {0: "Before [", 2: "After"}
+    assert renderer.answer == "Before [After"
+    assert renderer.answer_started
+    assert [
+        packet.placement.turn_index
+        for packet in output
+        if isinstance(packet.obj, SectionEnd)
+    ] == ([0, 1, 2] if boundary == "thinking" else [0, 2])
+
+
+@pytest.mark.parametrize("text, cited", [("Report [2]", ["2"]), ("Report", [])])
+def test_report_sources_include_only_observed_citations(
+    text: str, cited: list[str]
+) -> None:
+    documents = {
+        key: SearchDoc(
+            document_id=key,
+            chunk_ind=0,
+            semantic_identifier=key,
+            link=f"https://example.com/{key}",
+            blurb="source",
+            source_type=DocumentSource.WEB,
+            boost=1,
+            hidden=False,
+            metadata={},
+            match_highlights=[],
+        )
+        for key in ("1", "2")
+    }
+    settings = MessageRendering(
+        mode=PresentationMode.REPORT,
+        citation_mode=CitationMode.KEEP_MARKERS,
+        citation_documents={1: "1", 2: "2"},
+        document_ids=["1", "2"],
+    )
+    message = AssistantMessage(content=[TextContent(text=text)])
+    live = MessageRenderer(settings, documents, ResponseLayout())
+    output = live.consume(TextDeltaEvent(content_index=0, text=text))
+    output.extend(live.complete(message))
+    saved = MessageRenderer(settings, documents, ResponseLayout()).complete(message)
+    for packets in (output, saved):
+        assert [
+            doc.document_id
+            for packet in packets
+            if isinstance(packet.obj, IntermediateReportCitedDocs)
+            for doc in packet.obj.cited_docs or []
+        ] == cited
 
 
 def test_parallel_child_packets_stay_in_parent_tabs() -> None:

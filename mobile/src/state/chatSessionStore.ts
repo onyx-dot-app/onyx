@@ -31,7 +31,7 @@ interface ChatSessionStore {
   ) => void;
   abortSession: (sessionId: string) => void;
   setStreamId: (sessionId: string, streamId: number) => void;
-  requestStop: (sessionId: string) => void;
+  setStopRequested: (sessionId: string, requested: boolean) => void;
   patchNode: (
     sessionId: string,
     nodeId: number,
@@ -116,10 +116,10 @@ export const useChatSessionStore = create<ChatSessionStore>((set, get) => ({
     set((state) => ({
       sessions: writeSession(state.sessions, sessionId, { streamId }),
     })),
-  requestStop: (sessionId) =>
+  setStopRequested: (sessionId, requested) =>
     set((state) => ({
       sessions: writeSession(state.sessions, sessionId, {
-        stopRequested: true,
+        stopRequested: requested,
       }),
     })),
 

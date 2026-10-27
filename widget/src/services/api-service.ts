@@ -12,6 +12,8 @@ import { TokenProvider } from "@/types/widget-types";
 
 const READINESS_REQUEST_TIMEOUT_MS = 10_000;
 
+class SessionUnavailableError extends Error {}
+
 export class ApiService {
   private maxRetries = 3;
   private retryDelay = 1000;
@@ -74,6 +76,11 @@ export class ApiService {
             signal: controller.signal,
           }
         );
+        if (response.status === 403 || response.status === 404) {
+          throw new SessionUnavailableError(
+            "This conversation is no longer available. Start a new conversation."
+          );
+        }
         if (!response.ok) throw new Error("Cannot confirm chat readiness");
         const status: unknown = await response.json();
         if (
@@ -86,7 +93,8 @@ export class ApiService {
         }
         if (!status.is_processing) return;
       } catch (error) {
-        if (signal.aborted) throw error;
+        if (signal.aborted || error instanceof SessionUnavailableError)
+          throw error;
         onUnconfirmed();
       } finally {
         clearTimeout(timeout);
