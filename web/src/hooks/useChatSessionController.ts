@@ -33,7 +33,10 @@ import type { ProjectFile } from "@/lib/projects/types";
 import { getProjectFilesForSession } from "@/lib/projects/svc";
 import { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import type { ErrorResponseBody } from "@/lib/fetcher";
-import { settleChatSession } from "@/lib/chat/settleChatSession";
+import {
+  preserveFailedMessages,
+  settleChatSession,
+} from "@/lib/chat/settleChatSession";
 import { useTranslations } from "next-intl";
 
 // Runs currently being re-attached; module-level so effect re-runs (incl.
@@ -255,10 +258,17 @@ export default function useChatSessionController({
         }
       }
 
-      const newMessageMap = processRawChatHistory(
+      const savedMessages = processRawChatHistory(
         chatSession.messages,
         chatSession.packets
       );
+      const localMessages = useChatSessionStore
+        .getState()
+        .sessions.get(chatSession.chat_session_id)?.messageTree;
+      let newMessageMap =
+        recovering && localMessages
+          ? preserveFailedMessages(savedMessages, localMessages)
+          : savedMessages;
       const currentStream = chatSession.current_stream;
       const resumedMessage = currentStream
         ? newMessageMap.get(currentStream.stream_id)
@@ -266,9 +276,13 @@ export default function useChatSessionController({
       if (resumedMessage?.type === "assistant") {
         // Discard the reserved row's placeholder STOP before the renderer tracks
         // packet positions. Replay starts a new sequence for this same message.
-        resumedMessage.message = "";
-        resumedMessage.packets = [];
-        resumedMessage.packetCount = 0;
+        newMessageMap = new Map(newMessageMap);
+        newMessageMap.set(resumedMessage.nodeId, {
+          ...resumedMessage,
+          message: "",
+          packets: [],
+          packetCount: 0,
+        });
       }
       const newMessageHistory = getLatestMessageChain(newMessageMap);
 

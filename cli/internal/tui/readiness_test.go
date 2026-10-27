@@ -78,6 +78,22 @@ func TestBusyEnterKeepsDraft(t *testing.T) {
 	}
 }
 
+func TestBusyEnterSelectsPickerItem(t *testing.T) {
+	m := NewModel(config.DefaultConfig(), nil)
+	m.isStreaming = true
+	m.readinessUnconfirmed = true
+	m.llmModels = []modelOption{{name: "selected-model", label: "Selected model"}}
+	m.viewport.showPicker(pickerModel, []pickerItem{{id: "0", label: "Selected model"}})
+	updated, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = updated.(Model)
+	if m.viewport.pickerActive || m.modelOverride == nil || *m.modelOverride.ModelVersion != "selected-model" {
+		t.Fatal("readiness blocked model selection")
+	}
+	if !m.isStreaming {
+		t.Fatal("picker selection released an unconfirmed turn")
+	}
+}
+
 type stoppingClient struct {
 	api.ClientAPI
 	stopped chan int

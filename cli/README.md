@@ -322,7 +322,7 @@ Versions are derived from git tags with the `cli/` prefix (e.g. `cli/v0.1.0`). T
 The interactive client keeps the current request active until the server confirms that
 its session is idle. A STOP packet or a closed connection does not confirm a saved turn.
 Temporary readiness failures keep Send blocked and retry. Unsupported or denied requests
-stop polling and show an error; use `/new` to start another conversation.
+stop polling and show an error. Session, agent, and model pickers remain available while Send is blocked.
 Failed drafts remain in the input.
 The `ask` command confirms idle before naming the saved conversation.
 
@@ -330,3 +330,4 @@ Cancellation waits for the response ID before sending Stop. The request owns tha
 so a delayed Stop cannot cancel a later turn. If acknowledgement never arrives,
 cancellation closes delivery after ten seconds without sending an unscoped Stop.
 For acknowledged runs, delivery closes after the bounded Stop request completes.
+Session and response identities remain available after cancellation so the next message can continue from the cancelled turn.

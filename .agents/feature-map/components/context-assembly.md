@@ -412,6 +412,7 @@ conversation in an out-of-Postgres store for the session's lifetime
 `incognito_context.py:append_incognito_messages`).
 
 `incognito_context.py` stores canonical root messages and child response records in one JSON envelope.
+Root messages decode once, including prompt metadata. Their serializer omits tool details and attachment bytes.
 The envelope has a sliding one-hour TTL, a one-megabyte limit, and at most 200 root messages.
 It evicts older child records before older root messages. An oversized new response leaves stored state unchanged.
 The `incognito_ctx:v2` namespace starts fresh temporary sessions after deployment. Old content expires through its existing TTL.
@@ -425,6 +426,7 @@ A single cache write replaces root and child state together. Version checks reje
 Response saves retry transformations against fresh state and reject conflicting replay of the same response.
 
 Teardown sets a separate tombstone before waiting for cleanup. Reads and writes check that marker.
+Reads check after decoding the envelope. Locked writes check before loading and before storing the updated state.
 Its TTL covers the history and stream-buffer lifetimes. Cleanup removes the envelope under the session lock.
 `CacheBackend.delete_prefix` removes every buffered stream for that session, including chunks without metadata.
 It matches literal prefixes within one tenant. Redis and Postgres implement the same operation.
