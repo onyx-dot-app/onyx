@@ -231,12 +231,14 @@ objects. `readNdjson` drops `chat_heartbeat` events unless `keepHeartbeats` is s
 Stop (`hooks/useChatController.ts:stop`) calls `POST /chat/stop-chat-session/{id}`
 (`api/chat/sessions.ts:stopChatSession`) with the acknowledged response ID, then aborts
 local delivery. Before acknowledgement, Stop waits up to 10 seconds for the response ID.
+The Stop request times out after 10 seconds; a failed request releases its retry guard only for the same response owner.
 If it does not arrive, the app closes local delivery and checks server readiness without sending an unscoped Stop.
 The request retains its controller while `chat/sessionReadiness.ts:waitForSessionIdle`
 polls `GET /chat/chat-session/{id}/status`. Stream completion alone does not enable Send.
 Failed checks keep input blocked and retry. A stale callback cannot release a newer
 controller. Drafts clear only after acknowledgement and only if unchanged since submission.
 Rejected sends and newer composer edits keep their drafts.
+Before sending to an existing session, a busy or failed readiness check shows a toast and keeps the draft for retry.
 Resumed streams confirm idle before loading saved history. They preserve errors for the current response while refreshing other messages.
 Navigating away releases the replay reader, so reopening can reconnect during a blocked read or status check.
 Releasing a reader does not mark the server idle. A reopened response with a local error resumes readiness checks without replaying output.

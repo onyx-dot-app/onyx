@@ -134,23 +134,30 @@ def chat_error(
     model_index: int | None = None,
 ) -> StreamingError:
     """Apply the same classification and credential redaction to every chat error."""
+    details: dict[str, str | int | None] = {}
+    if model_index is not None:
+        details["model_index"] = model_index
     if isinstance(error, RunFailed):
         info = error.failure.llm_error
         return StreamingError(
             error=info.message if info else error.failure.message,
             error_code=info.error_code if info else "AGENT_EXECUTION_FAILED",
             is_retryable=info.is_retryable if info else False,
-            details={"model_index": model_index} if model_index is not None else {},
+            details=details,
         )
     if isinstance(error, OnyxError):
         return StreamingError(
             error=error.detail,
             error_code=error.error_code.code,
             is_retryable=error.status_code >= 500,
+            details=details,
         )
     if isinstance(error, ValueError) and llm is None:
         return StreamingError(
-            error=str(error), error_code="VALIDATION_ERROR", is_retryable=True
+            error=str(error),
+            error_code="VALIDATION_ERROR",
+            is_retryable=True,
+            details=details,
         )
     stack = "".join(traceback.format_exception(error))
     if llm is None:
@@ -159,14 +166,10 @@ def chat_error(
             stack_trace=stack if DEV_MODE else None,
             error_code="INIT_FAILED",
             is_retryable=True,
+            details=details,
         )
     info = litellm_exception_to_safe_error(error, llm, fallback_to_error_msg=False)
-    details: dict[str, str | int | None] = {
-        "model": llm.config.model_name,
-        "provider": llm.config.model_provider,
-    }
-    if model_index is not None:
-        details["model_index"] = model_index
+    details.update(model=llm.config.model_name, provider=llm.config.model_provider)
     if isinstance(error, EmptyLLMResponseError):
         details.update(
             tool_choice=error.tool_choice.value, finish_reason=error.finish_reason

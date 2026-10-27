@@ -7,6 +7,8 @@ import { useSession } from "@/state/session";
 import { DEFAULT_AGENT_ID } from "@/chat/agents";
 import { BackendChatSession } from "@/chat/interfaces";
 
+const SESSION_CONTROL_TIMEOUT_MS = 10_000;
+
 // Pre-creates a session so the first message sends with a real chat_session_id.
 export async function createChatSession(
   personaId: number = DEFAULT_AGENT_ID,
@@ -33,7 +35,10 @@ export async function getChatSessionStatus(
   sessionId: string,
 ): Promise<{ is_processing: boolean }> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10_000);
+  const timeout = setTimeout(
+    () => controller.abort(),
+    SESSION_CONTROL_TIMEOUT_MS,
+  );
   try {
     return await apiFetch<{ is_processing: boolean }>(
       `/chat/chat-session/${sessionId}/status`,
@@ -51,9 +56,19 @@ export async function stopChatSession(
   streamId?: number,
 ): Promise<void> {
   const query = streamId === undefined ? "" : `?stream_id=${streamId}`;
-  await apiFetch<void>(`/chat/stop-chat-session/${sessionId}${query}`, {
-    method: "POST",
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    SESSION_CONTROL_TIMEOUT_MS,
+  );
+  try {
+    await apiFetch<void>(`/chat/stop-chat-session/${sessionId}${query}`, {
+      method: "POST",
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 // `name: null` makes the backend LLM-generate a title from the session's history.

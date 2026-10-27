@@ -595,8 +595,8 @@ rendered packet to choose the activity label, so leading debug packets cannot hi
 Session readiness requires an explicit boolean from the status endpoint. Invalid responses
 keep the session blocked instead of treating a missing processing flag as completion.
 
-Settlement preserves live incognito messages because saved history can contain only usage
-metadata. Server readiness still gates the next send.
+Recovery loading and settlement preserve local incognito messages because saved history can
+contain only usage metadata. Server readiness still gates the next send.
 
 `AgentMessage` reports when its final content has finished rendering. For multi-model turns,
 `MultiModelResponseView` waits for all visible successful panels before releasing queued

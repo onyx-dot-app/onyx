@@ -1427,6 +1427,7 @@ def load_message_branch(
             .options(
                 load_only(ChatMessage.id),
                 selectinload(ChatMessage.response_items),
+                selectinload(ChatMessage.search_docs),
                 selectinload(ChatMessage.tool_calls),
             )
         ).all()
