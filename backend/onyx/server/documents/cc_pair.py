@@ -809,6 +809,8 @@ def update_cc_pair_status(
 
     else:
         redis_connector.stop.set_fence(False)
+        # A resumed DELETING pair leaves deletion; a later one waits anew.
+        redis_connector.stop.clear_timeout()
 
     update_connector_credential_pair_from_id(
         db_session=db_session,
