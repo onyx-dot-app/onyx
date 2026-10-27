@@ -25,6 +25,7 @@ from onyx.chat.models import (
     ResponseRecord,
     SavedAgentContext,
 )
+from onyx.context.search.models import SearchDocsResponse
 from onyx.db.chat_response import save_chat_response_to_db
 from onyx.db.chat_subagents import (
     load_agent_history,
@@ -32,7 +33,13 @@ from onyx.db.chat_subagents import (
     load_session_agent_metadata,
     lookup_session_agent,
 )
-from onyx.llm.models import AssistantMessage, Message, TextContent, UserMessage
+from onyx.llm.models import (
+    AssistantMessage,
+    Message,
+    TextContent,
+    ToolResultMessage,
+    UserMessage,
+)
 
 
 class ChatHistoryStore(Protocol):
@@ -170,7 +177,7 @@ class RedisChatHistoryStore(ChatHistoryStore):
             expected_persist_content=False,
             response=response,
         )
-        messages = (
+        messages: list[Message] = (
             response.response.messages
             if response.response and response.response.messages
             else [AssistantMessage(content=[TextContent(text=answer)])]
@@ -181,6 +188,24 @@ class RedisChatHistoryStore(ChatHistoryStore):
                 **{doc.document_id: doc for doc in response.citation_to_doc.values()},
                 **response.all_search_docs,
             }
+            # Response projection stores search documents separately from tool output.
+            # Temporary history needs those sources with the results it replays.
+            for index, message in enumerate(messages):
+                if not isinstance(message, ToolResultMessage) or not isinstance(
+                    message.details, SearchDocsResponse
+                ):
+                    continue
+                details = SearchDocsResponse(
+                    citation_mapping=message.details.citation_mapping,
+                    search_docs=[
+                        documents[document_id]
+                        for document_id in dict.fromkeys(
+                            message.details.citation_mapping.values()
+                        )
+                        if document_id in documents
+                    ],
+                )
+                messages[index] = message.model_copy(update={"details": details})
             pending = list(response.response.child_runs)
             while pending:
                 record = pending.pop()

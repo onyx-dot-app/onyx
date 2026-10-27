@@ -50,7 +50,7 @@ for (const recovery of [
         if (recovery !== "return after completion") {
           if (recovery === "reload after network loss") {
             await page.context().setOffline(true);
-            await expect(page.reload()).rejects.toThrow(
+            await expect(chatPage.reload()).rejects.toThrow(
               "ERR_INTERNET_DISCONNECTED"
             );
             await page.context().setOffline(false);
@@ -58,7 +58,7 @@ for (const recovery of [
           const resumed = page.waitForResponse((response) =>
             response.url().includes(`/chat-session/${sessionId}/resume-stream`)
           );
-          await page.reload();
+          await chatPage.reload();
           expect((await resumed).ok()).toBe(true);
           await chatPage.expectAnswerParagraph(FIRST_PARAGRAPH);
           await releaseMockLlmGate(nonce);
@@ -86,7 +86,7 @@ for (const recovery of [
         await chatPage.expectAnswerParagraph(FIRST_PARAGRAPH);
         await chatPage.expectAnswerHeading(HEADING);
         await chatPage.expectAnswerParagraph(LAST_PARAGRAPH);
-        await page.reload();
+        await chatPage.reload();
         await chatPage.expectCompleteAnswers(1);
         await chatPage.expectAnswerParagraph(FIRST_PARAGRAPH);
         await chatPage.expectAnswerHeading(HEADING);
@@ -138,7 +138,7 @@ recoveryTest(
       await chatPage.inputBar.send();
       await chatPage.expectCompleteAnswers(2);
       await chatPage.expectAnswerParagraph(followup);
-      await page.reload();
+      await chatPage.reload();
       await chatPage.expectCompleteAnswers(2);
       await chatPage.expectAnswerParagraph(FIRST_PARAGRAPH);
       await chatPage.expectAnswerParagraph(followup);

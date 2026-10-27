@@ -333,10 +333,13 @@ export default function useChatSessionController({
         // Added and deleted in this function only, so an entry can never
         // outlive its tail.
         resumingRuns.add(runId);
-        const readerFinished = Promise.withResolvers<void>();
+        let resolveReaderFinished: () => void = () => {};
+        const readerFinished = new Promise<void>((resolve) => {
+          resolveReaderFinished = resolve;
+        });
         useChatSessionStore.getState().updateSessionData(sessionId, {
           sendAcknowledged: Promise.resolve(runId),
-          readerFinished: readerFinished.promise,
+          readerFinished,
         });
         const accumulated: Packet[] = [];
         let lastFlush = 0;
@@ -438,7 +441,7 @@ export default function useChatSessionController({
               flush();
             }
           } finally {
-            readerFinished.resolve();
+            resolveReaderFinished();
             await settleSession(sessionId);
           }
         }

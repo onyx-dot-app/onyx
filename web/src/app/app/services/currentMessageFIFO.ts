@@ -9,11 +9,16 @@ export class CurrentMessageFIFO {
   private stack: PacketType[] = [];
   isComplete: boolean = false;
   error: string | null = null;
-  private readonly admission = Promise.withResolvers<number | null>();
+  private resolveAdmission: (value: number | null) => void = () => {};
+  private rejectAdmission: (reason: Error) => void = () => {};
   /** Accepted stream ID, or null if the server finishes without admission. */
-  readonly acknowledged = this.admission.promise;
+  readonly acknowledged: Promise<number | null>;
 
   constructor() {
+    this.acknowledged = new Promise((resolve, reject) => {
+      this.resolveAdmission = resolve;
+      this.rejectAdmission = reject;
+    });
     // Completion handlers consume errors after queued packets drain.
     void this.acknowledged.catch(() => {});
   }
@@ -21,16 +26,19 @@ export class CurrentMessageFIFO {
   push(packetBunch: PacketType) {
     this.stack.push(packetBunch);
     if ("reserved_assistant_message_id" in packetBunch) {
-      this.admission.resolve(packetBunch.reserved_assistant_message_id);
+      this.resolveAdmission(packetBunch.reserved_assistant_message_id);
     } else if ("responses" in packetBunch) {
-      this.admission.resolve(packetBunch.user_message_id);
+      this.resolveAdmission(packetBunch.user_message_id);
     }
   }
 
   complete(error?: unknown) {
     this.isComplete = true;
-    if (error !== undefined) this.admission.reject(error);
-    else this.admission.resolve(null);
+    if (error !== undefined)
+      this.rejectAdmission(
+        error instanceof Error ? error : new Error(String(error))
+      );
+    else this.resolveAdmission(null);
   }
 
   nextPacket(): PacketType | undefined {

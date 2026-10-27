@@ -603,6 +603,81 @@ describe("useChatController", () => {
     expect(stopSessionMock).toHaveBeenCalledWith("s1", 11);
   });
 
+  it.each([false, true])(
+    "retries a failed scoped Stop (requested before acknowledgement: %s)",
+    async (beforeAcknowledgement) => {
+      useChatSessionStore.getState().ensureSession("s1");
+      const acknowledgement = Promise.withResolvers<void>();
+      const status = Promise.withResolvers<{ is_processing: boolean }>();
+      jest
+        .mocked(getChatSessionStatus)
+        .mockResolvedValueOnce({ is_processing: false })
+        .mockReturnValueOnce(status.promise);
+      stopSessionMock
+        .mockRejectedValueOnce(new Error("offline"))
+        .mockResolvedValueOnce();
+      streamMock.mockImplementation((_body, signal) =>
+        (async function* () {
+          await acknowledgement.promise;
+          yield idInfo;
+          if (!signal.aborted) {
+            await new Promise<void>((resolve) =>
+              signal.addEventListener("abort", () => resolve(), { once: true }),
+            );
+          }
+        })(),
+      );
+      const { result } = renderHook(() => useChatController("s1"), { wrapper });
+      await act(async () => {
+        await result.current.submit("hi");
+      });
+      if (beforeAcknowledgement) act(() => result.current.stop());
+      await act(async () => {
+        acknowledgement.resolve();
+      });
+      if (!beforeAcknowledgement) act(() => result.current.stop());
+      await waitFor(() => {
+        expect(stopSessionMock).toHaveBeenCalledTimes(1);
+        expect(
+          useChatSessionStore.getState().sessions.get("s1")?.stopRequested,
+        ).toBe(false);
+      });
+      act(() => result.current.stop());
+      await waitFor(() => expect(stopSessionMock).toHaveBeenCalledTimes(2));
+      expect(stopSessionMock).toHaveBeenLastCalledWith("s1", 11);
+      await act(async () => {
+        status.resolve({ is_processing: false });
+      });
+      await waitFor(() => expect(result.current.chatState).toBe("input"));
+    },
+  );
+
+  it("reports session creation before navigation and acceptance only after acknowledgement", async () => {
+    createSessionMock.mockResolvedValue("new-session");
+    const acknowledgement = Promise.withResolvers<void>();
+    const accepted = jest.fn();
+    const created = jest.fn(() => {
+      expect(router.replace).not.toHaveBeenCalled();
+    });
+    streamMock.mockImplementation(() =>
+      (async function* () {
+        await acknowledgement.promise;
+        yield idInfo;
+      })(),
+    );
+    const { result } = renderHook(() => useChatController(null), { wrapper });
+    await act(async () => {
+      await result.current.submit("hi", [], accepted, undefined, created);
+    });
+    expect(created).toHaveBeenCalledTimes(1);
+    expect(router.replace).toHaveBeenCalledTimes(1);
+    expect(accepted).not.toHaveBeenCalled();
+    await act(async () => {
+      acknowledgement.resolve();
+    });
+    await waitFor(() => expect(accepted).toHaveBeenCalledTimes(1));
+  });
+
   it("holds ownership while the server saves and blocks a repeat send", async () => {
     useChatSessionStore.getState().ensureSession("s1");
     let resolveStatus!: (value: { is_processing: boolean }) => void;

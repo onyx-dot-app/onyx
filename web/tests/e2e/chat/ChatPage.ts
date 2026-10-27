@@ -48,7 +48,6 @@ export class ChatPage {
 
   async reload(): Promise<void> {
     await this.page.reload();
-    await this.page.waitForLoadState("networkidle");
     await this.inputBar.textbox.waitFor({ state: "visible", timeout: 15000 });
   }
 

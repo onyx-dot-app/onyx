@@ -187,3 +187,34 @@ test("late admission cannot stop or clear a newer request", async () => {
     sendAcknowledged: undefined,
   });
 });
+
+test("a failed Stop can target the same accepted stream again before the reader finishes", async () => {
+  const reader = Promise.withResolvers<void>();
+  useChatSessionStore.getState().updateSessionData("session", {
+    chatState: "streaming",
+    sendAcknowledged: Promise.resolve(42),
+    readerFinished: reader.promise,
+  });
+  fetchMock.mockRejectedValueOnce(new TypeError("Network unavailable"));
+  await expect(stopChatSession("session", errorMessage)).rejects.toThrow(
+    "Network unavailable"
+  );
+  expect(useChatSessionStore.getState().sessions.get("session")).toMatchObject({
+    chatState: "streaming",
+    queuedMessagesPaused: true,
+    uncaughtError: errorMessage,
+  });
+  const retry = stopChatSession("session", errorMessage);
+  await Promise.resolve();
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  expect(fetchMock).toHaveBeenLastCalledWith(
+    "/api/chat/stop-chat-session/session?stream_id=42",
+    expect.objectContaining({ method: "POST" })
+  );
+  expect(waitForChatSessionIdle).not.toHaveBeenCalled();
+  reader.resolve();
+  await retry;
+  expect(
+    useChatSessionStore.getState().sessions.get("session")?.chatState
+  ).toBe("input");
+});

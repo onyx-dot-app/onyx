@@ -405,7 +405,7 @@ export class OnyxChatWidget extends LitElement {
           controller.signal,
           () => {
             if (stillOurs())
-              this.error =
+              this.streamingStatus =
                 "Waiting to confirm that this conversation is ready.";
           }
         );
@@ -429,6 +429,7 @@ export class OnyxChatWidget extends LitElement {
       if (!stillOurs()) return;
       this.inputValue = "";
       this.error = undefined;
+      this.streamingStatus = "";
       this.messages = [...this.messages, userMessage];
 
       // Get parent message ID (last assistant message with a numeric ID from backend)
@@ -579,17 +580,21 @@ export class OnyxChatWidget extends LitElement {
             controller.signal,
             () => {
               if (stillOurs())
-                this.error =
+                this.streamingStatus =
                   "Waiting to confirm that this conversation is ready.";
             }
           );
-        } catch {
-          return;
+        } catch (error) {
+          if (!stillOurs()) return;
+          if (!(error instanceof Error && error.name === "AbortError")) {
+            this.error ??=
+              error instanceof Error
+                ? error.message
+                : "Cannot confirm chat readiness";
+          }
         }
       }
       if (!stillOurs()) return;
-      if (this.error === "Waiting to confirm that this conversation is ready.")
-        this.error = undefined;
       this.isStreaming = false;
       this.isLoading = false;
       this.streamingStatus = "";

@@ -33,7 +33,7 @@ describe("widget readiness", () => {
     let calls = 0;
     globalThis.fetch = mock(async () => {
       calls++;
-      if (calls === 1) return new Response("unavailable", { status: 403 });
+      if (calls === 1) return new Response("unavailable", { status: 401 });
       if (calls === 2) return Response.json({});
       return Response.json({ is_processing: false });
     }) as typeof fetch;
@@ -47,6 +47,26 @@ describe("widget readiness", () => {
     expect(unconfirmed).toHaveBeenCalledTimes(2);
     expect(calls).toBe(3);
   });
+
+  it.each([403, 404])(
+    "ends readiness polling for unavailable sessions (%s)",
+    async (status) => {
+      globalThis.fetch = mock(
+        async () => new Response("unavailable", { status })
+      ) as typeof fetch;
+      const api = new ApiService("https://onyx.test/api", async () => "key");
+      const unconfirmed = mock(() => {});
+      await expect(
+        api.waitForSessionIdle(
+          "session",
+          new AbortController().signal,
+          unconfirmed
+        )
+      ).rejects.toThrow("no longer available");
+      expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+      expect(unconfirmed).not.toHaveBeenCalled();
+    }
+  );
 
   it("retries a stalled status request without releasing Send early", async () => {
     const setTimer = globalThis.setTimeout;
@@ -211,7 +231,13 @@ describe("widget readiness", () => {
     widget["inputValue"] = "accepted question";
     const api = new ApiService("https://onyx.test/api", async () => "key");
     api.createChatSession = mock(async () => "session");
-    api.waitForSessionIdle = mock(async () => {});
+    api.waitForSessionIdle = mock(
+      async (_sessionId, _signal, onUnconfirmed) => {
+        onUnconfirmed();
+        expect(widget["error"]).toBe("delivery failed");
+        expect(widget["streamingStatus"]).toContain("Waiting to confirm");
+      }
+    );
     api.streamMessage = mock(async function* () {
       yield { obj: { user_message_id: 1, reserved_assistant_message_id: 2 } };
       throw new Error("delivery failed");
@@ -225,5 +251,32 @@ describe("widget readiness", () => {
     });
     expect(widget["inputValue"]).toBe("");
     expect(widget["error"]).toBe("delivery failed");
+    expect(widget["streamingStatus"]).toBe("");
+    expect(widget["isStreaming"]).toBe(false);
   });
+
+  it.each([false, true])(
+    "releases Send when a session is unavailable after sending=%s",
+    async (afterSending) => {
+      const widget = new OnyxChatWidget();
+      widget["config"] = { backendUrl: "https://onyx.test/api", apiKey: "key" };
+      widget["inputValue"] = "hello";
+      const api = new ApiService("https://onyx.test/api", async () => "key");
+      api.createChatSession = mock(async () => "session");
+      if (!afterSending) widget["chatSessionId"] = "session";
+      api.streamMessage = mock(async function* () {
+        yield { obj: { user_message_id: 1, reserved_assistant_message_id: 2 } };
+      });
+      api.waitForSessionIdle = mock(async () => {
+        throw new Error("Session unavailable");
+      });
+      widget["apiService"] = api;
+      await widget["sendMessage"]();
+      expect(widget["error"]).toBe("Session unavailable");
+      expect(widget["isStreaming"]).toBe(false);
+      expect(widget["abortController"]).toBeUndefined();
+      expect(widget["inputValue"]).toBe(afterSending ? "" : "hello");
+      expect(api.streamMessage).toHaveBeenCalledTimes(afterSending ? 1 : 0);
+    }
+  );
 });

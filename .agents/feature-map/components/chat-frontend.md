@@ -609,3 +609,7 @@ with replay prevents an earlier settlement from releasing input or replacing his
 Recovery preserves the latest unsaved failed turn during both initial history loading and settlement.
 Manual completion checks belong to their sessions; switching chats does not disable another chat's controls.
 Chat, search, and voice submission preserve drafts while readiness is unconfirmed.
+
+A failed Stop request leaves an acknowledged stream stoppable. The client keeps the draft and pauses queued sends.
+Pending readiness checks do not disable Stop when streaming resumes.
+History refresh preserves the selected source panel by its saved message ID.

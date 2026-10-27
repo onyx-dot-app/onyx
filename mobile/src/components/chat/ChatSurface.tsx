@@ -147,12 +147,9 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
     submit(
       message ?? draft.text,
       draft.descriptors,
-      () => {
-        // Acknowledgement consumes only the submitted draft, preserving edits made while waiting.
-        if (sessionId == null) composerTools.notePendingSend(sentWithAgent);
-        clearDraft();
-      },
+      clearDraft,
       composerTools.resolveToolOptions(),
+      () => composerTools.notePendingSend(sentWithAgent),
     );
   };
 
