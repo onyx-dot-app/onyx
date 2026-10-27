@@ -27,7 +27,14 @@ from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_prune import RedisConnectorPrunePayload
 from onyx.server.documents import cc_pair as cc_pair_api
 from onyx.server.documents.cc_pair import prune_cc_pair, update_cc_pair_status
-from onyx.server.documents.models import CCStatusUpdateRequest
+from onyx.server.documents.models import (
+    CCStatusUpdateRequest,
+    ConnectorCredentialPairIdentifier,
+)
+from onyx.server.manage import administrative as administrative_api
+from onyx.server.manage.administrative import (
+    create_deletion_attempt_for_connector_id,
+)
 from shared_configs.contextvars import get_current_tenant_id
 from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 from tests.external_dependency_unit.indexing_helpers import (
@@ -222,11 +229,13 @@ def test_resume_clears_the_deletion_wait(
     db_session: Session,
     cc_pair: ConnectorCredentialPair,
     admin: User,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _set_status(db_session, cc_pair, ConnectorCredentialPairStatus.DELETING)
     redis_connector = RedisConnector(get_current_tenant_id(), cc_pair.id)
     redis_connector.stop.set_fence(True)
     redis_connector.stop.set_timeout()
+    monkeypatch.setattr(cc_pair_api, "client_app", MagicMock())
 
     update_cc_pair_status(
         cc_pair.id,
@@ -237,6 +246,38 @@ def test_resume_clears_the_deletion_wait(
 
     assert not redis_connector.stop.fenced
     assert not redis_connector.stop.timeout_set
+
+
+@pytest.mark.parametrize(
+    ("status", "keeps_the_wait"),
+    [
+        (ConnectorCredentialPairStatus.PAUSED, False),
+        (ConnectorCredentialPairStatus.DELETING, True),
+    ],
+)
+def test_a_new_deletion_starts_its_own_wait(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    admin: User,
+    monkeypatch: pytest.MonkeyPatch,
+    status: ConnectorCredentialPairStatus,
+    keeps_the_wait: bool,
+) -> None:
+    # A wait left by an earlier deletion, e.g. one resumed by older code.
+    _set_status(db_session, cc_pair, status)
+    redis_connector = RedisConnector(get_current_tenant_id(), cc_pair.id)
+    redis_connector.stop.set_timeout()
+    monkeypatch.setattr(administrative_api, "client_app", MagicMock())
+
+    create_deletion_attempt_for_connector_id(
+        ConnectorCredentialPairIdentifier(
+            connector_id=cc_pair.connector_id, credential_id=cc_pair.credential_id
+        ),
+        user=admin,
+        db_session=db_session,
+    )
+
+    assert redis_connector.stop.timeout_set == keeps_the_wait
 
 
 def test_pause_cancels_a_queued_prune(
