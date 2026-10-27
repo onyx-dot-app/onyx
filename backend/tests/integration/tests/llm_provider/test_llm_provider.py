@@ -4,6 +4,7 @@ from typing import Any
 import httpx
 import pytest
 
+from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.llm.api_surfaces import resolve_api_surface
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_capabilities import (
@@ -26,7 +27,7 @@ from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
 
-def _get_provider_by_id(admin_user: DATestUser, provider_id: str) -> dict | None:
+def _get_provider_by_id(admin_user: DATestUser, provider_id: int) -> dict | None:
     """Utility function to fetch an LLM provider by ID"""
     response = client.get(
         f"{API_SERVER_URL}/admin/llm/provider",
@@ -2406,3 +2407,34 @@ def test_keep_existing_models_preserves_unsent_models(
     assert _update(keep=True) == ["gpt-4", "gpt-6-sol"]
     # The default is still a full replace.
     assert _update(keep=False) == ["gpt-4"]
+
+
+def test_max_document_tokens_uses_selected_model(
+    reset: None,  # noqa: ARG001
+) -> None:
+    """The pre-session context budget follows the model the user selected."""
+    admin_user = UserManager.create(name="admin_user")
+    # litellm lists gpt-4 with an 8K input window, far below the default model's.
+    provider = LLMProviderManager.create(
+        user_performing_action=admin_user, model_names=["gpt-4"]
+    )
+    provider_data = _get_provider_by_id(admin_user, provider.id)
+    assert provider_data is not None
+    small_model_id = next(
+        mc["id"]
+        for mc in provider_data["model_configurations"]
+        if mc["name"] == "gpt-4"
+    )
+
+    def _max_document_tokens(params: dict[str, int]) -> int:
+        response = client.get(
+            f"{API_SERVER_URL}/chat/max-selected-document-tokens",
+            params={"persona_id": DEFAULT_PERSONA_ID, **params},
+            headers=admin_user.headers,
+        )
+        assert response.status_code == 200
+        return response.json()["max_tokens"]
+
+    assert _max_document_tokens({"model_configuration_id": small_model_id}) < (
+        _max_document_tokens({})
+    )

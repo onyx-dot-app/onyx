@@ -302,6 +302,13 @@ const AppInputBar = React.memo(
       setIsRecording(nextIsRecording);
     }, []);
 
+    const { currentMessageFiles, setCurrentMessageFiles } =
+      useProjectsContext();
+    const fileSendGate = useFileSendGate(
+      currentMessageFiles,
+      availableContextTokens
+    );
+
     // Wrapper for onSubmit that stops TTS first to prevent overlapping voices
     const handleSubmit = useCallback(
       (text: string) => {
@@ -312,17 +319,15 @@ const AppInputBar = React.memo(
     );
     const submitMessage = useCallback(
       (text: string) => {
-        if (!text.trim()) {
+        // Checked here, not only in the controls, so voice auto-send obeys it.
+        if (!text.trim() || fileSendGate.isSendBlocked) {
           return;
         }
         handleSubmit(text);
         clearChatDraft();
       },
-      [handleSubmit, clearChatDraft]
+      [handleSubmit, clearChatDraft, fileSendGate.isSendBlocked]
     );
-
-    const { currentMessageFiles, setCurrentMessageFiles } =
-      useProjectsContext();
 
     // Expose reset and focus methods to parent via ref
     React.useImperativeHandle(ref, () => ({
@@ -373,11 +378,6 @@ const AppInputBar = React.memo(
     const { isLoading: isLoadingProjects } = useProjects();
     const activeProject = useActiveProject();
 
-    const fileSendGate = useFileSendGate(
-      currentMessageFiles,
-      availableContextTokens
-    );
-
     // Convert ProjectFile to MinimalOnyxDocument format for viewing
     const handleFileClick = useCallback(
       (file: ProjectFile) => {
@@ -405,18 +405,26 @@ const AppInputBar = React.memo(
 
     const prevChatStateRef = useRef(chatState);
     const prevRenderCompleteRef = useRef(latestMessageRenderComplete);
+    const prevSendBlockedRef = useRef(fileSendGate.isSendBlocked);
 
     useEffect(() => {
       // "Ready" requires the backend to be idle AND the previous answer
       // to have finished drawing on screen. Without the render-complete
       // gate, a queued follow-up fires while the smooth-streaming
-      // typewriter is still flushing the prior answer.
+      // typewriter is still flushing the prior answer. Attached files that
+      // still block send hold the queue until they finish indexing.
       const wasReady =
-        prevChatStateRef.current === "input" && prevRenderCompleteRef.current;
-      const isReady = chatState === "input" && latestMessageRenderComplete;
+        prevChatStateRef.current === "input" &&
+        prevRenderCompleteRef.current &&
+        !prevSendBlockedRef.current;
+      const isReady =
+        chatState === "input" &&
+        latestMessageRenderComplete &&
+        !fileSendGate.isSendBlocked;
 
       prevChatStateRef.current = chatState;
       prevRenderCompleteRef.current = latestMessageRenderComplete;
+      prevSendBlockedRef.current = fileSendGate.isSendBlocked;
 
       if (!wasReady && isReady && queuedMessages.length > 0) {
         const nextMessage = queuedMessages[0]!.text;
@@ -429,6 +437,7 @@ const AppInputBar = React.memo(
     }, [
       chatState,
       latestMessageRenderComplete,
+      fileSendGate.isSendBlocked,
       queuedMessages,
       removeCurrentQueuedMessage,
       stopTTS,

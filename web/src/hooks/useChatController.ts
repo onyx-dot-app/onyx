@@ -1711,7 +1711,10 @@ export default function useChatController({
           return;
         }
 
-        const maxTokens = await getMaxSelectedDocumentTokens(personaId);
+        const maxTokens = await getMaxSelectedDocumentTokens(
+          personaId,
+          llmManager.currentLlm.modelConfigurationId
+        );
         setIfActive(maxTokens ?? DEFAULT_CONTEXT_TOKENS);
       } catch (e) {
         console.error("Failed to fetch available context tokens:", e);

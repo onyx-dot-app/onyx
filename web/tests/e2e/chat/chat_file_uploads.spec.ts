@@ -44,8 +44,9 @@ async function uploadFilesToChat(
   getStatus: () => string = () => "COMPLETED"
 ): Promise<void> {
   // Report every tracked file as COMPLETED (by default) so the chat input
-  // treats uploads as ready. The send button is disabled while a file is still processing,
-  // and a file that fails to index is dropped from the message — so without
+  // treats uploads as ready. A file too large for the context blocks send
+  // while processing, and a file that fails to index is dropped from the
+  // message — so without
   // this stub these tests would race (or depend on) the real indexing
   // pipeline. UI rendering is what's under test here, not indexing.
   await page.route("**/api/user/projects/file/statuses", async (route) => {
@@ -186,9 +187,48 @@ test.describe("Chat File Uploads", () => {
   });
 
   test.describe("File Processing State", () => {
-    test("file chip shows processing and blocks send until the file is ready", async ({
+    test("a processing file that fits in the context sends without waiting", async ({
       page,
     }) => {
+      await chat.goto();
+      await mockChatEndpoint(page, buildMockStream(SHORT_AI_RESPONSE));
+
+      await uploadFilesToChat(
+        page,
+        [
+          {
+            name: "notes-small.txt",
+            mimeType: "text/plain",
+            buffer: Buffer.from("Short notes.", "utf-8"),
+          },
+        ],
+        () => "PROCESSING"
+      );
+
+      const { inputBar } = chat;
+      await inputBar.expectFileProcessing();
+      await inputBar.expectFileTooLargeBanner(false);
+
+      await inputBar.fill("Summarize this file");
+      await expect(inputBar.sendButton).toBeEnabled();
+      await inputBar.send();
+      await chat.expectHumanMessage("Summarize this file");
+    });
+
+    test("a processing file too large for the context waits for indexing", async ({
+      page,
+    }) => {
+      // A one-token budget makes any attached text too large to send inline.
+      await page.route(
+        "**/api/chat/max-selected-document-tokens**",
+        async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({ max_tokens: 1 }),
+          });
+        }
+      );
       await chat.goto();
       await mockChatEndpoint(page, buildMockStream(SHORT_AI_RESPONSE));
 
@@ -208,6 +248,7 @@ test.describe("Chat File Uploads", () => {
 
       const { inputBar } = chat;
       await inputBar.expectFileProcessing();
+      await inputBar.expectFileTooLargeBanner();
 
       await inputBar.fill("Summarize this file");
       await expect(inputBar.sendButton).toBeDisabled();
@@ -217,6 +258,7 @@ test.describe("Chat File Uploads", () => {
 
       fileStatus = "COMPLETED";
       await inputBar.expectFileProcessing(false);
+      await inputBar.expectFileTooLargeBanner(false);
       await expect(inputBar.sendButton).toBeEnabled();
       await inputBar.send();
       await chat.expectHumanMessage("Summarize this file");

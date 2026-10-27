@@ -1040,9 +1040,15 @@ class MaxSelectedDocumentTokens(BaseModel):
 @router.get("/max-selected-document-tokens")
 def get_max_document_tokens(
     persona_id: int,
+    model_configuration_id: int | None = None,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> MaxSelectedDocumentTokens:
+    """Return the persona's available context tokens before a chat session exists.
+
+    ``model_configuration_id`` selects the model the user has picked; without it
+    the budget reflects the persona's default model.
+    """
     try:
         persona = get_persona_by_id(
             persona_id=persona_id,
@@ -1051,13 +1057,19 @@ def get_max_document_tokens(
             is_for_edit=False,
         )
     except ValueError:
-        raise HTTPException(status_code=404, detail="Persona not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Persona not found")
 
+    llm_override = (
+        LLMOverride(model_configuration_id=model_configuration_id)
+        if model_configuration_id is not None
+        else None
+    )
     return MaxSelectedDocumentTokens(
         max_tokens=_get_available_tokens_for_persona(
             persona=persona,
             user=user,
             db_session=db_session,
+            llm_override=llm_override,
         ),
     )
 

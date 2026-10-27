@@ -4,7 +4,8 @@ import AppInputBar, {
   type AppInputBarHandle,
 } from "@/sections/input/AppInputBar";
 import { type ProjectFile, UserFileStatus } from "@/lib/projects/types";
-import { ChatFileType } from "@/app/app/interfaces";
+import { ChatFileType, type ChatState } from "@/app/app/interfaces";
+import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { useLlmManager } from "@/lib/hooks";
 import { useToolConfiguration } from "@/lib/tools/hooks";
 import type { MinimalAgent } from "@/lib/agents/types";
@@ -30,8 +31,18 @@ jest.mock("@/providers/QueryControllerProvider", () => ({
 jest.mock("@/providers/VoiceModeProvider", () => ({
   useVoiceMode: () => ({ stopTTS: jest.fn() }),
 }));
+const mockVoiceStatus = { sttEnabled: false };
 jest.mock("@/hooks/useVoiceStatus", () => ({
-  useVoiceStatus: () => ({ sttEnabled: false }),
+  useVoiceStatus: () => mockVoiceStatus,
+}));
+// Stands in for the recorder: one click delivers a finished transcription.
+jest.mock("@/sections/input/MicrophoneButton", () => ({
+  __esModule: true,
+  default: ({ onAutoSend }: { onAutoSend: (text: string) => void }) => (
+    <Button onClick={() => onAutoSend("spoken message")}>
+      Auto-send voice
+    </Button>
+  ),
 }));
 jest.mock("@/lib/settings/hooks", () => ({
   useSettings: () => ({ appName: "Onyx" }),
@@ -100,12 +111,14 @@ function Composer({
   inputBarRef,
   availableContextTokens,
   onSubmit = jest.fn(),
+  chatState = "input",
 }: {
   plugins: readonly MemberPlugin[];
   agentId?: number;
   inputBarRef?: React.Ref<AppInputBarHandle>;
   availableContextTokens?: number;
   onSubmit?: (message: string) => void;
+  chatState?: ChatState;
 }) {
   const configuration = useToolConfiguration(agentId);
   const llmManager = useLlmManager();
@@ -132,7 +145,7 @@ function Composer({
         handleFileUpload={jest.fn()}
         deepResearchEnabled={false}
         toggleDeepResearch={jest.fn()}
-        chatState="input"
+        chatState={chatState}
         availableContextTokens={availableContextTokens}
         disabled={false}
       />
@@ -144,6 +157,11 @@ beforeEach(() => {
   localStorage.clear();
   mockProjectsContext.currentMessageFiles = [];
   mockProjectsContext.setCurrentMessageFiles.mockClear();
+  mockVoiceStatus.sttEnabled = false;
+  useChatSessionStore.setState({
+    currentSessionId: null,
+    sessions: new Map(),
+  });
 });
 
 test("default Chat hides the forced plugin pill until metadata confirms availability without clearing the selection", async () => {
@@ -315,6 +333,50 @@ describe("attached files still indexing", () => {
     ];
     rerender(<Composer plugins={[]} availableContextTokens={10_000} />);
     expect(screen.getByText("File is too large for the chat")).toBeVisible();
+  });
+
+  test("voice auto-send waits for files that block send", async () => {
+    mockVoiceStatus.sttEnabled = true;
+    mockProjectsContext.currentMessageFiles = [processingFile(9_000)];
+    const onSubmit = jest.fn();
+    render(
+      <Composer
+        plugins={[]}
+        availableContextTokens={10_000}
+        onSubmit={onSubmit}
+      />
+    );
+    await setupUser().click(
+      screen.getByRole("button", { name: "Auto-send voice" })
+    );
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  test("holds a queued message until the files finish indexing", () => {
+    act(() => {
+      useChatSessionStore.getState().setCurrentSession("session-1");
+      useChatSessionStore.getState().enqueueMessage("session-1", "queued");
+    });
+    mockProjectsContext.currentMessageFiles = [processingFile(9_000)];
+    const onSubmit = jest.fn();
+    const composer = (chatState: ChatState) => (
+      <Composer
+        plugins={[]}
+        availableContextTokens={10_000}
+        onSubmit={onSubmit}
+        chatState={chatState}
+      />
+    );
+    const { rerender } = render(composer("streaming"));
+
+    rerender(composer("input"));
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    mockProjectsContext.currentMessageFiles = [
+      { ...processingFile(9_000), status: UserFileStatus.COMPLETED },
+    ];
+    rerender(composer("input"));
+    expect(onSubmit).toHaveBeenCalledWith("queued");
   });
 
   test("waits for a file with no extracted text yet", () => {
