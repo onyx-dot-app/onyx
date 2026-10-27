@@ -28,6 +28,7 @@ def _mcp_tool(
         auth_type=auth_type,
         transport=None,
         oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
+        oauth_cimd_enabled=True,
         oauth_authorization_endpoint=None,
         oauth_token_endpoint=None,
     )
@@ -46,7 +47,7 @@ def test_client_records_success_once() -> None:
     with (
         patch(
             "onyx.tools.tool_implementations.mcp.mcp_tool.call_mcp_tool",
-            return_value={"ok": True},
+            return_value='{"ok": true}',
         ),
         patch(
             "onyx.tools.tool_implementations.mcp.mcp_tool."
@@ -99,7 +100,7 @@ def test_client_records_post_call_failure_once() -> None:
         ),
         patch(
             "onyx.tools.tool_implementations.mcp.mcp_tool.call_mcp_tool",
-            return_value={"ok": True},
+            return_value='{"ok": true}',
         ),
         patch(
             "onyx.tools.tool_implementations.mcp.mcp_tool."

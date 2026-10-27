@@ -1,9 +1,9 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { getSourceMetadata } from "@/lib/connectors/utils";
 import * as TableLayouts from "@/layouts/table-layouts";
 import Text from "@/refresh-components/texts/Text";
-import { getSourceMetadata } from "@/lib/sources";
 import type { ConnectedSource } from "@/lib/hierarchy/types";
 import type { ValidSources } from "@/lib/connectors/types/source";
 import { Divider, LineItemButton } from "@opal/components";

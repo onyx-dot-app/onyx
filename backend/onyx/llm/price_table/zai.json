@@ -124,7 +124,7 @@
       },
       "mode": "chat",
       "name": "GLM-4.5-Flash",
-      "open_weights": true,
+      "open_weights": false,
       "reasoning": true,
       "release_date": "2025-07-28",
       "temperature": true,
@@ -154,6 +154,8 @@
     "glm-4.5v": {
       "attachment": true,
       "cost": {
+        "cache_read": 0.11,
+        "cache_write": 0,
         "input": 0.6,
         "output": 1.8
       },
@@ -212,6 +214,8 @@
     "glm-4.6v": {
       "attachment": true,
       "cost": {
+        "cache_read": 0.05,
+        "cache_write": 0,
         "input": 0.3,
         "output": 0.9
       },

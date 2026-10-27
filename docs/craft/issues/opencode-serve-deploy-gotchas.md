@@ -188,7 +188,7 @@ advance.
    whether the row participates in craft (`build-mode-*` pattern).
    `provider` is the type (`anthropic`, `openai`, `openrouter`, …).
 2. **BuildSession created** → `agent_provider` / `agent_model` record
-   the user's selection. Defaults come from `fetch_default_llm_model()`.
+   the user's selection. Defaults come from `fetch_default_model(..., LLMModelFlowType.CHAT)()`.
 3. **Sandbox provisioning** (`KubernetesSandboxManager.provision`):
    - `_get_llm_config(requested_provider_type, requested_model_name)`
      resolves the **default** for this sandbox. Tries

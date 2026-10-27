@@ -99,7 +99,11 @@ def test_delete_api_key_emits_event(
 
 @patch("onyx.server.manage.llm.api.invalidate_provider_listing_cache")
 @patch("onyx.server.manage.llm.api.remove_llm_provider")
+@patch(
+    "onyx.server.manage.llm.api.fetch_existing_llm_provider_by_id", return_value=None
+)
 def test_delete_llm_provider_emits_event(
+    _mock_fetch: MagicMock,
     _mock_remove: MagicMock,
     _mock_invalidate: MagicMock,
     caplog: pytest.LogCaptureFixture,

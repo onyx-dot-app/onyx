@@ -16,15 +16,14 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.llm import (
     fetch_auto_mode_providers,
-    fetch_default_craft_model,
-    fetch_default_llm_model,
+    fetch_default_model,
     fetch_existing_llm_provider,
     fetch_existing_llm_providers,
     fetch_llm_provider_view,
     remove_llm_provider,
     sync_auto_mode_models,
-    update_default_craft_provider,
-    update_default_provider,
+    update_default_model,
+    update_default_pointer_model,
 )
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM
@@ -116,8 +115,8 @@ class TestAutoModeSyncFeature:
         5. Fetch the default provider and verify the default model matches the config
         """
         # Define the expected models from the mock GitHub config
-        expected_default_model = "gpt-4o"
-        expected_additional_models = ["gpt-4o-mini", "gpt-4-turbo"]
+        expected_default_model = "gpt-6-sol"
+        expected_additional_models = ["gpt-6-luna", "gpt-4-turbo"]
         all_expected_models = [expected_default_model] + expected_additional_models
 
         # Create the mock LLMRecommendations
@@ -170,10 +169,15 @@ class TestAutoModeSyncFeature:
                     assert mc.is_visible is True, f"Model '{mc.name}' should be visible"
 
             # Step 4: Set the provider as default
-            update_default_provider(provider.id, expected_default_model, db_session)
+            update_default_model(
+                provider_id=provider.id,
+                model=expected_default_model,
+                db_session=db_session,
+                flow_type=LLMModelFlowType.CHAT,
+            )
 
             # Step 5: Fetch the default provider and verify
-            default_model = fetch_default_llm_model(db_session)
+            default_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
             assert default_model is not None, "Default provider should exist"
             assert default_model.llm_provider.name == provider_name, (
                 "Default provider should be our test provider"
@@ -205,10 +209,10 @@ class TestAutoModeSyncFeature:
             providers={
                 LlmProviderNames.OPENAI: LLMProviderRecommendation(
                     default_model=SimpleKnownModel(
-                        name="gpt-4o", display_name="GPT-4o"
+                        name="gpt-6-sol", display_name="GPT-6 Sol"
                     ),
                     additional_visible_models=[
-                        SimpleKnownModel(name="gpt-4o-mini", display_name="GPT-4o Mini")
+                        SimpleKnownModel(name="gpt-6-luna", display_name="GPT-6 Luna")
                     ],
                 ),
                 LlmProviderNames.ANTHROPIC: LLMProviderRecommendation(
@@ -255,8 +259,8 @@ class TestAutoModeSyncFeature:
             model_names = {mc.name for mc in provider.model_configurations}
 
             # OpenAI models should be present
-            assert "gpt-4o" in model_names
-            assert "gpt-4o-mini" in model_names
+            assert "gpt-6-sol" in model_names
+            assert "gpt-6-luna" in model_names
 
             # Anthropic models should NOT be present
             assert "claude-3-5-sonnet-latest" not in model_names
@@ -289,17 +293,17 @@ class TestAutoModeSyncFeature:
                 name="gpt-4", is_visible=True
             ),  # Will NOT be in auto config
             ModelConfigurationUpsertRequest(
-                name="gpt-4o", is_visible=True
+                name="gpt-6-sol", is_visible=True
             ),  # Will be in auto config
             ModelConfigurationUpsertRequest(
                 name="gpt-3.5-turbo", is_visible=True
             ),  # Will NOT be in auto config
         ]
 
-        # Auto mode config: gpt-4o (default) + gpt-4o-mini (additional)
+        # Auto mode config: gpt-6-sol (default) + gpt-6-luna (additional)
         # Note: gpt-4 and gpt-3.5-turbo are NOT in this config
-        auto_mode_default = "gpt-4o"
-        auto_mode_additional = ["gpt-4o-mini"]
+        auto_mode_default = "gpt-6-sol"
+        auto_mode_additional = ["gpt-6-luna"]
         all_auto_mode_models = [auto_mode_default] + auto_mode_additional
 
         mock_recommendations = _create_mock_llm_recommendations(
@@ -430,7 +434,7 @@ class TestAutoModeSyncFeature:
                         is_auto_mode=True,
                         model_configurations=[
                             ModelConfigurationUpsertRequest(
-                                name="gpt-4o",
+                                name="gpt-6-sol",
                                 is_visible=True,
                             )
                         ],
@@ -449,7 +453,7 @@ class TestAutoModeSyncFeature:
 
             # Only the default model provided in the request should exist
             model_names = {mc.name for mc in provider.model_configurations}
-            assert "gpt-4o" in model_names
+            assert "gpt-6-sol" in model_names
             # Anthropic models should NOT be synced
             assert "claude-3-5-sonnet-latest" not in model_names
 
@@ -480,8 +484,8 @@ class TestAutoModeSyncFeature:
         provider_2_api_key = "sk-ant-provider2-key-0000000000000000000000"
 
         # Provider 1 (OpenAI) config
-        provider_1_default_model = "gpt-4o"
-        provider_1_additional_models = ["gpt-4o-mini"]
+        provider_1_default_model = "gpt-6-sol"
+        provider_1_additional_models = ["gpt-6-luna"]
 
         # Provider 2 (Anthropic) config
         provider_2_default_model = "claude-3-5-sonnet-latest"
@@ -495,7 +499,7 @@ class TestAutoModeSyncFeature:
                 LlmProviderNames.OPENAI: LLMProviderRecommendation(
                     default_model=SimpleKnownModel(
                         name=provider_1_default_model,
-                        display_name="GPT-4o",
+                        display_name="GPT-6 Sol",
                     ),
                     additional_visible_models=[
                         SimpleKnownModel(name=m, display_name=m.upper())
@@ -548,7 +552,12 @@ class TestAutoModeSyncFeature:
                 name=provider_1_name, db_session=db_session
             )
             assert provider_1 is not None
-            update_default_provider(provider_1.id, provider_1_default_model, db_session)
+            update_default_model(
+                provider_id=provider_1.id,
+                model=provider_1_default_model,
+                db_session=db_session,
+                flow_type=LLMModelFlowType.CHAT,
+            )
 
             with patch(
                 "onyx.server.manage.llm.api.fetch_llm_recommendations_from_github",
@@ -571,7 +580,7 @@ class TestAutoModeSyncFeature:
 
             # Step 3: Verify provider 1 is still the default
             db_session.expire_all()
-            default_model = fetch_default_llm_model(db_session)
+            default_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
             assert default_model is not None
             assert default_model.llm_provider.name == provider_1_name
             assert default_model.name == provider_1_default_model
@@ -582,11 +591,16 @@ class TestAutoModeSyncFeature:
                 name=provider_2_name, db_session=db_session
             )
             assert provider_2 is not None
-            update_default_provider(provider_2.id, provider_2_default_model, db_session)
+            update_default_model(
+                provider_id=provider_2.id,
+                model=provider_2_default_model,
+                db_session=db_session,
+                flow_type=LLMModelFlowType.CHAT,
+            )
 
             # Step 5: Verify provider 2 is now the default
             db_session.expire_all()
-            default_model = fetch_default_llm_model(db_session)
+            default_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
             assert default_model is not None
             assert default_model.llm_provider.name == provider_2_name
             assert default_model.name == provider_2_default_model
@@ -629,8 +643,8 @@ class TestAutoModeMissingFlows:
         """
         mock_recommendations = _create_mock_llm_recommendations(
             provider=LlmProviderNames.OPENAI,
-            default_model_name="gpt-4o",
-            additional_models=["gpt-4o-mini"],
+            default_model_name="gpt-6-sol",
+            additional_models=["gpt-6-luna"],
         )
 
         try:
@@ -670,8 +684,8 @@ class TestAutoModeMissingFlows:
             assert provider is not None
 
             synced_model_names = {mc.name for mc in provider.model_configurations}
-            assert "gpt-4o" in synced_model_names
-            assert "gpt-4o-mini" in synced_model_names
+            assert "gpt-6-sol" in synced_model_names
+            assert "gpt-6-luna" in synced_model_names
 
             for mc in provider.model_configurations:
                 assert len(mc.llm_model_flows) > 0, (
@@ -718,14 +732,14 @@ class TestAutoModeTransitionsAndResync:
            recommended default model from the GitHub config.
         """
         initial_models = [
-            ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
-            ModelConfigurationUpsertRequest(name="gpt-4o-mini", is_visible=True),
+            ModelConfigurationUpsertRequest(name="gpt-6-sol", is_visible=True),
+            ModelConfigurationUpsertRequest(name="gpt-6-luna", is_visible=True),
         ]
 
         auto_config = _create_mock_llm_recommendations(
             provider=LlmProviderNames.OPENAI,
-            default_model_name="gpt-4o-mini",
-            additional_models=["gpt-4o"],
+            default_model_name="gpt-6-luna",
+            additional_models=["gpt-6-sol"],
         )
 
         try:
@@ -749,11 +763,16 @@ class TestAutoModeTransitionsAndResync:
                 name=provider_name, db_session=db_session
             )
             assert provider is not None
-            update_default_provider(provider.id, "gpt-4o", db_session)
+            update_default_model(
+                provider_id=provider.id,
+                model="gpt-6-sol",
+                db_session=db_session,
+                flow_type=LLMModelFlowType.CHAT,
+            )
 
-            default_before = fetch_default_llm_model(db_session)
+            default_before = fetch_default_model(db_session, LLMModelFlowType.CHAT)
             assert default_before is not None
-            assert default_before.name == "gpt-4o"
+            assert default_before.name == "gpt-6-sol"
             assert default_before.llm_provider_id == provider.id
 
             # Step 2: Transition to auto mode
@@ -778,7 +797,7 @@ class TestAutoModeTransitionsAndResync:
 
             # Step 3: Default should be preserved on this provider
             db_session.expire_all()
-            default_after = fetch_default_llm_model(db_session)
+            default_after = fetch_default_model(db_session, LLMModelFlowType.CHAT)
             assert default_after is not None, (
                 "Default model should not be None after transitioning to auto mode — "
                 "the provider was the default before and should remain so"
@@ -786,8 +805,8 @@ class TestAutoModeTransitionsAndResync:
             assert default_after.llm_provider_id == provider.id, (
                 "Default should still belong to the same provider after transition"
             )
-            assert default_after.name == "gpt-4o-mini", (
-                f"Default should be updated to the recommended model 'gpt-4o-mini', got '{default_after.name}'"
+            assert default_after.name == "gpt-6-luna", (
+                f"Default should be updated to the recommended model 'gpt-6-luna', got '{default_after.name}'"
             )
 
         finally:
@@ -812,8 +831,8 @@ class TestAutoModeTransitionsAndResync:
         """
         initial_config = _create_mock_llm_recommendations(
             provider=LlmProviderNames.OPENAI,
-            default_model_name="gpt-4o",
-            additional_models=["gpt-4o-mini"],
+            default_model_name="gpt-6-sol",
+            additional_models=["gpt-6-luna"],
         )
 
         try:
@@ -844,7 +863,7 @@ class TestAutoModeTransitionsAndResync:
             visibility_before = {
                 mc.name: mc.is_visible for mc in provider.model_configurations
             }
-            assert visibility_before == {"gpt-4o": True, "gpt-4o-mini": True}
+            assert visibility_before == {"gpt-6-sol": True, "gpt-6-luna": True}
 
             # Step 2: Switch to manual mode
             put_llm_provider(
@@ -856,9 +875,11 @@ class TestAutoModeTransitionsAndResync:
                     api_key_changed=False,
                     is_auto_mode=False,
                     model_configurations=[
-                        ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
                         ModelConfigurationUpsertRequest(
-                            name="gpt-4o-mini", is_visible=True
+                            name="gpt-6-sol", is_visible=True
+                        ),
+                        ModelConfigurationUpsertRequest(
+                            name="gpt-6-luna", is_visible=True
                         ),
                     ],
                 ),
@@ -897,20 +918,20 @@ class TestAutoModeTransitionsAndResync:
         should add newly listed models and hide models that were removed.
 
         Steps:
-        1. Create provider in auto mode with config v1: [gpt-4o, gpt-4o-mini].
-        2. Sync with config v2: [gpt-4o, gpt-4-turbo] (gpt-4o-mini removed,
+        1. Create provider in auto mode with config v1: [gpt-6-sol, gpt-6-luna].
+        2. Sync with config v2: [gpt-6-sol, gpt-4-turbo] (gpt-6-luna removed,
            gpt-4-turbo added).
-        3. Verify gpt-4o still visible, gpt-4o-mini hidden, gpt-4-turbo added
+        3. Verify gpt-6-sol still visible, gpt-6-luna hidden, gpt-4-turbo added
            and visible.
         """
         config_v1 = _create_mock_llm_recommendations(
             provider=LlmProviderNames.OPENAI,
-            default_model_name="gpt-4o",
-            additional_models=["gpt-4o-mini"],
+            default_model_name="gpt-6-sol",
+            additional_models=["gpt-6-luna"],
         )
         config_v2 = _create_mock_llm_recommendations(
             provider=LlmProviderNames.OPENAI,
-            default_model_name="gpt-4o",
+            default_model_name="gpt-6-sol",
             additional_models=["gpt-4-turbo"],
         )
 
@@ -959,11 +980,11 @@ class TestAutoModeTransitionsAndResync:
                 mc.name: mc.is_visible for mc in provider.model_configurations
             }
 
-            # gpt-4o: still in config -> visible
-            assert visibility["gpt-4o"] is True
-            # gpt-4o-mini: removed from config -> hidden (not deleted)
-            assert "gpt-4o-mini" in visibility, "Removed model should still exist in DB"
-            assert visibility["gpt-4o-mini"] is False
+            # gpt-6-sol: still in config -> visible
+            assert visibility["gpt-6-sol"] is True
+            # gpt-6-luna: removed from config -> hidden (not deleted)
+            assert "gpt-6-luna" in visibility, "Removed model should still exist in DB"
+            assert visibility["gpt-6-luna"] is False
             # gpt-4-turbo: newly added -> visible
             assert visibility["gpt-4-turbo"] is True
 
@@ -980,8 +1001,8 @@ class TestAutoModeTransitionsAndResync:
         changes on the second call."""
         config = _create_mock_llm_recommendations(
             provider=LlmProviderNames.OPENAI,
-            default_model_name="gpt-4o",
-            additional_models=["gpt-4o-mini", "gpt-4-turbo"],
+            default_model_name="gpt-6-sol",
+            additional_models=["gpt-6-luna", "gpt-4-turbo"],
         )
 
         try:
@@ -1063,20 +1084,20 @@ class TestAutoModeTransitionsAndResync:
         points at the ModelConfiguration), but the model is no longer visible.
 
         Steps:
-        1. Create provider with config: default=gpt-4o, additional=[gpt-4o-mini].
-        2. Set gpt-4o as the global default.
-        3. Re-sync with config: default=gpt-4o-mini (gpt-4o removed entirely).
-        4. Verify gpt-4o is hidden, gpt-4o-mini is visible, and
-           fetch_default_llm_model still returns a result (the flow row persists).
+        1. Create provider with config: default=gpt-6-sol, additional=[gpt-6-luna].
+        2. Set gpt-6-sol as the global default.
+        3. Re-sync with config: default=gpt-6-luna (gpt-6-sol removed entirely).
+        4. Verify gpt-6-sol is hidden, gpt-6-luna is visible, and
+           fetch_default_model still returns a result (the flow row persists).
         """
         config_v1 = _create_mock_llm_recommendations(
             provider=LlmProviderNames.OPENAI,
-            default_model_name="gpt-4o",
-            additional_models=["gpt-4o-mini"],
+            default_model_name="gpt-6-sol",
+            additional_models=["gpt-6-luna"],
         )
         config_v2 = _create_mock_llm_recommendations(
             provider=LlmProviderNames.OPENAI,
-            default_model_name="gpt-4o-mini",
+            default_model_name="gpt-6-luna",
             additional_models=[],
         )
 
@@ -1099,19 +1120,24 @@ class TestAutoModeTransitionsAndResync:
                     db_session=db_session,
                 )
 
-            # Step 2: Set gpt-4o as global default
+            # Step 2: Set gpt-6-sol as global default
             db_session.expire_all()
             provider = fetch_existing_llm_provider(
                 name=provider_name, db_session=db_session
             )
             assert provider is not None
-            update_default_provider(provider.id, "gpt-4o", db_session)
+            update_default_model(
+                provider_id=provider.id,
+                model="gpt-6-sol",
+                db_session=db_session,
+                flow_type=LLMModelFlowType.CHAT,
+            )
 
-            default_before = fetch_default_llm_model(db_session)
+            default_before = fetch_default_model(db_session, LLMModelFlowType.CHAT)
             assert default_before is not None
-            assert default_before.name == "gpt-4o"
+            assert default_before.name == "gpt-6-sol"
 
-            # Step 3: Re-sync with config v2 (gpt-4o removed)
+            # Step 3: Re-sync with config v2 (gpt-6-sol removed)
             db_session.expire_all()
             provider = fetch_existing_llm_provider(
                 name=provider_name, db_session=db_session
@@ -1135,19 +1161,19 @@ class TestAutoModeTransitionsAndResync:
             visibility = {
                 mc.name: mc.is_visible for mc in provider.model_configurations
             }
-            assert visibility["gpt-4o"] is False, "Removed default should be hidden"
-            assert visibility["gpt-4o-mini"] is True, "New default should be visible"
+            assert visibility["gpt-6-sol"] is False, "Removed default should be hidden"
+            assert visibility["gpt-6-luna"] is True, "New default should be visible"
 
-            # The old default (gpt-4o) is now hidden. sync_auto_mode_models
+            # The old default (gpt-6-sol) is now hidden. sync_auto_mode_models
             # should update the global default to the new recommended default
-            # (gpt-4o-mini) so that it is not silently lost.
+            # (gpt-6-luna) so that it is not silently lost.
             db_session.expire_all()
-            default_after = fetch_default_llm_model(db_session)
+            default_after = fetch_default_model(db_session, LLMModelFlowType.CHAT)
             assert default_after is not None, (
                 "Default model should not be None — sync should set the new recommended default when the old one is hidden"
             )
-            assert default_after.name == "gpt-4o-mini", (
-                f"Default should be updated to the new recommended model 'gpt-4o-mini', but got '{default_after.name}'"
+            assert default_after.name == "gpt-6-luna", (
+                f"Default should be updated to the new recommended model 'gpt-6-luna', but got '{default_after.name}'"
             )
 
         finally:
@@ -1164,21 +1190,21 @@ class TestAutoModeTransitionsAndResync:
         the global default should be updated to the new recommendation.
 
         Steps:
-        1. Create auto-mode provider with config v1: default=gpt-4o.
-        2. Set gpt-4o as the global CHAT default.
-        3. Re-sync with config v2: default=gpt-4o-mini (gpt-4o still present).
-        4. Verify the CHAT default switched to gpt-4o-mini and both models
+        1. Create auto-mode provider with config v1: default=gpt-6-sol.
+        2. Set gpt-6-sol as the global CHAT default.
+        3. Re-sync with config v2: default=gpt-6-luna (gpt-6-sol still present).
+        4. Verify the CHAT default switched to gpt-6-luna and both models
            remain visible.
         """
         config_v1 = _create_mock_llm_recommendations(
             provider=LlmProviderNames.OPENAI,
-            default_model_name="gpt-4o",
-            additional_models=["gpt-4o-mini"],
+            default_model_name="gpt-6-sol",
+            additional_models=["gpt-6-luna"],
         )
         config_v2 = _create_mock_llm_recommendations(
             provider=LlmProviderNames.OPENAI,
-            default_model_name="gpt-4o-mini",
-            additional_models=["gpt-4o"],
+            default_model_name="gpt-6-luna",
+            additional_models=["gpt-6-sol"],
         )
 
         try:
@@ -1200,17 +1226,22 @@ class TestAutoModeTransitionsAndResync:
                     db_session=db_session,
                 )
 
-            # Set gpt-4o as the global CHAT default
+            # Set gpt-6-sol as the global CHAT default
             db_session.expire_all()
             provider = fetch_existing_llm_provider(
                 name=provider_name, db_session=db_session
             )
             assert provider is not None
-            update_default_provider(provider.id, "gpt-4o", db_session)
+            update_default_model(
+                provider_id=provider.id,
+                model="gpt-6-sol",
+                db_session=db_session,
+                flow_type=LLMModelFlowType.CHAT,
+            )
 
-            default_before = fetch_default_llm_model(db_session)
+            default_before = fetch_default_model(db_session, LLMModelFlowType.CHAT)
             assert default_before is not None
-            assert default_before.name == "gpt-4o"
+            assert default_before.name == "gpt-6-sol"
 
             # Re-sync with config v2 (recommended default changed)
             db_session.expire_all()
@@ -1235,14 +1266,14 @@ class TestAutoModeTransitionsAndResync:
             visibility = {
                 mc.name: mc.is_visible for mc in provider.model_configurations
             }
-            assert visibility["gpt-4o"] is True
-            assert visibility["gpt-4o-mini"] is True
+            assert visibility["gpt-6-sol"] is True
+            assert visibility["gpt-6-luna"] is True
 
-            # The CHAT default should now be gpt-4o-mini
-            default_after = fetch_default_llm_model(db_session)
+            # The CHAT default should now be gpt-6-luna
+            default_after = fetch_default_model(db_session, LLMModelFlowType.CHAT)
             assert default_after is not None
-            assert default_after.name == "gpt-4o-mini", (
-                f"Default should be updated to 'gpt-4o-mini', got '{default_after.name}'"
+            assert default_after.name == "gpt-6-luna", (
+                f"Default should be updated to 'gpt-6-luna', got '{default_after.name}'"
             )
 
         finally:
@@ -1262,8 +1293,8 @@ class TestAutoModeTransitionsAndResync:
         """
         config = _create_mock_llm_recommendations(
             provider=LlmProviderNames.OPENAI,
-            default_model_name="gpt-4o",
-            additional_models=["gpt-4o-mini"],
+            default_model_name="gpt-6-sol",
+            additional_models=["gpt-6-luna"],
         )
 
         try:
@@ -1285,13 +1316,18 @@ class TestAutoModeTransitionsAndResync:
                     db_session=db_session,
                 )
 
-            # Set gpt-4o (the recommended default) as global CHAT default
+            # Set gpt-6-sol (the recommended default) as global CHAT default
             db_session.expire_all()
             provider = fetch_existing_llm_provider(
                 name=provider_name, db_session=db_session
             )
             assert provider is not None
-            update_default_provider(provider.id, "gpt-4o", db_session)
+            update_default_model(
+                provider_id=provider.id,
+                model="gpt-6-sol",
+                db_session=db_session,
+                flow_type=LLMModelFlowType.CHAT,
+            )
 
             # First sync to stabilize state
             db_session.expire_all()
@@ -1320,10 +1356,10 @@ class TestAutoModeTransitionsAndResync:
                 f"Expected 0 changes when default already matches recommended, got {changes}"
             )
 
-            # Default should still be gpt-4o
-            default_model = fetch_default_llm_model(db_session)
+            # Default should still be gpt-6-sol
+            default_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
             assert default_model is not None
-            assert default_model.name == "gpt-4o"
+            assert default_model.name == "gpt-6-sol"
 
         finally:
             db_session.rollback()
@@ -1344,19 +1380,19 @@ class TestAutoModeSyncKeepsDefaultModelsVisible:
         default on a model the admin cannot select.
 
         Steps:
-        1. Create provider with config: default=gpt-4o, additional=[gpt-4o-mini].
-        2. Point the Craft default at gpt-4o-mini.
-        3. Re-sync with config: default=gpt-4o (gpt-4o-mini removed).
-        4. Verify gpt-4o-mini stays visible and still holds the Craft default.
+        1. Create provider with config: default=gpt-6-sol, additional=[gpt-6-luna].
+        2. Point the Craft default at gpt-6-luna.
+        3. Re-sync with config: default=gpt-6-sol (gpt-6-luna removed).
+        4. Verify gpt-6-luna stays visible and still holds the Craft default.
         """
         config_v1 = _create_mock_llm_recommendations(
             provider=LlmProviderNames.OPENAI,
-            default_model_name="gpt-4o",
-            additional_models=["gpt-4o-mini"],
+            default_model_name="gpt-6-sol",
+            additional_models=["gpt-6-luna"],
         )
         config_v2 = _create_mock_llm_recommendations(
             provider=LlmProviderNames.OPENAI,
-            default_model_name="gpt-4o",
+            default_model_name="gpt-6-sol",
             additional_models=[],
         )
 
@@ -1384,7 +1420,12 @@ class TestAutoModeSyncKeepsDefaultModelsVisible:
                 name=provider_name, db_session=db_session
             )
             assert provider is not None
-            update_default_craft_provider(provider.id, "gpt-4o-mini", db_session)
+            update_default_pointer_model(
+                provider_id=provider.id,
+                model_name="gpt-6-luna",
+                db_session=db_session,
+                flow_type=LLMModelFlowType.CRAFT,
+            )
 
             db_session.expire_all()
             provider = fetch_existing_llm_provider(
@@ -1405,14 +1446,14 @@ class TestAutoModeSyncKeepsDefaultModelsVisible:
             visibility = {
                 mc.name: mc.is_visible for mc in provider.model_configurations
             }
-            assert visibility["gpt-4o-mini"] is True, (
+            assert visibility["gpt-6-luna"] is True, (
                 "A model holding the Craft default must stay visible, even once "
                 "the config drops it"
             )
 
-            craft_default = fetch_default_craft_model(db_session)
+            craft_default = fetch_default_model(db_session, LLMModelFlowType.CRAFT)
             assert craft_default is not None
-            assert craft_default.name == "gpt-4o-mini"
+            assert craft_default.name == "gpt-6-luna"
 
         finally:
             db_session.rollback()
@@ -1427,20 +1468,20 @@ class TestAutoModeSyncKeepsDefaultModelsVisible:
         not enough to hide it while it still holds another.
 
         Steps:
-        1. Create provider with config: default=gpt-4o, additional=[gpt-4o-mini].
-        2. Point both the chat default and the Craft default at gpt-4o.
-        3. Re-sync with config: default=gpt-4o-mini (gpt-4o removed).
-        4. Verify chat re-points to gpt-4o-mini, and gpt-4o stays visible
+        1. Create provider with config: default=gpt-6-sol, additional=[gpt-6-luna].
+        2. Point both the chat default and the Craft default at gpt-6-sol.
+        3. Re-sync with config: default=gpt-6-luna (gpt-6-sol removed).
+        4. Verify chat re-points to gpt-6-luna, and gpt-6-sol stays visible
            because it still holds Craft.
         """
         config_v1 = _create_mock_llm_recommendations(
             provider=LlmProviderNames.OPENAI,
-            default_model_name="gpt-4o",
-            additional_models=["gpt-4o-mini"],
+            default_model_name="gpt-6-sol",
+            additional_models=["gpt-6-luna"],
         )
         config_v2 = _create_mock_llm_recommendations(
             provider=LlmProviderNames.OPENAI,
-            default_model_name="gpt-4o-mini",
+            default_model_name="gpt-6-luna",
             additional_models=[],
         )
 
@@ -1468,8 +1509,18 @@ class TestAutoModeSyncKeepsDefaultModelsVisible:
                 name=provider_name, db_session=db_session
             )
             assert provider is not None
-            update_default_provider(provider.id, "gpt-4o", db_session)
-            update_default_craft_provider(provider.id, "gpt-4o", db_session)
+            update_default_model(
+                provider_id=provider.id,
+                model="gpt-6-sol",
+                db_session=db_session,
+                flow_type=LLMModelFlowType.CHAT,
+            )
+            update_default_pointer_model(
+                provider_id=provider.id,
+                model_name="gpt-6-sol",
+                db_session=db_session,
+                flow_type=LLMModelFlowType.CRAFT,
+            )
 
             db_session.expire_all()
             provider = fetch_existing_llm_provider(
@@ -1483,15 +1534,15 @@ class TestAutoModeSyncKeepsDefaultModelsVisible:
             )
 
             db_session.expire_all()
-            chat_default = fetch_default_llm_model(db_session)
+            chat_default = fetch_default_model(db_session, LLMModelFlowType.CHAT)
             assert chat_default is not None
-            assert chat_default.name == "gpt-4o-mini", (
+            assert chat_default.name == "gpt-6-luna", (
                 "The chat default should follow the new recommendation"
             )
 
-            craft_default = fetch_default_craft_model(db_session)
+            craft_default = fetch_default_model(db_session, LLMModelFlowType.CRAFT)
             assert craft_default is not None
-            assert craft_default.name == "gpt-4o"
+            assert craft_default.name == "gpt-6-sol"
 
             provider = fetch_existing_llm_provider(
                 name=provider_name, db_session=db_session
@@ -1500,11 +1551,11 @@ class TestAutoModeSyncKeepsDefaultModelsVisible:
             visibility = {
                 mc.name: mc.is_visible for mc in provider.model_configurations
             }
-            assert visibility["gpt-4o"] is True, (
-                "gpt-4o gave up the chat default but still holds Craft, so it "
+            assert visibility["gpt-6-sol"] is True, (
+                "gpt-6-sol gave up the chat default but still holds Craft, so it "
                 "must stay visible"
             )
-            assert visibility["gpt-4o-mini"] is True
+            assert visibility["gpt-6-luna"] is True
 
         finally:
             db_session.rollback()
@@ -1519,20 +1570,20 @@ class TestAutoModeSyncKeepsDefaultModelsVisible:
         Sync repairs that instead of leaving the default unreachable.
 
         Steps:
-        1. Create provider with config: default=gpt-4o, additional=[gpt-4o-mini].
-        2. Point the Craft default at gpt-4o-mini, then hide it by hand to
+        1. Create provider with config: default=gpt-6-sol, additional=[gpt-6-luna].
+        2. Point the Craft default at gpt-6-luna, then hide it by hand to
            reproduce what the previous sync left behind.
-        3. Re-sync with config: default=gpt-4o (gpt-4o-mini removed).
-        4. Verify gpt-4o-mini is visible again and still holds Craft.
+        3. Re-sync with config: default=gpt-6-sol (gpt-6-luna removed).
+        4. Verify gpt-6-luna is visible again and still holds Craft.
         """
         config_v1 = _create_mock_llm_recommendations(
             provider=LlmProviderNames.OPENAI,
-            default_model_name="gpt-4o",
-            additional_models=["gpt-4o-mini"],
+            default_model_name="gpt-6-sol",
+            additional_models=["gpt-6-luna"],
         )
         config_v2 = _create_mock_llm_recommendations(
             provider=LlmProviderNames.OPENAI,
-            default_model_name="gpt-4o",
+            default_model_name="gpt-6-sol",
             additional_models=[],
         )
 
@@ -1560,7 +1611,12 @@ class TestAutoModeSyncKeepsDefaultModelsVisible:
                 name=provider_name, db_session=db_session
             )
             assert provider is not None
-            update_default_craft_provider(provider.id, "gpt-4o-mini", db_session)
+            update_default_pointer_model(
+                provider_id=provider.id,
+                model_name="gpt-6-luna",
+                db_session=db_session,
+                flow_type=LLMModelFlowType.CRAFT,
+            )
 
             # Reproduce the state the old sync left: hidden, but still the default.
             db_session.expire_all()
@@ -1569,7 +1625,7 @@ class TestAutoModeSyncKeepsDefaultModelsVisible:
             )
             assert provider is not None
             for mc in provider.model_configurations:
-                if mc.name == "gpt-4o-mini":
+                if mc.name == "gpt-6-luna":
                     mc.is_visible = False
             db_session.commit()
 
@@ -1592,14 +1648,14 @@ class TestAutoModeSyncKeepsDefaultModelsVisible:
             visibility = {
                 mc.name: mc.is_visible for mc in provider.model_configurations
             }
-            assert visibility["gpt-4o-mini"] is True, (
+            assert visibility["gpt-6-luna"] is True, (
                 "Sync must restore a model that an earlier sync hid while it "
                 "still held a default"
             )
 
-            craft_default = fetch_default_craft_model(db_session)
+            craft_default = fetch_default_model(db_session, LLMModelFlowType.CRAFT)
             assert craft_default is not None
-            assert craft_default.name == "gpt-4o-mini"
+            assert craft_default.name == "gpt-6-luna"
 
         finally:
             db_session.rollback()
@@ -1615,21 +1671,21 @@ class TestAutoModeSyncKeepsDefaultModelsVisible:
         must reach the loaded rows, not only the database.
 
         Steps:
-        1. Create provider with config: default=gpt-4o,
-           additional=[gpt-4o-mini, gpt-4-turbo].
-        2. Point Craft at gpt-4o-mini and hide it by hand, so the sync has one
+        1. Create provider with config: default=gpt-6-sol,
+           additional=[gpt-6-luna, gpt-4-turbo].
+        2. Point Craft at gpt-6-luna and hide it by hand, so the sync has one
            model to restore and one (gpt-4-turbo) to hide.
-        3. Re-sync with config: default=gpt-4o (both extras removed).
+        3. Re-sync with config: default=gpt-6-sol (both extras removed).
         4. Read the same provider object back with no expire_all in between.
         """
         config_v1 = _create_mock_llm_recommendations(
             provider=LlmProviderNames.OPENAI,
-            default_model_name="gpt-4o",
-            additional_models=["gpt-4o-mini", "gpt-4-turbo"],
+            default_model_name="gpt-6-sol",
+            additional_models=["gpt-6-luna", "gpt-4-turbo"],
         )
         config_v2 = _create_mock_llm_recommendations(
             provider=LlmProviderNames.OPENAI,
-            default_model_name="gpt-4o",
+            default_model_name="gpt-6-sol",
             additional_models=[],
         )
 
@@ -1657,7 +1713,12 @@ class TestAutoModeSyncKeepsDefaultModelsVisible:
                 name=provider_name, db_session=db_session
             )
             assert provider is not None
-            update_default_craft_provider(provider.id, "gpt-4o-mini", db_session)
+            update_default_pointer_model(
+                provider_id=provider.id,
+                model_name="gpt-6-luna",
+                db_session=db_session,
+                flow_type=LLMModelFlowType.CRAFT,
+            )
 
             db_session.expire_all()
             provider = fetch_existing_llm_provider(
@@ -1665,7 +1726,7 @@ class TestAutoModeSyncKeepsDefaultModelsVisible:
             )
             assert provider is not None
             for mc in provider.model_configurations:
-                if mc.name == "gpt-4o-mini":
+                if mc.name == "gpt-6-luna":
                     mc.is_visible = False
             db_session.commit()
 
@@ -1688,7 +1749,7 @@ class TestAutoModeSyncKeepsDefaultModelsVisible:
             assert visibility["gpt-4-turbo"] is False, (
                 "The hide must reach the loaded row, not just the database"
             )
-            assert visibility["gpt-4o-mini"] is True, (
+            assert visibility["gpt-6-luna"] is True, (
                 "The restore must reach the loaded row, not just the database"
             )
 

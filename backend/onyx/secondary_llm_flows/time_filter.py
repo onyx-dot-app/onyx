@@ -57,8 +57,12 @@ class TimeFilter(BaseModel):
         return filters
 
 
-# The model's "(start, end)" output; each side is one comma/paren-free token.
-_TIME_FILTER_PAIR_RE = re.compile(r"\(\s*([^(),]+?)\s*,\s*([^(),]+?)\s*\)")
+# The model's "(start, end)" output; each side is one comma/paren-free slot,
+# stripped by _parse_bound. One quantifier per slot keeps matching linear.
+_TIME_FILTER_PAIR_RE = re.compile(r"\(([^(),]+),([^(),]+)\)")
+
+# The expected output is under ~40 chars; only a short prefix is parsed.
+_MAX_TIME_FILTER_OUTPUT_CHARS = 512
 
 # The date field the model prefixes its pair with ("created (...)" /
 # "updated (...)"). Absent / anything else defaults to updated.
@@ -114,6 +118,7 @@ def _parse_time_decision(
     now = now or datetime.now(timezone.utc)
     if not content:
         return None
+    content = content[:_MAX_TIME_FILTER_OUTPUT_CHARS]
     # search() tolerates code fences / stray text around the pair.
     match = _TIME_FILTER_PAIR_RE.search(content)
     if match is None:

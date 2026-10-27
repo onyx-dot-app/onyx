@@ -28,7 +28,7 @@ pytestmark = pytest.mark.nightly
 
 # Deployment that exists on the shared Azure test resource (the same resource
 # AZURE_API_URL points at; see tests/daily/embedding for its embedding use).
-_CHAT_DEPLOYMENT = "gpt-4o"
+_CHAT_DEPLOYMENT = "gpt-6-sol"
 
 # A dated api-version, as admins configure for Azure chat completions. Before
 # the v1-surface fix this routed responses-bridge calls to the legacy surface.

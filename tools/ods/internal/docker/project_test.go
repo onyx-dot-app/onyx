@@ -2,23 +2,10 @@ package docker
 
 import (
 	"maps"
-	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"testing"
-
-	"github.com/onyx-dot-app/onyx/tools/ods/internal/gittest"
 )
-
-func TestName_usesFlag(t *testing.T) {
-	SetProjectFlags("custom-project")
-	defer SetProjectFlags("")
-
-	if got := ProjectName(); got != "custom-project" {
-		t.Fatalf("expected \"custom-project\", got %q", got)
-	}
-}
 
 func TestNormalizeProjectName(t *testing.T) {
 	tests := []struct {
@@ -34,44 +21,17 @@ func TestNormalizeProjectName(t *testing.T) {
 		{"...", defaultProjectName},
 	}
 	for _, tt := range tests {
-		if got := normalizeProjectName(tt.input); got != tt.want {
-			t.Errorf("normalizeProjectName(%q) = %q, want %q", tt.input, got, tt.want)
+		if got := NormalizeProjectName(tt.input); got != tt.want {
+			t.Errorf("NormalizeProjectName(%q) = %q, want %q", tt.input, got, tt.want)
 		}
 	}
 }
 
-func TestName_usesNormalizedGitRootBasename(t *testing.T) {
-	SetProjectFlags("")
-	repo := filepath.Join(t.TempDir(), "Feature.X")
-	if err := os.Mkdir(repo, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	gittest.Git(t, repo, "init")
-	t.Chdir(repo)
-
-	if got := ProjectName(); got != "featurex" {
-		t.Fatalf("expected %q, got %q", "featurex", got)
-	}
-}
-
-func TestName_defaultsOutsideGitRepo(t *testing.T) {
-	SetProjectFlags("")
-	dir := t.TempDir()
-	t.Setenv("GIT_CEILING_DIRECTORIES", filepath.Dir(dir))
-	t.Chdir(dir)
-
-	if got := ProjectName(); got != defaultProjectName {
-		t.Fatalf("expected %q, got %q", defaultProjectName, got)
-	}
-}
-
 func TestFindAvailablePorts_reusesRunningContainerPorts(t *testing.T) {
-	SetProjectFlags("proj")
-	t.Cleanup(func() { SetProjectFlags("") })
 	// Every container reports host port 2<containerPort>, e.g. 25432.
 	calls := fakeDocker(t, `echo "0.0.0.0:2$3"`)
 
-	resolved, err := FindAvailablePorts()
+	resolved, err := FindAvailablePorts("proj")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -101,13 +61,11 @@ func TestFindAvailablePorts_reusesRunningContainerPorts(t *testing.T) {
 }
 
 func TestFindAvailablePorts_probesWithoutReusingClaimedPorts(t *testing.T) {
-	SetProjectFlags("proj")
-	t.Cleanup(func() { SetProjectFlags("") })
 	// Only the model server runs, and it holds object-store's default port.
 	fakeDocker(t, `[ "$2" = proj-inference_model_server-1 ] && echo 0.0.0.0:9004 && exit 0
 exit 1`)
 
-	resolved, err := FindAvailablePorts()
+	resolved, err := FindAvailablePorts("proj")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

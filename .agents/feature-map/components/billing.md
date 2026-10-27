@@ -71,7 +71,7 @@ All authenticated handlers gate on
 | POST | `/license/upload` | `upload_license` | Manual signed license file, for air-gapped self-hosted. Rejects on `MULTI_TENANT`. |
 | POST | `/license/refresh` | `refresh_license_cache_endpoint` | Re-reads the DB, not the control plane. |
 | DELETE | `/license` | `delete_license` | Rejects on `MULTI_TENANT`. |
-| POST | `/license/downgrade` | `downgrade_to_community` | Drops the deployment to the Community tier (§4.5). Returns `CommunityDowngradeResponse` (`connectors_made_public`, `user_groups_removed`). Rejects on `MULTI_TENANT`. |
+| POST | `/license/downgrade` | `downgrade_to_community` | Drops the deployment to the Community tier (§4.5). Returns `CommunityDowngradeResponse` (`connectors_made_public`, `user_groups_removed`). Rejects on `MULTI_TENANT`, and with `CONFLICT` unless the deployment is gated. |
 
 All of these gate on `FULL_ADMIN_PANEL_ACCESS` too, and are sync `def` (not
 `async def`) because the work is blocking: `requests` calls, sync SQLAlchemy,
@@ -161,7 +161,9 @@ value the control plane sends.
 
 `onyx/server/settings/tier_order.py:tier_at_least` gives every caller a total
 order (`COMMUNITY < BUSINESS < ENTERPRISE`) without depending on EE code, so
-CE call sites can gate on tier without importing `ee`.
+CE call sites can gate on tier without importing `ee`. `get_current_tier` in the
+same module resolves the deployment tier (`ee.onyx.utils.tier.get_tier`, or
+`Tier.COMMUNITY` when EE code is not loaded) for those call sites.
 
 ### 4.2 License claim (self-hosted)
 
@@ -221,6 +223,8 @@ control-plane-side downgrade) - that is enforced separately by
 ```
 POST /license/downgrade                       ee/onyx/server/license/api.py:downgrade_to_community
   MULTI_TENANT -> OnyxError(VALIDATION_ERROR)
+  not is_access_gated(get_license_metadata)   ee/onyx/server/settings/api.py
+    -> OnyxError(CONFLICT)
   make_all_cc_pairs_public__no_commit         ee/onyx/db/community_downgrade.py
   remove_custom_user_groups__no_commit        ee/onyx/db/community_downgrade.py
   disable_paid_features__no_commit            ee/onyx/db/community_downgrade.py
@@ -233,7 +237,10 @@ POST /license/downgrade                       ee/onyx/server/license/api.py:down
 
 The route is under `/license`, which is in `LICENSE_ENFORCEMENT_ALLOWED_PREFIXES`
 (`ee/onyx/configs/license_enforcement_config.py`). An admin can call it while an
-expired license gates the other routes.
+expired license gates the other routes. It refuses unless the deployment is
+gated: `is_access_gated` is the same rule that sets `gated_access` in
+`apply_license_status_to_settings`, so the route accepts in the state where the
+UI offers the downgrade.
 
 Two entry points open `web/src/sections/modals/DowngradeToCommunityModal.tsx`,
 a consent screen that lists what becomes public and what is removed. Confirming

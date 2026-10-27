@@ -10,13 +10,13 @@ resource "onyx_llm_provider" "openai" {
   # The complete set of enabled models: anything omitted here is
   # removed from the provider on apply.
   model_configurations = [
-    { name = "gpt-5" },
+    { name = "gpt-6-sol" },
     {
-      name                = "gpt-5-mini"
-      custom_display_name = "GPT-5 Mini (cheap tier)"
+      name                = "gpt-6-luna"
+      custom_display_name = "GPT-6 Luna (cheap tier)"
     },
     {
-      name       = "gpt-5-nano"
+      name       = "gpt-6-astra"
       is_visible = false
     },
   ]

@@ -217,15 +217,24 @@ export interface IndexAttemptSnapshot {
   total_docs_indexed: number;
   error_msg: string | null;
   error_count: number;
+  /** Unresolved errors, whole entities such as a drive or channel included. */
+  open_error_count: number;
+  /** Unresolved document-level errors, the ones a targeted reindex can retry. */
+  open_doc_error_count: number;
   full_exception_trace: string | null;
   time_started: string | null;
   time_updated: string;
+  /** When a finished attempt ended. `time_updated` also moves on checkpoint cleanup. */
+  time_finished: string | null;
+  /** Indexed under the FUTURE search settings of a running model switch. */
+  is_new_model: boolean;
+  /** A one-off run over a window outside the pair's incremental cursor, such as an added scope. */
+  is_backfill: boolean;
 }
 
 // Mirror of `onyx.db.index_attempt_metrics_models.IndexAttemptStage`. The
-// declaration order is the canonical pipeline order — the API serializes
-// stages in this order and the "Pipeline order" sort renders them as-is.
-// Keep in sync with the Python enum.
+// declaration order is the canonical pipeline order, which the API serializes
+// and the stage details popover renders. Keep in sync with the Python enum.
 export const INDEX_ATTEMPT_STAGES = [
   "CONNECTOR_VALIDATION",
   "PERMISSION_VALIDATION",
@@ -242,6 +251,8 @@ export const INDEX_ATTEMPT_STAGES = [
   "CHUNKING",
   "CONTEXTUAL_RAG",
   "EMBEDDING",
+  "EMBEDDING_RATE_LIMIT_WAIT",
+  "EMBEDDING_PROVIDER_THROTTLE_WAIT",
   "DOC_LOCK_ACQUIRE_WAIT",
   "ENRICHMENT_PREP",
   "VECTOR_DB_WRITE",
@@ -586,6 +597,7 @@ export interface SecuritySettings {
   allow_connector_group_restrictions: boolean;
   track_external_idp_expiry: boolean;
   allow_same_provider_subject_relink: boolean;
+  allow_renamed_account_claim: boolean;
   ssrf_protection_level: SSRFProtectionLevel;
   mask_credential_prefix: boolean;
   llm_custom_config_env_injection: boolean;
@@ -637,4 +649,14 @@ export interface IndexingStatusRequest {
   source_to_page?: Record<ValidSources, number>;
   source?: ValidSources;
   get_all_connectors?: boolean;
+}
+
+export interface SpreadsheetSheet {
+  name: string;
+  csv: string;
+  truncated: boolean;
+}
+
+export interface SpreadsheetPreviewData {
+  sheets: SpreadsheetSheet[];
 }

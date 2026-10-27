@@ -1,17 +1,22 @@
 "use client";
 
+import { useState } from "react";
 import { useField } from "formik";
 import { useTranslations } from "next-intl";
 import {
   Button,
-  InputSingleComboBox,
+  Chip,
+  InputMultiComboBox,
   Table,
   type TableColumn,
+  type TagItem,
 } from "@opal/components";
 import { Content, InputErrorText, Section } from "@opal/layouts";
 import { SvgUsers, SvgX } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import { useUserGroups } from "@/lib/hooks";
+import { useTierAtLeast, useTierLockedOptions } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 
 /** A fixed row shown before the picked groups, which cannot be removed. */
 export interface GroupShareLockedRow {
@@ -21,6 +26,11 @@ export interface GroupShareLockedRow {
   memberCount?: number;
   /** Why the row is fixed, e.g. "Always shared". */
   note: string;
+  /**
+   * A fixed value after the note, lined up with the picked groups' own
+   * control, e.g. the role the row always has.
+   */
+  role?: React.ReactNode;
 }
 
 interface GroupShareRow {
@@ -30,6 +40,8 @@ interface GroupShareRow {
   memberCount?: number;
   /** Set on a locked row. */
   note?: string;
+  /** Set on a locked row with a fixed value after its note. */
+  role?: React.ReactNode;
   /** Set on a picked group, which the remove button drops. */
   groupId?: number;
 }
@@ -40,25 +52,39 @@ export interface GroupShareGroup {
   name: string;
 }
 
-interface GroupShareListProps {
+interface GroupShareListBaseProps {
   /** Formik field holding the selected group ids. */
   name: "groups" | "data_access_group_ids";
-  /** The table's accessible name; it has no visible header. */
   label: string;
   placeholder: string;
-  /** Fixed rows shown before the selected groups (e.g. "Admins"). */
-  lockedRows?: GroupShareLockedRow[];
-  /**
-   * Each picked group's trailing control, in place of the remove button,
-   * e.g. a role menu. `remove` drops the group.
-   */
-  rowAction?: (group: GroupShareGroup, remove: () => void) => React.ReactNode;
   disabled?: boolean;
+  /**
+   * The tier groups need. Below it the workspace has no groups to pick, so
+   * the picker offers only an upgrade link.
+   */
+  requiredTier?: Tier;
 }
 
+type GroupShareListProps = GroupShareListBaseProps &
+  (
+    | { variant: "pills"; lockedRows?: never; rowAction?: never }
+    | {
+        variant?: "rows";
+        /** Fixed rows shown before the selected groups (e.g. "Admins"). */
+        lockedRows?: GroupShareLockedRow[];
+        /**
+         * Each picked group's trailing control, in place of the remove button,
+         * e.g. a role menu. `remove` drops the group.
+         */
+        rowAction?: (
+          group: GroupShareGroup,
+          remove: () => void
+        ) => React.ReactNode;
+      }
+  );
+
 /**
- * A group combo box over a table of the groups already added. Each row shows
- * the group's member count and a remove button.
+ * Search for groups, then show selections as table rows or removable pills.
  */
 export default function GroupShareList({
   name,
@@ -67,23 +93,41 @@ export default function GroupShareList({
   lockedRows = [],
   rowAction,
   disabled,
+  requiredTier = Tier.COMMUNITY,
+  variant = "rows",
 }: GroupShareListProps) {
   const t = useTranslations("admin.connector.groupRestriction");
-  const { data: userGroups, isLoading, error } = useUserGroups();
+  const locked: boolean = !useTierAtLeast(requiredTier);
+  const lockForTier = useTierLockedOptions(requiredTier);
+  // Below the tier the groups request is refused, so it is not sent.
+  const { data: userGroups, isLoading, error } = useUserGroups(!locked);
   // Without the groups there is nothing to pick from, and the rows already
   // added cannot show; say so rather than show an empty picker.
   const loadFailed = !isLoading && !!error;
   const [field, meta, helpers] = useField<number[]>(name);
 
+  const [query, setQuery] = useState("");
+
   const selectedIds = new Set(field.value);
-  const options = (userGroups ?? [])
-    .filter((group) => !selectedIds.has(group.id))
-    .map((group) => ({
-      value: String(group.id),
-      title: group.name,
-      description: t("memberCount", { count: group.users.length }),
-      icon: SvgUsers,
-    }));
+  // Every group, the picked ones shown selected: picking one again drops it.
+  const options = (userGroups ?? []).map((group) => ({
+    value: String(group.id),
+    title: group.name,
+    description: t("memberCount", { count: group.users.length }),
+    icon: SvgUsers,
+  }));
+
+  // Below the tier the fixed rows sit locked under the upgrade link, so the
+  // list names what the plan adds to.
+  const lockedOptions = lockedRows.map((row) => ({
+    value: row.id,
+    title: row.name,
+    description:
+      row.memberCount === undefined
+        ? undefined
+        : t("memberCount", { count: row.memberCount }),
+    icon: row.icon,
+  }));
 
   const rows: GroupShareRow[] = [
     ...lockedRows,
@@ -113,7 +157,14 @@ export default function GroupShareList({
     setGroups([...field.value, id]);
   }
 
+  // The picked groups, as the search marks them selected. They show as rows
+  // or pills below, not as chips in the search.
+  const pickedTags: TagItem[] = (userGroups ?? [])
+    .filter((group) => selectedIds.has(group.id))
+    .map((group) => ({ id: String(group.id), label: group.name }));
+
   const hasLockedRows = lockedRows.length > 0;
+  const hasLockedRole = lockedRows.some((row) => row.role !== undefined);
   const columns: TableColumn<GroupShareRow>[] = [
     {
       kind: "qualifier",
@@ -148,12 +199,13 @@ export default function GroupShareList({
           {
             kind: "display",
             id: "trailing",
-            width: { weight: 20 },
+            // A locked row's note and role stay on one line.
+            width: { weight: 20, minWidth: hasLockedRole ? 260 : undefined },
             hideable: false,
             alignment: "right",
             cell: (row) => {
               if (row.note) {
-                return (
+                const note = (
                   <Content
                     icon={row.icon}
                     title={row.note}
@@ -161,7 +213,22 @@ export default function GroupShareList({
                     variant="body"
                     orientation="reverse"
                     color="muted"
+                    width="fit"
                   />
+                );
+                if (row.role === undefined) return note;
+                return (
+                  <Section
+                    flexDirection="row"
+                    justifyContent="end"
+                    alignItems="center"
+                    gap={4}
+                    width="fit"
+                    className="shrink-0 whitespace-nowrap"
+                  >
+                    {note}
+                    {row.role}
+                  </Section>
                 );
               }
               const { groupId } = row;
@@ -199,15 +266,40 @@ export default function GroupShareList({
 
   return (
     <Section gap={2} alignItems="stretch" height="fit">
-      <InputSingleComboBox
-        value=""
-        onValueChange={addGroup}
-        options={options}
+      <InputMultiComboBox
+        value={query}
+        onChange={setQuery}
+        onAdd={() => undefined}
+        tags={pickedTags}
+        showTags={false}
+        onSelectOption={(option) => addGroup(option.value)}
+        onRemoveTag={(id) => removeGroup(Number(id))}
+        options={locked ? lockForTier(lockedOptions) : options}
         placeholder={placeholder}
         disabled={disabled || isLoading || loadFailed}
       />
+      {variant === "pills" && rows.length > 0 && (
+        <div
+          role="group"
+          aria-label={label}
+          className="flex max-h-40 flex-wrap gap-2 overflow-y-auto p-1"
+        >
+          {rows.map((row) => {
+            const groupId = row.groupId;
+            return groupId === undefined ? null : (
+              <Chip
+                key={row.id}
+                title={row.name}
+                icon={row.icon}
+                onRemove={() => removeGroup(groupId)}
+                disabled={disabled || isLoading || loadFailed}
+              />
+            );
+          })}
+        </div>
+      )}
       {loadFailed && <InputErrorText>{t("loadError")}</InputErrorText>}
-      {rows.length > 0 && (
+      {variant === "rows" && rows.length > 0 && (
         <Table
           label={label}
           items={rows}

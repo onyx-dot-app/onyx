@@ -221,7 +221,14 @@ def test_invoke_without_streaming(script: MockLLMScript, llm: LitellmLLM) -> Non
     assert request.tool_choice == "required"
 
 
-def test_invoke_with_streaming(script: MockLLMScript, llm: LitellmLLM) -> None:
+@pytest.mark.parametrize("inject_env", [False, True])
+def test_invoke_streams_only_with_actual_env_injection(
+    script: MockLLMScript, inject_env: bool
+) -> None:
+    llm = make_llm(
+        script.api_base,
+        custom_config={"ONYX_TEST_ENV": "value"} if inject_env else None,
+    )
     script.conversation(
         "main", Reply(reasoning="Hmm.", text="Streamed answer."), conditions=TOOL_FREE
     )
@@ -230,7 +237,7 @@ def test_invoke_with_streaming(script: MockLLMScript, llm: LitellmLLM) -> None:
         response = llm.invoke_raw(prompt=PROMPT)
 
     assert response.choice.message.content == "Streamed answer."
-    assert script.requests[0].body["stream"] is True
+    assert script.requests[0].body.get("stream", False) is inject_env
 
 
 @pytest.mark.parametrize("streamed", [True, False])

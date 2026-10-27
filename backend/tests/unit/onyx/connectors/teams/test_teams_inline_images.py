@@ -1,6 +1,7 @@
 """Images pasted into channel messages: which ones join their thread, in what
 order, and what is never downloaded."""
 
+from collections.abc import Callable
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -64,8 +65,10 @@ def downloads(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     served: dict[str, Any] = {}
     asked: list[str] = []
 
-    def download(access_token: str, url: str, cap: int, description: str) -> bytes:
-        assert access_token == "token" and cap > 0 and description
+    def download(
+        get_access_token: Callable[[], str], url: str, cap: int, description: str
+    ) -> bytes:
+        assert get_access_token() == "token" and cap > 0 and description
         asked.append(url)
         answer = served[url]
         if isinstance(answer, Exception):

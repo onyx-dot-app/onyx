@@ -21,7 +21,7 @@ resource "onyx_llm_provider" "ds_seed" {
   api_key       = "sk-tf-acc-fake-key"
 
   model_configurations = [
-    { name = "gpt-5-mini" },
+    { name = "gpt-6-luna" },
   ]
 }
 

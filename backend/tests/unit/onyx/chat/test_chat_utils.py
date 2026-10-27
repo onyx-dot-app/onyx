@@ -133,7 +133,7 @@ class TestGetCustomAgentPrompt:
         assert result is None
 
     def test_custom_persona_in_project_uses_persona_prompt(self) -> None:
-        """Test that custom persona in a project uses persona's system_prompt, not project instructions."""
+        """Project and agent instructions both reach the model."""
         persona = self._create_mock_persona(
             persona_id=1,
             system_prompt="Custom system prompt",
@@ -144,11 +144,14 @@ class TestGetCustomAgentPrompt:
 
         result = get_custom_agent_prompt(persona, chat_session)
 
-        # Should use persona's system_prompt, NOT project instructions
-        assert result == "Custom system prompt"
+        assert result == (
+            "Project instructions:\nProject instructions\n\n"
+            "Agent instructions:\nCustom system prompt\n\n"
+            "If these instructions conflict, follow the agent instructions."
+        )
 
     def test_custom_persona_replace_base_in_project(self) -> None:
-        """Test that custom persona with replace_base_system_prompt=True in a project still returns None."""
+        """Project instructions supplement the replacement system prompt."""
         persona = self._create_mock_persona(
             persona_id=1,
             system_prompt="Custom system prompt",
@@ -159,8 +162,15 @@ class TestGetCustomAgentPrompt:
 
         result = get_custom_agent_prompt(persona, chat_session)
 
-        # Should return None because replace_base_system_prompt=True
-        assert result is None
+        assert result == "Project instructions"
+
+    def test_custom_persona_without_prompt_keeps_project_instructions(self) -> None:
+        persona: MagicMock = self._create_mock_persona(system_prompt="")
+        project: MagicMock = self._create_mock_project(
+            instructions="Project instructions"
+        )
+        session: MagicMock = self._create_mock_chat_session(project=project)
+        assert get_custom_agent_prompt(persona, session) == "Project instructions"
 
 
 class TestBuildToolCallResponseHistoryMessage:

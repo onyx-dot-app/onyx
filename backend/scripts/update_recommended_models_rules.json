@@ -87,9 +87,9 @@
       "pinned_default": null,
       "rules": [
         {
-          "label": "gemini-pro",
+          "label": "gemini-pro-argon",
           "vendor_prefix": "google/",
-          "include_regex": "^google/gemini-\\d+(\\.\\d+)?-pro(-preview)?$",
+          "include_regex": "^google/gemini-\\d+(\\.\\d+)?-(pro(-preview)?|argon)$",
           "exclude_regex": "-(lite|image|audio|tts|customtools)",
           "is_default_source": true
         },

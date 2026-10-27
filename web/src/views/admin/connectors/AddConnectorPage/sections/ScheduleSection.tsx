@@ -1,22 +1,19 @@
 import { useTranslations } from "next-intl";
-import {
-  Card,
-  Collapsible,
-  InputDatePicker,
-  InputNumber,
-} from "@opal/components";
+import { useSettings } from "@/lib/settings/hooks";
+import { Card, Collapsible, InputDatePicker } from "@opal/components";
 import { InputHorizontal, Section } from "@opal/layouts";
 import { FormikField } from "@/refresh-components/form/FormikField";
+import { InputNumberField } from "@opal/form";
 import {
-  defaultRefreshFreqMinutes,
   MAX_PRUNE_FREQ_HOURS,
   MAX_REFRESH_FREQ_MINUTES,
-  MIN_PRUNE_FREQ_HOURS,
+  MIN_SCHEDULE_HOURS,
   MIN_REFRESH_FREQ_MINUTES,
 } from "@/lib/connectors/connectors";
 
 interface ScheduleSectionProps {
-  defaultPruneFreqHours?: number;
+  /** Shows Run Checks Every: the source has checks of its own. */
+  showCheckFreq?: boolean;
   /** Freezes the section while the page locks the configuration. */
   disabled?: boolean;
 }
@@ -37,12 +34,51 @@ function formatIndexingStart(date: Date | null): string {
   return `${date.getFullYear()}-${month}-${day}`;
 }
 
-/** The connector's schedule: refresh and prune frequency, and the start date. */
+interface IndexingStartFieldProps {
+  disabled?: boolean;
+}
+
+/** The date before which the connector indexes nothing. The Index
+ * Configurations section shows it. */
+export function IndexingStartField({ disabled }: IndexingStartFieldProps) {
+  const t = useTranslations("admin.connectorsList.scheduled");
+  return (
+    <InputHorizontal
+      withLabel="indexingStart"
+      disabled={disabled}
+      title={t("indexingStart.title")}
+      description={t("indexingStart.description")}
+      suffix="optional"
+      fillInput
+      center
+    >
+      <FormikField<string | undefined>
+        name="indexingStart"
+        render={(field, helper) => (
+          <InputDatePicker
+            id="indexingStart"
+            value={parseIndexingStart(field.value)}
+            onChange={(date) => helper.setValue(formatIndexingStart(date))}
+            placeholder={t("indexingStart.placeholder")}
+            clearable
+            disabled={disabled}
+          />
+        )}
+      />
+    </InputHorizontal>
+  );
+}
+
+/** The connector's schedule: refresh and prune frequency. */
 export default function ScheduleSection({
-  defaultPruneFreqHours = 600,
+  showCheckFreq = false,
   disabled,
 }: ScheduleSectionProps) {
   const t = useTranslations("admin.connectorsList.scheduled");
+  // A cleared field shows the backend's default, which a new form starts at.
+  const settings = useSettings();
+  const placeholderOf = (seconds: number | undefined, unit: number) =>
+    seconds === undefined ? undefined : String(seconds / unit);
 
   return (
     <Collapsible
@@ -60,25 +96,13 @@ export default function ScheduleSection({
             fillInput
             center
           >
-            <FormikField<number | undefined>
+            <InputNumberField
               name="refreshFreq"
-              render={(field, helper) => (
-                <InputNumber
-                  id="refreshFreq"
-                  value={field.value ?? null}
-                  onChange={(value) => {
-                    // InputNumber has no blur callback, so touch on change to
-                    // show the field's validation error.
-                    helper.setTouched(true, false);
-                    helper.setValue(value ?? undefined);
-                  }}
-                  min={MIN_REFRESH_FREQ_MINUTES}
-                  max={MAX_REFRESH_FREQ_MINUTES}
-                  placeholder={String(defaultRefreshFreqMinutes)}
-                  suffix={t("units.minutes")}
-                  disabled={disabled}
-                />
-              )}
+              min={MIN_REFRESH_FREQ_MINUTES}
+              max={MAX_REFRESH_FREQ_MINUTES}
+              placeholder={placeholderOf(settings.default_refresh_freq, 60)}
+              suffix={t("units.minutes")}
+              disabled={disabled}
             />
           </InputHorizontal>
 
@@ -90,52 +114,39 @@ export default function ScheduleSection({
             fillInput
             center
           >
-            <FormikField<number | undefined>
+            <InputNumberField
               name="pruneFreq"
-              render={(field, helper) => (
-                <InputNumber
-                  id="pruneFreq"
-                  value={field.value ?? null}
-                  onChange={(value) => {
-                    helper.setTouched(true, false);
-                    helper.setValue(value ?? undefined);
-                  }}
-                  min={MIN_PRUNE_FREQ_HOURS}
-                  max={MAX_PRUNE_FREQ_HOURS}
-                  decimalPlaces={3}
-                  placeholder={String(defaultPruneFreqHours)}
-                  suffix={t("units.hours")}
-                  disabled={disabled}
-                />
-              )}
+              min={MIN_SCHEDULE_HOURS}
+              max={MAX_PRUNE_FREQ_HOURS}
+              placeholder={placeholderOf(settings.default_pruning_freq, 3600)}
+              decimalPlaces={3}
+              suffix={t("units.hours")}
+              disabled={disabled}
             />
           </InputHorizontal>
 
-          <InputHorizontal
-            withLabel="indexingStart"
-            disabled={disabled}
-            title={t("indexingStart.title")}
-            description={t("indexingStart.description")}
-            suffix="optional"
-            fillInput
-            center
-          >
-            <FormikField<string | undefined>
-              name="indexingStart"
-              render={(field, helper) => (
-                <InputDatePicker
-                  id="indexingStart"
-                  value={parseIndexingStart(field.value)}
-                  onChange={(date) =>
-                    helper.setValue(formatIndexingStart(date))
-                  }
-                  placeholder={t("indexingStart.placeholder")}
-                  clearable
-                  disabled={disabled}
-                />
-              )}
-            />
-          </InputHorizontal>
+          {showCheckFreq && (
+            <InputHorizontal
+              withLabel="checkFreq"
+              disabled={disabled}
+              title={t("checkFrequency.title")}
+              suffix="optional"
+              description={t("checkFrequency.description")}
+              fillInput
+              center
+            >
+              <InputNumberField
+                name="checkFreq"
+                min={MIN_SCHEDULE_HOURS}
+                max={MAX_PRUNE_FREQ_HOURS}
+                decimalPlaces={3}
+                // Cleared, the checks run only on request.
+                placeholder={t("checkFrequency.placeholder")}
+                suffix={t("units.hours")}
+                disabled={disabled}
+              />
+            </InputHorizontal>
+          )}
         </Section>
       </Card>
     </Collapsible>

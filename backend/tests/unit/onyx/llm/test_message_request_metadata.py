@@ -16,7 +16,7 @@ _SENTINEL = object()
 def _make_llm(
     reasoning_effort_max: ReasoningEffort | None = None,
     temperature: float | None = None,
-    model_name: str = "gpt-5.1",
+    model_name: str = "gpt-6.1-sol",
 ) -> LitellmLLM:
     return LitellmLLM(
         api_key="test-key",
@@ -53,9 +53,11 @@ def _run(
 
 
 def test_captures_model_identity_and_sent_temperature() -> None:
-    params = _run(_make_llm(temperature=0.3, model_name="gpt-4o"), ReasoningEffort.AUTO)
+    params = _run(
+        _make_llm(temperature=0.3, model_name="custom-chat-model"), ReasoningEffort.AUTO
+    )
     assert params is not None
-    assert params.model_name == "gpt-4o"
+    assert params.model_name == "custom-chat-model"
     assert params.model_provider == "openai"
     assert params.sent_kwargs["temperature"] == 0.3
 
@@ -116,7 +118,8 @@ def test_non_finite_floats_are_dropped() -> None:
     """These params ride to a JSONB column. Postgres rejects NaN and Infinity,
     so leaving one in would fail the commit that saves the answer."""
     params = _run(
-        _make_llm(temperature=float("nan"), model_name="gpt-4o"), ReasoningEffort.AUTO
+        _make_llm(temperature=float("nan"), model_name="custom-chat-model"),
+        ReasoningEffort.AUTO,
     )
     assert params is not None
     assert params.sent_kwargs["temperature"] is None
@@ -129,14 +132,14 @@ class TestStateContainerHandoff:
         container = ChatStateContainer()
         assert container.get_request_params() is None
 
-        container.set_request_params({"model_name": "gpt-5.1"})
-        assert container.get_request_params() == {"model_name": "gpt-5.1"}
+        container.set_request_params({"model_name": "gpt-6.1-sol"})
+        assert container.get_request_params() == {"model_name": "gpt-6.1-sol"}
 
     def test_container_starts_empty_per_model(self) -> None:
         """Multi-model turns must not share one model's params with another."""
         first = ChatStateContainer()
         second = ChatStateContainer()
-        first.set_request_params({"model_name": "gpt-5.1"})
+        first.set_request_params({"model_name": "gpt-6.1-sol"})
 
         assert second.get_request_params() is None
 
@@ -144,10 +147,13 @@ class TestStateContainerHandoff:
         """Tool loops run the step repeatedly. The message is attributed to the
         call that produced the answer, which is the last one to hand off."""
         container = ChatStateContainer()
-        container.set_request_params({"model_name": "gpt-5.1", "step": 1})
-        container.set_request_params({"model_name": "gpt-5.1", "step": 2})
+        container.set_request_params({"model_name": "gpt-6.1-sol", "step": 1})
+        container.set_request_params({"model_name": "gpt-6.1-sol", "step": 2})
 
-        assert container.get_request_params() == {"model_name": "gpt-5.1", "step": 2}
+        assert container.get_request_params() == {
+            "model_name": "gpt-6.1-sol",
+            "step": 2,
+        }
 
     def test_handoff_of_nothing_leaves_it_unset(self) -> None:
         """A turn that fails before any completion attributes nothing, rather

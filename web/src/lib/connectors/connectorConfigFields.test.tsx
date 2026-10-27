@@ -1,7 +1,7 @@
 import { render, screen } from "@tests/setup/test-utils";
 import { Formik } from "formik";
 import ConnectorConfigFields from "@/views/admin/connectors/AddConnectorPage/form/ConnectorConfigFields";
-import { connectorConfigs } from "@/lib/connectors/connectors";
+import { useConnectorConfiguration } from "@/lib/connectors/connectors";
 import { createConnectorInitialValues } from "@/lib/connectors/utils";
 import { ValidSources } from "@/lib/connectors/types/source";
 import type { Credential } from "@/lib/credentials/types";
@@ -17,16 +17,35 @@ function credentialWith(json: Record<string, unknown>): Credential<unknown> {
   return { id: 1, credential_json: json } as unknown as Credential<unknown>;
 }
 
+// The form shows the translated config, as the add-connector page does.
+function DriveFields({
+  values,
+  currentCredential,
+}: {
+  values: ReturnType<typeof createConnectorInitialValues>;
+  currentCredential: Credential<unknown> | null;
+}) {
+  const config = useConnectorConfiguration(ValidSources.GoogleDrive);
+  return (
+    <ConnectorConfigFields
+      config={config}
+      values={values}
+      connector={ValidSources.GoogleDrive}
+      currentCredential={currentCredential}
+      reportScope={
+        currentCredential
+          ? { credentialId: currentCredential.id, connectorId: null }
+          : null
+      }
+    />
+  );
+}
+
 function renderDriveFields(currentCredential: Credential<unknown> | null) {
   const values = createConnectorInitialValues(ValidSources.GoogleDrive);
   render(
     <Formik initialValues={values} onSubmit={() => {}}>
-      <ConnectorConfigFields
-        config={connectorConfigs.google_drive}
-        values={values}
-        connector={ValidSources.GoogleDrive}
-        currentCredential={currentCredential}
-      />
+      <DriveFields values={values} currentCredential={currentCredential} />
     </Formik>
   );
 }

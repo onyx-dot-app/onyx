@@ -303,6 +303,12 @@ def test_backfill_fills_missing_field_resumes_and_reports_completion(
                 ).pending_cc_pair_ids
                 == test_snapshot
             )
+            assert (
+                cc_pair_ids_backfill.load_cc_pair_ids_backfill_progress(
+                    search_settings  # ty: ignore[invalid-argument-type]
+                ).snapshot_cc_pair_ids
+                == test_snapshot
+            )
             assert not cc_pair_ids_backfill.is_cc_pair_ids_backfill_complete(db_session)
 
             assert backfill_tasks.run_cc_pair_ids_backfill(lock)

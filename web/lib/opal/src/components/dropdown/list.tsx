@@ -26,6 +26,7 @@ import { Row, targetTakesFocus } from "@opal/components/dropdown/rows";
 import type {
   DropdownMode,
   DropdownRow,
+  DropdownSizePreset,
   DropdownSearch,
   RowGroup,
 } from "@opal/components/dropdown/types";
@@ -35,6 +36,7 @@ interface DropdownListProps {
   mode: DropdownMode;
   container: HTMLElement | null | undefined;
   isOpen: boolean;
+  /** A disabled dropdown's list is closed, even if its `open` is held. */
   disabled: boolean;
   /** The list's accessible name. */
   label: string;
@@ -53,6 +55,7 @@ interface DropdownListProps {
   viewDirection: "forward" | "back";
   /** Post-filter, post-fold groups in render order. */
   groups: RowGroup[];
+  sizePreset: DropdownSizePreset;
   /** The supplied set itself is empty, not merely filtered out. */
   emptySet: boolean;
   isSelected: (row: DropdownRow) => boolean;
@@ -101,7 +104,7 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       listId,
       mode,
       container,
-      isOpen,
+      isOpen: isOpenProp,
       disabled,
       label,
       floatingStyles,
@@ -111,6 +114,7 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       viewKey,
       viewDirection,
       groups,
+      sizePreset,
       emptySet,
       isSelected,
       exactValue,
@@ -128,6 +132,9 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
     ref
   ) => {
     const strings = useOpalStrings();
+    // Disabling closes the list even when a parent holds `open`; it then
+    // plays its exit like any close, rather than vanishing mid-animation.
+    const isOpen = isOpenProp && !disabled;
     // The list stays mounted one exit animation longer than `isOpen`, so it
     // can animate out without living in the tree while closed.
     const presence = usePresence(isOpen);
@@ -231,6 +238,7 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       mode,
       label,
       groups,
+      sizePreset,
       emptySet,
       isSelected,
       exactValue,
@@ -254,7 +262,7 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       };
     });
 
-    if (!presence.mounted || disabled || typeof document === "undefined") {
+    if (!presence.mounted || typeof document === "undefined") {
       return null;
     }
 
@@ -392,6 +400,7 @@ interface CardProps {
   mode: DropdownMode;
   label: string;
   groups: RowGroup[];
+  sizePreset: DropdownSizePreset;
   emptySet: boolean;
   isSelected: (row: DropdownRow) => boolean;
   exactValue: string | undefined;
@@ -438,6 +447,7 @@ function Card({
   mode,
   label,
   groups,
+  sizePreset,
   emptySet,
   isSelected,
   exactValue,
@@ -553,6 +563,7 @@ function Card({
             listId={listId}
             mode={mode}
             groups={groups}
+            sizePreset={sizePreset}
             isSelected={isSelected}
             exactValue={exactValue}
             highlightedIndex={highlightedIndex}
@@ -574,6 +585,7 @@ interface RowsProps {
   listId: string;
   mode: DropdownMode;
   groups: RowGroup[];
+  sizePreset: DropdownSizePreset;
   isSelected: (row: DropdownRow) => boolean;
   exactValue: string | undefined;
   highlightedIndex: number;
@@ -591,6 +603,7 @@ function Rows({
   listId,
   mode,
   groups,
+  sizePreset,
   isSelected,
   exactValue,
   highlightedIndex,
@@ -610,7 +623,8 @@ function Rows({
           interaction={highlightedIndex === 0 ? "hover" : "rest"}
           rounding={2}
           title={create.text}
-          sizePreset="main-ui"
+          sizePreset={sizePreset}
+          padding={sizePreset === "secondary" ? 0 : 0.5}
           variant="body"
           rightChildren={<SvgPlus className="opal-dropdown-create-icon" />}
           id={createElementId(listId)}
@@ -648,6 +662,7 @@ function Rows({
               listId={listId}
               mode={mode}
               row={row}
+              sizePreset={sizePreset}
               index={rowIndex}
               isHighlighted={rowIndex >= 0 && rowIndex === highlightedIndex}
               isSelected={
@@ -670,7 +685,7 @@ function Rows({
               key={group.key}
               role="group"
               aria-label={group.title}
-              className="opal-dropdown-group"
+              className="opal-dropdown-group opal-dropdown-titled"
             >
               <Divider
                 title={group.title}
@@ -700,7 +715,9 @@ function Rows({
         return (
           <React.Fragment key={group.key}>
             {group.title !== undefined ? (
-              <Divider title={group.title} />
+              <div className="opal-dropdown-titled">
+                <Divider title={group.title} />
+              </div>
             ) : (
               groupIndex > 0 && <Divider />
             )}

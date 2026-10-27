@@ -13,8 +13,10 @@ import type {
   OverridableExtremaSizeVariants,
   ContainerSizeVariants,
   ExtremaSizeVariants,
+  LineHeight,
   Rounding,
   Spacing,
+  ContextualMenuWidth,
 } from "@opal/types";
 
 /**
@@ -137,6 +139,24 @@ function spacingToRem(spacing: Spacing): string {
  * on the scale, and folding that case into the spacing converter would make
  * `padding="full"` mean 62.5rem, which is meaningless.
  */
+/** Each contextual-menu width step and the sizes.css token it stands for. */
+const CONTEXTUAL_MENU_WIDTH_TOKENS: Record<ContextualMenuWidth, string> = {
+  30: "--block-width-contextual-menu-extra-small",
+  40: "--block-width-contextual-menu-small",
+  50: "--block-width-contextual-menu-medium-small",
+  60: "--block-width-contextual-menu-medium",
+  70: "--block-width-contextual-menu-medium-large",
+  80: "--block-width-contextual-menu-large",
+  90: "--block-width-contextual-menu-extra-large",
+  120: "--block-width-contextual-menu-2x-large",
+  160: "--block-width-contextual-menu-3x-large",
+};
+
+/** Converts a {@link ContextualMenuWidth} step to its token, as a CSS length. */
+function contextualMenuWidthToCss(width: ContextualMenuWidth): string {
+  return `var(${CONTEXTUAL_MENU_WIDTH_TOKENS[width]})`;
+}
+
 function roundingToRem(rounding: Rounding): string {
   return rounding === "full" ? "var(--radius-round)" : spacingToRem(rounding);
 }
@@ -144,6 +164,7 @@ function roundingToRem(rounding: Rounding): string {
 export {
   type ExtremaSizeVariants,
   type ContainerSizeVariants,
+  type LineHeight,
   type OverridableExtremaSizeVariants,
   type Rounding,
   type SizeVariants,
@@ -151,6 +172,7 @@ export {
   containerSizeVariants,
   spacingToRem,
   roundingToRem,
+  contextualMenuWidthToCss,
   widthVariants,
   heightVariants,
 };

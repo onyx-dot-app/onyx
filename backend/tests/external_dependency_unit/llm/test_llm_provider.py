@@ -16,7 +16,7 @@ from onyx.db.enums import LLMModelFlowType
 from onyx.db.llm import (
     fetch_existing_llm_provider,
     remove_llm_provider,
-    update_default_provider,
+    update_default_model,
     upsert_llm_provider,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -56,7 +56,7 @@ def _create_test_provider(
             api_key=api_key,
             api_key_changed=True,
             model_configurations=[
-                ModelConfigurationUpsertRequest(name="gpt-4o-mini", is_visible=True)
+                ModelConfigurationUpsertRequest(name="gpt-6-luna", is_visible=True)
             ],
         ),
         db_session=db_session,
@@ -108,9 +108,9 @@ class TestLLMConfigurationEndpoint:
                         api_key="sk-new-test-key-0000000000000000000000000000",
                         api_key_changed=True,
                         custom_config_changed=False,
-                        model="gpt-4o-mini",
+                        model="gpt-6-luna",
                     ),
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -118,7 +118,7 @@ class TestLLMConfigurationEndpoint:
             assert len(captured_llms) == 1, "test_llm should have been called once"
 
             # Verify the LLM was configured with the correct model
-            assert captured_llms[0].config.model_name == "gpt-4o-mini"
+            assert captured_llms[0].config.model_name == "gpt-6-luna"
             assert captured_llms[0].config.model_provider == LlmProviderNames.OPENAI
 
         finally:
@@ -152,9 +152,9 @@ class TestLLMConfigurationEndpoint:
                             api_key="sk-invalid-key-00000000000000000000000000",
                             api_key_changed=True,
                             custom_config_changed=False,
-                            model="gpt-4o-mini",
+                            model="gpt-6-luna",
                         ),
-                        _=_create_mock_admin(),
+                        user=_create_mock_admin(),
                         db_session=db_session,
                     )
 
@@ -198,9 +198,9 @@ class TestLLMConfigurationEndpoint:
                         api_key=None,  # Not providing a new key
                         api_key_changed=False,  # Using existing key
                         custom_config_changed=False,
-                        model="gpt-4o-mini",
+                        model="gpt-6-luna",
                     ),
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -247,9 +247,9 @@ class TestLLMConfigurationEndpoint:
                         api_key=new_api_key,  # Providing a new key
                         api_key_changed=True,  # Key is being changed
                         custom_config_changed=False,
-                        model="gpt-4o-mini",
+                        model="gpt-6-luna",
                     ),
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -290,7 +290,7 @@ class TestLLMConfigurationEndpoint:
                     custom_config_changed=True,
                     model_configurations=[
                         ModelConfigurationUpsertRequest(
-                            name="gpt-4o-mini", is_visible=True
+                            name="gpt-6-luna", is_visible=True
                         )
                     ],
                 ),
@@ -309,9 +309,9 @@ class TestLLMConfigurationEndpoint:
                         api_key_changed=False,
                         custom_config=None,  # Not providing new config
                         custom_config_changed=False,  # Using existing config
-                        model="gpt-4o-mini",
+                        model="gpt-6-luna",
                     ),
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -336,7 +336,7 @@ class TestLLMConfigurationEndpoint:
             captured_llms.append(llm)
             return None
 
-        test_models = ["gpt-4", "gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"]
+        test_models = ["gpt-4", "gpt-6-sol", "gpt-6-luna", "gpt-3.5-turbo"]
 
         try:
             with patch(
@@ -351,7 +351,7 @@ class TestLLMConfigurationEndpoint:
                             custom_config_changed=False,
                             model=model_name,
                         ),
-                        _=_create_mock_admin(),
+                        user=_create_mock_admin(),
                         db_session=db_session,
                     )
 
@@ -395,8 +395,8 @@ class TestDefaultProviderEndpoint:
         provider_2_api_key = "sk-provider2-key-000000000000000000000000000"
 
         provider_1_initial_model = "gpt-4"
-        provider_1_updated_model = "gpt-4o"
-        provider_2_default_model = "gpt-4o-mini"
+        provider_1_updated_model = "gpt-6-sol"
+        provider_2_default_model = "gpt-6-luna"
 
         captured_llms: list[LLM] = []
 
@@ -415,14 +415,21 @@ class TestDefaultProviderEndpoint:
                     api_key_changed=True,
                     model_configurations=[
                         ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
-                        ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
+                        ModelConfigurationUpsertRequest(
+                            name="gpt-6-sol", is_visible=True
+                        ),
                     ],
                 ),
                 db_session=db_session,
             )
 
             # Set provider 1 as the default provider explicitly
-            update_default_provider(provider_1.id, provider_1_initial_model, db_session)
+            update_default_model(
+                provider_id=provider_1.id,
+                model=provider_1_initial_model,
+                db_session=db_session,
+                flow_type=LLMModelFlowType.CHAT,
+            )
 
             # Step 2: Call run_test_default_provider - should use provider 1's default model
             with patch(
@@ -444,7 +451,7 @@ class TestDefaultProviderEndpoint:
                     api_key_changed=True,
                     model_configurations=[
                         ModelConfigurationUpsertRequest(
-                            name="gpt-4o-mini", is_visible=True
+                            name="gpt-6-luna", is_visible=True
                         ),
                         ModelConfigurationUpsertRequest(
                             name="gpt-3.5-turbo", is_visible=True
@@ -475,14 +482,21 @@ class TestDefaultProviderEndpoint:
                     api_key_changed=True,
                     model_configurations=[
                         ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
-                        ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
+                        ModelConfigurationUpsertRequest(
+                            name="gpt-6-sol", is_visible=True
+                        ),
                     ],
                 ),
                 db_session=db_session,
             )
 
             # Set provider 1's default model to the updated model
-            update_default_provider(provider_1.id, provider_1_updated_model, db_session)
+            update_default_model(
+                provider_id=provider_1.id,
+                model=provider_1_updated_model,
+                db_session=db_session,
+                flow_type=LLMModelFlowType.CHAT,
+            )
 
             # Step 6: Call run_test_default_provider - should use new model on provider 1
             with patch(
@@ -496,7 +510,12 @@ class TestDefaultProviderEndpoint:
             captured_llms.clear()
 
             # Step 7: Change the default provider to provider 2
-            update_default_provider(provider_2.id, provider_2_default_model, db_session)
+            update_default_model(
+                provider_id=provider_2.id,
+                model=provider_2_default_model,
+                db_session=db_session,
+                flow_type=LLMModelFlowType.CHAT,
+            )
 
             # Step 8: Call run_test_default_provider - should use provider 2
             with patch(
@@ -567,13 +586,18 @@ class TestDefaultProviderEndpoint:
                     api_key_changed=True,
                     model_configurations=[
                         ModelConfigurationUpsertRequest(
-                            name="gpt-4o-mini", is_visible=True
+                            name="gpt-6-luna", is_visible=True
                         ),
                     ],
                 ),
                 db_session=db_session,
             )
-            update_default_provider(provider.id, "gpt-4o-mini", db_session)
+            update_default_model(
+                provider_id=provider.id,
+                model="gpt-6-luna",
+                db_session=db_session,
+                flow_type=LLMModelFlowType.CHAT,
+            )
 
             # Test should fail
             with patch(

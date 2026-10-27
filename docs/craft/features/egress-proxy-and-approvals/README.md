@@ -20,15 +20,16 @@ The short version:
 
 Proxy runtime:
 
+- `backend/onyx/sandbox_proxy/models.py` defines shared destination, credential
+  injection, and MCP classification models.
 - `backend/onyx/sandbox_proxy/server.py` starts mitmproxy, health checks, CA
   bootstrap, identity lookup, request evaluator, credential resolvers, and the
   gate addon.
 - `backend/onyx/sandbox_proxy/addons/gate.py` owns request classification,
   approval parking, grant resolution, credential injection dispatch, internal
   destination blocking, and SIGTERM drain cleanup.
-- `backend/onyx/sandbox_proxy/identity.py`,
-  `identity_k8s.py`, and `identity_docker.py` resolve source IPs to sandbox,
-  tenant, and user identity.
+- `backend/onyx/sandbox_proxy/sandbox_identity/` modules resolve source IPs to sandbox,
+  tenant, and user identity. Its `models.py` defines the identity and session models.
 - `backend/onyx/sandbox_proxy/request_evaluator.py` turns mitmproxy requests
   into external-app action matches.
 - `backend/onyx/sandbox_proxy/credential_injection.py` and
@@ -36,14 +37,15 @@ Proxy runtime:
   and external-app credentials.
 - `backend/onyx/sandbox_proxy/approval_cache.py` defines Redis announce, wake,
   and session-grant cache keys.
-- `backend/onyx/sandbox_proxy/ca.py`, `ca_k8s.py`, and `ca_docker.py` manage
+- `backend/onyx/sandbox_proxy/certificate_authority/` modules manage
   the proxy CA.
 
 Approval persistence and API:
 
 - `backend/onyx/db/models.py` defines `ActionApproval`,
-  `ExternalAppPolicy`, and `ScheduledTaskPreApprovedTarget`.
-- `backend/onyx/db/enums.py` defines `EndpointPolicy`,
+  `WorkspaceActionPolicy`, `UserActionPolicy`, `ScheduledTaskActionPolicy`,
+  and `ScheduledTaskEnabledApp`.
+- `backend/onyx/db/enums.py` defines `ActionPolicy`,
   `ApprovalDecision`, and `ApprovalDecidedVia`.
 - `backend/onyx/server/features/build/db/action_approval.py` owns approval DB
   operations. `try_record_decision` is the race arbiter.
@@ -404,8 +406,8 @@ Older undecided rows are treated as proxy-crash orphans and excluded from
 
 ### Approve Once
 
-`POST /api/build/approvals/{approval_id}/decision` accepts only `APPROVED` or
-`REJECTED`.
+`POST /api/build/approvals/{approval_id}/decision` accepts `approve_once`,
+`approve_session`, or `reject`. These commands map to stored approval outcomes.
 
 The API:
 
@@ -421,12 +423,12 @@ The API:
 ### Reject
 
 Reject follows the same endpoint as approve once, with
-`decision=REJECTED`. The proxy returns a structured 403 to the sandbox and does
+`decision=reject`. The proxy returns a structured 403 to the sandbox and does
 not forward the original upstream request.
 
 ### Approve For Session
 
-`POST /api/build/approvals/{approval_id}/session-grant` approves the current
+`POST /api/build/approvals/{approval_id}/decision` with `decision=approve_session` approves the current
 request and later matching requests for the same session.
 
 The API:
@@ -553,15 +555,11 @@ row, pushes the announce key, and the stream carries only:
 - one polling `approval:announce:{session_id}` every second
 
 Both feed the existing SSE stream. `useBuildStreaming` handles the packet by
-invalidating `SWR_KEYS.buildSessionLiveApprovals(sessionId)`.
+invalidating `SWR_KEYS.buildSessionApprovals(sessionId)`.
 
-`useLiveApprovals` fetches
-`GET /api/build/approvals/sessions/{session_id}/live` and also refreshes every
-10 seconds to catch removals from expiration, another tab, or another user
-session.
-
-`LiveApprovalsRegion` renders live approval rows at the trailing assistant slot
-in the chat. `ApprovalCard` offers:
+`SessionApprovalsRegion` fetches
+`GET /api/build/approvals/sessions/{session_id}` and refreshes every 10 seconds.
+It displays pending requests, rejections, and expired requests in the chat. `ApprovalCard` offers:
 
 - Approve once
 - Approve for session

@@ -2,7 +2,8 @@
 
 import { Button, Text } from "@opal/components";
 import { useTranslations } from "next-intl";
-import { TextFormField, TypedFileUploadFormField } from "@/components/Field";
+import { TextFormField } from "@/components/Field";
+import { CredentialFileField } from "@/lib/credentials/components/CredentialFieldsRenderer";
 import { Form, Formik, FormikHelpers } from "formik";
 import { toast } from "@opal/layouts";
 import { useCredentialFieldCopy } from "@/lib/credentials/hooks";
@@ -26,8 +27,8 @@ export interface EditCredentialProps {
   sourceType: ValidSources;
   onClose: () => void;
   onUpdate: (
-    selectedCredentialId: Credential<any>,
-    details: any,
+    credential: Credential<CredentialFieldValues>,
+    values: CredentialFormValues,
     onSuccess: () => void
   ) => Promise<void>;
 }
@@ -101,10 +102,12 @@ export default function EditCredential({
 
             {Object.entries(editableCredentialFields).map(([key, value]) =>
               getCredentialFileType(key) !== null ? (
-                <TypedFileUploadFormField
+                <CredentialFileField
                   key={key}
                   name={key}
+                  fieldKey={key}
                   label={fieldCopy(key).title}
+                  description={fieldCopy(key).description}
                 />
               ) : (
                 <TextFormField

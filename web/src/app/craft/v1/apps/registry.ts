@@ -7,6 +7,7 @@ import {
   SvgGoogleDrive,
   SvgHubSpot,
   SvgNotion,
+  SvgZendesk,
 } from "@opal/logos";
 import { SvgPlug } from "@opal/icons";
 import { IconFunctionComponent } from "@opal/types";
@@ -21,6 +22,7 @@ export type ExternalAppType =
   | "GITHUB"
   | "HUBSPOT"
   | "NOTION"
+  | "ZENDESK"
   | "CUSTOM";
 
 const _BUILT_IN_LOGOS: Partial<Record<ExternalAppType, IconFunctionComponent>> =
@@ -33,6 +35,7 @@ const _BUILT_IN_LOGOS: Partial<Record<ExternalAppType, IconFunctionComponent>> =
     GITHUB: SvgGitHub,
     HUBSPOT: SvgHubSpot,
     NOTION: SvgNotion,
+    ZENDESK: SvgZendesk,
   };
 
 /** Logo for a known `app_type`, with a generic fallback for CUSTOM /
@@ -54,8 +57,8 @@ export interface OrgCredentialFieldDescriptor {
   secret: boolean;
 }
 
-// Mirrors `onyx.db.enums.EndpointPolicy` on the backend.
-export type EndpointPolicy = "ALWAYS" | "ASK" | "DENY";
+// Mirrors `onyx.db.enums.ActionPolicy` on the backend.
+export type ActionPolicy = "ALWAYS" | "ASK" | "DENY";
 
 export interface EndpointDescriptor {
   action_id: string;
@@ -63,14 +66,14 @@ export interface EndpointDescriptor {
   description: string;
   // Policy a newly-created app seeds this action's selector with (admin can
   // override). Mirrors `EndpointSpec.default_policy` on the backend.
-  default_policy: EndpointPolicy;
+  default_policy: ActionPolicy;
 }
 
 export interface ActionPolicyView {
   action_id: string;
   normalised_name: string;
   description: string;
-  state: EndpointPolicy;
+  state: ActionPolicy;
 }
 
 export interface BuiltInExternalAppDescriptor {
@@ -84,6 +87,7 @@ export interface BuiltInExternalAppDescriptor {
 }
 
 export interface ExternalAppAdminResponse {
+  users_can_manage_policies: boolean;
   id: number;
   name: string;
   app_type: ExternalAppType;
@@ -109,6 +113,7 @@ export interface ExternalAppUserResponse {
   id: number;
   name: string;
   app_type: ExternalAppType;
+  service_urls?: string[];
   credential_keys: string[];
   credential_values: Record<string, string>;
   authenticated: boolean;

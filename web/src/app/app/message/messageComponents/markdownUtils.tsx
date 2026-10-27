@@ -11,7 +11,7 @@ import { useHighlightLanguages } from "@/hooks/useHighlightLanguages";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import "@/app/app/message/custom-code-styles.css";
-import { FullChatState } from "@/app/app/message/messageComponents/interfaces";
+import { FullChatState } from "@/app/app/message/messageComponents/types";
 import {
   MemoizedAnchor,
   MemoizedParagraph,

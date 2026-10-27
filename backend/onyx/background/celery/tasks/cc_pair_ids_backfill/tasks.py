@@ -123,6 +123,7 @@ def run_cc_pair_ids_backfill(lock: RedisLock) -> bool:
         progress = load_cc_pair_ids_backfill_progress(search_settings)
         if progress.pending_cc_pair_ids is None:
             progress.pending_cc_pair_ids = get_non_deleting_cc_pair_ids(db_session)
+            progress.snapshot_cc_pair_ids = list(progress.pending_cc_pair_ids)
             store_cc_pair_ids_backfill_progress(progress)
         index = build_opensearch_document_index(search_settings)
 

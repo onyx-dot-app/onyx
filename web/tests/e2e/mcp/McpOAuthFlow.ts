@@ -1,17 +1,6 @@
-/**
- * Encapsulates the external-IdP OAuth dance for MCP servers: driving the IdP
- * login form, waiting through the connect → IdP → callback → return-path
- * redirect chain, and re-authenticating from the chat actions popover.
- *
- * The redirect/timing logic here is ported from the original mcp_oauth_flow
- * spec — it encodes hard-won handling of IdP quirks and should not be
- * casually rewritten. It is exposed as a class so specs call
- * `oauthFlow.completeFlow(...)` instead of inlining ~400 lines of glue.
- */
-
 import { type Page, expect } from "@playwright/test";
 import { logPageState } from "@tests/e2e/utils/pageStateLogger";
-import { ToolsPopover } from "@tests/e2e/pages/ToolsPopover";
+import { ChatPluginsPopover } from "@tests/e2e/pages/ChatPluginsPopover";
 
 const REQUIRED_ENV_VARS = [
   "MCP_OAUTH_CLIENT_ID",
@@ -175,6 +164,7 @@ export class McpOAuthFlow {
     value: string
   ): Promise<boolean> {
     for (const selector of selectors) {
+      if (!this.isOnIdpHost(this.page.url())) return false;
       const locator = this.page.locator(selector).first();
       if ((await locator.count()) === 0) continue;
       let visible = await locator.isVisible().catch(() => false);
@@ -340,7 +330,8 @@ export class McpOAuthFlow {
       const clickedSubmit = await this.clickFirstVisible(submitSelectors, {
         optional: true,
       });
-      if (!clickedSubmit) {
+      // A submit can land back on the app; a stray Enter there acts on app controls.
+      if (!clickedSubmit && this.isOnIdpHost(this.page.url())) {
         const passwordLocator = this.page
           .locator(passwordSelectorString)
           .first();
@@ -527,38 +518,33 @@ export class McpOAuthFlow {
     await tryConfirmConnected(false);
   }
 
-  // ---------------------------------------------------------------------------
-  // Re-authentication from the chat actions popover
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Re-authenticate an OAuth MCP server from chat. Clicking the server row may
-   * either kick off OAuth directly or drill into the tool list with a
-   * "Re-Authenticate" footer row; both are handled.
-   */
-  async reauthenticateFromChat(
-    actions: ToolsPopover,
-    serverName: string,
-    returnSubstring: string
+  async connectFromChat(
+    plugins: ChatPluginsPopover,
+    serverName: string
   ): Promise<void> {
-    const outcome = await actions.clickServerRowDetectingNavigation(serverName);
-
-    // An already-authenticated server drills into its tool list, where a
-    // "Re-Authenticate" footer row kicks off OAuth. Only take that path if the
-    // tool list actually appears.
-    if (outcome === "drilled" && (await actions.toolListVisible(3000))) {
-      await this.clickAndWaitForPossibleUrlChange(
-        () => actions.clickReauthRow(),
-        "Re-authenticate click"
-      );
+    const startingUrl = this.page.url();
+    if (await plugins.needsConnection(serverName)) {
+      await plugins.connectPlugin(serverName);
+      const popup =
+        await plugins.connectionDialog.continueWithOAuth(serverName);
+      try {
+        await popup.waitForURL(
+          (url) => url.protocol === "https:" || url.protocol === "http:",
+          {
+            timeout: 10_000,
+          }
+        );
+        if (!popup.isClosed() && !this.isOnAppHost(popup.url())) {
+          await new McpOAuthFlow(popup, this.config).performIdpLogin();
+        }
+      } catch (error) {
+        if (!popup.isClosed()) throw error;
+      }
+      await plugins.connectionDialog.expectClosed();
     }
-
-    // For an unauthenticated server the row click already started OAuth. With
-    // the auto-issuing mock IdP the round-trip can complete before any url
-    // change is observable, so clickServerRowDetectingNavigation may report a
-    // false "drilled". completeFlow drives the redirect chain and tolerates an
-    // already-completed round-trip (it returns immediately if we are back on
-    // the return path), so it handles both the navigated and false-drilled cases.
-    await this.completeFlow({ expectReturnPathContains: returnSubstring });
+    await expect(this.page).toHaveURL(startingUrl);
+    await plugins.expectConnected(serverName);
+    await plugins.expectPluginEnabled(serverName, true);
+    await plugins.close();
   }
 }

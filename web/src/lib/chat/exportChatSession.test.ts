@@ -84,7 +84,7 @@ function lastDownload(): {
     throw new Error("downloadFile was not called");
   }
   const [filename, opts] = call;
-  if (!("content" in opts)) {
+  if (!("content" in opts) || typeof opts.content !== "string") {
     throw new Error("expected content-based download");
   }
   return { filename, content: opts.content, mimeType: opts.mimeType };

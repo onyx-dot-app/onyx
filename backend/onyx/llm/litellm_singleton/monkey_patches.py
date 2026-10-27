@@ -93,9 +93,9 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
      assistant message with tool_calls carries no thinking blocks, guarding against
      "Expected thinking or redacted_thinking, but found tool_use"
    - The guard tests `thinking is not None` rather than whether thinking is enabled,
-     so it also drops thinking={"type": "disabled"}, the one value that cannot
-     produce that error: disabled thinking is the state in which Anthropic requires
-     those blocks to be absent
+     so it also drops the off types, thinking={"type": "disabled"} and Sonnet 5.5's
+     {"type": "between_tools"}, the values that cannot produce that error: off
+     thinking is the state in which Anthropic requires those blocks to be absent
    - Reasoning off then silently becomes the API's own default on every turn after a
      tool call, which on the Claude 5 line is full reasoning
    - Bedrock Converse carries its own copy of the same check in
@@ -104,8 +104,30 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
      are wrapped
    STATUS: STILL NEEDED - v1.93.0 gates on presence, not on the thinking type.
 
+9. OpenRouter Routed Model Lost In Streams (_patch_openrouter_routed_model):
+   - OpenRouter stream chunks carry the model a router (openrouter/auto) actually
+     served, but CustomStreamWrapper overwrites every chunk's `model` with the
+     requested name, so routed calls cannot be priced
+   - Our patch keeps the served name in provider_specific_fields["routed_model"],
+     which the wrapper copies through to the consumer
+   STATUS: STILL NEEDED - v1.93.0 only preserves chunk models for Azure.
+
+10. Gemini 4+ And Content-less Candidates (_patch_vertex_gemini_newer_models):
+   - VertexGeminiConfig._is_gemini_3_or_newer matches the "gemini-3" substring, so
+     gemini-4-argon takes the Gemini 2 path: reasoning maps to thinkingBudget,
+     which Gemini 4 rejects. get_supported_openai_params also looks the bare name
+     up in the registry, which lists gemini-4-argon only as vertex_ai/gemini-4-argon,
+     so reasoning_effort is reported unsupported and dropped
+   - _map_reasoning_effort_to_thinking_level maps medium to high outside Gemini
+     3 Flash and 3.1 Pro; Gemini 4 supports medium
+   - _process_candidates skips a candidate with a finishReason but no content,
+     e.g. a reply whose whole output budget went to thinking. A non-streamed
+     response then has no choices; streaming adds an empty choice for the same reply
+   STATUS: STILL NEEDED - Fixed upstream by v1.106.4; drop once we are on it.
+
 """
 
+import re
 import time
 import uuid
 from typing import Any, List, Optional, cast
@@ -116,7 +138,15 @@ from litellm.completion_extras.litellm_responses_transformation.transformation i
 )
 from litellm.llms.ollama.chat.transformation import OllamaChatCompletionResponseIterator
 from litellm.llms.ollama.common_utils import OllamaError
-from litellm.types.utils import ChatCompletionUsageBlock, ModelResponseStream
+from litellm.llms.openrouter.chat.transformation import (
+    OpenRouterChatCompletionStreamingHandler,
+)
+from litellm.types.llms.vertex_ai import Candidates, GeminiThinkingConfig
+from litellm.types.utils import (
+    ChatCompletionUsageBlock,
+    ModelResponse,
+    ModelResponseStream,
+)
 
 # Original upstream chunk_parser, saved before any patching for fallback use
 _original_responses_chunk_parser = (
@@ -812,23 +842,28 @@ def _patch_responses_api_bridge_check() -> None:
     )
 
 
-def _disabled_thinking(optional_params: dict) -> dict | None:
-    """The thinking param when it explicitly asks for no thinking at all."""
+# The thinking types that turn up-front thinking off: disabled everywhere it is
+# accepted, between_tools on Sonnet 5.5, which rejects disabled.
+_THINKING_OFF_TYPES = frozenset({"disabled", "between_tools"})
+
+
+def _thinking_off(optional_params: dict) -> dict | None:
+    """The thinking param when it explicitly asks for no up-front thinking."""
     thinking = optional_params.get("thinking")
-    if isinstance(thinking, dict) and thinking.get("type") == "disabled":
+    if isinstance(thinking, dict) and thinking.get("type") in _THINKING_OFF_TYPES:
         return thinking
     return None
 
 
 def _patch_anthropic_keeps_disabled_thinking() -> None:
     """
-    Patches the two Anthropic request transforms to keep an explicit
-    thinking={"type": "disabled"} on a turn whose history carries tool calls
-    with no thinking blocks.
+    Patches the two Anthropic request transforms to keep an explicit off
+    thinking type (disabled, or between_tools on Sonnet 5.5) on a turn whose
+    history carries tool calls with no thinking blocks.
 
     Upstream drops the param there to avoid "Expected thinking or
     redacted_thinking, but found tool_use", but it gates on `thinking is not
-    None` rather than on thinking being enabled. Disabled thinking cannot raise
+    None` rather than on thinking being enabled. Off thinking cannot raise
     that error: it is the state where Anthropic requires the blocks to be
     absent, which is exactly what we send. Dropping it silently returns the
     model to its default effort, which on the Claude 5 line is full reasoning.
@@ -854,7 +889,7 @@ def _patch_anthropic_keeps_disabled_thinking() -> None:
             litellm_params: dict,
             headers: dict,
         ) -> dict:
-            thinking = _disabled_thinking(optional_params)
+            thinking = _thinking_off(optional_params)
             body = original_transform_request(
                 self, model, messages, optional_params, litellm_params, headers
             )
@@ -882,7 +917,7 @@ def _patch_anthropic_keeps_disabled_thinking() -> None:
             headers: Optional[dict] = None,
             drop_params: bool = False,
         ) -> Any:
-            thinking = _disabled_thinking(optional_params)
+            thinking = _thinking_off(optional_params)
             data = original_request_helper(
                 self,
                 model=model,
@@ -906,6 +941,136 @@ def _patch_anthropic_keeps_disabled_thinking() -> None:
         )
 
 
+_original_openrouter_chunk_parser = (
+    OpenRouterChatCompletionStreamingHandler.chunk_parser
+)
+
+
+def _patch_openrouter_routed_model() -> None:
+    if (
+        OpenRouterChatCompletionStreamingHandler.chunk_parser.__name__
+        == "_patched_openrouter_chunk_parser"
+    ):
+        return
+
+    def _patched_openrouter_chunk_parser(self: Any, chunk: dict) -> ModelResponseStream:
+        response: ModelResponseStream = _original_openrouter_chunk_parser(self, chunk)
+        served_model: Any = chunk.get("model")
+        if isinstance(served_model, str) and served_model:
+            fields: dict[str, Any] = dict(response.provider_specific_fields or {})
+            fields["routed_model"] = served_model
+            response.provider_specific_fields = fields
+        return response
+
+    OpenRouterChatCompletionStreamingHandler.chunk_parser = (  # type: ignore[method-assign]
+        _patched_openrouter_chunk_parser
+    )
+
+
+_GEMINI_PRE_3_PATTERN = re.compile(
+    r"^gemini-(?:[12](?:\.\d+)?|exp|(?:pro|flash)(?!-(?:lite-)?latest$))(?:-|$)"
+)
+
+
+def _is_gemini_3_or_newer(model: str) -> bool:
+    model_name = model.split("/")[-1].lower()
+    if not model_name.startswith("gemini-"):
+        return False
+    return _GEMINI_PRE_3_PATTERN.match(model_name) is None
+
+
+def _gemini_major_version(model: str) -> int | None:
+    match = re.match(r"gemini-(\d+)", model.split("/")[-1].lower())
+    return int(match.group(1)) if match else None
+
+
+def _patch_vertex_gemini_newer_models() -> None:
+    from litellm.llms.vertex_ai.gemini.vertex_and_google_ai_studio_gemini import (
+        VertexGeminiConfig,
+    )
+
+    if (
+        VertexGeminiConfig.get_supported_openai_params.__name__
+        == "_patched_gemini_get_supported_openai_params"
+    ):
+        return
+
+    original_get_supported_openai_params = (
+        VertexGeminiConfig.get_supported_openai_params
+    )
+    original_process_candidates = VertexGeminiConfig._process_candidates
+    original_map_thinking_level = (
+        VertexGeminiConfig._map_reasoning_effort_to_thinking_level
+    )
+
+    def _patched_gemini_get_supported_openai_params(self: Any, model: str) -> list[str]:
+        params: list[str] = original_get_supported_openai_params(self, model)
+        if _is_gemini_3_or_newer(model):
+            params += [p for p in ("reasoning_effort", "thinking") if p not in params]
+        return params
+
+    def _patched_gemini_process_candidates(
+        _candidates: list[Candidates],
+        model_response: ModelResponse | ModelResponseStream,
+        standard_optional_params: dict[str, Any],
+        cumulative_tool_call_index: int = 0,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[Any], list[Any], int]:
+        grounding_metadata: list[dict[str, Any]] = []
+        url_context_metadata: list[dict[str, Any]] = []
+        safety_ratings: list[Any] = []
+        citation_metadata: list[Any] = []
+        # One call per candidate: upstream shares message state across candidates.
+        for idx, candidate in enumerate(_candidates):
+            if "content" not in candidate and "finishReason" in candidate:
+                candidate = cast(
+                    Candidates, {**candidate, "content": {"role": "model", "parts": []}}
+                )
+            candidate = cast(Candidates, {"index": idx, **candidate})
+            (
+                grounding,
+                url_context,
+                safety,
+                citations,
+                cumulative_tool_call_index,
+            ) = original_process_candidates(
+                [candidate],
+                model_response,
+                standard_optional_params,
+                cumulative_tool_call_index,
+            )
+            grounding_metadata.extend(grounding)
+            url_context_metadata.extend(url_context)
+            safety_ratings.extend(safety)
+            citation_metadata.extend(citations)
+        return (
+            grounding_metadata,
+            url_context_metadata,
+            safety_ratings,
+            citation_metadata,
+            cumulative_tool_call_index,
+        )
+
+    def _patched_gemini_map_thinking_level(
+        reasoning_effort: str, model: Optional[str] = None
+    ) -> GeminiThinkingConfig:
+        config = original_map_thinking_level(reasoning_effort, model)
+        major = _gemini_major_version(model) if model else None
+        if reasoning_effort == "medium" and major is not None and major >= 4:
+            config["thinkingLevel"] = "medium"
+        return config
+
+    VertexGeminiConfig._is_gemini_3_or_newer = staticmethod(_is_gemini_3_or_newer)  # ty: ignore[invalid-assignment]
+    VertexGeminiConfig.get_supported_openai_params = (  # type: ignore[method-assign]
+        _patched_gemini_get_supported_openai_params
+    )
+    VertexGeminiConfig._map_reasoning_effort_to_thinking_level = staticmethod(  # ty: ignore[invalid-assignment]
+        _patched_gemini_map_thinking_level
+    )
+    VertexGeminiConfig._process_candidates = staticmethod(  # ty: ignore[invalid-assignment]
+        _patched_gemini_process_candidates
+    )
+
+
 def apply_monkey_patches() -> None:
     """
     Apply all necessary monkey patches to LiteLLM for compatibility.
@@ -920,6 +1085,8 @@ def apply_monkey_patches() -> None:
     - Patching Logging._get_assembled_streaming_response to avoid mutating original response
     - Patching responses_api_bridge_check to always honor an explicit responses/ prefix
     - Patching AnthropicConfig.transform_request to keep disabled thinking on tool turns
+    - Patching OpenRouterChatCompletionStreamingHandler.chunk_parser to keep the served model
+    - Patching VertexGeminiConfig for Gemini 4+ thinking and content-less candidates
     """
     _patch_ollama_chunk_parser()
     _patch_responses_reasoning_summary_newlines()
@@ -929,3 +1096,5 @@ def apply_monkey_patches() -> None:
     _patch_logging_assembled_streaming_response()
     _patch_responses_api_bridge_check()
     _patch_anthropic_keeps_disabled_thinking()
+    _patch_openrouter_routed_model()
+    _patch_vertex_gemini_newer_models()

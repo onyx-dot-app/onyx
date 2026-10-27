@@ -15,7 +15,7 @@ import {
   useToolOAuthStatus,
   type ToolAuthStatus,
 } from "@/lib/hooks/useToolOAuthStatus";
-import { hasPermission } from "@/lib/permissions";
+import { hasPermission } from "@/lib/permissions/utils";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { useSettings } from "@/lib/settings/hooks";
 import {

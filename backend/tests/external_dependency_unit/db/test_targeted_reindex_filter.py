@@ -7,6 +7,7 @@ while cleanup/cancellation paths still see both.
 """
 
 from collections.abc import Generator
+from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy.orm import Session
@@ -67,6 +68,11 @@ def cc_pair(
         cleanup_cc_pair(db_session, pair)
 
 
+# A finished attempt always has the window docfetching set.
+_POLL_RANGE_START = datetime(2026, 1, 1, tzinfo=timezone.utc)
+_POLL_RANGE_END = datetime(2026, 1, 2, tzinfo=timezone.utc)
+
+
 def _make_attempt(
     db_session: Session,
     cc_pair_id: int,
@@ -81,6 +87,8 @@ def _make_attempt(
         from_beginning=False,
         status=status,
         targeted_reindex_job_id=targeted_reindex_job_id,
+        poll_range_start=_POLL_RANGE_START,
+        poll_range_end=_POLL_RANGE_END,
     )
     db_session.add(attempt)
     db_session.commit()
