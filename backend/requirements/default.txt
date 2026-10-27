@@ -292,9 +292,9 @@ audioop-lts==0.2.2 \
     --hash=sha256:fbdd522624141e40948ab3e8cdae6e04c748d78710e9f0f8d4dae2750831de19 \
     --hash=sha256:fd3d4602dc64914d462924a08c1a9816435a2155d74f325853c1f1ac3b2d9800
     # via discord-py
-authlib==1.9.0 \
-    --hash=sha256:9d17f1702131683a9af223e48c275b13d1520510582371f327a0ef05a370568e \
-    --hash=sha256:c54c963ede35c428d126f5bb5d6f84617e91ace74d6ea9acad659c30f5ff1819
+authlib==1.9.1 \
+    --hash=sha256:5c7d9848f47cac340f060f76ae0bc09b59f5c8e89cc1bb032d4370a0c55b5974 \
+    --hash=sha256:8b9be8b1e5174dcbf5520e984f1a22dc2edae5b6e40a61d4cedbf86b97e9e69b
     # via fastmcp-slim
 azure-cognitiveservices-speech==1.50.0 \
     --hash=sha256:2621d1c95741c0864d418f88c59d1355bde0d893beb57c609b6ae4819c99e591 \
