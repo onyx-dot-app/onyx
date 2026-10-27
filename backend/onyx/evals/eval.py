@@ -158,7 +158,7 @@ def _get_answer_with_tools(
             - 'force_tools' (optional): List of tool types to force for this input
             - 'expected_tools' (optional): List of tool types expected to be called
             - 'require_all_tools' (optional): If true, all expected tools must be called
-            - 'model' (optional): Model version to use (e.g., "gpt-4o", "claude-3-5-sonnet")
+            - 'model' (optional): Model version to use (e.g., "gpt-6-sol", "claude-3-5-sonnet")
             - 'model_provider' (optional): Model provider (e.g., "openai", "anthropic")
             - 'temperature' (optional): Temperature for the model
         configuration: Evaluation configuration options

@@ -7,6 +7,8 @@ a future inlining of these types (or swap to a different upstream)
 touches only this file. See docs/craft/drop-acp-layer.md.
 """
 
+from typing import NotRequired, TypedDict
+
 from acp.schema import (
     AgentMessageChunk,
     AgentPlanUpdate,
@@ -18,6 +20,14 @@ from acp.schema import (
     ToolCallProgress,
     ToolCallStart,
 )
+
+
+class TextPartMetadata(TypedDict):
+    """Live part identity and authoritative text from OpenCode part updates."""
+
+    partId: str
+    snapshotText: NotRequired[str]
+
 
 # Onyx-synthesized ``Error.code`` sentinels for turn-terminating failures.
 # Negative so they never collide with opencode / JSON-RPC error codes.
@@ -45,6 +55,7 @@ __all__ = [
     "RequestPermissionRequest",
     "ToolCallProgress",
     "ToolCallStart",
+    "TextPartMetadata",
     "TURN_ERROR_CODE_SESSION",
     "TURN_ERROR_CODE_TIMEOUT",
     "TURN_ERROR_CODE_TRANSPORT",

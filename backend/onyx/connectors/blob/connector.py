@@ -14,7 +14,11 @@ from botocore.credentials import RefreshableCredentials
 from botocore.exceptions import ClientError, NoCredentialsError, PartialCredentialsError
 from botocore.session import get_session
 
-from onyx.configs.app_configs import BLOB_STORAGE_SIZE_THRESHOLD, INDEX_BATCH_SIZE
+from onyx.configs.app_configs import (
+    BLOB_STORAGE_SIZE_THRESHOLD,
+    INDEX_BATCH_SIZE,
+    SKIP_SPREADSHEET_CONTENT,
+)
 from onyx.configs.constants import BlobType, DocumentSource, FileOrigin
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     process_onyx_metadata,
@@ -486,7 +490,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                         downloaded_file = self._download_object(key)
                         if downloaded_file is None:
                             continue
-                        tabular_sections: list[TabularSection] = []
+                        tabular_sections: list[TabularSection | TextSection] = []
                         staged_file_id: str | None = None
                         if self.raw_file_callback is not None:
                             content_type, _ = mimetypes.guess_type(file_name)
@@ -496,6 +500,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                                 content_type=content_type or "application/octet-stream",
                                 raw_file_callback=self.raw_file_callback,
                                 link=link,
+                                skip_content=SKIP_SPREADSHEET_CONTENT,
                             )
                             tabular_sections = result.sections
                             staged_file_id = result.staged_file_id

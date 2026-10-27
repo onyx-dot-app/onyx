@@ -21,6 +21,8 @@ from onyx.server.query_and_chat.streaming_models import (
     CustomToolStart,
     Packet,
 )
+from onyx.server.security.models import OutboundSSRFParams, SSRFProtectionLevel
+from onyx.server.security.store import get_security_settings
 from onyx.tools.interface import Tool
 from onyx.tools.models import (
     CHAT_SESSION_ID_PLACEHOLDER,
@@ -41,10 +43,48 @@ from onyx.tools.tool_implementations.custom.openapi_parsing import (
 )
 from onyx.utils.headers import HeaderItemDict, header_list_to_header_dict
 from onyx.utils.logger import setup_logger
+from onyx.utils.url import SSRFException, ssrf_safe_request, validate_outbound_http_url
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
 CUSTOM_TOOL_RESPONSE_ID = "custom_tool_response"
+# (connect, read) seconds
+CUSTOM_TOOL_REQUEST_TIMEOUT: tuple[float, float] = (10, 120)
+
+
+def custom_tool_ssrf_params() -> OutboundSSRFParams:
+    """Cloud blocks every internal target. Self-hosted allows private hosts,
+    allows loopback only at DISABLED, and always blocks link-local/metadata.
+
+    Self-hosted allows private ranges at every level, VALIDATE_ALL included, so
+    admins can call internal APIs. This is an accepted risk (ENG-4421)."""
+    if MULTI_TENANT:
+        return OutboundSSRFParams(
+            allow_private_network=False,
+            block_loopback_and_link_local=True,
+            block_link_local_only=False,
+        )
+    ssrf_disabled = (
+        get_security_settings().ssrf_protection_level == SSRFProtectionLevel.DISABLED
+    )
+    return OutboundSSRFParams(
+        allow_private_network=True,
+        block_loopback_and_link_local=not ssrf_disabled,
+        block_link_local_only=ssrf_disabled,
+    )
+
+
+def validate_custom_tool_url(url: str, *, resolve_dns: bool = True) -> None:
+    """Raises ``SSRFException`` or ``ValueError`` for a blocked destination."""
+    params = custom_tool_ssrf_params()
+    validate_outbound_http_url(
+        url,
+        allow_private_network=params.allow_private_network,
+        block_loopback_and_link_local=params.block_loopback_and_link_local,
+        block_link_local_only=params.block_link_local_only,
+        resolve_dns=resolve_dns,
+    )
 
 
 # override_kwargs is not supported for custom tools
@@ -147,6 +187,37 @@ class CustomTool(Tool[None]):
             )
         )
 
+    def _failed_response(
+        self,
+        placement: Placement,
+        status_code: int | None,
+        message: str,
+        is_unreachable: bool = False,
+    ) -> ToolResponse:
+        error_info = CustomToolErrorInfo(
+            status_code=status_code, message=message, is_unreachable=is_unreachable
+        )
+        self.emitter.emit(
+            Packet(
+                placement=placement,
+                obj=CustomToolDelta(
+                    tool_name=self._name,
+                    tool_id=self._id,
+                    response_type="text",
+                    error=error_info,
+                ),
+            )
+        )
+        return ToolResponse(
+            rich_response=CustomToolCallSummary(
+                tool_name=self._name,
+                response_type="text",
+                tool_result=None,
+                error=error_info,
+            ),
+            llm_facing_response=message,
+        )
+
     def run(
         self,
         placement: Placement,
@@ -192,9 +263,63 @@ class CustomTool(Tool[None]):
         url = self._method_spec.build_url(self._base_url, path_params, query_params)
         method = self._method_spec.method
 
-        response = requests.request(
-            method, url, json=request_body, headers=self.headers
-        )
+        params = custom_tool_ssrf_params()
+        try:
+            response = ssrf_safe_request(
+                url,
+                method=method,
+                json=request_body,
+                headers=self.headers,
+                timeout=CUSTOM_TOOL_REQUEST_TIMEOUT,
+                allow_private_network=params.allow_private_network,
+                block_loopback_and_link_local=params.block_loopback_and_link_local,
+                block_link_local_only=params.block_link_local_only,
+            )
+        except (SSRFException, ValueError) as e:
+            logger.warning("%s request blocked: %s", self._name, e)
+            return self._failed_response(
+                placement,
+                status_code=None,
+                message=(
+                    f"The {self._name} tool could not run because its destination "
+                    "is not allowed."
+                ),
+            )
+        except requests.exceptions.Timeout:
+            logger.warning("%s request timed out", self._name, exc_info=True)
+            return self._failed_response(
+                placement,
+                status_code=None,
+                message=f"The {self._name} tool could not reach its server (timed out).",
+                is_unreachable=True,
+            )
+        except requests.exceptions.ConnectionError:
+            logger.warning("%s request could not connect", self._name, exc_info=True)
+            return self._failed_response(
+                placement,
+                status_code=None,
+                message=(
+                    f"The {self._name} tool could not reach its server "
+                    "(connection failed)."
+                ),
+                is_unreachable=True,
+            )
+        if response.is_redirect:
+            logger.warning(
+                "%s got HTTP %s redirect to '%s'; redirects are not followed",
+                self._name,
+                response.status_code,
+                response.headers.get("Location"),
+            )
+            return self._failed_response(
+                placement,
+                status_code=response.status_code,
+                message=(
+                    f"The {self._name} tool failed because the server sent a "
+                    "redirect. An admin must set the plugin's server URL to the "
+                    "final location."
+                ),
+            )
         content_type = response.headers.get("Content-Type", "")
 
         # Detect HTTP errors — only 401/403 are flagged as auth errors

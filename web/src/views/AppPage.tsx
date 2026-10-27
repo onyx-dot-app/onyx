@@ -6,6 +6,7 @@ import {
   useRouter,
   useSearchParams,
 } from "next/navigation";
+import { SourceMetadata, ValidSources } from "@/lib/connectors/types/source";
 import { loginPath } from "@/lib/auth/paths";
 import { endIncognitoSession } from "@/app/app/services/lib";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -17,6 +18,14 @@ import { useSendChatMessageFromURL } from "@/lib/chat/hooks";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
 import { useToolConfiguration } from "@/lib/tools/hooks";
+import { useMemberPlugins } from "@/lib/plugins/member";
+import {
+  applyChatPluginIntent,
+  chatPluginIntentLoadState,
+  chatPluginsForAgent,
+  parseChatPluginIntent,
+  withoutChatPluginIntent,
+} from "@/lib/plugins/chat";
 import { useSettings } from "@/lib/settings/hooks";
 import Dropzone from "react-dropzone";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
@@ -31,9 +40,7 @@ import { NoAgentModal } from "@/lib/agents/components";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import { Modal } from "@opal/components";
 import { useSendMessageToParent } from "@/lib/extension/hooks";
-import { SourceMetadata } from "@/lib/search/types";
 import { FederatedConnectorDetail } from "@/lib/types";
-import { ValidSources } from "@/lib/connectors/types/source";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
 import useChatController from "@/hooks/useChatController";
 import useMultiModelChat from "@/hooks/useMultiModelChat";
@@ -63,7 +70,7 @@ import {
   ProjectContextPanel,
   ProjectChatSessionList,
 } from "@/lib/projects/components";
-import { useProjectsContext } from "@/lib/projects/providers";
+import { type ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import { useActiveProject, useProjects } from "@/lib/projects/hooks";
 import { getProjectTokenCount } from "@/lib/projects/svc";
 import { cn } from "@opal/utils";
@@ -86,7 +93,7 @@ import useScreenSize from "@/hooks/useScreenSize";
 import { useSidebarState } from "@opal/layouts";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
-import ChatUI from "@/sections/chat/ChatUI";
+import ChatUI, { FULL_WIDTH_TRANSITION } from "@/sections/chat/ChatUI";
 import { useFullWidthChat } from "@/providers/FullWidthChatProvider";
 import { paidTierGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
@@ -201,6 +208,64 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   }, [searchParams, router]);
 
   const toolConfiguration = useToolConfiguration();
+  const pluginCopy = useTranslations("actions.memberPlugins");
+  const memberPlugins = useMemberPlugins({
+    agentId: activeAgent?.id,
+    surface: "chat",
+  });
+  const handledPluginIntent = useRef<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    if (!params.has("pluginKind") && !params.has("pluginId")) {
+      handledPluginIntent.current = null;
+      return;
+    }
+    const reference = parseChatPluginIntent(params);
+    const intentLoadState = reference
+      ? chatPluginIntentLoadState(reference, memberPlugins)
+      : null;
+    if (!toolConfiguration.ready) return;
+    if (
+      reference &&
+      (!activeAgent ||
+        isLoadingAgents ||
+        isLoadingChatSessions ||
+        intentLoadState === "loading")
+    ) {
+      return;
+    }
+    const intentKey = `${pathname}?${params}`;
+    if (handledPluginIntent.current === intentKey) return;
+    handledPluginIntent.current = intentKey;
+    if (!reference) {
+      toast.error(pluginCopy("chat.intent.invalid"));
+    } else if (
+      !activeAgent ||
+      intentLoadState === "error" ||
+      !applyChatPluginIntent(
+        reference,
+        chatPluginsForAgent(memberPlugins.plugins, activeAgent),
+        toolConfiguration
+      )
+    ) {
+      toast.error(pluginCopy("chat.intent.unavailable"));
+    }
+    const remaining = withoutChatPluginIntent(params).toString();
+    router.replace(remaining ? `/app?${remaining}` : "/app", {
+      scroll: false,
+    });
+  }, [
+    activeAgent,
+    isLoadingAgents,
+    isLoadingChatSessions,
+    memberPlugins,
+    pathname,
+    pluginCopy,
+    router,
+    searchParams,
+    toolConfiguration,
+  ]);
 
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
     chatSessionId: currentChatSessionId,
@@ -283,6 +348,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     chatInputBarRef.current?.reset();
     setCurrentMessageFiles([]);
   }, [setCurrentMessageFiles]);
+
+  const restoreInputBar = useCallback(
+    (message: string, files: ProjectFile[]) => {
+      chatInputBarRef.current?.restore(message, files);
+    },
+    []
+  );
 
   // Add refs needed by useChatSessionController
   const chatSessionIdRef = useRef<string | null>(currentChatSessionId);
@@ -391,7 +463,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       setFolded(preMultiModelFoldedRef.current);
       preMultiModelFoldedRef.current = null;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [multiModel.isMultiModelActive]);
 
   // Sync single-model selection to llmManager so the submission path uses
@@ -431,10 +502,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     toolConfiguration,
     availableAgents: agents,
     activeAgent,
+    memberPlugins: memberPlugins.plugins,
     existingChatSessionId: currentChatSessionId,
     selectedDocuments,
     searchParams,
     resetInputBar,
+    restoreInputBar,
   });
 
   const { onMessageSelection, sessionFetchError } = useChatSessionController({
@@ -902,8 +975,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       justifyContent="between"
                       alignItems="end"
                       className={cn(
-                        !fullWidthActive &&
-                          "max-w-(--app-page-main-content-width)"
+                        fullWidthActive
+                          ? "max-w-full"
+                          : "max-w-(--app-page-main-content-width)",
+                        FULL_WIDTH_TRANSITION
                       )}
                     >
                       <WelcomeMessage
@@ -942,8 +1017,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     className={cn(
                       "relative w-full flex flex-col",
                       onboardingVisible && "min-h-0",
-                      !fullWidthActive &&
-                        "md:max-w-(--app-page-main-content-width)"
+                      fullWidthActive
+                        ? "md:max-w-full"
+                        : "md:max-w-(--app-page-main-content-width)",
+                      FULL_WIDTH_TRANSITION
                     )}
                   >
                     {/* Scroll to bottom button - positioned absolutely above AppInputBar */}
@@ -1010,6 +1087,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       )}
                       <AppInputBar
                         toolConfiguration={toolConfiguration}
+                        memberPlugins={memberPlugins.plugins}
                         ref={chatInputBarRef}
                         deepResearchEnabled={
                           deepResearchEnabledForCurrentWorkflow

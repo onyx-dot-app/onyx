@@ -45,6 +45,8 @@ jobs:
       - uses: j178/prek-action@4e14d07f9231acabce116ccfca13b13dd9755ece
         env:
           SKIP: ty,desktop-rust-fmt,desktop-rust-clippy
+          # All-files checks need the push range for translation comparisons.
+          PRE_COMMIT_FROM_REF: ${{ github.event_name == 'push' && github.ref_name == 'main' && github.event.before != '0000000000000000000000000000000000000000' && github.event.before || '' }}
           # Lets the zizmor hook run its online audits. Read-only: the job
           # grants `contents: read` and nothing else.
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,12 +1,16 @@
 "use client";
 
 import type { Route } from "next";
+import { listSourceMetadata } from "@/lib/connectors/utils";
+import {
+  SourceCategory,
+  SourceMetadata,
+  federatedSourceToRegularSource,
+} from "@/lib/connectors/types/source";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useTranslations } from "next-intl";
 import { Content, SettingsLayouts } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import { SourceCategory, SourceMetadata } from "@/lib/search/types";
-import { listSourceMetadata } from "@/lib/sources";
 import {
   useCallback,
   useDeferredValue,
@@ -19,7 +23,6 @@ import { InputTypeIn, Text } from "@opal/components";
 import { useGridNavigation, useHotkey } from "@opal/hooks";
 import { useFederatedConnectors } from "@/lib/connectors/hooks";
 import { FederatedConnectorDetail } from "@/lib/types";
-import { federatedSourceToRegularSource } from "@/lib/connectors/types/source";
 import { useSettings } from "@/lib/settings/hooks";
 import { ConnectorSourceCard } from "@/lib/connectors/components";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";

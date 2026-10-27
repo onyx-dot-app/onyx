@@ -52,9 +52,9 @@
       "name": "Kimi K2.6",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-04-21",
+      "release_date": "2026-04-20",
       "structured_output": true,
-      "temperature": true,
+      "temperature": false,
       "tool_call": true
     },
     "kimi-k2.7-code": {
@@ -122,6 +122,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.3,
+        "cache_write": 3,
         "input": 3,
         "output": 15
       },
@@ -145,6 +146,68 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-07-16",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "kimi-k3.1-pro": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "cache_write": 2,
+        "input": 2,
+        "output": 10
+      },
+      "family": "kimi-k3",
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Kimi K3.1 Pro",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-23",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "kimi-k3.1-pro-highspeed": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "cache_write": 4,
+        "input": 4,
+        "output": 20
+      },
+      "family": "kimi-k3",
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Kimi K3.1 Pro Highspeed",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-23",
       "structured_output": true,
       "temperature": false,
       "tool_call": true

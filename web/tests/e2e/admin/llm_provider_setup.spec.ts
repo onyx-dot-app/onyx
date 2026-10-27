@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { CI_OPENAI_MODEL } from "@tests/e2e/constants";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import type { Locator, Page } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
@@ -111,7 +112,7 @@ async function getDefaultTextModel(page: Page): Promise<DefaultModelInfo> {
 async function createPublicProvider(
   page: Page,
   providerName: string,
-  modelName: string = "gpt-4o"
+  modelName: string = CI_OPENAI_MODEL
 ): Promise<number> {
   return createPublicProviderWithModels(page, providerName, [
     { name: modelName, is_visible: true },

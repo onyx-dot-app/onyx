@@ -87,7 +87,6 @@ class DocAwareChunk(BaseChunk):
 
 class IndexChunk(DocAwareChunk):
     embeddings: ChunkEmbedding
-    title_embedding: Embedding | None
 
 
 # TODO(rkuo): currently, this extra metadata sent during indexing is just for speed,
@@ -267,6 +266,7 @@ class IndexingBatchAdapter(Protocol):
         ignore_time_skip: bool,
         index_to_secondary: bool,
         force_update: bool = False,
+        skip_document_row_writes: bool = False,
     ) -> Optional["DocumentBatchPrepareContext"]: ...
 
     @contextlib.contextmanager
@@ -296,4 +296,5 @@ class IndexingBatchAdapter(Protocol):
         enrichment: ChunkEnrichmentContext,
         db_session: Session,
         index_to_secondary: bool,
+        failed_document_ids: set[str],
     ) -> None: ...

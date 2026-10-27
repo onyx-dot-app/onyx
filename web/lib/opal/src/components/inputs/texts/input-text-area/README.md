@@ -14,6 +14,7 @@ Multiline text field on the shared `.opal-input` chrome. Accepts standard textar
 | `maxRows`      | `number`        | —           | Row cap for `autoResize`, content beyond it scrolls                                                                          |
 | `resizable`    | `boolean`       | `true`      | Manual vertical resize handle, ignored with `autoResize`                                                                     |
 | `rightSection` | `ReactNode`     | —           | Slot pinned to the top-right inside the field                                                                                |
+| `mono`         | `boolean`       | `false`     | Monospace text (`font-main-ui-mono`), for code or queries                                                                    |
 
 ## Usage
 

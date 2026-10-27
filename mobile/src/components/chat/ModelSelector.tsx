@@ -114,7 +114,7 @@ export function ModelSelector() {
         </Text>
       </Popover.Trigger>
 
-      {/* Bounded rather than fixed: model names run from "GPT-5" to "Claude Sonnet 4.5 (Bedrock)",
+      {/* Bounded rather than fixed: model names run from "GPT-6 Sol" to "Claude Sonnet 4.5 (Bedrock)",
           so any single width is either half empty or clipping. */}
       <Popover.Content
         side="top"

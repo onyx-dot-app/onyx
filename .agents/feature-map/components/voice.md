@@ -31,6 +31,13 @@ first. Until then, the microphone button and read-aloud control are hidden
 (`GET /voice/status`); nothing errors mid-conversation for a capability that
 was never turned on.
 
+Zoom uses one connection for Scribe and Decisions. An admin can create or edit
+it from Voice or Decision Models. Both pages use the same encrypted credentials.
+Zoom Decisions is opt-in: only a Decision Models save links the connection to a
+decision provider. Creating it from Decision Models does not activate a voice
+default or select a decision model. Voice setup keeps its existing activation
+behavior.
+
 ---
 
 ## 2. Surfaces
@@ -40,7 +47,7 @@ was never turned on.
 | Method | Path | Handler | Notes |
 |---|---|---|---|
 | GET | `/admin/voice/providers` | `list_voice_providers` | |
-| POST | `/admin/voice/providers` | `upsert_voice_provider_endpoint` | Create/update; validates credentials live via `voice_provider.validate_credentials()` before commit, rolling back on failure. |
+| POST | `/admin/voice/providers` | `upsert_voice_provider_endpoint` | Create/update with live validation before commit. Zoom supports voice or decision validation. Failure rolls back the shared connection. |
 | DELETE | `/admin/voice/providers/{provider_id}` | `delete_voice_provider_endpoint` | |
 | POST | `/admin/voice/providers/{provider_id}/activate-stt` \| `/deactivate-stt` | | Sets/clears `is_default_stt`. |
 | POST | `/admin/voice/providers/{provider_id}/activate-tts` \| `/deactivate-tts` | | Sets/clears `is_default_tts`; gated by `_validate_tts_activation_supported`. |
@@ -75,6 +82,10 @@ streaming session, so provider-specific error detail never reaches the client.
   `api_secret` (`SensitiveValue`/`EncryptedString`), `api_base`,
   `custom_config` (JSONB), `stt_model`, `tts_model`, `default_voice`, and two
   independent booleans `is_default_stt` / `is_default_tts`.
+- Zoom decision providers reference the credential row through
+  `LLMProvider.zoom_voice_provider_id`. A Decision Models save creates the
+  linked provider and its hidden decision models without choosing a decision
+  default. A Voice save only keeps an existing link in sync.
 - **STT and TTS defaults are independent of each other and independent per
   row.** One provider row can be the STT default, a different row the TTS
   default; `fetch_default_stt_provider` and `fetch_default_tts_provider`
@@ -207,6 +218,11 @@ sample rather than silently truncating or shifting it.
    cannot support the platform's TTS streaming contract fails
    `_validate_tts_activation_supported` before `is_default_tts` can be set,
    independent of whether it is a valid STT default.
+6. **Zoom connection setup is shared and atomic.** VoiceProvider owns the key
+   and secret. Both admin pages update that row and its linked decision provider
+   in one transaction. Decision setup preserves Voice defaults and leaves the
+   decision model unset. Shared disconnect requires clearing a selected decision
+   model and removes both configurations.
 
 ---
 
@@ -217,16 +233,16 @@ sample rather than silently truncating or shifting it.
   same `send-chat-message` path as typed text; this component does not have
   its own turn model.
 - [[llm-providers]]: shares the `EncryptedString`/`SensitiveValue` credential
-  pattern used for `LLMProvider`, though `VoiceProvider` is its own table, not
-  reused rows.
+  pattern used for `LLMProvider`. Zoom decision providers reference a
+  `VoiceProvider` row so credential edits apply to both capabilities.
 - [[observability]]: every STT/TTS provider call is wrapped in
   `traced_llm_call` with `LLMFlow.STT` / `LLMFlow.TTS`.
 - [[chat-frontend]]: `MicrophoneButton` and `VoiceModeProvider` are chat-page
   components that call into this component's endpoints.
 
 **Depended on by**
-- Nothing else in the codebase calls into voice; it is a leaf feature
-  reachable only from the chat input/output UI.
+- [[llm-providers]]: Decision Models reuses Zoom connection setup and the current
+  stored key and secret to sign decision requests.
 
 ---
 
@@ -238,6 +254,7 @@ sample rather than silently truncating or shifting it.
 | changes `TranscriptResult` or the WebSocket message shape | `websocket_api.py:_forward_transcripts`/`_receive_transcripts` and the frontend's `useVoiceRecorder` parsing |
 | changes audio resampling (`Pcm16Resampler`) | any provider that streams PCM16 at a non-native sample rate; a phase bug here corrupts audio without raising an error |
 | changes `is_default_stt`/`is_default_tts` semantics | `db/voice.py:fetch_default_stt_provider`/`fetch_default_tts_provider` and `/voice/status`, since the frontend gates the mic/read-aloud UI on that endpoint |
+| changes Zoom connection setup, credentials, or deletion | Decision Models setup, the linked LLM provider and DECISION flows, selected-model protection, and credential rotation |
 | adds any audio or transcript persistence | this document's §5 privacy invariant becomes false; update it in the same change, and check whether that needs a retention/consent story |
 | changes voice session admission limits | `redis/redis_pool.py:acquire_voice_session`/`release_voice_session` and `VoiceSessionPolicy.handler_seconds`, which the REST and WebSocket paths both depend on |
 
@@ -276,6 +293,10 @@ No integration test targets this component specifically.
    text advancing roughly in sync with audio.
 5. Deactivate the provider and confirm `/voice/status` reports both
    capabilities disabled, and the mic/read-aloud controls disappear.
+6. Configure Zoom from Decision Models and confirm Voice shows that connection.
+   Confirm voice defaults did not change and the decision model remains unset.
+   Connect Zoom from Voice only and confirm no decision provider exists until an
+   admin connects it on Decision Models, without another credential entry.
 
 ### What "working" looks like
 

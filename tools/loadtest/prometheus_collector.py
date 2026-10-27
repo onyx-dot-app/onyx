@@ -10,7 +10,9 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Any
 
-from prometheus_client.core import CounterMetricFamily, GaugeMetricFamily
+from onyx_client.workload_metrics import METRIC_NAMES, aggregate
+from prometheus_client.core import CounterMetricFamily, GaugeMetricFamily, Metric
+from prometheus_client.registry import Collector
 
 _LABELS = ["name", "method"]
 
@@ -24,13 +26,13 @@ def _percentile(entry: Any, pct: float) -> float:
     return float(val)
 
 
-class LocustCollector:
+class LocustCollector(Collector):
     """Pulls current aggregated stats from the runner at scrape time."""
 
     def __init__(self, environment: Any) -> None:
         self.environment = environment
 
-    def collect(self) -> Iterator[Any]:
+    def collect(self) -> Iterator[Metric]:
         runner = self.environment.runner
         if runner is None:
             return
@@ -66,3 +68,23 @@ class LocustCollector:
         yield p50
         yield p95
         yield rps
+        clients = getattr(runner, "clients", None)
+        active_workers = (
+            {
+                worker_id
+                for worker_id, worker in clients.items()
+                if worker.state != "missing"
+            }
+            if clients is not None
+            else None
+        )
+        workload = aggregate(active_workers)
+        for name in METRIC_NAMES:
+            family = GaugeMetricFamily(
+                f"onyx_loadtest_{name}",
+                f"Workload {name}; cumulative counts reset at test start",
+                labels=["scenario"],
+            )
+            for scenario, values in workload.items():
+                family.add_metric([scenario], values.get(name, 0))
+            yield family

@@ -29,6 +29,8 @@ func managedFiles(prod, lite, craft, dev bool) []deployfiles.File {
 			deployfiles.EnvNginxTemplate,
 			deployfiles.NginxAppConfProd,
 			deployfiles.NginxRunScript,
+			deployfiles.NginxMcpConf,
+			deployfiles.NginxMcpUpstreamConf,
 		}
 	} else {
 		files = []deployfiles.File{
@@ -37,6 +39,8 @@ func managedFiles(prod, lite, craft, dev bool) []deployfiles.File {
 			deployfiles.Readme,
 			deployfiles.NginxAppConf,
 			deployfiles.NginxRunScript,
+			deployfiles.NginxMcpConf,
+			deployfiles.NginxMcpUpstreamConf,
 		}
 	}
 	if lite {

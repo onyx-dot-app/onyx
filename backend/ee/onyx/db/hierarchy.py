@@ -11,7 +11,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.db.connector_credential_pair import (
     build_restricted_acl_guard,
     build_user_cc_pair_access_filter,
-    has_sync_restricted_cc_pairs,
+    has_guarded_cc_pairs,
 )
 from onyx.db.enums import (
     ConnectorCredentialPairStatus,
@@ -66,8 +66,8 @@ def _build_hierarchy_access_filter(
             )
         )
     acl_match = or_(*acl_filters)
-    # The guard's per-row EXISTS checks can only matter once a restricted pair exists.
-    if has_sync_restricted_cc_pairs(db_session):
+    # The guard's per-row EXISTS checks can only matter once a guarded pair exists.
+    if has_guarded_cc_pairs(db_session):
         acl_match = and_(
             acl_match, build_restricted_acl_guard(user_id, _node_has_cc_pair)
         )

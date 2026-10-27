@@ -55,7 +55,7 @@ All synchronous — no Celery, matching the skills pattern.
 
 ```
 build_user_library_fileset(user_id, db_session)
-    1. list_user_files() → CRAFT_FILE Document rows for user
+    1. get_documents_by_source(source=CRAFT_FILE, creator_id=user_id) → Document rows for user
     2. Filter: skip is_directory=True, skip sync_disabled=True
     3. For each remaining doc: file_store.read_file(doc.link)
     4. Strip leading "/" from file_path (push daemon rejects absolute paths)
@@ -78,7 +78,6 @@ Empty filesets push too (clears stale files via the swap).
 | `get_or_create_craft_connector(db, user)` | Returns `(connector_id, credential_id)`. Idempotent. |
 | `get_user_storage_bytes(db, user_id)` | SQL aggregation for quota |
 | `build_document_id(user_id, path)` | Deterministic doc_id |
-| `list_user_files(db, user_id)` | All CRAFT_FILE docs for the user |
 | `fetch_user_file_for_user(db, doc_id, user_id)` | Lookup + ownership check; raises `OnyxError(NOT_FOUND)` on miss |
 | `store_user_file(db, ..., file_path, content, mime_type)` | Save to file store + upsert Document. Returns `(doc_id, file_id, old_blob_id_to_delete)`. The new blob is saved first; the caller must pass `old_blob_id_to_delete` to `cleanup_old_blobs` after their final commit. |
 | `cleanup_old_blobs(blob_ids)` | Delete superseded blobs. Must be called after the final DB commit — if called before and the commit fails, the document rolls back to point at the now-deleted blob. |

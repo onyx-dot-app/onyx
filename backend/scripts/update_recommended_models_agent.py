@@ -28,6 +28,7 @@ import json
 import os
 import re
 import sys
+from collections import deque
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -52,6 +53,7 @@ from update_recommended_models import (  # ty: ignore[unresolved-import]  # noqa
     load_catalog_file,
     load_previous,
     load_rules,
+    matches_rule,
     sections_equal,
     serialize,
     visible_models,
@@ -119,10 +121,14 @@ these models to admins configuring providers in "Auto" mode — the default mode
 plus a short visible list. Your picks ship to every deployment, so recommend
 only models you are confident are the vendor's current recommended lineup.
 
-Sections and their naming conventions (native names, NOT OpenRouter ids):
-- openai: strip the "openai/" prefix (e.g. "gpt-5.6-sol"). No display_name.
-- anthropic: strip "anthropic/" and replace "." with "-" (e.g. "claude-opus-5").
-- vertex_ai: strip the "google/" prefix (e.g. "gemini-3.1-pro-preview").
+Sections and their naming conventions (native names, NOT OpenRouter ids). A
+section lists ONLY its own vendor's models:
+- openai: openai/* models only; strip the "openai/" prefix (e.g.
+  "gpt-6.1-sol"). No display_name.
+- anthropic: anthropic/* models only; strip "anthropic/" and replace "." with
+  "-" (e.g. "claude-opus-5").
+- vertex_ai: google/* models only; strip the "google/" prefix (e.g.
+  "gemini-3.1-pro-preview").
 - openrouter: keep the full "vendor/id" OpenRouter id (e.g. "z-ai/glm-5.3").
 
 Selection rules:
@@ -135,9 +141,16 @@ Selection rules:
   even if it is still sold.
 - Do not recommend models released more than ~12 months ago unless the vendor
   still sells them as the current model for that tier.
-- Cover tiers per vendor where they exist: the flagship (this becomes
-  default_model), plus cheaper/faster current-tier options. Keep each list
-  tight: about 3-5 models.
+- default_model is the vendor's balanced general-purpose tier: strong, current,
+  and mid-priced (e.g. OpenAI Sol, Anthropic Opus, Gemini Pro/Argon, GLM). It MUST
+  fall in the family the curation rules below mark `is_default_source`. Never
+  make a premium tier (OpenAI Astra, Anthropic Fable, "-pro" variants, anything
+  priced several times the balanced tier) the default: it becomes the default
+  for every Auto-mode deployment, so cost matters more than peak capability.
+  Premium tiers may still appear in additional_visible_models.
+- Cover tiers per vendor where they exist: the default, cheaper/faster
+  current-tier options, and optionally one premium tier. Keep each list tight:
+  about 3-5 models.
 - Skip free tiers (":free" ids / $0 pricing), image/audio/embedding-only
   models, models without text output, and expired models.
 - display_name: emit for anthropic, vertex_ai, and openrouter sections only —
@@ -165,8 +178,12 @@ only — you may pick outside these families when the vendor lineup changed) ==
 FAILURE_CONTEXT_TEMPLATE = """\
 == PREVIOUS ATTEMPT FAILED CI ==
 The last generated PR failed the provider chat tests — real API calls against
-each recommended model. Fix your picks based on this failure output (drop or
-replace the failing models):
+each recommended model. Read the error for each failing model:
+- The provider rejected the model (unknown model, not found, deprecated, no
+  access): drop or replace that model.
+- Onyx failed while handling a model the vendor still recommends (for example
+  a 400 VALIDATION_ERROR with "An unexpected error occurred", or a 5xx): that
+  is an Onyx bug, not a bad pick. Keep the model; do not swap in an older one.
 
 {failure_context}
 """
@@ -178,9 +195,63 @@ Fix these problems and try again:
 {errors}
 """
 
+FAILURE_CONTEXT_CHARS = 60_000
+FAILURE_JOB_TAIL_LINES = 50
+# `gh run view --log-failed` prefixes each line with "<job>\t<step>\t<timestamp> ".
+_LOG_LINE_RE = re.compile(r"^(?P<job>[^\t]*)\t[^\t]*\t\S+Z ?(?P<text>.*)$")
+_PYTEST_FAILURES_RE = re.compile(r"^=+ FAILURES =+$")
+_PYTEST_SECTION_END_RE = re.compile(r"^(-+ Captured |=+ )")
+
+
+def extract_failure_context(log: str, limit: int = FAILURE_CONTEXT_CHARS) -> str:
+    """Keep the header and pytest failure sections of a failed-run log.
+
+    Failed-job logs end with container teardown output, so the tail of the
+    log rarely contains the assertion that failed. A failed job with no pytest
+    failure section (e.g. a setup error) keeps its last lines. Falls back to
+    the tail when the log has no pytest failure section.
+    """
+    header: list[str] = []
+    blocks: list[str] = []
+    block: list[str] | None = None
+    job_tails: dict[str, deque[str]] = {}
+    jobs_with_blocks: set[str] = set()
+    for line in log.splitlines():
+        match = _LOG_LINE_RE.match(line)
+        if match is None:
+            if not job_tails:
+                header.append(line)
+            continue
+        job = match.group("job")
+        text = match.group("text")
+        job_tails.setdefault(job, deque(maxlen=FAILURE_JOB_TAIL_LINES)).append(text)
+        if _PYTEST_FAILURES_RE.match(text):
+            block = [f"[{job}]"]
+            jobs_with_blocks.add(job)
+        elif block is not None:
+            if _PYTEST_SECTION_END_RE.match(text):
+                blocks.append("\n".join(block))
+                block = None
+            else:
+                block.append(text)
+    if block is not None:
+        blocks.append("\n".join(block))
+    if not blocks:
+        return log[-limit:]
+    # A retried job repeats the same failure.
+    unique_blocks = list(dict.fromkeys(blocks))
+    other_jobs = [
+        "\n".join([f"[{job}] (no pytest failure; last lines)", *tail])
+        for job, tail in job_tails.items()
+        if job not in jobs_with_blocks
+    ]
+    return "\n".join([*header, *unique_blocks, *other_jobs])[:limit]
+
+
 # Names are provider model ids — anything with braces, spaces, or commas is a
 # formatting glitch, not a pick.
 VALID_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9./_-]*$")
+_NON_ALNUM_RE = re.compile(r"[^a-z0-9]")
 
 
 def _created_date(model: CatalogModel) -> str:
@@ -241,32 +312,44 @@ def _section_vendors(section_rules: SectionRules) -> set[str]:
 def _alias_to_native(
     section_rules: SectionRules,
     catalog: list[CatalogModel],
-) -> dict[str, str]:
-    """Alias → canonical native name for this section.
+) -> tuple[dict[str, str], dict[str, str]]:
+    """(alias → canonical native name, foreign alias → its vendor).
 
     The agent may write a bare catalog id ("claude-fable-5.1") or the full
     OpenRouter id ("anthropic/claude-fable-5.1") where the file wants the
     transformed native name ("claude-fable-5-1"); map all of them so one
-    naming glitch doesn't sink an otherwise-correct pick.
+    naming glitch doesn't sink an otherwise-correct pick. Names of other
+    vendors' models are tracked separately so a Gemini id in the openai
+    section is rejected instead of passing as "new/unlisted".
     """
     aliases: dict[str, str] = {}
+    foreign: dict[str, str] = {}
     keep_full: bool = section_rules.id_transform == "keep_full_id"
     vendors: set[str] = _section_vendors(section_rules)
     for model in catalog:
-        if not keep_full and model.id.split("/", 1)[0] not in vendors:
-            continue
+        vendor: str = model.id.split("/", 1)[0]
         native: str = derive_native_name(model, section_rules)
-        aliases[model.id] = native
-        aliases[native] = native
+        names: list[str] = [model.id, native]
         if "/" in model.id:
-            aliases[model.id.split("/", 1)[1]] = native
-    return aliases
+            names.append(model.id.split("/", 1)[1])
+        if keep_full or vendor in vendors:
+            aliases.update(dict.fromkeys(names, native))
+        else:
+            # Keyed loosely: another section's transform may have turned
+            # "claude-opus-5.5" into "claude-opus-5-5".
+            foreign.update({_loose_key(name): vendor for name in names})
+    return aliases, foreign
+
+
+def _loose_key(name: str) -> str:
+    return _NON_ALNUM_RE.sub("", name.lower())
 
 
 def _resolve_name(
     section_name: str,
     raw_name: str,
     aliases: dict[str, str],
+    foreign: dict[str, str],
     previous_names: set[str],
     strict_catalog: bool,
     errors: list[str],
@@ -277,7 +360,8 @@ def _resolve_name(
     keep_full_id names ARE OpenRouter ids — they must exist in the catalog.
     Native sections name models in the provider's namespace: an absent
     catalog entry may just mean OpenRouter hasn't listed a real model yet,
-    so it warns and PR CI arbitrates. Malformed names are always rejected.
+    so it warns and PR CI arbitrates. Malformed names and another vendor's
+    models are always rejected.
     """
     if not raw_name or not VALID_NAME_RE.match(raw_name):
         errors.append(f"{section_name}: malformed name '{raw_name}'")
@@ -289,6 +373,13 @@ def _resolve_name(
         return name
     if raw_name in previous_names:
         return raw_name
+    vendor = foreign.get(_loose_key(raw_name))
+    if vendor is not None:
+        errors.append(
+            f"{section_name}: '{raw_name}' is a {vendor} model and does not "
+            f"belong in the {section_name} section"
+        )
+        return None
     if strict_catalog:
         errors.append(f"{section_name}: '{raw_name}' is not an OpenRouter catalog id")
         return None
@@ -309,7 +400,7 @@ def _build_provider_section(
     errors: list[str],
     warnings: list[str],
 ) -> ProviderSection:
-    aliases: dict[str, str] = _alias_to_native(section_rules, catalog)
+    aliases, foreign = _alias_to_native(section_rules, catalog)
     previous_names: set[str] = {m.name for m in visible_models(previous_section)}
     strict_catalog: bool = section_rules.id_transform == "keep_full_id"
     emit_display: bool = section_rules.emit_display_name
@@ -319,6 +410,7 @@ def _build_provider_section(
             section_name,
             raw_name,
             aliases,
+            foreign,
             previous_names,
             strict_catalog,
             errors,
@@ -349,10 +441,30 @@ def _build_provider_section(
     # default_model first
     deduped.sort(key=lambda m: m.name != default_name)
 
-    # Soft checks: recommend, don't reject
     catalog_by_native: dict[str, CatalogModel] = {
         derive_native_name(m, section_rules): m for m in catalog
     }
+
+    # The default ships to every Auto-mode deployment: premium tiers (Astra,
+    # Fable) cost too much, so it must sit in the is_default_source family.
+    default_rule = next((r for r in section_rules.rules if r.is_default_source), None)
+    default_entry = catalog_by_native.get(default_name)
+    if default_rule is not None and default_name:
+        if default_entry is None:
+            errors.append(
+                f"{section_name}: default_model '{default_name}' is not in the "
+                f"catalog, so it cannot be verified against the default family "
+                f"'{default_rule.label}'; pick a listed model"
+            )
+        elif not matches_rule(default_rule, default_entry):
+            errors.append(
+                f"{section_name}: default_model '{default_name}' is outside the "
+                f"default family '{default_rule.label}' "
+                f"({default_rule.include_regex}, excluding {default_rule.exclude_regex}); "
+                "premium tiers may only be additional visible models"
+            )
+
+    # Soft checks: recommend, don't reject
     for model in deduped:
         entry = catalog_by_native.get(model.name)
         if entry is None:
@@ -539,7 +651,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     if args.failure_context_file and args.failure_context_file.exists():
         prompt += FAILURE_CONTEXT_TEMPLATE.format(
-            failure_context=args.failure_context_file.read_text()[-60_000:]
+            failure_context=extract_failure_context(
+                args.failure_context_file.read_text()
+            )
         )
 
     schema: dict[str, Any] = _output_schema(list(previous.providers))

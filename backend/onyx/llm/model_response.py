@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Generator, Iterator, Sequence
 from typing import TYPE_CHECKING, Any, List, Protocol, runtime_checkable
 from uuid import uuid4
@@ -34,7 +35,6 @@ from onyx.llm.tool_parsing import (
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
-from onyx.utils.streaming_json import appended_text, parse_partial_object
 
 logger = setup_logger()
 
@@ -75,6 +75,9 @@ class ModelResponseStream(BaseModel):
     created: str
     choice: StreamingChoice
     usage: Usage | None = None
+    # Model the provider reports serving the request; differs from the requested
+    # name behind routers (openrouter/auto).
+    model: str | None = None
 
 
 if TYPE_CHECKING:
@@ -100,6 +103,7 @@ class ModelResponse(BaseModel):
     created: str
     choice: Choice
     usage: Usage | None = None
+    model: str | None = None
 
 
 if TYPE_CHECKING:
@@ -267,6 +271,12 @@ def _merge_choices_into_one(
 
 
 def _usage_from_usage_data(usage_data: dict[str, Any]) -> Usage:
+    cache_read_input_tokens = usage_data.get("cache_read_input_tokens")
+    if cache_read_input_tokens is None:
+        cache_read_input_tokens = (usage_data.get("prompt_tokens_details") or {}).get(
+            "cached_tokens"
+        )
+
     # NOTE: sometimes the usage data dictionary has these keys and the values are None
     # hence the "or 0" instead of just using default values
     return Usage(
@@ -274,12 +284,22 @@ def _usage_from_usage_data(usage_data: dict[str, Any]) -> Usage:
         prompt_tokens=usage_data.get("prompt_tokens") or 0,
         total_tokens=usage_data.get("total_tokens") or 0,
         cache_creation_input_tokens=usage_data.get("cache_creation_input_tokens") or 0,
-        cache_read_input_tokens=usage_data.get(
-            "cache_read_input_tokens",
-            (usage_data.get("prompt_tokens_details") or {}).get("cached_tokens"),
-        )
-        or 0,
+        cache_read_input_tokens=cache_read_input_tokens or 0,
     )
+
+
+def served_model_from_litellm_response(response_data: dict[str, Any]) -> str | None:
+    """Model name the provider served, from a dumped LiteLLM response or chunk.
+
+    LiteLLM's stream wrapper overwrites each chunk's model with the requested
+    name; the OpenRouter chunk_parser patch keeps the served one in
+    provider_specific_fields.
+    """
+    provider_fields: dict[str, Any] = (
+        response_data.get("provider_specific_fields") or {}
+    )
+    model: Any = provider_fields.get("routed_model") or response_data.get("model")
+    return model if isinstance(model, str) and model else None
 
 
 def from_litellm_model_response_stream(
@@ -319,6 +339,7 @@ def from_litellm_model_response_stream(
         created=created,
         choice=streaming_choice,
         usage=(_usage_from_usage_data(usage_data) if usage_data else None),
+        model=served_model_from_litellm_response(response_data),
     )
 
 
@@ -355,6 +376,7 @@ def from_litellm_model_response(
         created=created,
         choice=choice,
         usage=(_usage_from_usage_data(usage_data) if usage_data else None),
+        model=served_model_from_litellm_response(response_data),
     )
 
 
@@ -480,33 +502,7 @@ class _PendingToolCall:
     def __init__(self, content_index: int, call: ToolCall) -> None:
         self.content_index = content_index
         self.call = call
-        self.arguments: str | None = ""
-        self.streaming = True
         self.finalized = False
-
-    def update(self, delta: ChatCompletionDeltaToolCall) -> dict[str, str]:
-        self.finalized = False
-        if delta.id:
-            self.call.id = delta.id
-        if delta.function is None:
-            return {}
-        if delta.function.name:
-            self.call.name = delta.function.name
-        text = delta.function.arguments or ""
-        self.arguments = (self.arguments or "") + text
-        self.call.raw_arguments = self.arguments
-        if not self.streaming or not text:
-            return {}
-        try:
-            current = parse_partial_object(self.arguments)
-        except ValueError:
-            # Retain invalid arguments so execution can return a paired tool error.
-            logger.debug("Tool arguments cannot be parsed incrementally", exc_info=True)
-            self.streaming = False
-            return {}
-        fragments = appended_text(self.call.arguments, current)
-        self.call.arguments = current
-        return fragments
 
 
 class MessageAccumulator:
@@ -563,35 +559,46 @@ class MessageAccumulator:
                 )
                 continue
             self.active_text = None
-            fragments: dict[str, str] = {}
+            fragments: list[str] = []
             if pending is None:
+                buffered = self._unnamed_calls.pop(call.index, [])
                 block = ToolCall(
-                    id=call.id or f"fallback_{uuid4().hex}",
+                    id=next((part.id for part in buffered if part.id), None)
+                    or call.id
+                    or f"fallback_{uuid4().hex}",
                     name=call.function.name or "" if call.function else "",
                     arguments={},
+                    raw_arguments="",
                     arguments_complete=False,
                 )
                 pending = _PendingToolCall(len(self.message.content), block)
                 self.calls[call.index] = pending
-                for buffered in self._unnamed_calls.pop(call.index, []):
-                    for name, text in pending.update(buffered).items():
-                        fragments[name] = fragments.get(name, "") + text
+                fragments.extend(
+                    part.function.arguments or ""
+                    for part in buffered
+                    if part.function is not None
+                )
                 self.message.content.append(block)
                 events.append(
                     ToolCallStartEvent(
                         content_index=pending.content_index,
-                        tool_call=block.model_copy(deep=True),
+                        tool_call_id=block.id,
+                        tool_name=block.name,
                     )
                 )
-            for name, text in pending.update(call).items():
-                fragments[name] = fragments.get(name, "") + text
-            events.append(
-                ToolCallDeltaEvent(
-                    content_index=pending.content_index,
-                    tool_call=pending.call.model_copy(deep=True),
-                    argument_deltas=fragments,
+            pending.finalized = False
+            if call.function is not None:
+                fragments.append(call.function.arguments or "")
+            if arguments_delta := "".join(fragments):
+                pending.call.raw_arguments = (
+                    pending.call.raw_arguments or ""
+                ) + arguments_delta
+                events.append(
+                    ToolCallDeltaEvent(
+                        content_index=pending.content_index,
+                        arguments_delta=arguments_delta,
+                    )
                 )
-            )
         if chunk.choice.finish_reason:
             self.message.stop_reason = chunk.choice.finish_reason
         if chunk.usage is not None:
@@ -607,25 +614,20 @@ class MessageAccumulator:
             )
             pending = _PendingToolCall(len(self.message.content), block)
             # Recovery already parsed and normalized these arguments.
-            pending.arguments = None
             self.calls[len(self.calls)] = pending
             self.message.content.append(block)
             events.append(
                 ToolCallStartEvent(
                     content_index=pending.content_index,
-                    tool_call=block.model_copy(deep=True),
+                    tool_call_id=block.id,
+                    tool_name=block.name,
                 )
             )
             block.arguments = call.arguments.copy()
             events.append(
                 ToolCallDeltaEvent(
                     content_index=pending.content_index,
-                    tool_call=block.model_copy(deep=True),
-                    argument_deltas={
-                        name: value
-                        for name, value in call.arguments.items()
-                        if isinstance(value, str)
-                    },
+                    arguments_delta=json.dumps(call.arguments),
                 )
             )
         return events
@@ -707,11 +709,13 @@ class MessageAccumulator:
         for pending in self.calls.values():
             if pending.finalized:
                 continue
-            if pending.arguments is None:
+            if pending.call.raw_arguments is None:
                 pending.call.arguments_complete = True
             else:
                 _finish_tool_call(
-                    pending.call, pending.arguments, self.tools.get(pending.call.name)
+                    pending.call,
+                    pending.call.raw_arguments,
+                    self.tools.get(pending.call.name),
                 )
             pending.finalized = True
 

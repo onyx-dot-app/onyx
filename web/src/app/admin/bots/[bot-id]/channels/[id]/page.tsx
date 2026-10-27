@@ -1,6 +1,5 @@
 "use client";
 
-import { IconLoader } from "@opal/loaders";
 import { use } from "react";
 import { useTranslations } from "next-intl";
 import { SlackChannelConfigCreationForm } from "@/app/admin/bots/[bot-id]/channels/SlackChannelConfigCreationForm";
@@ -12,8 +11,8 @@ import { useSlackChannelConfigs } from "@/app/admin/bots/[bot-id]/hooks";
 import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
 import { useAgents } from "@/lib/agents/hooks";
 import { useStandardAnswerCategories } from "@/app/ee/admin/standard-answer/hooks";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import type { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 
 function EditSlackChannelConfigContent({ id }: { id: string }) {
@@ -59,12 +58,10 @@ function EditSlackChannelConfigContent({ id }: { id: string }) {
     : t("editChannel.channel.header.title");
 
   return (
-    <SettingsLayouts.Root>
+    <SettingsLayouts.Root loading={isLoading}>
       <SettingsLayouts.Header icon={SvgSlack} title={title} divider cancel />
       <SettingsLayouts.Body>
-        {isLoading ? (
-          <IconLoader />
-        ) : channelsError || !slackChannelConfigs ? (
+        {channelsError || !slackChannelConfigs ? (
           <ErrorCallout
             errorTitle={t("error.generic.title")}
             errorMsg={t("error.fetchChannels.message", {

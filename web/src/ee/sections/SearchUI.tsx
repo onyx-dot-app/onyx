@@ -1,6 +1,7 @@
 "use client";
 
 import { IconLoader } from "@opal/loaders";
+import { getSourceMetadata } from "@/lib/connectors/utils";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { BaseFilters, MinimalOnyxDocument } from "@/lib/search/types";
@@ -9,7 +10,6 @@ import { Divider, Pagination } from "@opal/components";
 import { EmptyMessageCard } from "@opal/components";
 import { IllustrationContent, toast } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
-import { getSourceMetadata } from "@/lib/sources";
 import { Tag } from "@/lib/types";
 import { ValidSources } from "@/lib/connectors/types/source";
 import {
@@ -21,7 +21,7 @@ import { useTags } from "@/lib/searchFilters/hooks";
 import { SourceIcon } from "@/components/SourceIcon";
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
-import { Dropdown, FilterButton, LineItemButton } from "@opal/components";
+import { Dropdown, SelectButton, LineItemButton } from "@opal/components";
 import { SvgClock, SvgTag } from "@opal/icons";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { cn } from "@opal/utils";
@@ -188,9 +188,12 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
             {/* Time filter */}
             <Dropdown open={timeFilterOpen} onOpenChange={setTimeFilterOpen}>
               <Dropdown.Trigger asChild>
-                <FilterButton
+                <SelectButton
+                  variant="select-filter"
+                  chevron
+                  labelFont="main-ui-action"
                   icon={SvgClock}
-                  active={!!timeFilter}
+                  state={timeFilter ? "selected" : "empty"}
                   onClear={() => {
                     setTimeFilter(null);
                     onRefineSearch(buildFilters({ time: null }));
@@ -198,7 +201,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
                 >
                   {timeFilterOptions.find((o) => o.value === timeFilter)
                     ?.label ?? t("timeFilter.all.label")}
-                </FilterButton>
+                </SelectButton>
               </Dropdown.Trigger>
               <Dropdown.Data
                 label={t("timeFilter.all.label")}
@@ -223,9 +226,12 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
             {/* Tag filter */}
             <Dropdown open={tagFilterOpen} onOpenChange={setTagFilterOpen}>
               <Dropdown.Trigger asChild>
-                <FilterButton
+                <SelectButton
+                  variant="select-filter"
+                  chevron
+                  labelFont="main-ui-action"
                   icon={SvgTag}
-                  active={selectedTags.length > 0}
+                  state={selectedTags.length > 0 ? "selected" : "empty"}
                   onClear={() => {
                     setSelectedTags([]);
                     onRefineSearch(buildFilters({ tags: [] }));
@@ -236,7 +242,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
                         count: selectedTags.length,
                       })
                     : t("tagFilter.empty.label")}
-                </FilterButton>
+                </SelectButton>
               </Dropdown.Trigger>
               <Dropdown.Data
                 label={t("tagFilter.empty.label")}

@@ -6,7 +6,6 @@
  */
 import { SvgBifrost, SvgConfluence, SvgGitBook, SvgGitHub } from "@opal/logos";
 import { render } from "@tests/setup/test-utils";
-import { GoogleStorageIcon } from "./icons";
 
 describe("Logo Icons", () => {
   test("renders as an SVG element", () => {
@@ -30,15 +29,6 @@ describe("Logo Icons", () => {
 
     expect(svg).toHaveAttribute("width", "24");
     expect(svg).toHaveAttribute("height", "24");
-  });
-
-  test("applies size adjustments", () => {
-    // GoogleStorageIcon has a +4px size adjustment
-    const { container } = render(<GoogleStorageIcon size={16} />);
-    const image = container.querySelector("img");
-
-    // Base 16 + adjustment 4 = 20
-    expect(image).toHaveStyle({ width: "20px", height: "20px" });
   });
 
   test("renders opal SVG logo as single element", () => {

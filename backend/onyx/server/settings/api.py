@@ -18,6 +18,10 @@ from onyx.configs.app_configs import (
 from onyx.configs.constants import KV_REINDEX_KEY, NotificationType
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
+from onyx.db.llm import (
+    mark_model_configuration_visible,
+    require_router_model_configuration,
+)
 from onyx.db.models import User
 from onyx.db.notification import (
     dismiss_all_notifications,
@@ -32,8 +36,10 @@ from onyx.oauth_provider.config import OAUTH_PROVIDER_SETTINGS
 from onyx.server.features.build.utils import (
     is_craft_available_for_deployment,
     is_craft_enabled_for_user,
+    is_craft_locked_by_tier,
 )
 from onyx.server.features.notifications.models import NotificationResponse
+from onyx.server.manage.llm.provider_cache import invalidate_provider_listing_cache
 from onyx.server.settings.models import (
     DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_NO_VECTOR_DB,
     DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB,
@@ -46,7 +52,7 @@ from onyx.server.settings.store import (
     settings_write_lock,
     store_settings,
 )
-from onyx.server.settings.tier_order import tier_at_least
+from onyx.server.settings.tier_order import get_current_tier, tier_at_least
 from onyx.utils.audit import (
     AuditAction,
     AuditOutcome,
@@ -73,13 +79,9 @@ def admin_patch_settings(
     current_user: User = Depends(
         require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
     ),
+    db_session: Session = Depends(get_session),
 ) -> Settings:
-    if global_version.is_ee_version():
-        from ee.onyx.utils.tier import get_tier
-
-        current_tier = get_tier()
-    else:
-        current_tier = Tier.COMMUNITY
+    current_tier = get_current_tier()
 
     # Serialize the read-modify-write so two concurrent partial patches cannot
     # each merge onto a stale snapshot and drop the other's field.
@@ -135,6 +137,16 @@ def admin_patch_settings(
                 "The LLM gateway requires the Business or Enterprise plan.",
             )
 
+        routing_id = merged.model_routing_model_configuration_id
+        if (
+            "model_routing_model_configuration_id" in settings.model_fields_set
+            and routing_id is not None
+        ):
+            routing_model = require_router_model_configuration(db_session, routing_id)
+            # Hidden routers don't reach the picker's provider payload.
+            if mark_model_configuration_visible(db_session, routing_model):
+                invalidate_provider_listing_cache()
+
         store_settings(merged)
 
         if merged.craft_default_enabled != existing.craft_default_enabled:
@@ -144,6 +156,15 @@ def admin_patch_settings(
                 actor=actor_from_user(current_user),
                 resource_type="settings",
                 extra={"craft_default_enabled": merged.craft_default_enabled},
+            )
+
+        if merged.default_language != existing.default_language:
+            emit_audit_event(
+                AuditAction.DEFAULT_LANGUAGE_CHANGE,
+                AuditOutcome.SUCCESS,
+                actor=actor_from_user(current_user),
+                resource_type="settings",
+                extra={"default_language": merged.default_language.value},
             )
 
         if merged.llm_gateway_enabled != existing.llm_gateway_enabled:
@@ -213,6 +234,9 @@ def fetch_settings(
         if user
         else False
     )
+    onyx_craft_requires_upgrade = (
+        user is not None and not onyx_craft_available and is_craft_locked_by_tier(user)
+    )
 
     # Dev/debug flag: tail-the-pod-logs button gated by an env var. Same
     # check happens on the SSE endpoint so flipping the env var off
@@ -226,6 +250,7 @@ def fetch_settings(
         needs_reindexing=needs_reindexing,
         onyx_craft_enabled=onyx_craft_enabled_for_user,
         onyx_craft_available=onyx_craft_available,
+        onyx_craft_requires_upgrade=onyx_craft_requires_upgrade,
         opencode_debugging_enabled=ENABLE_OPENCODE_DEBUGGING,
         vector_db_enabled=not DISABLE_VECTOR_DB,
         hide_onyx_branding=HIDE_ONYX_BRANDING

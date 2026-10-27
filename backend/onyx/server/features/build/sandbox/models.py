@@ -1,15 +1,42 @@
 """Pydantic models for sandbox module communication."""
 
 from datetime import datetime
+from enum import Enum
 from typing import TypeAlias
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
 from onyx.db.enums import SandboxStatus
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
+    FilesystemEntry,
+)
 from onyx.server.gateway.models import GatewayModelDescriptor
 
 FileSet: TypeAlias = dict[str, bytes]
+
+
+class SandboxResourceKind(str, Enum):
+    POD = "pod"
+    SERVICE = "service"
+    SECRET = "secret"
+    CONTAINER = "container"
+    VOLUME = "volume"
+
+
+class SandboxResource(BaseModel):
+    """Observed resource identity. Never derive a deletion target from a UUID prefix."""
+
+    model_config = ConfigDict(frozen=True)
+
+    kind: SandboxResourceKind
+    name: str
+    instance_id: str
+    sandbox_id: UUID
+    tenant_id: str
+    created_at: datetime
+    provisioning_attempt_number: int | None = None
+    legacy_ownership: bool = False
 
 
 class PromptAttachment(BaseModel):
@@ -67,18 +94,12 @@ class SnapshotResult(BaseModel):
     size_bytes: int
 
 
-class FilesystemEntry(BaseModel):
-    """Represents a file or directory entry in the sandbox filesystem.
+class SandboxCleanupCheckpoint(BaseModel):
+    model_config = ConfigDict(frozen=True)
 
-    Used for directory listing operations. This is the canonical model used
-    by both sandbox managers and the API layer.
-    """
-
-    name: str
-    path: str
-    is_directory: bool
-    size: int | None = None  # File size in bytes (None for directories)
-    mime_type: str | None = None  # MIME type (None for directories)
+    provisioning_attempt_number: int
+    storage_identity: str
+    last_heartbeat: datetime | None
 
 
 class DirectoryListing(BaseModel):

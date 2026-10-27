@@ -20,10 +20,10 @@ from onyx.configs.constants import (
     DocumentSource,
     FileOrigin,
 )
-from onyx.context.search.models import CCPairAccessMode
+from onyx.context.search.models import CCPairAccessMode, InferenceChunk
 from onyx.db.connector_credential_pair import (
     get_cc_pair_access_sets_for_user,
-    has_sync_restricted_cc_pairs,
+    has_guarded_cc_pairs,
 )
 from onyx.db.document import (
     get_access_info_for_document,
@@ -160,6 +160,19 @@ def get_acl_for_user(user: User, db_session: Session | None = None) -> set[str]:
         "onyx.access.access", "_get_acl_for_user"
     )
     return versioned_acl_for_user_fn(user, db_session)
+
+
+def censor_chunks_for_user(
+    chunks: list[InferenceChunk], user: User
+) -> list[InferenceChunk]:
+    """EE post-query censoring for sources whose access is decided per user at
+    read time. Every path that hands chunk content to a user runs it, not only
+    search, since the index ACL alone lets those chunks through."""
+    return fetch_ee_implementation_or_noop(
+        "onyx.external_permissions.post_query_censoring",
+        "_post_query_chunk_censoring",
+        chunks,
+    )(chunks=chunks, user=user)
 
 
 def source_should_fetch_permissions_during_indexing(source: DocumentSource) -> bool:
@@ -399,13 +412,13 @@ def _user_can_access_connector_file(
     user_acl = get_acl_for_user(user, db_session)
     doc_access = get_access_for_documents(document_ids, db_session)
     if get_cc_pair_access_mode(db_session) != CCPairAccessMode.ENFORCE:
-        if not has_sync_restricted_cc_pairs(db_session):
+        if not has_guarded_cc_pairs(db_session):
             return any(
                 not user_acl.isdisjoint(access.to_acl())
                 for access in doc_access.values()
             )
-        # The old ACL rule, without SYNC_RESTRICTED pairs that grant the user
-        # nothing (see the OpenSearch restricted cc-pair guard).
+        # The old ACL rule, without guarded pairs that grant the user nothing
+        # (see the OpenSearch restricted cc-pair guard).
         access_sets = get_cc_pair_access_sets_for_user(db_session, user)
         granting_cc_pair_ids = (
             access_sets.open_cc_pair_ids | access_sets.acl_cc_pair_ids

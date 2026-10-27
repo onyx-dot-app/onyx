@@ -42,7 +42,7 @@ def _row(
 ) -> UsageExportRow:
     return UsageExportRow(
         email=email,
-        model="gpt-5",
+        model="gpt-6-sol",
         flow=flow,
         provider="openai",
         incognito=incognito,
@@ -260,7 +260,7 @@ def test_api_key_spend_is_labeled_by_key_name() -> None:
         == "sync@corp (API key)"
     )
     assert _display_name("human@corp.com") == "human@corp.com"
-    assert _display_name("gpt-5") == "gpt-5"
+    assert _display_name("gpt-6-sol") == "gpt-6-sol"
     assert _display_name(DELETED_USER_EXPORT_EMAIL) == DELETED_USER_EXPORT_EMAIL
 
 

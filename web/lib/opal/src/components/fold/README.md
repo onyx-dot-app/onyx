@@ -25,6 +25,10 @@ part of whatever surrounds it: rows folding inside a card stay in the card.
   spacing inside the fold's content, or the gap stays around the closed fold.
 - Children stay mounted through the closing animation, then drop, so a closed
   fold holds nothing, unless `keepMounted`.
+- The root carries `data-open` (open now), `data-visible` (open or still
+  closing, so it has height) and `data-mounted` (its children are mounted,
+  which `keepMounted` makes always true). Style on `data-visible` for anything
+  that must follow the height.
 - While closed or closing, the fold is `inert` and `aria-hidden`.
 - `CardFold` (`Card` and `SelectCard`) passes its bordered body as the `frame`.
 - `Card`, `SelectCard`, `Collapsible`, `Divider` (foldable) and `MessageCard`

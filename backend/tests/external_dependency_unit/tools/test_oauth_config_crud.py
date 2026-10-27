@@ -77,12 +77,27 @@ class TestOAuthConfigCRUD:
         assert oauth_config.token_url == "https://github.com/login/oauth/access_token"
         assert oauth_config.scopes == ["repo", "user"]
         assert oauth_config.additional_params == {"test_param": "test_value"}
+        assert oauth_config.supports_pkce is False
         assert oauth_config.created_at is not None
         assert oauth_config.updated_at is not None
 
         # Verify encrypted fields are stored (we can't decrypt in tests, but we can check they exist)
         assert oauth_config.client_id is not None
         assert oauth_config.client_secret is not None
+
+    def test_pkce_setting_survives_partial_updates_and_can_be_disabled(
+        self, db_session: Session
+    ) -> None:
+        config = _create_test_oauth_config(db_session)
+        update_oauth_config(config.id, db_session, supports_pkce=True)
+        update_oauth_config(config.id, db_session, scopes=["read"])
+        db_session.expire_all()
+        enabled = get_oauth_config(config.id, db_session)
+        assert enabled is not None and enabled.supports_pkce is True
+        update_oauth_config(config.id, db_session, supports_pkce=False)
+        db_session.expire_all()
+        disabled = get_oauth_config(config.id, db_session)
+        assert disabled is not None and disabled.supports_pkce is False
 
     def test_get_oauth_config(self, db_session: Session) -> None:
         """Test retrieving an OAuth config by ID"""
@@ -288,6 +303,7 @@ class TestOAuthConfigCRUD:
             scopes=new_scopes,
             additional_params=new_params,
             client_id=new_client_id,
+            supports_pkce=True,
         )
 
         assert updated_config.name == new_name
@@ -295,6 +311,7 @@ class TestOAuthConfigCRUD:
         assert updated_config.token_url == new_token_url
         assert updated_config.scopes == new_scopes
         assert updated_config.additional_params == new_params
+        assert updated_config.supports_pkce is True
         assert updated_config.client_id is not None
         assert updated_config.client_id.get_value(apply_mask=False) == new_client_id
 

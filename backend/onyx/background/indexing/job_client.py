@@ -15,6 +15,11 @@ from typing import Any, Literal, Optional
 
 from onyx.configs.constants import POSTGRES_CELERY_WORKER_INDEXING_CHILD_APP_NAME
 from onyx.db.engine.sql_engine import SqlEngine
+from onyx.utils.fleet_telemetry import (
+    EXIT_FLUSH_SECONDS,
+    start_telemetry,
+    stop_telemetry,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.os_reaper import (
     become_child_subreaper,
@@ -87,6 +92,9 @@ def _initializer(
         pool_size=4, max_overflow=12, pool_recycle=60, pool_pre_ping=True
     )
 
+    # The parent worker reports this container; the child only delivers its counters.
+    start_telemetry("indexing", report_process=False)
+
     # Proceed with executing the target function
     try:
         return func(*args, **kwargs)
@@ -103,6 +111,8 @@ def _initializer(
 
         sys.exit(255)  # use 255 to indicate a generic exception
     finally:
+        # Bounded: the child exits after at most this wait, delivered or not.
+        stop_telemetry(flush_timeout=EXIT_FLUSH_SECONDS)
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
         # os._exit entrypoints skip this finally and drain themselves

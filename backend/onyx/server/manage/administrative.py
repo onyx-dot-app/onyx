@@ -18,6 +18,7 @@ from onyx.configs.constants import (
 from onyx.db.connector_credential_pair import (
     CCPairAccessLevel,
     get_connector_credential_pair_for_user,
+    lock_connector_credential_pair_row,
     update_connector_credential_pair_from_id,
 )
 from onyx.db.engine.sql_engine import get_session
@@ -169,6 +170,10 @@ def create_deletion_attempt_for_connector_id(
         error = f"Connector with ID '{connector_id}' and credential ID '{credential_id}' does not exist. Has it already been deleted?"
         logger.error(error)
         raise OnyxError(OnyxErrorCode.CONNECTOR_NOT_FOUND, error)
+
+    # Held through the status commit, so attempt creation (which takes the
+    # same lock) runs before this cancel or sees DELETING.
+    lock_connector_credential_pair_row(db_session, cc_pair.id)
 
     # Cancel any scheduled indexing attempts
     cancel_indexing_attempts_for_ccpair(

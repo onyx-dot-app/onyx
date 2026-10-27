@@ -227,7 +227,7 @@ func TestDeployCloud_pushThenAnnounceOrWatch(t *testing.T) {
 			wantCalls: []string{
 				runList,
 				"run view 900 -R onyx-dot-app/onyx " + deployRunJSONFields,
-				"pr list -R onyx-dot-app/onyx-infra --head bump-version/" + tag + " --state all --json number,state,url",
+				"pr list -R example-org/infra-repo --head bump-version/" + tag + " --state all --json number,state,url",
 			},
 		},
 	}

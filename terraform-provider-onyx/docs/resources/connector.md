@@ -46,7 +46,7 @@ resource "onyx_connector" "docs_site" {
 ### Optional
 
 - `indexing_start` (String) Earliest document timestamp to index, RFC 3339, e.g. `2026-01-01T00:00:00Z`. Onyx ignores it on update, so changing it replaces the connector.
-- `prune_freq` (Number) Seconds between pruning runs. Onyx rewrites an unset value to its default of 604800 (7 days) on the first update, and Terraform then keeps that value.
+- `prune_freq` (Number) Seconds between pruning runs. Unset, Onyx uses its default of 604800 (7 days) on create and keeps the stored value on update.
 - `refresh_freq` (Number) Seconds between index runs. Unset means index once, with no refresh.
 
 ### Read-Only

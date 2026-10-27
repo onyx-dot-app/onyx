@@ -24,6 +24,7 @@ from onyx.llm.model_response import (
 )
 from onyx.llm.models import ReasoningEffort, ToolChoice
 from onyx.llm.multi_llm import LitellmLLM, ProviderOperation
+from tests.common.models import CI_OPENAI_MODEL
 
 T = TypeVar("T")
 
@@ -221,7 +222,7 @@ class MockLLM(LitellmLLM, MockLLMController):
         super().__init__(
             model_provider="openai",
             api_key=None,
-            model_name="gpt-5-mini",
+            model_name=CI_OPENAI_MODEL,
             max_input_tokens=1000000000,
         )
         self.stream_controller = SyncStreamController[StreamItem]()

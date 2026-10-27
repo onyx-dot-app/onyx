@@ -1,6 +1,7 @@
 import "@opal/layouts/content-action/styles.css";
 import { Content, type ContentProps } from "@opal/layouts/content/components";
 import { spacingToRem } from "@opal/shared";
+import type { Spacing } from "@opal/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -21,6 +22,14 @@ type ContentActionProps = ContentProps & {
    * @default 2
    */
   padding?: 0 | 0.5 | 1 | 1.5 | 2;
+
+  /**
+   * The gap between the `Content` area and `rightChildren`, as a spacing
+   * step (`N / 4` rem). Ignored in the `responsive` branch.
+   *
+   * @default 4
+   */
+  gapping?: Spacing;
 
   /**
    * When true, vertically centers the Content and rightChildren.
@@ -99,6 +108,7 @@ function routesToContentMd(props: {
 function ContentAction({
   rightChildren,
   padding = 2,
+  gapping = 4,
   center = false,
   responsive = false,
   fillRight = false,
@@ -120,7 +130,11 @@ function ContentAction({
   }
 
   return (
-    <div className="opal-content-action" data-centered={center || undefined}>
+    <div
+      className="opal-content-action"
+      data-centered={center || undefined}
+      style={{ gap: spacingToRem(gapping) }}
+    >
       <div className="opal-content-action-content" style={paddingStyle}>
         <Content {...contentProps} />
       </div>

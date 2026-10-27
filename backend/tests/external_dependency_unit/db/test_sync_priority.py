@@ -25,13 +25,14 @@ from onyx.db.document import (
     mark_document_as_modified,
     mark_document_synced_secondary_pending,
 )
+from onyx.db.enums import PortAttemptStatus
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Document as DbDocument
 from onyx.db.port_attempt import (
     any_future_port_in_progress,
     create_port_attempt,
     mark_port_in_progress,
-    mark_port_succeeded,
+    mark_port_terminal,
 )
 from onyx.kg.models import KGStage
 from tests.external_dependency_unit.indexing_helpers import (
@@ -149,7 +150,7 @@ def test_any_future_port_in_progress(
     mark_port_in_progress(db_session, attempt.id)
     assert any_future_port_in_progress(db_session) is True
 
-    mark_port_succeeded(db_session, attempt.id)
+    mark_port_terminal(db_session, attempt.id, PortAttemptStatus.SUCCESS)
     assert any_future_port_in_progress(db_session) is False
 
 
@@ -172,7 +173,7 @@ def test_sync_priority_across_three_states(
 
     # port stopped with a deferred backlog still pending: that drain is the swap
     # gate, so the deferred doc goes HIGH and needs_sync yields to LOW
-    mark_port_succeeded(db_session, attempt.id)
+    mark_port_terminal(db_session, attempt.id, PortAttemptStatus.SUCCESS)
     captured = _run_generate(db_session)
     assert captured[f"{_DOC_PREFIX}B"]["priority"] == OnyxCeleryPriority.HIGH
     assert captured[f"{_DOC_PREFIX}A"]["priority"] == OnyxCeleryPriority.LOW

@@ -7,6 +7,7 @@
         "input": 0.09,
         "output": 0.47
       },
+      "family": "gpt-oss",
       "limit": {
         "context": 131072,
         "output": 131072
@@ -22,8 +23,9 @@
       "name": "gpt-oss-120b",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2025-08-28",
+      "release_date": "2025-08-05",
       "structured_output": true,
+      "temperature": true,
       "tool_call": true
     },
     "gpt-oss-20b": {
@@ -32,6 +34,7 @@
         "input": 0.05,
         "output": 0.18
       },
+      "family": "gpt-oss",
       "limit": {
         "context": 131072,
         "output": 131072
@@ -47,8 +50,9 @@
       "name": "gpt-oss-20b",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2025-08-28",
+      "release_date": "2025-08-05",
       "structured_output": true,
+      "temperature": true,
       "tool_call": true
     },
     "meta-llama-3_3-70b-instruct": {
@@ -57,6 +61,7 @@
         "input": 0.74,
         "output": 0.74
       },
+      "family": "llama",
       "limit": {
         "context": 131072,
         "output": 131072
@@ -72,33 +77,7 @@
       "name": "Meta-Llama-3_3-70B-Instruct",
       "open_weights": true,
       "reasoning": false,
-      "release_date": "2025-04-01",
-      "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
-    "mistral-7b-instruct-v0.3": {
-      "attachment": false,
-      "cost": {
-        "input": 0.11,
-        "output": 0.11
-      },
-      "limit": {
-        "context": 65536,
-        "output": 65536
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "Mistral-7B-Instruct-v0.3",
-      "open_weights": true,
-      "reasoning": false,
-      "release_date": "2025-04-01",
+      "release_date": "2024-12-06",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -109,6 +88,7 @@
         "input": 0.14,
         "output": 0.14
       },
+      "family": "mistral-nemo",
       "limit": {
         "context": 65536,
         "output": 65536
@@ -124,7 +104,7 @@
       "name": "Mistral-Nemo-Instruct-2407",
       "open_weights": true,
       "reasoning": false,
-      "release_date": "2024-11-20",
+      "release_date": "2024-07-18",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -135,14 +115,15 @@
         "input": 0.1,
         "output": 0.31
       },
+      "family": "mistral-small",
       "limit": {
         "context": 131072,
         "output": 131072
       },
       "modalities": {
         "input": [
-          "text",
-          "image"
+          "image",
+          "text"
         ],
         "output": [
           "text"
@@ -151,7 +132,7 @@
       "name": "Mistral-Small-3.2-24B-Instruct-2506",
       "open_weights": true,
       "reasoning": false,
-      "release_date": "2025-07-16",
+      "release_date": "2025-06-20",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -162,6 +143,7 @@
         "input": 1.01,
         "output": 1.01
       },
+      "family": "qwen",
       "limit": {
         "context": 32768,
         "output": 32768
@@ -178,36 +160,10 @@
       "name": "Qwen2.5-VL-72B-Instruct",
       "open_weights": true,
       "reasoning": false,
-      "release_date": "2025-03-31",
+      "release_date": "2025-01-26",
       "structured_output": true,
       "temperature": true,
       "tool_call": false
-    },
-    "qwen3-coder-30b-a3b-instruct": {
-      "attachment": false,
-      "cost": {
-        "input": 0.07,
-        "output": 0.26
-      },
-      "limit": {
-        "context": 262144,
-        "output": 262144
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "Qwen3-Coder-30B-A3B-Instruct",
-      "open_weights": true,
-      "reasoning": false,
-      "release_date": "2025-10-28",
-      "structured_output": true,
-      "temperature": true,
-      "tool_call": true
     },
     "qwen3.5-397b-a17b": {
       "attachment": true,
@@ -215,6 +171,7 @@
         "input": 0.71,
         "output": 4.25
       },
+      "family": "qwen",
       "limit": {
         "context": 262144,
         "output": 262144
@@ -231,7 +188,7 @@
       "name": "Qwen3.5-397B-A17B",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-05-18",
+      "release_date": "2026-02-15",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -242,6 +199,7 @@
         "input": 0.12,
         "output": 0.18
       },
+      "family": "qwen",
       "limit": {
         "context": 262144,
         "output": 262144
@@ -258,7 +216,7 @@
       "name": "Qwen3.5-9B",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-04-22",
+      "release_date": "2026-02-23",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -269,6 +227,7 @@
         "input": 0.47,
         "output": 3.19
       },
+      "family": "qwen",
       "limit": {
         "context": 262144,
         "output": 262144
@@ -285,7 +244,7 @@
       "name": "Qwen3.6-27B",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-06-01",
+      "release_date": "2026-04-22",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -313,7 +272,7 @@
       "name": "Qwen3.8-27B",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-09-02",
+      "release_date": "2026-08-14",
       "structured_output": true,
       "temperature": true,
       "tool_call": true

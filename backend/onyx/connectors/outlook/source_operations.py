@@ -52,6 +52,7 @@ from onyx.connectors.microsoft_utils.graph_gateway import (
     MicrosoftGraphGateway,
     build_graph_user_url,
 )
+from onyx.connectors.microsoft_utils.models import MicrosoftTokenInfo
 from onyx.connectors.outlook.models import (
     OutlookAttachment,
     OutlookDeltaPage,
@@ -65,7 +66,6 @@ from onyx.connectors.outlook.models import (
     OutlookMessageChange,
     OutlookMessagePage,
     OutlookRecipient,
-    OutlookTokenInfo,
 )
 from onyx.connectors.source_operations import (
     OperationConsumes,
@@ -97,10 +97,14 @@ EVENTS_PAGE_SIZE = 50
 # Enough to tell one group with a display name from several.
 GROUP_NAME_MATCH_LIMIT = 2
 
-MAILBOX_SELECT = "id,mail,userPrincipalName,displayName"
+MAILBOX_SELECT = "id,mail,userPrincipalName,displayName,proxyAddresses"
+# The user listing's fields plus the aliases a message may name a mailbox by.
+OUTLOOK_USER_SELECT = f"{ENTRA_USER_SELECT},proxyAddresses"
+_SMTP_PREFIX = "smtp:"
 FOLDER_SELECT = "id,displayName,parentFolderId,childFolderCount,isHidden"
-# Identity, thread and placement of a message, never a body. Shared by the
-# delta walk and the conversation outline.
+# Identity, thread, placement and headers of a message, never a body. Shared
+# by the delta walk and the conversation outline, which decide who builds and
+# reads a thread from the sender and recipients.
 CHANGE_SELECT = ",".join(
     (
         "id",
@@ -110,6 +114,9 @@ CHANGE_SELECT = ",".join(
         "parentFolderId",
         "receivedDateTime",
         "isDraft",
+        "sender",
+        "toRecipients",
+        "ccRecipients",
     )
 )
 MESSAGE_SELECT = ",".join(
@@ -147,6 +154,13 @@ SEARCH_FOLDER_TYPE = "#microsoft.graph.mailSearchFolder"
 # carry this always-true bound to be allowed ``$orderby=receivedDateTime desc``.
 EPOCH_TIMESTAMP = "1970-01-01T00:00:00Z"
 
+# MAPI ids of a folder's entry id and of an item's parent folder. Graph hides
+# which calendar an event sits in from app-only callers, so the two are compared.
+FOLDER_ENTRY_ID_PROPERTY = "Binary 0x0FFF"
+PARENT_ENTRY_ID_PROPERTY = "Binary 0x0E09"
+# Messages per page of a received-time scan, which reads headers only.
+RECEIVED_SCAN_PAGE_SIZE = 500
+
 # Graph may answer a collection request with an empty page and a next link.
 # Lookups that want a single item follow at most this many of them.
 EMPTY_PAGE_FOLLOW_LIMIT = 20
@@ -182,10 +196,18 @@ def _mailbox(user: EntraUser) -> OutlookMailbox | None:
     address = user.mail or user.user_principal_name
     if not address:
         return None
+    aliases: list[str] = []
+    for proxy in user.proxy_addresses:
+        if not proxy.lower().startswith(_SMTP_PREFIX):
+            continue
+        alias = proxy[len(_SMTP_PREFIX) :].lower()
+        if alias != address.lower() and alias not in aliases:
+            aliases.append(alias)
     return OutlookMailbox(
         id=user.id,
         address=address,
         display_name=user.display_name,
+        aliases=tuple(aliases),
     )
 
 
@@ -219,6 +241,9 @@ def _parse_change(raw: dict[str, Any]) -> OutlookMessageChange:
         parent_folder_id=raw.get("parentFolderId"),
         received_at=parse_graph_datetime(received) if received else None,
         is_draft=bool(raw.get("isDraft")),
+        sender=_recipient(raw.get("sender")),
+        to_recipients=_recipients(raw.get("toRecipients")),
+        cc_recipients=_recipients(raw.get("ccRecipients")),
     )
 
 
@@ -335,6 +360,17 @@ def _parse_attachment(raw: dict[str, Any]) -> OutlookAttachment:
     )
 
 
+def _expand_property(property_id: str) -> str:
+    return f"singleValueExtendedProperties($filter=id eq '{property_id}')"
+
+
+def _expanded_property(raw: dict[str, Any]) -> str | None:
+    """The value of the one extended property ``_expand_property`` asked for.
+    Graph writes its id back in its own spelling, so it is not matched."""
+    props = raw.get("singleValueExtendedProperties") or []
+    return props[0].get("value") if props else None
+
+
 def _graph_timestamp(moment: datetime) -> str:
     return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -381,9 +417,6 @@ class OutlookSourceOperations(SourceOperations):
             graph_api_version=GRAPH_API_VERSION,
         )
         return self._graph_gateway
-
-    def _token_response(self) -> dict[str, Any]:
-        return self._gateway().token_response()
 
     def _access_token(self) -> str:
         return self._gateway().access_token()
@@ -433,13 +466,9 @@ class OutlookSourceOperations(SourceOperations):
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
     )
-    def check_token(self) -> OutlookTokenInfo:
+    def check_token(self) -> MicrosoftTokenInfo:
         """Acquire an app-only token: proves client id, directory id and credential agree."""
-        response = self._token_response()
-        expires_in = response.get("expires_in")
-        return OutlookTokenInfo(
-            expires_in=int(expires_in) if expires_in is not None else None
-        )
+        return self._gateway().token_info()
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
@@ -458,7 +487,7 @@ class OutlookSourceOperations(SourceOperations):
             self._gateway().get_json,
             url=f"{self._graph_base()}/users",
             item_model=EntraUser,
-            select_fields=ENTRA_USER_SELECT,
+            select_fields=OUTLOOK_USER_SELECT,
             next_link=next_link,
             page_size=page_size,
             filter_expression=ENABLED_USERS_FILTER,
@@ -548,7 +577,7 @@ class OutlookSourceOperations(SourceOperations):
                 "/transitiveMembers/microsoft.graph.user"
             ),
             item_model=EntraUser,
-            select_fields=ENTRA_USER_SELECT,
+            select_fields=OUTLOOK_USER_SELECT,
             next_link=next_link,
             page_size=page_size,
         )
@@ -768,6 +797,35 @@ class OutlookSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "Needs an event id, which only the calendar walk produces. The "
+            "calendar check reads the same calendar under the same grant."
+        ),
+    )
+    def get_default_calendar_event(
+        self, *, mailbox_id: str, event_id: str
+    ) -> OutlookEvent | None:
+        """One event by id when it sits in the mailbox's default calendar, the
+        one the calendar walk reads. None for an event in another calendar."""
+        calendar = self._get(
+            f"{self._user_url(mailbox_id)}/calendar",
+            {"$select": "id", "$expand": _expand_property(FOLDER_ENTRY_ID_PROPERTY)},
+        )
+        raw = self._get(
+            # The id comes from a stored document id, so it is kept to one segment.
+            f"{self._user_url(mailbox_id)}/events/{quote(event_id, safe='')}",
+            {"$expand": _expand_property(PARENT_ENTRY_ID_PROPERTY)},
+            {"Prefer": EVENT_PREFERENCES},
+        )
+        calendar_entry_id = _expanded_property(calendar)
+        parent_entry_id = _expanded_property(raw)
+        if calendar_entry_id is None or parent_entry_id != calendar_entry_id:
+            return None
+        return _parse_event(raw)
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
     )
     def list_message_attachments(
         self, *, mailbox_id: str, message_id: str, limit: int
@@ -803,7 +861,7 @@ class OutlookSourceOperations(SourceOperations):
         )
         try:
             return download_graph_url_with_cap(
-                access_token=self._access_token(),
+                get_access_token=self._access_token,
                 url=url,
                 cap=cap,
                 description=f"outlook attachment {attachment_id}",
@@ -859,10 +917,12 @@ class OutlookSourceOperations(SourceOperations):
         select: str,
         next_link: str | None,
         headers: dict[str, str] | None = None,
+        oldest_first: bool = False,
     ) -> dict[str, Any]:
-        """One page of a conversation in one mailbox, newest first. Ordering
-        needs the ordered property to lead the filter, hence the always-true
-        ``receivedDateTime`` bound ahead of the conversation id."""
+        """One page of a conversation in one mailbox, newest first unless
+        asked otherwise. Ordering needs the ordered property to lead the
+        filter, hence the always-true ``receivedDateTime`` bound ahead of the
+        conversation id."""
         params = None
         url = next_link
         if url is None:
@@ -872,34 +932,11 @@ class OutlookSourceOperations(SourceOperations):
                     f"receivedDateTime ge {EPOCH_TIMESTAMP} and "
                     f"conversationId eq '{_odata_quote(conversation_id)}'"
                 ),
-                "$orderby": "receivedDateTime desc",
+                "$orderby": "receivedDateTime " + ("asc" if oldest_first else "desc"),
                 "$select": select,
                 "$top": str(MESSAGES_PAGE_SIZE),
             }
         return self._get(url, params, headers)
-
-    @source_operation(
-        capabilities={CredentialCapability.INDEXING},
-        consumes=OperationConsumes.CREDENTIAL,
-        untested=(
-            "Needs a Message-ID a second mailbox holds, which only a shared thread "
-            "produces. The mail-read check proves the fields on the mailbox-wide route."
-        ),
-    )
-    def find_message_by_internet_message_id(
-        self, *, mailbox_id: str, internet_message_id: str
-    ) -> OutlookMessageChange | None:
-        """The mailbox's copy of one message by its Internet Message-ID, the
-        CHANGE_SELECT fields only. None when the mailbox holds none."""
-        raw = self._first_item(
-            f"{self._user_url(mailbox_id)}/messages",
-            {
-                "$filter": f"internetMessageId eq '{_odata_quote(internet_message_id)}'",
-                "$select": CHANGE_SELECT,
-                "$top": "1",
-            },
-        )
-        return _parse_change(raw) if raw else None
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
@@ -915,12 +952,17 @@ class OutlookSourceOperations(SourceOperations):
         mailbox_id: str,
         conversation_id: str,
         next_link: str | None = None,
+        oldest_first: bool = False,
     ) -> OutlookDeltaPage:
-        """One page of a conversation's messages in one mailbox, newest
-        first, the CHANGE_SELECT fields only, to compare copies across
-        mailboxes without reading a body."""
+        """One page of a conversation's messages in one mailbox, newest first
+        unless asked otherwise, the CHANGE_SELECT fields only, to decide a
+        copy's documents without reading a body."""
         data = self._conversation_page(
-            mailbox_id, conversation_id, CHANGE_SELECT, next_link
+            mailbox_id,
+            conversation_id,
+            CHANGE_SELECT,
+            next_link,
+            oldest_first=oldest_first,
         )
         return OutlookDeltaPage(
             changes=[_parse_change(raw) for raw in data.get("value", [])],
@@ -955,5 +997,42 @@ class OutlookSourceOperations(SourceOperations):
         )
         return OutlookMessagePage(
             messages=[_parse_message(raw) for raw in data.get("value", [])],
+            next_link=data.get("@odata.nextLink"),
+        )
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "Lists the mailbox-wide route the mail-read check proves with "
+            "read_any_message, with the CHANGE_SELECT fields the delta walk reads."
+        ),
+    )
+    def fetch_received_page(
+        self,
+        *,
+        mailbox_id: str,
+        received_from: datetime,
+        received_to: datetime | None = None,
+        next_link: str | None = None,
+    ) -> OutlookDeltaPage:
+        """One page of the mailbox's messages received in the range, oldest
+        first, the CHANGE_SELECT fields only."""
+        params = None
+        url = next_link
+        if url is None:
+            url = f"{self._user_url(mailbox_id)}/messages"
+            received = f"receivedDateTime ge {_graph_timestamp(received_from)}"
+            if received_to is not None:
+                received += f" and receivedDateTime le {_graph_timestamp(received_to)}"
+            params = {
+                "$filter": received,
+                "$orderby": "receivedDateTime asc",
+                "$select": CHANGE_SELECT,
+                "$top": str(RECEIVED_SCAN_PAGE_SIZE),
+            }
+        data = self._get(url, params)
+        return OutlookDeltaPage(
+            changes=[_parse_change(raw) for raw in data.get("value", [])],
             next_link=data.get("@odata.nextLink"),
         )

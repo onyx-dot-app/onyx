@@ -2,10 +2,10 @@
 
 import React, { useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
+import { getSourceMetadata } from "@/lib/connectors/utils";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
 import Text from "@/refresh-components/texts/Text";
-import { getSourceMetadata } from "@/lib/sources";
 import { useSettings } from "@/lib/settings/hooks";
 import type { AgentAttachedDocument } from "@/lib/agents/types";
 import type { ProjectFile } from "@/lib/projects/types";

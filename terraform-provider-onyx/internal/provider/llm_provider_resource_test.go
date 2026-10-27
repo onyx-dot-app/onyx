@@ -25,7 +25,7 @@ resource "onyx_llm_provider" "test" {
   api_key       = "sk-tf-acc-fake-key"
 
   model_configurations = [
-    { name = "gpt-5-mini" },
+    { name = "gpt-6-luna" },
   ]
 }
 `,
@@ -57,11 +57,11 @@ resource "onyx_llm_provider" "test" {
   api_key       = "sk-tf-acc-fake-key-rotated"
 
   model_configurations = [
-    { name = "gpt-5-mini" },
+    { name = "gpt-6-luna" },
     {
-      name                = "gpt-5-nano"
+      name                = "gpt-6-sol"
       is_visible          = false
-      custom_display_name = "Cheap GPT-5"
+      custom_display_name = "Cheap GPT-6 Astra"
     },
   ]
 }
@@ -70,7 +70,7 @@ resource "onyx_llm_provider" "test" {
 					resource.TestCheckResourceAttr("onyx_llm_provider.test", "name", "tf-acc-openai-renamed"),
 					resource.TestCheckResourceAttr("onyx_llm_provider.test", "model_configurations.#", "2"),
 					resource.TestCheckResourceAttr("onyx_llm_provider.test", "api_key", "sk-tf-acc-fake-key-rotated"),
-					testAccCheckLLMProviderModelNames(t, "onyx_llm_provider.test", []string{"gpt-5-mini", "gpt-5-nano"}),
+					testAccCheckLLMProviderModelNames(t, "onyx_llm_provider.test", []string{"gpt-6-luna", "gpt-6-sol"}),
 				),
 			},
 			{
@@ -83,13 +83,13 @@ resource "onyx_llm_provider" "test" {
   api_key       = "sk-tf-acc-fake-key-rotated"
 
   model_configurations = [
-    { name = "gpt-5-mini" },
+    { name = "gpt-6-luna" },
   ]
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("onyx_llm_provider.test", "model_configurations.#", "1"),
-					testAccCheckLLMProviderModelNames(t, "onyx_llm_provider.test", []string{"gpt-5-mini"}),
+					testAccCheckLLMProviderModelNames(t, "onyx_llm_provider.test", []string{"gpt-6-luna"}),
 				),
 			},
 		},

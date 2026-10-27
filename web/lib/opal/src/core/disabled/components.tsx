@@ -1,6 +1,6 @@
 import "@opal/core/disabled/styles.css";
 import React from "react";
-import { Tooltip, type TooltipSide } from "@opal/components";
+import { Tooltip, type TooltipAlign, type TooltipSide } from "@opal/components";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import type { RichStr, WithoutStyles } from "@opal/types";
 
@@ -37,6 +37,9 @@ interface DisabledProps extends WithoutStyles<
   /** Which side the tooltip appears on. @default "right" */
   tooltipSide?: TooltipSide;
 
+  /** Where the tooltip sits along its side. See `Tooltip`'s `align`. @default "center" */
+  tooltipAlign?: TooltipAlign;
+
   children?: React.ReactNode;
 }
 
@@ -69,7 +72,8 @@ function Disabled({
   disabled,
   allowClick,
   tooltip,
-  tooltipSide = "right",
+  tooltipSide = "end",
+  tooltipAlign = "center",
   ref,
   children,
   ...rest
@@ -112,7 +116,7 @@ function Disabled({
   if (!showTooltip) return wrapper;
 
   return (
-    <Tooltip tooltip={tooltip} side={tooltipSide}>
+    <Tooltip tooltip={tooltip} side={tooltipSide} align={tooltipAlign}>
       {wrapper}
     </Tooltip>
   );

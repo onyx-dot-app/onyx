@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
+from onyx.access.access import censor_chunks_for_user
 from onyx.chat.emitter import Emitter
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.context.search.models import (
@@ -821,10 +822,13 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         ]
 
         try:
-            chunks = self._document_index.id_based_retrieval(
-                chunk_requests=chunk_requests,
-                filters=filters,
-                batch_retrieval=True,
+            chunks = censor_chunks_for_user(
+                self._document_index.id_based_retrieval(
+                    chunk_requests=chunk_requests,
+                    filters=filters,
+                    batch_retrieval=True,
+                ),
+                self._user,
             )
         except Exception as exc:
             logger.warning(

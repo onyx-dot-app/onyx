@@ -114,14 +114,17 @@ the SSRF guard for outbound admin-configured MCP client connections, owned by
 
 ### Deployment
 
-Self-hosted docker-compose ships the `mcp_server` service **commented out** by
-default in `deployment/docker_compose/docker-compose.prod.yml`,
-`docker-compose.prod-no-letsencrypt.yml`, and `docker-compose.template.yml`; an
-operator uncomments it and sets `MCP_SERVER_ENABLED=true` to run it. Uncommented,
-it runs `python -m onyx.mcp_server_main` in the same backend image, pointed at
-`API_SERVER_HOST=api_server`.
+Self-hosted docker-compose runs the `mcp_server` service **by default** in
+every file generated from `deployment/docker_compose/docker-compose.template.yml`.
+The service and nginx both default `MCP_SERVER_ENABLED` to `true`; an operator
+sets `MCP_SERVER_ENABLED=false` in `.env` to turn it off. Disabled, the container
+idles (`sleep infinity`) and `run-nginx.sh` writes empty MCP includes. The service runs `python -m onyx.mcp_server_main` in the same backend
+image, pointed at `API_SERVER_HOST=api_server`. The `onyx-cli` installer ships
+`mcp.conf.inc.template` and `mcp_upstream.conf.inc.template` so nginx can
+render the MCP routes.
 
-The Helm chart deploys it unconditionally when `mcpServer.enabled` is set
+The Helm chart deploys it by default (`mcpServer.enabled: true`; set it to
+`false` to drop the server, its ingresses and its nginx routes)
 (`deployment/helm/charts/onyx/templates/mcp-server-deployment.yaml`): its own
 `Deployment` running `python onyx/mcp_server_main.py`, its own `Service`
 (`mcp-server-service.yaml`), an `Ingress` at path `/mcp` on the API host
@@ -216,7 +219,10 @@ The API ingress also routes `/api/oauth-provider` on the web host in split-host
 deployments, removing `/api` before forwarding to the backend.
 Nginx serves authorization metadata at the RFC 8414 issuer path and the root
 and `/mcp` compatibility aliases. All aliases retain the canonical issuer.
-Discovery is handled by the public proxy, without Next.js rewrite destinations.
+Production discovery is handled by the public proxy, without Next.js rewrite destinations.
+For local OAuth, `next dev` rewrites authorization discovery to `INTERNAL_URL`
+and protected-resource discovery to `MCP_INTERNAL_URL`. These rewrites exist
+only in `PHASE_DEVELOPMENT_SERVER`; production builds and servers omit them.
 
 ### 4.3 A search call, end to end
 
@@ -359,11 +365,32 @@ whatever those endpoints give back.
 | changes which `user` `search/api.py:search` passes to `SearchTool`, or adds any way to skip ACL filters | [[access-control]] §5.3 treats this as a security review regardless of caller |
 | changes `NullEmitter` | [[core-chat-loop]] also depends on it for the non-streaming save path; re-check both callers named in its docstring |
 | adds a way for `search_indexed_documents` (or a future tool) to make an LLM call | re-read §9's rate-limit note; the call must stay behind the budget checks in `search/api.py:search` or add its own |
-| changes `MCP_SERVER_ENABLED`/`MCP_SERVER_PORT`/`API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS` defaults | update the Helm chart's `mcp-server-deployment.yaml` env block and the commented docker-compose service to match |
+| changes `MCP_SERVER_ENABLED`/`MCP_SERVER_PORT`/`API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS` defaults | update the Helm chart's `mcp-server-deployment.yaml` env block and the docker-compose `mcp_server` and `nginx` services to match |
 
 ---
 
 ## 8. How to verify a change
+
+The `MCP Compatibility` workflow checks real nginx routing on PRs and merge
+groups. Its native-client job runs Claude Code and Codex OAuth login against
+an isolated Onyx test server with PostgreSQL and Redis, through real nginx
+using the shipped routing configuration, without LLM calls. Each client runs
+OAuth and authenticated tool discovery with both `/mcp` and `/mcp/` URLs.
+PRs use pinned CLI versions; the nightly run uses their latest releases.
+The same job checks the OAuth protocol with omitted resource parameters, which
+legacy Claude Code clients use. Tokens remain bound to the configured MCP URL.
+
+A weekly canary, Mondays at 09:17 UTC, builds the backend under test and starts an isolated Compose
+stack with the API, MCP server, PostgreSQL, Redis, and shipped nginx routing.
+It checks loopback discovery aliases, both endpoint URL forms, the advertised
+resource, MCP auth challenges, and provider routing without creating users or grants.
+It does not use a running deployment or test the Next.js consent UI. Scheduled and
+manual failures post to `#alerts` (`C07K8KBMGKF`) through `slack-post-message`
+with `CVE_REVIEWS_BOT_TOKEN`, matching the channel-addressable bot workflows.
+Messages tag Roshan through the shared `rohoswagger` user mapping.
+The required-client mode fails if either CLI is missing.
+Manual runs with `test_alert=true` send a labeled delivery-test message even
+when compatibility checks pass.
 
 ### Tests
 
@@ -449,7 +476,7 @@ to `[[mcp-and-custom-tools]]`, not this component.
   ACL concerns of their own, but they are part of this server's contract and
   its blast radius (§7) all the same.
 - **Local dev and Helm diverge on how the API server is addressed.**
-  `.vscode/launch.json` and the commented docker-compose service use
+  `.vscode/launch.json` and the docker-compose `mcp_server` service use
   `API_SERVER_PROTOCOL`/`API_SERVER_HOST`; the Helm chart uses
   `API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS` exclusively
   (`mcp-server-deployment.yaml`). Both are read by the same helper,

@@ -49,7 +49,7 @@ from onyx.db.port_attempt import (
 from onyx.db.search_settings import (
     get_current_search_settings,
     get_secondary_search_settings,
-    update_search_settings_status,
+    update_search_settings_status__no_commit,
 )
 from onyx.db.user_file import (
     PortedUserScope,
@@ -120,17 +120,19 @@ def _perform_index_swap(
     ):
         new_search_settings.port_backfill_source_id = current_search_settings.id
 
-    # swap over search settings
-    update_search_settings_status(
+    # Swap both statuses (and the backfill pin above) in one commit. Two commits leave
+    # a window with no PRESENT row, and readers such as run_port_attempt fail in it.
+    update_search_settings_status__no_commit(
         search_settings=current_search_settings,
         new_status=IndexModelStatus.PAST,
         db_session=db_session,
     )
-    update_search_settings_status(
+    update_search_settings_status__no_commit(
         search_settings=new_search_settings,
         new_status=IndexModelStatus.PRESENT,
         db_session=db_session,
     )
+    db_session.commit()
 
     # FUTURE is now live: cancel stragglers that dropped out of the required set
     # (paused/INVALID) so they stop writing into the live index. Skip for INSTANT —
@@ -221,12 +223,6 @@ def _required_cc_pairs_for_switchover(
         )
     )
     return [cc_pair for cc_pair in all_cc_pairs if cc_pair.id in portable_ids]
-
-
-def _required_users_for_switchover(db_session: Session) -> list[UUID]:
-    """Portable users whose port must finish before a port-flow swap — the same set
-    check_for_port ports. Switchover-agnostic (users have no paused concept)."""
-    return fetch_port_scope_user_ids(db_session)
 
 
 def _verification_backoff_key(search_settings_id: int) -> str:
@@ -469,7 +465,8 @@ def check_and_perform_index_swap(db_session: Session) -> SearchSettings | None:
             db_session, all_cc_pairs, switchover_type
         )
 
-        required_user_ids = _required_users_for_switchover(db_session)
+        # Use the same users as check_for_port; users cannot be paused.
+        required_user_ids = fetch_port_scope_user_ids(db_session)
         if _port_swap_ready(
             db_session, new_search_settings, required_cc_pairs, required_user_ids
         ):

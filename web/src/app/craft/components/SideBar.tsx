@@ -10,8 +10,8 @@ import {
   useSession,
   useSessionHistory,
   useBuildSessionStore,
-  SessionHistoryItem,
 } from "@/app/craft/hooks/useBuildSessionStore";
+import type { SessionHistoryItem } from "@/app/craft/types/streamingTypes";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { Button, Dropdown, SidebarTab, Text } from "@opal/components";
 import {
@@ -43,7 +43,7 @@ import OpencodeDebugLogsButton from "@/app/craft/components/OpencodeDebugLogs";
 import {
   CRAFT_PATH,
   CRAFT_SKILLS_PATH,
-  CRAFT_APPS_PATH,
+  CRAFT_PLUGINS_PATH,
   CRAFT_TASKS_PATH,
 } from "@/app/craft/v1/constants";
 import { useUnsavedChangesNavigation } from "@/providers/UnsavedChangesNavigationProvider";
@@ -303,7 +303,23 @@ const MemoizedBuildSidebarInner = memo(() => {
     [requestNavigation, router]
   );
 
-  const handleNewBuild = useCallback(() => navigate(CRAFT_PATH), [navigate]);
+  const handleNewBuild = useCallback(
+    (event: React.MouseEvent<HTMLElement>) => {
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      ) {
+        return;
+      }
+      event.preventDefault();
+      navigate(CRAFT_PATH);
+    },
+    [navigate]
+  );
 
   const handleLoadSession = useCallback(
     (sessionId: string) => {
@@ -328,7 +344,11 @@ const MemoizedBuildSidebarInner = memo(() => {
         showLogoWhenFolded={showLogoWhenFolded}
       >
         <div className="flex flex-col gap-0.5">
-          <SidebarTab icon={SvgEditBig} onClick={handleNewBuild}>
+          <SidebarTab
+            icon={SvgEditBig}
+            href={CRAFT_PATH}
+            onClick={handleNewBuild}
+          >
             {t("newSession.label")}
           </SidebarTab>
           <SidebarTab
@@ -347,10 +367,10 @@ const MemoizedBuildSidebarInner = memo(() => {
           </SidebarTab>
           <SidebarTab
             icon={SvgPlug}
-            onClick={() => navigate(CRAFT_APPS_PATH)}
-            selected={pathname.startsWith(CRAFT_APPS_PATH)}
+            onClick={() => navigate(CRAFT_PLUGINS_PATH)}
+            selected={pathname.startsWith(CRAFT_PLUGINS_PATH)}
           >
-            {t("apps.label")}
+            {t("plugins.label")}
           </SidebarTab>
         </div>
       </SidebarLayouts.Header>
@@ -370,7 +390,7 @@ const MemoizedBuildSidebarInner = memo(() => {
                   isActive={
                     !pathname.startsWith(CRAFT_TASKS_PATH) &&
                     !pathname.startsWith(CRAFT_SKILLS_PATH) &&
-                    !pathname.startsWith(CRAFT_APPS_PATH) &&
+                    !pathname.startsWith(CRAFT_PLUGINS_PATH) &&
                     session?.id === historyItem.id
                   }
                   onLoad={() => handleLoadSession(historyItem.id)}

@@ -53,6 +53,7 @@ def _server(
         auth_performer=MCPAuthenticationPerformer.PER_USER,
         transport=transport,
         oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
+        oauth_cimd_enabled=True,
         oauth_authorization_endpoint=None,
         oauth_token_endpoint=None,
         oauth_scopes_override=None,
@@ -69,7 +70,7 @@ def _flow(
 ) -> MCPOAuthFlowState:
     mcp_server = cast(MCPServer, _server())
     client_information = _client_information(client_id)
-    code_verifier = f"{state}-verifier"
+    code_verifier = f"{state}-verifier".ljust(43, "v")
     return MCPOAuthFlowState(
         server_id=mcp_server.id,
         connection_config_id=101,
@@ -179,7 +180,7 @@ def _setup_flow_coordinator(
     attempt_store = MagicMock()
     monkeypatch.setattr(oauth_flow, "make_oauth_provider", make_oauth_provider)
     monkeypatch.setattr(oauth_flow, "initialize_mcp_client", initialize)
-    monkeypatch.setattr(oauth_flow, "mcp_oauth_attempt_store", lambda: attempt_store)
+    monkeypatch.setattr(oauth_flow, "MCP_OAUTH_ATTEMPTS", attempt_store)
     return providers, initialize, attempt_store
 
 
@@ -538,6 +539,7 @@ def test_reverse_order_completions_restore_their_own_registration(
                 "connection_config_id": 101,
                 "transport": "STREAMABLE_HTTP",
                 "oauth_provider_mode": "AUTO_DISCOVERY",
+                "oauth_cimd_enabled": True,
             },
         )
         exchange = AsyncMock()
@@ -572,8 +574,70 @@ def test_reverse_order_completions_restore_their_own_registration(
     )
     assert providers[1].context.client_info == _client_information("first-registration")
     exchanges[0].assert_awaited_once_with(
-        "second-code", "second-state-verifier", resource=None
+        "second-code", "second-state-verifier".ljust(43, "v"), resource=None
     )
     exchanges[1].assert_awaited_once_with(
-        "first-code", "first-state-verifier", resource=None
+        "first-code", "first-state-verifier".ljust(43, "v"), resource=None
     )
+
+
+_CIMD_CLIENT_ID = "https://onyx.example.com/api/mcp/oauth/client-metadata"
+
+
+def _install_cimd_challenge(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
+    providers, initialize, attempt_store = _setup_flow_coordinator(monkeypatch)
+
+    async def initialize_with_challenge(*_args: object, **_kwargs: object) -> object:
+        providers[0].context.client_info = _client_information(_CIMD_CLIENT_ID)
+        await providers[0].require_authorization()
+        raise AssertionError("authorization handoff must unwind the request")
+
+    initialize.side_effect = initialize_with_challenge
+    return attempt_store
+
+
+def test_rejected_client_metadata_document_fails_before_redirect(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempt_store = _install_cimd_challenge(monkeypatch)
+    request_urls = _install_discovery_responses(monkeypatch, [400])
+
+    with pytest.raises(OnyxError) as exc_info:
+        _start_flow(_server())
+    assert exc_info.value.extra == {"oauth_error": "client_metadata_rejected"}
+    assert request_urls == ["https://accounts.example.com/consent"]
+    attempt_store.store.assert_not_called()
+
+
+def test_accepted_client_metadata_document_redirects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempt_store = _install_cimd_challenge(monkeypatch)
+    _install_discovery_responses(monkeypatch, [302])
+
+    assert _start_flow(_server()) == oauth_flow.OAuthAuthorizationRedirect(
+        "https://accounts.example.com/consent"
+    )
+    attempt_store.store.assert_called_once()
+
+
+def test_unreachable_authorization_endpoint_still_redirects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempt_store = _install_cimd_challenge(monkeypatch)
+
+    def refuse_connection(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("unreachable", request=request)
+
+    monkeypatch.setattr(
+        oauth_flow,
+        "mcp_ssrf_httpx_client_factory",
+        lambda **_kwargs: httpx.AsyncClient(
+            transport=httpx.MockTransport(refuse_connection)
+        ),
+    )
+
+    assert _start_flow(_server()) == oauth_flow.OAuthAuthorizationRedirect(
+        "https://accounts.example.com/consent"
+    )
+    attempt_store.store.assert_called_once()

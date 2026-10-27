@@ -35,6 +35,7 @@ from onyx.server.query_and_chat.models import MessageResponseIDInfo, SendMessage
 from onyx.tools.fake_tools import research_agent
 from onyx.tools.fake_tools.research_agent import RESEARCH_AGENT_TIMEOUT_MESSAGE
 from onyx.tools.models import ToolCallKickoff
+from tests.common.models import CI_OPENAI_MODEL
 from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider
 from tests.external_dependency_unit.answer.stream_test_utils import (
     create_chat_session,
@@ -89,7 +90,7 @@ class DeepResearchScriptLLM(LitellmLLM):
         super().__init__(
             model_provider="openai",
             api_key=None,
-            model_name="gpt-5-mini",
+            model_name=CI_OPENAI_MODEL,
             max_input_tokens=1_000_000_000,
         )
         self._lock = threading.Lock()

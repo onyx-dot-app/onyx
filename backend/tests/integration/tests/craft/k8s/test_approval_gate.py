@@ -16,9 +16,9 @@ from sqlalchemy.orm import Session
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import NotificationType
 from onyx.db.enums import (
+    ActionPolicy,
     ApprovalDecision,
     BuildSessionStatus,
-    EndpointPolicy,
     ExternalAppType,
 )
 from onyx.db.models import ActionApproval, BuildSession, Notification
@@ -94,7 +94,7 @@ def _upsert_slack_external_app(
         "upstream_url_patterns": ["https://slack\\.com/api/.*"],
         "auth_template": {"Authorization": "Bearer {access_token}"},
         "organization_credentials": organization_credentials,
-        "action_policies": {"slack.messages.write": EndpointPolicy.ASK},
+        "action_policies": {"slack.messages.write": ActionPolicy.ASK},
     }
     if existing is None:
         created = ExternalAppManager.create(admin_user, **kwargs)
@@ -106,7 +106,7 @@ def _upsert_slack_external_app(
 
 def _action_policies_for_restore(
     app: ExternalAppAdminResponse,
-) -> dict[str, EndpointPolicy]:
+) -> dict[str, ActionPolicy]:
     return {action.action_id: action.state for action in app.actions}
 
 
@@ -249,7 +249,11 @@ def _submit_decision_response(
 ) -> httpx.Response:
     return http_client.post(
         f"{API_SERVER_URL}/build/approvals/{approval_id}/decision",
-        json={"decision": decision.value},
+        json={
+            "decision": "reject"
+            if decision == ApprovalDecision.REJECTED
+            else "approve_once"
+        },
         headers=api_user.headers,
         cookies=api_user.cookies,
     )
@@ -515,7 +519,7 @@ def test_gated_egress_without_session_tag_fails_closed(
     )
 
 
-def test_ask_with_uninvokable_app_forwards_bare(
+def test_ask_without_credentials_still_requires_approval(
     k8s_manager: object,  # noqa: ARG001 -- required to construct owned_live_pod
     k8s_client: client.CoreV1Api,
     k8s_admin_user: DATestUser,
@@ -542,20 +546,14 @@ def test_ask_with_uninvokable_app_forwards_bare(
             session_id=session_id,
         )
 
+        pending = _wait_for_pending_approval(db_session, session_id)
+        _submit_decision(api_user, pending.approval_id, ApprovalDecision.REJECTED)
         status_code, body = wait_for_pod_exec_output(
             k8s_client, pod_name, output_path, timeout_s=30
         )
-        assert status_code == 200, (
-            f"Uninvokable ASK should forward bare to Slack and Slack should 200 "
-            f"with invalid_auth in the body, got {status_code}: {body!r}"
-        )
-        assert "invalid_auth" in body.strip(), (
-            f"Bare-forwarded request should reach slack.com and get invalid_auth, "
-            f"got body {body!r}"
-        )
-        assert _approval_count_for_user(db_session, user_id) == 0, (
-            "Uninvokable ASK must not mint an approval row."
-        )
+        assert status_code == 403
+        _assert_403_error_code(body, "user_rejected")
+        assert _approval_count_for_user(db_session, user_id) == 1
     finally:
         _upsert_slack_external_app(
             k8s_admin_user,
@@ -752,10 +750,12 @@ def test_post_decision_after_proxy_claimed_expired_returns_conflict(
     )
 
 
+@pytest.mark.parametrize("scheme", ["http", "https"])
 def test_unidentified_sandbox_403_from_non_sandbox_pod(
     k8s_manager: object,  # noqa: ARG001
     k8s_client: client.CoreV1Api,
     gated_session: GatedSession,  # noqa: ARG001 — for fixture chain
+    scheme: str,
 ) -> None:
     """A pod in the sandbox namespace without the managed-by label → 403 ``unidentified_sandbox``.
 
@@ -783,8 +783,8 @@ def test_unidentified_sandbox_403_from_non_sandbox_pod(
         "--max-time",
         "30",
         "-w",
-        "\nHTTP_STATUS:%{http_code}\n",
-        _SLACK_POST_MESSAGE_URL,
+        "\nHTTP_STATUS:%{http_code}\nCONNECT_STATUS:%{http_connect}\n",
+        _SLACK_POST_MESSAGE_URL.replace("https://", f"{scheme}://"),
     ]
 
     pod_spec = client.V1Pod(
@@ -808,7 +808,7 @@ def test_unidentified_sandbox_403_from_non_sandbox_pod(
 
     k8s_client.create_namespaced_pod(namespace=SANDBOX_NAMESPACE, body=pod_spec)
     try:
-        # curl exits 0 even on HTTP errors.
+        # Rejected CONNECT exits nonzero; inspect its proxy response status.
         deadline = time.monotonic() + 90
         phase = ""
         while time.monotonic() < deadline:
@@ -826,10 +826,13 @@ def test_unidentified_sandbox_403_from_non_sandbox_pod(
         logs = k8s_client.read_namespaced_pod_log(
             name=rogue_pod_name, namespace=SANDBOX_NAMESPACE
         )
-        assert "HTTP_STATUS:403" in logs, (
-            f"Expected 403 from gate for unidentified sandbox, got logs: {logs!r}"
-        )
-        _assert_403_error_code(logs, "unidentified_sandbox")
+        if scheme == "https":
+            # The gate rejects CONNECT before curl can send the HTTPS request.
+            assert "CONNECT_STATUS:403" in logs, logs
+            assert "HTTP_STATUS:000" in logs, logs
+        else:
+            assert "HTTP_STATUS:403" in logs, logs
+            _assert_403_error_code(logs, "unidentified_sandbox")
     finally:
         try:
             k8s_client.delete_namespaced_pod(

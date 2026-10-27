@@ -1,16 +1,12 @@
+import { Tier } from "@/lib/tiers/types";
 import type { Notification } from "@/lib/notifications/interfaces";
+import type { Locale } from "@/i18n/config";
 
 export enum ApplicationStatus {
   PAYMENT_REMINDER = "payment_reminder",
   GATED_ACCESS = "gated_access",
   ACTIVE = "active",
   SEAT_LIMIT_EXCEEDED = "seat_limit_exceeded",
-}
-
-export enum Tier {
-  COMMUNITY = "community",
-  BUSINESS = "business",
-  ENTERPRISE = "enterprise",
 }
 
 export enum QueryHistoryType {
@@ -35,6 +31,11 @@ export interface Settings {
   reasoning_override_enabled?: boolean;
   // Model selector shows one flat list instead of per-provider groups.
   hide_provider_grouping?: boolean;
+
+  // "Auto" picker item backed by the admin-chosen router.
+  // router model configuration (e.g. openrouter/auto).
+  model_routing_enabled?: boolean;
+  model_routing_model_configuration_id?: number | null;
   query_history_type: QueryHistoryType;
 
   // Visibility-only: hides the sidebar page; query-history APIs + recording stay on.
@@ -48,6 +49,10 @@ export interface Settings {
   // Image processing settings
   image_extraction_and_analysis_enabled?: boolean;
   image_analysis_max_size_mb?: number | null;
+
+  // Global limit on indexing embedding requests; null means no limit
+  embedding_rate_limit_requests?: number | null;
+  embedding_rate_limit_period_seconds?: number;
 
   // User Knowledge settings
   user_knowledge_enabled?: boolean;
@@ -67,8 +72,14 @@ export interface Settings {
   // Gates visibility of the admin Craft-access controls.
   onyx_craft_available?: boolean;
 
+  // Craft is switched on but the tier is too low: show the upgrade prompt.
+  onyx_craft_requires_upgrade?: boolean;
+
   // Workspace default for Craft access; per-user overrides win.
   craft_default_enabled?: boolean;
+
+  // Workspace UI language for users without a stored language of their own.
+  default_language: Locale;
 
   // Workspace-wide switch for the LLM gateway (direct model API access via
   // /api/gateway). When false, all gateway routes reject requests.
@@ -113,6 +124,8 @@ export interface Settings {
 
   // Factory defaults for the restore button.
   default_pruning_freq?: number;
+  // A new connector's schedule as the create form fills it in, in seconds.
+  default_refresh_freq?: number;
   default_user_file_max_upload_size_mb?: number;
   default_file_token_count_threshold_k?: number;
 

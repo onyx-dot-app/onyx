@@ -103,7 +103,6 @@ function useOnboardingState(activeAgent?: MinimalAgent): {
       type: OnboardingActionType.GO_TO_STEP,
       step: OnboardingStep.Complete,
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [llmProviders, isLoadingProviders, userName, hasLlmProviders, user]);
 
   const nextStep = useCallback(() => {

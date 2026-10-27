@@ -58,6 +58,16 @@ delete action (`AgentRowActions.tsx`,
 `db/persona.py:mark_persona_as_deleted` also refuses any built-in persona for
 every caller, admin included. See §5.
 
+MCP server configuration can also change default Chat tool attachments. Turning
+server availability off removes only its default Chat attachments. Custom agents
+keep theirs. The default Chat tool editor updates the same availability flag when
+its last selected server tool is removed. Discovery adds new tools for enabled
+servers without restoring existing tools the admin deselected.
+
+OpenAPI plugin settings control default Chat selection separately from custom agents.
+Turning off default Chat removes its attachment without changing custom-agent attachments.
+Legacy disabled plugins remain off in default Chat until explicitly selected; see §4.5.
+
 ---
 
 ## 2. Surfaces
@@ -91,7 +101,8 @@ The naming split is real: the product says Agent, the router paths say
 | GET | `/admin/agents` | `api.py:get_agents_admin_paginated` | |
 | PATCH | `/admin/agents/display-priorities` | `api.py:patch_agents_display_priorities` | |
 | GET | `/admin/default-assistant/configuration` | `default_assistant/api.py:get_default_assistant_configuration` | |
-| PATCH | `/admin/default-assistant` | `default_assistant/api.py:update_default_assistant` | Only touches `tool_ids` and `system_prompt`. |
+| PATCH | `/admin/default-assistant` | `default_assistant/api.py:update_default_assistant` | Only touches `tool_ids` (full list) and `system_prompt`. |
+| PATCH | `/admin/default-assistant/tools` | `default_assistant/api.py:update_default_assistant_tools` | Adds or removes only the given `tool_ids` (`enabled`). |
 | GET | `/analytics/assistant/{id}/stats` | `ee/onyx/server/analytics/api.py:get_assistant_stats` | Backs the stats page. EE only. |
 | GET | `/analytics/admin/persona/messages`, `/unique-users` | `ee/onyx/server/analytics/api.py` | Finer-grained analytics feeding the same page. |
 
@@ -258,8 +269,10 @@ level-only change.
 `onyx/tools/tool_constructor.py:construct_tools` (via `_construct_tools_impl`)
 turns `persona.tools` into a live tool dict, keyed by `Tool.id`:
 
-- Skips any `Persona__Tool` row where `Tool.enabled` is `False`, and any tool
-  not in the caller's `allowed_tool_ids` whitelist when one is supplied.
+- Skips disabled MCP and built-in tools. Legacy OpenAPI `enabled=False` blocks
+  default Chat but does not block custom agents. The shared
+  `is_tool_available_for_persona` predicate applies this distinction.
+- Skips tools outside the caller's `allowed_tool_ids` whitelist when one is supplied.
 - For the built-in search tool, builds `PersonaSearchInfo` from
   `persona.document_sets`, `persona.search_start_date`,
   `persona.attached_documents`, and `persona.hierarchy_nodes`
@@ -273,10 +286,9 @@ turns `persona.tools` into a live tool dict, keyed by `Tool.id`:
 ### 4.4 Prompt reach
 
 `chat/chat_utils.py:get_custom_agent_prompt(persona, chat_session)` resolves
-the custom agent prompt once per turn, before the loop starts: a non-default
-persona's `system_prompt` always wins (even inside a project), unless
-`replace_base_system_prompt` makes it the system prompt outright; the default
-persona inside a project falls back to `chat_session.project.instructions`.
+instructions once per turn. Custom agents retain project instructions, with
+agent instructions taking precedence on conflicts. Replacement agents keep
+their system prompt and receive project instructions separately.
 Full detail, including the moving-message mechanics and the token-budget
 interaction, is [[context-assembly]] §4.1-4.2; this component only owns the
 persona row those functions read.
@@ -300,6 +312,26 @@ empty, and the migration history is the source of truth.
 its `tool_ids` and `system_prompt` (`db/persona.py:update_default_assistant_configuration`),
 explicitly not display priority or built-in status (`upsert_persona`'s own
 docstring repeats this limit for the general update path).
+
+Default-assistant configuration reads omit legacy OpenAPI rows with `enabled=False`,
+even if they retain an attachment. This prevents unrelated full-list saves from
+reactivating them. Explicitly including an OpenAPI tool in `tool_ids` sets its
+stored `enabled` flag to true in the same transaction as the attachment update.
+Removing it only changes default Chat selection. Custom agents ignore the legacy
+flag but still require access and authentication. No migration rewrites existing rows.
+See [[mcp-and-custom-tools]] §4.5 for the plugin API contract.
+
+All writers of the default assistant's tool list lock its persona row
+(`db/persona.py:lock_default_assistant__no_commit`), so concurrent writes
+serialize. Each writer takes this lock before it writes a `tool` row. The
+custom tool create and update routes take it before they save the tool, so
+the lock order cannot deadlock. They change `persona__tool` rows with core SQL, not an ORM
+collection replace, so a concurrent delete cannot cause `StaleDataError`.
+
+Frontend `useDefaultAssistantConfiguration.updateTools` sends only the changed
+tool ids to `PATCH /admin/default-assistant/tools`. A stale cache therefore
+cannot drop tools that another client added. Writes are also sequenced per SWR
+cache, and a failed write rolls back before the next operation reads the cache.
 
 ### 4.6 Pinning
 
@@ -341,11 +373,11 @@ underlying counts at finer grain for the admin panel.
 
 ## 5. Contracts and invariants
 
-1. **A `Persona__Tool` row records availability, not usability.** Disabling a
-   `Tool` (`Tool.enabled = False`) does not remove the association row.
-   `construct_tools` must keep filtering on `enabled` at construction time; a
-   persona's stale tool attachment must never resurrect a disabled tool into a
-   live turn. See [[tools-framework]] §5.
+1. **A `Persona__Tool` row records availability, not usability.** Disabling an
+   MCP or built-in tool does not remove its association rows. Construction must
+   exclude these disabled tools. Legacy disabled OpenAPI tools remain excluded
+   from default Chat, but custom agents ignore that flag. Access and authentication
+   still apply. See [[tools-framework]] §5 and §4.5 above.
 2. **`search_start_date` is a floor, never negotiable downward.** Any new
    caller-supplied date filter must be intersected with it, not replace it.
    [[internal-search]] enforces this on the retrieval side; this component
@@ -402,9 +434,8 @@ underlying counts at finer grain for the admin panel.
   system-prompt and custom-agent-prompt assembly.
 - [[chat-frontend]]: the agent picker, `/app/agents/*` pages, and the
   in-chat agent switcher all read this component's snapshots.
-- [[projects]]: a project's default agent falls back to project instructions
-  only when the default persona is active; a custom persona always
-  supersedes a project (`get_custom_agent_prompt`).
+- [[projects]]: project instructions and files remain available with custom
+  agents; see §4.4 and [[projects]] §4.5 for composition rules.
 - [[skills]] and [[mcp-and-custom-tools]]: skills and MCP tools become
   attachable `Tool` rows that personas reference the same way as any other
   tool.
@@ -463,8 +494,9 @@ Relevant existing e2e coverage: `web/tests/e2e/agents/create_and_edit_agent.spec
 
 - The agent's prompt and knowledge scope are both visibly in effect in chat,
   not just saved in the admin form.
-- A disabled or removed tool never becomes callable through a persona that
-  still lists it.
+- Disabled MCP and built-in tools remain uncallable despite retained attachments.
+  Legacy disabled OpenAPI tools stay off in default Chat but work in configured
+  custom agents, subject to access and authentication.
 - Sharing changes take effect for the intended audience only; an unshared
   user cannot fetch the agent by id.
 

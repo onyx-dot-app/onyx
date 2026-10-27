@@ -27,7 +27,13 @@ import { cn } from "@opal/utils";
 // Reading-width cap only applies at md and up — below that the window is too
 // narrow for it to matter, so chat is always full width (and the top-bar
 // toggle is hidden).
-const MSG_MAX_W = "md:max-w-[720px] md:min-w-[400px]";
+const MSG_MAX_W = "md:max-w-chat-message";
+// Full width keeps a max-width (100%), so the switch animates instead of jumping.
+const MSG_FULL_W = "md:max-w-full";
+
+/** Animates the full-width toggle; every surface it widens uses this. */
+export const FULL_WIDTH_TRANSITION =
+  "transition-[max-width] duration-300 ease-in-out motion-reduce:transition-none";
 
 export interface ChatUIProps {
   activeAgent: MinimalAgent;
@@ -94,8 +100,11 @@ const ChatUI = React.memo(
     const emptyDocs = useMemo<OnyxDocument[]>(() => [], []);
     const emptyChildrenIds = useMemo<number[]>(() => [], []);
 
-    // Reading-width cap on messages; dropped in full-width mode.
-    const msgWidth = fullWidthChat ? undefined : MSG_MAX_W;
+    // Reading-width cap on messages; full-width mode widens it to 100%.
+    const msgWidth = cn(
+      fullWidthChat ? MSG_FULL_W : MSG_MAX_W,
+      FULL_WIDTH_TRANSITION
+    );
 
     // Lookup: model identifier → provider slug (for icon resolution).
     const modelProviderLookup = useMemo(

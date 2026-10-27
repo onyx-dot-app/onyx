@@ -18,10 +18,10 @@ The deployment-wide default LLM model — a singleton pointer at one provider + 
 # provider holding it is deleted.
 resource "onyx_llm_provider_default" "this" {
   provider_id = onyx_llm_provider.openai.id
-  model_name  = "gpt-5"
+  model_name  = "gpt-6-sol"
 
   vision_provider_id = onyx_llm_provider.openai.id
-  vision_model_name  = "gpt-5"
+  vision_model_name  = "gpt-6-sol"
 }
 ```
 
@@ -30,7 +30,7 @@ resource "onyx_llm_provider_default" "this" {
 
 ### Required
 
-- `model_name` (String) Model name within that provider, e.g. `gpt-5-mini`. Must be one of its visible `model_configurations`.
+- `model_name` (String) Model name within that provider, e.g. `gpt-6-luna`. Must be one of its visible `model_configurations`.
 - `provider_id` (String) Id of the `onyx_llm_provider` holding the default model.
 
 ### Optional

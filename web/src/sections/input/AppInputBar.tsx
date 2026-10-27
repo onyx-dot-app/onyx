@@ -20,6 +20,8 @@ import { MinimalOnyxDocument } from "@/lib/search/types";
 import { ChatState, MAX_QUEUED_MESSAGES } from "@/app/app/interfaces";
 import { useQueuedMessageNavigation } from "@/hooks/useQueuedMessageNavigation";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
+import { effectiveChatForcedToolId } from "@/lib/plugins/chat";
+import type { MemberPlugin } from "@/lib/plugins/member";
 import { useAppPosition } from "@/lib/position/hooks";
 import { useDraft, draftKey } from "@/hooks/useDraft";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
@@ -36,6 +38,7 @@ import { ProjectFile } from "@/lib/projects/types";
 import { isFilePending } from "@/lib/projects/utils";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import { ToolsPopover } from "@/lib/tools/components";
+import MCPConnectionPrompt from "@/lib/mcp/components/MCPConnectionPrompt";
 import {
   getIconForAction,
   hasSearchToolsAvailable,
@@ -76,6 +79,8 @@ import { handleInputNavKeys } from "@/sections/input/inputBarKeys";
 
 export interface AppInputBarHandle {
   reset: () => void;
+  /** Puts back a message and files that failed to send, unless a newer draft exists. */
+  restore: (message: string, files: ProjectFile[]) => void;
   focus: () => void;
 }
 
@@ -88,6 +93,7 @@ export interface AppInputBarProps {
 
   // agents
   activeAgent: MinimalAgent | undefined;
+  memberPlugins?: readonly MemberPlugin[];
 
   handleFileUpload: (files: File[]) => void;
   deepResearchEnabled: boolean;
@@ -114,6 +120,7 @@ const AppInputBar = React.memo(
     onSubmit,
     chatState,
     activeAgent,
+    memberPlugins,
     handleFileUpload,
     llmManager,
     deepResearchEnabled,
@@ -306,6 +313,9 @@ const AppInputBar = React.memo(
       [handleSubmit, clearChatDraft]
     );
 
+    const { currentMessageFiles, setCurrentMessageFiles } =
+      useProjectsContext();
+
     // Expose reset and focus methods to parent via ref
     React.useImperativeHandle(ref, () => ({
       reset: () => {
@@ -313,6 +323,13 @@ const AppInputBar = React.memo(
           clearMessage();
           clearChatDraft();
         }
+      },
+      restore: (text: string, files: ProjectFile[]) => {
+        // Keep a draft the user started while the failed send was pending.
+        if (message.trim() || currentMessageFiles.length > 0) return;
+        setMessage(text);
+        setCurrentMessageFiles(files);
+        setCursorToEnd();
       },
       focus: () => {
         inputRef.current?.focus();
@@ -327,7 +344,7 @@ const AppInputBar = React.memo(
       if (initialMessage) {
         setMessage(initialMessage);
       }
-    }, [initialMessage]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [initialMessage]);
     const shouldShowRecordingWaveformBelow =
       isRecording &&
       !isVoicePlaybackActive &&
@@ -337,11 +354,14 @@ const AppInputBar = React.memo(
       if (isNewSession && !initialMessage) {
         clearMessage();
       }
-    }, [isNewSession, initialMessage]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [isNewSession, initialMessage]);
 
-    const { forcedToolId, clearForcedTool } = toolConfiguration;
-    const { currentMessageFiles, setCurrentMessageFiles } =
-      useProjectsContext();
+    const { clearForcedTool } = toolConfiguration;
+    const forcedToolId = effectiveChatForcedToolId({
+      requestedToolId: toolConfiguration.forcedToolId,
+      agent: activeAgent,
+      plugins: memberPlugins ?? [],
+    });
     const { isLoading: isLoadingProjects } = useProjects();
     const activeProject = useActiveProject();
 
@@ -673,6 +693,17 @@ const AppInputBar = React.memo(
               )
             )}
 
+            {!isSearchMode && !controlsLoading && activeAgent && (
+              <MCPConnectionPrompt
+                key={`mcp-auth-${activeAgent.id}`}
+                isStreaming={chatState === "streaming"}
+                agent={activeAgent}
+                toolConfiguration={toolConfiguration}
+                disabled={disabled}
+                onConnectionsClosed={() => inputRef.current?.focus()}
+              />
+            )}
+
             {(() => {
               if (!activeAgent || forcedToolId === null) return null;
               const tool = activeAgent.tools.find(
@@ -944,7 +975,7 @@ const AppInputBar = React.memo(
                   side="top"
                   align="start"
                   onOpenAutoFocus={(e) => e.preventDefault()}
-                  width="xl"
+                  width={70}
                 >
                   <Popover.Menu>
                     {[

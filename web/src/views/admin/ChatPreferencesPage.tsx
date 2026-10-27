@@ -1,5 +1,14 @@
 "use client";
 
+import { parseErrorDetail } from "@/lib/fetcher";
+
+import {
+  useBetaTag,
+  usePlans,
+  useTierAtLeast,
+  useTierLockedOptions,
+} from "@/lib/tiers/hooks";
+import { getSourceMetadata } from "@/lib/connectors/utils";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { markdown } from "@opal/utils";
 import React, {
@@ -12,9 +21,8 @@ import React, {
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { Formik, Form } from "formik";
-import useSWR, { mutate } from "swr";
+import { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SettingsLayouts, toast } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import { Collapsible } from "@opal/components";
@@ -25,27 +33,15 @@ import {
   InputTypeIn,
   type SelectOption,
 } from "@opal/components";
-import { SimpleModelSelector } from "@/lib/languageModels/components";
-import {
-  filterModelConfigurations,
-  findLlmOptionById,
-} from "@/lib/languageModels/options";
-import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
-import { findProviderOwningModelConfig } from "@/lib/languageModels/utils";
 import {
   SvgAddLines,
-  SvgActions,
-  SvgExpand,
-  SvgFold,
   SvgExternalLink,
-  SvgOrganization,
   SvgRefreshCw,
   SvgRevert,
   SvgChevronDown,
 } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import {
-  Card as CardLayout,
   Content,
   ContentAction,
   InputHorizontal,
@@ -53,8 +49,8 @@ import {
 } from "@opal/layouts";
 import { useSettings } from "@/lib/settings/hooks";
 import useCCPairs from "@/hooks/useCCPairs";
-import { getSourceMetadata } from "@/lib/sources";
 import { QueryHistoryType, Settings, toSettings } from "@/lib/settings/types";
+import { LanguageSelect } from "@/lib/app/components";
 import { useAvailableTools } from "@/lib/tools/hooks";
 import {
   SEARCH_TOOL_ID,
@@ -76,146 +72,16 @@ import {
 import { Modal } from "@opal/components";
 import GenericConfirmModal from "@/sections/modals/GenericConfirmModal";
 import { InputSwitch } from "@opal/components";
-import { useMcpServers } from "@/lib/mcp/hooks";
-import useOpenApiTools from "@/hooks/useOpenApiTools";
-import { getActionIcon } from "@/lib/tools/utils";
 import { Disabled, Hoverable } from "@opal/core";
-import useFilter from "@/hooks/useFilter";
-import { MCPServer } from "@/lib/mcp/types";
-import type { IconProps } from "@opal/types";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import { Tier } from "@/lib/tiers/types";
+import {
+  ChatNamingModelSetting,
+  SearchSelectionModelSetting,
+} from "@/views/admin/ChatTaskModelSettings";
+
+import { useDefaultAssistantConfiguration } from "@/lib/agents/hooks";
 
 const route = ADMIN_ROUTES.CHAT_PREFERENCES;
-
-interface DefaultAgentConfiguration {
-  tool_ids: number[];
-  system_prompt: string | null;
-  default_system_prompt: string;
-}
-
-interface MCPServerCardTool {
-  id: number;
-  icon: React.FunctionComponent<IconProps>;
-  name: string;
-  description: string;
-}
-
-interface MCPServerCardProps {
-  server: MCPServer;
-  tools: MCPServerCardTool[];
-  isToolEnabled: (toolDbId: number) => boolean;
-  onToggleTool: (toolDbId: number, enabled: boolean) => void;
-  onToggleTools: (toolDbIds: number[], enabled: boolean) => void;
-}
-
-function MCPServerCard({
-  server,
-  tools,
-  isToolEnabled,
-  onToggleTool,
-  onToggleTools,
-}: MCPServerCardProps) {
-  const t = useTranslations("admin.chatPreferences");
-  const [isFolded, setIsFolded] = useState(true);
-  const {
-    query,
-    setQuery,
-    filtered: filteredTools,
-  } = useFilter(tools, (tool) => `${tool.name} ${tool.description}`);
-
-  const allToolIds = tools.map((t) => t.id);
-  const serverEnabled = tools.some((t) => isToolEnabled(t.id));
-  const needsAuth = !server.user_can_authenticate;
-  const authTooltip = needsAuth ? t("mcpServer.authTooltip") : undefined;
-
-  const expanded = !isFolded;
-  const hasContent = tools.length > 0 && filteredTools.length > 0;
-
-  return (
-    <Card
-      expandable
-      expanded={expanded}
-      border="solid"
-      rounding={4}
-      padding={2}
-      expandedContent={
-        hasContent ? (
-          <Section gap={2} padding={2}>
-            {filteredTools.map((tool) => (
-              <Card key={tool.id} border="solid" rounding={3}>
-                <InputHorizontal
-                  icon={tool.icon}
-                  title={tool.name}
-                  description={tool.description}
-                  withLabel
-                >
-                  <Tooltip tooltip={authTooltip} side="top">
-                    <InputSwitch
-                      checked={isToolEnabled(tool.id)}
-                      onCheckedChange={(checked) =>
-                        onToggleTool(tool.id, checked)
-                      }
-                      disabled={needsAuth}
-                    />
-                  </Tooltip>
-                </InputHorizontal>
-              </Card>
-            ))}
-          </Section>
-        ) : undefined
-      }
-    >
-      <CardLayout.Header
-        bottomChildren={
-          tools.length > 0 ? (
-            <Section flexDirection="row" gap={2}>
-              <InputTypeIn
-                placeholder={t("mcpServer.search.placeholder")}
-                variant="internal"
-                searchIcon
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-              <Button
-                rightIcon={isFolded ? SvgExpand : SvgFold}
-                onClick={() => setIsFolded((prev) => !prev)}
-                prominence="internal"
-                size="lg"
-              >
-                {isFolded
-                  ? t("mcpServer.expandButton.label")
-                  : t("mcpServer.foldButton.label")}
-              </Button>
-            </Section>
-          ) : undefined
-        }
-      >
-        <div className="p-2">
-          <ContentAction
-            icon={getActionIcon(server.server_url, server.name)}
-            title={server.name}
-            description={server.description}
-            sizePreset="main-ui"
-            variant="section"
-            padding={0}
-            rightChildren={
-              <Tooltip tooltip={authTooltip} side="top">
-                <InputSwitch
-                  checked={serverEnabled}
-                  onCheckedChange={(checked) =>
-                    onToggleTools(allToolIds, checked)
-                  }
-                  disabled={needsAuth}
-                />
-              </Tooltip>
-            }
-          />
-        </div>
-      </CardLayout.Header>
-    </Card>
-  );
-}
 
 type FileLimitFieldName =
   | "user_file_max_upload_size_mb"
@@ -437,7 +303,7 @@ const isRetentionReduction = (
 
 interface RetentionFieldProps {
   value: number | null;
-  disabled: boolean;
+  disabled?: boolean;
   onSave: (value: number | null) => void;
 }
 
@@ -445,8 +311,16 @@ interface RetentionFieldProps {
 // the dropdown in place into a numeric "days" input (with revert + reopen
 // affordances). The persisted shape (number | null) is unchanged, so any
 // existing value — preset or not — round-trips correctly.
-function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
+function RetentionField({
+  value,
+  disabled = false,
+  onSave,
+}: RetentionFieldProps) {
   const t = useTranslations("admin.chatPreferences");
+  // Retention needs Enterprise: below it, the choices stay on show, locked
+  // under an upgrade link.
+  const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
+  const lockForEnterprise = useTierLockedOptions(Tier.ENTERPRISE);
   const tInputSelect = useTranslations("common.inputSelect");
   const retentionPresets = useMemo(
     () => [
@@ -541,11 +415,15 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
   // Only read while in select mode. A stored custom value (transiently visible
   // here after "More") maps to no option, so the select is left empty and the
   // trigger shows the placeholder until the user picks.
+  // Below Enterprise a stored custom value cannot change, so the locked list
+  // shows it as "Custom Retention" rather than the editable input.
   const selectValue =
     value === null
       ? FOREVER_RETENTION_VALUE
       : valueIsCustomRetention(value)
-        ? ""
+        ? enterpriseTier
+          ? ""
+          : CUSTOM_RETENTION_VALUE
         : String(value);
 
   const persist = (next: number | null) => {
@@ -636,6 +514,19 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
   const customInvalid =
     customDays !== "" && !isValidCustomRetention(customDays);
 
+  const presetOptions: SelectOption[] = retentionPresets.map((preset) => ({
+    value: String(preset.days),
+    title: preset.label,
+  }));
+  const foreverOption: SelectOption = {
+    value: FOREVER_RETENTION_VALUE,
+    title: t("retention.forever.label"),
+  };
+  const customOption: SelectOption = {
+    value: CUSTOM_RETENTION_VALUE,
+    title: t("retention.custom.label"),
+  };
+
   const iconButtonProps = {
     prominence: "tertiary",
     size: "xs",
@@ -645,7 +536,7 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
 
   return (
     <div className="flex flex-col gap-2 w-full">
-      {showCustom ? (
+      {enterpriseTier && showCustom ? (
         <div className="flex flex-col gap-1 w-full">
           <InputTypeIn
             ref={customInputRef}
@@ -692,26 +583,17 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
             onBlur={handleSelectBlur}
             disabled={disabled}
             placeholder={tInputSelect("placeholder.fallback")}
-            options={[
-              {
-                value: FOREVER_RETENTION_VALUE,
-                title: t("retention.forever.label"),
-              },
-              ...retentionPresets.map(
-                (preset): SelectOption => ({
-                  value: String(preset.days),
-                  title: preset.label,
-                })
-              ),
-              {
-                options: [
-                  {
-                    value: CUSTOM_RETENTION_VALUE,
-                    title: t("retention.custom.label"),
-                  },
-                ],
-              },
-            ]}
+            options={
+              enterpriseTier
+                ? [foreverOption, ...presetOptions, { options: [customOption] }]
+                : // Below Enterprise every choice sits locked under an
+                  // upgrade link, the stored value selected.
+                  lockForEnterprise([
+                    foreverOption,
+                    ...presetOptions,
+                    customOption,
+                  ])
+            }
           />
         </div>
       )}
@@ -731,6 +613,8 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
 
 export default function ChatPreferencesPage() {
   const t = useTranslations("admin.chatPreferences");
+  const plans = usePlans();
+  const betaTag = useBetaTag();
   const tInputSelect = useTranslations("common.inputSelect");
   const adminRouteTitle = useAdminRouteTitle();
   const router = useRouter();
@@ -739,89 +623,6 @@ export default function ChatPreferencesPage() {
   // Search Mode toggle is Business+; Chat Retention is Enterprise-only.
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
-
-  // Dedicated chat-naming model. Auto-naming reads this designation via
-  // fetch_default_chat_naming_model; when unset it uses the session's model.
-  const {
-    llmProviders,
-    defaultChatNaming,
-    modelPaging,
-    refetch: refetchLlmProviders,
-  } = useAdminLanguageModels();
-
-  // Resolve defaultChatNaming (id + name based) to a model_configuration_id
-  // for the select.
-  const chatNamingModelConfigId = useMemo(() => {
-    if (!defaultChatNaming || !llmProviders) return null;
-    for (const p of llmProviders) {
-      if (p.id !== defaultChatNaming.provider_id) continue;
-      const mc = p.model_configurations.find(
-        (m) => m.name === defaultChatNaming.model_name
-      );
-      if (mc?.id != null) return mc.id;
-    }
-    return null;
-  }, [llmProviders, defaultChatNaming]);
-
-  const handleChatNamingModelChange = useCallback(
-    async ({
-      modelName,
-      modelConfigurationId,
-    }: {
-      modelName: string;
-      modelConfigurationId: number | null | undefined;
-    }) => {
-      const provider = findProviderOwningModelConfig(
-        llmProviders,
-        modelConfigurationId
-      );
-      if (!provider) {
-        toast.error(t("toasts.providerResolveFailed"));
-        return;
-      }
-      try {
-        const response = await fetch("/api/admin/llm/default-chat-naming", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            provider_id: provider.id,
-            model_name: modelName,
-          }),
-        });
-        if (!response.ok) {
-          throw new Error(
-            (await response.json()).detail ?? t("toasts.chatNamingUpdateFailed")
-          );
-        }
-        await refetchLlmProviders();
-        toast.success(t("toasts.chatNamingUpdated"));
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : t("toasts.unknownError")
-        );
-      }
-    },
-    [llmProviders, refetchLlmProviders, t]
-  );
-
-  const handleClearChatNamingModel = useCallback(async () => {
-    try {
-      const response = await fetch("/api/admin/llm/default-chat-naming", {
-        method: "DELETE",
-      });
-      if (!response.ok) {
-        throw new Error(
-          (await response.json()).detail ?? t("toasts.chatNamingResetFailed")
-        );
-      }
-      await refetchLlmProviders();
-      toast.success(t("toasts.chatNamingReset"));
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : t("toasts.unknownError")
-      );
-    }
-  }, [refetchLlmProviders, t]);
 
   // Local state for text fields (save-on-blur)
   const [companyName, setCompanyName] = useState(s.company_name ?? "");
@@ -839,7 +640,7 @@ export default function ChatPreferencesPage() {
       setCompanyName(incoming);
       savedCompanyName.current = incoming;
     }
-  }, [s.company_name]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [s.company_name]);
 
   useEffect(() => {
     const incoming = s.company_description ?? "";
@@ -850,7 +651,7 @@ export default function ChatPreferencesPage() {
       setCompanyDescription(incoming);
       savedCompanyDescription.current = incoming;
     }
-  }, [s.company_description]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [s.company_description]);
 
   // Tools availability
   const { tools: availableTools } = useAvailableTools();
@@ -879,87 +680,24 @@ export default function ChatPreferencesPage() {
   const { ccPairs } = useCCPairs();
   const uniqueSources = Array.from(new Set(ccPairs.map((p) => p.source)));
 
-  // MCP servers and OpenAPI tools
-  const { mcpData } = useMcpServers();
-  const { openApiTools: openApiToolsRaw } = useOpenApiTools();
-  const mcpServers = mcpData?.mcp_servers ?? [];
-  const openApiTools = openApiToolsRaw ?? [];
-
-  const mcpServersWithTools = mcpServers.map((server) => ({
-    server,
-    tools: availableTools
-      .filter((tool) => tool.mcp_server_id === server.id)
-      .map((tool) => ({
-        id: tool.id,
-        icon: getActionIcon(server.server_url, server.name),
-        name: tool.display_name || tool.name,
-        description: tool.description,
-      })),
-  }));
-
   // Default agent configuration (system prompt)
-  const { data: defaultAgentConfig, mutate: mutateDefaultAgent } =
-    useSWR<DefaultAgentConfiguration>(
-      SWR_KEYS.defaultAssistantConfig,
-      errorHandlingFetcher
-    );
-
+  const {
+    data: defaultAgentConfig,
+    mutate: mutateDefaultAgent,
+    updateTools,
+  } = useDefaultAssistantConfiguration();
   const enabledToolIds = defaultAgentConfig?.tool_ids ?? [];
-
-  const isToolEnabled = useCallback(
-    (toolDbId: number) => enabledToolIds.includes(toolDbId),
-    [enabledToolIds]
-  );
-
-  const saveToolIds = useCallback(
-    async (newToolIds: number[]) => {
-      // Optimistic update so subsequent toggles read fresh state
-      const optimisticData = defaultAgentConfig
-        ? { ...defaultAgentConfig, tool_ids: newToolIds }
-        : undefined;
-      try {
-        await mutateDefaultAgent(
-          async () => {
-            const response = await fetch("/api/admin/default-assistant", {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ tool_ids: newToolIds }),
-            });
-            if (!response.ok) {
-              const errorMsg = (await response.json()).detail;
-              throw new Error(errorMsg);
-            }
-            return optimisticData;
-          },
-          { optimisticData, revalidate: true }
-        );
-        toast.success(t("toasts.toolsUpdated"));
-      } catch {
-        toast.error(t("toasts.toolsUpdateFailed"));
-      }
-    },
-    [defaultAgentConfig, mutateDefaultAgent, t]
-  );
-
-  const toggleTool = useCallback(
-    (toolDbId: number, enabled: boolean) => {
-      const newToolIds = enabled
-        ? [...enabledToolIds, toolDbId]
-        : enabledToolIds.filter((id) => id !== toolDbId);
-      void saveToolIds(newToolIds);
-    },
-    [enabledToolIds, saveToolIds]
-  );
-
-  const toggleTools = useCallback(
-    (toolDbIds: number[], enabled: boolean) => {
-      const idsSet = new Set(toolDbIds);
-      const withoutIds = enabledToolIds.filter((id) => !idsSet.has(id));
-      const newToolIds = enabled ? [...withoutIds, ...toolDbIds] : withoutIds;
-      void saveToolIds(newToolIds);
-    },
-    [enabledToolIds, saveToolIds]
-  );
+  const isToolEnabled = (toolDbId: number) => enabledToolIds.includes(toolDbId);
+  const toggleTools = async (toolDbIds: number[], enabled: boolean) => {
+    try {
+      await updateTools(toolDbIds, enabled);
+    } catch {
+      toast.error(t("toasts.toolsUpdateFailed"));
+    }
+  };
+  const toggleTool = (toolDbId: number, enabled: boolean) => {
+    void toggleTools([toolDbId], enabled);
+  };
 
   // System prompt modal state
   const [systemPromptModalOpen, setSystemPromptModalOpen] = useState(false);
@@ -982,13 +720,13 @@ export default function ChatPreferencesPage() {
         });
 
         if (!response.ok) {
-          const errorMsg = (await response.json()).detail;
-          throw new Error(errorMsg);
+          throw new Error(
+            await parseErrorDetail(response, t("toasts.settingsUpdateFailed"))
+          );
         }
 
         router.refresh();
         await mutate(SWR_KEYS.settings);
-        toast.success(t("toasts.settingsUpdated"));
       } catch (error) {
         toast.error(t("toasts.settingsUpdateFailed"));
       }
@@ -1007,59 +745,25 @@ export default function ChatPreferencesPage() {
         />
 
         <SettingsLayouts.Body>
-          {/* Features */}
+          {/* Chat */}
           <Card border="solid" rounding={4}>
             <Section alignItems="stretch">
-              <Disabled
-                disabled={!businessTier || uniqueSources.length === 0}
-                allowClick={businessTier}
-                tooltip={
-                  !businessTier
-                    ? t("searchMode.tierTooltip")
-                    : t("searchMode.noConnectorsTooltip")
-                }
-              >
-                <InputHorizontal
-                  title={t("searchMode.title")}
-                  tag={
-                    !businessTier
-                      ? {
-                          title: t("searchMode.businessPlanTag.label"),
-                          color: "amber",
-                          icon: SvgOrganization,
-                        }
-                      : { title: t("betaTag.label"), color: "blue" }
-                  }
-                  description={t("searchMode.description")}
-                  disabled={!businessTier || uniqueSources.length === 0}
-                  withLabel
-                >
-                  <InputSwitch
-                    checked={
-                      businessTier ? (s.search_ui_enabled ?? true) : false
-                    }
-                    onCheckedChange={(checked) => {
-                      void saveSettings({ search_ui_enabled: checked });
-                    }}
-                    disabled={!businessTier || uniqueSources.length === 0}
-                  />
-                </InputHorizontal>
-              </Disabled>
               <InputHorizontal
-                title={t("autoDetectFilters.title")}
-                description={t("autoDetectFilters.description")}
+                title={t("defaultLanguage.title")}
+                description={t("defaultLanguage.description")}
                 withLabel
+                fillInput
               >
-                <InputSwitch
-                  checked={s.auto_detect_search_filters ?? true}
-                  onCheckedChange={(checked) => {
-                    void saveSettings({ auto_detect_search_filters: checked });
+                <LanguageSelect
+                  value={s.default_language}
+                  onChange={(language) => {
+                    void saveSettings({ default_language: language });
                   }}
                 />
               </InputHorizontal>
+              <ChatNamingModelSetting />
               <InputHorizontal
                 title={t("multiModel.title")}
-                tag={{ title: t("betaTag.label"), color: "blue" }}
                 description={t("multiModel.description")}
                 withLabel
               >
@@ -1094,77 +798,61 @@ export default function ChatPreferencesPage() {
                   }}
                 />
               </InputHorizontal>
+            </Section>
+          </Card>
+
+          {/* Search */}
+          <Card border="solid" rounding={4}>
+            <Section alignItems="stretch">
+              <SearchSelectionModelSetting />
+              {/* Below Business, or with no connectors, the row stays as is;
+              only its switch is locked. */}
               <InputHorizontal
-                title={t("temperature.title")}
-                description={t("temperature.description")}
+                title={t("searchMode.title")}
+                tag={!businessTier ? plans[Tier.BUSINESS].tag : betaTag}
+                description={t("searchMode.description")}
+                withLabel
+              >
+                <Tooltip
+                  tooltip={
+                    !businessTier
+                      ? plans[Tier.BUSINESS].tooltip
+                      : uniqueSources.length === 0
+                        ? t("searchMode.noConnectorsTooltip")
+                        : undefined
+                  }
+                >
+                  <div>
+                    <InputSwitch
+                      checked={
+                        businessTier ? (s.search_ui_enabled ?? true) : false
+                      }
+                      onCheckedChange={(checked) => {
+                        void saveSettings({ search_ui_enabled: checked });
+                      }}
+                      disabled={!businessTier || uniqueSources.length === 0}
+                    />
+                  </div>
+                </Tooltip>
+              </InputHorizontal>
+              <InputHorizontal
+                title={t("autoDetectFilters.title")}
+                description={t("autoDetectFilters.description")}
                 withLabel
               >
                 <InputSwitch
-                  checked={s.temperature_override_enabled ?? true}
+                  checked={s.auto_detect_search_filters ?? true}
                   onCheckedChange={(checked) => {
-                    void saveSettings({
-                      temperature_override_enabled: checked,
-                    });
+                    void saveSettings({ auto_detect_search_filters: checked });
                   }}
                 />
-              </InputHorizontal>
-              <InputHorizontal
-                title={t("reasoning.title")}
-                description={t("reasoning.description")}
-                withLabel
-              >
-                <InputSwitch
-                  id="reasoning_override_enabled"
-                  checked={s.reasoning_override_enabled ?? true}
-                  onCheckedChange={(checked) => {
-                    void saveSettings({
-                      reasoning_override_enabled: checked,
-                    });
-                  }}
-                />
-              </InputHorizontal>
-              <InputHorizontal
-                title={t("chatNaming.title")}
-                description={t("chatNaming.description")}
-                withLabel
-              >
-                <div className="flex items-center gap-2">
-                  {chatNamingModelConfigId !== null && (
-                    <Button
-                      prominence="tertiary"
-                      size="sm"
-                      onClick={() => void handleClearChatNamingModel()}
-                    >
-                      {t("chatNaming.resetButton.label")}
-                    </Button>
-                  )}
-                  <SimpleModelSelector
-                    providers={filterModelConfigurations(llmProviders ?? [], {
-                      keep: chatNamingModelConfigId,
-                    })}
-                    value={chatNamingModelConfigId}
-                    grouped={!settings.hide_provider_grouping}
-                    modelPaging={modelPaging}
-                    onChange={(modelConfigurationId) => {
-                      const opt = findLlmOptionById(
-                        llmProviders,
-                        modelConfigurationId
-                      );
-                      if (!opt) return;
-                      void handleChatNamingModelChange({
-                        modelName: opt.modelName,
-                        modelConfigurationId,
-                      });
-                    }}
-                  />
-                </div>
               </InputHorizontal>
             </Section>
           </Card>
 
           <Divider paddingParallel={0} paddingPerpendicular={0} />
 
-          {/* Team Context */}
+          {/* Team context */}
           <Section gap={4}>
             <InputVertical
               title={t("teamName.title")}
@@ -1232,57 +920,61 @@ export default function ChatPreferencesPage() {
               <Section gap={6}>
                 {/* Connectors */}
                 <Section gap={3}>
-                  <Content
-                    title={t("connectors.title")}
-                    sizePreset="main-content"
-                    variant="section"
-                  />
-
                   <Section
                     flexDirection="row"
                     justifyContent="between"
                     alignItems="center"
                     gap={1}
+                    wrap
                   >
-                    {uniqueSources.length === 0 ? (
-                      <EmptyMessageCard
-                        sizePreset="main-ui"
-                        title={t("connectors.empty.title")}
+                    <Section width="fit" alignItems="start">
+                      <Content
+                        title={t("connectors.title")}
+                        description={t("connectors.description")}
+                        sizePreset="main-content"
+                        variant="section"
                       />
-                    ) : (
-                      <>
-                        <Section
-                          flexDirection="row"
-                          justifyContent="start"
-                          alignItems="center"
-                          gap={1}
-                        >
-                          {uniqueSources.slice(0, 3).map((source) => {
-                            const meta = getSourceMetadata(source);
-                            return (
-                              <div key={source} className="w-40">
-                                <Card padding={2} border="solid">
-                                  <Content
-                                    icon={meta.icon}
-                                    title={meta.displayName}
-                                    sizePreset="main-ui"
-                                  />
-                                </Card>
-                              </div>
-                            );
-                          })}
-                        </Section>
-
-                        <Button
-                          href="/admin/indexing-status"
-                          prominence="tertiary"
-                          rightIcon={SvgExternalLink}
-                        >
-                          {t("connectors.manageAllButton.label")}
-                        </Button>
-                      </>
+                    </Section>
+                    {uniqueSources.length > 0 && (
+                      <Button
+                        href="/admin/indexing-status"
+                        prominence="tertiary"
+                        rightIcon={SvgExternalLink}
+                      >
+                        {t("connectors.manageAllButton.label")}
+                      </Button>
                     )}
                   </Section>
+
+                  {uniqueSources.length === 0 ? (
+                    <EmptyMessageCard
+                      sizePreset="main-ui"
+                      title={t("connectors.empty.title")}
+                    />
+                  ) : (
+                    <Section
+                      flexDirection="row"
+                      justifyContent="start"
+                      alignItems="center"
+                      gap={1}
+                      wrap
+                    >
+                      {uniqueSources.map((source) => {
+                        const meta = getSourceMetadata(source);
+                        return (
+                          <div key={source} className="w-40">
+                            <Card padding={2} border="solid">
+                              <Content
+                                icon={meta.icon}
+                                title={meta.displayName}
+                                sizePreset="main-ui"
+                              />
+                            </Card>
+                          </div>
+                        );
+                      })}
+                    </Section>
+                  )}
                 </Section>
 
                 {/* Actions & Tools */}
@@ -1290,183 +982,157 @@ export default function ChatPreferencesPage() {
                   title={t("tools.title")}
                   description={t("tools.description")}
                 >
-                  <Section gap={2} alignItems="stretch">
-                    {vectorDbEnabled && searchTool && (
-                      <Card border="solid" rounding={4}>
-                        <InputHorizontal
-                          title={t("tools.internalSearch.title")}
-                          description={t("tools.internalSearch.description")}
-                          withLabel
-                        >
-                          <InputSwitch
-                            checked={isToolEnabled(searchTool.id)}
-                            onCheckedChange={(checked) =>
-                              void toggleTool(searchTool.id, checked)
-                            }
-                          />
-                        </InputHorizontal>
-                      </Card>
-                    )}
+                  <Section gap={6} alignItems="stretch">
+                    <Section gap={2} alignItems="stretch">
+                      {vectorDbEnabled && searchTool && (
+                        <Card border="solid" rounding={4}>
+                          <InputHorizontal
+                            title={t("tools.internalSearch.title")}
+                            description={t("tools.internalSearch.description")}
+                            withLabel
+                          >
+                            <InputSwitch
+                              checked={isToolEnabled(searchTool.id)}
+                              onCheckedChange={(checked) =>
+                                void toggleTool(searchTool.id, checked)
+                              }
+                            />
+                          </InputHorizontal>
+                        </Card>
+                      )}
 
-                    <Disabled
-                      disabled={!imageGenTool}
-                      tooltip={t("tools.imageGeneration.disabledTooltip")}
-                    >
-                      <Card border="solid" rounding={4}>
-                        <InputHorizontal
-                          title={t("tools.imageGeneration.title")}
-                          description={t("tools.imageGeneration.description")}
-                          disabled={!imageGenTool}
-                          withLabel
-                        >
-                          <InputSwitch
-                            checked={
-                              imageGenTool
-                                ? isToolEnabled(imageGenTool.id)
-                                : false
-                            }
-                            onCheckedChange={(checked) =>
-                              imageGenTool &&
-                              void toggleTool(imageGenTool.id, checked)
-                            }
+                      <Disabled
+                        disabled={!imageGenTool}
+                        tooltip={t("tools.imageGeneration.disabledTooltip")}
+                      >
+                        <Card border="solid" rounding={4}>
+                          <InputHorizontal
+                            title={t("tools.imageGeneration.title")}
+                            description={t("tools.imageGeneration.description")}
                             disabled={!imageGenTool}
-                          />
-                        </InputHorizontal>
-                      </Card>
-                    </Disabled>
+                            withLabel
+                          >
+                            <InputSwitch
+                              checked={
+                                imageGenTool
+                                  ? isToolEnabled(imageGenTool.id)
+                                  : false
+                              }
+                              onCheckedChange={(checked) =>
+                                imageGenTool &&
+                                void toggleTool(imageGenTool.id, checked)
+                              }
+                              disabled={!imageGenTool}
+                            />
+                          </InputHorizontal>
+                        </Card>
+                      </Disabled>
 
-                    <Disabled disabled={!webSearchTool}>
-                      <Card border="solid" rounding={4}>
-                        <InputHorizontal
-                          title={t("tools.webSearch.title")}
-                          description={t("tools.webSearch.description")}
-                          disabled={!webSearchTool}
-                          withLabel
-                        >
-                          <InputSwitch
-                            checked={
-                              webSearchTool
-                                ? isToolEnabled(webSearchTool.id)
-                                : false
-                            }
-                            onCheckedChange={(checked) =>
-                              webSearchTool &&
-                              void toggleTool(webSearchTool.id, checked)
-                            }
+                      <Disabled disabled={!webSearchTool}>
+                        <Card border="solid" rounding={4}>
+                          <InputHorizontal
+                            title={t("tools.webSearch.title")}
+                            description={t("tools.webSearch.description")}
                             disabled={!webSearchTool}
-                          />
-                        </InputHorizontal>
-                      </Card>
-                    </Disabled>
+                            withLabel
+                          >
+                            <InputSwitch
+                              checked={
+                                webSearchTool
+                                  ? isToolEnabled(webSearchTool.id)
+                                  : false
+                              }
+                              onCheckedChange={(checked) =>
+                                webSearchTool &&
+                                void toggleTool(webSearchTool.id, checked)
+                              }
+                              disabled={!webSearchTool}
+                            />
+                          </InputHorizontal>
+                        </Card>
+                      </Disabled>
 
-                    <Disabled disabled={!openURLTool}>
-                      <Card border="solid" rounding={4}>
-                        <InputHorizontal
-                          title={t("tools.openUrl.title")}
-                          description={t("tools.openUrl.description")}
-                          disabled={!openURLTool}
-                          withLabel
-                        >
-                          <InputSwitch
-                            checked={
-                              openURLTool
-                                ? isToolEnabled(openURLTool.id)
-                                : false
-                            }
-                            onCheckedChange={(checked) =>
-                              openURLTool &&
-                              void toggleTool(openURLTool.id, checked)
-                            }
+                      <Disabled disabled={!openURLTool}>
+                        <Card border="solid" rounding={4}>
+                          <InputHorizontal
+                            title={t("tools.openUrl.title")}
+                            description={t("tools.openUrl.description")}
                             disabled={!openURLTool}
-                          />
-                        </InputHorizontal>
-                      </Card>
-                    </Disabled>
+                            withLabel
+                          >
+                            <InputSwitch
+                              checked={
+                                openURLTool
+                                  ? isToolEnabled(openURLTool.id)
+                                  : false
+                              }
+                              onCheckedChange={(checked) =>
+                                openURLTool &&
+                                void toggleTool(openURLTool.id, checked)
+                              }
+                              disabled={!openURLTool}
+                            />
+                          </InputHorizontal>
+                        </Card>
+                      </Disabled>
 
-                    <Disabled disabled={!codeInterpreterTool}>
-                      <Card border="solid" rounding={4}>
-                        <InputHorizontal
-                          title={t("tools.codeInterpreter.title")}
-                          description={t("tools.codeInterpreter.description")}
-                          disabled={!codeInterpreterTool}
-                          withLabel
-                        >
-                          <InputSwitch
-                            checked={
-                              codeInterpreterTool
-                                ? isToolEnabled(codeInterpreterTool.id)
-                                : false
-                            }
-                            onCheckedChange={(checked) =>
-                              codeInterpreterTool &&
-                              void toggleTool(codeInterpreterTool.id, checked)
-                            }
+                      <Disabled disabled={!codeInterpreterTool}>
+                        <Card border="solid" rounding={4}>
+                          <InputHorizontal
+                            title={t("tools.codeInterpreter.title")}
+                            description={t("tools.codeInterpreter.description")}
                             disabled={!codeInterpreterTool}
-                          />
-                        </InputHorizontal>
-                      </Card>
-                    </Disabled>
+                            withLabel
+                          >
+                            <InputSwitch
+                              checked={
+                                codeInterpreterTool
+                                  ? isToolEnabled(codeInterpreterTool.id)
+                                  : false
+                              }
+                              onCheckedChange={(checked) =>
+                                codeInterpreterTool &&
+                                void toggleTool(codeInterpreterTool.id, checked)
+                              }
+                              disabled={!codeInterpreterTool}
+                            />
+                          </InputHorizontal>
+                        </Card>
+                      </Disabled>
 
-                    <Disabled disabled={!codingAgentTool}>
-                      <Card border="solid" rounding={4}>
-                        <InputHorizontal
-                          title={t("tools.codingAgent.title")}
-                          description={t("tools.codingAgent.description")}
-                          disabled={!codingAgentTool}
-                          withLabel
-                        >
-                          <InputSwitch
-                            checked={
-                              codingAgentTool
-                                ? isToolEnabled(codingAgentTool.id)
-                                : false
-                            }
-                            onCheckedChange={(checked) =>
-                              codingAgentTool &&
-                              void toggleTool(codingAgentTool.id, checked)
-                            }
+                      <Disabled disabled={!codingAgentTool}>
+                        <Card border="solid" rounding={4}>
+                          <InputHorizontal
+                            title={t("tools.codingAgent.title")}
+                            description={t("tools.codingAgent.description")}
                             disabled={!codingAgentTool}
-                          />
-                        </InputHorizontal>
-                      </Card>
-                    </Disabled>
-                  </Section>
+                            withLabel
+                          >
+                            <InputSwitch
+                              checked={
+                                codingAgentTool
+                                  ? isToolEnabled(codingAgentTool.id)
+                                  : false
+                              }
+                              onCheckedChange={(checked) =>
+                                codingAgentTool &&
+                                void toggleTool(codingAgentTool.id, checked)
+                              }
+                              disabled={!codingAgentTool}
+                            />
+                          </InputHorizontal>
+                        </Card>
+                      </Disabled>
+                    </Section>
 
-                  {/* Separator between built-in tools and MCP/OpenAPI tools */}
-                  {(mcpServersWithTools.length > 0 ||
-                    openApiTools.length > 0) && (
-                    <Divider paddingPerpendicular={2} paddingParallel={0} />
-                  )}
-
-                  {/* MCP Servers & OpenAPI Tools */}
-                  <Section gap={2}>
-                    {mcpServersWithTools.map(({ server, tools }) => (
-                      <MCPServerCard
-                        key={server.id}
-                        server={server}
-                        tools={tools}
-                        isToolEnabled={isToolEnabled}
-                        onToggleTool={toggleTool}
-                        onToggleTools={toggleTools}
-                      />
-                    ))}
-                    {openApiTools.map((tool) => (
-                      <Card key={tool.id} border="solid" rounding={4}>
-                        <InputHorizontal
-                          icon={SvgActions}
-                          title={tool.display_name || tool.name}
-                          description={tool.description}
-                          withLabel
-                        >
-                          <InputSwitch
-                            checked={isToolEnabled(tool.id)}
-                            onCheckedChange={(checked) =>
-                              toggleTool(tool.id, checked)
-                            }
-                          />
-                        </InputHorizontal>
-                      </Card>
-                    ))}
+                    <MessageCard
+                      variant="info"
+                      title={markdown(
+                        t("tools.pluginsNote", {
+                          url: ADMIN_ROUTES.PLUGINS.path,
+                        })
+                      )}
+                    />
                   </Section>
                 </Collapsible>
               </Section>
@@ -1480,37 +1146,26 @@ export default function ChatPreferencesPage() {
             <Section gap={4}>
               <Card border="solid" rounding={4}>
                 <Section alignItems="stretch">
-                  <Disabled
-                    disabled={!enterpriseTier}
-                    tooltip={t("retention.tierTooltip")}
+                  {/* Below Enterprise the row stays as is; only its
+                  dropdown is locked. */}
+                  <InputHorizontal
+                    title={t("retention.title")}
+                    description={t("retention.description", {
+                      appName: settings.appName,
+                    })}
+                    tag={
+                      !enterpriseTier ? plans[Tier.ENTERPRISE].tag : undefined
+                    }
+                    withLabel
+                    fillInput
                   >
-                    <InputHorizontal
-                      title={t("retention.title")}
-                      description={t("retention.description", {
-                        appName: settings.appName,
-                      })}
-                      tag={
-                        !enterpriseTier
-                          ? {
-                              title: t("retention.enterprisePlanTag.label"),
-                              color: "amber",
-                              icon: SvgOrganization,
-                            }
-                          : undefined
+                    <RetentionField
+                      value={s.maximum_chat_retention_days ?? null}
+                      onSave={(maximum_chat_retention_days) =>
+                        void saveSettings({ maximum_chat_retention_days })
                       }
-                      disabled={!enterpriseTier}
-                      withLabel
-                      fillInput
-                    >
-                      <RetentionField
-                        value={s.maximum_chat_retention_days ?? null}
-                        disabled={!enterpriseTier}
-                        onSave={(maximum_chat_retention_days) =>
-                          void saveSettings({ maximum_chat_retention_days })
-                        }
-                      />
-                    </InputHorizontal>
-                  </Disabled>
+                    />
+                  </InputHorizontal>
 
                   <InputHorizontal
                     title={t("queryHistory.title")}
@@ -1588,7 +1243,7 @@ export default function ChatPreferencesPage() {
                 <Section>
                   <InputHorizontal
                     title={t("anonymousUsers.title")}
-                    description={t("anonymousUsers.description")}
+                    description={markdown(t("anonymousUsers.description"))}
                     withLabel
                   >
                     <InputSwitch
@@ -1603,7 +1258,7 @@ export default function ChatPreferencesPage() {
 
                   <InputHorizontal
                     title={t("disableDefaultChat.title")}
-                    description={t("disableDefaultChat.description")}
+                    description={markdown(t("disableDefaultChat.description"))}
                     withLabel
                   >
                     <InputSwitch
@@ -1643,12 +1298,15 @@ export default function ChatPreferencesPage() {
                   body: JSON.stringify({ system_prompt }),
                 });
                 if (!response.ok) {
-                  const errorMsg = (await response.json()).detail;
-                  throw new Error(errorMsg);
+                  throw new Error(
+                    await parseErrorDetail(
+                      response,
+                      t("toasts.systemPromptUpdateFailed")
+                    )
+                  );
                 }
                 await mutateDefaultAgent();
                 setSystemPromptModalOpen(false);
-                toast.success(t("toasts.systemPromptUpdated"));
               } catch {
                 toast.error(t("toasts.systemPromptUpdateFailed"));
               }

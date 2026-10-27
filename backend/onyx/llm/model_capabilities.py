@@ -27,6 +27,7 @@ from onyx.configs.model_configs import (
 )
 from onyx.llm.api_surfaces import OPENAI_COMPATIBLE_SURFACES, LlmApiSurface
 from onyx.llm.constants import BEDROCK_MODEL_TOKEN_LIMITS, LlmProviderNames
+from onyx.llm.model_catalog import CHAT_MODES
 from onyx.llm.models import ReasoningEffort
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -82,7 +83,13 @@ def _strip_colon_from_model_name(model_name: str) -> str:
     return ":".join(model_name.split(":")[:-1]) if ":" in model_name else model_name
 
 
-def find_model_obj(model_map: dict, provider: str, model_name: str) -> dict | None:
+def find_model_obj(
+    model_map: dict,
+    provider: str,
+    model_name: str,
+    *,
+    chat_only: bool = False,
+) -> dict | None:
     stripped_model_name = _strip_extra_provider_from_model_name(model_name)
 
     model_names = [
@@ -98,19 +105,43 @@ def find_model_obj(model_map: dict, provider: str, model_name: str) -> dict | No
     # Filter out None values and deduplicate model names
     filtered_model_names = [name for name in model_names if name]
 
+    # Remote first: the provider's catalog file on main is fresher than the
+    # release-frozen vendored copy. On a hit, stamp it into the map — additive
+    # only, so a later remote failure falls back to vendored, never to a
+    # stale remote copy.
+    from onyx.llm.model_catalog import find_remote_model_obj
+
+    remote: dict[str, Any] | None = find_remote_model_obj(
+        provider, filtered_model_names
+    )
+    if remote is not None and not (chat_only and not _is_chat_entry(remote)):
+        for name in filtered_model_names:
+            model_map.setdefault(f"{provider}/{name}", remote)
+            model_map.setdefault(name, remote)
+        return remote
+
+    # Vendored floor: offline/air-gapped or the model isn't in remote's file.
     # First try all model names with provider prefix
     for model_name in filtered_model_names:
         model_obj = model_map.get(f"{provider}/{model_name}")
-        if model_obj:
+        if model_obj and not (chat_only and not _is_chat_entry(model_obj)):
             return model_obj
 
     # Then try all model names without provider prefix
     for model_name in filtered_model_names:
         model_obj = model_map.get(model_name)
-        if model_obj:
+        if model_obj and not (chat_only and not _is_chat_entry(model_obj)):
             return model_obj
 
     return None
+
+
+# litellm modes that are chat-shaped for token-budget purposes; mirrors the
+# sync script's classification (image/embedding/audio modes stay excluded).
+def _is_chat_entry(model_obj: dict) -> bool:
+    """Budget lookups must not land on non-chat entries — a bare-name scan can
+    resolve e.g. a custom deployment named like an image/embedding model."""
+    return (model_obj.get("mode") or "chat") in CHAT_MODES
 
 
 def llm_max_input_tokens(
@@ -128,6 +159,7 @@ def llm_max_input_tokens(
         model_map,
         model_provider,
         model_name,
+        chat_only=True,
     )
     if not model_obj:
         logger.warning(
@@ -161,7 +193,7 @@ def get_llm_max_output_tokens(
     """Best effort attempt to get the max output tokens for the LLM."""
     default_output_tokens = int(GEN_AI_MODEL_FALLBACK_MAX_TOKENS)
 
-    model_obj = find_model_obj(model_map, model_provider, model_name)
+    model_obj = find_model_obj(model_map, model_provider, model_name, chat_only=True)
 
     if not model_obj:
         logger.warning(
@@ -557,6 +589,13 @@ _ANTHROPIC_THINKING_MIN_VERSION = (3, 7)
 # "off" is not a level they can be asked for.
 _ANTHROPIC_ALWAYS_THINKING_TIERS = ("fable", "mythos")
 
+# Opus from 5.5 rejects disabled and between_tools alike.
+_ANTHROPIC_OPUS_ALWAYS_THINKING_MIN_VERSION = (5, 5)
+
+# Sonnet from 5.5 also rejects thinking.type=disabled, but it has its own off
+# level: thinking.type=between_tools stops up-front thinking.
+_ANTHROPIC_SONNET_BETWEEN_TOOLS_MIN_VERSION = (5, 5)
+
 
 def _normalize_anthropic_name(model_name: str) -> str | None:
     """A Claude name cut down to the part that carries tier and version.
@@ -631,21 +670,47 @@ def anthropic_supports_thinking(model_name: str) -> bool:
     return _anthropic_meets_version(model_name, _ANTHROPIC_THINKING_MIN_VERSION)
 
 
-def anthropic_identity_is_always_thinking(model_names: Sequence[str]) -> bool:
-    """The deployment alias, listed last by model_identity_names, is what
-    reaches the provider, so it decides whenever it names a Claude version."""
+def _deciding_claude_name(model_names: Sequence[str]) -> str | None:
+    """The Claude name whose capabilities apply. The deployment alias, listed
+    last by model_identity_names, is what reaches the provider, so it wins
+    when it parses as Claude. None when nothing does."""
     claude_names = [
         name for name in model_names if parse_anthropic_model_version(name) is not None
     ]
-    return bool(claude_names) and anthropic_thinking_is_always_on(claude_names[-1])
+    return claude_names[-1] if claude_names else None
+
+
+def anthropic_identity_is_always_thinking(model_names: Sequence[str]) -> bool:
+    name = _deciding_claude_name(model_names)
+    return name is not None and anthropic_thinking_is_always_on(name)
+
+
+def anthropic_identity_turns_thinking_off_between_tools(
+    model_names: Sequence[str],
+) -> bool:
+    name = _deciding_claude_name(model_names)
+    return name is not None and anthropic_turns_thinking_off_between_tools(name)
 
 
 def anthropic_thinking_is_always_on(model_name: str) -> bool:
-    """True for the tiers that reason no matter what. Adaptive thinking is
+    """True for the models that reason no matter what. Adaptive thinking is
     checked first so a tier word elsewhere ("fable-writer-v2") can't match."""
-    return (
-        anthropic_uses_adaptive_thinking(model_name)
-        and _anthropic_tier(model_name) in _ANTHROPIC_ALWAYS_THINKING_TIERS
+    if not anthropic_uses_adaptive_thinking(model_name):
+        return False
+    tier: str | None = _anthropic_tier(model_name)
+    return tier in _ANTHROPIC_ALWAYS_THINKING_TIERS or (
+        tier == "opus"
+        and _anthropic_meets_version(
+            model_name, _ANTHROPIC_OPUS_ALWAYS_THINKING_MIN_VERSION
+        )
+    )
+
+
+def anthropic_turns_thinking_off_between_tools(model_name: str) -> bool:
+    """True where off is spelled thinking.type=between_tools: the model rejects
+    disabled, and between_tools is the lowest setting it accepts."""
+    return _anthropic_tier(model_name) == "sonnet" and _anthropic_meets_version(
+        model_name, _ANTHROPIC_SONNET_BETWEEN_TOOLS_MIN_VERSION
     )
 
 

@@ -31,7 +31,9 @@ from onyx.context.search.preprocessing.access_filters import (
 from onyx.db.connector_credential_pair import (
     build_user_cc_pair_access_filter,
     get_cc_pair_access_sets_for_user,
+    has_guarded_cc_pairs,
 )
+from onyx.db.connector_edit_requests import apply_access_change__no_commit
 from onyx.db.document import (
     get_cc_pair_ids_for_documents,
     upsert_document_by_connector_credential_pair,
@@ -264,8 +266,9 @@ def test_chat_file_check_follows_cc_pair_rule(
         with patch("onyx.access.access.get_cc_pair_access_mode", return_value=mode):
             return user_can_access_chat_file(file_id, user, db_session)
 
-    # Public in the source, but the private pair limits it to its groups.
-    assert can_access(world.outsider, None)
+    # Public in the source, but no perm-synced pair, so the private pair's
+    # groups limit it in every mode.
+    assert not can_access(world.outsider, None)
     assert not can_access(world.outsider, CCPairAccessMode.ENFORCE)
     assert can_access(world.member, CCPairAccessMode.ENFORCE)
     assert can_access(world.owner, CCPairAccessMode.ENFORCE)
@@ -295,6 +298,31 @@ def _write_chunk(
     index.index(
         chunks=[chunk], indexing_metadata=make_indexing_metadata([doc_id], [0], [1])
     )
+
+
+def _write_stale_public_chunk(
+    db_session: Session,
+    index: OpenSearchDocumentIndex,
+    test_index_name: str,
+    doc_id: str,
+) -> None:
+    """Writes a public chunk, as indexing did before source ACLs needed a
+    perm-synced pair."""
+    cc_pair_ids = get_cc_pair_ids_for_documents(db_session, [doc_id]).get(doc_id)
+    access = DocumentAccess.build(
+        user_emails=[],
+        user_groups=[],
+        external_user_emails=[],
+        external_user_group_ids=[],
+        is_public=True,
+    )
+    chunk = make_chunk(doc_id).model_copy(
+        update={"access": access, "cc_pair_ids": cc_pair_ids}
+    )
+    index.index(
+        chunks=[chunk], indexing_metadata=make_indexing_metadata([doc_id], [0], [1])
+    )
+    OpenSearchIndexClient(index_name=test_index_name).refresh_index()
 
 
 def _add_document(
@@ -440,10 +468,9 @@ def test_cc_pair_filter_visibility(
             )
             == expected
         ), user.email
-        # The old filter also shows a public-in-source doc of a private pair
-        # to everyone. That is the one intended difference.
-        assert _visible_docs(db_session, opensearch_index, user, None, docs) == (
-            expected | {docs.private_public_in_source}
+        # Source ACLs count only on perm-synced pairs, so the old filter agrees.
+        assert (
+            _visible_docs(db_session, opensearch_index, user, None, docs) == expected
         ), user.email
 
 
@@ -453,6 +480,7 @@ def test_shadow_mode_keeps_old_results_and_logs_disagreement(
     world: _World,
     docs: _Docs,
     opensearch_index: OpenSearchDocumentIndex,
+    test_index_name: str,
 ) -> None:
     expected_chunk_id = get_opensearch_doc_chunk_id(
         tenant_state=TenantState(
@@ -460,6 +488,9 @@ def test_shadow_mode_keeps_old_results_and_logs_disagreement(
         ),
         document_id=docs.private_public_in_source,
         chunk_index=0,
+    )
+    _write_stale_public_chunk(
+        db_session, opensearch_index, test_index_name, docs.private_public_in_source
     )
     # Run the background comparison inline so the test can read its log.
     with (
@@ -813,3 +844,110 @@ def test_deleting_restricted_pair_stays_on_chunks(
     }
     access_sets = get_cc_pair_access_sets_for_user(db_session, restricted.acl_member)
     assert restricted.pair.id in access_sets.hidden_restricted_cc_pair_ids
+
+
+# --- Awaiting first permission sync ------------------------------------------
+
+
+class _Pending(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    pair: ConnectorCredentialPair  # moved from PUBLIC to SYNC
+    only_doc_id: str  # public in the source, in the pair only
+    with_public_doc_id: str  # also in the world's PUBLIC pair
+
+
+@pytest.fixture
+def pending(
+    db_session: Session,
+    world: _World,
+    opensearch_index: OpenSearchDocumentIndex,
+    test_index_name: str,
+    ee: None,  # noqa: ARG001
+) -> Generator[_Pending, None, None]:
+    pair = _make_pair(db_session, AccessType.PUBLIC)
+    suffix = uuid4().hex[:8]
+    only_doc_id = f"acc-pending-only-{suffix}"
+    with_public_doc_id = f"acc-pending-with-public-{suffix}"
+    _add_document(db_session, [pair], only_doc_id, is_public=True)
+    _add_document(db_session, [pair, world.public_pair], with_public_doc_id)
+    # Written while the pair is PUBLIC, so both chunks have public=true.
+    for doc_id in (only_doc_id, with_public_doc_id):
+        _write_chunk(db_session, opensearch_index, doc_id)
+    OpenSearchIndexClient(index_name=test_index_name).refresh_index()
+
+    apply_access_change__no_commit(
+        db_session,
+        pair.id,
+        AccessType.SYNC,
+        data_access_group_ids=set(),
+        visible_group_ids=None,
+    )
+    db_session.commit()
+    db_session.refresh(pair)
+    assert pair.perm_sync_pending_since is not None
+    try:
+        yield _Pending(
+            pair=pair, only_doc_id=only_doc_id, with_public_doc_id=with_public_doc_id
+        )
+    finally:
+        db_session.rollback()
+        for doc_id in (only_doc_id, with_public_doc_id):
+            opensearch_index.delete(doc_id)
+        cleanup_cc_pair(db_session, pair)
+
+
+@pytest.mark.parametrize("is_ee", [True, False])
+def test_pending_pair_grants_nothing(
+    db_session: Session,
+    world: _World,
+    pending: _Pending,
+    monkeypatch: pytest.MonkeyPatch,
+    is_ee: bool,
+) -> None:
+    _set_ee(monkeypatch, is_ee)
+    assert has_guarded_cc_pairs(db_session)
+    for user in (world.member, world.outsider, world.external_user, world.anonymous):
+        access_sets = get_cc_pair_access_sets_for_user(db_session, user)
+        assert pending.pair.id not in access_sets.open_cc_pair_ids, user.email
+        assert pending.pair.id not in access_sets.acl_cc_pair_ids, user.email
+        assert pending.pair.id in access_sets.hidden_restricted_cc_pair_ids, user.email
+
+
+def test_pending_pair_hides_stale_public_chunks_in_every_mode(
+    db_session: Session,
+    world: _World,
+    pending: _Pending,
+    opensearch_index: OpenSearchDocumentIndex,
+) -> None:
+    doc_ids = {pending.only_doc_id, pending.with_public_doc_id}
+
+    def visible(user: User, mode: CCPairAccessMode | None) -> set[str]:
+        return _visible_doc_ids(db_session, opensearch_index, user, mode, doc_ids)
+
+    def visible_in_postgres(user: User) -> set[str]:
+        accessible = get_accessible_documents_by_ids(
+            db_session,
+            list(doc_ids),
+            user_email=user.email,
+            external_group_ids=[],
+            user_id=user.id,
+        )
+        return {doc.id for doc in accessible}
+
+    # The chunk keeps public=true until metadata sync, but the pair grants
+    # nothing. A granting pair of a shared document still grants.
+    for mode in (CCPairAccessMode.ENFORCE, CCPairAccessMode.SHADOW, None):
+        for user in (world.outsider, world.anonymous):
+            assert visible(user, mode) == {pending.with_public_doc_id}, (
+                user.email,
+                mode,
+            )
+    assert visible_in_postgres(world.outsider) == {pending.with_public_doc_id}
+
+    # The mark alone hides it: the same stale chunk shows once it is cleared.
+    pending.pair.perm_sync_pending_since = None
+    db_session.commit()
+    for mode in (CCPairAccessMode.ENFORCE, CCPairAccessMode.SHADOW, None):
+        assert visible(world.outsider, mode) == doc_ids, mode
+    assert visible_in_postgres(world.outsider) == doc_ids

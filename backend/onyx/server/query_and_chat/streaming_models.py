@@ -273,7 +273,9 @@ class CustomToolArgs(BaseObj):
 
 class CustomToolErrorInfo(BaseModel):
     is_auth_error: bool = False
-    status_code: int
+    # Timeout or connection failure after the request passed the SSRF checks.
+    is_unreachable: bool = False
+    status_code: int | None
     message: str
 
 

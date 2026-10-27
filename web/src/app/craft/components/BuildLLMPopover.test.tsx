@@ -41,9 +41,9 @@ const providers: LLMProviderDescriptor[] = [
     provider: "openai_compatible",
     provider_display_name: "OpenAI Compatible",
     model_configurations: [
-      model("gpt-5.6-sol", "GPT-5.6 Sol", true),
-      model("gpt-5.5", "GPT-5.5", true),
-      model("gpt-5-mini", "GPT-5 Mini"),
+      model("gpt-6.1-sol", "GPT-6.1 Sol", true),
+      model("gpt-6-sol", "GPT-6 Sol", true),
+      model("gpt-6-astra", "GPT-6 Astra"),
     ],
   },
   {
@@ -75,9 +75,9 @@ describe("BuildLLMPopover recommended models", () => {
 
     fireEvent.click(provider);
 
-    expect(screen.getByText("GPT-5.6 Sol")).toBeInTheDocument();
-    expect(screen.getByText("GPT-5.5")).toBeInTheDocument();
-    expect(screen.queryByText("GPT-5 Mini")).not.toBeInTheDocument();
+    expect(screen.getByText("GPT-6.1 Sol")).toBeInTheDocument();
+    expect(screen.getByText("GPT-6 Sol")).toBeInTheDocument();
+    expect(screen.queryByText("GPT-6 Astra")).not.toBeInTheDocument();
   });
 
   it("still lists a non-recommended model when it is the current selection", () => {
@@ -87,7 +87,7 @@ describe("BuildLLMPopover recommended models", () => {
           providerId: 13,
           providerName: "OpenAI Team",
           provider: "openai_compatible",
-          modelName: "gpt-5-mini",
+          modelName: "gpt-6-astra",
         }}
         onSelectionChange={jest.fn()}
         llmProviders={providers}
@@ -100,8 +100,8 @@ describe("BuildLLMPopover recommended models", () => {
 
     // The selected provider's group auto-expands, revealing the active model
     // alongside the recommended ones.
-    expect(screen.getByText("GPT-5 Mini")).toBeInTheDocument();
-    expect(screen.getByText("GPT-5.6 Sol")).toBeInTheDocument();
+    expect(screen.getByText("GPT-6 Astra")).toBeInTheDocument();
+    expect(screen.getByText("GPT-6.1 Sol")).toBeInTheDocument();
   });
 });
 
