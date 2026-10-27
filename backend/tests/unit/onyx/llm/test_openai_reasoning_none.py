@@ -9,7 +9,7 @@ from litellm.types.utils import Delta
 from onyx.configs.constants import MessageType
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_capabilities import openai_model_supports_reasoning_none
-from onyx.llm.model_request import UserMessage
+from onyx.llm.model_request import SerializedToolDefinition, UserMessage
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.well_known_providers.constants import (
@@ -26,11 +26,12 @@ from onyx.tools.models import ChatMinimalTextMessage
 
 _COMPLETION = "onyx.llm.litellm_singleton.litellm.completion"
 
-_TOOLS: list[dict[str, Any]] = [
+_TOOLS: list[SerializedToolDefinition] = [
     {
         "type": "function",
         "function": {
             "name": "get_weather",
+            "description": "",
             "parameters": {"type": "object", "properties": {}},
         },
     }
@@ -54,7 +55,7 @@ def _llm(
 def _sent_kwargs(
     llm: LitellmLLM,
     effort: ReasoningEffort,
-    tools: list[dict[str, Any]] | None = None,
+    tools: list[SerializedToolDefinition] | None = None,
 ) -> dict[str, Any]:
     with patch(_COMPLETION) as completion:
         llm._completion(

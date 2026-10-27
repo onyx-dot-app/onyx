@@ -13,6 +13,7 @@ from onyx.llm.model_request import (
     AssistantMessage,
     ChatCompletionMessage,
     RequestFunctionCall,
+    SerializedToolDefinition,
     ToolCall,
     ToolMessage,
     UserMessage,
@@ -20,11 +21,12 @@ from onyx.llm.model_request import (
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.multi_llm import LitellmLLM
 
-_TOOLS: list[dict[str, Any]] = [
+_TOOLS: list[SerializedToolDefinition] = [
     {
         "type": "function",
         "function": {
             "name": "search",
+            "description": "",
             "parameters": {"type": "object", "properties": {}},
         },
     }
@@ -64,7 +66,7 @@ def _llm(model_name: str, supports_reasoning: bool = False) -> LitellmLLM:
 def _sent_kwargs(
     llm: LitellmLLM,
     prompt: list[ChatCompletionMessage],
-    tools: list[dict[str, Any]] | None = _TOOLS,
+    tools: list[SerializedToolDefinition] | None = _TOOLS,
 ) -> dict[str, Any]:
     with patch("onyx.llm.litellm_singleton.litellm.completion") as completion:
         llm._completion(

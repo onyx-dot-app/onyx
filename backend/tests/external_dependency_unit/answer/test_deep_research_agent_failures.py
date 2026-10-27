@@ -1,6 +1,6 @@
 import json
 import threading
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from typing import Any
 from unittest.mock import patch
 
@@ -19,7 +19,11 @@ from onyx.deep_research.tool_definitions import (
     RESEARCH_AGENT_TOOL_NAME,
 )
 from onyx.llm.interfaces import LLMConfig, LLMUserIdentity
-from onyx.llm.model_request import ChatCompletionMessage, ToolMessage
+from onyx.llm.model_request import (
+    ChatCompletionMessage,
+    SerializedToolDefinition,
+    ToolMessage,
+)
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,
@@ -61,7 +65,9 @@ class ScriptedToolCall(BaseModel):
 
 class RecordedRequest:
     def __init__(
-        self, messages: list[ChatCompletionMessage], tools: list[dict]
+        self,
+        messages: list[ChatCompletionMessage],
+        tools: Sequence[SerializedToolDefinition],
     ) -> None:
         self.messages = messages
         self.tool_names = {tool["function"]["name"] for tool in tools}
@@ -108,7 +114,7 @@ class DeepResearchScriptLLM(LitellmLLM):
     def invoke_raw(
         self,
         prompt: list[ChatCompletionMessage],  # noqa: ARG002
-        tools: list[dict] | None = None,  # noqa: ARG002
+        tools: Sequence[SerializedToolDefinition] | None = None,  # noqa: ARG002
         tool_choice: ToolChoice | None = None,  # noqa: ARG002
         structured_response_format: dict | None = None,  # noqa: ARG002
         max_tokens: int | None = None,  # noqa: ARG002
@@ -122,7 +128,7 @@ class DeepResearchScriptLLM(LitellmLLM):
     def stream_raw(
         self,
         prompt: list[ChatCompletionMessage],
-        tools: list[dict] | None = None,
+        tools: Sequence[SerializedToolDefinition] | None = None,
         tool_choice: ToolChoice | None = None,  # noqa: ARG002
         structured_response_format: dict | None = None,  # noqa: ARG002
         max_tokens: int | None = None,  # noqa: ARG002

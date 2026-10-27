@@ -2,7 +2,7 @@
 
 import json
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, TypedDict
 
 from pydantic import BaseModel, JsonValue
 
@@ -149,7 +149,22 @@ def format_provider_message(message: app.Message) -> ChatCompletionMessage:
     raise TypeError(f"Unsupported message type: {type(message).__name__}")
 
 
-def serialize_tools(tools: Sequence[app.ToolDefinition]) -> list[dict[str, JsonValue]]:
+class SerializedToolFunction(TypedDict):
+    name: str
+    description: str
+    parameters: dict[str, JsonValue]
+
+
+class SerializedToolDefinition(TypedDict):
+    """A tool in the wire shape LiteLLM and the chat loop pass around."""
+
+    type: Literal["function"]
+    function: SerializedToolFunction
+
+
+def serialize_tools(
+    tools: Sequence[app.ToolDefinition],
+) -> list[SerializedToolDefinition]:
     return [
         {
             "type": "function",

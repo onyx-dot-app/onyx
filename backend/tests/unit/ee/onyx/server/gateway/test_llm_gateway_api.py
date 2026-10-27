@@ -27,6 +27,7 @@ from onyx.llm.model_request import (
     AssistantMessage,
     ChatCompletionMessage,
     RequestFunctionCall,
+    SerializedToolDefinition,
     SystemMessage,
     ToolCall,
     UserMessage,
@@ -944,7 +945,7 @@ def test_parse_tool_choice_refuses_unsupported(raw: object) -> None:
 )
 def test_require_named_tool(
     tool_choice: ToolChoiceOptions | NamedToolChoice | None,
-    tools: list[dict[str, Any]] | None,
+    tools: list[SerializedToolDefinition] | None,
     should_raise: bool,
 ) -> None:
     if should_raise:

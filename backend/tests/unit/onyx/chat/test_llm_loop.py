@@ -28,6 +28,7 @@ from onyx.file_store.models import (
     FileToolMetadata,
 )
 from onyx.llm.interfaces import LLMConfig
+from onyx.llm.model_request import SerializedToolDefinition
 from onyx.llm.models import ToolChoiceOptions
 from onyx.prompts.chat_prompts import (
     ANSWER_COMPLETENESS_REMINDER,
@@ -1468,12 +1469,13 @@ class TestForgottenFilesNoticeFollowsConstructedTools:
 
 
 class TestFallbackToolExtraction:
-    def _tool_defs(self) -> list[dict]:
+    def _tool_defs(self) -> list[SerializedToolDefinition]:
         return [
             {
                 "type": "function",
                 "function": {
                     "name": "internal_search",
+                    "description": "",
                     "parameters": {
                         "type": "object",
                         "properties": {

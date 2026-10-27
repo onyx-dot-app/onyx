@@ -25,6 +25,7 @@ from onyx.llm.model_request import (
     AssistantMessage,
     ChatCompletionMessage,
     RequestFunctionCall,
+    SerializedToolDefinition,
     ToolCall,
     ToolMessage,
     UserMessage,
@@ -207,7 +208,7 @@ def test_multiple_tool_calls(default_multi_llm: LitellmLLM) -> None:
         ]
 
         # Define available tools
-        tools = [
+        tools: list[SerializedToolDefinition] = [
             {
                 "type": "function",
                 "function": {
@@ -361,7 +362,7 @@ def test_multiple_tool_calls_streaming(default_multi_llm: LitellmLLM) -> None:
             UserMessage(content="What's the weather and time in New York?")
         ]
 
-        tools = [
+        tools: list[SerializedToolDefinition] = [
             {
                 "type": "function",
                 "function": {
@@ -2638,7 +2639,7 @@ def test_no_tool_choice_sent_when_no_tools(default_multi_llm: LitellmLLM) -> Non
         )
 
 
-_TOOL_CHOICE_DOWNGRADE_TOOLS = [
+_TOOL_CHOICE_DOWNGRADE_TOOLS: list[SerializedToolDefinition] = [
     {
         "type": "function",
         "function": {
@@ -2921,7 +2922,7 @@ def test_bedrock_claude_keeps_thinking_when_thinking_blocks_missing() -> None:
         ),
     ]
 
-    tools = [
+    tools: list[SerializedToolDefinition] = [
         {
             "type": "function",
             "function": {
@@ -2966,7 +2967,7 @@ def test_bedrock_claude_keeps_thinking_when_no_tool_history() -> None:
         UserMessage(content="What's the weather?"),
     ]
 
-    tools = [
+    tools: list[SerializedToolDefinition] = [
         {
             "type": "function",
             "function": {
@@ -3010,7 +3011,7 @@ def test_bifrost_claude_includes_allowed_openai_params() -> None:
     messages: list[ChatCompletionMessage] = [
         UserMessage(content="Use a tool if needed")
     ]
-    tools = [
+    tools: list[SerializedToolDefinition] = [
         {
             "type": "function",
             "function": {
@@ -3308,7 +3309,7 @@ def _invoke_stream_flag(
     llm: LitellmLLM,
     injection_enabled: bool,
     total_timeout_s: float = 60,
-    tools: list[dict] | None = None,
+    tools: list[SerializedToolDefinition] | None = None,
 ) -> tuple[bool, ModelResponse]:
     """Run invoke() with litellm mocked and report the stream kwarg it sent."""
     model_name = llm.config.model_name
@@ -3384,7 +3385,12 @@ def test_invoke_plain_request_even_with_tools(
     streamed, _ = _invoke_stream_flag(
         default_multi_llm,
         injection_enabled=False,
-        tools=[{"type": "function", "function": {"name": "search"}}],
+        tools=[
+            {
+                "type": "function",
+                "function": {"name": "search", "description": "", "parameters": {}},
+            }
+        ],
     )
 
     assert streamed is False

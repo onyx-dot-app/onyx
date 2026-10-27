@@ -3,6 +3,7 @@ import queue
 import threading
 import time
 import uuid
+from collections.abc import Sequence
 from contextlib import closing
 from functools import partial
 from itertools import count
@@ -47,6 +48,8 @@ from onyx.llm.interfaces import LLM
 from onyx.llm.model_request import (
     AssistantMessage,
     ChatCompletionMessage,
+    SerializedToolDefinition,
+    SerializedToolFunction,
     ToolCall,
     UserMessage,
 )
@@ -325,7 +328,7 @@ def _stream_worker(
     llm: LitellmLLM,
     flow: LLMFlow,
     messages: list[ChatCompletionMessage],
-    tools: list[dict[str, Any]] | None,
+    tools: list[SerializedToolDefinition] | None,
     tool_choice: ToolChoice | None,
     structured_response_format: dict[str, Any] | None,
     max_tokens: int | None,
@@ -391,7 +394,8 @@ def handle_chat_completion(
     )
     messages = _prepare_messages(llm, request.messages)
     tool_choice = _parse_tool_choice(request.tool_choice)
-    _require_named_tool(tool_choice, request.tools)
+    tools = cast(list[SerializedToolDefinition] | None, request.tools)
+    _require_named_tool(tool_choice, tools)
     reasoning_effort = _parse_reasoning_effort(request.reasoning_effort)
     max_tokens = request.max_completion_tokens or request.max_tokens
 
@@ -417,14 +421,14 @@ def handle_chat_completion(
             llm,
             flow=flow,
             input_messages=messages,
-            tools=request.tools,
+            tools=tools,
         ) as span,
     ):
         try:
             response = llm.invoke_raw(
                 prompt=messages,
                 total_timeout_s=GATEWAY_LLM_TOTAL_TIMEOUT_SECONDS,
-                tools=request.tools,
+                tools=tools,
                 tool_choice=tool_choice,
                 structured_response_format=request.response_format,
                 max_tokens=max_tokens,
@@ -508,7 +512,9 @@ def _responses_input_to_raw_messages(request: ResponsesRequest) -> list[dict[str
     return raw
 
 
-def _responses_tools(request: ResponsesRequest) -> list[dict[str, Any]] | None:
+def _responses_tools(
+    request: ResponsesRequest,
+) -> list[SerializedToolDefinition] | None:
     from litellm.responses.litellm_completion_transformation.transformation import (
         LiteLLMCompletionResponsesConfig,
     )
@@ -518,7 +524,7 @@ def _responses_tools(request: ResponsesRequest) -> list[dict[str, Any]] | None:
             cast(Any, request.tools)
         )
     )
-    return cast(list[dict[str, Any]], tools) or None
+    return cast(list[SerializedToolDefinition], tools) or None
 
 
 def _function_call_item(
@@ -562,7 +568,7 @@ def _responses_stream_worker(
     llm: LitellmLLM,
     flow: LLMFlow,
     messages: list[ChatCompletionMessage],
-    tools: list[dict[str, Any]] | None,
+    tools: list[SerializedToolDefinition] | None,
     tool_choice: ToolChoice | None,
     max_tokens: int | None,
     reasoning_effort: ReasoningEffort,
@@ -940,10 +946,10 @@ def _anthropic_messages_to_raw_messages(
 
 def _anthropic_tools(
     raw_tools: list[dict[str, Any]] | None,
-) -> list[dict[str, Any]] | None:
+) -> list[SerializedToolDefinition] | None:
     if not raw_tools:
         return None
-    tools: list[dict[str, Any]] = []
+    tools: list[SerializedToolDefinition] = []
     for tool in raw_tools:
         name = tool.get("name")
         input_schema = tool.get("input_schema")
@@ -954,9 +960,11 @@ def _anthropic_tools(
                 f"Tool {identifier!r} is not supported by the Onyx gateway; "
                 "only client tools with an input_schema are accepted.",
             )
-        function: dict[str, Any] = {"name": name, "parameters": input_schema}
-        if "description" in tool:
-            function["description"] = tool["description"]
+        function: SerializedToolFunction = {
+            "name": name,
+            "description": tool.get("description", ""),
+            "parameters": input_schema,
+        }
         tools.append({"type": "function", "function": function})
     return tools
 
@@ -984,7 +992,7 @@ def _anthropic_tool_choice(raw: dict[str, Any] | None) -> ToolChoice | None:
 
 
 def _require_named_tool(
-    tool_choice: ToolChoice | None, tools: list[dict[str, Any]] | None
+    tool_choice: ToolChoice | None, tools: Sequence[SerializedToolDefinition] | None
 ) -> None:
     """A named tool_choice referencing an absent tool would fail opaquely
     upstream; refuse it with a clear error instead."""
@@ -1098,7 +1106,7 @@ def _anthropic_stream_worker(
     llm: LitellmLLM,
     flow: LLMFlow,
     messages: list[ChatCompletionMessage],
-    tools: list[dict[str, Any]] | None,
+    tools: list[SerializedToolDefinition] | None,
     tool_choice: ToolChoice | None,
     max_tokens: int,
     reasoning_effort: ReasoningEffort,

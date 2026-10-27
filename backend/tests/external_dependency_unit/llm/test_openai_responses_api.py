@@ -24,7 +24,11 @@ import pytest
 
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.litellm_singleton import litellm
-from onyx.llm.model_request import ChatCompletionMessage, UserMessage
+from onyx.llm.model_request import (
+    ChatCompletionMessage,
+    SerializedToolDefinition,
+    UserMessage,
+)
 from onyx.llm.multi_llm import LitellmLLM
 from tests.common.models import CI_OPENAI_MODEL
 from tests.utils.secret_names import TestSecret
@@ -58,7 +62,7 @@ def test_streaming_parallel_tool_calls_land_in_distinct_slots(
     """
     llm = _build_openai_llm(CI_OPENAI_MODEL, test_secrets[TestSecret.OPENAI_API_KEY])
 
-    tools = [
+    tools: list[SerializedToolDefinition] = [
         {
             "type": "function",
             "function": {

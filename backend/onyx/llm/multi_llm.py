@@ -3,7 +3,7 @@ import json
 import math
 import os
 import time
-from collections.abc import Generator, Iterable, Iterator
+from collections.abc import Generator, Iterable, Iterator, Sequence
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Union, cast
@@ -74,6 +74,7 @@ from onyx.llm.model_capabilities import (
 from onyx.llm.model_request import (
     ChatCompletionMessage,
     RequestFunctionCall,
+    SerializedToolDefinition,
     serialize_request,
     serialize_tools,
 )
@@ -839,7 +840,7 @@ class LitellmLLM(LLM):
     def _completion(
         self,
         prompt: list[ChatCompletionMessage],
-        tools: list[dict] | None,
+        tools: Sequence[SerializedToolDefinition] | None,
         tool_choice: ToolChoice | None,
         stream: bool,
         parallel_tool_calls: bool,
@@ -1355,7 +1356,7 @@ class LitellmLLM(LLM):
                         messages=messages,
                         # None (omitted) rather than [] — some OpenAI-compatible
                         # servers reject requests with an empty tools array.
-                        tools=tools or None,
+                        tools=list(tools) if tools else None,
                         stream=stream,
                         timeout=timeout,
                         max_tokens=max_tokens,
@@ -1473,7 +1474,7 @@ class LitellmLLM(LLM):
     def invoke_raw(
         self,
         prompt: list[ChatCompletionMessage],
-        tools: list[dict] | None = None,
+        tools: Sequence[SerializedToolDefinition] | None = None,
         tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
         max_tokens: int | None = None,
@@ -1613,7 +1614,7 @@ class LitellmLLM(LLM):
     def stream_raw(
         self,
         prompt: list[ChatCompletionMessage],
-        tools: list[dict] | None = None,
+        tools: Sequence[SerializedToolDefinition] | None = None,
         tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
         max_tokens: int | None = None,
