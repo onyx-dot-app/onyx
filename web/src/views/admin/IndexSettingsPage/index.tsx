@@ -27,6 +27,7 @@ import {
   MessageCard,
   SelectCard,
   Spacer,
+  InputNumber,
   InputSwitch,
   Tabs,
   Text,
@@ -72,7 +73,7 @@ import {
   CLOUD_BASED_PROVIDERS,
   CUSTOM_PROVIDER,
   DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB,
-  MAX_IMAGE_SIZE_OPTIONS,
+  MAX_IMAGE_ANALYSIS_MAX_SIZE_MB,
   SELF_HOSTED_PROVIDERS,
 } from "@/lib/searchSettings/constants";
 import {
@@ -699,7 +700,8 @@ interface IndexSettingsFormValues extends EmbeddingModelSelection {
   vector_quantization: VectorQuantization;
   image_processing_enabled: boolean;
   image_processing_model_configuration_id: number | null;
-  image_processing_max_size_mb: number;
+  /** Null means the backend default. */
+  image_processing_max_size_mb: number | null;
 }
 
 /**
@@ -1095,9 +1097,7 @@ export default function IndexSettingsPage() {
       image_processing_enabled:
         settings.image_extraction_and_analysis_enabled ?? false,
       image_processing_model_configuration_id: captioningModelConfigId,
-      image_processing_max_size_mb:
-        settings.image_analysis_max_size_mb ??
-        DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB,
+      image_processing_max_size_mb: settings.image_analysis_max_size_mb ?? null,
     }),
     [
       savedSelection,
@@ -2457,32 +2457,26 @@ export default function IndexSettingsPage() {
                             >
                               <InputHorizontal
                                 title={t("maxImageSize.title")}
-                                suffix={t("maxImageSize.suffix")}
                                 description={t("maxImageSize.description")}
                                 disabled={!values.image_processing_enabled}
                                 withLabel
+                                fillInput
                               >
-                                <InputSingleSelect
-                                  value={String(
-                                    values.image_processing_max_size_mb
-                                  )}
-                                  onValueChange={(value) =>
+                                <InputNumber
+                                  value={values.image_processing_max_size_mb}
+                                  onChange={(value) =>
                                     void setFieldValue(
                                       "image_processing_max_size_mb",
-                                      parseInt(value, 10)
+                                      value
                                     )
                                   }
+                                  min={1}
+                                  max={MAX_IMAGE_ANALYSIS_MAX_SIZE_MB}
+                                  suffix={t("maxImageSize.suffix")}
+                                  placeholder={String(
+                                    DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB
+                                  )}
                                   disabled={!values.image_processing_enabled}
-                                  defaultOption="20"
-                                  placeholder={tInputSelect(
-                                    "placeholder.fallback"
-                                  )}
-                                  options={MAX_IMAGE_SIZE_OPTIONS.map(
-                                    (size) => ({
-                                      value: size,
-                                      title: size,
-                                    })
-                                  )}
                                 />
                               </InputHorizontal>
                             </Disabled>

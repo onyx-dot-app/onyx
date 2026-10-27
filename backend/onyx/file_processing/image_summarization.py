@@ -8,6 +8,7 @@ from onyx.configs.app_configs import (
     IMAGE_SUMMARIZATION_USER_PROMPT,
 )
 from onyx.configs.chat_configs import IMAGE_SUMMARIZATION_TIMEOUT
+from onyx.configs.llm_configs import get_image_analysis_max_size_mb
 from onyx.llm.interfaces import LLM, GenerationContext
 from onyx.llm.models import (
     ContentPart,
@@ -34,8 +35,11 @@ class UnsupportedImageFormatError(ValueError):
 
 def prepare_image_bytes(image_data: bytes) -> str:
     """Prepare image bytes for summarization.
-    Resizes image if it's larger than 20MB. Encodes image as a base64 string."""
-    image_data = _resize_image_if_needed(image_data)
+    Resizes the image if it is larger than the workspace's max size setting.
+    Encodes the image as a base64 string."""
+    image_data = _resize_image_if_needed(
+        image_data, max_size_mb=get_image_analysis_max_size_mb()
+    )
 
     # encode image (base64)
     encoded_image = _encode_image_for_llm_prompt(image_data)
@@ -175,7 +179,7 @@ def _encode_image_for_llm_prompt(image_data: bytes) -> str:
     return f"data:{mime_type};base64,{base64_encoded_data}"
 
 
-def _resize_image_if_needed(image_data: bytes, max_size_mb: int = 20) -> bytes:
+def _resize_image_if_needed(image_data: bytes, max_size_mb: int) -> bytes:
     """Resize image if it's larger than the specified max size in MB."""
     max_size_bytes = max_size_mb * 1024 * 1024
 

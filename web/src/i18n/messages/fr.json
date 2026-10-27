@@ -6997,7 +6997,7 @@
       },
       "maxImageSize": {
         "description": "Les images dépassant cette taille seront ignorées pour limiter l’utilisation des ressources.",
-        "suffix": "(Mo)",
+        "suffix": "Mo",
         "title": "Taille maximale des images à analyser"
       },
       "modal": {

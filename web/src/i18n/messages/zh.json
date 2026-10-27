@@ -6997,7 +6997,7 @@
       },
       "maxImageSize": {
         "description": "超过此大小的图片将被跳过，以限制资源使用。",
-        "suffix": "(MB)",
+        "suffix": "MB",
         "title": "分析的最大图像大小"
       },
       "modal": {

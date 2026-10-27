@@ -1,9 +1,10 @@
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from onyx.configs.app_configs import (
     DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS,
+    DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB,
     DEFAULT_PRUNING_FREQ,
     DEFAULT_REFRESH_FREQ,
     DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB,
@@ -11,6 +12,7 @@ from onyx.configs.app_configs import (
     MAX_ALLOWED_UPLOAD_SIZE_MB,
     MAX_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS,
     MAX_EMBEDDING_RATE_LIMIT_REQUESTS,
+    MAX_IMAGE_ANALYSIS_MAX_SIZE_MB,
 )
 from onyx.configs.constants import QueryHistoryType
 from onyx.db.enums import SupportedLanguage
@@ -84,7 +86,12 @@ class Settings(BaseModel):
 
     # Image processing settings
     image_extraction_and_analysis_enabled: bool | None = True
-    image_analysis_max_size_mb: int | None = 20
+    # Images above this size are resized before analysis. None means the default.
+    image_analysis_max_size_mb: int | None = Field(
+        default=DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB,
+        ge=1,
+        le=MAX_IMAGE_ANALYSIS_MAX_SIZE_MB,
+    )
 
     # Global limit on indexing embedding requests: at most this many in any
     # window of `embedding_rate_limit_period_seconds`. None means no limit.
@@ -138,6 +145,15 @@ class Settings(BaseModel):
     # Deprecated: OpenSearch is the only document index, so this is always True.
     # Kept for API clients that still read it (e.g. the Terraform provider).
     opensearch_indexing_enabled: bool = True
+
+    @field_validator("image_analysis_max_size_mb", mode="before")
+    @classmethod
+    def _clamp_image_analysis_max_size_mb(cls, value: object) -> object:
+        # Clamp, not reject: a stored value from before the bound must still
+        # load, or load_settings falls back to blank settings.
+        if isinstance(value, int) and not isinstance(value, bool):
+            return min(max(value, 1), MAX_IMAGE_ANALYSIS_MAX_SIZE_MB)
+        return value
 
 
 class UserSettings(Settings):

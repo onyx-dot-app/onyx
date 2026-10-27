@@ -6997,7 +6997,7 @@
       },
       "maxImageSize": {
         "description": "Images above this size will be skipped to limit resource usage.",
-        "suffix": "(MB)",
+        "suffix": "MB",
         "title": "Max Image Size for Analysis"
       },
       "modal": {
