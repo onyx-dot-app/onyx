@@ -187,29 +187,66 @@ def test_explicit_commit_operations_are_checked(repo: Path, operation: str) -> N
     assert _checked(repo) == {"base.txt"}
 
 
-@pytest.mark.parametrize(
-    "operation", ["cherry-pick", "merge", "rebase", "rebase-with-commit"]
-)
-def test_only_conflict_resolutions_are_checked(repo: Path, operation: str) -> None:
+_CONFLICT_COMMANDS = {
+    "cherry-pick": ["cherry-pick", "upstream"],
+    "merge": ["merge", "upstream"],
+    "rebase": ["rebase", "upstream"],
+    "rebase-with-commit": ["rebase", "upstream"],
+    "rebase-apply": ["rebase", "--apply", "upstream"],
+    "pull-rebase": ["pull", "--rebase", ".", "upstream"],
+}
+
+
+def _conflict(repo: Path, operation: str) -> None:
+    result = subprocess.run(
+        ["git", *_CONFLICT_COMMANDS[operation]],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0, result.stdout
+
+
+def _resolve(repo: Path, operation: str) -> None:
+    (repo / "base.txt").write_text("resolved\n")
+    _git(repo, "add", "base.txt")
+    if operation in ("merge", "rebase-with-commit"):
+        _git(repo, "commit", "-q", "--no-edit")
+    if operation != "merge":
+        command = "cherry-pick" if operation == "cherry-pick" else "rebase"
+        _git(repo, "-c", "core.editor=true", command, "--continue")
+
+
+def _diverge(repo: Path) -> None:
     _git(repo, "checkout", "-qb", "upstream")
     _commit(repo, "upstream.txt")
     _commit(repo, "base.txt", "upstream edit\n")
     _git(repo, "checkout", "-q", "main")
+
+
+@pytest.mark.parametrize("operation", list(_CONFLICT_COMMANDS))
+def test_only_conflict_resolutions_are_checked(repo: Path, operation: str) -> None:
+    _diverge(repo)
     (repo / "local.txt").write_text("local\n")
     _git(repo, "add", "local.txt")
     _commit(repo, "base.txt", "local edit\n")
-    command = operation.removesuffix("-with-commit")
     _start(repo)
-    conflict = subprocess.run(
-        ["git", command, "upstream"], cwd=repo, capture_output=True, text=True
-    )
-    assert conflict.returncode != 0, conflict.stdout
-    (repo / "base.txt").write_text("resolved\n")
-    _git(repo, "add", "base.txt")
-    if command == "merge" or operation == "rebase-with-commit":
-        _git(repo, "commit", "-q", "--no-edit")
-    if command != "merge":
-        _git(repo, "-c", "core.editor=true", command, "--continue")
+    _conflict(repo, operation)
+    _resolve(repo, operation)
+    _stop(repo)
+    assert _checked(repo) == {"base.txt"}
+
+
+def test_rebase_pairs_repeated_subjects_in_order(repo: Path) -> None:
+    _diverge(repo)
+    (repo / "base.txt").write_text("local edit\n")
+    _git(repo, "commit", "-qam", "Same subject")
+    (repo / "local.txt").write_text("local\n")
+    _git(repo, "add", "local.txt")
+    _git(repo, "commit", "-qm", "Same subject")
+    _start(repo)
+    _conflict(repo, "rebase")
+    _resolve(repo, "rebase")
     _stop(repo)
     assert _checked(repo) == {"base.txt"}
 
