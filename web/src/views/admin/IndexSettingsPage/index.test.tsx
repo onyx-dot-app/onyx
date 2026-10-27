@@ -196,7 +196,6 @@ function queryModelCard(
   );
 }
 
-const BRING_YOUR_OWN = "Advanced: bring your own model or proxy";
 const GRANITE = "ibm-granite/granite-embedding-97m-multilingual-r2";
 const BIFROST_MODEL = "openai/text-embedding-3-small";
 
@@ -308,7 +307,7 @@ describe("IndexSettingsPage embedding model picker", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps the bring-your-own options in the collapsed Advanced section", async () => {
+  it("lists the bring-your-own options with the other providers", async () => {
     setCurrentModel(
       "text-embedding-3-small",
       EmbeddingProviderName.OPENAI,
@@ -318,14 +317,6 @@ describe("IndexSettingsPage embedding model picker", () => {
     const user = setupUser();
     render(<IndexSettingsPage />);
     await openModelPicker(user);
-
-    const toggle = screen.getByRole("button", { name: BRING_YOUR_OWN });
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(
-      screen.queryByText("Add configs for your Azure embedding providers.")
-    ).toBeNull();
-
-    await user.click(toggle);
 
     expect(
       screen.getByText("Add configs for your LiteLLM embedding providers.")
@@ -349,7 +340,6 @@ describe("IndexSettingsPage embedding model picker", () => {
     const user = setupUser();
     render(<IndexSettingsPage />);
     await openModelPicker(user);
-    await user.click(screen.getByRole("button", { name: BRING_YOUR_OWN }));
     await user.click(
       screen.getByText("Add configs for your Bifrost embedding providers.")
     );
@@ -380,28 +370,19 @@ describe("IndexSettingsPage embedding model picker", () => {
     ).toBeInTheDocument();
   });
 
-  it("opens the bring-your-own section on a current Bifrost model and shows its card", async () => {
+  it("shows a current Bifrost model as the current card", async () => {
     setCurrentModel(BIFROST_MODEL, EmbeddingProviderName.BIFROST, 1536);
     configureProviders(EmbeddingProviderName.BIFROST);
     const user = setupUser();
     render(<IndexSettingsPage />);
     await openModelPicker(user);
 
-    const toggle = screen.getByRole("button", { name: BRING_YOUR_OWN });
-    expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(
       within(modelCard(EmbeddingProviderName.BIFROST, BIFROST_MODEL)).getByRole(
         "button",
         { name: "Current Model" }
       )
     ).toBeInTheDocument();
-
-    // The admin can still fold it.
-    await user.click(toggle);
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(
-      queryModelCard(EmbeddingProviderName.BIFROST, BIFROST_MODEL)
-    ).toBeNull();
   });
 
   it("finds a current bring-your-own model by its name", async () => {
@@ -496,7 +477,6 @@ describe("IndexSettingsPage embedding model picker", () => {
     const user = setupUser();
     render(<IndexSettingsPage />);
     await openModelPicker(user);
-    await user.click(screen.getByRole("button", { name: BRING_YOUR_OWN }));
     await user.click(screen.getByRole("button", { name: "Add Custom Model" }));
 
     const dialog = await screen.findByRole("dialog", {

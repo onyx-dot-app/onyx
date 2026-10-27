@@ -7045,11 +7045,6 @@
         "addCustomModel": {
           "label": "إضافة نموذج مخصص"
         },
-        "bringYourOwn": {
-          "cloudDescription": "اربط وكيل LiteLLM أو نشر Azure OpenAI أو بوابة Bifrost أو نقطة نهاية متوافقة مع OpenAI. تحدد أنت اسم النموذج. وفي LiteLLM وAzure ونقاط النهاية المتوافقة مع OpenAI تحدد أيضًا الأبعاد.",
-          "selfHostedDescription": "شغّل نموذج تضمين من Hugging Face غير موجود في القائمة أعلاه. تحدد أنت اسم النموذج وأبعاده وبادئاته.",
-          "title": "متقدم: استخدم نموذجك أو الوكيل الخاص بك"
-        },
         "cloudTab": {
           "label": "سحابي"
         },

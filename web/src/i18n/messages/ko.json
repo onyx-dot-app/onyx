@@ -7045,11 +7045,6 @@
         "addCustomModel": {
           "label": "사용자 지정 모델 추가"
         },
-        "bringYourOwn": {
-          "cloudDescription": "LiteLLM 프록시, Azure OpenAI 배포, Bifrost 게이트웨이 또는 OpenAI 호환 엔드포인트를 연결합니다. 모델 이름은 직접 입력합니다. LiteLLM, Azure, OpenAI 호환 엔드포인트는 차원도 입력합니다.",
-          "selfHostedDescription": "위 목록에 없는 Hugging Face 임베딩 모델을 실행합니다. 모델 이름, 차원, 접두사는 직접 입력합니다.",
-          "title": "고급: 자체 모델 또는 프록시 사용"
-        },
         "cloudTab": {
           "label": "클라우드 기반"
         },

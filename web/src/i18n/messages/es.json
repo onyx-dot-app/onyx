@@ -7045,11 +7045,6 @@
         "addCustomModel": {
           "label": "Añadir modelo personalizado"
         },
-        "bringYourOwn": {
-          "cloudDescription": "Conecta un proxy de LiteLLM, una implementación de Azure OpenAI, una puerta de enlace de Bifrost o un endpoint compatible con OpenAI. Tú indicas el nombre del modelo. Para LiteLLM, Azure y los endpoints compatibles con OpenAI, también indicas la dimensión.",
-          "selfHostedDescription": "Ejecuta un modelo de embeddings de Hugging Face que no esté en la lista anterior. Tú indicas el nombre, la dimensión y los prefijos del modelo.",
-          "title": "Avanzado: usa tu propio modelo o proxy"
-        },
         "cloudTab": {
           "label": "En la nube"
         },
