@@ -49,7 +49,6 @@ import {
 } from "@opal/icons";
 import { copyText, escapeMarkdown, markdown } from "@opal/utils";
 import { useModal } from "@opal/components";
-import { ShareAccessRow } from "@/sections/modals/ShareAccessRow";
 import { SharePermissionMenu } from "@/lib/permissions/components";
 import {
   useSharePermissionOptions,
@@ -68,6 +67,19 @@ import {
 type ShareModalView = "share" | "transfer";
 
 /** One row of the people table: the admins, an owner, or a share. */
+// The access column's fixed width, shared by the scope row and the people
+// table so their menus line up. Wide enough for the longest label
+// ("Ansehen & Chatten") with its icon and chevron.
+const ACCESS_COLUMN_WIDTH = 200;
+
+/** The general-access row: a one-row table shaped like the people table. */
+interface ScopeTableRow {
+  id: string;
+  icon: IconFunctionComponent;
+  scope: React.ReactNode;
+  access: React.ReactNode;
+}
+
 interface ShareTableRow {
   id: string;
   name: string;
@@ -742,13 +754,73 @@ export function ShareAgentModal({
       {
         kind: "display",
         id: "access",
-        // Fixed, so every row's access cell starts at the same x. Wide enough
-        // for the longest label ("Ansehen & Chatten") with its icon and chevron.
-        width: { fixed: 200 },
+        // Fixed, so every row's access cell starts at the same x.
+        width: { fixed: ACCESS_COLUMN_WIDTH },
         hideable: false,
         cell: (row) => row.trailing,
       },
     ];
+
+    // Same qualifier and access columns as the people table, so the scope
+    // row's menus line up with the rows below the divider.
+    const scopeColumns: TableColumn<ScopeTableRow>[] = [
+      {
+        kind: "qualifier",
+        content: "icon",
+        icon: (row) => row.icon,
+        background: true,
+      },
+      {
+        kind: "display",
+        id: "scope",
+        width: { weight: 60 },
+        hideable: false,
+        cell: (row) => row.scope,
+      },
+      {
+        kind: "display",
+        id: "access",
+        width: { fixed: ACCESS_COLUMN_WIDTH },
+        hideable: false,
+        cell: (row) => row.access,
+      },
+    ];
+    const scopeRow: ScopeTableRow = {
+      id: "scope",
+      icon: scopeIcon,
+      scope: (
+        <SharePermissionMenu
+          ariaLabel={t("shareAgent.scopeMenu.ariaLabel")}
+          // Stays visible so the current scope still reads; only changing it is gated.
+          disabled={!canEditShares || !canPublish}
+          showTriggerIcon={false}
+          onChange={(scope) => {
+            setDraftState((currentDraftState) => ({
+              ...currentDraftState,
+              isPublic: scope === "PUBLIC",
+            }));
+          }}
+          options={scopeOptions}
+          value={effectiveState.isPublic ? "PUBLIC" : "PRIVATE"}
+          layout="row"
+        />
+      ),
+      access: (
+        <SharePermissionMenu
+          ariaLabel={t("shareAgent.publicPermissionMenu.ariaLabel")}
+          disabled={!canEditShares || !canPublish}
+          onChange={(permission) => {
+            setDraftState((currentDraftState) => ({
+              ...currentDraftState,
+              publicPermission: permission,
+            }));
+          }}
+          options={permissionOptions}
+          value={effectiveState.publicPermission}
+          layout="row"
+        />
+      ),
+    };
 
     // The card adds 0.5rem and each row's own padding the other 0.5rem
     return (
@@ -769,40 +841,14 @@ export function ShareAgentModal({
             />
           ) : null}
 
-          {/* Mock anatomy: icon + scope trigger on the left, org-permission
-            trigger on the right — no label or description text */}
-          <ShareAccessRow
-            icon={scopeIcon}
-            titleSlot={
-              <SharePermissionMenu
-                ariaLabel={t("shareAgent.scopeMenu.ariaLabel")}
-                // Stays visible so the current scope still reads; only changing it is gated.
-                disabled={!canEditShares || !canPublish}
-                showTriggerIcon={false}
-                onChange={(scope) => {
-                  setDraftState((currentDraftState) => ({
-                    ...currentDraftState,
-                    isPublic: scope === "PUBLIC",
-                  }));
-                }}
-                options={scopeOptions}
-                value={effectiveState.isPublic ? "PUBLIC" : "PRIVATE"}
-              />
-            }
-            rightChildren={
-              <SharePermissionMenu
-                ariaLabel={t("shareAgent.publicPermissionMenu.ariaLabel")}
-                disabled={!canEditShares || !canPublish}
-                onChange={(permission) => {
-                  setDraftState((currentDraftState) => ({
-                    ...currentDraftState,
-                    publicPermission: permission,
-                  }));
-                }}
-                options={permissionOptions}
-                value={effectiveState.publicPermission}
-              />
-            }
+          <Table
+            label={t("shareAgent.scopeMenu.ariaLabel")}
+            items={[scopeRow]}
+            columns={scopeColumns}
+            getRowId={(row) => row.id}
+            pageSize={false}
+            prominence="secondary"
+            header={false}
           />
 
           <Divider paddingParallel={0} paddingPerpendicular={0} />
