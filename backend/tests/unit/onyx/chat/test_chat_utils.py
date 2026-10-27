@@ -401,6 +401,7 @@ class TestConvertChatHistory:
             additional_context=None,
             token_counter=lambda s: len(s),
             tool_id_to_name_map={1: "internal_search", 2: "web_search"},
+            thinking_model="anthropic/claude-fable-5",
         )
 
         assistants = [
@@ -413,3 +414,20 @@ class TestConvertChatHistory:
             tc.token_count for tc in tool_message.tool_calls
         ) + len("search first")
         assert answer_message.token_count == 5 + len("opaque")
+
+        other_model = convert_chat_history(
+            chat_history=cast(list[ChatMessage], [assistant_msg]),
+            files=[],
+            context_image_files=[],
+            additional_context=None,
+            token_counter=lambda s: len(s),
+            tool_id_to_name_map={1: "internal_search", 2: "web_search"},
+            thinking_model="openai/gpt-5",
+        )
+        other_assistants = [
+            m
+            for m in other_model.simple_messages
+            if m.message_type == MessageType.ASSISTANT
+        ]
+        assert [m.thinking for m in other_assistants] == [None, None]
+        assert other_assistants[1].token_count == 5

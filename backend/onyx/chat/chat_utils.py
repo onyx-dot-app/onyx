@@ -1,6 +1,6 @@
 import json
 from collections.abc import Callable
-from typing import cast
+from typing import Any, cast
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -457,6 +457,16 @@ def thinking_token_count(
     return token_counter(thinking.replay_text()) if thinking else 0
 
 
+def _stored_thinking(
+    raw: dict[str, Any] | None, thinking_model: str | None
+) -> ReplayableThinking | None:
+    """Thinking to replay to ``thinking_model``; other models cannot read it."""
+    if not raw or thinking_model is None:
+        return None
+    thinking = ReplayableThinking.model_validate(raw)
+    return thinking if thinking.model == thinking_model else None
+
+
 def convert_chat_history_basic(
     chat_history: list[ChatMessage],
     token_counter: Callable[[str], int],
@@ -563,6 +573,7 @@ def convert_chat_history(
     additional_context: str | None,
     token_counter: Callable[[str], int],
     tool_id_to_name_map: dict[int, str],
+    thinking_model: str | None = None,
 ) -> ChatHistoryResult:
     """Convert ChatMessage history to ChatMessageSimple format.
 
@@ -698,13 +709,16 @@ def convert_chat_history(
                     total_tool_call_tokens = sum(
                         tc.token_count for tc in tool_calls_simple
                     )
-                    tool_step_thinking = next(
-                        (
-                            ReplayableThinking.model_validate(tool_call.thinking_blocks)
-                            for tool_call in turn_tool_calls
-                            if tool_call.thinking_blocks
+                    tool_step_thinking = _stored_thinking(
+                        next(
+                            (
+                                tool_call.thinking_blocks
+                                for tool_call in turn_tool_calls
+                                if tool_call.thinking_blocks
+                            ),
+                            None,
                         ),
-                        None,
+                        thinking_model,
                     )
                     total_tool_call_tokens += thinking_token_count(
                         tool_step_thinking, token_counter
@@ -743,10 +757,8 @@ def convert_chat_history(
                         )
 
             # Add the assistant message itself (the final answer)
-            answer_thinking = (
-                ReplayableThinking.model_validate(chat_message.thinking_blocks)
-                if chat_message.thinking_blocks
-                else None
+            answer_thinking = _stored_thinking(
+                chat_message.thinking_blocks, thinking_model
             )
             simple_messages.append(
                 ChatMessageSimple(

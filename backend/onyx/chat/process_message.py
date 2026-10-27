@@ -48,6 +48,7 @@ from onyx.chat.incognito_context import (
     load_incognito_context,
 )
 from onyx.chat.llm_loop import EmptyLLMResponseError, run_llm_loop
+from onyx.chat.llm_step import thinking_replay_key
 from onyx.chat.models import (
     AnswerStream,
     AnswerStreamPart,
@@ -977,6 +978,7 @@ def build_chat_turn(
         additional_context=additional_context or new_msg_req.additional_context,
         token_counter=token_counter,
         tool_id_to_name_map=tool_id_to_name_map,
+        thinking_model=None if is_multi else thinking_replay_key(llms[0].config),
     )
     simple_chat_history = chat_history_result.simple_messages
 
