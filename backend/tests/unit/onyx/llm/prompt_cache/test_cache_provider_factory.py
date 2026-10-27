@@ -199,6 +199,20 @@ def test_anthropic_skips_tail_breakpoint_for_one_shot_prompt() -> None:
     assert processed[2].cache_control is None
 
 
+def test_anthropic_one_shot_without_system_prompt_is_not_marked() -> None:
+    with patch.object(processor_module, "ENABLE_PROMPT_CACHING", True):
+        processed, _ = process_with_prompt_cache(
+            llm_config=_config("anthropic", "claude-sonnet-5"),
+            cacheable_prefix=[UserMessage(content="question")],
+            suffix=[],
+            continuation=False,
+            with_metadata=False,
+            mark_tail=False,
+        )
+
+    assert all(msg.cache_control is None for msg in processed)
+
+
 def test_non_anthropic_adapters_ignore_mark_tail() -> None:
     prefix: list[ChatCompletionMessage] = [
         SystemMessage(content="system prompt"),

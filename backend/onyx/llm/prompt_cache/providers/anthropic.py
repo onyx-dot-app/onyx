@@ -30,7 +30,11 @@ def _add_anthropic_cache_control(
         Messages with cache_control added
     """
     result: list[ChatCompletionMessage] = list(messages)
-    result[0] = result[0].model_copy(update={"cache_control": {"type": "ephemeral"}})
+    # A lone message is the tail itself, so a one-shot leaves it unmarked.
+    if mark_tail or len(result) > 1:
+        result[0] = result[0].model_copy(
+            update={"cache_control": {"type": "ephemeral"}}
+        )
     if mark_tail and len(result) > 1:
         result[-1] = result[-1].model_copy(
             update={"cache_control": {"type": "ephemeral"}}
