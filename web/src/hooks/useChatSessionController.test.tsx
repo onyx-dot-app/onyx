@@ -9,6 +9,7 @@ import {
 } from "@/lib/chat/sessionReadiness";
 import { processRawChatHistory, resumeStream } from "@/app/app/services/lib";
 import { settleChatSession } from "@/lib/chat/settleChatSession";
+import { stopChatSession } from "@/lib/chat/stopChatSession";
 import { deferred } from "@tests/setup/test-utils";
 
 jest.mock("next-intl", () => ({
@@ -278,4 +279,202 @@ test("returning after a disconnected Stop releases a now-idle session", async ()
       useChatSessionStore.getState().sessions.get("session")?.chatState
     ).toBe("input")
   );
+});
+
+test.each([false, true])(
+  "reopening an unconfirmed send recovers despite failed acknowledgement (busy: %s)",
+  async (busy) => {
+    const store = useChatSessionStore.getState();
+    store.createSession("session");
+    const acknowledgement = Promise.reject(new TypeError("Connection lost"));
+    void acknowledgement.catch(() => {});
+    store.updateSessionData("session", {
+      chatState: "unconfirmed",
+      sendAcknowledged: acknowledgement,
+    });
+    jest.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+      json: async () => backendSession(busy),
+    } as Response);
+    jest.mocked(waitForChatSessionIdle).mockResolvedValue();
+    mountController();
+    await waitFor(() =>
+      expect(
+        useChatSessionStore.getState().sessions.get("session")?.chatState
+      ).toBe("input")
+    );
+    expect(waitForChatSessionIdle).toHaveBeenCalledWith("session");
+    expect(fetchSettledChatSession).toHaveBeenCalledWith("session");
+  }
+);
+
+test("Stop targets the replay response and waits for its incognito tail", async () => {
+  const finish = deferred<void>();
+  const reserved: Message = {
+    nodeId: 42,
+    messageId: 42,
+    type: "assistant",
+    message: "",
+    files: [],
+    packets: [],
+    toolCall: null,
+    parentNodeId: null,
+  };
+  jest
+    .mocked(processRawChatHistory)
+    .mockImplementation(() => new Map([[42, reserved]]));
+  jest.mocked(global.fetch).mockResolvedValue({
+    ok: true,
+    json: async () => ({
+      ...backendSession(true),
+      incognito: true,
+      current_stream: { stream_id: 42 },
+    }),
+  } as Response);
+  jest.mocked(resumeStream).mockImplementation(async function* () {
+    await finish.promise;
+    yield {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: { type: "message_delta", content: "Final research output" },
+    };
+  });
+  jest.mocked(waitForChatSessionIdle).mockResolvedValue();
+  mountController();
+  await waitFor(() => expect(resumeStream).toHaveBeenCalled());
+  const stopping = stopChatSession("session", "Check failed");
+  await waitFor(() =>
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/chat/stop-chat-session/session?stream_id=42",
+      expect.objectContaining({ method: "POST" })
+    )
+  );
+  expect(waitForChatSessionIdle).not.toHaveBeenCalled();
+  expect(
+    useChatSessionStore.getState().sessions.get("session")?.chatState
+  ).toBe("cancelling");
+  await act(async () => {
+    finish.resolve();
+    await stopping;
+  });
+  const session = useChatSessionStore.getState().sessions.get("session");
+  expect(session?.chatState).toBe("input");
+  expect(session?.messageTree.get(42)?.packets).toEqual([
+    expect.objectContaining({
+      obj: { type: "message_delta", content: "Final research output" },
+    }),
+    expect.objectContaining({ obj: { type: "stop" } }),
+  ]);
+});
+
+test("reopening with an aborted owner waits for its reader before recovery", async () => {
+  const reader = deferred<void>();
+  const store = useChatSessionStore.getState();
+  store.createSession("session");
+  useChatSessionStore
+    .getState()
+    .sessions.get("session")!
+    .abortController.abort();
+  const acknowledgement = Promise.reject(new TypeError("Connection lost"));
+  void acknowledgement.catch(() => {});
+  store.updateSessionData("session", {
+    chatState: "unconfirmed",
+    sendAcknowledged: acknowledgement,
+    readerFinished: reader.promise,
+  });
+  jest.mocked(global.fetch).mockResolvedValue({
+    ok: true,
+    json: async () => backendSession(false),
+  } as Response);
+  jest.mocked(waitForChatSessionIdle).mockResolvedValue();
+  mountController();
+  await waitFor(() => expect(processRawChatHistory).toHaveBeenCalled());
+  expect(waitForChatSessionIdle).not.toHaveBeenCalled();
+  expect(
+    useChatSessionStore.getState().sessions.get("session")?.chatState
+  ).toBe("unconfirmed");
+  await act(async () => reader.resolve());
+  await waitFor(() =>
+    expect(
+      useChatSessionStore.getState().sessions.get("session")?.chatState
+    ).toBe("input")
+  );
+});
+
+test("an earlier Stop cannot release input while a replacement replay has unread packets", async () => {
+  const oldReader = deferred<void>();
+  const replayTail = deferred<void>();
+  const store = useChatSessionStore.getState();
+  store.createSession("session", { incognito: true });
+  const controller = useChatSessionStore
+    .getState()
+    .sessions.get("session")!.abortController;
+  store.updateSessionData("session", {
+    chatState: "cancelling",
+    sendAcknowledged: Promise.resolve(42),
+    readerFinished: oldReader.promise,
+  });
+  const stopping = settleChatSession({
+    sessionId: "session",
+    controller,
+    errorMessage: "Check failed",
+  });
+  await Promise.resolve();
+  controller.abort();
+  const reserved: Message = {
+    nodeId: 42,
+    messageId: 42,
+    type: "assistant",
+    message: "",
+    files: [],
+    packets: [],
+    toolCall: null,
+    parentNodeId: null,
+  };
+  jest
+    .mocked(processRawChatHistory)
+    .mockImplementation(() => new Map([[42, reserved]]));
+  jest.mocked(global.fetch).mockResolvedValue({
+    ok: true,
+    json: async () => ({
+      ...backendSession(true),
+      incognito: true,
+      current_stream: { stream_id: 42 },
+    }),
+  } as Response);
+  jest.mocked(resumeStream).mockImplementation(async function* () {
+    await replayTail.promise;
+    yield {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: { type: "message_delta", content: "Unread tail" },
+    };
+  });
+  jest.mocked(waitForChatSessionIdle).mockResolvedValue();
+  mountController();
+  try {
+    await waitFor(() => expect(resumeStream).toHaveBeenCalled());
+    await act(async () => {
+      oldReader.resolve();
+      await stopping;
+    });
+    expect(waitForChatSessionIdle).not.toHaveBeenCalled();
+    expect(
+      useChatSessionStore.getState().sessions.get("session")?.chatState
+    ).toBe("cancelling");
+  } finally {
+    await act(async () => replayTail.resolve());
+  }
+  await waitFor(() =>
+    expect(
+      useChatSessionStore.getState().sessions.get("session")?.chatState
+    ).toBe("input")
+  );
+  expect(
+    useChatSessionStore.getState().sessions.get("session")?.messageTree.get(42)
+      ?.packets
+  ).toEqual([
+    expect.objectContaining({
+      obj: { type: "message_delta", content: "Unread tail" },
+    }),
+    expect.objectContaining({ obj: { type: "stop" } }),
+  ]);
 });

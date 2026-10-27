@@ -1,6 +1,6 @@
 from sqlalchemy import select
 
-from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import DocumentSource, MessageType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import ChatMessage
 from onyx.db.models import ToolCall as ToolCallModel
@@ -161,9 +161,16 @@ def test_research_child_tool_calls_attach_to_research_call(
         assert research_call.parent_chat_message_id == response.assistant_message_id
         assert research_call.parent_tool_call_id is None
 
-        child_response = db_session.scalar(
+        child_instruction = db_session.scalar(
             select(ChatMessage).where(
                 ChatMessage.invoking_tool_call_id == research_call.id
+            )
+        )
+        assert child_instruction is not None
+        child_response = db_session.scalar(
+            select(ChatMessage).where(
+                ChatMessage.parent_message_id == child_instruction.id,
+                ChatMessage.message_type == MessageType.ASSISTANT,
             )
         )
         assert child_response is not None
