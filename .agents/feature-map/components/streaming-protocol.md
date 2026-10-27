@@ -400,7 +400,7 @@ Generic model-facing error text is not displayed. Explicit public error details 
 structured tool output retain their existing rendering.
 Coding-child reasoning uses `CodingAgentThinkingDelta`, including native thinking
 and configured thinking-tool output. Replay assigns sections in accepted content
-order. Citation removal also applies to citation-only and interrupted answers.
+order. Answer sections close before intervening thinking or tool calls; later answer text starts a new section. Citation removal also applies to citation-only and interrupted answers.
 Generated-message metadata supplies saved source references, including previously
 retrieved sources that the current response did not retrieve again.
 

@@ -191,6 +191,9 @@ CitationInfo objects BEFORE the citation text" comment).
 `state_container.add_emitted_citation(result.citation_number)` for every
 `CitationInfo` actually yielded.
 
+The additive SDK renderer tracks observed citations independently of marker formatting.
+Intermediate reports list only mapped sources cited in the report, even when citation markers remain unformatted.
+
 ### 4.6 State container: two mappings, two purposes
 
 `ChatStateContainer` (`chat_state.py`) tracks:

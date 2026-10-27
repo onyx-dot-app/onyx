@@ -135,7 +135,7 @@ class MessageRenderer:
 
     @property
     def answer_started(self) -> bool:
-        return self._answer_placement is not None
+        return bool(self.answer)
 
     def _append(self, text: str, *, thinking: bool = False) -> list[packets.Packet]:
         if not text or self.settings.mode == PresentationMode.SILENT:
@@ -161,6 +161,7 @@ class MessageRenderer:
             self.reasoning += text
             result = []
             if self._reasoning_placement is None:
+                result.extend(self._close_answer())
                 self._reasoning_placement = self.layout.next_section(self.parent)
                 result.append(
                     packets.Packet(
@@ -265,7 +266,8 @@ class MessageRenderer:
                 or event.tool_name in HIDDEN_TOOLS
             ):
                 return []
-            result = self._close_reasoning()
+            result = self._close_answer()
+            result.extend(self._close_reasoning())
             self.tool_placement(event.tool_call_id)
             return result
         call = self._argument_streams.get(event.content_index)
@@ -353,7 +355,12 @@ class MessageRenderer:
                 is_thinking = True
             else:
                 flush_content()
-                if isinstance(block, ToolCall) and block.name not in HIDDEN_TOOLS:
+                if (
+                    isinstance(block, ToolCall)
+                    and block.name not in HIDDEN_TOOLS
+                    and block.id not in self.tool_placements
+                ):
+                    result.extend(self._close_answer())
                     result.extend(self._close_reasoning())
                     self.tool_placement(block.id)
                 continue
@@ -380,6 +387,20 @@ class MessageRenderer:
                 )
         return result
 
+    def _close_answer(self) -> list[packets.Packet]:
+        # Reports and coding output share their parent card across content blocks.
+        if self.settings.mode not in (PresentationMode.ANSWER, PresentationMode.PLAN):
+            return []
+        result = self._content(None)
+        if self._answer_placement is not None:
+            result.append(
+                packets.Packet(
+                    placement=self._answer_placement, obj=packets.SectionEnd()
+                )
+            )
+            self._answer_placement = None
+        return result
+
     def _close_reasoning(self) -> list[packets.Packet]:
         if self._reasoning_placement is None:
             return []
@@ -402,7 +423,11 @@ class MessageRenderer:
                     packets.Packet(
                         placement=self._answer_placement,
                         obj=packets.IntermediateReportCitedDocs(
-                            cited_docs=self.documents
+                            cited_docs=list(
+                                self.citation_processor.get_seen_citations().values()
+                            )
+                            if self.citation_processor is not None
+                            else []
                         ),
                     )
                 )
