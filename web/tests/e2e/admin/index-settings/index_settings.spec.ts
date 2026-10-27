@@ -1179,6 +1179,7 @@ interface EmptyRegistryProviderCase {
   // Fills the credential fields unique to this provider via the page object
   // (the shared model-spec fields are filled by the test body).
   fillCredentials: (indexSettings: IndexSettingsPage) => Promise<void>;
+  reducedDimension?: number;
 }
 
 const EMPTY_REGISTRY_PROVIDERS: EmptyRegistryProviderCase[] = [
@@ -1202,6 +1203,18 @@ const EMPTY_REGISTRY_PROVIDERS: EmptyRegistryProviderCase[] = [
         deploymentName: "my-deployment",
       }),
   },
+  {
+    providerType: "openai_compatible",
+    displayName: "OpenAI-Compatible",
+    fillCredentials: async (indexSettings) => {
+      await indexSettings.fillLiteLLMCredentials({
+        apiBaseUrl: "http://localhost:8000/v1",
+        apiKey: "sk-test-key",
+      });
+      await indexSettings.fillReducedDimension(512);
+    },
+    reducedDimension: 512,
+  },
 ];
 
 test.describe("Index Settings: empty-registry providers @exclusive", () => {
@@ -1214,6 +1227,7 @@ test.describe("Index Settings: empty-registry providers @exclusive", () => {
     providerType,
     displayName,
     fillCredentials,
+    reducedDimension,
   } of EMPTY_REGISTRY_PROVIDERS) {
     test(`connecting ${displayName} stages its model and applies with provider_type="${providerType}"`, async ({
       page,
@@ -1275,6 +1289,7 @@ test.describe("Index Settings: empty-registry providers @exclusive", () => {
       // sent as provider_type=null (which the backend treats as self-hosted
       // and would ignore the credentials we just saved).
       expect(body.provider_type).toBe(providerType);
+      expect(body.reduced_dimension).toBe(reducedDimension ?? null);
     });
   }
 });

@@ -7046,7 +7046,7 @@
           "label": "カスタムモデルを追加"
         },
         "bringYourOwn": {
-          "cloudDescription": "LiteLLM プロキシ、Azure OpenAI デプロイメント、または Bifrost ゲートウェイを接続します。モデル名はご自身で指定します。LiteLLM と Azure では次元も指定します。",
+          "cloudDescription": "LiteLLM プロキシ、Azure OpenAI デプロイメント、Bifrost ゲートウェイ、または OpenAI 互換エンドポイントを接続します。モデル名はご自身で指定します。LiteLLM、Azure、OpenAI 互換エンドポイントでは次元も指定します。",
           "selfHostedDescription": "上の一覧にない Hugging Face の埋め込みモデルを実行します。モデル名、次元、プレフィックスはご自身で指定します。",
           "title": "詳細設定: 独自のモデルまたはプロキシを使用"
         },
@@ -7091,6 +7091,20 @@
           "label": "一時的に利用不可"
         },
         "title": "マルチパスインデックス"
+      },
+      "openaiCompatible": {
+        "apiUrl": {
+          "description": "OpenAI 互換エンドポイントのベース URL(例: http://localhost:8000/v1)。{appName} が /embeddings パスを追加します。",
+          "title": "API ベース URL"
+        },
+        "modelName": {
+          "description": "{appName} は OpenAI 互換エンドポイント上のこのモデルに接続します。"
+        },
+        "reducedDimension": {
+          "description": "より短いベクトルをリクエストします。Matryoshka Representation Learning で学習したモデルのみが対応しています。短いベクトルはストレージが少なく、検索も高速です。モデルの最大サイズを使う場合は空欄のままにしてください。",
+          "placeholder": "例: 1024",
+          "title": "埋め込み次元数"
+        }
       },
       "progressBanner": {
         "attentionButton": {
@@ -7218,6 +7232,7 @@
         "modelDimPositive": "正の整数を入力してください",
         "modelDimRequired": "モデルの次元数は必須です",
         "modelNameRequired": "モデル名は必須です",
+        "reducedDimensionTooLarge": "モデルの次元数より小さくする必要があります",
         "serviceAccountJsonInvalid": "有効な Google サービスアカウントの JSON ファイルを指定してください",
         "serviceAccountJsonRequired": "サービスアカウント JSON は必須です",
         "targetUrlRequired": "ターゲット URL は必須です",

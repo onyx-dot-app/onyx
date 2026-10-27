@@ -148,6 +148,7 @@ function setCurrentModel(
     api_key: null,
     api_url: null,
     index_name: "danswer_chunk",
+    reduced_dimension: null,
   };
   mockState.currentModel = current;
   mockState.searchSettings = {

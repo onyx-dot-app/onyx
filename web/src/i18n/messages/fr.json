@@ -7046,7 +7046,7 @@
           "label": "Ajouter un modèle personnalisé"
         },
         "bringYourOwn": {
-          "cloudDescription": "Connectez un proxy LiteLLM, un déploiement Azure OpenAI ou une passerelle Bifrost. Vous indiquez vous-même le nom du modèle. Pour LiteLLM et Azure, vous indiquez aussi la dimension.",
+          "cloudDescription": "Connectez un proxy LiteLLM, un déploiement Azure OpenAI, une passerelle Bifrost ou un point de terminaison compatible OpenAI. Vous indiquez vous-même le nom du modèle. Pour LiteLLM, Azure et les points de terminaison compatibles OpenAI, vous indiquez aussi la dimension.",
           "selfHostedDescription": "Exécutez un modèle d'embedding Hugging Face absent de la liste ci-dessus. Vous indiquez vous-même le nom, la dimension et les préfixes du modèle.",
           "title": "Avancé : utiliser votre propre modèle ou proxy"
         },
@@ -7091,6 +7091,20 @@
           "label": "temporairement indisponible"
         },
         "title": "Indexation multi-passes"
+      },
+      "openaiCompatible": {
+        "apiUrl": {
+          "description": "L'URL de base de votre point de terminaison compatible OpenAI, par exemple http://localhost:8000/v1. {appName} ajoute le chemin /embeddings.",
+          "title": "URL de base de l'API"
+        },
+        "modelName": {
+          "description": "{appName} se connectera à ce modèle sur votre point de terminaison compatible OpenAI."
+        },
+        "reducedDimension": {
+          "description": "Demander des vecteurs plus courts. Seuls les modèles entraînés avec Matryoshka Representation Learning le permettent. Les vecteurs plus courts occupent moins d'espace et accélèrent la recherche. Laissez vide pour utiliser la taille complète du modèle.",
+          "placeholder": "ex. : 1024",
+          "title": "Dimensions d'embedding"
+        }
       },
       "progressBanner": {
         "attentionButton": {
@@ -7218,6 +7232,7 @@
         "modelDimPositive": "Doit être un entier positif",
         "modelDimRequired": "La dimension du modèle est obligatoire",
         "modelNameRequired": "Le nom du modèle est obligatoire",
+        "reducedDimensionTooLarge": "Doit être inférieur à la dimension du modèle",
         "serviceAccountJsonInvalid": "Doit être un fichier JSON de compte de service Google valide",
         "serviceAccountJsonRequired": "Le JSON du compte de service est obligatoire",
         "targetUrlRequired": "L'URL cible est obligatoire",

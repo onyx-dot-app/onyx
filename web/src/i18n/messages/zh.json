@@ -7046,7 +7046,7 @@
           "label": "添加自定义模型"
         },
         "bringYourOwn": {
-          "cloudDescription": "连接 LiteLLM 代理、Azure OpenAI 部署或 Bifrost 网关。模型名称由您自行填写。对于 LiteLLM 和 Azure，还需填写维度。",
+          "cloudDescription": "连接 LiteLLM 代理、Azure OpenAI 部署、Bifrost 网关或 OpenAI 兼容端点。模型名称由您自行填写。对于 LiteLLM、Azure 和 OpenAI 兼容端点，还需填写维度。",
           "selfHostedDescription": "运行上方列表中没有的 Hugging Face 嵌入模型。模型名称、维度和前缀由您自行填写。",
           "title": "高级：使用自己的模型或代理"
         },
@@ -7091,6 +7091,20 @@
           "label": "暂时不可用"
         },
         "title": "多轮索引"
+      },
+      "openaiCompatible": {
+        "apiUrl": {
+          "description": "OpenAI 兼容端点的基础 URL,例如 http://localhost:8000/v1。{appName} 会添加 /embeddings 路径。",
+          "title": "API 基础 URL"
+        },
+        "modelName": {
+          "description": "{appName} 将连接到你的 OpenAI 兼容端点上的此模型。"
+        },
+        "reducedDimension": {
+          "description": "请求更短的向量。仅使用 Matryoshka Representation Learning 训练的模型支持此功能。更短的向量占用更少存储并且搜索更快。留空则使用模型的完整维度。",
+          "placeholder": "例如 1024",
+          "title": "嵌入维度"
+        }
       },
       "progressBanner": {
         "attentionButton": {
@@ -7218,6 +7232,7 @@
         "modelDimPositive": "必须是正整数",
         "modelDimRequired": "模型维度为必填项",
         "modelNameRequired": "模型名称为必填项",
+        "reducedDimensionTooLarge": "必须小于模型维度",
         "serviceAccountJsonInvalid": "必须是有效的 Google 服务账号 JSON 文件",
         "serviceAccountJsonRequired": "服务账号 JSON 为必填项",
         "targetUrlRequired": "目标 URL 为必填项",

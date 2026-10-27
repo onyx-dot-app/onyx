@@ -7046,7 +7046,7 @@
           "label": "إضافة نموذج مخصص"
         },
         "bringYourOwn": {
-          "cloudDescription": "اربط وكيل LiteLLM أو نشر Azure OpenAI أو بوابة Bifrost. تحدد أنت اسم النموذج. وفي LiteLLM وAzure تحدد أيضًا الأبعاد.",
+          "cloudDescription": "اربط وكيل LiteLLM أو نشر Azure OpenAI أو بوابة Bifrost أو نقطة نهاية متوافقة مع OpenAI. تحدد أنت اسم النموذج. وفي LiteLLM وAzure ونقاط النهاية المتوافقة مع OpenAI تحدد أيضًا الأبعاد.",
           "selfHostedDescription": "شغّل نموذج تضمين من Hugging Face غير موجود في القائمة أعلاه. تحدد أنت اسم النموذج وأبعاده وبادئاته.",
           "title": "متقدم: استخدم نموذجك أو الوكيل الخاص بك"
         },
@@ -7091,6 +7091,20 @@
           "label": "غير متاحة مؤقتًا"
         },
         "title": "الفهرسة متعددة التمريرات"
+      },
+      "openaiCompatible": {
+        "apiUrl": {
+          "description": "عنوان URL الأساسي لنقطة النهاية المتوافقة مع OpenAI، مثل http://localhost:8000/v1. يضيف {appName} المسار ‎/embeddings.",
+          "title": "عنوان URL الأساسي لواجهة API"
+        },
+        "modelName": {
+          "description": "سيتصل {appName} بهذا النموذج على نقطة النهاية المتوافقة مع OpenAI."
+        },
+        "reducedDimension": {
+          "description": "اطلب متجهات أقصر. تدعم ذلك فقط النماذج المدربة باستخدام Matryoshka Representation Learning. تستهلك المتجهات الأقصر مساحة تخزين أقل وتجعل البحث أسرع. اتركه فارغًا لاستخدام الحجم الكامل للنموذج.",
+          "placeholder": "مثال: 1024",
+          "title": "أبعاد التضمين"
+        }
       },
       "progressBanner": {
         "attentionButton": {
@@ -7218,6 +7232,7 @@
         "modelDimPositive": "يجب أن يكون عددًا صحيحًا موجبًا",
         "modelDimRequired": "أبعاد النموذج مطلوبة",
         "modelNameRequired": "اسم النموذج مطلوب",
+        "reducedDimensionTooLarge": "يجب أن يكون أصغر من بُعد النموذج",
         "serviceAccountJsonInvalid": "يجب أن يكون ملف JSON صالحًا لحساب خدمة Google",
         "serviceAccountJsonRequired": "JSON حساب الخدمة مطلوب",
         "targetUrlRequired": "عنوان URL الهدف مطلوب",

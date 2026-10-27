@@ -184,6 +184,12 @@ export class IndexSettingsPage {
     await this.activeSetupModal.locator("#apiKey").fill(creds.apiKey);
   }
 
+  async fillReducedDimension(reducedDimension: number): Promise<void> {
+    await this.activeSetupModal
+      .locator("#reducedDimension")
+      .fill(String(reducedDimension));
+  }
+
   async fillAzureCredentials(creds: {
     targetUrl: string;
     apiKey: string;
