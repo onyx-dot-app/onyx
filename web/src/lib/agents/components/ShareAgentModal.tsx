@@ -932,11 +932,11 @@ export function ShareAgentModal({
             </InputPadder>
           ) : agentId && !hydratedFromAgentRef.current ? (
             <InputPadder>
-              <div className="flex w-full items-center justify-center py-6">
+              <Section height="auto" padding={6}>
                 <Text color="text-03" font="secondary-body">
                   {t("shareAgent.loading.description")}
                 </Text>
-              </div>
+              </Section>
             </InputPadder>
           ) : (
             renderShareRows()
