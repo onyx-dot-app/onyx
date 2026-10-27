@@ -38,6 +38,9 @@ type settingsResource struct {
 // EEFeaturesEnabled, GPUEnabled, SeatCount and UsedSeats. Backend env vars
 // overwrite HideQueryHistoryFromAdminPanel and ShowExtraConnectors on every
 // read. OpenSearchIndexingEnabled is deprecated and always true.
+// ImageAnalysisMaxSizeMB is deprecated. The provider no longer sends it to
+// Onyx or reads it back, so state keeps the value from the config and plans
+// show no change for configs that still set it.
 type settingsResourceModel struct {
 	ID                                types.String  `tfsdk:"id"`
 	CompanyName                       types.String  `tfsdk:"company_name"`
@@ -143,8 +146,10 @@ func (r *settingsResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 				MarkdownDescription: "Extract and analyze images during indexing.",
 			},
 			"image_analysis_max_size_mb": schema.Int64Attribute{
-				Optional:            true,
-				MarkdownDescription: "Max image size for analysis, in MB.",
+				Optional:           true,
+				DeprecationMessage: "Onyx no longer has this setting. Remove this attribute; it has no effect.",
+				MarkdownDescription: "Deprecated: Onyx no longer has this setting, and the " +
+					"value has no effect.",
 			},
 			"user_knowledge_enabled": schema.BoolAttribute{
 				Optional:            true,
@@ -267,9 +272,6 @@ func patchBodyFromPlan(plan settingsResourceModel) map[string]any {
 	if !plan.ImageExtractionAndAnalysisEnabled.IsNull() {
 		body["image_extraction_and_analysis_enabled"] = plan.ImageExtractionAndAnalysisEnabled.ValueBool()
 	}
-	if !plan.ImageAnalysisMaxSizeMB.IsNull() {
-		body["image_analysis_max_size_mb"] = plan.ImageAnalysisMaxSizeMB.ValueInt64()
-	}
 	if !plan.UserKnowledgeEnabled.IsNull() {
 		body["user_knowledge_enabled"] = plan.UserKnowledgeEnabled.ValueBool()
 	}
@@ -332,9 +334,6 @@ func refreshSettingsModel(model *settingsResourceModel, server *client.Settings)
 	}
 	if !model.ImageExtractionAndAnalysisEnabled.IsNull() {
 		model.ImageExtractionAndAnalysisEnabled = types.BoolPointerValue(server.ImageExtractionAndAnalysisEnabled)
-	}
-	if !model.ImageAnalysisMaxSizeMB.IsNull() {
-		model.ImageAnalysisMaxSizeMB = types.Int64PointerValue(server.ImageAnalysisMaxSizeMB)
 	}
 	if !model.UserKnowledgeEnabled.IsNull() {
 		model.UserKnowledgeEnabled = types.BoolPointerValue(server.UserKnowledgeEnabled)

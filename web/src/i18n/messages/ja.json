@@ -6995,11 +6995,6 @@
           "description": "{appName} は {provider} プロキシ上にあるこのモデルに接続します。"
         }
       },
-      "maxImageSize": {
-        "description": "このサイズを超える画像は、分析の前にサイズが縮小されます。",
-        "suffix": "MB",
-        "title": "解析する画像の最大サイズ"
-      },
       "modal": {
         "cancelButton": {
           "label": "キャンセル"

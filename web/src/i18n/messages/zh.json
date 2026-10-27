@@ -6995,11 +6995,6 @@
           "description": "{appName} 将在您的 {provider} 代理上连接此模型。"
         }
       },
-      "maxImageSize": {
-        "description": "超过此大小的图片会在分析前调整大小。",
-        "suffix": "MB",
-        "title": "分析的最大图像大小"
-      },
       "modal": {
         "cancelButton": {
           "label": "取消"

@@ -6995,11 +6995,6 @@
           "description": "{appName} verbindet sich mit diesem Modell auf Ihrem {provider}-Proxy."
         }
       },
-      "maxImageSize": {
-        "description": "Bilder über dieser Größe werden vor der Analyse verkleinert.",
-        "suffix": "MB",
-        "title": "Maximale Bildgröße für die Analyse"
-      },
       "modal": {
         "cancelButton": {
           "label": "Abbrechen"
