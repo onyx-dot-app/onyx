@@ -154,7 +154,7 @@ separate share-link table.
 | `invoking_tool_call_id` | Nullable tool invocation that supplied a child input. This provenance link uses deferred NO ACTION on deletion. |
 | `request_params` | Requested reasoning effort plus the actual provider kwargs. Attribution, not content: kept even when `persist_content=False` (`chat/save_chat.py:save_chat_turn`). |
 | `reasoning_tokens` | See §5, reasoning attaches forward. |
-| `thinking_blocks` | Nullable JSONB `ReplayableThinking` (model key plus signed and redacted thinking blocks) of the answer step. Replayed only to the same model. Content: blank for `persist_content=False`. |
+| `thinking_blocks` | Nullable JSONB `ReplayableThinking` (model key, signed and redacted thinking blocks, prefix hash, and the reminder the step saw) of the answer step. Replayed only to the same model. Content: blank for `persist_content=False`. |
 | `message` | Text. Blank string for a content-free incognito row. |
 | `token_count` | |
 | `message_type` | `MessageType`: `SYSTEM` (root only, never sent to the LLM as-is), `USER`, `ASSISTANT`, `TOOL_CALL_RESPONSE`, `USER_REMINDER` (`configs/constants.py:MessageType`). |

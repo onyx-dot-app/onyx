@@ -247,8 +247,8 @@ the whole session and the prompt-cache prefix stays the same between steps and t
 ```mermaid
 flowchart TD
     P[Provider stream] -->|Delta.thinking_blocks| S["run_llm_step<br/>merge fragments + signature<br/>keep signed and redacted blocks"]
-    S -->|"LlmStepResult.thinking<br/>(ReplayableThinking: model key + blocks)"| L[run_llm_loop]
-    L -->|in turn| H["ChatMessageSimple.thinking<br/>on the tool-call message"]
+    S -->|"LlmStepResult.thinking<br/>(ReplayableThinking: model key + blocks<br/>+ prefix hash + reminder)"| L[run_llm_loop]
+    L -->|in turn| H["ChatMessageSimple.thinking<br/>on the tool-call message<br/>after the reminder it saw"]
     L -->|answer step| C[ChatStateContainer.answer_thinking]
     L -->|tool step| T[ToolCallInfo.thinking]
     C --> D1[(chat_message.thinking_blocks)]
@@ -257,7 +257,8 @@ flowchart TD
     D2 -->|next turn| R
     R --> H
     H --> X["translate_history_to_llm_format<br/>attach only if model key matches"]
-    X -->|AssistantMessage.thinking_blocks| M["LitellmLLM._completion<br/>thinking stays on when the tool-call message has signed blocks"]
+    X --> G["_drop_thinking_with_changed_prefix<br/>clear blocks whose prefix hash changed"]
+    G -->|AssistantMessage.thinking_blocks| M["LitellmLLM._completion<br/>thinking stays on"]
     M --> P
 ```
 
@@ -269,6 +270,15 @@ flowchart TD
   Empty lists are not saved to the database.
 - A request sent without `thinking` (for example, budget thinking with a forced tool) has its
   `thinking_blocks` removed.
+- Anthropic binds each block to the tools and every message before it, and rejects a block whose
+  prefix changed. `thinking_prefix` hashes that prefix when the block is minted. Before each request,
+  `_drop_thinking_with_changed_prefix` clears a block whose prefix no longer matches, and every later
+  block. A cleared block becomes an empty list, so thinking stays on.
+- To keep the prefix the same, the reminder a step saw stays in place before that step's tool-call
+  message (`thinking_reminder`), in the turn and when history loads from the database. The last cycle
+  keeps the tools and sets `tool_choice` to none instead of removing them.
+- A custom agent prompt and project files move to the latest user message each turn, so earlier
+  turns' blocks fail the prefix check in those chats and are cleared.
 
 ## Things to know
 

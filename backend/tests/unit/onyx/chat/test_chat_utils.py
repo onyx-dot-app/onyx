@@ -366,6 +366,7 @@ class TestConvertChatHistory:
         tool_step = ReplayableThinking(
             model="anthropic/claude-fable-5",
             blocks=[ThinkingBlock(thinking="search first", signature="sig-1")],
+            reminder="cite sources",
         )
         answer_step = ReplayableThinking(
             model="anthropic/claude-fable-5",
@@ -408,6 +409,15 @@ class TestConvertChatHistory:
             m for m in result.simple_messages if m.message_type == MessageType.ASSISTANT
         ]
         assert [m.thinking for m in assistants] == [tool_step, answer_step]
+        assert [m.message_type for m in result.simple_messages] == [
+            MessageType.USER,
+            MessageType.USER_REMINDER,
+            MessageType.ASSISTANT,
+            MessageType.TOOL_CALL_RESPONSE,
+            MessageType.TOOL_CALL_RESPONSE,
+            MessageType.ASSISTANT,
+        ]
+        assert result.simple_messages[1].message == "cite sources"
         tool_message, answer_message = assistants
         assert tool_message.tool_calls is not None
         assert tool_message.token_count == sum(

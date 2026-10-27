@@ -98,11 +98,10 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
      thinking is the state in which Anthropic requires those blocks to be absent
    - Reasoning off then silently becomes the API's own default on every turn after a
      tool call, which on the Claude 5 line is full reasoning
-   - Anthropic's own API also accepts enabled thinking after tool calls without
-     thinking blocks. Onyx sends it there only when the model chose not to think
-     on that step, and the drop otherwise keeps thinking off for the rest of the
-     session. So AnthropicConfig itself (not Vertex, Azure or Bedrock) keeps any
-     thinking type
+   - The API also accepts enabled thinking after tool calls without thinking
+     blocks. Onyx sends that only when the model chose not to think on a step or
+     a replayed block's prefix changed, and the drop then keeps thinking off for
+     the rest of the session. So every thinking type is kept
    - Bedrock Converse carries its own copy of the same check in
      AmazonConverseConfig._transform_request_helper, and keeps thinking under
      additionalModelRequestFields rather than at the top level, so both transforms
@@ -135,7 +134,7 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
 import re
 import time
 import uuid
-from typing import TYPE_CHECKING, Any, List, Optional, cast
+from typing import Any, List, Optional, cast
 
 from litellm.completion_extras.litellm_responses_transformation.transformation import (
     LiteLLMResponsesTransformationHandler,
@@ -157,9 +156,6 @@ from litellm.types.utils import (
 _original_responses_chunk_parser = (
     OpenAiResponsesToChatCompletionStreamIterator.chunk_parser
 )
-
-if TYPE_CHECKING:
-    from litellm.llms.anthropic.chat.transformation import AnthropicConfig
 
 
 def _patch_ollama_chunk_parser() -> None:
@@ -852,45 +848,23 @@ def _patch_responses_api_bridge_check() -> None:
 
 # The thinking types that turn up-front thinking off: disabled everywhere it is
 # accepted, between_tools on Sonnet 5.5, which rejects disabled.
-_THINKING_OFF_TYPES = frozenset({"disabled", "between_tools"})
-
-
-def _thinking_off(optional_params: dict) -> dict | None:
-    """The thinking param when it explicitly asks for no up-front thinking."""
+def _requested_thinking(optional_params: dict) -> dict | None:
     thinking = optional_params.get("thinking")
-    if isinstance(thinking, dict) and thinking.get("type") in _THINKING_OFF_TYPES:
-        return thinking
-    return None
-
-
-def _anthropic_thinking_to_keep(
-    config: "AnthropicConfig", optional_params: dict
-) -> dict | None:
-    """The thinking param to restore if upstream drops it on a tool turn.
-
-    The Anthropic API itself accepts enabled thinking there. Other hosts of the
-    same transform (Vertex, Azure, Bedrock invoke) are not verified, so they
-    keep only the off types.
-    """
-    thinking = optional_params.get("thinking")
-    if config.custom_llm_provider == "anthropic" and isinstance(thinking, dict):
-        return thinking
-    return _thinking_off(optional_params)
+    return thinking if isinstance(thinking, dict) else None
 
 
 def _patch_anthropic_keeps_requested_thinking() -> None:
     """
-    Patches the two Anthropic request transforms to keep an explicit off
-    thinking type (disabled, or between_tools on Sonnet 5.5) on a turn whose
-    history carries tool calls with no thinking blocks. The Anthropic API
-    itself also keeps enabled thinking there.
+    Patches the two Anthropic request transforms to keep the requested
+    thinking param on a turn whose history carries tool calls with no
+    thinking blocks.
 
     Upstream drops the param there to avoid "Expected thinking or
-    redacted_thinking, but found tool_use", but it gates on `thinking is not
-    None` rather than on thinking being enabled. Off thinking cannot raise
-    that error: it is the state where Anthropic requires the blocks to be
-    absent, which is exactly what we send. Dropping it silently returns the
-    model to its default effort, which on the Claude 5 line is full reasoning.
+    redacted_thinking, but found tool_use". The Anthropic API accepts that
+    history on every current Claude model, and Onyx sends it only when the
+    model chose not to think or a replayed block's prefix changed. Dropping
+    the param instead turns thinking off for the rest of the session, or on
+    the Claude 5 line resets it to the model's default effort.
 
     Bedrock Converse carries its own copy of the same check, and puts thinking
     under additionalModelRequestFields rather than at the top level, so it
@@ -913,7 +887,7 @@ def _patch_anthropic_keeps_requested_thinking() -> None:
             litellm_params: dict,
             headers: dict,
         ) -> dict:
-            thinking = _anthropic_thinking_to_keep(self, optional_params)
+            thinking = _requested_thinking(optional_params)
             body = original_transform_request(
                 self, model, messages, optional_params, litellm_params, headers
             )
@@ -941,7 +915,7 @@ def _patch_anthropic_keeps_requested_thinking() -> None:
             headers: Optional[dict] = None,
             drop_params: bool = False,
         ) -> Any:
-            thinking = _thinking_off(optional_params)
+            thinking = _requested_thinking(optional_params)
             data = original_request_helper(
                 self,
                 model=model,

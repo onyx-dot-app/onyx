@@ -457,6 +457,22 @@ def thinking_token_count(
     return token_counter(thinking.replay_text()) if thinking else 0
 
 
+def thinking_reminder(
+    thinking: ReplayableThinking | None, token_counter: Callable[[str], int]
+) -> list[ChatMessageSimple]:
+    """The reminder replayed thinking was minted after. Its signature is bound
+    to every earlier message, so the reminder stays in place in history."""
+    if not thinking or not thinking.blocks or not thinking.reminder:
+        return []
+    return [
+        ChatMessageSimple(
+            message=thinking.reminder,
+            token_count=token_counter(thinking.reminder),
+            message_type=MessageType.USER_REMINDER,
+        )
+    ]
+
+
 def _stored_thinking(
     raw: dict[str, Any] | None, thinking_model: str | None
 ) -> ReplayableThinking | None:
@@ -723,6 +739,9 @@ def convert_chat_history(
                     total_tool_call_tokens += thinking_token_count(
                         tool_step_thinking, token_counter
                     )
+                    simple_messages.extend(
+                        thinking_reminder(tool_step_thinking, token_counter)
+                    )
                     simple_messages.append(
                         ChatMessageSimple(
                             message="",  # No text content when making tool calls
@@ -760,6 +779,7 @@ def convert_chat_history(
             answer_thinking = _stored_thinking(
                 chat_message.thinking_blocks, thinking_model
             )
+            simple_messages.extend(thinking_reminder(answer_thinking, token_counter))
             simple_messages.append(
                 ChatMessageSimple(
                     message=chat_message.message,

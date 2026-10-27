@@ -368,10 +368,12 @@ carries signed `thinking_blocks` and the provider accepts them, or carries an
 empty list because the model chose not to think on that step
 (`_tool_loop_lacks_signed_thinking`). Otherwise thinking is skipped for that
 request. LiteLLM drops `thinking` after a tool-call message with no blocks.
-A monkey patch (`_patch_anthropic_keeps_requested_thinking`) keeps it on the
-Anthropic API, so one step without thinking does not turn thinking off for the
-rest of the session. Vertex, Azure and Bedrock keep the upstream drop. Any
-attempt sent without `thinking` has its `thinking_blocks` removed. The chat path captures, saves, and replays these blocks
+A monkey patch (`_patch_anthropic_keeps_requested_thinking`) keeps it for the
+Anthropic API, Vertex, Azure and Bedrock, so one step without thinking does not
+turn thinking off for the rest of the session. A replayed block whose prefix
+changed is cleared to an empty list before the request
+(`_drop_thinking_with_changed_prefix`). Any attempt sent without `thinking` has
+its `thinking_blocks` removed. The chat path captures, saves, and replays these blocks
 (`backend/onyx/chat/README.md`, "Signed thinking replay").
 
 `LLMConfig.supports_images` records the resolved image capability. A configured

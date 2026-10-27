@@ -180,6 +180,10 @@ class ReplayableThinking(BaseModel):
 
     model: str
     blocks: list[AnyThinkingBlock]
+    # Anthropic binds each block to the tools and every message before it.
+    prefix: str | None = None
+    # The reminder the block was minted after, which history must replay.
+    reminder: str | None = None
 
     def replay_text(self) -> str:
         """Block content the provider counts as input tokens on replay.

@@ -7,10 +7,12 @@ import pytest
 
 from onyx.chat import llm_step as llm_step_module
 from onyx.chat.llm_step import (
+    _drop_thinking_with_changed_prefix,
     _extract_tool_call_kickoffs,
     _increment_turns,
     _parse_tool_args_to_dict,
     extract_tool_calls_from_response_text,
+    thinking_prefix,
     translate_history_to_llm_format,
 )
 from onyx.chat.models import ChatLoadedFile, ChatMessageSimple, ToolCallSimple
@@ -1303,6 +1305,71 @@ class TestFinishReasonPropagation:
 
 
 class TestSignedThinkingReplay:
+    def test_block_whose_prefix_changed_is_dropped_with_later_blocks(self) -> None:
+        config = _make_llm_config(LlmProviderNames.ANTHROPIC.value)
+        model_key = f"{config.model_provider}/{config.model_name}"
+        tools = [{"type": "function", "function": {"name": "search"}}]
+
+        def history(question: str) -> list[ChatMessageSimple]:
+            user = ChatMessageSimple(
+                message=question, token_count=1, message_type=MessageType.USER
+            )
+            minted = thinking_prefix(
+                translate_history_to_llm_format(history=[user], llm_config=config),
+                tools,
+            )
+            steps = [user]
+            for index in range(2):
+                steps.append(
+                    ChatMessageSimple(
+                        message="",
+                        token_count=1,
+                        message_type=MessageType.ASSISTANT,
+                        tool_calls=[
+                            ToolCallSimple(
+                                tool_call_id=f"tc_{index}",
+                                tool_name="search",
+                                tool_arguments={},
+                                token_count=1,
+                            )
+                        ],
+                        thinking=ReplayableThinking(
+                            model=model_key,
+                            blocks=[ThinkingBlock(thinking="t", signature="s")],
+                            prefix=minted if index == 0 else "stale",
+                        ),
+                    )
+                )
+                steps.append(
+                    ChatMessageSimple(
+                        message="out",
+                        token_count=1,
+                        message_type=MessageType.TOOL_CALL_RESPONSE,
+                        tool_call_id=f"tc_{index}",
+                    )
+                )
+            return steps
+
+        def replayed(steps: list[ChatMessageSimple], llm_tools: list) -> list:
+            translated = _drop_thinking_with_changed_prefix(
+                translate_history_to_llm_format(history=steps, llm_config=config),
+                steps,
+                llm_tools,
+            )
+            return [
+                msg.thinking_blocks
+                for msg in translated
+                if isinstance(msg, AssistantMessage)
+            ]
+
+        signed = [ThinkingBlock(thinking="t", signature="s")]
+        assert replayed(history("Hi"), tools) == [signed, []]
+        assert replayed(history("Hi"), []) == [[], []]
+
+        edited = history("Hi")
+        edited[0] = edited[0].model_copy(update={"message": "Hello"})
+        assert replayed(edited, tools) == [[], []]
+
     @staticmethod
     def _run_stream(deltas: list[Any]) -> Any:
         from onyx.chat.llm_step import run_llm_step_pkt_generator
@@ -1361,7 +1428,10 @@ class TestSignedThinkingReplay:
             ]
         )
 
-        assert result.thinking == ReplayableThinking(
+        assert result.thinking is not None and result.thinking.prefix
+        assert result.thinking.model_copy(
+            update={"prefix": None}
+        ) == ReplayableThinking(
             model="anthropic/claude-fable-5",
             blocks=[
                 ThinkingBlock(thinking="Let me think.", signature="sig-1"),

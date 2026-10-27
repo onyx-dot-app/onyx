@@ -1,3 +1,4 @@
+import hashlib
 import json
 import time
 import uuid
@@ -383,8 +384,73 @@ def thinking_replay_key(llm_config: LLMConfig) -> str:
     return f"{llm_config.model_provider}/{llm_config.deployment_name or llm_config.model_name}"
 
 
+def thinking_prefix(
+    messages: Sequence[ChatCompletionMessage], tools: Sequence[Mapping[str, Any]]
+) -> str:
+    """Fingerprint of what Anthropic binds a thinking block to: the tools and
+    every earlier message. Cache markers and earlier thinking are not bound."""
+
+    def strip(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                key: strip(item)
+                for key, item in value.items()
+                if key not in ("cache_control", "thinking_blocks")
+            }
+        if isinstance(value, list):
+            return [strip(item) for item in value]
+        return value
+
+    payload = {
+        "tools": strip(list(tools)),
+        "messages": [strip(msg.model_dump(mode="json")) for msg in messages],
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, default=str).encode()
+    ).hexdigest()
+
+
+def _drop_thinking_with_changed_prefix(
+    messages: list[ChatCompletionMessage],
+    history: Sequence[ChatMessageSimple],
+    tools: Sequence[Mapping[str, Any]],
+) -> list[ChatCompletionMessage]:
+    """Clear replayed blocks whose prefix changed since they were minted.
+
+    Anthropic rejects such a block, and any block after a removed one, so
+    every later block goes too. The empty list keeps thinking on: the API
+    accepts tool calls without thinking blocks.
+    """
+    thinking = [
+        msg.thinking for msg in history if msg.message_type == MessageType.ASSISTANT
+    ]
+    assistant_indices = [
+        i for i, msg in enumerate(messages) if isinstance(msg, AssistantMessage)
+    ]
+    aligned = len(thinking) == len(assistant_indices)
+    result = list(messages)
+    broken = not aligned
+    for position, index in enumerate(assistant_indices):
+        msg = result[index]
+        assert isinstance(msg, AssistantMessage)
+        if not msg.thinking_blocks:
+            continue
+        minted = thinking[position] if aligned else None
+        if (
+            broken
+            or minted is None
+            or minted.prefix != thinking_prefix(result[:index], tools)
+        ):
+            broken = True
+            result[index] = msg.model_copy(update={"thinking_blocks": []})
+    return result
+
+
 def _replayable_thinking(
-    generated: GeneratedAssistantMessage, llm_config: LLMConfig, reasoned: bool
+    generated: GeneratedAssistantMessage,
+    llm_config: LLMConfig,
+    reasoned: bool,
+    prefix: str,
 ) -> ReplayableThinking | None:
     blocks = signed_thinking_blocks(
         [
@@ -398,7 +464,9 @@ def _replayable_thinking(
         return None
     # No blocks and no reasoning: the model chose not to think, so the step
     # needs no block for thinking to stay on.
-    return ReplayableThinking(model=thinking_replay_key(llm_config), blocks=blocks)
+    return ReplayableThinking(
+        model=thinking_replay_key(llm_config), blocks=blocks, prefix=prefix
+    )
 
 
 def _build_structured_tool_response_message(msg: ChatMessageSimple) -> ToolMessage:
@@ -914,8 +982,10 @@ def run_llm_step_pkt_generator(
     image_replay: HistoryImageReplay = _resolve_history_image_replay(
         history, llm.config
     )
-    llm_msg_history = translate_history_to_llm_format(
-        history, llm.config, image_replay=image_replay
+    llm_msg_history = _drop_thinking_with_changed_prefix(
+        translate_history_to_llm_format(history, llm.config, image_replay=image_replay),
+        history,
+        tool_definitions,
     )
     has_reasoned = False
 
@@ -1355,6 +1425,7 @@ def run_llm_step_pkt_generator(
                 generated_thinking,
                 llm.config,
                 reasoned=bool(accumulated_reasoning or generated_thinking.content),
+                prefix=thinking_prefix(llm_msg_history, tool_definitions),
             ),
         ),
         has_reasoned,

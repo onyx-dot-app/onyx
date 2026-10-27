@@ -497,9 +497,9 @@ def test_anthropic_api_keeps_enabled_thinking_after_tool_calls() -> None:
     assert body["thinking"] == {"type": "adaptive"}
 
 
-def test_vertex_still_drops_enabled_thinking_after_tool_calls() -> None:
+def test_vertex_keeps_enabled_thinking_after_tool_calls() -> None:
     body = _anthropic_body({"type": "adaptive"}, list(_TOOL_HISTORY), vertex=True)
-    assert "thinking" not in body
+    assert body["thinking"] == {"type": "adaptive"}
 
 
 def _converse_fields(thinking: dict[str, str], messages: list[Any]) -> Any:
@@ -525,9 +525,9 @@ def test_converse_keeps_disabled_thinking_after_tool_calls(off_type: str) -> Non
     assert fields == {"thinking": {"type": off_type}}
 
 
-def test_converse_still_drops_enabled_thinking_after_tool_calls() -> None:
+def test_converse_keeps_enabled_thinking_after_tool_calls() -> None:
     fields = _converse_fields({"type": "adaptive"}, list(_TOOL_HISTORY))
-    assert not (fields or {}).get("thinking")
+    assert fields == {"thinking": {"type": "adaptive"}}
 
 
 def test_openrouter_chunk_parser_keeps_served_model() -> None:
