@@ -15,6 +15,7 @@ from onyx.db.models import ChatMessage, ToolCall
 from onyx.db.tools import create_tool_call_no_commit
 from onyx.file_processing.file_types import guess_mime_type
 from onyx.file_store.models import FileDescriptor
+from onyx.llm.models import ReplayableThinking
 from onyx.natural_language_processing.utils import BaseTokenizer, get_tokenizer
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.tools.models import ToolCallInfo
@@ -77,9 +78,19 @@ def _create_and_link_tool_calls(
     # We'll update parent references after flushing to get IDs
     tool_call_objects: list[ToolCall] = []
     tool_call_info_map: dict[str, ToolCallInfo] = {}
+    turns_with_thinking: set[int] = set()
 
     for tool_call_info in tool_calls:
         tool_call_info_map[tool_call_info.tool_call_id] = tool_call_info
+        # Parallel calls of one step share its thinking, so store it once.
+        thinking_blocks = None
+        if (
+            tool_call_info.thinking
+            and tool_call_info.thinking.blocks
+            and tool_call_info.turn_index not in turns_with_thinking
+        ):
+            turns_with_thinking.add(tool_call_info.turn_index)
+            thinking_blocks = tool_call_info.thinking.model_dump()
 
         # Calculate tool_call_tokens from arguments
         try:
@@ -118,6 +129,7 @@ def _create_and_link_tool_calls(
                 else None
             ),
             tab_index=tool_call_info.tab_index,
+            thinking_blocks=thinking_blocks,
             add_only=True,
         )
 
@@ -179,6 +191,7 @@ def save_chat_turn(
     pre_answer_processing_time: float | None = None,
     persist_content: bool = True,
     request_params: dict[str, Any] | None = None,
+    answer_thinking: ReplayableThinking | None = None,
 ) -> None:
     """
     Save a chat turn by populating the assistant_message and creating related entities.
@@ -216,9 +229,15 @@ def save_chat_turn(
         assistant_message.reasoning_tokens = (
             sanitize_string(reasoning_tokens) if reasoning_tokens else reasoning_tokens
         )
+        assistant_message.thinking_blocks = (
+            answer_thinking.model_dump()
+            if answer_thinking and answer_thinking.blocks
+            else None
+        )
     else:
         assistant_message.message = ""
         assistant_message.reasoning_tokens = None
+        assistant_message.thinking_blocks = None
         tool_calls = []
         citation_to_doc = {}
         all_search_docs = {}

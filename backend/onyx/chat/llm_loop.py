@@ -1151,6 +1151,9 @@ def run_llm_loop(
                 fallback_extraction_attempted = True
             if reminder_msg and llm_step_result.thinking:
                 llm_step_result.thinking.reminder = reminder_msg.message
+            state_container.set_answer_thinking(
+                None if llm_step_result.tool_calls else llm_step_result.thinking
+            )
 
             # Save citation mapping after each LLM step for incremental state updates
             state_container.set_citation_mapping(citation_processor.citation_to_doc)
@@ -1367,6 +1370,7 @@ def run_llm_loop(
                     tool_call_id=tool_call.tool_call_id,
                     tool_id=tool.id,
                     reasoning_tokens=llm_step_result.reasoning,  # All tool calls from this loop share the same reasoning
+                    thinking=llm_step_result.thinking,
                     tool_call_arguments=tool_call.tool_args,
                     tool_call_response=saved_response,
                     search_docs=(

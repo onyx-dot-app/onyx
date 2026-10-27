@@ -240,15 +240,22 @@ tool calls and returns that to the LLM Loop to execute.
 
 ## Signed thinking replay
 
-Claude extended thinking returns signed thinking blocks. Onyx sends the blocks of a tool step back on the
-next step of the same turn, so Claude continues from its own reasoning instead of starting again, and the
-prompt-cache prefix stays the same between steps.
+Claude extended thinking returns signed thinking blocks. Onyx sends the blocks of a step back on the next
+step of the same turn and in later turns, so Claude continues from its own reasoning instead of starting
+again, and the prompt-cache prefix stays the same between steps and turns.
 
 ```mermaid
 flowchart TD
     P[Provider stream] -->|Delta.thinking_blocks| S["run_llm_step<br/>merge fragments + signature<br/>keep signed and redacted blocks"]
     S -->|"LlmStepResult.thinking<br/>(ReplayableThinking: model key + blocks<br/>+ prefix hash + reminder)"| L[run_llm_loop]
     L -->|next step| H["ChatMessageSimple.thinking<br/>on the tool-call message<br/>after the reminder it saw"]
+    L -->|answer step| C[ChatStateContainer.answer_thinking]
+    L -->|tool step| T[ToolCallInfo.thinking]
+    C --> D1[(chat_message.thinking_blocks)]
+    T --> D2[("tool_call.thinking_blocks<br/>first call of each turn")]
+    D1 -->|next turn| R[create_chat_history_chain]
+    D2 -->|next turn| R
+    R --> H
     H --> X["translate_history_to_llm_format<br/>attach only if model key matches"]
     X --> G["_drop_thinking_with_changed_prefix<br/>clear blocks whose prefix hash changed"]
     G -->|AssistantMessage.thinking_blocks| M["LitellmLLM._completion<br/>thinking stays on"]
@@ -259,7 +266,7 @@ flowchart TD
   model that minted them, so blocks from another model are not sent.
 - A step that streamed no reasoning at all records an empty block list: the model chose not to think.
   `thinking` is sent on every request either way (`llm-providers.md`); the blocks only let Claude reuse
-  its reasoning.
+  its reasoning. Empty lists are not saved to the database.
 - A request sent without `thinking` (for example, budget thinking with a forced tool) has its
   `thinking_blocks` removed.
 - Anthropic binds each block to the tools and every message before it, and rejects a block whose
@@ -267,10 +274,16 @@ flowchart TD
   `_drop_thinking_with_changed_prefix` clears a block whose prefix no longer matches, and every later
   block minted on top of it. A cleared block becomes an empty list, so thinking stays on.
 - To keep the prefix the same, the reminder a step saw stays in place before that step's tool-call
-  message (`thinking_reminder`). The last cycle keeps the tools the previous step saw and sets
+  message (`thinking_reminder`), in the turn and when history loads from the database (the reminder is
+  saved with the blocks). The last cycle keeps the tools the previous step saw and sets
   `tool_choice` to none instead of removing them.
-- Blocks live in the turn only. History loaded from the database carries none, so the first step of a
-  turn starts without them.
+- Blocks are saved with the answer (`chat_message.thinking_blocks`) and with the first tool call of each
+  step (`tool_call.thinking_blocks`). A stopped or incognito answer saves none. On load, blocks are
+  attached only when the stored model key matches the current model.
+- History loaded from the database replaces earlier turns' tool results with a placeholder, so only the
+  first tool step of each earlier turn keeps its block; later ones fail the prefix check and are cleared.
+  A custom agent prompt and project files move to the latest user message each turn, so earlier turns'
+  blocks are cleared in those chats too.
 
 ## Things to know
 

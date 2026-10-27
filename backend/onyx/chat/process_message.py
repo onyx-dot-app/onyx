@@ -48,6 +48,7 @@ from onyx.chat.incognito_context import (
     load_incognito_context,
 )
 from onyx.chat.llm_loop import EmptyLLMResponseError, run_llm_loop
+from onyx.chat.llm_step import thinking_replay_key
 from onyx.chat.models import (
     AnswerStream,
     AnswerStreamPart,
@@ -977,6 +978,7 @@ def build_chat_turn(
         additional_context=additional_context or new_msg_req.additional_context,
         token_counter=token_counter,
         tool_id_to_name_map=tool_id_to_name_map,
+        thinking_model=None if is_multi else thinking_replay_key(llms[0].config),
     )
     simple_chat_history = chat_history_result.simple_messages
 
@@ -1995,6 +1997,7 @@ def llm_loop_completion_handle(
     # direct attribute access is not thread-safe — use the provided getters.
     answer_tokens = state_container.get_answer_tokens()
     reasoning_tokens = state_container.get_reasoning_tokens()
+    answer_thinking = state_container.get_answer_thinking()
     request_params = state_container.get_request_params()
     citation_to_doc = state_container.get_citation_to_doc()
     tool_calls = state_container.get_tool_calls()
@@ -2052,6 +2055,8 @@ def llm_loop_completion_handle(
             emitted_citations=emitted_citations,
             pre_answer_processing_time=pre_answer_processing_time,
             persist_content=keeps_content,
+            # A stopped answer gets a suffix the thinking did not produce.
+            answer_thinking=answer_thinking if completed_normally else None,
         )
 
         # Incognito: the answer lives only in the ephemeral store, and
