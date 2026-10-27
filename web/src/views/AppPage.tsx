@@ -75,7 +75,7 @@ import { useActiveProject, useProjects } from "@/lib/projects/hooks";
 import { getProjectTokenCount } from "@/lib/projects/svc";
 import { cn } from "@opal/utils";
 import Suggestions from "@/sections/Suggestions";
-import OnboardingFlow from "@/sections/onboarding/OnboardingFlow";
+import { OnboardingFlow } from "@/lib/onboarding/components";
 import { OnboardingStep } from "@/lib/onboarding/types";
 import { useShowOnboarding } from "@/lib/onboarding/hooks";
 import { SvgChevronDown, SvgFileText } from "@opal/icons";

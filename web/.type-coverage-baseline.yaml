@@ -80,7 +80,7 @@ packages:
   src/lib/notifications: 99.3
   src/lib/oauth: 100
   src/lib/oauth-provider: 100
-  src/lib/onboarding: 100
+  src/lib/onboarding: 99.8
   src/lib/opensearch-health: 100
   src/lib/permissions: 100
   src/lib/plugins: 99.7
@@ -127,7 +127,6 @@ packages:
   src/sections/modals: 99.5
   src/sections/model-selector: 99.6
   src/sections/oauth-provider: 100
-  src/sections/onboarding: 99.8
   src/sections/plugins: 99.8
   src/sections/settings: 100
   src/sections/sidebar: 99.3
