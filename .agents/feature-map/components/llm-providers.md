@@ -353,6 +353,14 @@ tool-calling params, and reasoning params accordingly. On a `BadRequestError`
 naming a rejected kwarg, a retry ladder (`_retry_attempts`) strips that kwarg
 and retries with a narrower request, up to the ladder's length.
 
+Claude thinking is sent on every request of a tool loop, so the configured
+reasoning setting holds for the whole chat and the prompt-cache prefix does not
+change. Anthropic and Bedrock accept a tool-call message without thinking
+blocks. LiteLLM would drop `thinking` there; a monkey patch
+(`_patch_anthropic_keeps_requested_thinking`) keeps it for the Anthropic API,
+Vertex, Azure and Bedrock Converse. Claude behind an OpenAI-style gateway still
+skips reasoning mid loop (`_prompt_in_tool_loop`).
+
 `LLMConfig.supports_images` records the resolved image capability. A configured
 `supports_image_input=True` overrides catalog values. Configured `False` permits
 catalog fallback. Unknown catalog capability stays `None`. Direct client callers
