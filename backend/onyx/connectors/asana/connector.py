@@ -5,8 +5,12 @@ from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE, INDEX_BATCH_
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.asana import asana_api
 from onyx.connectors.asana.scope import check_projects, read_team, read_workspace
-from onyx.connectors.asana.source_operations import AsanaSourceOperations
+from onyx.connectors.asana.source_operations import (
+    AsanaApiError,
+    AsanaSourceOperations,
+)
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
+from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.interfaces import (
     GenerateDocumentsOutput,
     LoadConnector,
@@ -68,11 +72,15 @@ class AsanaConnector(LoadConnector, PollConnector):
     def validate_connector_settings(self) -> None:
         """The workspace, and the team or projects that narrow it, must be
         readable with the token. One message names every unusable project."""
-        read_workspace(self.ops, self.workspace_id)
-        if self.project_ids_to_index:
-            check_projects(self.ops, self.project_ids_to_index, self.workspace_id)
-        elif self.asana_team_id:
-            read_team(self.ops, self.asana_team_id, self.workspace_id)
+        try:
+            read_workspace(self.ops, self.workspace_id)
+            if self.project_ids_to_index:
+                check_projects(self.ops, self.project_ids_to_index, self.workspace_id)
+            elif self.asana_team_id:
+                read_team(self.ops, self.asana_team_id, self.workspace_id)
+        except AsanaApiError as e:
+            # An unmapped status is transient here: it must not pause the pair.
+            raise UnexpectedValidationError(str(e)) from e
 
     def poll_source(
         self,

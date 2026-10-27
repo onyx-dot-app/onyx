@@ -146,14 +146,59 @@ def test_empty_project_passes_with_an_advisory() -> None:
 
 def test_no_project_in_scope_fails() -> None:
     ops = _ops()
-    ops.iterate_projects.side_effect = lambda **_kwargs: iter(
-        [{"gid": "2", "archived": True}]
-    )
+    ops.iterate_projects.side_effect = lambda **_kwargs: iter([])
 
     with pytest.raises(ConnectorValidationError) as raised:
         _run("asana_tasks", ops)
 
     assert raised.value.summary == "No projects to index"
+    assert ops.iterate_projects.call_args.kwargs["archived"] is False
+
+
+def test_sample_skips_private_projects_of_other_teams() -> None:
+    ops = _ops()
+    ops.iterate_projects.side_effect = lambda **_kwargs: iter(
+        [
+            {
+                "gid": "8",
+                "name": "Secret",
+                "privacy_setting": "private",
+                "team": {"gid": "T2"},
+            },
+            {
+                "gid": "2",
+                "name": "Roadmap",
+                "privacy_setting": "public",
+                "team": {"gid": "T2"},
+            },
+        ]
+    )
+
+    output = _run(
+        "asana_tasks", ops, {"asana_workspace_id": "1", "asana_team_id": "T1"}
+    )
+
+    assert output is not None
+    assert output.summary == "Read task Ship it"
+    assert ops.iterate_project_tasks.call_args.kwargs["project_gid"] == "2"
+
+
+def test_sample_of_only_skipped_projects_is_inconclusive() -> None:
+    ops = _ops()
+    ops.iterate_projects.side_effect = lambda **_kwargs: iter(
+        [
+            {"gid": str(i), "privacy_setting": "private", "team": {"gid": "T2"}}
+            for i in range(20)
+        ]
+    )
+
+    output = _run(
+        "asana_tasks", ops, {"asana_workspace_id": "1", "asana_team_id": "T1"}
+    )
+
+    assert output is not None
+    assert "task access was not checked" in output.advisories[0].message
+    ops.iterate_project_tasks.assert_not_called()
 
 
 def _sdk_error(status: int) -> ApiException:
@@ -195,6 +240,14 @@ def test_gateway_keeps_other_statuses_with_the_request_and_body() -> None:
     assert raised.value.not_found
     assert raised.value.url == "https://app.asana.com/api/1.0/workspaces/abc"
     assert raised.value.body == '{"errors":[{"message":"Not Authorized"}]}'
+
+
+def test_gateway_maps_a_wrapped_connection_failure() -> None:
+    def _fail() -> None:
+        raise ApiException(status=0, reason="SSL handshake failed")
+
+    with pytest.raises(UnreachableValidationError, match="SSL handshake failed"):
+        _call("/users/me", _fail)
 
 
 def test_gateway_maps_transport_failures() -> None:

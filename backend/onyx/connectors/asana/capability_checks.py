@@ -8,6 +8,7 @@ readable in those projects. Asana has no permission sync.
 from collections.abc import Callable
 from typing import Any, TypeVar
 
+from onyx.connectors.asana.asana_api import project_skipped_for_team
 from onyx.connectors.asana.config import AsanaConnectorConfig
 from onyx.connectors.asana.scope import check_projects, read_team, read_workspace
 from onyx.connectors.asana.source_operations import (
@@ -51,6 +52,8 @@ _REQUIRED_FIELDS: frozenset[str] = frozenset({"asana_workspace_id"})
 # Projects the tasks sample lists to find one that is not archived.
 _PROJECT_SAMPLE_SIZE: int = 20
 _STORY_SAMPLE_SIZE: int = 50
+# Sentinel: the sample held only projects the team filter skips.
+_SAMPLE_EXHAUSTED: dict[str, Any] = {}
 _TIMEOUT_TEXT = CheckRowText(
     summary="Timed out",
     description=(
@@ -251,31 +254,54 @@ class _TasksCheck(_AsanaCheck):
         )
 
     def _first_project(self, context: CapabilityCheckContext) -> dict[str, Any] | None:
-        """The first project that is not archived: a selected one, else one
-        of the workspace."""
+        """The first project indexing would read: a selected one that is not
+        archived, else a live project of the workspace that the team filter
+        keeps. ``_SAMPLE_EXHAUSTED`` when every sampled project was skipped."""
         gateway: AsanaSourceOperations = _gateway(context)
         config: AsanaConnectorConfig = _config(context)
         project_ids: list[str] = _project_ids(config)
-        projects = (
-            (
+        if project_ids:
+            projects = (
                 gateway.get_project(project_gid=project_id, opt_fields="name,archived")
                 for project_id in project_ids
             )
-            if project_ids
-            else gateway.iterate_projects(
-                workspace_gid=_workspace_id(config),
-                opt_fields="name,archived",
-                limit=_PROJECT_SAMPLE_SIZE,
+            return _probe(
+                lambda: next((p for p in projects if not p.get("archived")), None),
+                "Onyx could not read the selected projects.",
             )
+        team_id: str | None = _team_id(config)
+        sampled: list[dict[str, Any]] = _probe(
+            lambda: list(
+                gateway.iterate_projects(
+                    workspace_gid=_workspace_id(config),
+                    opt_fields="name,privacy_setting,team",
+                    archived=False,
+                    limit=_PROJECT_SAMPLE_SIZE,
+                )
+            ),
+            "Onyx could not list the workspace's projects.",
         )
-        return _probe(
-            lambda: next((p for p in projects if not p.get("archived")), None),
-            "Onyx could not read the projects in scope.",
-        )
+        in_scope = (p for p in sampled if not project_skipped_for_team(p, team_id))
+        project: dict[str, Any] | None = next(in_scope, None)
+        if project is None and len(sampled) >= _PROJECT_SAMPLE_SIZE:
+            return _SAMPLE_EXHAUSTED
+        return project
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         gateway: AsanaSourceOperations = _gateway(context)
         project: dict[str, Any] | None = self._first_project(context)
+        if project is _SAMPLE_EXHAUSTED:
+            return CheckOutput(
+                summary="No project sampled",
+                advisories=[
+                    CheckAdvisory(
+                        message=(
+                            f"The first {_PROJECT_SAMPLE_SIZE} projects are private "
+                            "to other teams, so task access was not checked."
+                        )
+                    )
+                ],
+            )
         if project is None:
             raise ConnectorValidationError(
                 "Asana returned no project in scope that is not archived, so "

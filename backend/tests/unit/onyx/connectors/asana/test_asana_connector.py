@@ -15,6 +15,7 @@ from onyx.connectors.asana.source_operations import (
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialInvalidError,
+    UnexpectedValidationError,
 )
 from onyx.connectors.models import ConnectorMissingCredentialError
 
@@ -383,6 +384,16 @@ def test_unknown_workspace_names_the_readable_ones() -> None:
     assert raised.value.summary == "Workspace not found: 123"
     assert raised.value.description is not None
     assert "The token can read: Other (999)." in raised.value.description
+
+
+def test_unmapped_status_is_transient_for_validation() -> None:
+    ops = _ops()
+    ops.get_workspace.side_effect = AsanaApiError(
+        status_code=502, path="/workspaces/123", body=None
+    )
+
+    with pytest.raises(UnexpectedValidationError):
+        _connector_with_ops(ops).validate_connector_settings()
 
 
 def test_gateway_validation_errors_pass_through() -> None:

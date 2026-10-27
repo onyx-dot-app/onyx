@@ -35,6 +35,14 @@ class AsanaTask:
         return f"ID: {self.id}\nTitle: {self.title}\nLast modified: {self.last_modified}\nText: {self.text}"
 
 
+def project_skipped_for_team(project: dict, team_gid: str | None) -> bool:
+    """Whether the team filter skips a project: a private project of another
+    team. The filter applies only when no project ids are selected."""
+    if not team_gid or project.get("privacy_setting") != "private":
+        return False
+    return (project.get("team") or {}).get("gid") != team_gid
+
+
 class AsanaAPI:
     def __init__(
         self, ops: AsanaSourceOperations, workspace_gid: str, team_gid: str | None
@@ -100,8 +108,6 @@ class AsanaAPI:
     ) -> Iterator[AsanaTask]:
         project = self.ops.get_project(project_gid=project_gid)
         project_name = project.get("name", project_gid)
-        team = project.get("team") or {}
-        team_gid = team.get("gid")
 
         if project.get("archived"):
             logger.info("Skipping archived project: %s (%s)", project_name, project_gid)
@@ -110,12 +116,7 @@ class AsanaAPI:
         # picked specific projects via `project_gids`, respect that choice
         # regardless of team membership — those projects were explicitly
         # opted in upstream by the project_gid filter in get_tasks.
-        if (
-            project.get("privacy_setting") == "private"
-            and self.team_gid
-            and team_gid != self.team_gid
-            and project_gids is None
-        ):
+        if project_gids is None and project_skipped_for_team(project, self.team_gid):
             logger.info(
                 "Skipping private project not in configured team: %s (%s)",
                 project_name,

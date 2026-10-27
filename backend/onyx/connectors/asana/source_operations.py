@@ -70,11 +70,16 @@ def _call(path: str, call: Callable[[], T]) -> T:
     try:
         return call()
     except ApiException as e:
+        # The SDK wraps a connection or TLS failure as status 0.
+        if not e.status:
+            raise UnreachableValidationError(
+                f"Onyx cannot connect to Asana for GET {path}: {e.reason}"
+            ) from e
         raw: Any = e.body
         body: str | None = raw.decode("utf-8", errors="replace") if raw else None
         # The cause of a mapped error, so a check's Error Details show the
         # request and Asana's body.
-        api_error = AsanaApiError(status_code=int(e.status or 0), path=path, body=body)
+        api_error = AsanaApiError(status_code=int(e.status), path=path, body=body)
         if api_error.status_code == 401:
             raise CredentialInvalidError(
                 "Asana rejected the personal access token (HTTP 401).",
@@ -238,21 +243,21 @@ class AsanaSourceOperations(SourceOperations):
         *,
         workspace_gid: str,
         opt_fields: str | None = None,
+        archived: bool | None = None,
         limit: int | None = None,
     ) -> Iterator[dict[str, Any]]:
-        """Every project of the workspace that the token's user can see."""
+        """Every project of the workspace that the token's user can see,
+        or only the archived or the live ones."""
         projects = self._clients().projects
         path: str = "/projects"
+        opts: dict[str, Any] = _opts(opt_fields, workspace=workspace_gid)
+        if archived is not None:
+            opts["archived"] = "true" if archived else "false"
         return _items(
             path,
             _call(
                 path,
-                lambda: iter(
-                    projects.get_projects(
-                        _opts(opt_fields, workspace=workspace_gid),
-                        **_listing_kwargs(limit),
-                    )
-                ),
+                lambda: iter(projects.get_projects(opts, **_listing_kwargs(limit))),
             ),
         )
 
