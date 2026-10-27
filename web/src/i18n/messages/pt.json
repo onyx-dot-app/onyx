@@ -7297,11 +7297,11 @@
             "off": "Todos os fragmentos do índice de pesquisa têm seus IDs de conector. A pesquisa usa as listas de acesso dos documentos. O acesso por conector está desativado.",
             "shadow": "Todos os fragmentos do índice de pesquisa têm seus IDs de conector. A pesquisa usa as listas de acesso dos documentos e as compara com o acesso por conector."
           },
-          "title": "Atualização do acesso por conector concluída"
+          "title": "Atualização do acesso por conector concluída."
         },
         "notStarted": {
           "description": "Um trabalho em segundo plano adicionará os IDs de conector aos fragmentos existentes do índice de pesquisa. Ele começa em alguns minutos.",
-          "title": "A atualização do acesso por conector ainda não começou"
+          "title": "A atualização do acesso por conector ainda não começou."
         },
         "progress": {
           "ariaLabel": "Progresso da atualização do acesso por conector"
@@ -7342,7 +7342,7 @@
         },
         "loadError": {
           "description": "Recarregue a página para tentar novamente.",
-          "title": "Não foi possível carregar a atualização do acesso por conector"
+          "title": "Não foi possível carregar a atualização do acesso por conector."
         }
       },
       "embeddingRateLimit": {

@@ -7297,11 +7297,11 @@
             "off": "Every chunk in the search index has its connector IDs. Search uses the document access lists. Connector-level access is turned off.",
             "shadow": "Every chunk in the search index has its connector IDs. Search uses the document access lists and compares them with connector-level access."
           },
-          "title": "Connector access update complete"
+          "title": "Connector access update complete."
         },
         "notStarted": {
           "description": "A background job will add connector IDs to the existing chunks in the search index. It starts within a few minutes.",
-          "title": "Connector access update has not started"
+          "title": "Connector access update has not started."
         },
         "progress": {
           "ariaLabel": "Connector access update progress"
@@ -7342,7 +7342,7 @@
         },
         "loadError": {
           "description": "Reload the page to try again.",
-          "title": "Could not load the connector access update"
+          "title": "Could not load the connector access update."
         }
       },
       "embeddingRateLimit": {

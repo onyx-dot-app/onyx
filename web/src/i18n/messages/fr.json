@@ -7297,11 +7297,11 @@
             "off": "Chaque fragment de l’index de recherche a ses ID de connecteur. La recherche utilise les listes d’accès des documents. L’accès par connecteur est désactivé.",
             "shadow": "Chaque fragment de l’index de recherche a ses ID de connecteur. La recherche utilise les listes d’accès des documents et les compare à l’accès par connecteur."
           },
-          "title": "Mise à jour de l’accès par connecteur terminée"
+          "title": "Mise à jour de l’accès par connecteur terminée."
         },
         "notStarted": {
           "description": "Une tâche en arrière-plan ajoutera les ID de connecteur aux fragments existants de l’index de recherche. Elle démarre dans quelques minutes.",
-          "title": "La mise à jour de l’accès par connecteur n’a pas commencé"
+          "title": "La mise à jour de l’accès par connecteur n’a pas commencé."
         },
         "progress": {
           "ariaLabel": "Progression de la mise à jour de l’accès par connecteur"
@@ -7342,7 +7342,7 @@
         },
         "loadError": {
           "description": "Rechargez la page pour réessayer.",
-          "title": "Impossible de charger la mise à jour de l’accès par connecteur"
+          "title": "Impossible de charger la mise à jour de l’accès par connecteur."
         }
       },
       "embeddingRateLimit": {
