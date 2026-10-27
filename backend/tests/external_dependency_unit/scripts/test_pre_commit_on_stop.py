@@ -361,6 +361,19 @@ def test_unrelated_history_merge_checks_only_resolutions(repo: Path) -> None:
     assert _checked(repo) == set()
 
 
+def test_octopus_merge_checks_edits_from_the_turn(repo: Path) -> None:
+    for branch in ("one", "two"):
+        _git(repo, "checkout", "-qb", branch, "main")
+        _commit(repo, f"{branch}.txt")
+    _git(repo, "checkout", "-q", "main")
+    _commit(repo, "main.txt")
+    _start(repo)
+    _git(repo, "merge", "-q", "--no-commit", "one", "two")
+    _commit(repo, "base.txt", "edit\n")
+    _stop(repo)
+    assert _checked(repo) == {"base.txt"}
+
+
 def test_linked_worktree_uses_its_own_reflog(repo: Path) -> None:
     linked = repo.parent / "linked"
     _git(repo, "worktree", "add", "-b", "linked", str(linked))

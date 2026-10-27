@@ -94,12 +94,17 @@ def _automatic_merge(repo: Path, *merge_args: str) -> str | None:
 
 def _merge_resolution_files(repo: Path, merge: str) -> set[str]:
     parents = _git(repo, "rev-list", "--parents", "-n", "1", merge).split()[1:]
-    if len(parents) != 2:
-        return set()
     automatic = (
-        _automatic_merge(repo, "--allow-unrelated-histories", *parents) or parents[0]
+        _automatic_merge(repo, "--allow-unrelated-histories", *parents)
+        if len(parents) == 2
+        else None
     )
-    return _git_paths(repo, "diff", "--name-only", automatic, merge)
+    if automatic is not None:
+        return _git_paths(repo, "diff", "--name-only", automatic, merge)
+    # merge-tree takes two branches; otherwise keep files that match no parent.
+    return set.intersection(
+        *(_git_paths(repo, "diff", "--name-only", parent, merge) for parent in parents)
+    )
 
 
 def _replay_files(
