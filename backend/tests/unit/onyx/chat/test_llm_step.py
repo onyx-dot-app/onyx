@@ -1390,6 +1390,28 @@ class TestSignedThinkingReplay:
             ThinkingBlock(thinking="Let me think.", signature="sig-1")
         ]
 
+    def test_signed_suffix_matching_earlier_text_is_appended(self) -> None:
+        from onyx.llm.model_response import Delta
+
+        result = self._run_stream(
+            [
+                Delta(
+                    reasoning_content="ab",
+                    thinking_blocks=[ThinkingBlock(thinking="ab")],
+                ),
+                Delta(
+                    reasoning_content="abc",
+                    thinking_blocks=[ThinkingBlock(thinking="abc", signature="sig-1")],
+                ),
+                Delta(content="Answer"),
+            ]
+        )
+
+        assert result.thinking is not None
+        assert result.thinking.blocks == [
+            ThinkingBlock(thinking="ababc", signature="sig-1")
+        ]
+
     def test_unsigned_thinking_is_not_replayable(self) -> None:
         from onyx.llm.model_response import Delta
 

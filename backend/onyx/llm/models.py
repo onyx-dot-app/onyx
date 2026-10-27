@@ -182,9 +182,15 @@ class ReplayableThinking(BaseModel):
     blocks: list[AnyThinkingBlock]
 
     def replay_text(self) -> str:
-        """Block content the provider counts as input tokens on replay."""
+        """Block content the provider counts as input tokens on replay.
+
+        An omitted-display block has empty text, and its signature holds the
+        encrypted reasoning, so the signature stands in as an upper estimate.
+        """
         return "".join(
-            block.thinking if isinstance(block, ThinkingBlock) else block.data
+            (block.thinking or block.signature or "")
+            if isinstance(block, ThinkingBlock)
+            else block.data
             for block in self.blocks
         )
 
@@ -505,9 +511,9 @@ def apply_generation_event(message: AssistantMessage, event: GenerationEvent) ->
                     and not last.signature
                 ):
                     # LiteLLM's Anthropic stream resends the full text with
-                    # the signature; a provider that does not sends a suffix.
-                    if block.signature and block.thinking.startswith(last.thinking):
-                        last.thinking = block.thinking
+                    # the signature in a chunk that adds no text delta.
+                    if block.signature and not event.text:
+                        last.thinking = block.thinking or last.thinking
                     else:
                         last.thinking += block.thinking
                     last.signature = block.signature

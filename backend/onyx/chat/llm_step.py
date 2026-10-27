@@ -1143,7 +1143,11 @@ def run_llm_step_pkt_generator(
             if delta.thinking_blocks:
                 apply_generation_event(
                     generated_thinking,
-                    ThinkingDeltaEvent(content_index=0, blocks=delta.thinking_blocks),
+                    ThinkingDeltaEvent(
+                        content_index=0,
+                        text=delta.reasoning_content or "",
+                        blocks=delta.thinking_blocks,
+                    ),
                 )
 
             # Should only happen once, frontend does not expect multiple
