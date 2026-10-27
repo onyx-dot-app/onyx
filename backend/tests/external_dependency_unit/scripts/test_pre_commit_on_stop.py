@@ -187,6 +187,28 @@ def test_explicit_commit_operations_are_checked(repo: Path, operation: str) -> N
     assert _checked(repo) == {"base.txt"}
 
 
+@pytest.mark.parametrize("operation", ["cherry-pick", "merge", "rebase"])
+def test_conflict_resolutions_are_checked(repo: Path, operation: str) -> None:
+    _git(repo, "checkout", "-qb", "upstream")
+    _commit(repo, "upstream.txt")
+    _commit(repo, "base.txt", "upstream edit\n")
+    _git(repo, "checkout", "-q", "main")
+    _commit(repo, "base.txt", "local edit\n")
+    _start(repo)
+    conflict = subprocess.run(
+        ["git", operation, "upstream"], cwd=repo, capture_output=True, text=True
+    )
+    assert conflict.returncode != 0, conflict.stdout
+    (repo / "base.txt").write_text("resolved\n")
+    _git(repo, "add", "base.txt")
+    if operation == "merge":
+        _git(repo, "commit", "-qm", "Merge upstream")
+    else:
+        _git(repo, "-c", "core.editor=true", operation, "--continue")
+    _stop(repo)
+    assert _checked(repo) == {"base.txt"}
+
+
 def test_linked_worktree_uses_its_own_reflog(repo: Path) -> None:
     linked = repo.parent / "linked"
     _git(repo, "worktree", "add", "-b", "linked", str(linked))

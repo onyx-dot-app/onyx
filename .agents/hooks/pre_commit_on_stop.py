@@ -78,20 +78,48 @@ def _head_reflog(repo: Path) -> bytes:
         return b""
 
 
+def _merge_resolution_files(repo: Path, merge: str) -> set[str]:
+    """Files a merge commit changed beyond Git's automatic merge result."""
+    parents = _git(repo, "rev-list", "--parents", "-n", "1", merge).split()[1:]
+    if len(parents) != 2:
+        return set()
+    automatic = subprocess.run(
+        ["git", "merge-tree", "--write-tree", *parents],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    )
+    # Exit code 1 means the automatic merge had conflicts; the tree still exists.
+    if automatic.returncode not in (0, 1) or not automatic.stdout:
+        return set()
+    return _git_paths(repo, "diff", "--name-only", automatic.stdout.split()[0], merge)
+
+
 def _committed_files(repo: Path, offset: int, digest: str) -> set[str]:
-    """Read local commits, not checkout, pull, merge or rebase updates."""
+    """Read local commits and conflict resolutions, not imported branch updates."""
     log = _head_reflog(repo)
     if hashlib.sha256(log[:offset]).hexdigest() != digest:
         return set()  # The reflog was expired or rewritten during the turn.
     files: set[str] = set()
     for entry in log[offset:].decode("utf-8", errors="replace").splitlines():
         refs, separator, action = entry.partition("\t")
-        if not separator or not action.startswith(
-            ("commit:", "commit (amend):", "cherry-pick:", "revert:")
-        ):
+        if not separator:
             continue
         before, after = refs.split()[:2]
-        files |= _git_paths(repo, "diff", "--name-only", before, after)
+        if action.startswith("commit (merge):"):
+            files |= _merge_resolution_files(repo, after)
+        elif action.startswith(
+            (
+                "commit:",
+                "commit (amend):",
+                "commit (cherry-pick):",
+                "cherry-pick:",
+                "revert:",
+                # A rebased commit replays branch work, never upstream changes.
+                "rebase (continue):",
+            )
+        ):
+            files |= _git_paths(repo, "diff", "--name-only", before, after)
     return files
 
 
