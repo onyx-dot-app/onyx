@@ -12,6 +12,7 @@ from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
     InsufficientPermissionsError,
+    RateLimitedValidationError,
     UnexpectedValidationError,
 )
 from onyx.connectors.models import ConnectorMissingCredentialError
@@ -372,7 +373,7 @@ def test_validate_connector_settings_reads_configured_workspace() -> None:
         (401, CredentialExpiredError),
         (403, InsufficientPermissionsError),
         (404, ConnectorValidationError),
-        (429, UnexpectedValidationError),
+        (429, RateLimitedValidationError),
         (500, UnexpectedValidationError),
     ],
 )

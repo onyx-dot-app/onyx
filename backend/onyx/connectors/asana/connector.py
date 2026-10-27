@@ -10,6 +10,7 @@ from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
     InsufficientPermissionsError,
+    RateLimitedValidationError,
     UnexpectedValidationError,
 )
 from onyx.connectors.interfaces import (
@@ -89,7 +90,7 @@ class AsanaConnector(LoadConnector, PollConnector):
                     "Check the Workspace ID."
                 ) from api_err
             if status == 429:
-                raise UnexpectedValidationError(
+                raise RateLimitedValidationError(
                     "Asana rate limit reached during validation (HTTP 429). Try again later."
                 ) from api_err
             raise UnexpectedValidationError(
