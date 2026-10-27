@@ -128,14 +128,10 @@ from shared_configs.contextvars import get_current_tenant_id
 
 if TYPE_CHECKING:
     from litellm.types.llms.anthropic import (
-        AnthopicMessagesAssistantMessageParam,
-        AnthropicMessagesUserMessageParam,
+        AllAnthropicPassThroughMessageValues,
+        AnthropicThinkingParam,
     )
     from litellm.types.llms.openai import ChatCompletionToolParam
-
-    _AnthropicAdapterMessage = (
-        AnthropicMessagesUserMessageParam | AnthopicMessagesAssistantMessageParam
-    )
 
 logger = setup_logger()
 
@@ -919,7 +915,7 @@ def _anthropic_messages_to_raw_messages(
 
     adapter = LiteLLMAnthropicMessagesAdapter()
     translated = adapter.translate_anthropic_messages_to_openai(
-        messages=cast("list[_AnthropicAdapterMessage]", messages)
+        messages=cast("list[AllAnthropicPassThroughMessageValues]", messages)
     )
     raw: list[dict[str, Any]] = []
     system_message = _anthropic_system_to_raw_message(system)
@@ -1028,7 +1024,7 @@ def _anthropic_reasoning_effort(
     )
 
     effort = LiteLLMAnthropicMessagesAdapter.translate_anthropic_thinking_to_reasoning_effort(
-        thinking
+        cast("AnthropicThinkingParam", thinking)
     )
     return _parse_reasoning_effort(effort)
 
