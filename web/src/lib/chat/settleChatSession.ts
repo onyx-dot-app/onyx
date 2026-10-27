@@ -93,10 +93,23 @@ export async function settleChatSession({
       if (!session?.incognito && !settled.incognito) {
         const local = session?.messageTree;
         const saved = processRawChatHistory(settled.messages, settled.packets);
-        store.updateSessionMessageTree(
-          sessionId,
-          local ? preserveFailedMessages(saved, local) : saved
-        );
+        const messageTree = local
+          ? preserveFailedMessages(saved, local)
+          : saved;
+        const selectedNodeId = session?.selectedNodeIdForDocDisplay;
+        const selectedMessageId =
+          selectedNodeId == null
+            ? undefined
+            : local?.get(selectedNodeId)?.messageId;
+        store.updateSessionData(sessionId, {
+          messageTree,
+          selectedNodeIdForDocDisplay:
+            messageTree === local
+              ? (selectedNodeId ?? null)
+              : selectedMessageId === undefined
+                ? null
+                : (messageTree.get(selectedMessageId)?.nodeId ?? null),
+        });
       }
     }
     const store = useChatSessionStore.getState();

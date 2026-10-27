@@ -1035,7 +1035,10 @@ export default function useChatController({
 
       let streamSucceeded = false;
       let saveFailed = false;
-      const readerFinished = Promise.withResolvers<void>();
+      let resolveReaderFinished: () => void = () => {};
+      const readerFinished = new Promise<void>((resolve) => {
+        resolveReaderFinished = resolve;
+      });
 
       try {
         // Selection-time override writes are best-effort. Await confirmation
@@ -1089,7 +1092,7 @@ export default function useChatController({
         const stack = new CurrentMessageFIFO();
         useChatSessionStore.getState().updateSessionData(frozenSessionId, {
           sendAcknowledged: stack.acknowledged,
-          readerFinished: readerFinished.promise,
+          readerFinished,
         });
         updateCurrentMessageFIFO(stack, {
           signal: controller.signal,
@@ -1521,7 +1524,7 @@ export default function useChatController({
             });
           }
         } finally {
-          readerFinished.resolve();
+          resolveReaderFinished();
         }
       }
 

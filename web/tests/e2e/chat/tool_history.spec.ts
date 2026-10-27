@@ -55,7 +55,7 @@ test("custom tool output and answer survive a history reload", async ({
     await chatPage.expectCompleteAnswers(1);
     await chatPage.expectAnswerParagraph("The health check returned ok.");
     await chatPage.expectCustomToolResult(operation, '"status": "ok"');
-    await page.reload();
+    await chatPage.reload();
     await chatPage.expectCompleteAnswers(1);
     await chatPage.expectAnswerParagraph("The health check returned ok.");
     await chatPage.expectCustomToolResult(operation, '"status": "ok"');

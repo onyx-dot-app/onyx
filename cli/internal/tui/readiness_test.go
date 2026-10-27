@@ -140,3 +140,33 @@ func TestUnsupportedReadinessStopsPollingWithoutReleasingInput(t *testing.T) {
 		t.Fatal("unsupported endpoint must stop polling without declaring idle")
 	}
 }
+
+func TestReopeningActiveSessionPreservesReadinessOwner(t *testing.T) {
+	for _, settling := range []bool{false, true} {
+		m := NewModel(config.DefaultConfig(), nil)
+		ch := make(chan models.StreamEvent)
+		sid := "session"
+		parent := 11
+		m.chatSessionID = &sid
+		m.parentMessageID = &parent
+		m.streamCh = ch
+		m.isStreaming = true
+		m.settling = settling
+		m.viewport.addUserMessage("current question")
+		updated, cmd := m.handleSessionResumed(SessionResumedMsg{Detail: &models.ChatSessionDetailResponse{
+			ChatSessionID: sid,
+			Messages:      []models.ChatMessageDetail{{MessageID: 1, MessageType: "assistant", Message: "earlier answer"}},
+		}})
+		m = updated.(Model)
+		if cmd != nil || !m.isStreaming || m.streamCh != ch || m.parentMessageID != &parent {
+			t.Fatal("reopening replaced the active stream or its parent")
+		}
+		if len(m.viewport.entries) != 1 || m.viewport.entries[0].content != "current question" {
+			t.Fatal("reopening replaced live history with the earlier saved snapshot")
+		}
+		updated, _ = m.Update(sessionReadyMsg{sessionID: sid, channel: ch})
+		if updated.(Model).isStreaming {
+			t.Fatal("reopening detached the existing readiness callback")
+		}
+	}
+}

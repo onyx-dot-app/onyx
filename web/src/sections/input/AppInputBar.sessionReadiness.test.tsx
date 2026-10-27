@@ -269,3 +269,26 @@ test.each([false, true])(
     expect(fetchSettledChatSession).toHaveBeenCalledWith("session");
   }
 );
+
+test("a pending readiness check does not disable Stop when streaming resumes", async () => {
+  const user = setupUser();
+  const reader = deferred<void>();
+  const store = useChatSessionStore.getState();
+  store.updateSessionData("session", {
+    chatState: "unconfirmed",
+    readerFinished: reader.promise,
+  });
+  const inputProps = { ...props("unconfirmed"), initialMessage: "" };
+  const { rerender, container } = render(<AppInputBar {...inputProps} />);
+  await user.click(screen.getByRole("button", { name: /Check again$/ }));
+  act(() => store.updateChatState("session", "streaming"));
+  rerender(<AppInputBar {...inputProps} chatState="streaming" />);
+  const stop = container.querySelector<HTMLButtonElement>(
+    "#onyx-chat-input-send-button"
+  );
+  expect(stop).toBeEnabled();
+  if (!stop) throw new Error("Stop button is missing");
+  await user.click(stop);
+  expect(inputProps.stopGenerating).toHaveBeenCalledTimes(1);
+  await act(async () => reader.resolve());
+});
