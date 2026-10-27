@@ -78,24 +78,73 @@ def _head_reflog(repo: Path) -> bytes:
         return b""
 
 
-def _changed_beyond_merge(repo: Path, result: str, *merge_args: str) -> set[str]:
-    automatic = subprocess.run(
+def _automatic_merge(repo: Path, *merge_args: str) -> str | None:
+    """Tree of Git's automatic merge, with conflict markers where it conflicts."""
+    result = subprocess.run(
         ["git", "merge-tree", "--write-tree", *merge_args],
         cwd=repo,
         capture_output=True,
         text=True,
     )
     # Exit code 1 means the automatic merge had conflicts; the tree still exists.
-    if automatic.returncode not in (0, 1) or not automatic.stdout:
-        return _git_paths(repo, "diff", "--name-only", f"{result}^", result)
-    return _git_paths(repo, "diff", "--name-only", automatic.stdout.split()[0], result)
+    if result.returncode not in (0, 1) or not result.stdout:
+        return None
+    return result.stdout.split()[0]
 
 
 def _merge_resolution_files(repo: Path, merge: str) -> set[str]:
     parents = _git(repo, "rev-list", "--parents", "-n", "1", merge).split()[1:]
     if len(parents) != 2:
         return set()
-    return _changed_beyond_merge(repo, merge, *parents)
+    automatic = (
+        _automatic_merge(repo, "--allow-unrelated-histories", *parents) or parents[0]
+    )
+    return _git_paths(repo, "diff", "--name-only", automatic, merge)
+
+
+def _replay_files(
+    repo: Path, before: str, after: str, originals: list[str]
+) -> tuple[set[str], int | None]:
+    """Files a rebase step changed beyond an automatic replay of one original.
+
+    Returns the files and the index of the closest original. The closest replay
+    leaves only resolution edits. A step that replays no original, such as a
+    commit at an edit stop, keeps its whole diff.
+    """
+    closest = _git_paths(repo, "diff", "--name-only", before, after)
+    closest_index: int | None = None
+    for index, original in enumerate(originals):
+        if not closest:
+            break
+        automatic = _automatic_merge(
+            repo, "--merge-base", f"{original}^", before, original
+        )
+        if automatic is None:
+            continue
+        files = _git_paths(repo, "diff", "--name-only", automatic, after)
+        if len(files) < len(closest):
+            closest, closest_index = files, index
+    return closest, closest_index
+
+
+def _rebase_originals(repo: Path, original_tip: str, onto: str) -> list[str]:
+    return _git(
+        repo, "rev-list", "--reverse", "--no-merges", f"{onto}..{original_tip}"
+    ).split()
+
+
+def _rebase_in_progress(repo: Path) -> tuple[str, str] | None:
+    """(original tip, onto) from Git's state for a rebase in progress."""
+    for name in ("rebase-merge", "rebase-apply"):
+        state = Path(_git(repo, "rev-parse", "--git-path", name).strip())
+        try:
+            return (
+                (repo / state / "orig-head").read_text().strip(),
+                (repo / state / "onto").read_text().strip(),
+            )
+        except OSError:
+            continue
+    return None
 
 
 _Entry = tuple[str, str, str]  # (before, after, action)
@@ -122,42 +171,28 @@ def _reflog_entries(chunk: bytes) -> list[_Entry]:
     return entries
 
 
-def _rebase_step(action: str) -> str | None:
-    match = _REBASE_STEP.match(action)
-    return match["step"] if match else None
-
-
-def _rebase_in_progress(earlier: list[_Entry]) -> tuple[str, str] | None:
-    """(original tip, onto) of a rebase that started before the turn."""
-    for before, after, action in reversed(earlier):
-        step = _rebase_step(action)
-        if step in ("finish", "abort"):
-            return None
-        if step == "start":
-            return before, after
-    return None
-
-
-def _committed_files(repo: Path, offset: int, digest: str) -> set[str]:
+def _committed_files(
+    repo: Path, offset: int, digest: str, rebase: tuple[str, str] | None
+) -> set[str]:
     """Read local commits and conflict resolutions, not imported branch updates."""
     log = _head_reflog(repo)
     if hashlib.sha256(log[:offset]).hexdigest() != digest:
         return set()  # The reflog was expired or rewritten during the turn.
-    rebase = _rebase_in_progress(_reflog_entries(log[:offset]))
+    originals = _rebase_originals(repo, *rebase) if rebase else None
     files: set[str] = set()
     for before, after, action in _reflog_entries(log[offset:]):
-        step = _rebase_step(action)
+        match = _REBASE_STEP.match(action)
+        step = match["step"] if match else None
         if step == "start":
-            rebase = (before, after)
-        elif step == "abort":
-            rebase = None
-        elif step == "finish" and rebase:
-            # Clean replays, squashes and fixups match the automatic merge.
-            original_tip, onto = rebase
-            files |= _changed_beyond_merge(repo, after, onto, original_tip)
-            rebase = None
-        elif rebase:
-            continue
+            originals = _rebase_originals(repo, before, after)
+        elif step in ("finish", "abort"):
+            originals = None
+        elif originals is not None and (step or action.startswith(_COMMIT_ACTIONS)):
+            replayed, index = _replay_files(repo, before, after, originals)
+            files |= replayed
+            if index is not None:
+                # Replays keep their order, so the next one likely follows this one.
+                originals = originals[index + 1 :] + originals[: index + 1]
         elif action.startswith("commit (merge):"):
             files |= _merge_resolution_files(repo, after)
         elif action.startswith(_COMMIT_ACTIONS):
@@ -174,6 +209,7 @@ def _record_turn_start(repo: Path, session: str) -> None:
             {
                 "reflog_offset": len(reflog),
                 "reflog_digest": hashlib.sha256(reflog).hexdigest(),
+                "rebase": _rebase_in_progress(repo),
                 "files": _digests(repo, sorted(_dirty_files(repo))),
             }
         )
@@ -195,8 +231,11 @@ def _turn_changes(repo: Path, session: str) -> set[str] | None:
     try:
         offset = start.get("reflog_offset")
         digest = start.get("reflog_digest")
+        rebase = start.get("rebase")
         if isinstance(offset, int) and offset >= 0 and isinstance(digest, str):
-            changed |= _committed_files(repo, offset, digest)
+            changed |= _committed_files(
+                repo, offset, digest, (rebase[0], rebase[1]) if rebase else None
+            )
     except (subprocess.CalledProcessError, KeyError):
         pass
     return changed

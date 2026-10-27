@@ -212,7 +212,13 @@ def _resolve(repo: Path, operation: str) -> None:
     _git(repo, "add", "base.txt")
     if operation in ("merge", "rebase-with-commit"):
         _git(repo, "commit", "-q", "--no-edit")
-    if operation != "merge":
+    if operation == "rebase-without-finish":
+        subprocess.run(
+            ["git", "-c", "core.editor=true", "rebase", "--continue"],
+            cwd=repo,
+            capture_output=True,
+        )
+    elif operation != "merge":
         command = "cherry-pick" if operation == "cherry-pick" else "rebase"
         _git(repo, "-c", "core.editor=true", command, "--continue")
 
@@ -266,6 +272,91 @@ def test_clean_autosquash_checks_nothing(repo: Path) -> None:
         "--autosquash",
         "HEAD~3",
     )
+    _stop(repo)
+    assert _checked(repo) == set()
+
+
+def test_rebase_onto_checks_only_replayed_commits(repo: Path) -> None:
+    _git(repo, "checkout", "-qb", "upstream")
+    _commit(repo, "upstream.txt")
+    _git(repo, "checkout", "-q", "main")
+    _commit(repo, "base.txt", "skipped\n")
+    _commit(repo, "local.txt")
+    _start(repo)
+    _git(repo, "rebase", "-q", "--onto", "upstream", "HEAD~1")
+    _stop(repo)
+    assert _checked(repo) == set()
+
+
+def test_rebase_skips_patch_already_upstream(repo: Path) -> None:
+    _git(repo, "checkout", "-qb", "upstream")
+    _commit(repo, "base.txt", "shared\n")
+    _git(repo, "checkout", "-q", "main")
+    (repo / "base.txt").write_text("shared\n")
+    _git(repo, "commit", "-qam", "Local copy of the upstream change")
+    _commit(repo, "base.txt", "local\n")
+    _start(repo)
+    _git(repo, "rebase", "-q", "upstream")
+    _stop(repo)
+    assert _checked(repo) == set()
+
+
+def test_unfinished_rebase_checks_commits_from_the_turn(repo: Path) -> None:
+    _commit(repo, "local.txt")
+    _start(repo)
+    _git(
+        repo,
+        "-c",
+        "sequence.editor=sed -i.bak s/^pick/edit/",
+        "rebase",
+        "-qi",
+        "HEAD~1",
+    )
+    _commit(repo, "new.txt")
+    _stop(repo)
+    assert _checked(repo) == {"new.txt"}
+
+
+def test_rebase_across_turns_checks_each_turn_once(repo: Path) -> None:
+    _git(repo, "checkout", "-qb", "upstream")
+    _commit(repo, "base.txt", "upstream edit\n")
+    _commit(repo, "other.txt", "upstream edit\n")
+    _git(repo, "checkout", "-q", "main")
+    _commit(repo, "base.txt", "local edit\n")
+    _commit(repo, "other.txt", "local edit\n")
+    _start(repo)
+    _conflict(repo, "rebase")
+    _resolve(repo, "rebase-without-finish")
+    _stop(repo)
+    assert "base.txt" in _checked(repo)
+    _start(repo)
+    (repo / "other.txt").write_text("resolved\n")
+    _git(repo, "add", "other.txt")
+    _git(repo, "-c", "core.editor=true", "rebase", "--continue")
+    _stop(repo)
+    assert _checked(repo) == {"other.txt"}
+
+
+def test_quit_rebase_does_not_hide_later_commits(repo: Path) -> None:
+    _diverge(repo)
+    _commit(repo, "base.txt", "local edit\n")
+    _conflict(repo, "rebase")
+    _git(repo, "rebase", "--quit")
+    _git(repo, "reset", "-q", "--hard")
+    _start(repo)
+    _commit(repo, "new.txt")
+    _stop(repo)
+    assert _checked(repo) == {"new.txt"}
+
+
+def test_unrelated_history_merge_checks_only_resolutions(repo: Path) -> None:
+    _git(repo, "checkout", "-q", "--orphan", "unrelated")
+    _git(repo, "rm", "-rfq", ".")
+    _commit(repo, "imported.txt")
+    _git(repo, "checkout", "-q", "main")
+    _start(repo)
+    _git(repo, "merge", "-q", "--no-commit", "--allow-unrelated-histories", "unrelated")
+    _git(repo, "commit", "-q", "--no-edit")
     _stop(repo)
     assert _checked(repo) == set()
 
