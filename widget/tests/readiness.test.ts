@@ -49,10 +49,11 @@ describe("widget readiness", () => {
   });
 
   it("retries a stalled status request without releasing Send early", async () => {
-    const deadline = new AbortController();
-    const timeout = spyOn(AbortSignal, "timeout")
-      .mockImplementation(() => new AbortController().signal)
-      .mockReturnValueOnce(deadline.signal);
+    const setTimer = globalThis.setTimeout;
+    const timeout = spyOn(globalThis, "setTimeout").mockImplementation(
+      (callback, delay, ...args) =>
+        setTimer(callback, delay === 10_000 ? 0 : delay, ...args)
+    );
     let calls = 0;
     globalThis.fetch = mock(
       async (_input: RequestInfo | URL, init?: RequestInit) => {
@@ -64,11 +65,6 @@ describe("widget readiness", () => {
             () => reject(init.signal?.reason),
             { once: true }
           );
-          queueMicrotask(() =>
-            deadline.abort(
-              new DOMException("Request timed out", "TimeoutError")
-            )
-          );
         });
       }
     ) as typeof fetch;
@@ -79,9 +75,28 @@ describe("widget readiness", () => {
       new AbortController().signal,
       unconfirmed
     );
-    expect(timeout).toHaveBeenCalledWith(10_000);
+    expect(timeout).toHaveBeenCalledWith(expect.any(Function), 10_000);
     expect(unconfirmed).toHaveBeenCalledTimes(1);
     expect(calls).toBe(2);
+  });
+
+  it("supports browsers without AbortSignal composition methods", async () => {
+    spyOn(AbortSignal, "any").mockImplementation(() => {
+      throw new TypeError("AbortSignal.any is unavailable");
+    });
+    spyOn(AbortSignal, "timeout").mockImplementation(() => {
+      throw new TypeError("AbortSignal.timeout is unavailable");
+    });
+    globalThis.fetch = mock(async () =>
+      Response.json({ is_processing: false })
+    ) as typeof fetch;
+    const controller = new AbortController();
+    const api = new ApiService("https://onyx.test/api", async () => "key");
+
+    await api.waitForSessionIdle("session", controller.signal, () =>
+      controller.abort()
+    );
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
   });
 
   it("cancels polling when a reset replaces the conversation", async () => {

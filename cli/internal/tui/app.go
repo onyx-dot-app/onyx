@@ -314,9 +314,6 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "enter":
-		if m.isStreaming && !strings.HasPrefix(strings.TrimSpace(m.input.textInput.Value()), "/") {
-			return m, nil
-		}
 		if m.configState != nil {
 			text := strings.TrimSpace(m.input.textInput.Value())
 			m.input.textInput.SetValue("")
@@ -338,6 +335,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 					return cmdSelectModel(m, item.id)
 				}
 			}
+			return m, nil
+		}
+		if m.isStreaming && !strings.HasPrefix(strings.TrimSpace(m.input.textInput.Value()), "/") {
 			return m, nil
 		}
 

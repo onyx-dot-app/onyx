@@ -119,7 +119,19 @@ func TestCancellationAtDeliveryEndStillStopsAcknowledgedRun(t *testing.T) {
 			cancel()
 		}))
 		events := testutil.NewClient(server.URL).SendMessageStream(ctx, "hello", nil, 0, nil, nil, nil)
-		for range events {
+		var sessionID string
+		var responseID int
+		for event := range events {
+			switch e := event.(type) {
+			case models.SessionCreatedEvent:
+				sessionID = e.ChatSessionID
+			case models.MessageIDEvent:
+				responseID = e.ReservedAgentMessageID
+			}
+		}
+		if sessionID != "session" || responseID != 11 {
+			server.Close()
+			t.Fatalf("cancelled turn lost identity: session=%q response=%d", sessionID, responseID)
 		}
 		select {
 		case id := <-stopped:

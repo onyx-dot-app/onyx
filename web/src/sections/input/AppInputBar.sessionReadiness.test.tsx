@@ -13,6 +13,9 @@ import {
 } from "@/lib/chat/sessionReadiness";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 
+let mockSearchMode = false;
+const mockClearDraft = jest.fn();
+
 jest.mock("@/lib/chat/sessionReadiness", () => ({
   waitForChatSessionIdle: jest.fn(),
   fetchSettledChatSession: jest.fn(),
@@ -25,7 +28,12 @@ jest.mock("@/providers/IncognitoProvider", () => ({
   useIncognito: () => ({ incognitoEnabled: false }),
 }));
 jest.mock("@/providers/QueryControllerProvider", () => ({
-  useQueryController: () => ({ state: { phase: "idle", appMode: "chat" } }),
+  useQueryController: () => ({
+    state: {
+      phase: mockSearchMode ? "search-results" : "idle",
+      appMode: "chat",
+    },
+  }),
 }));
 jest.mock("@/providers/VoiceModeProvider", () => ({
   useVoiceMode: () => ({ stopTTS: jest.fn() }),
@@ -62,7 +70,7 @@ jest.mock("@/hooks/useDraft", () => ({
     loaded: true,
     draft: undefined,
     save: jest.fn(),
-    clear: jest.fn(),
+    clear: mockClearDraft,
   }),
 }));
 jest.mock("@/refresh-components/popovers/FilePickerPopover", () => ({
@@ -93,11 +101,78 @@ function props(chatState: AppInputBarProps["chatState"]): AppInputBarProps {
 }
 
 beforeEach(() => {
+  mockSearchMode = false;
+  mockClearDraft.mockClear();
+  jest.mocked(fetchSettledChatSession).mockResolvedValue({
+    chat_session_id: "session",
+    description: "Existing chat",
+    persona_id: 0,
+    persona_name: "Assistant",
+    time_created: "2026-10-02T00:00:00Z",
+    time_updated: "2026-10-02T00:00:00Z",
+    shared_status: ChatSessionSharedStatus.Private,
+    current_temperature_override: null,
+    current_reasoning_effort_override: null,
+    owner_name: null,
+    messages: [],
+    packets: [],
+    is_processing: false,
+    current_stream: null,
+  });
   useChatSessionStore.setState({ sessions: new Map(), currentSessionId: null });
   const store = useChatSessionStore.getState();
   store.createSession("session");
   store.setCurrentSession("session");
   store.enqueueCurrentMessage("Queued follow-up");
+});
+
+test("completion checks stay with their sessions across navigation", async () => {
+  const user = setupUser();
+  const firstIdle = deferred<void>();
+  const secondIdle = deferred<void>();
+  jest
+    .mocked(waitForChatSessionIdle)
+    .mockImplementation((sessionId) =>
+      sessionId === "session" ? firstIdle.promise : secondIdle.promise
+    );
+  const store = useChatSessionStore.getState();
+  store.updateChatState("session", "unconfirmed");
+  store.createSession("other", { chatState: "unconfirmed" });
+  const { rerender } = render(<AppInputBar {...props("unconfirmed")} />);
+
+  await user.click(screen.getByRole("button", { name: /Check again$/ }));
+  act(() => store.setCurrentSession("other"));
+  rerender(<AppInputBar {...props("unconfirmed")} />);
+  expect(screen.getByRole("button", { name: /Check again$/ })).toBeEnabled();
+  await user.click(screen.getByRole("button", { name: /Check again$/ }));
+
+  act(() => store.setCurrentSession("session"));
+  rerender(<AppInputBar {...props("unconfirmed")} />);
+  expect(screen.getByRole("button", { name: /Check again$/ })).toBeDisabled();
+  await act(async () => firstIdle.resolve());
+  act(() => store.setCurrentSession("other"));
+  rerender(<AppInputBar {...props("unconfirmed")} />);
+  expect(screen.getByRole("button", { name: /Check again$/ })).toBeDisabled();
+  await act(async () => secondIdle.resolve());
+  expect(screen.getByRole("button", { name: /Check again$/ })).toBeEnabled();
+});
+
+test("search cannot submit or clear a draft while readiness is unconfirmed", async () => {
+  mockSearchMode = true;
+  const user = setupUser();
+  const inputProps = props("unconfirmed");
+  const { container } = render(<AppInputBar {...inputProps} />);
+  const send = container.querySelector<HTMLButtonElement>(
+    "#onyx-chat-input-send-button"
+  );
+  expect(send).toBeDisabled();
+  if (!send) throw new Error("Search submission button is missing");
+  await user.click(send);
+  expect(inputProps.onSubmit).not.toHaveBeenCalled();
+  expect(mockClearDraft).not.toHaveBeenCalled();
+  expect(
+    screen.getByRole("textbox", { name: "Message input" })
+  ).toHaveTextContent("Keep this draft");
 });
 
 test("stopping preserves the draft and queue until completion", async () => {
@@ -162,22 +237,7 @@ test.each([false, true])(
     const user = setupUser();
     const idle = deferred<void>();
     jest.mocked(waitForChatSessionIdle).mockReturnValue(idle.promise);
-    jest.mocked(fetchSettledChatSession).mockResolvedValue({
-      chat_session_id: "session",
-      description: "Existing chat",
-      persona_id: 0,
-      persona_name: "Assistant",
-      time_created: "2026-10-02T00:00:00Z",
-      time_updated: "2026-10-02T00:00:00Z",
-      shared_status: ChatSessionSharedStatus.Private,
-      current_temperature_override: null,
-      current_reasoning_effort_override: null,
-      owner_name: null,
-      messages: [],
-      packets: [],
-      is_processing: false,
-      current_stream: null,
-    });
+
     const store = useChatSessionStore.getState();
     const sendAcknowledged = failedAcknowledgement
       ? Promise.reject(new TypeError("Connection lost before admission"))

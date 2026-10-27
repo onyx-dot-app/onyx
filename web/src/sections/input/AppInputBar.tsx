@@ -147,7 +147,14 @@ const AppInputBar = React.memo(
     );
     const setMutedRef = useRef<((muted: boolean) => void) | null>(null);
     const queuedMessages = useCurrentQueuedMessages();
-    const [isCheckingCompletion, setIsCheckingCompletion] = useState(false);
+    const currentSessionId = useChatSessionStore(
+      (state) => state.currentSessionId
+    );
+    const [checkingSessions, setCheckingSessions] = useState<Set<string>>(
+      () => new Set()
+    );
+    const isCheckingCompletion =
+      currentSessionId !== null && checkingSessions.has(currentSessionId);
     const tReadiness = useTranslations("chat.readiness");
     const queuedMessagesPaused = useChatSessionStore(
       (state) =>
@@ -313,13 +320,13 @@ const AppInputBar = React.memo(
     );
     const submitMessage = useCallback(
       (text: string) => {
-        if (!text.trim()) {
+        if (chatState !== "input" || !text.trim()) {
           return;
         }
         handleSubmit(text);
         clearChatDraft();
       },
-      [handleSubmit, clearChatDraft]
+      [chatState, handleSubmit, clearChatDraft]
     );
 
     const { currentMessageFiles, setCurrentMessageFiles } =
@@ -810,13 +817,21 @@ const AppInputBar = React.memo(
                   ? store.sessions.get(sessionId)
                   : undefined;
                 if (!sessionId || !session || isCheckingCompletion) return;
-                setIsCheckingCompletion(true);
+                setCheckingSessions((pending) =>
+                  new Set(pending).add(sessionId)
+                );
                 void settleChatSession({
                   sessionId,
                   controller: session.abortController,
                   errorMessage: tReadiness("checkFailed"),
                   mode: "recovery",
-                }).finally(() => setIsCheckingCompletion(false));
+                }).finally(() =>
+                  setCheckingSessions((pending) => {
+                    const remaining = new Set(pending);
+                    remaining.delete(sessionId);
+                    return remaining;
+                  })
+                );
                 return;
               }
               const canSubmitNormally = chatState === "input";
@@ -1079,7 +1094,8 @@ const AppInputBar = React.memo(
                       !message ||
                       isClassifying ||
                       hasPendingFiles ||
-                      chatState === "cancelling"
+                      chatState === "cancelling" ||
+                      chatState === "unconfirmed"
                     }
                     id="onyx-chat-input-send-button"
                     icon={isClassifying ? IconLoader : SvgSearch}

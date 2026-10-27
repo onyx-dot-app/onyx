@@ -403,10 +403,13 @@ export default function useChatController({
       )
         return;
       const controller = new AbortController();
-      submissionStore.setAbortController(getCurrentSessionId(), controller);
-      submissionStore.updateSessionData(getCurrentSessionId(), {
-        queuedMessagesPaused: false,
-      });
+      const submissionSessionId = getCurrentSessionId();
+      if (submissionSessionId) {
+        submissionStore.setAbortController(submissionSessionId, controller);
+        submissionStore.updateSessionData(submissionSessionId, {
+          queuedMessagesPaused: false,
+        });
+      }
       // Read at submit time so no caller can capture a stale value.
       const incognito = incognitoEnabledRef.current ?? false;
       const isMultiModel =
