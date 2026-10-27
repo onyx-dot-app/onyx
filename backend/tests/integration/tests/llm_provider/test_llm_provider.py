@@ -2418,23 +2418,27 @@ def test_max_document_tokens_uses_selected_model(
     provider = LLMProviderManager.create(
         user_performing_action=admin_user, model_names=["gpt-4"]
     )
-    provider_data = _get_provider_by_id(admin_user, provider.id)
-    assert provider_data is not None
-    small_model_id = next(
-        mc["id"]
-        for mc in provider_data["model_configurations"]
-        if mc["name"] == "gpt-4"
-    )
-
-    def _max_document_tokens(params: dict[str, int]) -> int:
-        response = client.get(
-            f"{API_SERVER_URL}/chat/max-selected-document-tokens",
-            params={"persona_id": DEFAULT_PERSONA_ID, **params},
-            headers=admin_user.headers,
+    try:
+        provider_data = _get_provider_by_id(admin_user, provider.id)
+        assert provider_data is not None
+        small_model_id = next(
+            mc["id"]
+            for mc in provider_data["model_configurations"]
+            if mc["name"] == "gpt-4"
         )
-        assert response.status_code == 200
-        return response.json()["max_tokens"]
 
-    assert _max_document_tokens({"model_configuration_id": small_model_id}) < (
-        _max_document_tokens({})
-    )
+        def _max_document_tokens(params: dict[str, int]) -> int:
+            response = client.get(
+                f"{API_SERVER_URL}/chat/max-selected-document-tokens",
+                params={"persona_id": DEFAULT_PERSONA_ID, **params},
+                headers=admin_user.headers,
+            )
+            assert response.status_code == 200
+            return response.json()["max_tokens"]
+
+        assert _max_document_tokens({"model_configuration_id": small_model_id}) < (
+            _max_document_tokens({})
+        )
+    finally:
+        # The provider became the global default; force-delete clears both.
+        LLMProviderManager.delete(provider, admin_user, force=True)
