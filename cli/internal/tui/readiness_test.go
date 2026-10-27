@@ -112,3 +112,15 @@ func TestStopDuringSettlementUsesAcknowledgedIdentity(t *testing.T) {
 		t.Fatal("Stop was lost after delivery ended")
 	}
 }
+
+func TestUnsupportedReadinessStopsPollingWithoutReleasingInput(t *testing.T) {
+	m := NewModel(config.DefaultConfig(), nil)
+	ch := make(chan models.StreamEvent)
+	m.streamCh = ch
+	m.isStreaming = true
+	updated, cmd := m.Update(sessionReadyMsg{sessionID: "session", channel: ch, err: &api.OnyxAPIError{StatusCode: 404, Detail: "Not found"}})
+	m = updated.(Model)
+	if cmd != nil || !m.isStreaming || !m.readinessUnconfirmed {
+		t.Fatal("unsupported endpoint must stop polling without declaring idle")
+	}
+}

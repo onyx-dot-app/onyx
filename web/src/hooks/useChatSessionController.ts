@@ -239,6 +239,9 @@ export default function useChatSessionController({
       const sessionOwner = useChatSessionStore
         .getState()
         .sessions.get(chatSession.chat_session_id)?.abortController;
+      const recovering =
+        useChatSessionStore.getState().sessions.get(chatSession.chat_session_id)
+          ?.chatState === "unconfirmed";
       const sessionBusy = Boolean(
         chatSession.is_processing || chatSession.current_stream
       );
@@ -299,6 +302,7 @@ export default function useChatSessionController({
           sessionId,
           controller: sessionOwner,
           errorMessage: tReadiness("checkFailed"),
+          mode: recovering ? "recovery" : "completion",
         });
       }
 
@@ -315,6 +319,11 @@ export default function useChatSessionController({
         // Added and deleted in this function only, so an entry can never
         // outlive its tail.
         resumingRuns.add(runId);
+        const readerFinished = Promise.withResolvers<void>();
+        useChatSessionStore.getState().updateSessionData(sessionId, {
+          sendAcknowledged: Promise.resolve(runId),
+          readerFinished: readerFinished.promise,
+        });
         const accumulated: Packet[] = [];
         let lastFlush = 0;
         let trailingFlush: ReturnType<typeof setTimeout> | null = null;
@@ -400,18 +409,24 @@ export default function useChatSessionController({
             clearTimeout(trailingFlush);
           }
           resumingRuns.delete(runId);
-          if (ownsStream()) {
-            if (
-              !accumulated.some((packet) => packet.obj.type === PacketType.STOP)
-            ) {
-              accumulated.push({
-                placement: { turn_index: 0, tab_index: 0 },
-                obj: { type: PacketType.STOP },
-              });
+          try {
+            if (ownsStream()) {
+              if (
+                !accumulated.some(
+                  (packet) => packet.obj.type === PacketType.STOP
+                )
+              ) {
+                accumulated.push({
+                  placement: { turn_index: 0, tab_index: 0 },
+                  obj: { type: PacketType.STOP },
+                });
+              }
+              flush();
             }
-            flush();
+          } finally {
+            readerFinished.resolve();
+            await settleSession(sessionId);
           }
-          await settleSession(sessionId);
         }
       }
 

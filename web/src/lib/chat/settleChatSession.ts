@@ -54,17 +54,19 @@ export async function settleChatSession({
   refreshHistory = true,
   completeRendering = true,
 }: SettleChatSessionOptions): Promise<void> {
+  const session = useChatSessionStore.getState().sessions.get(sessionId);
+  const sendAcknowledged = session?.sendAcknowledged;
+  const readerFinished = session?.readerFinished;
   const ownsSettlement = () => {
-    const session = useChatSessionStore.getState().sessions.get(sessionId);
+    const current = useChatSessionStore.getState().sessions.get(sessionId);
     return (
-      session?.abortController === controller && session.chatState !== "input"
+      current?.abortController === controller &&
+      current.readerFinished === readerFinished &&
+      current.chatState !== "input"
     );
   };
   if (!ownsSettlement()) return;
   try {
-    const sendAcknowledged = useChatSessionStore
-      .getState()
-      .sessions.get(sessionId)?.sendAcknowledged;
     if (sendAcknowledged) {
       try {
         await sendAcknowledged;
@@ -72,6 +74,10 @@ export async function settleChatSession({
         // Explicit recovery checks server state after the original send failed.
         if (mode !== "recovery") throw error;
       }
+      if (!ownsSettlement()) return;
+    }
+    if (readerFinished) {
+      await readerFinished;
       if (!ownsSettlement()) return;
     }
     await waitForChatSessionIdle(sessionId);
@@ -102,6 +108,7 @@ export async function settleChatSession({
       regenerationState: null,
       streamingStartTime: undefined,
       sendAcknowledged: undefined,
+      readerFinished: undefined,
     });
     if (completeRendering)
       store.setLatestMessageRenderComplete(sessionId, true);

@@ -353,3 +353,59 @@ test("an old rejected attempt does not hide the latest saved answer", async () =
     useChatSessionStore.getState().sessions.get("session")?.messageTree
   ).toEqual(saved);
 });
+
+test.each([false, true])(
+  "recovery waits for final local packets before releasing input (aborted: %s)",
+  async (aborted) => {
+    const reader = Promise.withResolvers<void>();
+    const store = useChatSessionStore.getState();
+    const controller = store.sessions.get("session")!.abortController;
+    const acknowledgement = Promise.reject(new TypeError("Connection lost"));
+    store.updateSessionData("session", {
+      chatState: "unconfirmed",
+      incognito: true,
+      sendAcknowledged: acknowledgement,
+      readerFinished: reader.promise,
+    });
+    if (aborted) controller.abort();
+    const recovery = settle("recovery");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(waitForChatSessionIdle).not.toHaveBeenCalled();
+    expect(store.sessions.get("session")?.chatState).not.toBe("input");
+    store.updateSessionMessageTree(
+      "session",
+      new Map([[42, message(42, "assistant", "Final local output")]])
+    );
+    reader.resolve();
+    await recovery;
+    expect(
+      useChatSessionStore.getState().sessions.get("session")
+    ).toMatchObject({
+      chatState: "input",
+      readerFinished: undefined,
+    });
+    expect(
+      useChatSessionStore
+        .getState()
+        .sessions.get("session")
+        ?.messageTree.get(42)?.message
+    ).toBe("Final local output");
+  }
+);
+
+test("an old reader finishing cannot release another request", async () => {
+  const reader = Promise.withResolvers<void>();
+  const store = useChatSessionStore.getState();
+  const controller = store.sessions.get("session")!.abortController;
+  store.updateSessionData("session", { readerFinished: reader.promise });
+  const settling = settle();
+  store.setAbortController("session", new AbortController());
+  controller.abort();
+  reader.resolve();
+  await settling;
+  expect(waitForChatSessionIdle).not.toHaveBeenCalled();
+  expect(
+    useChatSessionStore.getState().sessions.get("session")?.chatState
+  ).toBe("cancelling");
+});

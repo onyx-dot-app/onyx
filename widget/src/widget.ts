@@ -388,6 +388,7 @@ export class OnyxChatWidget extends LitElement {
     this.abortController = controller;
     const stillOurs = () => this.abortController === controller;
     let sentSessionId: string | undefined;
+    let acknowledged = false;
     const userMessage: ChatMessage = {
       id: `msg-${Date.now()}`,
       role: "user",
@@ -456,6 +457,7 @@ export class OnyxChatWidget extends LitElement {
 
         // Capture message IDs from backend and update local messages
         if (result.messageIds) {
+          acknowledged = true;
           // Update user message ID if we got one
           if (result.messageIds.userMessageId !== null) {
             const userMsgIndex = this.messages.findIndex(
@@ -561,7 +563,12 @@ export class OnyxChatWidget extends LitElement {
       if (!(err instanceof Error && err.name === "AbortError")) {
         this.error =
           err instanceof Error ? err.message : "Failed to send message";
-        this.inputValue = message;
+        if (!acknowledged) {
+          this.messages = this.messages.filter(
+            (item) => item.id !== userMessage.id
+          );
+          if (!this.inputValue) this.inputValue = message;
+        }
       }
     } finally {
       if (!stillOurs()) return;
