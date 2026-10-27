@@ -720,3 +720,47 @@ def test_completion_drains_delayed_events_before_closing_live_output(
     assert "".join(saved.blocks) == "".join(
         get_json_line(packet.model_dump()) for packet in packets
     )
+
+
+@pytest.mark.parametrize("delete_on_done", [False, True])
+def test_worker_start_failure_finalizes_replay_and_rejects_late_events(
+    delete_on_done: bool,
+) -> None:
+    cache = FakeCache()
+    session_id = uuid4()
+    buffer = StreamBufferWriter(
+        cache, session_id, _STREAM_ID, delete_on_done=delete_on_done
+    )
+    buffer.append_line('{"saved": "partial"}\n')
+    buffer.flush()
+    output = ChatDelivery(buffer)
+    packet = Packet(placement=Placement(turn_index=0), obj=OverallStop())
+    output.publish(packet)
+    channel = EventDelivery(output.events)
+    received: list[AgentEvent] = []
+    channel.subscribe(received.append)
+
+    with patch(
+        "onyx.agents.concurrency.start_thread_with_context",
+        side_effect=RuntimeError("cannot start new thread"),
+    ) as start:
+        output.finish()
+        output.finished.result(timeout=1)
+        channel.publish(AgentStartEvent(run_id="late"))
+        output.finish()
+        start.assert_called_once()
+
+    assert received == []
+    assert channel.failed.is_set()
+    assert channel.tracker.wait_idle(timeout=1)
+    packets = list(output.reader)
+    assert packets[0] == packet
+    assert len(packets) == 2
+    assert isinstance(packets[1], StreamingError)
+    assert packets[1].error_code == "STREAM_GAP"
+    saved = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
+    if delete_on_done:
+        assert saved is None
+        assert not cache.store
+    else:
+        assert saved is not None and saved.done and saved.gap

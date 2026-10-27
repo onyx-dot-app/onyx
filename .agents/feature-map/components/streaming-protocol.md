@@ -96,6 +96,10 @@ limits and cache failures mark the buffer incomplete. Readers must reload saved
 history when replay has a gap. These primitives are additive; production chat
 still uses its existing worker and reader lifecycle.
 
+If the delivery worker cannot start during completion, the caller finalizes replay.
+It marks normal replay incomplete and deletes content-free incognito buffers before resolving completion.
+The closed event dispatcher rejects later events.
+
 ## 3. Data model
 
 This component has no tables. Packets are never written to Postgres; the chat
