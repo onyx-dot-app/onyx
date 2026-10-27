@@ -758,6 +758,11 @@ func (m Model) handleSessionResumed(msg SessionResumedMsg) (tea.Model, tea.Cmd) 
 		return m, nil
 	}
 
+	if m.isStreaming && m.chatSessionID != nil && *m.chatSessionID == msg.Detail.ChatSessionID {
+		// The current stream owns newer messages than this saved snapshot.
+		return m, nil
+	}
+
 	// Cancel any in-progress stream before replacing the session
 	if m.isStreaming {
 		m, _ = m.cancelStream()

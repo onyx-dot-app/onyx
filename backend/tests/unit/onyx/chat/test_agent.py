@@ -13,7 +13,7 @@ from onyx.agents.models import AgentStep, StepInput
 from onyx.agents.runtime import Run
 from onyx.chat.agent import ChatAgent
 from onyx.chat.emitter import Emitter
-from onyx.chat.models import PersonaPromptConfig, PromptMetadata
+from onyx.chat.models import IncognitoState, PersonaPromptConfig, PromptMetadata
 from onyx.chat.presentation import ResponsePresenter, project_response
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
@@ -331,8 +331,10 @@ def test_cancelled_source_file_staging_drains_before_completion(
 
 
 @pytest.mark.parametrize("tool_name", [WebSearchTool.NAME, SearchTool.NAME])
+@pytest.mark.parametrize("incognito", [False, True])
 def test_chat_reuses_completed_search_artifacts_without_duplicate_documents(
     tool_name: str,
+    incognito: bool,
 ) -> None:
     runs: list[Run] = []
     document = SearchDoc(
@@ -347,21 +349,24 @@ def test_chat_reuses_completed_search_artifacts_without_duplicate_documents(
         metadata={},
         match_highlights=[],
     )
+    history: list[Message] = [
+        UserMessage(content="Find evidence"),
+        AssistantMessage(content=[ToolCall(id="search", name=tool_name, arguments={})]),
+        ToolResultMessage(
+            tool_call_id="search",
+            tool_name=tool_name,
+            content="Evidence [4]",
+            details=SearchDocsResponse(
+                search_docs=[document], citation_mapping={4: "reference"}
+            ),
+        ),
+    ]
+    if incognito:
+        history = IncognitoState.model_validate_json(
+            IncognitoState(messages=history).model_dump_json()
+        ).messages
     feature = ChatAgent(
-        messages=[
-            UserMessage(content="Find evidence"),
-            AssistantMessage(
-                content=[ToolCall(id="search", name=tool_name, arguments={})]
-            ),
-            ToolResultMessage(
-                tool_call_id="search",
-                tool_name=tool_name,
-                content="Evidence [4]",
-                details=SearchDocsResponse(
-                    search_docs=[document], citation_mapping={4: "reference"}
-                ),
-            ),
-        ],
+        messages=history,
         tools=[],
         custom_agent_prompt=None,
         base_system_prompt="",

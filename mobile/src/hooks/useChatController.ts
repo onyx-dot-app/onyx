@@ -76,6 +76,22 @@ function appendUserCancelledStop(sessionId: string, nodeId: number): void {
   });
 }
 
+async function stopAcknowledgedStream(
+  sessionId: string,
+  streamId: number,
+  controller: AbortController,
+): Promise<void> {
+  try {
+    await stopChatSession(sessionId, streamId);
+  } catch (error) {
+    console.warn("Could not stop chat response", { sessionId, error });
+    const store = useChatSessionStore.getState();
+    if (store.sessions.get(sessionId)?.abortController === controller) {
+      store.setStopRequested(sessionId, false);
+    }
+  }
+}
+
 async function runChatStream(
   sessionId: string,
   userNodeId: number,
@@ -144,10 +160,11 @@ async function runChatStream(
           .getState()
           .setStreamId(sessionId, event.reserved_assistant_message_id);
         if (store.getState().sessions.get(sessionId)?.stopRequested) {
-          void stopChatSession(
+          void stopAcknowledgedStream(
             sessionId,
             event.reserved_assistant_message_id,
-          ).catch(() => {});
+            controller,
+          );
           controller.abort();
         }
         continue;
@@ -224,6 +241,8 @@ export interface ChatController {
     files?: FileDescriptor[],
     onAccepted?: () => void,
     toolOptions?: ChatToolOptions,
+    // Runs before navigation; onAccepted waits for the server's message ID.
+    onCreated?: () => void,
   ) => void;
   stop: () => void;
   isHydrating: boolean;
@@ -286,6 +305,7 @@ export function useChatController(
       files?: FileDescriptor[],
       onAccepted?: () => void,
       toolOptions?: ChatToolOptions,
+      onCreated?: () => void,
     ) => {
       const text = overrideText.trim();
       if (!text) return;
@@ -366,6 +386,7 @@ export function useChatController(
         };
 
         if (sessionId == null) {
+          onCreated?.();
           if (onSessionCreated) {
             onSessionCreated(activeId);
           } else {
@@ -401,10 +422,14 @@ export function useChatController(
     const store = useChatSessionStore.getState();
     const current = store.sessions.get(sessionId);
     if (!current?.abortController || current.stopRequested) return;
-    store.requestStop(sessionId);
+    store.setStopRequested(sessionId, true);
     // Keep reading until acknowledgement, so Stop cannot target a later request.
     if (current.streamId !== null) {
-      void stopChatSession(sessionId, current.streamId).catch(() => {});
+      void stopAcknowledgedStream(
+        sessionId,
+        current.streamId,
+        current.abortController,
+      );
       current.abortController.abort();
       return;
     }

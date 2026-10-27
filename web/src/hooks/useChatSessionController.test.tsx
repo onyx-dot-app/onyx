@@ -398,6 +398,9 @@ test("recovery replay does not mutate retained local messages", async () => {
 
 test("Stop targets the replay response and waits for its incognito tail", async () => {
   const finish = deferred<void>();
+  jest.spyOn(Promise, "withResolvers").mockImplementation(() => {
+    throw new Error("Promise.withResolvers is unavailable");
+  });
   const reserved: Message = {
     nodeId: 42,
     messageId: 42,

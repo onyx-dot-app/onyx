@@ -183,5 +183,5 @@ def test_research_child_tool_calls_attach_to_research_call(
         )
         assert child_search is not None
         assert child_search.chat_session_id == child_response.chat_session_id
-        assert child_search.parent_tool_call_id is None
+        assert child_search.parent_tool_call_id == research_call.id
         assert child_search.tool_call_arguments == _CHILD_SEARCH_ARGS

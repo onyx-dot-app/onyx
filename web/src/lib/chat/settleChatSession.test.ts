@@ -409,3 +409,19 @@ test("an old reader finishing cannot release another request", async () => {
     useChatSessionStore.getState().sessions.get("session")?.chatState
   ).toBe("cancelling");
 });
+
+test("history replacement keeps the sources panel on the selected response", async () => {
+  const local = { ...message(-2, "assistant", "Answer"), messageId: 42 };
+  const saved = { ...local, nodeId: 42 };
+  useChatSessionStore.getState().updateSessionData("session", {
+    messageTree: new Map([[-2, local]]),
+    selectedNodeIdForDocDisplay: -2,
+    documentSidebarVisible: true,
+  });
+  jest.mocked(processRawChatHistory).mockReturnValue(new Map([[42, saved]]));
+  await settle();
+  expect(useChatSessionStore.getState().sessions.get("session")).toMatchObject({
+    selectedNodeIdForDocDisplay: 42,
+    documentSidebarVisible: true,
+  });
+});

@@ -71,7 +71,7 @@ test("incognito retains context between turns and removes history on exit @exclu
     if (!sessionId) throw new Error("Incognito session has no URL ID");
     await chatPage.expectNoSessionLink(sessionId);
     await chatPage.exitIncognito();
-    await page.reload();
+    await chatPage.reload();
     await chatPage.expectNoHumanMessages();
     await chatPage.expectNoSessionLink(sessionId);
     await expect(chatPage.aiMessages).toHaveCount(0);

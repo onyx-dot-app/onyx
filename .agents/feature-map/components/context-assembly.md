@@ -412,7 +412,7 @@ conversation in an out-of-Postgres store for the session's lifetime
 `incognito_context.py:append_incognito_messages`).
 
 `incognito_context.py` stores canonical root messages and child response records in one JSON envelope.
-Root messages decode once, including prompt metadata. Their serializer omits tool details and attachment bytes.
+Root messages decode once, including prompt metadata. Their serializer retains search and research citation sources, but omits other tool details and attachment bytes.
 The envelope has a sliding one-hour TTL, a one-megabyte limit, and at most 200 root messages.
 It evicts older child records before older root messages. An oversized new response leaves stored state unchanged.
 The `incognito_ctx:v2` namespace starts fresh temporary sessions after deployment. Old content expires through its existing TTL.
