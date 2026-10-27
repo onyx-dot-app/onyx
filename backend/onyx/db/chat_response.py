@@ -1035,6 +1035,10 @@ def read_response_replay_data(
     root = db_session.get(ChatMessage, int(execution.response.run_id))
     if root is None:
         raise ValueError("Chat response is unavailable")
+    documents = {
+        document.document_id: translate_db_search_doc_to_saved_search_doc(document)
+        for document in root.search_docs or []
+    }
     tools: dict[tuple[str, str], ToolReplayData] = {}
     references = {
         reference.record_id: reference for reference in execution.tool_records
@@ -1078,19 +1082,19 @@ def read_response_replay_data(
             raise ValueError(
                 "Tool replay reference does not match its accepted invocation"
             )
+        search_docs = [
+            translate_db_search_doc_to_saved_search_doc(document)
+            for document in tool.search_docs or []
+        ]
+        for document in search_docs:
+            documents.setdefault(document.document_id, document)
         tools[(message_id, tool.tool_call_id)] = ToolReplayData(
             tool_id=tool.tool_id,
-            search_docs=[
-                translate_db_search_doc_to_saved_search_doc(document)
-                for document in tool.search_docs or []
-            ],
+            search_docs=search_docs,
         )
     if len(rows) != len(references):
         raise ValueError("Accepted tool replay data is unavailable")
     return ResponseReplayData(
         tools=tools,
-        documents={
-            document.document_id: translate_db_search_doc_to_saved_search_doc(document)
-            for document in root.search_docs or []
-        },
+        documents=documents,
     )

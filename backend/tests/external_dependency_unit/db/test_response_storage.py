@@ -2076,3 +2076,61 @@ def test_root_history_and_metadata_do_not_consume_child_history_limit(
     assert [
         agent.id for agent in load_session_agent_metadata(latest.id, include_root=False)
     ] == [str(child_id)]
+
+
+def test_replay_sources_include_tool_documents_and_preserve_root_versions(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    response = _response(db_session, conversation)
+    record = _record(response)
+    record.steps = _steps(
+        record.run_id,
+        [
+            AssistantMessage(
+                content=[ToolCall(id="search", name="internal_search", arguments={})]
+            ),
+            AssistantMessage(content=[TextContent(text="Answer")]),
+        ],
+    )
+    record.answer_step_index = 1
+    _save(db_session, response, record)
+    documents = [
+        StoredSearchDoc(
+            document_id=document_id,
+            chunk_ind=0,
+            semantic_id="Guide",
+            blurb=version,
+            boost=1,
+            source_type=DocumentSource.WEB,
+            hidden=False,
+            doc_metadata={},
+            score=1.0,
+            match_highlights=[],
+        )
+        for document_id, version in (
+            ("shared", "root version"),
+            ("shared", "tool version"),
+            ("tool-only", "tool-only source"),
+        )
+    ]
+    db_session.add_all(documents)
+    response.search_docs = documents[:1]
+    assert response.tool_calls is not None
+    response.tool_calls[0].search_docs = documents[1:]
+    db_session.flush()
+    db_session.expire_all()
+
+    execution = read_chat_execution(response)
+    assert execution is not None
+    replay = read_response_replay_data(execution, db_session)
+    assert {key: doc.blurb for key, doc in replay.documents.items()} == {
+        "shared": "root version",
+        "tool-only": "tool-only source",
+    }
+    reference = execution.tool_records[0]
+    assert [
+        doc.blurb
+        for doc in replay.tools[
+            (reference.message_id, reference.tool_call_id)
+        ].search_docs
+    ] == ["tool version", "tool-only source"]

@@ -582,3 +582,6 @@ response; restoration reports missing cited sources explicitly.
 
 Shared history and response data models live in `chat/response_models.py`.
 Database modules import those models instead of defining separate data contracts.
+
+Replay includes sources linked only to a tool. Root-selected document versions
+take precedence for answer citations; tool cards retain their own saved versions.
