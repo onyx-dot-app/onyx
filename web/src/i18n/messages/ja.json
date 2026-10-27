@@ -12394,6 +12394,16 @@
           "label": "スキル"
         }
       },
+      "fileIndexingBanner": {
+        "noText": {
+          "description": "読み取り可能なテキストがまだないファイルがあります。内容を利用できるよう、処理が完了するまでお待ちください。",
+          "title": "ファイルを読み込み中です"
+        },
+        "tooLarge": {
+          "description": "添付ファイルがモデルのコンテキストに収まりません。回答で検索できるよう、インデックス作成が完了するまでお待ちください。",
+          "title": "ファイルがチャットには大きすぎます"
+        }
+      },
       "inputChip": {
         "removeButton": {
           "ariaLabel": "{label} を削除"

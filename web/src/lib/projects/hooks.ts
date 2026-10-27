@@ -1,8 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import useSWR from "swr";
-import { Project, ProjectSearchMatch } from "@/lib/projects/types";
+import { Project, ProjectFile, ProjectSearchMatch } from "@/lib/projects/types";
+import {
+  type FileIndexingReason,
+  getFileSendBlock,
+} from "@/lib/projects/utils";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { UNNAMED_CHAT } from "@/lib/constants";
@@ -103,4 +107,35 @@ export function useProjectSearch(query: string): ProjectSearchMatch[] {
       ];
     });
   }, [projects, query]);
+}
+
+interface FileSendGate {
+  /** True while the attached files must finish before the message can be sent. */
+  isSendBlocked: boolean;
+  /** What the waiting banner explains, or null when it is hidden. */
+  bannerReason: FileIndexingReason | null;
+  /** Hides the banner until a different set of files blocks send. */
+  dismissBanner: () => void;
+}
+
+/** Decides whether the attached files hold back send, and drives the banner. */
+export function useFileSendGate(
+  files: ProjectFile[],
+  availableContextTokens: number
+): FileSendGate {
+  const block = getFileSendBlock(files, availableContextTokens);
+  const filesKey = files.map((file) => file.id).join(",");
+  const [dismissedFilesKey, setDismissedFilesKey] = useState<string | null>(
+    null
+  );
+
+  // Uploads finish on their own in moments, so they need no explanation.
+  const waitsForIndexing = block === "tooLarge" || block === "noText";
+  const isBannerDismissed = dismissedFilesKey === filesKey;
+
+  return {
+    isSendBlocked: block !== null,
+    bannerReason: waitsForIndexing && !isBannerDismissed ? block : null,
+    dismissBanner: () => setDismissedFilesKey(filesKey),
+  };
 }

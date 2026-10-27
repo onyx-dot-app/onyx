@@ -12394,6 +12394,16 @@
           "label": "Skills"
         }
       },
+      "fileIndexingBanner": {
+        "noText": {
+          "description": "A file has no readable text yet. Wait until processing completes so its content is available.",
+          "title": "File is still being read"
+        },
+        "tooLarge": {
+          "description": "The attached files do not fit in the model's context. Wait until indexing completes so the answer can search them.",
+          "title": "File is too large for the chat"
+        }
+      },
       "inputChip": {
         "removeButton": {
           "ariaLabel": "Remove {label}"

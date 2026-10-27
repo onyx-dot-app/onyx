@@ -12394,6 +12394,16 @@
           "label": "技能"
         }
       },
+      "fileIndexingBanner": {
+        "noText": {
+          "description": "有文件尚无可读文本。请等待处理完成，以便使用其内容。",
+          "title": "仍在读取文件"
+        },
+        "tooLarge": {
+          "description": "附加文件超出了模型的上下文容量。请等待索引完成，以便回答时可以搜索这些文件。",
+          "title": "文件过大，无法直接用于聊天"
+        }
+      },
       "inputChip": {
         "removeButton": {
           "ariaLabel": "移除 {label}"

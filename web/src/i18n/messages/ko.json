@@ -12394,6 +12394,16 @@
           "label": "스킬"
         }
       },
+      "fileIndexingBanner": {
+        "noText": {
+          "description": "아직 읽을 수 있는 텍스트가 없는 파일이 있습니다. 내용을 사용할 수 있도록 처리가 완료될 때까지 기다려 주세요.",
+          "title": "파일을 아직 읽는 중입니다"
+        },
+        "tooLarge": {
+          "description": "첨부 파일이 모델의 컨텍스트에 들어가지 않습니다. 답변에서 검색할 수 있도록 인덱싱이 완료될 때까지 기다려 주세요.",
+          "title": "파일이 채팅에 비해 너무 큽니다"
+        }
+      },
       "inputChip": {
         "removeButton": {
           "ariaLabel": "{label} 제거"

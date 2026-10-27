@@ -12394,6 +12394,16 @@
           "label": "Skills"
         }
       },
+      "fileIndexingBanner": {
+        "noText": {
+          "description": "Eine Datei hat noch keinen lesbaren Text. Warten Sie, bis die Verarbeitung abgeschlossen ist, damit ihr Inhalt verfügbar ist.",
+          "title": "Datei wird noch gelesen"
+        },
+        "tooLarge": {
+          "description": "Die angehängten Dateien passen nicht in den Kontext des Modells. Warten Sie, bis die Indexierung abgeschlossen ist, damit die Antwort sie durchsuchen kann.",
+          "title": "Datei ist zu groß für den Chat"
+        }
+      },
       "inputChip": {
         "removeButton": {
           "ariaLabel": "{label} entfernen"

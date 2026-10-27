@@ -32,10 +32,14 @@ import { Disabled } from "@opal/core";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
 import { useProjectsContext } from "@/lib/projects/providers";
-import { useActiveProject, useProjects } from "@/lib/projects/hooks";
+import {
+  useActiveProject,
+  useFileSendGate,
+  useProjects,
+} from "@/lib/projects/hooks";
 import { FileCard } from "@/sections/cards/FileCard";
 import { ProjectFile } from "@/lib/projects/types";
-import { isFilePending } from "@/lib/projects/utils";
+import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import { ToolsPopover } from "@/lib/tools/components";
 import MCPConnectionPrompt from "@/lib/mcp/components/MCPConnectionPrompt";
@@ -75,6 +79,7 @@ import {
   useChatSessionStore,
 } from "@/app/app/stores/useChatSessionStore";
 import QueuedMessageBar from "@/sections/input/QueuedMessageBar";
+import FileIndexingBanner from "@/sections/input/FileIndexingBanner";
 import { handleInputNavKeys } from "@/sections/input/inputBarKeys";
 
 export interface AppInputBarHandle {
@@ -90,6 +95,8 @@ export interface AppInputBarProps {
   onSubmit: (message: string) => void;
   llmManager: LlmManager;
   chatState: ChatState;
+  /** Context tokens left for attachments; decides if they must index first. */
+  availableContextTokens?: number;
 
   // agents
   activeAgent: MinimalAgent | undefined;
@@ -119,6 +126,7 @@ const AppInputBar = React.memo(
     stopGenerating,
     onSubmit,
     chatState,
+    availableContextTokens = DEFAULT_CONTEXT_TOKENS,
     activeAgent,
     memberPlugins,
     handleFileUpload,
@@ -365,10 +373,9 @@ const AppInputBar = React.memo(
     const { isLoading: isLoadingProjects } = useProjects();
     const activeProject = useActiveProject();
 
-    // A file isn't queryable until processing completes, so gate send on it.
-    const hasPendingFiles = useMemo(
-      () => currentMessageFiles.some((file) => isFilePending(file.status)),
-      [currentMessageFiles]
+    const fileSendGate = useFileSendGate(
+      currentMessageFiles,
+      availableContextTokens
     );
 
     // Convert ProjectFile to MinimalOnyxDocument format for viewing
@@ -763,11 +770,11 @@ const AppInputBar = React.memo(
               (chatState === "input" &&
                 !isVoicePlaybackControllable &&
                 !message) ||
-              hasPendingFiles ||
+              fileSendGate.isSendBlocked ||
               isClassifying
             }
             tooltip={
-              hasPendingFiles
+              fileSendGate.isSendBlocked
                 ? t("appInputBar.sendButton.processingFilesTooltip")
                 : undefined
             }
@@ -812,6 +819,10 @@ const AppInputBar = React.memo(
           highlightedIndex={queueNav.highlightedIndex}
           onDiscard={removeCurrentQueuedMessage}
           onHighlight={queueNav.setHighlightedIndex}
+        />
+        <FileIndexingBanner
+          reason={fileSendGate.bannerReason}
+          onClose={fileSendGate.dismissBanner}
         />
         <Disabled disabled={disabled} allowClick>
           <div
@@ -948,7 +959,7 @@ const AppInputBar = React.memo(
                               message &&
                               !disabled &&
                               !isClassifying &&
-                              !hasPendingFiles
+                              !fileSendGate.isSendBlocked
                             ) {
                               submitMessage(message);
                             }
@@ -956,7 +967,7 @@ const AppInputBar = React.memo(
                             message.trim() &&
                             !disabled &&
                             !isClassifying &&
-                            !hasPendingFiles &&
+                            !fileSendGate.isSendBlocked &&
                             queuedMessages.length < MAX_QUEUED_MESSAGES
                           ) {
                             enqueueCurrentMessage(message.trim());
@@ -1030,7 +1041,9 @@ const AppInputBar = React.memo(
                     prominence="tertiary"
                   />
                   <Button
-                    disabled={!message || isClassifying || hasPendingFiles}
+                    disabled={
+                      !message || isClassifying || fileSendGate.isSendBlocked
+                    }
                     id="onyx-chat-input-send-button"
                     icon={isClassifying ? IconLoader : SvgSearch}
                     onClick={() => {
