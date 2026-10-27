@@ -8,6 +8,13 @@ import pytest
 
 from onyx.connectors.asana.asana_api import AsanaAPI
 from onyx.connectors.asana.connector import AsanaConnector
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
+from onyx.connectors.models import ConnectorMissingCredentialError
 
 
 class _AsanaTestSetup(NamedTuple):
@@ -328,3 +335,62 @@ def test_get_tasks_skips_archived_project_even_when_allowlisted() -> None:
     )
 
     assert yielded == []
+
+
+def _connector_with_workspaces_api(workspaces_api: MagicMock) -> AsanaConnector:
+    connector = AsanaConnector(asana_workspace_id="123")
+    connector.api_token = "token"
+    connector.asana_client = MagicMock()
+    connector.asana_client.workspaces_api = workspaces_api
+    return connector
+
+
+def _api_exception(status: int) -> Exception:
+    from asana.rest import ApiException
+
+    return ApiException(status=status, reason="error")
+
+
+def test_validate_connector_settings_requires_credentials() -> None:
+    connector = AsanaConnector(asana_workspace_id="123")
+    with pytest.raises(ConnectorMissingCredentialError):
+        connector.validate_connector_settings()
+
+
+def test_validate_connector_settings_reads_configured_workspace() -> None:
+    workspaces_api = MagicMock()
+    connector = _connector_with_workspaces_api(workspaces_api)
+
+    connector.validate_connector_settings()
+
+    workspaces_api.get_workspace.assert_called_once_with("123", {})
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        (401, CredentialExpiredError),
+        (403, InsufficientPermissionsError),
+        (404, ConnectorValidationError),
+        (429, UnexpectedValidationError),
+        (500, UnexpectedValidationError),
+    ],
+)
+def test_validate_connector_settings_maps_api_errors(
+    status: int, expected: type[Exception]
+) -> None:
+    workspaces_api = MagicMock()
+    workspaces_api.get_workspace.side_effect = _api_exception(status)
+    connector = _connector_with_workspaces_api(workspaces_api)
+
+    with pytest.raises(expected):
+        connector.validate_connector_settings()
+
+
+def test_validate_connector_settings_wraps_unknown_errors() -> None:
+    workspaces_api = MagicMock()
+    workspaces_api.get_workspace.side_effect = RuntimeError("boom")
+    connector = _connector_with_workspaces_api(workspaces_api)
+
+    with pytest.raises(UnexpectedValidationError):
+        connector.validate_connector_settings()

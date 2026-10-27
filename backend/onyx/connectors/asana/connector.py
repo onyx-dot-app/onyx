@@ -1,16 +1,29 @@
 import datetime
 from typing import Any
 
+from asana.rest import ApiException
+
 from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE, INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.asana import asana_api
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
 from onyx.connectors.interfaces import (
     GenerateDocumentsOutput,
     LoadConnector,
     PollConnector,
     SecondsSinceUnixEpoch,
 )
-from onyx.connectors.models import Document, HierarchyNode, TextSection
+from onyx.connectors.models import (
+    ConnectorMissingCredentialError,
+    Document,
+    HierarchyNode,
+    TextSection,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -38,6 +51,7 @@ class AsanaConnector(LoadConnector, PollConnector):
         self.asana_team_id = (asana_team_id.strip() or None) if asana_team_id else None
         self.batch_size = batch_size
         self.continue_on_failure = continue_on_failure
+        self.asana_client: asana_api.AsanaAPI | None = None
         logger.info(
             "AsanaConnector initialized with workspace_id: %s", asana_workspace_id
         )
@@ -51,6 +65,40 @@ class AsanaConnector(LoadConnector, PollConnector):
         )
         logger.info("Asana credentials loaded and API client initialized")
         return None
+
+    def validate_connector_settings(self) -> None:
+        """Confirm the token can read the configured workspace."""
+        if self.asana_client is None:
+            raise ConnectorMissingCredentialError("Asana")
+
+        try:
+            self.asana_client.workspaces_api.get_workspace(self.workspace_id, {})
+        except ApiException as api_err:
+            status = api_err.status
+            if status == 401:
+                raise CredentialExpiredError(
+                    "Asana token is invalid or expired (HTTP 401)."
+                ) from api_err
+            if status == 403:
+                raise InsufficientPermissionsError(
+                    "Asana token cannot access this workspace (HTTP 403)."
+                ) from api_err
+            if status == 404:
+                raise ConnectorValidationError(
+                    f"Asana workspace {self.workspace_id} was not found (HTTP 404). "
+                    "Check the Workspace ID."
+                ) from api_err
+            if status == 429:
+                raise UnexpectedValidationError(
+                    "Asana rate limit reached during validation (HTTP 429). Try again later."
+                ) from api_err
+            raise UnexpectedValidationError(
+                f"Unexpected Asana HTTP error (status={status}): {api_err}"
+            ) from api_err
+        except Exception as exc:
+            raise UnexpectedValidationError(
+                f"Unexpected error during Asana settings validation: {exc}"
+            ) from exc
 
     def poll_source(
         self,
