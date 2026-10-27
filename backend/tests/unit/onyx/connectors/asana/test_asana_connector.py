@@ -364,7 +364,9 @@ def test_validate_connector_settings_reads_configured_workspace() -> None:
 
     connector.validate_connector_settings()
 
-    workspaces_api.get_workspace.assert_called_once_with("123", {})
+    workspaces_api.get_workspace.assert_called_once_with(
+        "123", {}, _request_timeout=(5, 15)
+    )
 
 
 @pytest.mark.parametrize(
