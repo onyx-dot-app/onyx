@@ -60,6 +60,8 @@ const INNER_CLASSES: Record<InputNumberVariant, string | null> = {
 export interface InputNumberProps {
   value: number | null;
   onChange: (value: number | null) => void;
+  /** Called with the settled value: on blur, and on a stepper or reset click. Not called per keystroke. */
+  onCommit?: (value: number | null) => void;
   min?: number;
   max?: number;
   step?: number;
@@ -92,6 +94,7 @@ function textFor(value: number | null, typed: string): string {
 export default function InputNumber({
   value,
   onChange,
+  onCommit,
   min,
   max,
   step = 1,
@@ -135,20 +138,25 @@ export default function InputNumber({
   const handleIncrement = () => {
     if (canIncrement) {
       const newValue = normalizePrecision(effectiveValue + step);
-      onChange(max !== undefined ? Math.min(newValue, max) : newValue);
+      const next = max !== undefined ? Math.min(newValue, max) : newValue;
+      onChange(next);
+      onCommit?.(next);
     }
   };
 
   const handleDecrement = () => {
     if (canDecrement) {
       const newValue = normalizePrecision(effectiveValue - step);
-      onChange(min !== undefined ? Math.max(newValue, min) : newValue);
+      const next = min !== undefined ? Math.max(newValue, min) : newValue;
+      onChange(next);
+      onCommit?.(next);
     }
   };
 
   const handleReset = () => {
     if (defaultValue !== undefined) {
       onChange(defaultValue);
+      onCommit?.(defaultValue);
     }
   };
 
@@ -159,21 +167,26 @@ export default function InputNumber({
   const handleBlur = () => {
     const typed: boolean = typedRef.current;
     typedRef.current = false;
+    let settled: number | null = value;
     if (inputValue.trim() === "" && !allowEmpty) {
       setInputValue(value === null ? "" : String(value));
     } else if (inputValue.trim() === "") {
       // Kept as null so the placeholder shows.
+      settled = null;
       onChange(null);
     } else if (typed && value !== null && min !== undefined && value < min) {
       // Typing is free; leaving the field clamps to the nearest bound.
+      settled = min;
       onChange(min);
       setInputValue(String(min));
     } else if (typed && value !== null && max !== undefined && value > max) {
+      settled = max;
       onChange(max);
       setInputValue(String(max));
     } else {
       setInputValue((typed) => textFor(value, typed));
     }
+    onCommit?.(settled);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {

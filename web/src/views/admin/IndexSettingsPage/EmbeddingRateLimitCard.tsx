@@ -34,8 +34,9 @@ function inRange(value: number, max: number): boolean {
 }
 
 /**
- * The global limit on indexing embedding requests. Each field saves when it
- * commits and applies to the next embedding batch, without a re-index.
+ * The global limit on indexing embedding requests. Each field saves on blur
+ * or a stepper or reset click, and applies to the next embedding batch,
+ * without a re-index.
  */
 export default function EmbeddingRateLimitCard() {
   const t = useTranslations("admin.indexSettings.embeddingRateLimit");
@@ -61,8 +62,7 @@ export default function EmbeddingRateLimitCard() {
   function commit(nextRequests: number | null, nextPeriod: number) {
     setRequests(nextRequests);
     setPeriod(nextPeriod);
-    // InputNumber reports each keystroke and clamps only on blur, so an
-    // out-of-range value is never sent; the clamped one saves instead.
+    // A stored value outside the bounds is not clamped, so it is not sent.
     if (
       !inRange(nextRequests ?? 1, MAX_EMBEDDING_RATE_LIMIT_REQUESTS) ||
       !inRange(nextPeriod, MAX_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS)
@@ -122,7 +122,8 @@ export default function EmbeddingRateLimitCard() {
             <div className="w-48">
               <InputNumber
                 value={requests}
-                onChange={(value) => commit(value, period)}
+                onChange={setRequests}
+                onCommit={(value) => commit(value, period)}
                 min={1}
                 max={MAX_EMBEDDING_RATE_LIMIT_REQUESTS}
                 placeholder={t("requests.placeholder")}
@@ -139,6 +140,11 @@ export default function EmbeddingRateLimitCard() {
               <InputNumber
                 value={period}
                 onChange={(value) =>
+                  setPeriod(
+                    value ?? DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS
+                  )
+                }
+                onCommit={(value) =>
                   commit(
                     requests,
                     value ?? DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS
