@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Button } from "@opal/components";
+import { RowAction } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
 import { SvgPlusCircle, SvgUserEdit } from "@opal/icons";
 import type { DraftCredential } from "@/lib/credentials/types";
@@ -47,10 +47,10 @@ export function AccountSummary({ draft, sourceName }: AccountSummaryProps) {
           variant="section"
         />
       </Section>
-      {/* Repeats its card's own action, so it leaves the tab order. */}
-      <Button prominence="tertiary" rightIcon={SvgUserEdit} tabIndex={-1}>
+      {/* Repeats its card's own action, so it is static. */}
+      <RowAction rightIcon={SvgUserEdit} width="fit">
         {t("accountSummary.editButton.label")}
-      </Button>
+      </RowAction>
     </Section>
   );
 }
