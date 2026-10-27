@@ -1,3 +1,4 @@
+import hashlib
 import json
 import time
 import uuid
@@ -38,13 +39,19 @@ from onyx.llm.model_request import (
     UserMessage,
 )
 from onyx.llm.model_response import Delta
+from onyx.llm.models import AssistantMessage as GeneratedAssistantMessage
 from onyx.llm.models import (
     ImageContentPart,
     ImageUrlDetail,
     ReasoningEffort,
+    ReplayableThinking,
     TextContentPart,
+    ThinkingContent,
+    ThinkingDeltaEvent,
     ToolChoiceOptions,
     ToolDefinition,
+    apply_generation_event,
+    signed_thinking_blocks,
 )
 from onyx.llm.multi_llm import LitellmLLM, ProviderOperation
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
@@ -370,6 +377,91 @@ def _build_structured_assistant_message(msg: ChatMessageSimple) -> AssistantMess
         role="assistant",
         content=msg.message or None,
         tool_calls=tool_calls_list,
+    )
+
+
+def thinking_replay_key(llm_config: LLMConfig) -> str:
+    return f"{llm_config.model_provider}/{llm_config.deployment_name or llm_config.model_name}"
+
+
+def thinking_prefix(
+    messages: Sequence[ChatCompletionMessage], tools: Sequence[Mapping[str, Any]]
+) -> str:
+    """Fingerprint of what Anthropic binds a thinking block to: the tools and
+    every earlier message. Cache markers are not bound. Earlier thinking counts
+    only as present or absent, since a block is valid only after the same
+    sequence of earlier blocks."""
+
+    def strip(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                key: bool(item) if key == "thinking_blocks" else strip(item)
+                for key, item in value.items()
+                if key != "cache_control"
+            }
+        if isinstance(value, list):
+            return [strip(item) for item in value]
+        return value
+
+    payload = {
+        "tools": strip(list(tools)),
+        "messages": [strip(msg.model_dump(mode="json")) for msg in messages],
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, default=str).encode()
+    ).hexdigest()
+
+
+def _drop_thinking_with_changed_prefix(
+    messages: list[ChatCompletionMessage],
+    history: Sequence[ChatMessageSimple],
+    tools: Sequence[Mapping[str, Any]],
+) -> list[ChatCompletionMessage]:
+    """Clear replayed blocks whose prefix changed since they were minted.
+
+    Anthropic rejects such a block. Clearing one changes the prefix of later
+    blocks minted after it, so they are cleared too, while blocks minted after
+    it was already cleared still match. The empty list keeps thinking on: the
+    API accepts tool calls without thinking blocks.
+    """
+    thinking = [
+        msg.thinking for msg in history if msg.message_type == MessageType.ASSISTANT
+    ]
+    assistant_indices = [
+        i for i, msg in enumerate(messages) if isinstance(msg, AssistantMessage)
+    ]
+    aligned = len(thinking) == len(assistant_indices)
+    result = list(messages)
+    for position, index in enumerate(assistant_indices):
+        msg = result[index]
+        if not isinstance(msg, AssistantMessage) or not msg.thinking_blocks:
+            continue
+        minted = thinking[position] if aligned else None
+        if minted is None or minted.prefix != thinking_prefix(result[:index], tools):
+            result[index] = msg.model_copy(update={"thinking_blocks": []})
+    return result
+
+
+def _replayable_thinking(
+    generated: GeneratedAssistantMessage,
+    llm_config: LLMConfig,
+    reasoned: bool,
+    prefix: str,
+) -> ReplayableThinking | None:
+    blocks = signed_thinking_blocks(
+        [
+            block
+            for content in generated.content
+            if isinstance(content, ThinkingContent)
+            for block in content.blocks or []
+        ]
+    )
+    if not blocks and reasoned:
+        return None
+    # No blocks and no reasoning: the model chose not to think, so the step
+    # needs no block for thinking to stay on.
+    return ReplayableThinking(
+        model=thinking_replay_key(llm_config), blocks=blocks, prefix=prefix
     )
 
 
@@ -727,7 +819,13 @@ def translate_history_to_llm_format(
             messages.append(reminder_msg)
 
         elif msg.message_type == MessageType.ASSISTANT:
-            messages.append(history_message_formatter.format_assistant_message(msg))
+            assistant_message = history_message_formatter.format_assistant_message(msg)
+            # Signatures verify only against the model that minted them.
+            if msg.thinking and msg.thinking.model == thinking_replay_key(llm_config):
+                assistant_message = assistant_message.model_copy(
+                    update={"thinking_blocks": msg.thinking.blocks}
+                )
+            messages.append(assistant_message)
 
         elif msg.message_type == MessageType.TOOL_CALL_RESPONSE:
             messages.append(history_message_formatter.format_tool_response_message(msg))
@@ -880,8 +978,10 @@ def run_llm_step_pkt_generator(
     image_replay: HistoryImageReplay = _resolve_history_image_replay(
         history, llm.config
     )
-    llm_msg_history = translate_history_to_llm_format(
-        history, llm.config, image_replay=image_replay
+    llm_msg_history = _drop_thinking_with_changed_prefix(
+        translate_history_to_llm_format(history, llm.config, image_replay=image_replay),
+        history,
+        tool_definitions,
     )
     has_reasoned = False
 
@@ -896,6 +996,7 @@ def run_llm_step_pkt_generator(
     reasoning_start = False
     answer_start = False
     accumulated_reasoning = ""
+    generated_thinking = GeneratedAssistantMessage()
     accumulated_answer = ""
     accumulated_raw_answer = ""
     stream_chunk_count = 0
@@ -1077,6 +1178,7 @@ def run_llm_step_pkt_generator(
                 not delta.content
                 and delta.reasoning_content is None
                 and not delta.tool_calls
+                and not delta.thinking_blocks
             ):
                 empty_chunk_count += 1
                 logger.warning(
@@ -1105,6 +1207,16 @@ def run_llm_step_pkt_generator(
                 if modified_delta is None:
                     continue
                 delta = modified_delta
+
+            if delta.thinking_blocks:
+                apply_generation_event(
+                    generated_thinking,
+                    ThinkingDeltaEvent(
+                        content_index=0,
+                        text=delta.reasoning_content or "",
+                        blocks=delta.thinking_blocks,
+                    ),
+                )
 
             # Should only happen once, frontend does not expect multiple
             # ReasoningStart or ReasoningDone packets.
@@ -1305,6 +1417,12 @@ def run_llm_step_pkt_generator(
             tool_calls=tool_calls or None,
             raw_answer=accumulated_raw_answer or None,
             finish_reason=terminal_finish_reason,
+            thinking=_replayable_thinking(
+                generated_thinking,
+                llm.config,
+                reasoned=bool(accumulated_reasoning or generated_thinking.content),
+                prefix=thinking_prefix(llm_msg_history, tool_definitions),
+            ),
         ),
         has_reasoned,
     )

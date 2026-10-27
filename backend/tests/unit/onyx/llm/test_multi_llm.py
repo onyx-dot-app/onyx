@@ -30,7 +30,13 @@ from onyx.llm.model_request import (
     UserMessage,
 )
 from onyx.llm.model_response import ModelResponse, ModelResponseStream
-from onyx.llm.models import NamedToolChoice, ReasoningEffort, ToolChoiceOptions, Usage
+from onyx.llm.models import (
+    NamedToolChoice,
+    ReasoningEffort,
+    ThinkingBlock,
+    ToolChoiceOptions,
+    Usage,
+)
 from onyx.llm.multi_llm import (
     LitellmLLM,
     LLMRateLimitError,
@@ -2996,6 +3002,90 @@ def test_bedrock_claude_keeps_thinking_when_no_tool_history() -> None:
             "with tool_calls exist in history"
         )
         assert kwargs["thinking"]["type"] == "enabled"
+
+
+def _signed_weather_tool_call_message() -> AssistantMessage:
+    return _weather_tool_call_message().model_copy(
+        update={
+            "thinking_blocks": [
+                ThinkingBlock(thinking="Need the weather.", signature="sig-1")
+            ]
+        }
+    )
+
+
+def _bedrock_claude_llm() -> LitellmLLM:
+    return LitellmLLM(
+        api_key=None,
+        model_provider=LlmProviderNames.BEDROCK,
+        model_name="anthropic.claude-sonnet-4-20250514-v1:0",
+        max_input_tokens=200000,
+    )
+
+
+_WEATHER_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "Get the weather",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    }
+]
+
+
+def test_bedrock_claude_replays_signed_blocks_with_thinking_on() -> None:
+    messages: list[ChatCompletionMessage] = [
+        UserMessage(content="What's the weather?"),
+        _signed_weather_tool_call_message(),
+        ToolMessage(content="sunny", tool_call_id="tc_1"),
+    ]
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
+    ):
+        mock_completion.return_value = []
+        list(
+            _bedrock_claude_llm().stream_raw(
+                messages, tools=_WEATHER_TOOLS, reasoning_effort=ReasoningEffort.HIGH
+            )
+        )
+
+    kwargs = mock_completion.call_args.kwargs
+    assert kwargs["thinking"]["type"] == "enabled"
+    assert kwargs["messages"][1]["thinking_blocks"] == [
+        {"type": "thinking", "thinking": "Need the weather.", "signature": "sig-1"}
+    ]
+
+
+def test_bedrock_claude_strips_thinking_blocks_when_thinking_is_off() -> None:
+    """A forced tool turns budget thinking off, and Anthropic rejects
+    thinking blocks in a request without thinking."""
+    messages: list[ChatCompletionMessage] = [
+        UserMessage(content="What's the weather?"),
+        _signed_weather_tool_call_message(),
+        ToolMessage(content="sunny", tool_call_id="tc_1"),
+    ]
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
+    ):
+        mock_completion.return_value = []
+        list(
+            _bedrock_claude_llm().stream_raw(
+                messages,
+                tools=_WEATHER_TOOLS,
+                tool_choice=NamedToolChoice(name="get_weather"),
+                reasoning_effort=ReasoningEffort.HIGH,
+            )
+        )
+
+    kwargs = mock_completion.call_args.kwargs
+    assert "thinking" not in kwargs
+    assert all("thinking_blocks" not in msg for msg in kwargs["messages"])
 
 
 def test_bifrost_claude_includes_allowed_openai_params() -> None:

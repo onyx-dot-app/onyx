@@ -30,7 +30,7 @@ from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.db.memory import UserInfo, UserMemoryContext
 from onyx.file_store.models import ChatFileType
 from onyx.llm.interfaces import LLMConfig
-from onyx.llm.models import ToolChoiceOptions
+from onyx.llm.models import ReplayableThinking, ThinkingBlock, ToolChoiceOptions
 from onyx.prompts.chat_prompts import (
     ANSWER_COMPLETENESS_REMINDER,
     ANSWER_COVERAGE_GUIDANCE,
@@ -1509,10 +1509,15 @@ class TestFallbackToolExtraction:
         assert attempted is False
 
     def test_extracts_from_answer_when_required_and_no_tool_calls(self) -> None:
+        thinking = ReplayableThinking(
+            model="anthropic/claude-fable-5",
+            blocks=[ThinkingBlock(thinking="call search", signature="sig-1")],
+        )
         llm_step_result = LlmStepResult(
             reasoning=None,
             answer='{"name":"internal_search","arguments":{"queries":["alpha"]}}',
             tool_calls=None,
+            thinking=thinking,
         )
 
         result, attempted = _try_fallback_tool_extraction(
@@ -1528,6 +1533,7 @@ class TestFallbackToolExtraction:
         assert len(result.tool_calls) == 1
         assert result.tool_calls[0].tool_name == "internal_search"
         assert result.tool_calls[0].tool_args == {"queries": ["alpha"]}
+        assert result.thinking == thinking
         assert result.tool_calls[0].placement == Placement(turn_index=3)
 
     def test_falls_back_to_reasoning_when_answer_has_no_tool_calls(self) -> None:

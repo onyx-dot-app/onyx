@@ -238,6 +238,40 @@ so that the Emitter can emit individual tokens as soon as they arrive. It also k
 do not all come at once (reasoning, answers, tool calls are all built up token by token). This layer also tracks the different
 tool calls and returns that to the LLM Loop to execute.
 
+## Signed thinking replay
+
+Claude extended thinking returns signed thinking blocks. Onyx sends the blocks of a tool step back on the
+next step of the same turn, so Claude continues from its own reasoning instead of starting again, and the
+prompt-cache prefix stays the same between steps.
+
+```mermaid
+flowchart TD
+    P[Provider stream] -->|Delta.thinking_blocks| S["run_llm_step<br/>merge fragments + signature<br/>keep signed and redacted blocks"]
+    S -->|"LlmStepResult.thinking<br/>(ReplayableThinking: model key + blocks<br/>+ prefix hash + reminder)"| L[run_llm_loop]
+    L -->|next step| H["ChatMessageSimple.thinking<br/>on the tool-call message<br/>after the reminder it saw"]
+    H --> X["translate_history_to_llm_format<br/>attach only if model key matches"]
+    X --> G["_drop_thinking_with_changed_prefix<br/>clear blocks whose prefix hash changed"]
+    G -->|AssistantMessage.thinking_blocks| M["LitellmLLM._completion<br/>thinking stays on"]
+    M --> P
+```
+
+- `thinking_replay_key` (`llm_step.py`) is `provider/deployment_or_model`. Signatures verify only against the
+  model that minted them, so blocks from another model are not sent.
+- A step that streamed no reasoning at all records an empty block list: the model chose not to think.
+  `thinking` is sent on every request either way (`llm-providers.md`); the blocks only let Claude reuse
+  its reasoning.
+- A request sent without `thinking` (for example, budget thinking with a forced tool) has its
+  `thinking_blocks` removed.
+- Anthropic binds each block to the tools and every message before it, and rejects a block whose
+  prefix changed. `thinking_prefix` hashes that prefix when the block is minted. Before each request,
+  `_drop_thinking_with_changed_prefix` clears a block whose prefix no longer matches, and every later
+  block minted on top of it. A cleared block becomes an empty list, so thinking stays on.
+- To keep the prefix the same, the reminder a step saw stays in place before that step's tool-call
+  message (`thinking_reminder`). The last cycle keeps the tools and sets `tool_choice` to none instead
+  of removing them.
+- Blocks live in the turn only. History loaded from the database carries none, so the first step of a
+  turn starts without them.
+
 ## Things to know
 
 - Packets are labeled with a "turn_index" field as part of the Placement of the packet. This is not the same as the backend

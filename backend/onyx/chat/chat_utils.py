@@ -45,6 +45,7 @@ from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType, FileDescriptor
 from onyx.file_store.utils import plaintext_file_name_for_id, store_plaintext
+from onyx.llm.models import ReplayableThinking
 from onyx.prompts.chat_prompts import (
     ADDITIONAL_CONTEXT_PROMPT,
     NON_VISION_IMAGE_MARKER,
@@ -448,6 +449,28 @@ def load_all_chat_files(
         ),
     )
     return files
+
+
+def thinking_token_count(
+    thinking: ReplayableThinking | None, token_counter: Callable[[str], int]
+) -> int:
+    return token_counter(thinking.replay_text()) if thinking else 0
+
+
+def thinking_reminder(
+    thinking: ReplayableThinking | None, token_counter: Callable[[str], int]
+) -> list[ChatMessageSimple]:
+    """The reminder replayed thinking was minted after. Its signature is bound
+    to every earlier message, so the reminder stays in place in history."""
+    if not thinking or not thinking.blocks or not thinking.reminder:
+        return []
+    return [
+        ChatMessageSimple(
+            message=thinking.reminder,
+            token_count=token_counter(thinking.reminder),
+            message_type=MessageType.USER_REMINDER,
+        )
+    ]
 
 
 def convert_chat_history_basic(

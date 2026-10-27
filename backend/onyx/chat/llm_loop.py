@@ -10,6 +10,8 @@ from onyx.chat.chat_utils import (
     count_message_replay_tokens,
     create_tool_call_failure_messages,
     create_tool_call_failure_response,
+    thinking_reminder,
+    thinking_token_count,
 )
 from onyx.chat.citation_processor import (
     CitationMapping,
@@ -292,6 +294,7 @@ def _try_fallback_tool_extraction(
                 tool_calls=extracted_tool_calls,
                 raw_answer=llm_step_result.raw_answer,
                 finish_reason=llm_step_result.finish_reason,
+                thinking=llm_step_result.thinking,
             ),
             True,
         )
@@ -923,9 +926,17 @@ def run_llm_loop(
                 tool_choice = ToolChoiceOptions.REQUIRED
                 forced_tool_id = None
             elif out_of_cycles or ran_image_gen:
-                # Last cycle, no tools allowed, just answer!
+                # Last cycle, no tools allowed, just answer! Replayed thinking
+                # is bound to the tools it saw, so keep them and forbid calls.
                 tool_choice = ToolChoiceOptions.NONE
-                final_tools = []
+                final_tools = (
+                    tools
+                    if any(
+                        msg.thinking and msg.thinking.blocks
+                        for msg in simple_chat_history
+                    )
+                    else []
+                )
             else:
                 tool_choice = ToolChoiceOptions.AUTO
                 final_tools = tools
@@ -1135,6 +1146,8 @@ def run_llm_loop(
             if attempted:
                 # To prevent the case of excessive looping with bad models, we only allow one fallback attempt
                 fallback_extraction_attempted = True
+            if reminder_msg and llm_step_result.thinking:
+                llm_step_result.thinking.reminder = reminder_msg.message
 
             # Save citation mapping after each LLM step for incremental state updates
             state_container.set_citation_mapping(citation_processor.citation_to_doc)
@@ -1397,12 +1410,19 @@ def run_llm_loop(
 
                 # Create ONE ASSISTANT message with all tool calls for this turn
                 total_tool_call_tokens = sum(tc.token_count for tc in tool_calls_simple)
+                total_tool_call_tokens += thinking_token_count(
+                    llm_step_result.thinking, token_counter
+                )
                 assistant_with_tools = ChatMessageSimple(
                     message="",  # No text content when making tool calls
                     token_count=total_tool_call_tokens,
                     message_type=MessageType.ASSISTANT,
                     tool_calls=tool_calls_simple,
                     image_files=None,
+                    thinking=llm_step_result.thinking,
+                )
+                simple_chat_history.extend(
+                    thinking_reminder(llm_step_result.thinking, token_counter)
                 )
                 simple_chat_history.append(assistant_with_tools)
 
