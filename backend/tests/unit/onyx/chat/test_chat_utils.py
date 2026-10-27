@@ -407,3 +407,9 @@ class TestConvertChatHistory:
             m for m in result.simple_messages if m.message_type == MessageType.ASSISTANT
         ]
         assert [m.thinking for m in assistants] == [tool_step, answer_step]
+        tool_message, answer_message = assistants
+        assert tool_message.tool_calls is not None
+        assert tool_message.token_count == sum(
+            tc.token_count for tc in tool_message.tool_calls
+        ) + len("search first")
+        assert answer_message.token_count == 5 + len("opaque")

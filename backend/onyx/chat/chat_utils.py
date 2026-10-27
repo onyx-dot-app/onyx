@@ -451,6 +451,12 @@ def load_all_chat_files(
     return files
 
 
+def thinking_token_count(
+    thinking: ReplayableThinking | None, token_counter: Callable[[str], int]
+) -> int:
+    return token_counter(thinking.replay_text()) if thinking else 0
+
+
 def convert_chat_history_basic(
     chat_history: list[ChatMessage],
     token_counter: Callable[[str], int],
@@ -692,6 +698,17 @@ def convert_chat_history(
                     total_tool_call_tokens = sum(
                         tc.token_count for tc in tool_calls_simple
                     )
+                    tool_step_thinking = next(
+                        (
+                            ReplayableThinking.model_validate(tool_call.thinking_blocks)
+                            for tool_call in turn_tool_calls
+                            if tool_call.thinking_blocks
+                        ),
+                        None,
+                    )
+                    total_tool_call_tokens += thinking_token_count(
+                        tool_step_thinking, token_counter
+                    )
                     simple_messages.append(
                         ChatMessageSimple(
                             message="",  # No text content when making tool calls
@@ -699,16 +716,7 @@ def convert_chat_history(
                             message_type=MessageType.ASSISTANT,
                             tool_calls=tool_calls_simple,
                             image_files=None,
-                            thinking=next(
-                                (
-                                    ReplayableThinking.model_validate(
-                                        tool_call.thinking_blocks
-                                    )
-                                    for tool_call in turn_tool_calls
-                                    if tool_call.thinking_blocks
-                                ),
-                                None,
-                            ),
+                            thinking=tool_step_thinking,
                         )
                     )
 
@@ -735,17 +743,19 @@ def convert_chat_history(
                         )
 
             # Add the assistant message itself (the final answer)
+            answer_thinking = (
+                ReplayableThinking.model_validate(chat_message.thinking_blocks)
+                if chat_message.thinking_blocks
+                else None
+            )
             simple_messages.append(
                 ChatMessageSimple(
                     message=chat_message.message,
-                    token_count=chat_message.token_count,
+                    token_count=chat_message.token_count
+                    + thinking_token_count(answer_thinking, token_counter),
                     message_type=MessageType.ASSISTANT,
                     image_files=None,
-                    thinking=(
-                        ReplayableThinking.model_validate(chat_message.thinking_blocks)
-                        if chat_message.thinking_blocks
-                        else None
-                    ),
+                    thinking=answer_thinking,
                 )
             )
         else:

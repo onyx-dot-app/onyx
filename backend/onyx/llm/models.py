@@ -181,6 +181,13 @@ class ReplayableThinking(BaseModel):
     model: str
     blocks: list[AnyThinkingBlock]
 
+    def replay_text(self) -> str:
+        """Block content the provider counts as input tokens on replay."""
+        return "".join(
+            block.thinking if isinstance(block, ThinkingBlock) else block.data
+            for block in self.blocks
+        )
+
 
 class Usage(BaseModel):
     completion_tokens: int

@@ -10,6 +10,7 @@ from onyx.chat.chat_utils import (
     count_message_replay_tokens,
     create_tool_call_failure_messages,
     create_tool_call_failure_response,
+    thinking_token_count,
 )
 from onyx.chat.citation_processor import (
     CitationMapping,
@@ -292,6 +293,7 @@ def _try_fallback_tool_extraction(
                 tool_calls=extracted_tool_calls,
                 raw_answer=llm_step_result.raw_answer,
                 finish_reason=llm_step_result.finish_reason,
+                thinking=llm_step_result.thinking,
             ),
             True,
         )
@@ -1120,9 +1122,6 @@ def run_llm_loop(
                 reasoning_effort=reasoning_effort,
                 max_tokens=max_output_tokens,
             )
-            state_container.set_answer_thinking(
-                None if llm_step_result.tool_calls else llm_step_result.thinking
-            )
             if has_reasoned:
                 reasoning_cycles += 1
 
@@ -1138,6 +1137,9 @@ def run_llm_loop(
             if attempted:
                 # To prevent the case of excessive looping with bad models, we only allow one fallback attempt
                 fallback_extraction_attempted = True
+            state_container.set_answer_thinking(
+                None if llm_step_result.tool_calls else llm_step_result.thinking
+            )
 
             # Save citation mapping after each LLM step for incremental state updates
             state_container.set_citation_mapping(citation_processor.citation_to_doc)
@@ -1401,6 +1403,9 @@ def run_llm_loop(
 
                 # Create ONE ASSISTANT message with all tool calls for this turn
                 total_tool_call_tokens = sum(tc.token_count for tc in tool_calls_simple)
+                total_tool_call_tokens += thinking_token_count(
+                    llm_step_result.thinking, token_counter
+                )
                 assistant_with_tools = ChatMessageSimple(
                     message="",  # No text content when making tool calls
                     token_count=total_tool_call_tokens,
