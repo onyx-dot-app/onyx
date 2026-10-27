@@ -486,8 +486,9 @@ export function ShareAgentModal({
   function unpickShareOption(value: string) {
     if (value.startsWith(USER_OPTION_PREFIX)) {
       const userId = value.slice(USER_OPTION_PREFIX.length);
-      if (userId === currentUser?.id) {
-        void handleSelfRemove();
+      // On a saved agent, self-removal applies at once, so leave it to the
+      // row's Remove action
+      if (agentId && userId === currentUser?.id) {
         return;
       }
       removeUserShare(userId);
