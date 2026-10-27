@@ -105,7 +105,6 @@ def _collect_tool_history(
                 for document in result.details.search_docs:
                     documents.setdefault(document.document_id, document)
             if isinstance(result.details, ResearchAgentCallResult):
-                citations.update_citation_mapping(result.details.citation_mapping)
                 for document in result.details.citation_mapping.values():
                     documents.setdefault(document.document_id, document)
             update_citation_processor_from_tool_result(result, citations)

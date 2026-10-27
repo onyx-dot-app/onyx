@@ -30,6 +30,13 @@ export function preserveFailedMessages(
       if (node.nodeId === latest?.nodeId) return local;
       continue;
     }
+    // Final answer text and its error are saved together; packets can precede that save.
+    if (
+      savedNode.type === "assistant" &&
+      (savedNode.message || savedNode.files.length > 0)
+    ) {
+      continue;
+    }
     saved.set(savedNode.nodeId, {
       ...savedNode,
       type: "error",
@@ -103,6 +110,10 @@ export async function settleChatSession({
             : local?.get(selectedNodeId)?.messageId;
         store.updateSessionData(sessionId, {
           messageTree,
+          uncaughtError:
+            getLatestMessageChain(messageTree).at(-1)?.type === "assistant"
+              ? null
+              : (session?.uncaughtError ?? null),
           selectedNodeIdForDocDisplay:
             messageTree === local
               ? (selectedNodeId ?? null)

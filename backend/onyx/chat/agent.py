@@ -34,6 +34,7 @@ from onyx.chat.prompt_utils import (
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
 from onyx.context.models import UserMemoryContext
 from onyx.context.search.models import SearchDocsResponse
+from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
 from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
 from onyx.llm.models import (
@@ -195,6 +196,14 @@ class ChatAgent(Agent, RestorableFeature):
             if isinstance(data, SearchDocsResponse):
                 self.citation_mapping.update(data.citation_mapping)
                 self.gathered_documents.extend(data.search_docs)
+            elif isinstance(data, ResearchAgentCallResult):
+                self.citation_mapping.update(
+                    {
+                        number: doc.document_id
+                        for number, doc in data.citation_mapping.items()
+                    }
+                )
+                self.gathered_documents.extend(data.citation_mapping.values())
             if isinstance(data, ChatSearchResult):
                 existing = {file.filename for file in self.chat_files}
                 self.chat_files.extend(

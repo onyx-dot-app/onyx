@@ -359,6 +359,59 @@ def test_interleaved_answer_sections_preserve_content_order(
     ] == ([0, 1, 2] if boundary == "thinking" else [0, 2])
 
 
+@pytest.mark.parametrize("boundary", ["text", "thinking"])
+@pytest.mark.parametrize("streamed_blocks", [0, 1, 3, 5])
+def test_tool_tabs_do_not_cross_interleaved_content(
+    boundary: str, streamed_blocks: int
+) -> None:
+    calls = [
+        ToolCall(id=str(index), name="internal_search", arguments={})
+        for index in range(4)
+    ]
+    content = (
+        TextContent(text="Between searches")
+        if boundary == "text"
+        else ThinkingContent(text="Between searches")
+    )
+    message = AssistantMessage(content=[*calls[:2], content, *calls[2:]])
+    events = [
+        ToolCallStartEvent(
+            content_index=0, tool_call_id="0", tool_name="internal_search"
+        ),
+        ToolCallStartEvent(
+            content_index=1, tool_call_id="1", tool_name="internal_search"
+        ),
+        TextDeltaEvent(content_index=2, text="Between searches")
+        if boundary == "text"
+        else ThinkingDeltaEvent(content_index=2, text="Between searches"),
+        ToolCallStartEvent(
+            content_index=3, tool_call_id="2", tool_name="internal_search"
+        ),
+        ToolCallStartEvent(
+            content_index=4, tool_call_id="3", tool_name="internal_search"
+        ),
+    ]
+    renderer = MessageRenderer(MessageRendering(), {}, ResponseLayout())
+    output = [
+        packet
+        for event in events[:streamed_blocks]
+        for packet in renderer.consume(event)
+    ]
+    output.extend(renderer.complete(message))
+    for call in calls:
+        output.extend(ToolRenderer(call, renderer.tool_placement(call.id)).start())
+    assert [
+        (packet.placement.turn_index, packet.placement.tab_index)
+        for packet in output
+        if isinstance(packet.obj, SearchToolStart)
+    ] == [(0, 0), (0, 1), (2, 0), (2, 1)]
+    assert [
+        packet.placement.turn_index
+        for packet in output
+        if isinstance(packet.obj, (AgentResponseDelta, ReasoningDelta))
+    ] == [1]
+
+
 @pytest.mark.parametrize("text, cited", [("Report [2]", ["2"]), ("Report", [])])
 def test_report_sources_include_only_observed_citations(
     text: str, cited: list[str]
