@@ -40,6 +40,7 @@ import {
 } from "@/chat/streamingModels";
 import { useChatSessionStore } from "@/state/chatSessionStore";
 import { useSession } from "@/state/session";
+import { toast } from "@/hooks/useToast";
 
 // the run can finish before the ChatSession row is committed; let it settle before naming (web too)
 const AUTO_NAME_DELAY_MS = 200;
@@ -319,10 +320,18 @@ export function useChatController(
           const current = useChatSessionStore.getState().sessions.get(activeId);
           if (current && current.chatState !== "input") return; // a run is already active
           try {
-            if ((await getChatSessionStatus(activeId)).is_processing !== false)
+            if (
+              (await getChatSessionStatus(activeId)).is_processing !== false
+            ) {
+              toast.info(
+                "This conversation is still processing. Try again shortly.",
+              );
               return;
+            }
           } catch {
-            // Keep the draft until server readiness can be confirmed.
+            toast.error(
+              "Could not confirm this conversation is ready. Try again.",
+            );
             return;
           }
           if (
