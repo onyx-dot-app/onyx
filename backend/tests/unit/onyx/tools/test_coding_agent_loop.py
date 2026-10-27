@@ -40,6 +40,7 @@ from onyx.llm.models import (
 from onyx.llm.multi_llm import LitellmLLM, ProviderOperation
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
+    BashToolStart,
     CodingAgentThinkingDelta,
     Packet,
     ReasoningStart,
@@ -253,7 +254,12 @@ class TestThinkPlacement:
         assert "you are on cycle 0" in prompts[0]
         assert "you are on cycle 1" in prompts[1]
         assert "you are on cycle 2" in prompts[2]
-        assert thinking_sub_turns(run.packets) == [0, 1]
+        assert thinking_sub_turns(run.packets) == [0, 2]
+        assert [
+            packet.placement.sub_turn_index
+            for packet in run.packets
+            if isinstance(packet.obj, BashToolStart)
+        ] == [1]
 
     def test_think_with_narration_advances_sub_turn(self) -> None:
         run = run_agent(
@@ -279,7 +285,7 @@ class TestThinkPlacement:
         )
 
         assert reasoning_sub_turns(run.packets) == []
-        assert thinking_sub_turns(run.packets) == [0, 0, 1]
+        assert thinking_sub_turns(run.packets) == [0, 0, 2]
         assert [
             p.obj.content
             for p in run.packets

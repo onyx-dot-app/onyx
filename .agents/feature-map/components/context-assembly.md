@@ -264,6 +264,9 @@ documents, metadata) precede the long `contents` field, because the model
 attends better to fields placed early relative to a long trailing block even
 though it technically has global access to the whole message.
 
+Context-file document numbers come from the same source mapping used by citation rendering.
+Existing file IDs retain their numbers; new files cannot reuse historical source numbers.
+
 Search-tool documents follow the same `document`-keyed shape in a `ToolResultMessage`.
 Each tool result can contain multiple documents. Project/context files are injected
 as a `UserMessage` containing one document list.

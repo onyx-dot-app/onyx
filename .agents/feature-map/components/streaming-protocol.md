@@ -69,7 +69,7 @@ Neither path runs a model or executes a tool.
 
 `chat/response.py` captures accepted steps before display processing. A display
 failure can therefore leave a complete response record available for saving.
-`chat/response_models.py` separates response content from per-message rendering
+`chat/models.py` separates response content from per-message rendering
 settings, such as citation display and research phase.
 
 The detached response record is an in-memory aggregate. Database codecs restore
@@ -80,8 +80,7 @@ Session reload carries the saved message error alongside rendered packets.
 Only tool failures explicitly marked for public display produce error packets.
 Other tool errors remain available to the model for recovery.
 
-These APIs prepare the shared runtime transition. Production chat, research,
-coding, and session reload still use their existing execution and loading paths.
+Chat, research, coding, and session reload use these shared rendering paths.
 
 ## 3. Data model
 
@@ -90,7 +89,7 @@ tables under [[chat-persistence]] store the *result* of a turn (`ChatMessage`,
 `ToolCall`, `SearchDoc`), not the packet stream that produced it.
 
 The stream ID is the reserved assistant message ID, or the user message ID in a multi-model turn
-(`process_message.py:build_chat_turn`, `processing_stream_id`). The only durable storage here is the **stream buffer**, a transient,
+(`prepare.py:prepare_chat_turn`, `processing_stream_id`). The only durable storage here is the **stream buffer**, a transient,
 cross-pod cache structure (`backend/onyx/chat/stream_buffer.py`), used so any
 api-server pod can replay and tail an in-flight run:
 
@@ -169,6 +168,8 @@ whether delivered through a progress update or directly at completion.
   (`backend/onyx/chat/renderer.py:MessageRenderer.tool_placement`).
   Text or reasoning between tool calls starts a new section; only consecutive
   top-level calls share tabs.
+- Coding-agent commands each have a distinct child section, so concurrent outputs
+  and exit statuses stay attached to their command.
 - `sub_turn_index`: nesting level for a tool that calls other tools; `None` at
   the top level.
 - `model_index`: which model produced the packet in a multi-model turn (`0`,

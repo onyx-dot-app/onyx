@@ -15,7 +15,7 @@ import { ValidSources } from "@/lib/connectors/types/source";
 import { timeAgo } from "@opal/time";
 import { useLocale } from "next-intl";
 import type { IconProps } from "@opal/types";
-import { SubQuestionDetail } from "@/app/app/interfaces";
+import { SubQuestionDetail } from "@/app/app/types";
 
 export interface SourceInfo {
   id: string;

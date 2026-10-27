@@ -12,16 +12,18 @@ from pydantic import (
 )
 
 
-class LLMErrorInfo(BaseModel):
-    message: str
-    error_code: str
-    is_retryable: bool
-
-
 class ToolChoiceOptions(str, Enum):
     REQUIRED = "required"
     AUTO = "auto"
     NONE = "none"
+
+
+class LLMErrorInfo(BaseModel):
+    message: str
+    error_code: str
+    is_retryable: bool
+    tool_choice: ToolChoiceOptions | None = None
+    finish_reason: str | None = None
 
 
 class NamedToolChoice(BaseModel):

@@ -141,7 +141,7 @@ alone cannot distinguish them from historical messages.
 ### The message tree (`services/messageTree.ts`)
 
 `MessageTreeState = Map<number, Message>`, keyed by `nodeId` (`messageTree.ts`). Each
-`Message` (`app/app/interfaces.ts`) carries `parentNodeId`, `childrenNodeIds`,
+`Message` (`app/app/types.ts`) carries `parentNodeId`, `childrenNodeIds`,
 `latestChildNodeId`, and its own `packets: Packet[]`. `getLatestMessageChain`
 (`messageTree.ts:getLatestMessageChain`) walks `latestChildNodeId` from the root to
 produce the linear history the UI renders; editing or regenerating a message creates a

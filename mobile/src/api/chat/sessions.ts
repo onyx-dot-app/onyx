@@ -28,25 +28,18 @@ export async function createChatSession(
 export async function getChatSession(
   sessionId: string,
 ): Promise<BackendChatSession> {
-  return apiFetch<BackendChatSession>(`/chat/get-chat-session/${sessionId}`);
+  return apiFetch<BackendChatSession>(`/chat/get-chat-session/${sessionId}`, {
+    timeoutMs: SESSION_CONTROL_TIMEOUT_MS,
+  });
 }
 
 export async function getChatSessionStatus(
   sessionId: string,
 ): Promise<{ is_processing: boolean }> {
-  const controller = new AbortController();
-  const timeout = setTimeout(
-    () => controller.abort(),
-    SESSION_CONTROL_TIMEOUT_MS,
+  return apiFetch<{ is_processing: boolean }>(
+    `/chat/chat-session/${sessionId}/status`,
+    { timeoutMs: SESSION_CONTROL_TIMEOUT_MS },
   );
-  try {
-    return await apiFetch<{ is_processing: boolean }>(
-      `/chat/chat-session/${sessionId}/status`,
-      { signal: controller.signal },
-    );
-  } finally {
-    clearTimeout(timeout);
-  }
 }
 
 // client abort alone leaves the backend generating
@@ -56,19 +49,10 @@ export async function stopChatSession(
   streamId?: number,
 ): Promise<void> {
   const query = streamId === undefined ? "" : `?stream_id=${streamId}`;
-  const controller = new AbortController();
-  const timeout = setTimeout(
-    () => controller.abort(),
-    SESSION_CONTROL_TIMEOUT_MS,
-  );
-  try {
-    await apiFetch<void>(`/chat/stop-chat-session/${sessionId}${query}`, {
-      method: "POST",
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timeout);
-  }
+  await apiFetch<void>(`/chat/stop-chat-session/${sessionId}${query}`, {
+    method: "POST",
+    timeoutMs: SESSION_CONTROL_TIMEOUT_MS,
+  });
 }
 
 // `name: null` makes the backend LLM-generate a title from the session's history.

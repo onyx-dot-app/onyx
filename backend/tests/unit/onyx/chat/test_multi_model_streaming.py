@@ -3197,7 +3197,11 @@ def test_invalid_chat_settings_return_actionable_errors(
             create_chat_agent(setup, MagicMock(), 0, CancellationSignal(), True)
     assert raised.value.error_code == OnyxErrorCode.BAD_REQUEST
     packet = chat_error(raised.value, setup.responses[0].llm, model_index=1)
-    assert packet.details == {"model_index": 1}
+    assert packet.details == {
+        "model_index": 1,
+        "model": "test-model",
+        "provider": "openai",
+    }
     assert packet.error == detail
     assert not packet.is_retryable
 

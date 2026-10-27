@@ -87,11 +87,10 @@ and `BashTool`, checked in `python_tool.py:is_available` and `bash_tool.py:is_av
 
 ### Shared result contracts
 
-`backend/onyx/tools/results.py` defines serializable result payloads independently
+`backend/onyx/tools/models.py` defines serializable result payloads independently
 of tool execution. Execution, storage, and presentation import the same types.
-`backend/onyx/tools/records.py` keeps display-only `ToolCallInfo` separate from
-`RecordedToolCallInfo`, which requires the originating model-message identity.
-The existing tool runner continues to use `ToolResponse`.
+Its `ToolCallInfo` records the originating model-message identity for display and storage.
+Application tools bind to SDK tools and return `ToolResult`.
 
 ## 3. Data model
 

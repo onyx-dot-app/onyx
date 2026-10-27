@@ -7,7 +7,7 @@ import {
   BackendChatSession,
   FeedbackType,
   QueuedMessage,
-} from "../interfaces";
+} from "@/app/app/types";
 import {
   getLatestMessageChain,
   getMessageByMessageId,

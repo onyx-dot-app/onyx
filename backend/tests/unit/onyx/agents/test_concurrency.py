@@ -1040,3 +1040,21 @@ def test_run_idle_waits_for_buffered_event_output(fails: bool) -> None:
         assert run.wait_for_idle(2)
         dispatcher.close()
         assert finalized.wait(2)
+
+
+def test_failed_close_rejects_late_events_without_starting_another_worker() -> None:
+    dispatcher = concurrency.EventDispatcher(flush=lambda _final: None)
+    delivery = concurrency.EventDelivery(dispatcher)
+    received: list[AgentEvent] = []
+    delivery.subscribe(received.append)
+    with patch(
+        "onyx.agents.concurrency.start_thread_with_context",
+        side_effect=RuntimeError("cannot start new thread"),
+    ) as start:
+        with pytest.raises(RuntimeError, match="cannot start new thread"):
+            dispatcher.close()
+        delivery.publish(AgentStartEvent(run_id="late"))
+        start.assert_called_once()
+    assert not received
+    assert delivery.failed.is_set()
+    assert delivery.tracker.wait_idle(timeout=1)

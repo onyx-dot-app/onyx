@@ -2,7 +2,7 @@ import { DocumentInfoPacket, StreamStopInfo } from "@/lib/search/types";
 import type { SearchFiltersRequest } from "@/lib/searchFilters/types";
 import { handleSSEStream } from "@/lib/search/streamingUtils";
 import { ReasoningEffortOverride } from "@/lib/languageModels/types";
-import { FeedbackType } from "@/app/app/interfaces";
+import { FeedbackType } from "@/app/app/types";
 import {
   BackendMessage,
   DocumentsResponse,
@@ -18,7 +18,7 @@ import {
   StreamingError,
   ToolCallMetadata,
   UserKnowledgeFilePacket,
-} from "../interfaces";
+} from "@/app/app/types";
 import { ReadonlyURLSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "./searchParams";
 import { Packet } from "./streamingModels";

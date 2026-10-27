@@ -226,6 +226,7 @@ Other arguments must match. Sequential steps combine only adjacent calls, preser
 relative to other tools. Shared retrieval uses the tool's existing combined-result limits.
 
 Retrieval tools declare `merge_list_argument` using their query or URL parameter name.
+Tools with a per-call item cap also set `merge_list_limit`; larger groups execute separately.
 `Tool.bind` supplies the merger to the SDK, which does not inspect search fields.
 Steps with a `before_tool_call` hook and calls waiting for input execute individually.
 Batch results are recorded together before checkpoint capture; resumed runs skip completed calls.

@@ -829,6 +829,96 @@ def test_coding_thinking_uses_coding_packets(
     )
 
 
+@pytest.mark.parametrize("live", [False, True])
+def test_parallel_coding_commands_keep_separate_output_sections(live: bool) -> None:
+    calls = [
+        ToolCall(id=str(index), name="bash", arguments={"cmd": f"command-{index}"})
+        for index in range(2)
+    ]
+    message = AssistantMessage(
+        id="coding", content=[ThinkingContent(text="Inspect both files"), *calls]
+    )
+    settings = MessageRendering(mode=PresentationMode.CODING_THINKING)
+    parent = Placement(turn_index=3, tab_index=1)
+    results = {
+        call.id: ToolResultMessage(
+            tool_call_id=call.id,
+            tool_name=call.name,
+            content=f"output-{call.id}",
+            details=LlmBashExecutionResult(
+                stdout=f"output-{call.id}",
+                stderr="",
+                exit_code=int(call.id),
+                timed_out=False,
+            ),
+        )
+        for call in calls
+    }
+    if live:
+        renderer = MessageRenderer(settings, {}, ResponseLayout(), parent)
+        output = renderer.consume(
+            ThinkingDeltaEvent(content_index=0, text="Inspect both files")
+        )
+        for index, call in enumerate(calls, 1):
+            output.extend(
+                renderer.consume(
+                    ToolCallStartEvent(
+                        content_index=index, tool_call_id=call.id, tool_name=call.name
+                    )
+                )
+            )
+        output.extend(renderer.complete(message))
+        tools = [ToolRenderer(call, renderer.tool_placement(call.id)) for call in calls]
+        for tool in tools:
+            output.extend(tool.start())
+        for tool, call in zip(reversed(tools), reversed(calls), strict=True):
+            output.extend(tool.complete(results[call.id]))
+    else:
+        output = replay_response(
+            ResponseRecord(
+                run_id="child",
+                parent_run_id="root",
+                status=RunStatus.COMPLETE,
+                steps=[
+                    StepRecord(
+                        message=message,
+                        generation_status=ExecutionStatus.COMPLETE,
+                        tools={
+                            call.id: ToolExecutionRecord(
+                                status=ExecutionStatus.COMPLETE, result=results[call.id]
+                            )
+                            for call in calls
+                        },
+                    )
+                ],
+            ),
+            {},
+            {"coding": settings},
+            {},
+            parent=parent,
+        )
+    starts = {
+        packet.obj.cmd: packet.placement
+        for packet in output
+        if isinstance(packet.obj, BashToolStart)
+    }
+    assert starts["command-0"] != starts["command-1"]
+    for index in range(2):
+        delta = next(
+            packet
+            for packet in output
+            if isinstance(packet.obj, BashToolDelta)
+            and packet.obj.stdout == f"output-{index}"
+        )
+        assert delta.placement == starts[f"command-{index}"]
+        assert isinstance(delta.obj, BashToolDelta)
+        assert delta.obj.exit_code == index
+    thinking = next(
+        packet for packet in output if isinstance(packet.obj, CodingAgentThinkingDelta)
+    )
+    assert all(thinking.placement != placement for placement in starts.values())
+
+
 @pytest.mark.parametrize("tool_first", [False, True])
 def test_replay_preserves_live_text_and_tool_section_order(tool_first: bool) -> None:
     call = ToolCall(id="search", name="internal_search", arguments={"queries": ["q"]})

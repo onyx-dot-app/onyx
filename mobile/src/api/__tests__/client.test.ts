@@ -11,7 +11,11 @@ import { fetch as expoFetch } from "expo/fetch";
 import { apiFetch } from "@/api/client";
 import { setInFlightRefresh } from "@/api/auth/refreshState";
 import { getToken } from "@/api/auth/tokenStore";
-import { getChatSessionStatus, stopChatSession } from "@/api/chat/sessions";
+import {
+  getChatSession,
+  getChatSessionStatus,
+  stopChatSession,
+} from "@/api/chat/sessions";
 import {
   resumeChatMessage,
   streamChatMessage,
@@ -141,6 +145,7 @@ describe("request cancellation during authentication", () => {
   it.each([
     { name: "readiness", request: () => getChatSessionStatus("s1") },
     { name: "Stop", request: () => stopChatSession("s1", 11) },
+    { name: "history", request: () => getChatSession("s1") },
   ])(
     "applies the $name deadline while authentication is pending",
     async ({ request }) => {
@@ -158,4 +163,51 @@ describe("request cancellation during authentication", () => {
       expect(jest.getTimerCount()).toBe(0);
     },
   );
+});
+
+describe("request deadlines", () => {
+  it.each(["headers", "body"])(
+    "aborts a stalled %s read and clears its timer",
+    async (phase) => {
+      jest.useFakeTimers();
+      const aborted = new Error("Request cancelled");
+      aborted.name = "AbortError";
+      jest.mocked(globalThis.fetch).mockImplementationOnce((_url, init) => {
+        const pending = new Promise<never>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(aborted), {
+            once: true,
+          });
+        });
+        if (phase === "headers") return pending;
+        const response = new Response();
+        jest.spyOn(response, "text").mockReturnValue(pending);
+        return Promise.resolve(response);
+      });
+      const request = expect(getChatSession("s1")).rejects.toMatchObject({
+        name: "AbortError",
+      });
+      await jest.advanceTimersByTimeAsync(10_000);
+      await request;
+      expect(jest.getTimerCount()).toBe(0);
+    },
+  );
+
+  it("keeps caller cancellation linked and removes the listener on completion", async () => {
+    jest.useFakeTimers();
+    const refresh = Promise.withResolvers<string | null>();
+    setInFlightRefresh(refresh.promise);
+    const controller = new AbortController();
+    const removeListener = jest.spyOn(controller.signal, "removeEventListener");
+    const request = apiFetch("/me", {
+      signal: controller.signal,
+      timeoutMs: 10_000,
+    });
+    controller.abort();
+    await expect(request).rejects.toMatchObject({ name: "AbortError" });
+    expect(removeListener).toHaveBeenCalledWith("abort", expect.any(Function));
+    expect(jest.getTimerCount()).toBe(0);
+    refresh.resolve("late-test-token");
+    await Promise.resolve();
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
 });

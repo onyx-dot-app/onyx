@@ -8,6 +8,8 @@ export interface ApiFetchInit extends Omit<RequestInit, "body"> {
   body?: unknown;
   // "stored" skips the wait on an in-flight refresh, so `refreshToken` doesn't await its own promise.
   auth?: boolean | "stored";
+  // Includes credential resolution and reading the response body.
+  timeoutMs?: number;
 }
 
 function isBodyInit(body: unknown): body is BodyInit {
@@ -100,49 +102,71 @@ export async function apiFetch<T>(
   path: string,
   init?: ApiFetchInit,
 ): Promise<T> {
-  const { body, auth: _auth, ...rest } = init ?? {};
+  const {
+    body,
+    auth: _auth,
+    timeoutMs,
+    signal: callerSignal,
+    ...rest
+  } = init ?? {};
+  const controller =
+    timeoutMs === undefined ? undefined : new AbortController();
+  const abort = () => controller?.abort();
+  if (callerSignal?.aborted) abort();
+  else if (controller)
+    callerSignal?.addEventListener("abort", abort, { once: true });
+  const timeout = controller ? setTimeout(abort, timeoutMs) : undefined;
+  const signal = controller?.signal ?? callerSignal;
 
-  const hasBody = body !== undefined && body !== null;
-  const serializedBody: BodyInit | undefined = !hasBody
-    ? undefined
-    : isBodyInit(body)
-      ? body
-      : JSON.stringify(body);
-  const hasJsonBody = hasBody && !isBodyInit(body);
-
-  const headers = await buildHeaders(init, hasJsonBody);
-
-  const res = await fetch(`${getBaseUrl()}${path}`, {
-    ...rest,
-    headers,
-    body: serializedBody,
-  });
-
-  if (!res.ok) {
-    throw await toApiError(res);
-  }
-
-  if (res.status === 204) {
-    return undefined as T;
-  }
-  const text = await res.text();
-  if (text.trim().length === 0) {
-    return undefined as T;
-  }
-  // Without this, a non-JSON 2xx body throws a raw SyntaxError that escapes ApiError and gets retried.
   try {
-    return JSON.parse(text) as T;
-  } catch (parseError) {
-    throw new ApiError({
-      status: res.status,
-      detail: `Expected a JSON response but received ${
-        res.headers.get("content-type") ?? "an unknown content type"
-      }.`,
-      body: {
-        responseText: text,
-        parseError:
-          parseError instanceof Error ? parseError.message : String(parseError),
-      },
+    const hasBody = body !== undefined && body !== null;
+    const serializedBody: BodyInit | undefined = !hasBody
+      ? undefined
+      : isBodyInit(body)
+        ? body
+        : JSON.stringify(body);
+    const hasJsonBody = hasBody && !isBodyInit(body);
+
+    const headers = await buildHeaders({ ...init, signal }, hasJsonBody);
+
+    const res = await fetch(`${getBaseUrl()}${path}`, {
+      ...rest,
+      headers,
+      body: serializedBody,
+      signal,
     });
+
+    if (!res.ok) {
+      throw await toApiError(res);
+    }
+
+    if (res.status === 204) {
+      return undefined as T;
+    }
+    const text = await res.text();
+    if (text.trim().length === 0) {
+      return undefined as T;
+    }
+    // Without this, a non-JSON 2xx body throws a raw SyntaxError that escapes ApiError and gets retried.
+    try {
+      return JSON.parse(text) as T;
+    } catch (parseError) {
+      throw new ApiError({
+        status: res.status,
+        detail: `Expected a JSON response but received ${
+          res.headers.get("content-type") ?? "an unknown content type"
+        }.`,
+        body: {
+          responseText: text,
+          parseError:
+            parseError instanceof Error
+              ? parseError.message
+              : String(parseError),
+        },
+      });
+    }
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+    if (controller) callerSignal?.removeEventListener("abort", abort);
   }
 }

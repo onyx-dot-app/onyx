@@ -1,5 +1,5 @@
-import { ChatSessionSharedStatus } from "@/app/app/interfaces";
-import type { BackendChatSession, Message } from "@/app/app/interfaces";
+import { ChatSessionSharedStatus } from "@/app/app/types";
+import type { BackendChatSession, Message } from "@/app/app/types";
 import { processRawChatHistory } from "@/app/app/services/lib";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { settleChatSession } from "@/lib/chat/settleChatSession";

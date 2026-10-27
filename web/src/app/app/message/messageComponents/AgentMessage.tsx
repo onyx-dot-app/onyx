@@ -10,7 +10,7 @@ import React, {
 import { Packet, StopReason } from "@/app/app/services/streamingModels";
 import CustomToolAuthCard from "@/app/app/message/messageComponents/CustomToolAuthCard";
 import { FullChatState } from "@/app/app/message/messageComponents/types";
-import { FeedbackType } from "@/app/app/interfaces";
+import { FeedbackType } from "@/app/app/types";
 import { handleCopy } from "@/app/app/message/copyingUtils";
 import { useAuthErrors } from "@/app/app/message/messageComponents/hooks/useAuthErrors";
 import { getMessageSwitching } from "@/app/app/message/messageComponents/messageSwitching";
@@ -19,7 +19,7 @@ import { usePacketProcessor } from "@/app/app/message/messageComponents/timeline
 import { usePacedTurnGroups } from "@/app/app/message/messageComponents/timeline/hooks/usePacedTurnGroups";
 import MessageToolbar from "@/app/app/message/messageComponents/MessageToolbar";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
-import { Message } from "@/app/app/interfaces";
+import { Message } from "@/app/app/types";
 import { Text } from "@opal/components";
 import { AgentTimeline } from "@/app/app/message/messageComponents/timeline/AgentTimeline";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";

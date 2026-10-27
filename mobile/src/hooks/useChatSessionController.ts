@@ -24,6 +24,7 @@ import { getMessageByMessageId, upsertMessages } from "@/chat/messageTree";
 import { Packet } from "@/chat/streamingModels";
 import { useChatSessionStore } from "@/state/chatSessionStore";
 import { useSession } from "@/state/session";
+import { toast } from "@/hooks/useToast";
 
 async function runResumeStream(
   sessionId: string,
@@ -147,58 +148,68 @@ async function runResumeStream(
   } finally {
     if (flushTimer) clearTimeout(flushTimer);
     flush();
-    const stillOurs = () =>
-      store.getState().sessions.get(sessionId)?.abortController === controller;
-    const stillOpen = () =>
-      stillOurs() && store.getState().currentSessionId === sessionId;
-    if (!stillOurs()) return;
-    store.getState().updateChatState(sessionId, "settling");
-    try {
-      const idle = await waitForSessionIdle(sessionId, stillOpen, () => {
-        store.getState().updateChatState(sessionId, "unconfirmed");
-      });
-      if (!idle || !stillOpen()) return;
+  }
+  const stillOurs = () =>
+    store.getState().sessions.get(sessionId)?.abortController === controller;
+  const stillOpen = () =>
+    stillOurs() && store.getState().currentSessionId === sessionId;
+  if (!stillOurs()) return;
+  store.getState().updateChatState(sessionId, "settling");
+  try {
+    const idle = await waitForSessionIdle(sessionId, stillOpen, () => {
+      store.getState().updateChatState(sessionId, "unconfirmed");
+    });
+    if (!idle || !stillOpen()) return;
 
-      try {
-        const settled = await getChatSession(sessionId);
-        if (!stillOpen()) return;
-        const current = store
-          .getState()
-          .sessions.get(sessionId)
-          ?.messageTree.get(nodeId);
-        const messages = processRawChatHistory(
-          settled.messages,
-          settled.packets,
-        );
-        const saved = getMessageByMessageId(messages, runId);
-        const hasSavedAnswer =
-          saved?.type === "assistant" &&
-          (saved.message.length > 0 || saved.files.length > 0);
-        // Final saved answers are authoritative; partial packets alone do not prove a successful save.
-        if (current?.type === "error" && saved && !hasSavedAnswer) {
-          messages.set(saved.nodeId, {
-            ...saved,
-            type: "error",
-            message: current.message,
-            errorCode: current.errorCode,
-          });
-        }
-        store.getState().hydrateSession(sessionId, messages);
-        queryClient.setQueryData(
-          QUERY_KEYS.chatSession(serverUrl, sessionId),
-          settled,
-        );
-      } catch (error) {
-        console.warn("resume-stream could not load saved history", error);
-      }
+    try {
+      const settled = await getChatSession(sessionId);
       if (!stillOpen()) return;
-      store.getState().updateChatState(sessionId, "input");
-      void queryClient.invalidateQueries({
-        queryKey: QUERY_KEYS.chatSessions(serverUrl),
-      });
-    } finally {
-      if (stillOurs()) store.getState().setAbortController(sessionId, null);
+      const current = store
+        .getState()
+        .sessions.get(sessionId)
+        ?.messageTree.get(nodeId);
+      const messages = processRawChatHistory(settled.messages, settled.packets);
+      const saved = getMessageByMessageId(messages, runId);
+      const hasSavedAnswer =
+        saved?.type === "assistant" &&
+        (saved.message.length > 0 || saved.files.length > 0);
+      // Final saved answers are authoritative; partial packets alone do not prove a successful save.
+      if (current?.type === "error" && saved && !hasSavedAnswer) {
+        messages.set(saved.nodeId, {
+          ...saved,
+          type: "error",
+          message: current.message,
+          errorCode: current.errorCode,
+        });
+      }
+      store.getState().hydrateSession(sessionId, messages);
+      queryClient.setQueryData(
+        QUERY_KEYS.chatSession(serverUrl, sessionId),
+        settled,
+      );
+    } catch (error) {
+      console.warn("resume-stream could not load saved history", error);
+      if (stillOpen())
+        toast.error(
+          "Could not refresh saved messages. Reopen this conversation to retry.",
+        );
     }
+    if (!stillOpen()) return;
+    store.getState().updateChatState(sessionId, "input");
+    void queryClient.invalidateQueries({
+      queryKey: QUERY_KEYS.chatSessions(serverUrl),
+    });
+  } catch (error) {
+    if (!stillOpen()) return;
+    console.warn("Could not confirm chat readiness", error);
+    store.getState().updateChatState(sessionId, "unconfirmed");
+    toast.error(
+      error instanceof Error
+        ? error.message
+        : "This conversation is unavailable.",
+    );
+  } finally {
+    if (stillOurs()) store.getState().setAbortController(sessionId, null);
   }
 }
 

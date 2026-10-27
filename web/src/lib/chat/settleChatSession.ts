@@ -1,4 +1,4 @@
-import type { Message } from "@/app/app/interfaces";
+import type { Message } from "@/app/app/types";
 import { processRawChatHistory } from "@/app/app/services/lib";
 import { getLatestMessageChain } from "@/app/app/services/messageTree";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";

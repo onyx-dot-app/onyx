@@ -16,7 +16,7 @@ from collections.abc import Generator
 from dataclasses import dataclass
 from typing import TypeAlias
 
-from onyx.chat.response_models import CitationMode
+from onyx.chat.models import CitationMode
 from onyx.configs.chat_configs import STOP_STREAM_PAT
 from onyx.context.search.models import SearchDoc
 from onyx.server.query_and_chat.streaming_models import CitationInfo

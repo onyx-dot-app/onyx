@@ -25,7 +25,7 @@ import {
   getProviderOverrideForAgent,
   parseLlmDescriptor,
 } from "@/lib/languageModels/utils";
-import { ChatSession } from "@/app/app/interfaces";
+import { ChatSession } from "@/app/app/types";
 import { useSettings } from "@/lib/settings/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import {
