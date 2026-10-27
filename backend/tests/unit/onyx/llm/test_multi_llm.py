@@ -8,7 +8,12 @@ from unittest.mock import ANY, MagicMock, patch
 
 import litellm
 import pytest
-from litellm.types.utils import ChatCompletionDeltaToolCall, Delta, StreamingChoices
+from litellm.types.utils import (
+    ChatCompletionDeltaCustomToolCall,
+    ChatCompletionDeltaToolCall,
+    Delta,
+    StreamingChoices,
+)
 from litellm.types.utils import Function as LiteLLMFunction
 
 import onyx.llm.model_request
@@ -46,7 +51,9 @@ VERTEX_OPUS_MODELS_REJECTING_STREAM_OPTIONS = [
 def _create_delta(
     role: str | None = None,
     content: str | None = None,
-    tool_calls: list[ChatCompletionDeltaToolCall] | None = None,
+    tool_calls: (
+        list[ChatCompletionDeltaToolCall | ChatCompletionDeltaCustomToolCall] | None
+    ) = None,
 ) -> Delta:
     delta = Delta(role=role, content=content)
     # NOTE: for some reason, if you pass tool_calls to the constructor, it doesn't actually
