@@ -660,37 +660,35 @@ function CustomModelGroup({ onAddCustomModel }: CustomModelGroupProps) {
         />
       </GeneralLayouts.Section>
 
-      <GeneralLayouts.Section gap={0} alignItems="stretch" height="fit">
-        <SelectCard
-          state="filled"
-          rounding={3}
-          padding={2}
-          onClick={onAddCustomModel}
-        >
-          <ContentAction
-            title={t("modelPicker.customModel.title")}
-            sizePreset="secondary"
-            variant="body"
-            color="muted"
-            padding={1}
-            rightChildren={
-              <Button
-                prominence="tertiary"
-                rightIcon={SvgPlusCircle}
-                onClick={onAddCustomModel}
-              >
-                {t("modelPicker.addCustomModel.label")}
-              </Button>
-            }
-            center
-          />
-        </SelectCard>
-        <div className="px-3 pt-1 pb-2">
-          <Text font="secondary-body" color="text-03">
-            {markdown(t("modelPicker.customModels.hint", { appName }))}
-          </Text>
-        </div>
-      </GeneralLayouts.Section>
+      <SelectCard
+        state="filled"
+        rounding={3}
+        padding={2}
+        onClick={onAddCustomModel}
+      >
+        <ContentAction
+          title={t("modelPicker.customModel.title")}
+          sizePreset="secondary"
+          variant="body"
+          color="muted"
+          padding={1}
+          rightChildren={
+            <Button
+              prominence="tertiary"
+              rightIcon={SvgPlusCircle}
+              onClick={onAddCustomModel}
+            >
+              {t("modelPicker.addCustomModel.label")}
+            </Button>
+          }
+          center
+        />
+      </SelectCard>
+      <div className="px-3 pt-1 pb-2">
+        <Text font="secondary-body" color="text-03" as="p">
+          {markdown(t("modelPicker.customModels.hint", { appName }))}
+        </Text>
+      </div>
     </GeneralLayouts.Section>
   );
 }
