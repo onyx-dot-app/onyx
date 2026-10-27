@@ -96,8 +96,9 @@ example nginx); this file is not on that path.
 | Endpoint | Called from |
 |---|---|
 | `POST /api/chat/send-chat-message` | `services/lib.tsx:sendMessage` |
+| `GET /api/chat/chat-session/{id}/status` | `lib/chat/sessionReadiness.ts:waitForChatSessionIdle` |
 | `GET /api/chat/chat-session/{id}/resume-stream?cursor=N` | `services/lib.tsx:resumeStream`, from `useChatSessionController.ts` |
-| `POST /api/chat/stop-chat-session/{id}?stream_id=N` | `hooks/useChatController.ts:stopChatSession`. `stream_id` is the session store's `streamId`, which the controller sets from the assistant message ID, or the user message ID in multi-model mode. |
+| `POST /api/chat/stop-chat-session/{id}?stream_id=N` | `lib/chat/stopChatSession.ts`. `stream_id` comes from the accepted assistant message ID, or the user message ID in multi-model mode. |
 | `POST /api/chat/create-chat-session` | `services/lib.tsx:createChatSession` |
 | `PUT /api/chat/rename-chat-session` | `services/lib.tsx:renameChatSession`, `nameChatSession` |
 | `DELETE /api/chat/delete-chat-session/{id}`, `/api/chat/delete-all-chat-sessions` | `services/lib.tsx` |
@@ -600,3 +601,8 @@ metadata. Server readiness still gates the next send.
 `AgentMessage` reports when its final content has finished rendering. For multi-model turns,
 `MultiModelResponseView` waits for all visible successful panels before releasing queued
 messages. Failed or hidden panels have no answer animation to wait for.
+
+Stop and recovery wait for the current browser reader to apply its final packets before
+releasing input. Server idleness alone does not mean the local response is complete.
+Settlement belongs to both the request controller and its reader. Replacing the reader
+with replay prevents an earlier settlement from releasing input or replacing history.

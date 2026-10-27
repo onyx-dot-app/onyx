@@ -136,7 +136,7 @@ Checkpoint bindings identify the tenant and response. Saved progress uses the ru
 Feature state is a JSON object validated by its owning feature during restoration.
 Chat's `kind` discriminator selects the feature schema; message metadata and tool details retain their tagged codec.
 Prompt image metadata saves file IDs and token counts; restoration loads image bytes only when needed.
-The checkpoint writer rejects content-free sessions before creating or updating a checkpoint.
+The checkpoint writer rejects content-free sessions and mismatched response bindings before writing checkpoint state.
 
 ### `ChatSession` (`db/models.py:ChatSession`, table `chat_session`)
 

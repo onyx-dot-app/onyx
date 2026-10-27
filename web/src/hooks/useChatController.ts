@@ -1032,6 +1032,7 @@ export default function useChatController({
 
       let streamSucceeded = false;
       let saveFailed = false;
+      const readerFinished = Promise.withResolvers<void>();
 
       try {
         // Selection-time override writes are best-effort. Await confirmation
@@ -1085,6 +1086,7 @@ export default function useChatController({
         const stack = new CurrentMessageFIFO();
         useChatSessionStore.getState().updateSessionData(frozenSessionId, {
           sendAcknowledged: stack.acknowledged,
+          readerFinished: readerFinished.promise,
         });
         updateCurrentMessageFIFO(stack, {
           signal: controller.signal,
@@ -1501,17 +1503,23 @@ export default function useChatController({
           completeMessageTreeOverride: currentMessageTreeLocal,
           chatSessionId: frozenSessionId,
         });
-      }
-
-      // After streaming completes (normal or stop), mark all non-errored
-      // multi-model assistant nodes as done generating so panels exit
-      // "Thinking..." state.
-      if (isMultiModel && initialAssistantNodes.length > 0 && streamSucceeded) {
-        upsertToCompleteMessageTree({
-          messages: buildNonErroredNodes({ is_generating: false }),
-          completeMessageTreeOverride: currentMessageTreeLocal,
-          chatSessionId: frozenSessionId!,
-        });
+      } finally {
+        try {
+          // Finish every successful panel before Stop can release the input.
+          if (
+            isMultiModel &&
+            initialAssistantNodes.length > 0 &&
+            streamSucceeded
+          ) {
+            upsertToCompleteMessageTree({
+              messages: buildNonErroredNodes({ is_generating: false }),
+              completeMessageTreeOverride: currentMessageTreeLocal,
+              chatSessionId: frozenSessionId,
+            });
+          }
+        } finally {
+          readerFinished.resolve();
+        }
       }
 
       if (saveFailed || !streamSucceeded) {

@@ -163,6 +163,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.channel != m.streamCh || !m.isStreaming {
 			return m, nil
 		}
+		if msg.err != nil && !api.IsRetryableReadinessError(msg.err) {
+			m.readinessUnconfirmed = true
+			m.viewport.addError("Cannot confirm conversation readiness: " + msg.err.Error())
+			return m, nil
+		}
 		if msg.err != nil || msg.processing {
 			if msg.err != nil && !m.readinessUnconfirmed {
 				m.readinessUnconfirmed = true

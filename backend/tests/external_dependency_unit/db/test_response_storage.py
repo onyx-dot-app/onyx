@@ -2258,13 +2258,17 @@ def test_response_storage_sanitizes_postgres_text_without_mutating_input(
 @pytest.mark.parametrize(
     "save_order", ["lifecycle_first", "display_first", "concurrent"]
 )
+@pytest.mark.parametrize(
+    "status", [RunStatus.COMPLETE, RunStatus.ERROR, RunStatus.CANCELLED]
+)
 def test_lifecycle_and_display_saves_share_response_content(
-    db_session: Session, conversation: ChatSession, save_order: str
+    db_session: Session, conversation: ChatSession, save_order: str, status: RunStatus
 ) -> None:
     response = _response(db_session, conversation)
     record = _record(response)
     child_id = uuid4()
     child = _child_record(db_session, record, child_id, "Child answer")
+    record.status = status
     child.checkpoint = CompactionCheckpoint(
         summary="Child summary",
         covered_through_message_id=f"run:{child.run_id}:input:0",
@@ -2291,7 +2295,7 @@ def test_lifecycle_and_display_saves_share_response_content(
             all_search_docs={},
             pre_answer_processing_time=None,
             response=record,
-            cancelled=False,
+            cancelled=status == RunStatus.CANCELLED,
         )
         barrier = threading.Barrier(2) if save_order == "concurrent" else None
         engine = db_session.get_bind()
@@ -2330,7 +2334,12 @@ def test_lifecycle_and_display_saves_share_response_content(
         db_session.expire_all()
         saved_root = db_session.get(ChatMessage, root_id)
         assert saved_root is not None
-        assert saved_root.message == "Answer"
+        assert saved_root.message == (
+            "Answer ... \n\nGeneration was stopped by the user."
+            if status == RunStatus.CANCELLED
+            else "Answer"
+        )
+        assert saved_root.response_status == status
         assert read_response_steps(saved_root) == record.steps
         saved_child = read_response__no_commit(db_session, int(child.run_id))
         assert saved_child is not None
@@ -2879,13 +2888,16 @@ def test_replay_sources_include_tool_documents_and_preserve_root_versions(
 
 
 @pytest.mark.parametrize("existing_checkpoint", [False, True])
-def test_content_free_sessions_reject_checkpoint_content_before_writes(
+@pytest.mark.parametrize("rejection", ["content_free", "response_binding"])
+def test_invalid_checkpoint_publication_leaves_state_unchanged(
     db_session: Session,
     conversation: ChatSession,
     executed_sql: list[str],
     existing_checkpoint: bool,
+    rejection: str,
 ) -> None:
-    conversation.incognito_record_mode = IncognitoRecordMode.USAGE_ONLY
+    if rejection == "content_free":
+        conversation.incognito_record_mode = IncognitoRecordMode.USAGE_ONLY
     response = _response(db_session, conversation, text="")
     response.response_status = RunStatus.RUNNING
     if existing_checkpoint:
@@ -2898,7 +2910,12 @@ def test_content_free_sessions_reject_checkpoint_content_before_writes(
     checkpoint = ResponseCheckpoint(
         history_digest="history",
         response_digest="response",
-        binding=CheckpointBinding(tenant_id="public", response_id=str(response.id)),
+        binding=CheckpointBinding(
+            tenant_id="public",
+            response_id=str(
+                response.id if rejection == "content_free" else response.id + 1
+            ),
+        ),
         revision=1,
         progress={"private": "answer"},
         compaction_checkpoint=None,
@@ -2907,7 +2924,8 @@ def test_content_free_sessions_reject_checkpoint_content_before_writes(
         input_payloads=[],
     )
     executed_sql.clear()
-    with pytest.raises(ValueError, match="Content-free"):
+    expected_error = "Content-free" if rejection == "content_free" else "binding"
+    with pytest.raises(ValueError, match=expected_error):
         publish_checkpoint__no_commit(
             db_session,
             response.id,

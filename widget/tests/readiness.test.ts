@@ -65,7 +65,9 @@ describe("widget readiness", () => {
             { once: true }
           );
           queueMicrotask(() =>
-            deadline.abort(new DOMException("Request timed out", "TimeoutError"))
+            deadline.abort(
+              new DOMException("Request timed out", "TimeoutError")
+            )
           );
         });
       }
@@ -164,5 +166,49 @@ describe("widget readiness", () => {
     await widget["sendMessage"]();
     expect(widget["inputValue"]).toBe("retry me");
     expect(widget["isStreaming"]).toBe(false);
+  });
+  it("removes an unacknowledged optimistic prompt before retrying", async () => {
+    const widget = new OnyxChatWidget();
+    widget["config"] = { backendUrl: "https://onyx.test/api", apiKey: "key" };
+    widget["inputValue"] = "retry me";
+    const api = new ApiService("https://onyx.test/api", async () => "key");
+    api.createChatSession = mock(async () => "session");
+    api.waitForSessionIdle = mock(async () => {});
+    api.streamMessage = mock(async function* () {
+      throw new Error("offline");
+    });
+    widget["apiService"] = api;
+    await widget["sendMessage"]();
+    expect(widget["messages"]).toHaveLength(0);
+    expect(widget["inputValue"]).toBe("retry me");
+    api.streamMessage = mock(async function* () {
+      yield { obj: { user_message_id: 1, reserved_assistant_message_id: 2 } };
+    });
+    await widget["sendMessage"]();
+    expect(widget["messages"]).toHaveLength(1);
+    expect(widget["messages"][0]).toMatchObject({ id: 1, content: "retry me" });
+    expect(widget["inputValue"]).toBe("");
+  });
+
+  it("keeps an acknowledged prompt without restoring it as a duplicate draft", async () => {
+    const widget = new OnyxChatWidget();
+    widget["config"] = { backendUrl: "https://onyx.test/api", apiKey: "key" };
+    widget["inputValue"] = "accepted question";
+    const api = new ApiService("https://onyx.test/api", async () => "key");
+    api.createChatSession = mock(async () => "session");
+    api.waitForSessionIdle = mock(async () => {});
+    api.streamMessage = mock(async function* () {
+      yield { obj: { user_message_id: 1, reserved_assistant_message_id: 2 } };
+      throw new Error("delivery failed");
+    });
+    widget["apiService"] = api;
+    await widget["sendMessage"]();
+    expect(widget["messages"]).toHaveLength(1);
+    expect(widget["messages"][0]).toMatchObject({
+      id: 1,
+      content: "accepted question",
+    });
+    expect(widget["inputValue"]).toBe("");
+    expect(widget["error"]).toBe("delivery failed");
   });
 });
