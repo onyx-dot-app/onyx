@@ -111,7 +111,7 @@ test("Stop during preference persistence prevents the pending send from dispatch
     modelPaging: {
       hasMore: false,
       isLoading: false,
-      loadMore: jest.fn(async () => {}),
+      loadMore: jest.fn(async () => false),
       search: jest.fn(async () => false),
       searchHasMore: false,
       loadMoreSearch: jest.fn(async () => {}),

@@ -4,7 +4,11 @@ import argparse
 from collections import deque
 
 from onyx.agents.events import AgentEvent
-from onyx.coding_agent.agent import BASH_TOOL_SENTINEL_ID, CodingAgent, _setup_session
+from onyx.coding_agent.agent import (
+    BASH_TOOL_SENTINEL_ID,
+    CodingAgent,
+    coding_sandbox_session,
+)
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.llm.factory import get_default_llm, get_llm_token_counter
 from onyx.llm.models import UserMessage
@@ -49,7 +53,9 @@ def main() -> int:
     SqlEngine.init_engine(pool_size=5, max_overflow=5)
     llm = get_default_llm()
     events: deque[AgentEvent] = deque(maxlen=args.max_packets_shown)
-    with _setup_session(repo=args.repo, github_token=args.github_token) as session_id:
+    with coding_sandbox_session(
+        repo=args.repo, github_token=args.github_token
+    ) as session_id:
         feature = CodingAgent(
             repo=args.repo,
             llm=llm,
