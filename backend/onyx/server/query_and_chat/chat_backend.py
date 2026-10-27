@@ -435,7 +435,7 @@ def get_chat_session(
     ]
 
     current_stream: CurrentStreamInfo | None = None
-    is_processing = False
+    is_processing = True
     try:
         cache = get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
         is_processing = is_chat_session_processing(session_id, cache)
@@ -443,6 +443,7 @@ def get_chat_session(
         if stream_id is not None:
             current_stream = CurrentStreamInfo(stream_id=stream_id)
     except Exception:
+        is_processing = True
         logger.exception(
             "An error occurred while checking if the chat session is processing"
         )

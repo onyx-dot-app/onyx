@@ -275,6 +275,7 @@ def test_projection_retains_unfinished_descendant_for_inspection() -> None:
         steps=[
             StepRecord(
                 message=AssistantMessage(
+                    id="parent:0",
                     content=[TextContent(text="Partial answer")],
                     metadata=ChatMessageMetadata(),
                 ),
@@ -317,7 +318,8 @@ def test_full_response_reads_canonical_tool_output() -> None:
         steps=[
             StepRecord(
                 message=AssistantMessage(
-                    content=[ToolCall(id="tool", name="echo", arguments={})]
+                    id="root:0",
+                    content=[ToolCall(id="tool", name="echo", arguments={})],
                 ),
                 generation_status=ExecutionStatus.COMPLETE,
                 tools={
@@ -330,7 +332,9 @@ def test_full_response_reads_canonical_tool_output() -> None:
                 },
             ),
             StepRecord(
-                message=AssistantMessage(content=[TextContent(text="Answer")]),
+                message=AssistantMessage(
+                    id="root:1", content=[TextContent(text="Answer")]
+                ),
                 generation_status=ExecutionStatus.COMPLETE,
                 tools={},
             ),

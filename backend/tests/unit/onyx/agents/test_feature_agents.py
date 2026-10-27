@@ -17,7 +17,7 @@ from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.citation_utils import collapse_citations
 from onyx.chat.emitter import Emitter
-from onyx.chat.presentation import ResponsePresenter, project_response
+from onyx.chat.presentation import ResponsePresenter, project_response, replay_response
 from onyx.coding_agent.agent import CodingAgent
 from onyx.coding_agent.tool_definitions import BASH_TOOL_NAME, GENERATE_ANSWER_TOOL_NAME
 from onyx.configs.chat_configs import DR_REPORT_LLM_TIMEOUT_S
@@ -57,7 +57,6 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
-from onyx.server.query_and_chat.session_loading import _response_packets
 from onyx.server.query_and_chat.streaming_models import (
     AgentResponseDelta,
     DeepResearchPlanDelta,
@@ -345,7 +344,7 @@ def test_deep_research_composes_plan_child_and_report() -> None:
     assert all(packet.placement.sub_turn_index is None for packet in report_packets)
     saved_reports = [
         packet
-        for packet in _response_packets(
+        for packet in replay_response(
             snapshot.response, {}, snapshot.presentation, snapshot.all_search_docs
         )
         if isinstance(packet.obj, IntermediateReportDelta)

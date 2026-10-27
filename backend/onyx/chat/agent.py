@@ -230,6 +230,8 @@ class ChatAgent(Agent, RestorableFeature):
                     assistant = message
                 elif isinstance(message, ToolResultMessage) and assistant is not None:
                     self._update_tool_context(assistant, [message])
+            # Query expansion and stopping tools apply to the current turn only.
+            self.has_called_search_tool = False
             self.ran_image_gen = False
         results = [
             message

@@ -1,7 +1,6 @@
 """The packet view cannot drive model requests or tool execution."""
 
 from collections.abc import Mapping
-from queue import Queue
 
 import pytest
 from pydantic import BaseModel, JsonValue
@@ -31,7 +30,7 @@ from onyx.chat.models import (
     PresentationMode,
     ResponseRecord,
 )
-from onyx.chat.presentation import ResponsePresenter, project_response
+from onyx.chat.presentation import ResponsePresenter, project_response, replay_response
 from onyx.chat.renderer import MessageRenderer, ResponseLayout, ToolRenderer
 from onyx.chat.response import response_record, tool_arguments_for_display
 from onyx.coding_agent.models import CodingAgentCallResult
@@ -71,7 +70,6 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.session_loading import _response_packets
 from onyx.server.query_and_chat.streaming_models import (
     AgentResponseDelta,
     AgentResponseStart,
@@ -104,197 +102,14 @@ from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
 
 
+def _emitter(packets: list[Packet]) -> Emitter:
+    return Emitter(packets.append)
+
+
 class _Execution(BaseModel):
     requests: list[GenerationRequest]
     messages: list[Message]
     executed: list[str]
-
-
-@pytest.mark.parametrize(
-    ("status", "tool_started", "tool_finished"),
-    [
-        (ExecutionStatus.CANCELLED, False, False),
-        (ExecutionStatus.ERROR, False, False),
-        (ExecutionStatus.COMPLETE, False, False),
-        (ExecutionStatus.COMPLETE, True, False),
-        (ExecutionStatus.COMPLETE, True, True),
-    ],
-)
-def test_interrupted_python_arguments_close_the_live_code_card(
-    status: ExecutionStatus,
-    tool_started: bool,
-    tool_finished: bool,
-) -> None:
-    output: list[Packet] = []
-    presenter = ResponsePresenter(Emitter(output.append))
-    call = ToolCall(
-        id="python",
-        name=PythonTool.NAME,
-        arguments={"code": "print(1)"} if status == ExecutionStatus.COMPLETE else {},
-        raw_arguments=(
-            '{"code":"print(1)"}'
-            if status == ExecutionStatus.COMPLETE
-            else '{"code":"print(1)'
-        ),
-        arguments_complete=status == ExecutionStatus.COMPLETE,
-    )
-    message = AssistantMessage(id="m", content=[call])
-    presenter.consume(MessageStartEvent(run_id="r", message_id="m", step_index=0))
-    for update in (
-        ToolCallStartEvent(content_index=0, tool_call_id=call.id, tool_name=call.name),
-        ToolCallDeltaEvent(content_index=0, arguments_delta=call.raw_arguments or ""),
-    ):
-        presenter.consume(
-            MessageUpdateEvent(
-                run_id="r", message_id="m", step_index=0, generation_event=update
-            )
-        )
-    assert any(isinstance(packet.obj, ToolCallArgumentDelta) for packet in output)
-    if status == ExecutionStatus.COMPLETE:
-        presenter.consume(
-            MessageUpdateEvent(
-                run_id="r",
-                message_id="m",
-                step_index=0,
-                generation_event=ToolCallEndEvent(content_index=0, tool_call=call),
-            )
-        )
-    presenter.consume(
-        MessageEndEvent(
-            run_id="r", message_id="m", step_index=0, message=message, status=status
-        )
-    )
-    if tool_started:
-        presenter.consume(
-            ToolStartEvent(run_id="r", message_id="m", step_index=0, tool_call=call)
-        )
-    if tool_finished:
-        presenter.consume(
-            ToolEndEvent(
-                run_id="r",
-                message_id="m",
-                step_index=0,
-                tool_call=call,
-                result=ToolResult(content=""),
-            )
-        )
-    presenter.consume(AgentEndEvent(run_id="r", outcome=RunStatus.CANCELLED))
-    replay = _response_packets(
-        ResponseRecord(
-            run_id="r",
-            status=RunStatus.CANCELLED
-            if status == ExecutionStatus.CANCELLED
-            else RunStatus.ERROR,
-            steps=[StepRecord(message=message, generation_status=status)],
-        ),
-        {},
-        {},
-        {},
-    )
-    for packets in (output, replay):
-        starts = [
-            packet for packet in packets if isinstance(packet.obj, PythonToolStart)
-        ]
-        assert len(starts) == 1
-        assert starts[0].obj == PythonToolStart(code="print(1)")
-        assert (
-            sum(
-                isinstance(packet.obj, SectionEnd)
-                and packet.placement == starts[0].placement
-                for packet in packets
-            )
-            == 1
-        )
-
-
-def test_child_completion_closes_only_its_tool_cards() -> None:
-    output: list[Packet] = []
-    presenter = ResponsePresenter(Emitter(output.append))
-    call = ToolCall(id="python", name=PythonTool.NAME, arguments={"code": "print(1)"})
-    for run_id in ("parent", "child"):
-        presenter.consume(
-            MessageStartEvent(run_id=run_id, message_id="m", step_index=0)
-        )
-        presenter.consume(
-            MessageEndEvent(
-                run_id=run_id,
-                message_id="m",
-                step_index=0,
-                message=AssistantMessage(id="m", content=[call]),
-                status=ExecutionStatus.COMPLETE,
-            )
-        )
-        presenter.consume(
-            ToolStartEvent(run_id=run_id, message_id="m", step_index=0, tool_call=call)
-        )
-    starts = [packet for packet in output if isinstance(packet.obj, PythonToolStart)]
-    assert len(starts) == 2
-    presenter.consume(
-        AgentEndEvent(
-            run_id="child", parent_run_id="parent", outcome=RunStatus.CANCELLED
-        )
-    )
-    ends = [packet for packet in output if isinstance(packet.obj, SectionEnd)]
-    assert [packet.placement for packet in ends] == [starts[1].placement]
-    presenter.consume(AgentEndEvent(run_id="parent", outcome=RunStatus.CANCELLED))
-    ends = [packet for packet in output if isinstance(packet.obj, SectionEnd)]
-    assert [packet.placement for packet in ends] == [
-        starts[1].placement,
-        starts[0].placement,
-    ]
-
-
-@pytest.mark.parametrize("coding", [False, True])
-def test_completed_agent_tool_output_matches_replay(coding: bool) -> None:
-    name = CODING_AGENT_TOOL_NAME if coding else RESEARCH_AGENT_TOOL_NAME
-    details = (
-        CodingAgentCallResult(answer="Final report")
-        if coding
-        else ResearchAgentCallResult(
-            intermediate_report="Final report", citation_mapping={}
-        )
-    )
-    output: list[Packet] = []
-    presenter = ResponsePresenter(Emitter(output.append))
-    runs: list[Run] = []
-    run_agent(
-        Agent(
-            FakeModelClient(
-                lambda *_: AssistantMessage(
-                    content=[ToolCall(id="child", name=name, arguments={})]
-                )
-            ),
-            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-            tools=[
-                AgentTool(
-                    definition=ToolDefinition(name=name, description="", parameters={}),
-                    execute=lambda _: ToolResult(
-                        content="Final report", details=details
-                    ),
-                )
-            ],
-        ),
-        max_steps=1,
-        runs=runs,
-        listener=presenter.consume,
-    )
-    replay = _response_packets(response_record(runs[0].snapshot()), {}, {}, {})
-    for packets in (output, replay):
-        assert not any(
-            isinstance(packet.obj, CodingAgentThinkingDelta) for packet in packets
-        )
-        if coding:
-            assert [
-                packet.obj.answer
-                for packet in packets
-                if isinstance(packet.obj, CodingAgentFinal)
-            ] == ["Final report"]
-        else:
-            assert [
-                packet.obj.content
-                for packet in packets
-                if isinstance(packet.obj, IntermediateReportDelta)
-            ] == ["Final report"]
 
 
 def test_rendering_does_not_change_requests_transcript_or_execution() -> None:
@@ -339,7 +154,7 @@ def test_rendering_does_not_change_requests_transcript_or_execution() -> None:
         )
         listener = None
         if render:
-            presentation = ResponsePresenter(Emitter(Queue[Packet]().put_nowait))
+            presentation = ResponsePresenter(Emitter(lambda _packet: None))
             listener = presentation.consume
         run_agent(
             agent,
@@ -415,6 +230,7 @@ def test_snapshot_projects_partial_output_before_observers_receive_it() -> None:
         steps=[
             StepRecord(
                 message=AssistantMessage(
+                    id="run:0",
                     content=[TextContent(text="partial")],
                     stop_reason="aborted",
                     metadata=ChatMessageMetadata(),
@@ -498,7 +314,7 @@ def test_interrupted_text_is_not_duplicated_and_matches_reload() -> None:
 
 def test_parallel_child_packets_stay_in_parent_tabs() -> None:
     output: list[Packet] = []
-    presenter = ResponsePresenter(Emitter(output.append))
+    presenter = ResponsePresenter(_emitter(output))
     calls = [
         ToolCall(id=str(i), name="research_agent", arguments={"task": str(i)})
         for i in range(2)
@@ -575,7 +391,7 @@ def test_citation_recovery_waits_for_completion_and_does_not_duplicate() -> None
 
 def test_root_narration_and_search_use_distinct_render_groups() -> None:
     packets: list[Packet] = []
-    presenter = ResponsePresenter(Emitter(packets.append))
+    presenter = ResponsePresenter(_emitter(packets))
     call = ToolCall(
         id="search", name="internal_search", arguments={"queries": ["topic"]}
     )
@@ -621,42 +437,6 @@ def test_root_narration_and_search_use_distinct_render_groups() -> None:
         != (search.placement.turn_index, search.placement.tab_index)
         for p in narration
     )
-
-
-@pytest.mark.parametrize("public_error", [False, True])
-def test_live_tool_failure_keeps_private_text_out_of_packets(
-    public_error: bool,
-) -> None:
-    packets: list[Packet] = []
-    presenter = ResponsePresenter(Emitter(packets.append))
-    private_error = "Internal service credential could not be loaded"
-    tool = AgentTool(
-        definition=ToolDefinition(name="custom_action", description="", parameters={}),
-        execute=lambda _: ToolResult(
-            content=private_error,
-            is_error=True,
-            details=ToolExecutionError(message="Action unavailable")
-            if public_error
-            else None,
-        ),
-    )
-    agent = Agent(
-        FakeModelClient(
-            lambda *_: AssistantMessage(
-                content=[ToolCall(id="call", name=tool.name, arguments={})]
-            )
-        ),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        tools=[tool],
-    )
-    run_agent(agent, max_steps=1, listener=presenter.consume)
-    assert all(private_error not in packet.model_dump_json() for packet in packets)
-    assert sum(isinstance(packet.obj, PacketException) for packet in packets) == int(
-        public_error
-    )
-    result = agent.state.messages[-1]
-    assert isinstance(result, ToolResultMessage)
-    assert result.is_error and result.text == private_error
 
 
 @pytest.mark.parametrize("live", [False, True])
@@ -761,7 +541,7 @@ def test_invalid_tool_arguments_replay_the_error_and_later_answer(
         ],
         answer_step_index=1,
     )
-    packets = _response_packets(response, {}, {}, {})
+    packets = replay_response(response, {}, {}, {})
     assert any(isinstance(p.obj, CustomToolStart) for p in packets)
     assert any(
         isinstance(p.obj, PacketException)
@@ -795,7 +575,7 @@ def test_replay_hides_configured_thinking_tool(reasoning: str | list[str]) -> No
             ),
         ],
     )
-    packets = _response_packets(
+    packets = replay_response(
         response, {}, {"m": MessageRendering(think_tool="think")}, {}
     )
     assert not any(isinstance(p.obj, CustomToolStart) for p in packets)
@@ -825,13 +605,17 @@ def test_interrupted_answer_citations_belong_to_the_selected_text(
         steps=[
             StepRecord(
                 message=AssistantMessage(
-                    content=[TextContent(text="Checking [1].")], metadata=metadata
+                    id="checking",
+                    content=[TextContent(text="Checking [1].")],
+                    metadata=metadata,
                 ),
                 generation_status=ExecutionStatus.COMPLETE,
             ),
             StepRecord(
                 message=AssistantMessage(
-                    content=[TextContent(text="Partial answer")], metadata=metadata
+                    id="partial",
+                    content=[TextContent(text="Partial answer")],
+                    metadata=metadata,
                 ),
                 generation_status=ExecutionStatus.ERROR,
             ),
@@ -878,7 +662,7 @@ def test_coding_thinking_uses_coding_packets(
             )
         output.extend(renderer.complete(message))
     else:
-        output = _response_packets(
+        output = replay_response(
             ResponseRecord(
                 run_id="child",
                 parent_run_id="root",
@@ -914,7 +698,7 @@ def test_replay_preserves_live_text_and_tool_section_order(tool_first: bool) -> 
         id="m", content=[call, text] if tool_first else [text, call]
     )
     output: list[Packet] = []
-    presenter = ResponsePresenter(Emitter(output.append))
+    presenter = ResponsePresenter(_emitter(output))
     presenter.consume(MessageStartEvent(run_id="r", message_id="m", step_index=0))
     for index, block in enumerate(message.content):
         event = (
@@ -941,7 +725,7 @@ def test_replay_preserves_live_text_and_tool_section_order(tool_first: bool) -> 
     presenter.consume(
         ToolStartEvent(run_id="r", message_id="m", step_index=0, tool_call=call)
     )
-    replay = _response_packets(
+    replay = replay_response(
         ResponseRecord(
             run_id="r",
             status=RunStatus.COMPLETE,
@@ -1013,7 +797,7 @@ def test_tool_errors_only_display_explicit_public_details(
         renderer = ToolRenderer(call, Placement(turn_index=0))
         output = renderer.start() + renderer.complete(result)
     else:
-        output = _response_packets(
+        output = replay_response(
             ResponseRecord(
                 run_id="r",
                 status=RunStatus.COMPLETE,
@@ -1107,3 +891,226 @@ def test_completion_batches_content_and_decodes_thinking_once(
     )
     assert think.arguments == {}
     assert len(message.content) == 386
+
+
+@pytest.mark.parametrize("public_error", [False, True])
+def test_live_tool_failure_keeps_private_text_out_of_packets(
+    public_error: bool,
+) -> None:
+    packets: list[Packet] = []
+    presenter = ResponsePresenter(_emitter(packets))
+    private_error = "Internal service credential could not be loaded"
+    tool = AgentTool(
+        definition=ToolDefinition(name="custom_action", description="", parameters={}),
+        execute=lambda _: ToolResult(
+            content=private_error,
+            is_error=True,
+            details=ToolExecutionError(message="Action unavailable")
+            if public_error
+            else None,
+        ),
+    )
+    agent = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(
+                content=[ToolCall(id="call", name=tool.name, arguments={})]
+            )
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[tool],
+    )
+    run_agent(agent, max_steps=1, listener=presenter.consume)
+    assert all(private_error not in packet.model_dump_json() for packet in packets)
+    assert sum(isinstance(packet.obj, PacketException) for packet in packets) == int(
+        public_error
+    )
+    result = agent.state.messages[-1]
+    assert isinstance(result, ToolResultMessage)
+    assert result.is_error and result.text == private_error
+
+
+@pytest.mark.parametrize(
+    ("status", "tool_started", "tool_finished"),
+    [
+        (ExecutionStatus.CANCELLED, False, False),
+        (ExecutionStatus.ERROR, False, False),
+        (ExecutionStatus.COMPLETE, False, False),
+        (ExecutionStatus.COMPLETE, True, False),
+        (ExecutionStatus.COMPLETE, True, True),
+    ],
+)
+def test_interrupted_python_arguments_close_the_live_code_card(
+    status: ExecutionStatus,
+    tool_started: bool,
+    tool_finished: bool,
+) -> None:
+    output: list[Packet] = []
+    presenter = ResponsePresenter(_emitter(output))
+    call = ToolCall(
+        id="python",
+        name=PythonTool.NAME,
+        arguments={"code": "print(1)"} if status == ExecutionStatus.COMPLETE else {},
+        raw_arguments=(
+            '{"code":"print(1)"}'
+            if status == ExecutionStatus.COMPLETE
+            else '{"code":"print(1)'
+        ),
+        arguments_complete=status == ExecutionStatus.COMPLETE,
+    )
+    message = AssistantMessage(id="m", content=[call])
+    presenter.consume(MessageStartEvent(run_id="r", message_id="m", step_index=0))
+    for update in (
+        ToolCallStartEvent(content_index=0, tool_call_id=call.id, tool_name=call.name),
+        ToolCallDeltaEvent(content_index=0, arguments_delta=call.raw_arguments or ""),
+    ):
+        presenter.consume(
+            MessageUpdateEvent(
+                run_id="r", message_id="m", step_index=0, generation_event=update
+            )
+        )
+    assert any(isinstance(packet.obj, ToolCallArgumentDelta) for packet in output)
+    if status == ExecutionStatus.COMPLETE:
+        presenter.consume(
+            MessageUpdateEvent(
+                run_id="r",
+                message_id="m",
+                step_index=0,
+                generation_event=ToolCallEndEvent(content_index=0, tool_call=call),
+            )
+        )
+    presenter.consume(
+        MessageEndEvent(
+            run_id="r", message_id="m", step_index=0, message=message, status=status
+        )
+    )
+    if tool_started:
+        presenter.consume(
+            ToolStartEvent(run_id="r", message_id="m", step_index=0, tool_call=call)
+        )
+    if tool_finished:
+        presenter.consume(
+            ToolEndEvent(
+                run_id="r",
+                message_id="m",
+                step_index=0,
+                tool_call=call,
+                result=ToolResult(content=""),
+            )
+        )
+    presenter.consume(AgentEndEvent(run_id="r", outcome=RunStatus.CANCELLED))
+    replay = replay_response(
+        ResponseRecord(
+            run_id="r",
+            status=RunStatus.CANCELLED
+            if status == ExecutionStatus.CANCELLED
+            else RunStatus.ERROR,
+            steps=[StepRecord(message=message, generation_status=status)],
+        ),
+        {},
+        {},
+        {},
+    )
+    for packets in (output, replay):
+        starts = [
+            packet for packet in packets if isinstance(packet.obj, PythonToolStart)
+        ]
+        assert len(starts) == 1
+        assert starts[0].obj == PythonToolStart(code="print(1)")
+        assert (
+            sum(
+                isinstance(packet.obj, SectionEnd)
+                and packet.placement == starts[0].placement
+                for packet in packets
+            )
+            == 1
+        )
+
+
+def test_child_completion_closes_only_its_tool_cards() -> None:
+    output: list[Packet] = []
+    presenter = ResponsePresenter(_emitter(output))
+    call = ToolCall(id="python", name=PythonTool.NAME, arguments={"code": "print(1)"})
+    for run_id in ("parent", "child"):
+        presenter.consume(
+            MessageStartEvent(run_id=run_id, message_id="m", step_index=0)
+        )
+        presenter.consume(
+            MessageEndEvent(
+                run_id=run_id,
+                message_id="m",
+                step_index=0,
+                message=AssistantMessage(id="m", content=[call]),
+                status=ExecutionStatus.COMPLETE,
+            )
+        )
+        presenter.consume(
+            ToolStartEvent(run_id=run_id, message_id="m", step_index=0, tool_call=call)
+        )
+    starts = [packet for packet in output if isinstance(packet.obj, PythonToolStart)]
+    assert len(starts) == 2
+    presenter.consume(
+        AgentEndEvent(
+            run_id="child", parent_run_id="parent", outcome=RunStatus.CANCELLED
+        )
+    )
+    ends = [packet for packet in output if isinstance(packet.obj, SectionEnd)]
+    assert [packet.placement for packet in ends] == [starts[1].placement]
+    presenter.consume(AgentEndEvent(run_id="parent", outcome=RunStatus.CANCELLED))
+    ends = [packet for packet in output if isinstance(packet.obj, SectionEnd)]
+    assert [packet.placement for packet in ends] == [
+        starts[1].placement,
+        starts[0].placement,
+    ]
+
+
+@pytest.mark.parametrize("coding", [False, True])
+def test_completed_agent_tool_output_matches_replay(coding: bool) -> None:
+    name = CODING_AGENT_TOOL_NAME if coding else RESEARCH_AGENT_TOOL_NAME
+    details = (
+        CodingAgentCallResult(answer="Final report")
+        if coding
+        else ResearchAgentCallResult(
+            intermediate_report="Final report", citation_mapping={}
+        )
+    )
+    output: list[Packet] = []
+    presenter = ResponsePresenter(_emitter(output))
+    runs: list[Run] = []
+    run_agent(
+        Agent(
+            FakeModelClient(
+                lambda *_: AssistantMessage(
+                    content=[ToolCall(id="child", name=name, arguments={})]
+                )
+            ),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            tools=[
+                AgentTool(
+                    definition=ToolDefinition(name=name, description="", parameters={}),
+                    execute=lambda _: ToolResult(
+                        content="Final report", details=details
+                    ),
+                )
+            ],
+        ),
+        max_steps=1,
+        runs=runs,
+        listener=presenter.consume,
+    )
+    replay = replay_response(response_record(runs[0].snapshot()), {}, {}, {})
+    for packets in (output, replay):
+        assert not any(
+            isinstance(packet.obj, CodingAgentThinkingDelta) for packet in packets
+        )
+        if coding:
+            assert [
+                packet.obj.answer
+                for packet in packets
+                if isinstance(packet.obj, CodingAgentFinal)
+            ] == ["Final report"]
+        else:
+            assert [
+                packet.obj.content
+                for packet in packets
+                if isinstance(packet.obj, IntermediateReportDelta)
+            ] == ["Final report"]

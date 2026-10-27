@@ -90,7 +90,7 @@ def test_detail_selects_the_same_thinking_as_saved_display(
         (False, None, "Model thinking. "),
         (False, "think", "Model thinking. Tool reasoning. "),
         (True, None, "Model thinking. Text reasoning."),
-        (True, "think", "Model thinking. Tool reasoning. Text reasoning."),
+        (True, "think", "Model thinking. Text reasoning.Tool reasoning. "),
     ],
 )
 def test_detail_preserves_thinking_display_settings(

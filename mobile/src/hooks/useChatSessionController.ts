@@ -1,6 +1,4 @@
-// Re-attach to a run still generating server-side when a session is opened cold (the store is
-// ephemeral, so a backgrounded/killed app loses the live stream). Mirrors web's resume tail;
-// runResumeStream is module-scope so it survives re-renders, resumingRuns dedupes across reopens.
+// Reconnect to server output while the session is open. Server readiness gates the next send.
 import { useEffect } from "react";
 import {
   QueryClient,
@@ -18,6 +16,7 @@ import {
   resumeChatMessage,
   StreamHttpError,
 } from "@/api/chat/stream";
+import { waitForSessionIdle } from "@/chat/sessionReadiness";
 import { processRawChatHistory } from "@/chat/chatHistory";
 import { FLUSH_INTERVAL_MS } from "@/chat/constants";
 import { BackendChatSession } from "@/chat/interfaces";
@@ -26,13 +25,12 @@ import { Packet } from "@/chat/streamingModels";
 import { useChatSessionStore } from "@/state/chatSessionStore";
 import { useSession } from "@/state/session";
 
-const resumingRuns = new Set<number>();
-
 async function runResumeStream(
   sessionId: string,
   runId: number,
   serverUrl: string | null,
   queryClient: QueryClient,
+  controller: AbortController,
 ): Promise<void> {
   const store = useChatSessionStore;
   const data = store.getState().sessions.get(sessionId);
@@ -40,27 +38,35 @@ async function runResumeStream(
     ? getMessageByMessageId(data.messageTree, runId)
     : undefined;
   // Single-model only: a multi-model stream_id is the user message, not an assistant node.
-  if (!data || !node || node.type !== "assistant") return;
-  // local send owns the stream, or another reopen already resumed this run
-  if (resumingRuns.has(runId) || data.abortController) return;
-  resumingRuns.add(runId);
+  if (!data || !node || (node.type !== "assistant" && node.type !== "error"))
+    return;
+  // A local send or another reader already owns this session.
+  if (data.abortController) return;
 
   const nodeId = node.nodeId;
-  const controller = new AbortController();
   store.getState().setAbortController(sessionId, controller);
-  store.getState().updateChatState(sessionId, "streaming");
+  store.getState().setStreamId(sessionId, runId);
+  store
+    .getState()
+    .updateChatState(
+      sessionId,
+      node.type === "error" ? "settling" : "streaming",
+    );
   // clear the reserved placeholder so it doesn't render above the replayed stream. The timer
   // restarts from here: this client never saw the run's true start (web shows no timer at all here).
-  store.getState().patchNode(sessionId, nodeId, {
-    message: "",
-    packets: [],
-    streamingStartedAt: Date.now(),
-  });
+  if (node.type === "assistant") {
+    store.getState().patchNode(sessionId, nodeId, {
+      message: "",
+      packets: [],
+      streamingStartedAt: Date.now(),
+    });
+  }
 
   // writes are safe only while this session stays focused and unaborted
   const stillCurrent = () =>
     store.getState().currentSessionId === sessionId &&
-    !controller.signal.aborted;
+    !controller.signal.aborted &&
+    store.getState().sessions.get(sessionId)?.abortController === controller;
 
   let pending: Packet[] = [];
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -96,11 +102,12 @@ async function runResumeStream(
   }
 
   try {
-    for await (const event of resumeChatMessage(
-      sessionId,
-      0,
-      controller.signal,
-    )) {
+    // An error already ended local delivery; reopening still needs to confirm server readiness.
+    const stream =
+      node.type === "error"
+        ? []
+        : resumeChatMessage(sessionId, 0, controller.signal);
+    for await (const event of stream) {
       // re-check focus/abort on every event (heartbeats included) so navigate-away unwinds during quiet phases
       if (!stillCurrent()) break;
       if (isStreamError(event)) {
@@ -131,49 +138,63 @@ async function runResumeStream(
   } catch (error) {
     // 404 = nothing to resume (finished/evicted run) — expected, stay quiet. Anything else is a
     // real failure worth surfacing. Either way we settle from the snapshot below.
-    if (!(error instanceof StreamHttpError && error.status === 404)) {
+    if (
+      !controller.signal.aborted &&
+      !(error instanceof StreamHttpError && error.status === 404)
+    ) {
       console.warn("resume-stream failed; settling from snapshot", error);
     }
   } finally {
     if (flushTimer) clearTimeout(flushTimer);
     flush();
-    resumingRuns.delete(runId);
-    store.getState().updateChatState(sessionId, "input");
-    // Keep `controller` as an ownership token: a new send replaces it via setAbortController, so
-    // stillOurs() tells this resume from a raced-in send (a finished send leaves null ≠ token).
     const stillOurs = () =>
       store.getState().sessions.get(sessionId)?.abortController === controller;
-    const wasCurrent = store.getState().currentSessionId === sessionId;
+    const stillOpen = () =>
+      stillOurs() && store.getState().currentSessionId === sessionId;
+    if (!stillOurs()) return;
+    store.getState().updateChatState(sessionId, "settling");
+    try {
+      const idle = await waitForSessionIdle(sessionId, stillOpen, () => {
+        store.getState().updateChatState(sessionId, "unconfirmed");
+      });
+      if (!idle || !stillOpen()) return;
 
-    if (wasCurrent && stillOurs()) {
-      // settle from the persisted session, but only while we still own the stream — else a
-      // raced-in send would be clobbered by this now-stale snapshot
       try {
         const settled = await getChatSession(sessionId);
-        if (stillOurs() && store.getState().currentSessionId === sessionId) {
-          store
-            .getState()
-            .hydrateSession(
-              sessionId,
-              processRawChatHistory(settled.messages, settled.packets),
-            );
-          // clear the stale current_stream so a remount can't re-resume this finished run
-          queryClient.setQueryData(
-            QUERY_KEYS.chatSession(serverUrl, sessionId),
-            settled,
-          );
+        if (!stillOpen()) return;
+        const current = store
+          .getState()
+          .sessions.get(sessionId)
+          ?.messageTree.get(nodeId);
+        const messages = processRawChatHistory(
+          settled.messages,
+          settled.packets,
+        );
+        const saved = getMessageByMessageId(messages, runId);
+        // Transport errors may not appear in saved history. Preserve only this response's error.
+        if (current?.type === "error" && saved) {
+          messages.set(saved.nodeId, {
+            ...saved,
+            type: "error",
+            message: current.message,
+            errorCode: current.errorCode,
+          });
         }
-      } catch {
-        // keep whatever streamed in
+        store.getState().hydrateSession(sessionId, messages);
+        queryClient.setQueryData(
+          QUERY_KEYS.chatSession(serverUrl, sessionId),
+          settled,
+        );
+      } catch (error) {
+        console.warn("resume-stream could not load saved history", error);
       }
-    }
-    if (stillOurs()) {
-      store.getState().setAbortController(sessionId, null);
-    }
-    if (wasCurrent) {
+      if (!stillOpen()) return;
+      store.getState().updateChatState(sessionId, "input");
       void queryClient.invalidateQueries({
         queryKey: QUERY_KEYS.chatSessions(serverUrl),
       });
+    } finally {
+      if (stillOurs()) store.getState().setAbortController(sessionId, null);
     }
   }
 }
@@ -195,6 +216,15 @@ export function useChatSessionController(sessionId: string | null): void {
 
   useEffect(() => {
     if (sessionId == null || runId == null) return;
-    void runResumeStream(sessionId, runId, serverUrl, queryClient);
+    const controller = new AbortController();
+    void runResumeStream(sessionId, runId, serverUrl, queryClient, controller);
+    return () => {
+      controller.abort();
+      const store = useChatSessionStore.getState();
+      if (store.sessions.get(sessionId)?.abortController !== controller) return;
+      // Release the reader immediately; reopening must not wait for a blocked read or status call.
+      store.updateChatState(sessionId, "settling");
+      store.setAbortController(sessionId, null);
+    };
   }, [sessionId, runId, serverUrl, queryClient]);
 }

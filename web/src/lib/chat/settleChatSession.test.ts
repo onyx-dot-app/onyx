@@ -136,12 +136,16 @@ test("explicit recovery still waits for a pending send acknowledgement", async (
 });
 
 test("a rejected send without a reserved row keeps its submitted text and error", async () => {
-  const user = message(-1, "user", "Keep this question");
+  const user = {
+    ...message(-1, "user", "Keep this question"),
+    childrenNodeIds: [-2],
+    latestChildNodeId: -2,
+  };
   const error = {
     ...message(-2, "error", "Too many requests"),
     parentNodeId: -1,
   };
-  const tree = new Map([
+  const tree = new Map<number, Message>([
     [-1, user],
     [-2, error],
   ]);
@@ -290,4 +294,62 @@ test("a stale successful history refresh cannot overwrite a newer turn", async (
     chatState: "streaming",
     messageTree: tree,
   });
+});
+
+test.each(["completion", "recovery"] as const)(
+  "%s keeps incognito content when saved rows contain only usage metadata",
+  async (mode) => {
+    const tree = new Map([
+      [1, message(1, "user", "Private question")],
+      [2, message(2, "assistant", "Private answer")],
+      [3, message(3, "user", "Next question")],
+      [4, message(4, "assistant", "Partial answer")],
+    ]);
+    const store = useChatSessionStore.getState();
+    store.updateSessionData("session", { incognito: true, messageTree: tree });
+    await settle(mode);
+    expect(waitForChatSessionIdle).toHaveBeenCalledWith("session");
+    expect(fetchSettledChatSession).toHaveBeenCalledWith("session");
+    expect(processRawChatHistory).not.toHaveBeenCalled();
+    expect(
+      useChatSessionStore.getState().sessions.get("session")
+    ).toMatchObject({
+      chatState: "input",
+      messageTree: tree,
+    });
+  }
+);
+
+test("an old rejected attempt does not hide the latest saved answer", async () => {
+  const user = {
+    ...message(1, "user", "Question"),
+    childrenNodeIds: [-2, 42],
+    latestChildNodeId: 42,
+  };
+  const rejected = {
+    ...message(-2, "error", "Rejected attempt"),
+    parentNodeId: 1,
+  };
+  const partial = {
+    ...message(42, "assistant", "Partial"),
+    messageId: 42,
+    parentNodeId: 1,
+  };
+  useChatSessionStore.getState().updateSessionMessageTree(
+    "session",
+    new Map<number, Message>([
+      [1, user],
+      [-2, rejected],
+      [42, partial],
+    ])
+  );
+  const saved = new Map<number, Message>([
+    [1, user],
+    [42, { ...partial, message: "Complete saved answer" }],
+  ]);
+  jest.mocked(processRawChatHistory).mockReturnValue(saved);
+  await settle();
+  expect(
+    useChatSessionStore.getState().sessions.get("session")?.messageTree
+  ).toEqual(saved);
 });

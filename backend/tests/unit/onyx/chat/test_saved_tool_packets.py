@@ -14,19 +14,19 @@ from onyx.agents.models import (
     StepRecord,
     ToolExecutionRecord,
 )
-from onyx.chat.models import ChatSearchResult
-from onyx.chat.presentation import _collect_tool_history
+from onyx.chat.models import ChatSearchResult, ToolReplayData
+from onyx.chat.presentation import _collect_tool_history, replay_response
 from onyx.chat.renderer import ToolRenderer
 from onyx.chat.response import response_record
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SavedSearchDoc, SearchDoc, SearchDocsResponse
+from onyx.db.chat import translate_db_search_doc_to_saved_search_doc
 from onyx.db.models import ChatMessage, StoredToolResult, Tool, ToolCall
 from onyx.db.models import SearchDoc as DbSearchDoc
 from onyx.llm.models import AssistantMessage, ToolResultMessage
 from onyx.llm.models import ToolCall as ModelToolCall
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.session_loading import (
-    _response_packets,
     translate_assistant_message_to_packets,
 )
 from onyx.server.query_and_chat.streaming_models import (
@@ -116,7 +116,9 @@ def test_live_and_saved_tool_cards_share_public_content_without_tool_definition(
         search_docs=[],
         tool_call_response='{"type":"search_result","queries":["stale"]}',
     )
-    restored = _response_packets(response, {("run:0", call.id): record}, {}, {})
+    restored = replay_response(
+        response, {("run:0", call.id): ToolReplayData(tool_id=record.tool_id)}, {}, {}
+    )
     assert [
         packet.model_dump()
         for packet in restored
@@ -240,7 +242,20 @@ def test_saved_search_selection_uses_document_links_without_mutating_result(
             )
         ],
     )
-    packets = _response_packets(response, {("message", call.id): record}, {}, {})
+    packets = replay_response(
+        response,
+        {
+            ("message", call.id): ToolReplayData(
+                tool_id=record.tool_id,
+                search_docs=[
+                    translate_db_search_doc_to_saved_search_doc(doc)
+                    for doc in record.search_docs
+                ],
+            )
+        },
+        {},
+        {},
+    )
     documents = [
         doc
         for packet in packets

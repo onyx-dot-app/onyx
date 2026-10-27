@@ -29,6 +29,21 @@ export async function getChatSession(
   return apiFetch<BackendChatSession>(`/chat/get-chat-session/${sessionId}`);
 }
 
+export async function getChatSessionStatus(
+  sessionId: string,
+): Promise<{ is_processing: boolean }> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+  try {
+    return await apiFetch<{ is_processing: boolean }>(
+      `/chat/chat-session/${sessionId}/status`,
+      { signal: controller.signal },
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 // client abort alone leaves the backend generating
 // streamId scopes Stop to one response; omitted, the backend stops whichever is in flight.
 export async function stopChatSession(

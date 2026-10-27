@@ -185,6 +185,25 @@ export class ChatPage {
     await this.inputBar.sendButton.click();
   }
 
+  async editHumanMessage(text: string, index = 0): Promise<void> {
+    const message = this.humanMessage(index);
+    await message.hover();
+    await message.getByTestId("HumanMessage/edit-button").click();
+    await message.getByRole("textbox").fill(text);
+  }
+
+  async submitHumanMessageEdit(index = 0): Promise<void> {
+    await this.humanMessage(index)
+      .getByRole("button", { name: "Submit", exact: true })
+      .click();
+  }
+
+  async cancelHumanMessageEdit(index = 0): Promise<void> {
+    await this.humanMessage(index)
+      .getByRole("button", { name: "Cancel", exact: true })
+      .click();
+  }
+
   async expectHumanMessage(text: string, index = 0): Promise<void> {
     await expect(this.humanMessage(index)).toContainText(text);
   }

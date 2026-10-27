@@ -5,8 +5,10 @@ continues or stops.  The tests use a simple in-memory CacheBackend stub
 so no external services are needed.
 """
 
+import builtins
 import contextvars
 import threading
+from collections.abc import Collection
 from concurrent.futures import ThreadPoolExecutor
 from typing import cast
 from unittest.mock import MagicMock, patch
@@ -39,6 +41,7 @@ class _MemoryCacheBackend(CacheBackend):
 
     def __init__(self) -> None:
         self._store: dict[str, bytes] = {}
+        self.sets: dict[str, set[bytes]] = {}
         self._ttls: dict[str, int] = {}
 
     def get(self, key: str) -> bytes | None:
@@ -74,6 +77,27 @@ class _MemoryCacheBackend(CacheBackend):
     def delete(self, key: str) -> None:
         self._store.pop(key, None)
         self._ttls.pop(key, None)
+
+    def delete_prefix(self, prefix: str) -> None:
+        for key in list(self._store):
+            if key.startswith(prefix):
+                self.delete(key)
+
+    def exists_many(self, keys: Collection[str]) -> builtins.set[str]:
+        return {key for key in keys if key in self._store}
+
+    def set_add(self, key: str, member: str | bytes) -> None:
+        value = member if isinstance(member, bytes) else member.encode()
+        self.sets.setdefault(key, set()).add(value)
+
+    def set_remove(self, key: str, member: str | bytes) -> None:
+        value = member if isinstance(member, bytes) else member.encode()
+        self.sets.get(key, set()).discard(value)
+
+    def set_members(self, key: str, *, limit: int) -> list[bytes]:
+        if limit < 1:
+            raise ValueError("Cache set member limit must be positive")
+        return list(self.sets.get(key, set()))[:limit]
 
     def exists(self, key: str) -> bool:
         return key in self._store

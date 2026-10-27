@@ -26,7 +26,7 @@ from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import AgentTool, InputMode, PendingToolInput
 from onyx.chat.agent import ChatAgent
 from onyx.chat.emitter import Emitter
-from onyx.chat.errors import EmptyLLMResponseError
+from onyx.chat.errors import EmptyLLMResponseError, chat_error
 from onyx.chat.execution import (
     ActiveChatTurns,
     ChatTurnExecution,
@@ -45,6 +45,7 @@ from onyx.chat.models import (
     StreamingError,
 )
 from onyx.chat.persistence import ChatResponsePersistence
+from onyx.chat.prepare import create_chat_agent
 from onyx.chat.process_message import (
     _stream_chat_turn,
     gather_stream_full,
@@ -55,6 +56,8 @@ from onyx.configs.constants import MessageType
 from onyx.db.chat import set_preferred_response
 from onyx.db.enums import IncognitoRecordMode
 from onyx.db.models import ChatMessage, ChatSession, User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.models import ExtractedContextFiles
 from onyx.llm.cancellation import (
     CancellationSignal,
@@ -497,7 +500,6 @@ class TestRunModels:
         fast_llm = MagicMock()
         _search_selection_model.side_effect = None
         _search_selection_model.return_value = fast_llm
-        from onyx.chat.prepare import create_chat_agent
 
         with (
             patch("onyx.chat.prepare.ChatAgent") as answer,
@@ -3108,3 +3110,92 @@ def test_chat_delivery_reports_the_cycle_of_the_first_answer(n_models: int) -> N
         assert (data["outcome"], data["llm_cycles"]) == ("success", 2)
         assert data["first_answer_ms"] is not None
         assert "private" not in str(data)
+
+
+def test_caller_wait_timeout_does_not_cancel_execution_outcome() -> None:
+    outcome = Future[ChatResponseOutcome]()
+    packets: list[AnswerStreamPart] = [
+        MessageResponseIDInfo(user_message_id=41, reserved_assistant_message_id=42)
+    ]
+    with patch("onyx.chat.process_message.CHAT_RESPONSE_WAIT_TIMEOUT_S", 0.001):
+        with pytest.raises(TimeoutError):
+            gather_stream_full(iter(packets), outcome)
+    assert not outcome.done()
+    assert not outcome.cancelled()
+
+
+def test_execution_deadline_cancels_work_but_waits_for_preparation_to_drain() -> None:
+    entered = threading.Event()
+    release = threading.Event()
+    cancelled = threading.Event()
+    outcome = Future[ChatResponseOutcome]()
+    tasks = ActiveChatTurns()
+    turn = ChatTurnExecution(_make_setup(), MagicMock(), outcome)
+    prepared = _chat_agent(
+        Agent(
+            FakeModelClient(lambda *_: pytest.fail("Expired work must not generate")),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        )
+    )
+
+    def prepare(*_args: object) -> ChatAgent:
+        entered.set()
+        assert release.wait(5)
+        return prepared
+
+    original_cancel = turn.cancellation.cancel
+
+    def cancel() -> None:
+        original_cancel()
+        cancelled.set()
+
+    with (
+        patch("onyx.chat.execution.create_chat_agent", side_effect=prepare),
+        patch("onyx.chat.history_store.save_chat_response_to_db"),
+        patch("onyx.chat.execution.CHAT_EXECUTION_TIMEOUT_S", 0),
+        patch.object(turn.cancellation, "cancel", side_effect=cancel),
+        patch("onyx.chat.execution._CANCEL_POLL_INTERVAL_S", 0.01),
+    ):
+        turn.begin()
+        tasks.start(turn)
+        try:
+            assert entered.wait(5)
+            assert cancelled.wait(5)
+            assert not turn.finished.done()
+            assert not outcome.done()
+            release.set()
+            assert outcome.result(timeout=5).response.cancelled
+            turn.finished.result(timeout=5)
+        finally:
+            release.set()
+            turn.delivery.reader.close()
+            assert tasks.close()
+
+
+@pytest.mark.parametrize(
+    "invalid_setting, detail",
+    [
+        ("forced_tool", "Forced tool 1 not found in tools"),
+        ("research_project", "Deep research is not supported for projects"),
+        (
+            "research_context",
+            "Deep research requires a model with at least 50,000 input tokens",
+        ),
+    ],
+)
+def test_invalid_chat_settings_return_actionable_errors(
+    invalid_setting: str,
+    detail: str,
+) -> None:
+    setup = _make_setup(n_models=1)
+    setup.new_msg_req.deep_research = invalid_setting != "forced_tool"
+    setup.forced_tool_id = 1 if invalid_setting == "forced_tool" else None
+    setup.chat_session_project_id = 1 if invalid_setting == "research_project" else None
+    setup.research_tool_id = 2
+    with patch("onyx.chat.prepare.construct_tools", return_value={}):
+        with pytest.raises(OnyxError) as raised:
+            create_chat_agent(setup, MagicMock(), 0, CancellationSignal(), True)
+    assert raised.value.error_code == OnyxErrorCode.BAD_REQUEST
+    packet = chat_error(raised.value, setup.responses[0].llm)
+    assert packet.error == detail
+    assert not packet.is_retryable

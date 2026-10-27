@@ -8,6 +8,7 @@ import { router } from "expo-router";
 import {
   createChatSession,
   getChatSession,
+  getChatSessionStatus,
   renameChatSession,
   stopChatSession,
 } from "@/api/chat/sessions";
@@ -38,6 +39,7 @@ jest.mock("@/api/chat/stream", () => ({
 jest.mock("@/api/chat/sessions", () => ({
   createChatSession: jest.fn(),
   getChatSession: jest.fn(),
+  getChatSessionStatus: jest.fn(async () => ({ is_processing: false })),
   renameChatSession: jest.fn(),
   stopChatSession: jest.fn(),
 }));
@@ -109,6 +111,10 @@ function accumulated(packets: { obj: { type: string; content?: string } }[]) {
 describe("useChatController", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest
+      .mocked(getChatSessionStatus)
+      .mockReset()
+      .mockResolvedValue({ is_processing: false });
     renameSessionMock.mockResolvedValue();
     useChatSessionStore.setState({
       currentSessionId: null,
@@ -174,6 +180,7 @@ describe("useChatController", () => {
     // backend's own stop packet never arrives.
     streamMock.mockImplementation((_body, signal) =>
       (async function* () {
+        yield idInfo;
         yield startPacket("Thinking");
         await new Promise<void>((resolve) => {
           if (signal.aborted) resolve();
@@ -594,6 +601,154 @@ describe("useChatController", () => {
 
     await waitFor(() => expect(result.current.chatState).toBe("input"));
     expect(stopSessionMock).toHaveBeenCalledWith("s1", 11);
+  });
+
+  it("holds ownership while the server saves and blocks a repeat send", async () => {
+    useChatSessionStore.getState().ensureSession("s1");
+    let resolveStatus!: (value: { is_processing: boolean }) => void;
+    jest
+      .mocked(getChatSessionStatus)
+      .mockResolvedValueOnce({ is_processing: false })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveStatus = resolve;
+          }),
+      );
+    streamMock.mockReturnValue(scripted([idInfo, startPacket("saved later")]));
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+    await act(async () => {
+      await result.current.submit("hi");
+    });
+    await waitFor(() => expect(result.current.chatState).toBe("settling"));
+    const owner = useChatSessionStore
+      .getState()
+      .sessions.get("s1")?.abortController;
+    expect(owner).not.toBeNull();
+    await act(async () => {
+      await result.current.submit("again");
+    });
+    expect(streamMock).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      resolveStatus({ is_processing: false });
+    });
+    await waitFor(() => expect(result.current.chatState).toBe("input"));
+  });
+
+  it("does not clear a draft when readiness cannot be confirmed", async () => {
+    useChatSessionStore.getState().ensureSession("s1");
+    jest
+      .mocked(getChatSessionStatus)
+      .mockRejectedValueOnce(new Error("offline"));
+    const accepted = jest.fn();
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+    await act(async () => {
+      await result.current.submit("retry me", [], accepted);
+    });
+    expect(accepted).not.toHaveBeenCalled();
+    expect(streamMock).not.toHaveBeenCalled();
+  });
+
+  it("waits for acknowledgement before sending scoped Stop", async () => {
+    useChatSessionStore.getState().ensureSession("s1");
+    let acknowledge!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      acknowledge = resolve;
+    });
+    streamMock.mockImplementation((_body, signal) =>
+      (async function* () {
+        await ready;
+        yield idInfo;
+        if (!signal.aborted) yield startPacket("late");
+      })(),
+    );
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+    await act(async () => {
+      await result.current.submit("hi");
+    });
+    act(() => result.current.stop());
+    expect(stopSessionMock).not.toHaveBeenCalled();
+    expect(
+      useChatSessionStore.getState().sessions.get("s1")?.abortController?.signal
+        .aborted,
+    ).toBe(false);
+    await act(async () => {
+      acknowledge();
+    });
+    await waitFor(() => expect(result.current.chatState).toBe("input"));
+    expect(stopSessionMock).toHaveBeenCalledWith("s1", 11);
+  });
+
+  it("stops waiting for a missing acknowledgement without sending an unscoped Stop", async () => {
+    jest.useFakeTimers();
+    try {
+      useChatSessionStore.getState().ensureSession("s1");
+      const status = Promise.withResolvers<{ is_processing: boolean }>();
+      jest
+        .mocked(getChatSessionStatus)
+        .mockResolvedValueOnce({ is_processing: false })
+        .mockReturnValueOnce(status.promise);
+      streamMock.mockImplementation((_body, signal) =>
+        (async function* (): AsyncGenerator<StreamEvent> {
+          await new Promise<void>((resolve) =>
+            signal.addEventListener("abort", () => resolve(), { once: true }),
+          );
+        })(),
+      );
+      const { result, unmount } = renderHook(() => useChatController("s1"), {
+        wrapper,
+      });
+      await act(async () => {
+        await result.current.submit("hi");
+      });
+      act(() => result.current.stop());
+      await act(async () => {
+        jest.advanceTimersByTime(10_000);
+      });
+      expect(stopSessionMock).not.toHaveBeenCalled();
+      expect(result.current.chatState).toBe("settling");
+      await act(async () => {
+        await result.current.submit("too soon");
+      });
+      expect(streamMock).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        status.resolve({ is_processing: false });
+      });
+      expect(result.current.chatState).toBe("input");
+      unmount();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("does not release a newer owner after an old readiness check", async () => {
+    useChatSessionStore.getState().ensureSession("s1");
+    let resolveStatus!: (value: { is_processing: boolean }) => void;
+    jest
+      .mocked(getChatSessionStatus)
+      .mockResolvedValueOnce({ is_processing: false })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveStatus = resolve;
+          }),
+      );
+    streamMock.mockReturnValue(scripted([idInfo]));
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+    await act(async () => {
+      await result.current.submit("hi");
+    });
+    await waitFor(() => expect(result.current.chatState).toBe("settling"));
+    const newer = new AbortController();
+    await act(async () => {
+      useChatSessionStore.getState().setAbortController("s1", newer);
+      useChatSessionStore.getState().updateChatState("s1", "loading");
+      resolveStatus({ is_processing: false });
+    });
+    expect(
+      useChatSessionStore.getState().sessions.get("s1")?.abortController,
+    ).toBe(newer);
+    expect(result.current.chatState).toBe("loading");
   });
 
   it("hydrates an opened session from the backend snapshot", async () => {

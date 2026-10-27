@@ -20,13 +20,15 @@ import { usePacedTurnGroups } from "@/app/app/message/messageComponents/timeline
 import MessageToolbar from "@/app/app/message/messageComponents/MessageToolbar";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import { Message } from "@/app/app/interfaces";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { AgentTimeline } from "@/app/app/message/messageComponents/timeline/AgentTimeline";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { getTextContent } from "@/app/app/services/packetUtils";
 import { removeThinkingTokens } from "@/app/app/services/thinkingTokens";
 import { cn } from "@opal/utils";
 import { useTranslations } from "next-intl";
+import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
+import { getLatestMessageChain } from "@/app/app/services/messageTree";
 
 // Type for the regeneration factory function passed from ChatUI
 export type RegenerationFactory = (regenerationRequest: {
@@ -57,6 +59,7 @@ export interface AgentMessageProps {
   disableTTS?: boolean;
   /** When on, drop the message's reading-width padding so it sits flush with the chat edge. */
   fullWidthChat?: boolean;
+  onComplete?: (nodeId: number) => void;
 }
 
 // TODO: Consider more robust comparisons:
@@ -86,7 +89,8 @@ function arePropsEqual(
       next.llmManager?.isLoadingProviders &&
     prev.processingDurationSeconds === next.processingDurationSeconds &&
     prev.hideFooter === next.hideFooter &&
-    prev.fullWidthChat === next.fullWidthChat
+    prev.fullWidthChat === next.fullWidthChat &&
+    prev.onComplete === next.onComplete
     // Skip: chatState.regenerate, chatState.setPresentingDocument,
     //       most of llmManager, onMessageSelection (function/object props)
   );
@@ -108,6 +112,7 @@ const AgentMessage = React.memo(function AgentMessage({
   hideFooter,
   disableTTS,
   fullWidthChat,
+  onComplete,
 }: AgentMessageProps) {
   const t = useTranslations("chat.messages");
   const markdownRef = useRef<HTMLDivElement>(null);
@@ -132,6 +137,34 @@ const AgentMessage = React.memo(function AgentMessage({
     finalAnswerComing,
     toolProcessingDuration,
   } = usePacketProcessor(rawPackets, nodeId);
+
+  const sessionIdAtMount = useRef(
+    useChatSessionStore.getState().currentSessionId
+  );
+  const requestAtMount = useRef(
+    useChatSessionStore.getState().sessions.get(sessionIdAtMount.current ?? "")
+      ?.abortController
+  );
+  useEffect(() => {
+    if (!isComplete) return;
+    if (onComplete) {
+      onComplete(nodeId);
+      return;
+    }
+    const sessionId = sessionIdAtMount.current;
+    if (!sessionId) return;
+    const store = useChatSessionStore.getState();
+    const session = store.sessions.get(sessionId);
+    if (
+      !session ||
+      session.abortController !== requestAtMount.current ||
+      session.chatState === "loading"
+    )
+      return;
+    if (getLatestMessageChain(session.messageTree).at(-1)?.nodeId === nodeId) {
+      store.setLatestMessageRenderComplete(sessionId, true);
+    }
+  }, [isComplete, nodeId, onComplete]);
 
   // Apply pacing delays between different tool types for smoother visual transitions
   const { pacedTurnGroups, pacedDisplayGroups, pacedFinalAnswerComing } =
@@ -353,7 +386,7 @@ const AgentMessage = React.memo(function AgentMessage({
         {/* Show stopped message when user cancelled and no display content */}
         {pacedDisplayGroups.length === 0 &&
           stopReason === StopReason.USER_CANCELLED && (
-            <Text as="p" secondaryBody text04>
+            <Text as="p" font="secondary-body" color="text-04">
               {t("agentMessage.stoppedGeneration.text")}
             </Text>
           )}

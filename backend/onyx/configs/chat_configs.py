@@ -114,3 +114,6 @@ COMPRESSION_TRIGGER_RATIO = float(os.environ.get("COMPRESSION_TRIGGER_RATIO", "0
 SKIP_DEEP_RESEARCH_CLARIFICATION = (
     os.environ.get("SKIP_DEEP_RESEARCH_CLARIFICATION", "false").lower() == "true"
 )
+
+# Bound execution separately from a caller waiting for its saved response.
+CHAT_EXECUTION_TIMEOUT_S = int(os.environ.get("CHAT_EXECUTION_TIMEOUT_S") or "3600")
