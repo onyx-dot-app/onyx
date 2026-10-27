@@ -361,6 +361,13 @@ blocks. LiteLLM would drop `thinking` there; a monkey patch
 Vertex, Azure and Bedrock Converse. Claude behind an OpenAI-style gateway still
 skips reasoning mid loop (`_prompt_in_tool_loop`).
 
+Within a turn the chat path sends a tool step's signed `thinking_blocks` back on
+the next step, so Claude reuses its reasoning. Blocks are attached only for the
+same `provider/model` key, a block whose prefix changed is cleared to an empty
+list before the request (`_drop_thinking_with_changed_prefix`), and a request
+sent without `thinking` has its `thinking_blocks` removed
+(`backend/onyx/chat/README.md`, "Signed thinking replay").
+
 `LLMConfig.supports_images` records the resolved image capability. A configured
 `supports_image_input=True` overrides catalog values. Configured `False` permits
 catalog fallback. Unknown catalog capability stays `None`. Direct client callers

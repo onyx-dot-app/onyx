@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from enum import Enum
 from typing import Annotated, Literal
 
@@ -158,6 +159,44 @@ class RedactedThinkingBlock(BaseModel):
 
 
 AnyThinkingBlock = ThinkingBlock | RedactedThinkingBlock
+
+
+def signed_thinking_blocks(
+    blocks: Sequence[AnyThinkingBlock] | None,
+) -> list[AnyThinkingBlock]:
+    """Blocks a provider accepts on replay: an unsigned thinking block is incomplete."""
+    return [
+        block
+        for block in blocks or []
+        if not isinstance(block, ThinkingBlock) or block.signature
+    ]
+
+
+class ReplayableThinking(BaseModel):
+    """Signed thinking blocks and the model that minted them.
+
+    Signatures are only valid for that model, so replay skips them for others.
+    """
+
+    model: str
+    blocks: list[AnyThinkingBlock]
+    # Anthropic binds each block to the tools and every message before it.
+    prefix: str | None = None
+    # The reminder the block was minted after, which history must replay.
+    reminder: str | None = None
+
+    def replay_text(self) -> str:
+        """Block content the provider counts as input tokens on replay.
+
+        An omitted-display block has empty text, and its signature holds the
+        encrypted reasoning, so the signature stands in as an upper estimate.
+        """
+        return "".join(
+            (block.thinking or block.signature or "")
+            if isinstance(block, ThinkingBlock)
+            else block.data
+            for block in self.blocks
+        )
 
 
 class Usage(BaseModel):
@@ -475,7 +514,15 @@ def apply_generation_event(message: AssistantMessage, event: GenerationEvent) ->
                     and isinstance(last, ThinkingBlock)
                     and not last.signature
                 ):
-                    last.thinking += block.thinking
+                    # LiteLLM's Anthropic stream resends the full text with
+                    # the signature in a chunk that adds no text delta.
+                    resent_in_full = (
+                        block.signature
+                        and not event.text
+                        and block.thinking == last.thinking
+                    )
+                    if not resent_in_full:
+                        last.thinking += block.thinking
                     last.signature = block.signature
                 else:
                     content.blocks.append(block.model_copy(deep=True))

@@ -1027,6 +1027,11 @@ class LitellmLLM(LLM):
             self._api_surface,
         )
 
+        replays_thinking_blocks = is_claude_model and (
+            self._model_provider in _THINKING_BLOCK_PROVIDERS
+            or self._api_surface is LlmApiSurface.ANTHROPIC_MESSAGES
+        )
+
         # Always-thinking Claude models accept no off spelling, so off there
         # means the least reasoning they take rather than the API's default.
         if (
@@ -1270,13 +1275,7 @@ class LitellmLLM(LLM):
 
             messages = _prompt_to_dicts(prompt)
 
-            if not (
-                is_claude_model
-                and (
-                    self._model_provider in _THINKING_BLOCK_PROVIDERS
-                    or self._api_surface is LlmApiSurface.ANTHROPIC_MESSAGES
-                )
-            ):
+            if not replays_thinking_blocks:
                 messages = _strip_thinking_blocks_from_messages(messages)
 
             # Bedrock's Converse API requires toolConfig when messages
@@ -1352,7 +1351,13 @@ class LitellmLLM(LLM):
                         base_url=self._api_base or None,
                         api_version=api_version,
                         custom_llm_provider=self._custom_llm_provider or None,
-                        messages=messages,
+                        # Replayed thinking needs thinking on, which a retry
+                        # or a skipped thinking param can leave off.
+                        messages=(
+                            messages
+                            if "thinking" in opts
+                            else _strip_thinking_blocks_from_messages(messages)
+                        ),
                         # None (omitted) rather than [] — some OpenAI-compatible
                         # servers reject requests with an empty tools array.
                         tools=tools or None,

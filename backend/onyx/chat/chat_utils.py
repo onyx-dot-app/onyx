@@ -32,6 +32,7 @@ from onyx.file_store.models import (
     FileDescriptor,
     FileToolMetadata,
 )
+from onyx.llm.models import ReplayableThinking
 from onyx.prompts.chat_prompts import (
     ADDITIONAL_CONTEXT_PROMPT,
     NON_VISION_IMAGE_MARKER,
@@ -153,6 +154,28 @@ def create_chat_session_from_request(
         ),
     )
     return chat_session
+
+
+def thinking_token_count(
+    thinking: ReplayableThinking | None, token_counter: Callable[[str], int]
+) -> int:
+    return token_counter(thinking.replay_text()) if thinking else 0
+
+
+def thinking_reminder(
+    thinking: ReplayableThinking | None, token_counter: Callable[[str], int]
+) -> list[ChatMessageSimple]:
+    """The reminder replayed thinking was minted after. Its signature is bound
+    to every earlier message, so the reminder stays in place in history."""
+    if not thinking or not thinking.blocks or not thinking.reminder:
+        return []
+    return [
+        ChatMessageSimple(
+            message=thinking.reminder,
+            token_count=token_counter(thinking.reminder),
+            message_type=MessageType.USER_REMINDER,
+        )
+    ]
 
 
 def convert_chat_history_basic(
