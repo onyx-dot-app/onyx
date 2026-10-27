@@ -6996,7 +6996,7 @@
         }
       },
       "maxImageSize": {
-        "description": "Images above this size will be skipped to limit resource usage.",
+        "description": "Images above this size are resized before analysis.",
         "suffix": "MB",
         "title": "Max Image Size for Analysis"
       },

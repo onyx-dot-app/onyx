@@ -6996,7 +6996,7 @@
         }
       },
       "maxImageSize": {
-        "description": "Les images dépassant cette taille seront ignorées pour limiter l’utilisation des ressources.",
+        "description": "Les images au-delà de cette taille sont redimensionnées avant l’analyse.",
         "suffix": "Mo",
         "title": "Taille maximale des images à analyser"
       },

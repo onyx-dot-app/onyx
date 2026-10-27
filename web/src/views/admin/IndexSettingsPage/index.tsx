@@ -2204,6 +2204,7 @@ export default function IndexSettingsPage() {
                             title={t("vectorQuantization.title")}
                             description={t("vectorQuantization.description")}
                             withLabel
+                            fillInput
                           >
                             <InputSingleSelectField
                               name="vector_quantization"
@@ -2325,6 +2326,7 @@ export default function IndexSettingsPage() {
                                 description={t("contextualModel.description")}
                                 disabled={!values.enable_contextual_rag}
                                 withLabel
+                                fillInput
                               >
                                 <SimpleModelSelector
                                   providers={filterModelConfigurations(
@@ -2423,6 +2425,7 @@ export default function IndexSettingsPage() {
                                 description={t("captioningModel.description")}
                                 disabled={!values.image_processing_enabled}
                                 withLabel
+                                fillInput
                               >
                                 <SimpleModelSelector
                                   nullable
