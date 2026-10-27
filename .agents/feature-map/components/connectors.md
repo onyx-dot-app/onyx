@@ -50,8 +50,9 @@ For connectors that implement `validate_connector_settings` or named capability
 checks (§4), the admin sees a validation error at connector-creation time if
 credentials are wrong or a permission is missing. The base
 `validate_connector_settings` is a no-op. A connector that does not override
-it, for example Asana, can pass creation with bad credentials. The problem then
-shows only when an index run fails or returns nothing.
+it can pass creation with bad credentials. The problem then shows only when an
+index run fails or returns nothing. Asana overrides it with one
+`get_workspace` call that maps 401, 403, 404, and 429 to the validation errors.
 
 ---
 
