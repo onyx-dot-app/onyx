@@ -302,11 +302,13 @@ describe("widget readiness", () => {
     widget["inputValue"] = "accepted question";
     const api = new ApiService("https://onyx.test/api", async () => "key");
     api.createChatSession = mock(async () => "session");
+    let errorDuringWait: string | undefined;
+    let statusDuringWait = "";
     api.waitForSessionIdle = mock(
       async (_sessionId, _signal, onUnconfirmed) => {
         onUnconfirmed();
-        expect(widget["error"]).toBe("delivery failed");
-        expect(widget["streamingStatus"]).toContain("Waiting to confirm");
+        errorDuringWait = widget["error"];
+        statusDuringWait = widget["streamingStatus"];
       }
     );
     api.streamMessage = mock(async function* () {
@@ -315,6 +317,8 @@ describe("widget readiness", () => {
     });
     widget["apiService"] = api;
     await widget["sendMessage"]();
+    expect(errorDuringWait).toBe("delivery failed");
+    expect(statusDuringWait).toContain("Waiting to confirm");
     expect(widget["messages"]).toHaveLength(1);
     expect(widget["messages"][0]).toMatchObject({
       id: 1,

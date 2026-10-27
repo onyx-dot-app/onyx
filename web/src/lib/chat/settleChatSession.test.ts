@@ -210,6 +210,83 @@ test("stopping waits for saved history and preserves error retry details", async
   });
 });
 
+test.each([
+  { code: null, savedType: "assistant", text: "Saved answer", recover: true },
+  {
+    code: "STREAM_GAP",
+    savedType: "assistant",
+    text: "Saved answer",
+    recover: true,
+  },
+  { code: null, savedType: "assistant", text: "", recover: false },
+  { code: null, savedType: "error", text: "Partial answer", recover: false },
+  {
+    code: "RESPONSE_SAVE_ERROR",
+    savedType: "assistant",
+    text: "",
+    recover: false,
+  },
+  {
+    code: "RESPONSE_SAVE_ERROR",
+    savedType: "assistant",
+    text: "Saved answer",
+    recover: true,
+  },
+] as const)(
+  "recovery prefers successful saved answers and retains unresolved errors ($code, $savedType, '$text')",
+  async ({ code, savedType, text, recover }) => {
+    const failed: Message = {
+      ...message(-2, "error", "Could not finish this response"),
+      messageId: 42,
+      errorCode: code,
+      isRetryable: true,
+    };
+    const saved: Message = {
+      ...message(42, savedType, text),
+      messageId: 42,
+      packets: [
+        ...(code === "RESPONSE_SAVE_ERROR"
+          ? [
+              {
+                placement: { turn_index: 0 },
+                obj: {
+                  type: "reasoning_delta" as const,
+                  reasoning: "Partial reasoning",
+                },
+              },
+            ]
+          : []),
+        { placement: { turn_index: 0 }, obj: { type: "stop" } },
+      ],
+    };
+    useChatSessionStore.getState().updateSessionData("session", {
+      chatState: "unconfirmed",
+      uncaughtError: failed.message,
+      messageTree: new Map([[-2, failed]]),
+    });
+    jest.mocked(processRawChatHistory).mockReturnValue(new Map([[42, saved]]));
+    await settle("recovery");
+    const restored = useChatSessionStore
+      .getState()
+      .sessions.get("session")
+      ?.messageTree.get(42);
+    if (recover) {
+      expect(restored).toBe(saved);
+    } else {
+      expect(restored).toMatchObject({
+        type: "error",
+        message: failed.message,
+        errorCode: code,
+        isRetryable: true,
+        packets: [],
+      });
+    }
+    expect(
+      useChatSessionStore.getState().sessions.get("session")?.uncaughtError
+    ).toBe(recover ? null : failed.message);
+  }
+);
+
 test("a late failed readiness check cannot change a newer request", async () => {
   const idle = Promise.withResolvers<void>();
   jest.mocked(waitForChatSessionIdle).mockReturnValue(idle.promise);

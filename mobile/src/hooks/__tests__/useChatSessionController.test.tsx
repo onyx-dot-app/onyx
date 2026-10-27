@@ -411,7 +411,7 @@ describe("useChatSessionController", () => {
     );
     expect(resumeMock).toHaveBeenCalledTimes(1);
     const tree = useChatSessionStore.getState().sessions.get("s1")!.messageTree;
-    expect(getMessageByMessageId(tree, 2)?.message).toBe("replay failed");
+    expect(getMessageByMessageId(tree, 2)?.message).toBe("saved");
     await act(async () => {
       status.resolve({ is_processing: false });
     });
@@ -459,39 +459,66 @@ describe("useChatSessionController", () => {
     expect(getMessageByMessageId(tree, 12)?.message).toBe("old failure");
   });
 
-  it("preserves the current transport error while refreshing saved history", async () => {
-    seedLiveSession(2);
-    resumeMock.mockReturnValue(
-      scripted([streamError("replay failed", "STREAM_GAP")]),
-    );
-    getSessionMock.mockResolvedValue({
-      chat_session_id: "s1",
-      description: "",
-      persona_id: 0,
-      messages: backendMessages("saved answer").map((message) =>
-        message.message_type === "user"
-          ? { ...message, message: "saved question" }
-          : message,
-      ),
-      packets: [[historyPacket("saved answer")]],
-      time_created: "",
-      current_stream: null,
-    });
-
-    renderHook(() => useChatSessionController("s1"), { wrapper });
-    await waitFor(() =>
-      expect(useChatSessionStore.getState().sessions.get("s1")?.chatState).toBe(
-        "input",
-      ),
-    );
-    const tree = useChatSessionStore.getState().sessions.get("s1")!.messageTree;
-    expect(getMessageByMessageId(tree, 1)?.message).toBe("saved question");
-    expect(getMessageByMessageId(tree, 2)).toMatchObject({
-      type: "error",
-      message: "replay failed",
+  it.each([
+    {
       errorCode: "STREAM_GAP",
-    });
-  });
+      savedAnswer: "saved answer",
+      retainsError: false,
+    },
+    { errorCode: undefined, savedAnswer: "saved answer", retainsError: false },
+    { errorCode: "STREAM_GAP", savedAnswer: "", retainsError: true },
+    {
+      errorCode: "RESPONSE_SAVE_ERROR",
+      savedAnswer: "",
+      retainsError: true,
+    },
+    {
+      errorCode: "RESPONSE_SAVE_ERROR",
+      savedAnswer: "saved answer",
+      retainsError: false,
+    },
+  ])(
+    "settles error $errorCode with saved answer '$savedAnswer'",
+    async ({ errorCode, savedAnswer, retainsError }) => {
+      seedLiveSession(2);
+      resumeMock.mockReturnValue(
+        scripted([streamError("replay failed", errorCode)]),
+      );
+      getSessionMock.mockResolvedValue({
+        chat_session_id: "s1",
+        description: "",
+        persona_id: 0,
+        messages: backendMessages(savedAnswer).map((message) =>
+          message.message_type === "user"
+            ? { ...message, message: "saved question" }
+            : message,
+        ),
+        packets: [[historyPacket(savedAnswer || "partial output")]],
+        time_created: "",
+        current_stream: null,
+      });
+
+      renderHook(() => useChatSessionController("s1"), { wrapper });
+      await waitFor(() =>
+        expect(
+          useChatSessionStore.getState().sessions.get("s1")?.chatState,
+        ).toBe("input"),
+      );
+      const tree = useChatSessionStore
+        .getState()
+        .sessions.get("s1")!.messageTree;
+      expect(getMessageByMessageId(tree, 1)?.message).toBe("saved question");
+      expect(getMessageByMessageId(tree, 2)).toMatchObject(
+        retainsError
+          ? {
+              type: "error",
+              message: "replay failed",
+              errorCode: errorCode ?? null,
+            }
+          : { type: "assistant", message: savedAnswer },
+      );
+    },
+  );
 
   it("does not resume when the snapshot reports no live run", async () => {
     seedLiveSession(null);
