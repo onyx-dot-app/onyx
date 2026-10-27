@@ -118,48 +118,42 @@ export default function EmbeddingRateLimitCard() {
             description={t("requests.description")}
             suffix="optional"
             withLabel
+            fillInput
           >
-            <div className="w-48">
-              <InputNumber
-                value={requests}
-                onChange={setRequests}
-                onCommit={(value) => commit(value, period)}
-                min={1}
-                max={MAX_EMBEDDING_RATE_LIMIT_REQUESTS}
-                placeholder={t("requests.placeholder")}
-              />
-            </div>
+            <InputNumber
+              value={requests}
+              onChange={setRequests}
+              onCommit={(value) => commit(value, period)}
+              min={1}
+              max={MAX_EMBEDDING_RATE_LIMIT_REQUESTS}
+              placeholder={t("requests.placeholder")}
+            />
           </InputHorizontal>
           <InputHorizontal
             title={t("period.title")}
             description={t("period.description")}
             suffix={t("period.suffix")}
             withLabel
+            fillInput
           >
-            <div className="w-48">
-              <InputNumber
-                value={period}
-                onChange={(value) =>
-                  setPeriod(
-                    value ?? DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS
-                  )
-                }
-                onCommit={(value) =>
-                  commit(
-                    requests,
-                    value ?? DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS
-                  )
-                }
-                min={1}
-                max={MAX_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS}
-                defaultValue={DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS}
-                showReset
-                allowEmpty={false}
-                placeholder={String(
-                  DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS
-                )}
-              />
-            </div>
+            <InputNumber
+              value={period}
+              onChange={(value) =>
+                setPeriod(value ?? DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS)
+              }
+              onCommit={(value) =>
+                commit(
+                  requests,
+                  value ?? DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS
+                )
+              }
+              min={1}
+              max={MAX_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS}
+              defaultValue={DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS}
+              showReset
+              allowEmpty={false}
+              placeholder={String(DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS)}
+            />
           </InputHorizontal>
         </GeneralLayouts.Section>
       </Card>
