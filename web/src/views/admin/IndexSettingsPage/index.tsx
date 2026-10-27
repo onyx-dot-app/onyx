@@ -2458,6 +2458,7 @@ export default function IndexSettingsPage() {
                               <InputHorizontal
                                 title={t("maxImageSize.title")}
                                 description={t("maxImageSize.description")}
+                                suffix="optional"
                                 disabled={!values.image_processing_enabled}
                                 withLabel
                                 fillInput
