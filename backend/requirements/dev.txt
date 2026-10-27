@@ -4,18 +4,10 @@ agent-client-protocol==0.7.1 \
     --hash=sha256:4ffe999488f2b23db26f09becdfaa2aaae6529f0847a52bca61bc2c628001c0f \
     --hash=sha256:8d7031209e14c3f2f987e3b95e7d9c3286158e7b2af1bf43d6aae5b8a429249f
     # via onyx
-aioboto3==15.1.0 \
-    --hash=sha256:37763bbc6321ceb479106dc63bc84c8fdb59dd02540034a12941aebef2057c5c \
-    --hash=sha256:66006142a2ccc7d6d07aa260ba291c4922b6767d270ba42f95c59e85d8b3e645
+aiobotocore==3.8.0 \
+    --hash=sha256:80a1eb64ea915f3af3c1518669975bae74a17b2f37c14eb0fa2f83b915974670 \
+    --hash=sha256:8bc605132cadfe844a3f334635a0a64fa5e360a4a206e915d99d53db5b6deeba
     # via onyx
-aiobotocore==2.24.0 \
-    --hash=sha256:72bb1f8eb1b962779a95e1bcc9cf35bc33196ad763b622a40ae7fa9d2e95c87c \
-    --hash=sha256:b32c0c45d38c22a18ce395a0b5448606c5260603296a152895b5bdb40ab3139d
-    # via aioboto3
-aiofiles==25.1.0 \
-    --hash=sha256:a8d728f0a29de45dc521f18f07297428d56992a742f0cd2701ba86e44d23d5b2 \
-    --hash=sha256:abe311e527c862958650f9438e859c1fa7568a141b22abcd015e120e86a85695
-    # via aioboto3
 aiohappyeyeballs==2.6.1 \
     --hash=sha256:c3f9d0113123803ccadfdf3f0faa505bc78e6a72d1cc4806cbd719826e943558 \
     --hash=sha256:f349ba8f4b75cb25c99c5c2d84e997e485204d2902a9597802b0371f09331fb8
@@ -179,16 +171,16 @@ attrs==25.4.0 \
     #   aiohttp
     #   jsonschema
     #   referencing
-boto3==1.39.11 \
-    --hash=sha256:3027edf20642fe1d5f9dc50a420d0fe2733073ed6a9f0f047b60fe08c3682132 \
-    --hash=sha256:af8f1dad35eceff7658fab43b39b0f55892b6e3dd12308733521cc24dd2c9a02
-    # via aiobotocore
-boto3-stubs==1.39.11 \
-    --hash=sha256:35f923e15ce01dc43afe1d522d3cb3bda32e9a243d964b8f95a88e6690d24b95 \
-    --hash=sha256:dc8835cb1e256f3096031e5e845564364d0b28d5cb4ffeffe54ecaf7db266ae8
-botocore==1.39.11 \
-    --hash=sha256:1545352931a8a186f3e977b1e1a4542d7d434796e274c3c62efd0210b5ea76dc \
-    --hash=sha256:953b12909d6799350e346ab038e55b6efe622c616f80aef74d7a6683ffdd972c
+boto3==1.43.3 \
+    --hash=sha256:7c7777862ffc898f05efa566032bbabfe226dbb810e35ec11125817f128bc5c5 \
+    --hash=sha256:fb9fe51849ef2a78198d582756fc06f14f7de27f73e0fa90275d6aa4171eb4d0
+    # via litellm
+boto3-stubs==1.43.3 \
+    --hash=sha256:1c17fb4003c8d3ac324385f1d7a366721436eab3b6dc7838239dea53137ba9de \
+    --hash=sha256:dd43fb68fe1d6db450588609a96013a9baf86d1cfc45bbbee7fd97bac971a3c0
+botocore==1.43.46 \
+    --hash=sha256:59f2e1ac3cdc66d191cae91c0804bc41847ce817dc8147cf43eaada8f76a5533 \
+    --hash=sha256:cb673891e623ae6e6a1bf24d94ef169504f3eb02584adb5d5bee2f6aae819b60
     # via
     #   aiobotocore
     #   boto3
@@ -1000,22 +992,15 @@ kiwisolver==1.4.9 \
     --hash=sha256:efb3a45b35622bb6c16dbfab491a8f5a391fe0e9d45ef32f4df85658232ca0e2 \
     --hash=sha256:f68e4f3eeca8fb22cc3d731f9715a13b652795ef657a13df1ad0c7dc0e9731df
     # via matplotlib
-litellm==1.93.2 \
-    --hash=sha256:0a7f3e5138e307e429bd8fa29cc0c48bb1e2b827792e8f7799ca4c8cff736103 \
-    --hash=sha256:1c84f7c4acb4e926a79b93145ab23231b300fc687bde7172ef884fc52d6011e0 \
-    --hash=sha256:204cb0763fff9285bc87eb2dc0fc59b591999e5d94863d0964f806424d3c0cd6 \
-    --hash=sha256:3126c84361606b9fb07fde7d57eccd8a1747304d64c4143e2e5e40ae6e7693fb \
-    --hash=sha256:8a99ac7c0c1b78acd6bfd1959e9f203dca71fdbceb5f0c8691c2ad8eee450d7d \
-    --hash=sha256:a783b8b18ed68cb6a3b79d2b00273ec21aef92442e9b2712a50036cb84bfe583 \
-    --hash=sha256:a81ceff44c58ef504ab8bd787d03b82618765b9cfd530942386ae6d23c58be94 \
-    --hash=sha256:ae75a61c9abc827aa3131b7e640c952367a450830bb7c531b426b4ec2bb45f85 \
-    --hash=sha256:c54a09ab20f94120a9d60a30d9970439dcefa00d2565d190505ff006a80c7a69 \
-    --hash=sha256:c5d5223ef07f36e0886397fb45cc9db4150f86a0c6f6835cee1d5524cab69dfd \
-    --hash=sha256:cacf35cf703b12c54516fc6464a3e08c6dbb1dcfb97239e1f629294fe36a1cba \
-    --hash=sha256:d2edfa14b99bce706b35981703692e3ee631f9b87bf6dc28fb53b574f6480b20 \
-    --hash=sha256:d8684629be3f7b5f8e2b6e5fe5ea27ff957c63a8d525d81c1460d8436e2e1857 \
-    --hash=sha256:dee1b02b7f52a5a408bf7c8d499f0834e49194651743758a511dcdd926c0b692 \
-    --hash=sha256:f4071bef03e4c2942cd2ddc752727345b85447d6a7fee1ff5a4f8b92187966b0
+litellm==1.100.4 \
+    --hash=sha256:7228d4d12eb332e5e7b7dbfeb41a4182784ad2acf86f6b7eb806565e04912ada \
+    --hash=sha256:737c99748f9a37e74d4927ad9fe311e3f531a5379ea423eb0d1412d3310f1643 \
+    --hash=sha256:83342175eb948f146f405735b03c1cb1e5c332aeef6a98cfb31f59233d10426a \
+    --hash=sha256:aa8e8507678451b18c4369b69506d8948154b2ab4af211454dd062380597c1ce \
+    --hash=sha256:c031cbc63848be16403725594f6060fe002dc2e65f0866878285d72923ac27ab \
+    --hash=sha256:c86e2e3370674557547022eb9acd8ec842f802bddb2cfa97992332ad56309a53 \
+    --hash=sha256:ded14b15466163c76c9a7da0cd091663b4bebbff9aa56724a5905386a9d12532 \
+    --hash=sha256:eb12645456c19dd56f1fa5d7e165a2a76effb1501ace5d0a4df18efc0ac5c39a
     # via onyx
 mako==1.4.3 \
     --hash=sha256:723296007c870bfd6b3f0c3230dba7198096e5269297ebf5e4eff9e7ffa39d4f \
@@ -1225,9 +1210,9 @@ multidict==6.9.1 \
     #   aiobotocore
     #   aiohttp
     #   yarl
-mypy-boto3-s3==1.39.5 \
-    --hash=sha256:57272e73faf0d38e65b5ed82c8b22650c8820c8d070c5b10e307fd98f247e05a \
-    --hash=sha256:b339a9128e96eaf74f87c40ee42711db82d31a45085ba78b262ae7683cb9e5f0
+mypy-boto3-s3==1.43.106 \
+    --hash=sha256:731195f15830699a36e29d3c8abb2918bccd3587eb2edcb233f8046967893279 \
+    --hash=sha256:e233d04dbcf3925522dff4346e75c37344ec3d1cbb82337e5eed2af263847668
     # via boto3-stubs
 nest-asyncio==1.6.0 \
     --hash=sha256:6f172d5449aca15afd6c646851f4e31e02c598d553a667e38cafa997cfec55fe \
@@ -1573,6 +1558,7 @@ pydantic==2.12.5 \
     #   litellm
     #   onyx
     #   openai
+    #   pydantic-settings
 pydantic-core==2.41.5 \
     --hash=sha256:0177272f88ab8312479336e1d777f6b124537d47f2123f89cb37e0accea97f90 \
     --hash=sha256:01a3d0ab748ee531f4ea6c3e48ad9dac84ddba4b0d82291f87248f2f9de8d740 \
@@ -1620,6 +1606,10 @@ pydantic-core==2.41.5 \
     # via
     #   cohere
     #   pydantic
+pydantic-settings==2.15.0 \
+    --hash=sha256:0ba092c291c94baceb5eff768aa0d56400a457585bc0175925a5a5510303da42 \
+    --hash=sha256:694b793e84f766ba76a90ebdefc01d0a9a045dab0382bee70393da93712ad117
+    # via litellm
 pyee==13.0.0 \
     --hash=sha256:48195a3cddb3b1515ce0695ed76036b5ccc2ef3a9f963ff9f77aec0139845498 \
     --hash=sha256:b391e3c5a434d1f5118a25615001dbc8f669cf410ab67d04c4d4e07c55481c37
@@ -1690,6 +1680,7 @@ python-dotenv==1.2.2 \
     --hash=sha256:2c371a91fbd7ba082c2c1dc1f8bf89ca22564a087c2c287cd9b662adde799cf3
     # via
     #   litellm
+    #   pydantic-settings
     #   pytest-dotenv
 python-json-logger==4.1.0 \
     --hash=sha256:132994765cf75bf44554be9aa49b06ef2345d23661a96720262716438141b6b2 \
@@ -1929,9 +1920,9 @@ ruff==0.16.1 \
     --hash=sha256:e0d4c20532fca4f7fa609369161d968dd28f65d83dabbd61d8e9c7edbf7001f6 \
     --hash=sha256:fde5a99e2f97479af66edd6622c6d5a2a7592c77cf4153d9e4428f5eeb55b60c \
     --hash=sha256:fedad7c801dabd3fb9741d76aca39246e6ddd9ca446a015875207bf19f1e6bc7
-s3transfer==0.13.1 \
-    --hash=sha256:a981aa7429be23fe6dfc13e80e4020057cbab622b08c0315288758d67cabc724 \
-    --hash=sha256:c3fdba22ba1bd367922f27ec8032d6a1cf5f10c934fb5d68cf60fd5a23d936cf
+s3transfer==0.17.1 \
+    --hash=sha256:042dd5e3b1b512355e35a23f0223e426b7042e80b97830ea2680ddce327fc45e \
+    --hash=sha256:5b9827d1044159bbb01b86ef8902760ea39281927f5de31de75e1d657177bf4c
     # via boto3
 sentry-sdk==2.14.0 \
     --hash=sha256:1e0e2eaf6dad918c7d1e0edac868a7bf20017b177f242cefe2a6bcd47955961d \
@@ -2180,6 +2171,7 @@ typing-inspection==0.4.2 \
     # via
     #   fastapi
     #   pydantic
+    #   pydantic-settings
 tzdata==2025.2 ; sys_platform == 'win32' \
     --hash=sha256:1a403fada01ff9221ca8044d701868fa132215d84beb92242d9acd2147f667a8 \
     --hash=sha256:b60a638fcc0daffadf82fe0f57e53d06bdec2f36c4df66280ae79bce6bd6f2b9
