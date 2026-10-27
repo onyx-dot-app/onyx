@@ -18,8 +18,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.chat.chat_utils import load_all_chat_files, load_chat_file
-from onyx.chat.models import ChatLoadedFile
+from onyx.chat.files import load_all_chat_files, load_chat_file
 from onyx.configs.constants import FileOrigin, MessageType
 from onyx.db.chat import (
     create_chat_session,
@@ -28,7 +27,7 @@ from onyx.db.chat import (
 )
 from onyx.file_store import file_store as file_store_module
 from onyx.file_store.file_store import get_default_file_store
-from onyx.file_store.models import ChatFileType, FileDescriptor
+from onyx.file_store.models import ChatFileType, ChatLoadedFile, FileDescriptor
 from onyx.tools.models import ChatFile
 from tests.external_dependency_unit.conftest import create_test_user
 
@@ -209,7 +208,7 @@ class TestLazyShimContract:
         per-instance ``threading.Lock`` to make check-and-set atomic."""
         import threading
 
-        from onyx.chat.models import ChatLoadedFile
+        from onyx.file_store.models import ChatLoadedFile
 
         call_count = {"n": 0}
         gate = threading.Event()
@@ -412,7 +411,7 @@ class TestLoadAllChatFilesLazy:
             return [None] * len(funcs)
 
         with patch(
-            "onyx.chat.chat_utils.run_functions_tuples_in_parallel", side_effect=_spy
+            "onyx.chat.files.run_functions_tuples_in_parallel", side_effect=_spy
         ):
             # Synthetic 200-file "message" — we patch the parallel runner so
             # actual DB/file_store access never happens. Casting through Any
@@ -428,7 +427,7 @@ class TestLoadAllChatFilesLazy:
                     for i in range(200)
                 ]
 
-            from onyx.chat.chat_utils import load_all_chat_files as _llc
+            from onyx.chat.files import load_all_chat_files as _llc
 
             _llc(cast(Any, [_FakeMsg()]), cast(Any, None))
             assert captured["max_workers"] == 16
@@ -440,7 +439,7 @@ class TestLoadAllChatFilesLazy:
 
 
 class TestConvertLoadedFilesToChatFilesLazy:
-    """``_convert_loaded_files_to_chat_files`` must produce lazy ChatFiles —
+    """``convert_loaded_files_to_chat_files`` must produce lazy ChatFiles —
     it must not call ``len(loaded_file.content) > 0`` style guards that
     would defeat the lazy fix."""
 
@@ -449,7 +448,7 @@ class TestConvertLoadedFilesToChatFilesLazy:
         read_counter: _ReadCounter,
         file_cleanup: list[str],
     ) -> None:
-        from onyx.chat.process_message import _convert_loaded_files_to_chat_files
+        from onyx.chat.files import convert_loaded_files_to_chat_files
 
         file_id = _write_file(b"some-bytes", file_type="image/png")
         file_cleanup.append(file_id)
@@ -462,7 +461,7 @@ class TestConvertLoadedFilesToChatFilesLazy:
         ]
 
         baseline = read_counter.count
-        chat_files = _convert_loaded_files_to_chat_files(loaded)
+        chat_files = convert_loaded_files_to_chat_files(loaded)
         assert len(chat_files) == 1
         # Wrapping must not have materialized anything.
         assert read_counter.count == baseline

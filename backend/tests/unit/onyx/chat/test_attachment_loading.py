@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.chat.chat_utils import load_all_chat_files
+from onyx.chat.files import load_all_chat_files
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import ChatMessage, UserFile
 from onyx.file_store.models import ChatFileType, FileDescriptor
@@ -40,11 +40,9 @@ def test_attachment_metadata_is_read_before_workers() -> None:
         return "cached text"
 
     with (
-        patch("onyx.chat.chat_utils.get_user_file_by_id", side_effect=get_metadata),
-        patch(
-            "onyx.chat.chat_utils._get_or_extract_plaintext", side_effect=read_plaintext
-        ),
-        patch("onyx.chat.chat_utils.get_default_file_store") as store,
+        patch("onyx.chat.files.get_user_file_by_id", side_effect=get_metadata),
+        patch("onyx.chat.files._get_or_extract_plaintext", side_effect=read_plaintext),
+        patch("onyx.chat.files.get_default_file_store") as store,
     ):
         loaded = load_all_chat_files([ChatMessage(files=descriptors)], session)
         assert [file.file_id for file in loaded] == [
@@ -72,9 +70,9 @@ def test_loading_preserves_processing_plaintext_guard(
     session = MagicMock(spec=Session)
     pending = status in (UserFileStatus.PROCESSING, UserFileStatus.INDEXING)
     with (
-        patch("onyx.chat.chat_utils.get_user_file_by_id", return_value=user_file),
+        patch("onyx.chat.files.get_user_file_by_id", return_value=user_file),
         patch(
-            "onyx.chat.chat_utils._get_or_extract_plaintext", return_value="text"
+            "onyx.chat.files._get_or_extract_plaintext", return_value="text"
         ) as plaintext,
     ):
         loaded = load_all_chat_files([ChatMessage(files=[descriptor])], session)[0]
@@ -92,8 +90,8 @@ def test_history_without_valid_user_file_id_keeps_lazy_image(
     if user_file_id is not None:
         descriptor["user_file_id"] = user_file_id
     with (
-        patch("onyx.chat.chat_utils.get_user_file_by_id") as lookup,
-        patch("onyx.chat.chat_utils.get_default_file_store") as store,
+        patch("onyx.chat.files.get_user_file_by_id") as lookup,
+        patch("onyx.chat.files.get_default_file_store") as store,
     ):
         loaded = load_all_chat_files(
             [ChatMessage(files=[descriptor])], MagicMock(spec=Session)

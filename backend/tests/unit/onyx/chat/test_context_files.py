@@ -11,22 +11,23 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from onyx.chat.models import (
-    AvailableFiles,
-    ExtractedContextFiles,
-    FileToolMetadata,
-    SearchParams,
-)
-from onyx.chat.process_message import (
-    _collect_available_file_ids,
+from onyx.chat.files import (
+    collect_available_file_ids,
     determine_search_params,
     extract_context_files,
     resolve_context_user_files,
 )
+from onyx.chat.models import AvailableFiles, SearchParams
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.models import ChatMessage, UserFile
 from onyx.db.user_file import capture_user_file_metadata
-from onyx.file_store.models import ChatFileType, InMemoryChatFile, UserFileMetadata
+from onyx.file_store.models import (
+    ChatFileType,
+    ExtractedContextFiles,
+    FileToolMetadata,
+    InMemoryChatFile,
+    UserFileMetadata,
+)
 from onyx.tools.models import SearchToolUsage
 
 # ---------------------------------------------------------------------------
@@ -93,7 +94,7 @@ class TestResolveContextUserFiles:
         db_session: MagicMock = MagicMock()
         user_id: UUID = uuid4()
         with patch(
-            "onyx.chat.process_message.get_user_files_from_project",
+            "onyx.chat.files.get_user_files_from_project",
             return_value=[project_file],
         ) as get_files:
             result: list[UserFile] = resolve_context_user_files(
@@ -124,14 +125,14 @@ class TestResolveContextUserFiles:
             )
         ]
         with patch(
-            "onyx.chat.process_message.get_user_files_from_project",
+            "onyx.chat.files.get_user_files_from_project",
             return_value=[shared_file, shared_file],
         ):
             selected: list[UserFile] = resolve_context_user_files(
                 persona, 99, uuid4(), MagicMock()
             )
         assert selected == [shared_file, persona_file]
-        available: AvailableFiles = _collect_available_file_ids(history, selected)
+        available: AvailableFiles = collect_available_file_ids(history, selected)
         assert set(available.user_file_ids) == {shared_file.id, persona_file.id}
         assert available.chat_file_ids == [attachment_id]
 
@@ -142,11 +143,11 @@ class TestResolveContextUserFiles:
         persona: MagicMock = _make_persona(42, [project_file, persona_file])
         with (
             patch(
-                "onyx.chat.process_message.get_user_files_from_project",
+                "onyx.chat.files.get_user_files_from_project",
                 return_value=[project_file],
             ),
             patch(
-                "onyx.chat.process_message.load_in_memory_chat_files",
+                "onyx.chat.files.load_in_memory_chat_files",
                 return_value=[
                     _make_in_memory_file(project_file.file_id, "Project evidence"),
                     _make_in_memory_file(persona_file.file_id, "Agent evidence"),
@@ -189,7 +190,7 @@ class TestExtractContextFiles:
         assert result.use_as_search_filter is False
         assert result.uncapped_token_count is None
 
-    @patch("onyx.chat.process_message.load_in_memory_chat_files")
+    @patch("onyx.chat.files.load_in_memory_chat_files")
     def test_files_fit_in_context_are_loaded(self, mock_load: MagicMock) -> None:
         file_id = str(uuid4())
         uf = _make_user_file(token_count=100, file_id=file_id)
@@ -238,7 +239,7 @@ class TestExtractContextFiles:
 
         assert result.use_as_search_filter is True
 
-    @patch("onyx.chat.process_message.load_in_memory_chat_files")
+    @patch("onyx.chat.files.load_in_memory_chat_files")
     def test_just_under_boundary_loads(self, mock_load: MagicMock) -> None:
         """Token count just under the 60% boundary should load files."""
         file_id = str(uuid4())
@@ -254,7 +255,7 @@ class TestExtractContextFiles:
         assert result.use_as_search_filter is False
         assert result.file_texts == ["data"]
 
-    @patch("onyx.chat.process_message.load_in_memory_chat_files")
+    @patch("onyx.chat.files.load_in_memory_chat_files")
     def test_multiple_files_aggregate_check(self, mock_load: MagicMock) -> None:
         """Multiple small files that individually fit but collectively overflow."""
         files = [_make_user_file(token_count=2500) for _ in range(3)]
@@ -270,7 +271,7 @@ class TestExtractContextFiles:
         assert result.file_texts == []
         mock_load.assert_not_called()
 
-    @patch("onyx.chat.process_message.load_in_memory_chat_files")
+    @patch("onyx.chat.files.load_in_memory_chat_files")
     def test_reserved_tokens_reduce_available_space(self, mock_load: MagicMock) -> None:
         """Reserved tokens shrink the available window."""
         file_id = str(uuid4())
@@ -286,7 +287,7 @@ class TestExtractContextFiles:
         assert result.use_as_search_filter is True
         mock_load.assert_not_called()
 
-    @patch("onyx.chat.process_message.load_in_memory_chat_files")
+    @patch("onyx.chat.files.load_in_memory_chat_files")
     def test_image_files_are_extracted(self, mock_load: MagicMock) -> None:
         file_id = str(uuid4())
         uf = _make_user_file(token_count=50, file_id=file_id)
@@ -310,7 +311,7 @@ class TestExtractContextFiles:
         assert result.file_texts == []
         assert result.total_token_count == 50
 
-    @patch("onyx.chat.process_message.load_in_memory_chat_files")
+    @patch("onyx.chat.files.load_in_memory_chat_files")
     def test_tool_metadata_file_id_matches_chat_history_file_id(
         self, mock_load: MagicMock
     ) -> None:
@@ -322,7 +323,7 @@ class TestExtractContextFiles:
         In production, UserFile.id (UUID PK) differs from UserFile.file_id
         (file-store path). Both pathways should produce the same file_id
         (UserFile.id) for FileReaderTool."""
-        from onyx.chat.chat_utils import build_file_context
+        from onyx.chat.files import build_file_context
 
         user_file_uuid = uuid4()
         file_store_path = f"user_files/{user_file_uuid}/data.csv"
@@ -369,7 +370,7 @@ class TestExtractContextFiles:
             f"but build_file_context uses '{chat_history_file_id}'."
         )
 
-    @patch("onyx.chat.process_message.DISABLE_VECTOR_DB", True)
+    @patch("onyx.chat.files.DISABLE_VECTOR_DB", True)
     def test_overflow_with_vector_db_disabled_provides_tool_metadata(self) -> None:
         """When vector DB is disabled, overflow produces FileToolMetadata."""
         uf = _make_user_file(token_count=7000, name="bigfile.txt")
@@ -384,7 +385,7 @@ class TestExtractContextFiles:
         assert len(result.file_metadata_for_tool) == 1
         assert result.file_metadata_for_tool[0].filename == "bigfile.txt"
 
-    @patch("onyx.chat.process_message.load_in_memory_chat_files")
+    @patch("onyx.chat.files.load_in_memory_chat_files")
     def test_metadata_only_files_not_counted_in_aggregate_tokens(
         self, mock_load: MagicMock
     ) -> None:
@@ -421,7 +422,7 @@ class TestExtractContextFiles:
         assert len(result.file_metadata_for_tool) == 1
         assert result.file_metadata_for_tool[0].filename == "huge.xlsx"
 
-    @patch("onyx.chat.process_message.load_in_memory_chat_files")
+    @patch("onyx.chat.files.load_in_memory_chat_files")
     def test_metadata_only_files_loaded_as_tool_metadata(
         self, mock_load: MagicMock
     ) -> None:
@@ -481,7 +482,7 @@ class TestExtractContextFiles:
         assert len(result.file_metadata_for_tool) == 1
         assert result.file_metadata_for_tool[0].filename == "data.xlsx"
 
-    @patch("onyx.chat.process_message.DISABLE_VECTOR_DB", True)
+    @patch("onyx.chat.files.DISABLE_VECTOR_DB", True)
     def test_overflow_no_vector_db_includes_all_files_in_tool_metadata(self) -> None:
         """When vector DB is disabled and files overflow, all files
         (both text and metadata-only) appear in file_metadata_for_tool."""
@@ -634,7 +635,7 @@ class TestSearchFilterDetermination:
 class TestContextFileStagingFlag:
     """`staged_for_tools` must mirror what actually reaches PythonTool.
 
-    `_load_context_user_files_for_tools` loads only metadata-only files into
+    `load_context_user_files_for_tools` loads only metadata-only files into
     `chat_files_for_tools`, so everything else is listed for the LLM but never
     staged. The out-of-context file notice reads this flag to decide whether it
     may name the python tool; getting it wrong sends the model after bytes the
@@ -642,7 +643,7 @@ class TestContextFileStagingFlag:
     """
 
     def _metadata_for(self, name: str, file_type: str) -> FileToolMetadata:
-        from onyx.chat.process_message import _build_tool_metadata
+        from onyx.chat.files import _build_tool_metadata
 
         return _build_tool_metadata(
             UserFileMetadata(

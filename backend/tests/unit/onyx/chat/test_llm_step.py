@@ -13,9 +13,9 @@ from onyx.chat.llm_step import (
     extract_tool_calls_from_response_text,
     translate_history_to_llm_format,
 )
-from onyx.chat.models import ChatLoadedFile, ChatMessageSimple, ToolCallSimple
+from onyx.chat.models import ChatMessageSimple, ToolCallSimple
 from onyx.configs.constants import MessageType
-from onyx.file_store.models import ChatFileType
+from onyx.file_store.models import ChatFileType, ChatLoadedFile
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.model_request import AssistantMessage, ToolMessage, UserMessage
