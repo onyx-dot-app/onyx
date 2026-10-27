@@ -7046,7 +7046,7 @@
           "label": "Add Custom Model"
         },
         "bringYourOwn": {
-          "cloudDescription": "Connect a LiteLLM proxy, an Azure OpenAI deployment or a Bifrost gateway. You supply the model name. For LiteLLM and Azure, you also supply the dimension.",
+          "cloudDescription": "Connect a LiteLLM proxy, an Azure OpenAI deployment, a Bifrost gateway or an OpenAI-compatible endpoint. You supply the model name. For LiteLLM, Azure and OpenAI-compatible endpoints, you also supply the dimension.",
           "selfHostedDescription": "Run a Hugging Face embedding model that is not in the list above. You supply the model name, dimension and prefixes.",
           "title": "Advanced: bring your own model or proxy"
         },

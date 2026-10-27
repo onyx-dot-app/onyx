@@ -7046,7 +7046,7 @@
           "label": "カスタムモデルを追加"
         },
         "bringYourOwn": {
-          "cloudDescription": "LiteLLM プロキシ、Azure OpenAI デプロイメント、または Bifrost ゲートウェイを接続します。モデル名はご自身で指定します。LiteLLM と Azure では次元も指定します。",
+          "cloudDescription": "LiteLLM プロキシ、Azure OpenAI デプロイメント、Bifrost ゲートウェイ、または OpenAI 互換エンドポイントを接続します。モデル名はご自身で指定します。LiteLLM、Azure、OpenAI 互換エンドポイントでは次元も指定します。",
           "selfHostedDescription": "上の一覧にない Hugging Face の埋め込みモデルを実行します。モデル名、次元、プレフィックスはご自身で指定します。",
           "title": "詳細設定: 独自のモデルまたはプロキシを使用"
         },
