@@ -16,6 +16,7 @@ package release
 //	R11 edge tag                 -> web + sandbox
 //	R12 dev-build tag            -> web + sandbox, not a test run
 //	R13 dev-build with "cloud"   -> never a cloud tag
+//	R14 dev-build in mixed case  -> dev build, as GitHub's startsWith matches it
 //
 // Every tag that deploys a full stack builds the sandbox image: test runs,
 // stable, beta, cloud, nightly, edge and dev builds.
@@ -123,6 +124,12 @@ func TestClassify_routesTagsToBuilds(t *testing.T) {
 			ref:  "dev-build-cloud-fix-c86bc0e",
 			// A cloud tag dispatches the cloud deployment, so a dev build
 			// must never become one.
+			want: Classification{BuildWeb: true, BuildSandbox: true},
+		},
+		{
+			name: "R14 dev build in mixed case",
+			ref:  "Dev-Build-cloud-fix-c86bc0e",
+			// check-version-tag skips this tag, so it must not be a cloud tag.
 			want: Classification{BuildWeb: true, BuildSandbox: true},
 		},
 	}

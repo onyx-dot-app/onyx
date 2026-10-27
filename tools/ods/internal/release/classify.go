@@ -51,7 +51,9 @@ const DevBuildTagPrefix = "dev-build-"
 // event ("push", "workflow_dispatch"). A workflow_dispatch on anything but a
 // version or nightly tag is a test run.
 func Classify(ref, sha, event string) (Classification, error) {
-	isDevBuild := strings.HasPrefix(ref, DevBuildTagPrefix)
+	// deployment.yml also gates jobs on these names with startsWith and ==,
+	// which ignore case, so the matches here ignore case too.
+	isDevBuild := hasPrefixFold(ref, DevBuildTagPrefix)
 	// "cloud" is matched anywhere in the name, not just as a vX.Y.Z-cloud.N
 	// suffix, so ad-hoc cloud tags still route to the cloud web image. A dev
 	// build is never a cloud tag: a cloud tag dispatches the cloud deployment.
@@ -59,7 +61,7 @@ func Classify(ref, sha, event string) (Classification, error) {
 	isNightly := strings.HasPrefix(ref, "nightly")
 	// Environments that deploy every image in one version (nightly, edge and
 	// dev builds) need a sandbox image under that version too.
-	isWholeStack := strings.HasPrefix(ref, "nightly-latest") || ref == "edge" || isDevBuild
+	isWholeStack := hasPrefixFold(ref, "nightly-latest") || strings.EqualFold(ref, "edge") || isDevBuild
 	isVersion := classifyVersionRe.MatchString(ref)
 	isStable := classifyStableRe.MatchString(ref)
 	isBeta := classifyBetaRe.MatchString(ref)
@@ -102,6 +104,11 @@ func Classify(ref, sha, event string) (Classification, error) {
 	}
 
 	return c, nil
+}
+
+// hasPrefixFold reports whether s begins with prefix, ignoring case.
+func hasPrefixFold(s, prefix string) bool {
+	return len(s) >= len(prefix) && strings.EqualFold(s[:len(prefix)], prefix)
 }
 
 // shortSHA truncates a commit SHA to the 7 characters used in image tags.
