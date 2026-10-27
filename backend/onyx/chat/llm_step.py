@@ -432,8 +432,7 @@ def _drop_thinking_with_changed_prefix(
     broken = not aligned
     for position, index in enumerate(assistant_indices):
         msg = result[index]
-        assert isinstance(msg, AssistantMessage)
-        if not msg.thinking_blocks:
+        if not isinstance(msg, AssistantMessage) or not msg.thinking_blocks:
             continue
         minted = thinking[position] if aligned else None
         if (
