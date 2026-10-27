@@ -46,14 +46,18 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Setup uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # ratchet:astral-sh/setup-uv@v10.0.1
+      # Routing lives in tools/ods next to this workflow, so build ods from the
+      # same commit: a pinned release would lag behind the outputs used here.
+      # go.sum verifies every module. No cache, so a poisoned cache entry
+      # cannot reach a release build.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v5
         with:
-          version: "0.11.25"
-          enable-cache: false
+          go-version-file: tools/ods/go.mod
+          cache: false
 
-      - name: Install ods from uv.lock
-        run: uv sync --frozen --no-install-project --only-group ods
+      - name: Build ods
+        working-directory: tools/ods
+        run: go build -o "${RUNNER_TEMP}/ods" .
 
       - name: Check which components to build and version info
         id: check
@@ -64,7 +68,7 @@ jobs:
           # `ods release classify` owns the routing rules; see
           # tools/ods/internal/release/classify.go. The checkout above fetches
           # all tags, which the "latest" decision needs.
-          uv run --no-sync ods release classify \
+          "${RUNNER_TEMP}/ods" release classify \
             --ref "${GITHUB_REF_NAME}" \
             --sha "${GITHUB_SHA}" \
             --event "${EVENT_NAME}" >> "$GITHUB_OUTPUT"
@@ -262,19 +266,22 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Setup uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # ratchet:astral-sh/setup-uv@v10.0.1
+      # Routing lives in tools/ods next to this workflow, so build ods from the
+      # same commit: a pinned release would lag behind the outputs used here.
+      # go.sum verifies every module. No cache, so a poisoned cache entry
+      # cannot reach a release build.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v5
         with:
-          version: "0.11.25"
-          # NOTE: This isn't caching much and zizmor suggests this could be poisoned, so disable.
-          enable-cache: false
+          go-version-file: tools/ods/go.mod
+          cache: false
 
-      - name: Install ods from uv.lock
-        run: uv sync --frozen --no-install-project --only-group ods
+      - name: Build ods
+        working-directory: tools/ods
+        run: go build -o "${RUNNER_TEMP}/ods" .
 
       - name: Validate the tag is versioned correctly
         run: |
-          uv run --no-sync ods release --check --ref "$GITHUB_REF_NAME"
+          "${RUNNER_TEMP}/ods" release --check --ref "$GITHUB_REF_NAME"
 
   notify-slack-on-tag-check-failure:
     needs:
