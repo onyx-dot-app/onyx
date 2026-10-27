@@ -17,7 +17,7 @@ import {
   BackendChatSession,
   ChatSessionSharedStatus,
   Message,
-} from "@/app/app/interfaces";
+} from "@/app/app/types";
 import {
   SEARCH_PARAM_NAMES,
   shouldSubmitOnLoad,

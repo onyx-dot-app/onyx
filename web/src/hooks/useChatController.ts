@@ -49,7 +49,7 @@ import {
   StreamingError,
   ToolCallMetadata,
   UserKnowledgeFilePacket,
-} from "@/app/app/interfaces";
+} from "@/app/app/types";
 import { StreamStopReason } from "@/lib/search/types";
 import { createChatSession } from "@/app/app/services/lib";
 import {

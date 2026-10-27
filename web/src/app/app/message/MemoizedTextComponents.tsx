@@ -3,7 +3,7 @@ import type { ExtraProps } from "react-markdown";
 import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
 import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/types";
-import { SubQuestionDetail, CitationMap } from "../interfaces";
+import { SubQuestionDetail, CitationMap } from "@/app/app/types";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { ProjectFile } from "@/lib/projects/types";
 import { BlinkingBar } from "./BlinkingBar";

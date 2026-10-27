@@ -4,17 +4,22 @@ from unittest.mock import Mock
 
 import pytest
 
+from onyx.agents.models import RunState, StepResult
+from onyx.agents.runtime import Agent, RunFailed
 from onyx.chat.errors import (
     _REFUSAL_FINISH_REASONS,
     EmptyLLMResponseError,
     build_empty_llm_response_error,
+    chat_error,
 )
-from onyx.llm.interfaces import LLMConfig
+from onyx.llm.interfaces import GenerationContext, LLMConfig
 from onyx.llm.models import (
     AssistantMessage,
     ThinkingContent,
     ToolChoiceOptions,
 )
+from onyx.tracing.flows import LLMFlow
+from tests.unit.onyx.agents.fakes import FakeModelClient
 
 
 class TestEmptyLlmResponseClassification:
@@ -101,3 +106,52 @@ class TestEmptyLlmResponseClassification:
         assert err.is_retryable is False
         assert err.finish_reason == finish_reason
         assert "Claude Opus 4.8" not in err.client_error_msg
+
+
+def test_empty_response_diagnostics_survive_saved_run_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("onyx.chat.errors.DEV_MODE", False)
+    monkeypatch.setattr("onyx.agents.runtime.logger.exception", lambda *_: None)
+    llm = FakeModelClient(lambda *_: AssistantMessage(stop_reason="length"))
+    monkeypatch.setattr(
+        llm,
+        "redact_error",
+        lambda text: text.replace("test-private-value", "[REDACTED]"),
+    )
+    error = EmptyLLMResponseError(
+        provider=llm.config.model_provider,
+        model=llm.config.model_name,
+        tool_choice=ToolChoiceOptions.REQUIRED,
+        client_error_msg="Empty response test-private-value",
+        finish_reason="length",
+    )
+
+    def reject_empty_response(_result: StepResult) -> bool:
+        raise error from RuntimeError("raw-provider-detail")
+
+    run = Agent(
+        llm,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        after_step=reject_empty_response,
+    ).start(max_steps=1)
+    with pytest.raises(RunFailed):
+        run.result(timeout=2)
+    assert run.wait_for_idle(2)
+    serialized = run.snapshot().model_dump_json()
+    assert "test-private-value" not in serialized
+    assert "raw-provider-detail" not in serialized
+    restored = RunState.model_validate_json(serialized)
+    assert restored.failure is not None
+    packet = chat_error(RunFailed(restored.failure), llm, model_index=1)
+    assert packet == chat_error(error, llm, model_index=1)
+    assert packet.error_code == "EMPTY_LLM_RESPONSE"
+    assert packet.error == "Empty response [REDACTED]"
+    assert packet.details == {
+        "model": "test-model",
+        "provider": "openai",
+        "model_index": 1,
+        "tool_choice": "required",
+        "finish_reason": "length",
+    }
+    assert packet.stack_trace is None

@@ -1,7 +1,7 @@
 """Build chat instructions, reminders, and prompts from conversation history."""
 
 import json
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from uuid import UUID
 
 from pydantic import ValidationError
@@ -595,6 +595,7 @@ def prepare_prompt(
     all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
     llm_config: LLMConfig | None = None,
     available_tool_names: set[str] | None = None,
+    context_file_citations: Mapping[str, int] | None = None,
 ) -> list[Message]:
     """Assemble detached prompt messages without modifying borrowed inputs."""
     # Nested payloads stay read-only until output formatting detaches them.
@@ -627,7 +628,9 @@ def prepare_prompt(
     if custom_agent_prompt is not None:
         result.append(custom_agent_prompt.model_copy())
     if context_files and context_files.file_texts:
-        result.append(_create_context_files_message(context_files))
+        result.append(
+            _create_context_files_message(context_files, context_file_citations)
+        )
     for message in result:
         message.metadata = prompt_metadata(message).model_copy(
             update={"should_cache": True}
@@ -750,17 +753,24 @@ def _finalize_file_metadata_message(
 
 def _create_context_files_message(
     context_files: ExtractedContextFiles,
+    citation_numbers: Mapping[str, int] | None = None,
 ) -> Message:
     """Build a user message with numbered document text and titles."""
     documents: list[ContextDocument] = []
     for idx, file_text in enumerate(context_files.file_texts, start=1):
-        title = (
-            context_files.file_metadata[idx - 1].filename
+        metadata = (
+            context_files.file_metadata[idx - 1]
             if idx - 1 < len(context_files.file_metadata)
             else None
         )
         documents.append(
-            ContextDocument(document=idx, title=title or None, contents=file_text)
+            ContextDocument(
+                document=citation_numbers[metadata.file_id]
+                if citation_numbers is not None and metadata is not None
+                else idx,
+                title=metadata.filename or None if metadata is not None else None,
+                contents=file_text,
+            )
         )
 
     documents_json = json.dumps(

@@ -7,19 +7,26 @@ from functools import partial
 from unittest.mock import Mock
 
 import pytest
+from pydantic import JsonValue, TypeAdapter
 
 from onyx.agents.events import AgentEvent
 from onyx.agents.models import AgentStep, StepInput
 from onyx.agents.runtime import Run
 from onyx.chat.agent import ChatAgent
 from onyx.chat.emitter import Emitter
-from onyx.chat.models import IncognitoState, PersonaPromptConfig, PromptMetadata
+from onyx.chat.models import (
+    ChatMessageMetadata,
+    ContextDocuments,
+    IncognitoState,
+    PersonaPromptConfig,
+    PromptMetadata,
+)
 from onyx.chat.presentation import ResponsePresenter, project_response
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.deep_research.tool_definitions import RESEARCH_AGENT_TOOL_NAME
-from onyx.file_store.models import ExtractedContextFiles
+from onyx.file_store.models import ContextFileMetadata, ExtractedContextFiles
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
@@ -28,7 +35,9 @@ from onyx.llm.model_response import (
 )
 from onyx.llm.models import (
     AssistantMessage,
+    GenerationRequest,
     Message,
+    TextContent,
     ToolCall,
     ToolChoiceOptions,
     ToolResult,
@@ -40,7 +49,12 @@ from onyx.tools.models import ChatFile
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.utils.fleet_query_telemetry import QueryMode, QueryObservation
-from tests.unit.onyx.agents.fakes import EchoTool, ScriptedLLM, run_agent
+from tests.unit.onyx.agents.fakes import (
+    EchoTool,
+    FakeModelClient,
+    ScriptedLLM,
+    run_agent,
+)
 
 
 @pytest.mark.parametrize(
@@ -416,6 +430,125 @@ def test_chat_reuses_completed_source_artifacts_without_duplicate_documents(
             packet.obj.type == "citation_info" and packet.obj.document_id == "reference"
             for packet in output.queue
         )
+
+
+@pytest.mark.parametrize("source_record", ["tool", "metadata"])
+def test_context_file_citations_keep_history_numbers_across_turns(
+    source_record: str,
+) -> None:
+    source = SearchDoc(
+        document_id="reference",
+        chunk_ind=0,
+        semantic_identifier="Reference",
+        link="https://example.com/reference",
+        blurb="Evidence",
+        source_type=DocumentSource.WEB,
+        boost=0,
+        hidden=False,
+        metadata={},
+        match_highlights=[],
+    )
+    history: list[Message] = [UserMessage(content="Find evidence")]
+    if source_record == "tool":
+        history.extend(
+            [
+                AssistantMessage(
+                    content=[ToolCall(id="search", name=SearchTool.NAME, arguments={})]
+                ),
+                ToolResultMessage(
+                    tool_call_id="search",
+                    tool_name=SearchTool.NAME,
+                    content="Evidence [1]",
+                    details=SearchDocsResponse(
+                        search_docs=[source], citation_mapping={1: source.document_id}
+                    ),
+                ),
+            ]
+        )
+    else:
+        history.append(
+            AssistantMessage(
+                content=[TextContent(text="Evidence [1]")],
+                metadata=ChatMessageMetadata(sources={1: source}),
+            )
+        )
+    files = [
+        ContextFileMetadata(file_id="file-a", filename="A.txt", file_content="File A"),
+        ContextFileMetadata(file_id="file-b", filename="B.txt", file_content="File B"),
+    ]
+    requests: list[GenerationRequest] = []
+
+    def reply(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        requests.append(request)
+        return AssistantMessage(
+            content=[TextContent(text="Evidence [1], file [2], other file [3]")]
+        )
+
+    for ordered_files in (files, list(reversed(files))):
+        feature = ChatAgent(
+            messages=history,
+            tools=[],
+            custom_agent_prompt=None,
+            base_system_prompt="Use the evidence.",
+            context_files=ExtractedContextFiles(
+                file_texts=[file.file_content for file in ordered_files],
+                image_files=[],
+                use_as_search_filter=False,
+                total_token_count=10,
+                file_metadata=ordered_files,
+                uncapped_token_count=None,
+            ),
+            persona=None,
+            user_memory_context=None,
+            llm=FakeModelClient(reply),
+            token_counter=len,
+        )
+        # Resume decodes feature state separately from the retained conversation.
+        feature.restore_state(
+            TypeAdapter(dict[str, JsonValue]).validate_json(
+                feature.capture_state().model_dump_json()
+            )
+        )
+        runs: list[Run] = []
+        run_agent(
+            feature,
+            max_steps=1,
+            messages=[UserMessage(content="Compare the sources")],
+            runs=runs,
+        )
+        assert feature._tool_context().citation_mapping == {
+            1: "reference",
+            2: "file-a",
+            3: "file-b",
+        }
+        assert feature._tool_context().next_citation_num == 4
+        context = next(
+            message
+            for message in requests[-1].messages
+            if isinstance(message, UserMessage)
+            and isinstance(message.content, str)
+            and message.content.startswith(
+                "Here are some documents provided for context"
+            )
+        )
+        assert isinstance(context, UserMessage) and isinstance(context.content, str)
+        documents = ContextDocuments.model_validate_json(
+            context.content.split("\n", 1)[1]
+        ).documents
+        assert {doc.title: doc.document for doc in documents} == {
+            "A.txt": 2,
+            "B.txt": 3,
+        }
+        projection = project_response(runs[0].snapshot(), tool_ids={})
+        assert projection.answer is not None
+        assert "[[1]](https://example.com/reference)" in projection.answer
+        assert {
+            number: doc.document_id
+            for number, doc in projection.citation_to_doc.items()
+        } == {1: "reference", 2: "file-a", 3: "file-b"}
+        history = feature.state.messages
 
 
 @pytest.mark.parametrize("replace_base", [False, True])

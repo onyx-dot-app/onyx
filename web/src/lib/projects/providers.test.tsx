@@ -4,7 +4,7 @@ import { NextIntlClientProvider } from "next-intl";
 import englishMessages from "@/i18n/messages/en.json";
 import { ProjectsProvider, useProjectsContext } from "@/lib/projects/providers";
 import { type ProjectFile, UserFileStatus } from "@/lib/projects/types";
-import { ChatFileType } from "@/app/app/interfaces";
+import { ChatFileType } from "@/app/app/types";
 
 const mockUploadFiles = jest.fn();
 const mockGetRecentFiles = jest.fn();

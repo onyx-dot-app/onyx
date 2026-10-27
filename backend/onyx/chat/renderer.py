@@ -235,11 +235,6 @@ class MessageRenderer:
 
     def tool_placement(self, call_id: str) -> Placement:
         if call_id not in self.tool_placements:
-            if self.settings.mode == PresentationMode.CODING_THINKING:
-                if self._answer_placement is None:
-                    self._answer_placement = self.layout.next_section(self.parent)
-                self.tool_placements[call_id] = self._answer_placement
-                return self._answer_placement
             previous = self._last_tool_placement
             placement = (
                 previous.model_copy(update={"tab_index": previous.tab_index + 1})

@@ -1,4 +1,4 @@
-import type { BackendChatSession } from "@/app/app/interfaces";
+import type { BackendChatSession } from "@/app/app/types";
 
 const pendingChecks = new Map<string, Promise<void>>();
 

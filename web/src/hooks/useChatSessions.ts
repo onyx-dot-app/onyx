@@ -8,7 +8,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import useSWRInfinite from "swr/infinite";
-import { ChatSession, ChatSessionSharedStatus } from "@/app/app/interfaces";
+import { ChatSession, ChatSessionSharedStatus } from "@/app/app/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { MinimalAgent } from "@/lib/agents/types";

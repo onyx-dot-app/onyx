@@ -36,10 +36,11 @@ here. Read the component that documents the setting in its env table.
 
 | Path | Component(s) |
 |---|---|
-| `backend/onyx/chat/agent.py`, `backend/onyx/chat/prepare.py`, `backend/onyx/chat/execution.py`, `backend/onyx/agents/runtime.py`, `backend/onyx/chat/process_message.py`, `backend/onyx/chat/models.py`, `backend/onyx/chat/chat_processing_checker.py`, `backend/onyx/chat/stop_signal_checker.py` | core-chat-loop |
+| `backend/onyx/chat/agent.py`, `backend/onyx/chat/prepare.py`, `backend/onyx/chat/execution.py`, `backend/onyx/chat/process_message.py`, `backend/onyx/chat/models.py`, `backend/onyx/chat/chat_processing_checker.py`, `backend/onyx/chat/stop_signal_checker.py` | core-chat-loop |
 | `backend/onyx/chat/emitter.py`, `backend/onyx/chat/renderer.py`, `backend/onyx/chat/presentation.py`, `stream_buffer.py` | core-chat-loop, streaming-protocol |
-| `backend/onyx/agents/agent_coordination.py`, `backend/onyx/agents/concurrency.py`, `backend/onyx/agents/events.py`, `backend/onyx/agents/execution_records.py`, `backend/onyx/agents/README.md` | core-chat-loop |
-| `backend/onyx/context/models.py`, `backend/onyx/chat/prompt_utils.py`, `backend/onyx/chat/prompt_formatting.py`, `backend/onyx/agents/compaction.py`, `incognito*.py`, `backend/onyx/llm/token_budget.py` | context-assembly |
+| `backend/onyx/agents/` | agent-runtime |
+| `backend/onyx/agents/compaction.py` | agent-runtime, context-assembly |
+| `backend/onyx/context/models.py`, `backend/onyx/chat/prompt_utils.py`, `backend/onyx/chat/prompt_formatting.py`, `incognito*.py`, `backend/onyx/llm/token_budget.py` | context-assembly |
 | `backend/onyx/prompts/`, `backend/ee/onyx/prompts/` | context-assembly, agents-personas |
 | `backend/onyx/chat/citation_processor.py`, `citation_utils.py` | citations |
 | `backend/onyx/chat/persistence.py`, `backend/onyx/chat/history_store.py`, `backend/onyx/chat/restoration.py`, `backend/onyx/chat/checkpoint.py`, `backend/onyx/chat/run_store.py`, `backend/onyx/chat/subagents.py`, `backend/onyx/db/chat_subagents.py`, `backend/onyx/db/chat_checkpoint.py`, `backend/onyx/db/chat_response.py`, `backend/onyx/db/chat.py`, `db/chat_search.py`, `db/feedback.py` | chat-persistence |
@@ -51,7 +52,8 @@ here. Read the component that documents the setting in its env table.
 
 | Path | Component(s) |
 |---|---|
-| `backend/onyx/tools/interface.py`, `models.py`, `tool_constructor.py`, `backend/onyx/agents/tool_execution.py`, `built_in_tools.py`, `tool_name.py` | tools-framework |
+| `backend/onyx/tools/interface.py`, `models.py`, `tool_constructor.py`, `built_in_tools.py`, `tool_name.py` | tools-framework |
+| `backend/onyx/agents/tool_execution.py`, `backend/onyx/agents/tools.py` | agent-runtime, tools-framework |
 | `backend/onyx/tools/tool_implementations/search/`, `backend/onyx/tools/tool_implementations/search_like_tool_utils.py` | internal-search, tools-framework |
 | `backend/onyx/tools/tool_implementations/web_search/`, `backend/onyx/tools/tool_implementations/open_url/` | web-search |
 | `backend/onyx/tools/tool_implementations/knowledge_graph/` | **incomplete feature.** The knowledge graph tool cannot run yet. See INDEX.md, Incomplete features. |

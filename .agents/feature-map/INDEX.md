@@ -38,6 +38,7 @@ loop with tools, streams packets back, and saves the turn.
 | | Component | What it covers |
 |---|---|---|
 | ✅ | [core-chat-loop](components/core-chat-loop.md) | `ChatTurnExecution` → `ChatAgent` → shared SDK runtime. The turn engine. |
+| ✅ | [agent-runtime](components/agent-runtime.md) | Shared model/tool execution, cancellation, child coordination, compaction, and resumable state. |
 | ✅ | [context-assembly](components/context-assembly.md) | System prompt, custom agent prompt, project files, user files, reminders, token budget, compression. |
 | ✅ | [streaming-protocol](components/streaming-protocol.md) | Packet types, `Placement`/`turn_index`, the emitter, the wire format the frontend consumes. |
 | ✅ | [tools-framework](components/tools-framework.md) | The `Tool` interface, tool construction per turn, the tool runner, built-in tool catalogue. |

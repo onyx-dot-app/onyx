@@ -378,10 +378,8 @@ incognito mode does not persist content skip the naming call.
 item stores one model generation, including thinking blocks and provider metadata.
 `ToolCall.result` stores the actual tool result and typed application details.
 Readers rebuild model history from these records in step and tool-call order.
-The existing production loop still uses `chat/save_chat.py` and its legacy rows.
-Both writers use `db/chat_display.py` for recording policy, token counts, source
-links, citations, and referenced files. Their tool-record writes remain separate.
-These APIs prepare the runtime transition; they do not switch chat execution.
+`db/chat_response.py` writes the displayed answer, token counts, source links,
+citations, and referenced files alongside the accepted runtime records.
 
 `db/chat_subagents.py` loads child history from the selected conversation branch.
 A child session belongs to the root conversation that created it. Public chat
@@ -396,7 +394,7 @@ retain status and usage without response items, tool results, or child content.
 Projected saves update the displayed answer and accepted records in one transaction.
 `read_response_replay_data` loads detached tool IDs and saved source documents.
 It checks references against accepted calls and keeps saved document IDs for source cards.
-Existing legacy tool response text remains a mapped column for the production writer.
+Legacy response text remains readable for conversations created before SDK adoption.
 
 ## 5. Contracts and invariants
 
@@ -555,9 +553,10 @@ uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit/db/
 - **The empty root message means message counts are off by one** from what a
   naive count of "turns" suggests. Do not assume `len(messages)` is `2 *
   num_turns`.
-- **Tool content and application details have different consumers.** SDK history
-  replays the saved result content to the model. Rendering reads its typed details.
-  Legacy history may use placeholders because it lacks saved model-facing results.
+- **Tool content and application details have different consumers.** Storage retains model-facing results and typed rendering details. Ordinary chat
+  replaces prior-turn tool content with placeholders when assembling the prompt,
+  except image-generation results. Stored content remains available for citations
+  and rendering. Other SDK callers choose their own prompt policy.
 - **A `ToolCall` with `parent_tool_call_id` set is a sub-agent's internal
   call, not a retry.** `turn_number` distinguishes retries/sequences;
   `parent_tool_call_id` distinguishes nesting depth. Conflating the two will
