@@ -1,9 +1,8 @@
 "use client";
 
-import React, { useRef } from "react";
+import React from "react";
 import { useTranslations } from "next-intl";
-import Text from "@/refresh-components/texts/Text";
-import { Button, InputTypeIn } from "@opal/components";
+import { Button, InputTypeIn, Text } from "@opal/components";
 import {
   OnboardingState,
   OnboardingActions,
@@ -41,8 +40,6 @@ const NameStep = React.memo(
       }
     };
 
-    const inputRef = useRef<HTMLInputElement>(null);
-
     const handleEdit = () => {
       setButtonActive(true);
       goToStep(OnboardingStep.Name);
@@ -54,27 +51,20 @@ const NameStep = React.memo(
         role="group"
         aria-label="onboarding-name-step"
       >
-        {/* Pointer convenience only — the input is already keyboard reachable. */}
-        <div
-          role="presentation"
-          className="contents"
-          onClick={() => inputRef.current?.focus()}
+        <InputHorizontal
+          withLabel
+          fillInput
+          icon={SvgUser}
+          title={t("nameStep.title", { appName })}
+          description={t("nameStep.description")}
         >
-          <InputHorizontal
-            responsive
-            icon={SvgUser}
-            title={t("nameStep.title", { appName })}
-            description={t("nameStep.description")}
-          >
-            <InputTypeIn
-              ref={inputRef}
-              placeholder={t("nameStep.input.placeholder")}
-              value={userName || ""}
-              onChange={(e) => updateName(e.target.value)}
-              onKeyDown={handleKeyDown}
-            />
-          </InputHorizontal>
-        </div>
+          <InputTypeIn
+            placeholder={t("nameStep.input.placeholder")}
+            value={userName || ""}
+            onChange={(e) => updateName(e.target.value)}
+            onKeyDown={handleKeyDown}
+          />
+        </InputHorizontal>
       </div>
     ) : (
       <Hoverable.Root group="nameStep" width="full">
@@ -95,11 +85,11 @@ const NameStep = React.memo(
                 "w-5 h-5"
               )}
             >
-              <Text as="p" inverted secondaryBody>
+              <Text as="p" font="secondary-body" color="text-inverted-05">
                 {userName?.[0]?.toUpperCase()}
               </Text>
             </InputAvatar>
-            <Text as="p" text04 mainUiAction>
+            <Text as="p" font="main-ui-action" color="text-04">
               {userName}
             </Text>
           </div>

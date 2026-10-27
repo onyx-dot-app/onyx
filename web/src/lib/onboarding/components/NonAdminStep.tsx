@@ -1,23 +1,21 @@
 "use client";
 
-import React, { useRef, useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
-import Text from "@/refresh-components/texts/Text";
-import { InputTypeIn } from "@opal/components";
+import { InputTypeIn, Text } from "@opal/components";
 import { updateUserPersonalization } from "@/lib/users/svc";
 import { useUser } from "@/providers/UserProvider";
 import { Button } from "@opal/components";
 import { InputAvatar } from "@opal/components";
 import { cn, clickOnKeyDown } from "@opal/utils";
 import { SvgCheckCircle, SvgEdit, SvgUser, SvgX } from "@opal/icons";
-import { ContentAction, InputHorizontal, toast } from "@opal/layouts";
+import { ContentAction, InputHorizontal, Section, toast } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
 import { useSettings } from "@/lib/settings/hooks";
 
 export default function NonAdminStep() {
   const t = useTranslations("onboarding");
   const { appName } = useSettings();
-  const inputRef = useRef<HTMLInputElement>(null);
   const { user, refreshUser } = useUser();
   const [name, setName] = useState("");
   const [showHeader, setShowHeader] = useState(false);
@@ -99,39 +97,38 @@ export default function NonAdminStep() {
           role="group"
           aria-label="non-admin-name-prompt"
         >
-          {/* Pointer convenience only — the input is already keyboard reachable. */}
-          <div
-            role="presentation"
-            className="contents"
-            onClick={() => inputRef.current?.focus()}
+          <InputHorizontal
+            withLabel
+            fillInput
+            icon={SvgUser}
+            title={t("nameStep.title", { appName })}
+            description={t("nameStep.description")}
           >
-            <InputHorizontal
-              responsive
-              icon={SvgUser}
-              title={t("nameStep.title", { appName })}
-              description={t("nameStep.description")}
+            <Section
+              flexDirection="row"
+              justifyContent="start"
+              alignItems="center"
+              gap={2}
+              height="auto"
             >
-              <div className="flex w-full items-center gap-2">
-                <InputTypeIn
-                  ref={inputRef}
-                  placeholder={t("nameStep.input.placeholder")}
-                  value={name || ""}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                    setName(e.target.value)
+              <InputTypeIn
+                placeholder={t("nameStep.input.placeholder")}
+                value={name || ""}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setName(e.target.value)
+                }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && name && name.trim().length > 0) {
+                    e.preventDefault();
+                    handleSave();
                   }
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && name && name.trim().length > 0) {
-                      e.preventDefault();
-                      handleSave();
-                    }
-                  }}
-                />
-                <Button disabled={name === ""} onClick={handleSave}>
-                  {t("nonAdminStep.save.label")}
-                </Button>
-              </div>
-            </InputHorizontal>
-          </div>
+                }}
+              />
+              <Button disabled={name === ""} onClick={handleSave}>
+                {t("nonAdminStep.save.label")}
+              </Button>
+            </Section>
+          </InputHorizontal>
         </div>
       ) : (
         <Hoverable.Root group="nonAdminName" width="full">
@@ -150,11 +147,11 @@ export default function NonAdminStep() {
                   "w-5 h-5"
                 )}
               >
-                <Text as="p" inverted secondaryBody>
+                <Text as="p" font="secondary-body" color="text-inverted-05">
                   {savedName?.[0]?.toUpperCase()}
                 </Text>
               </InputAvatar>
-              <Text as="p" text04 mainUiAction>
+              <Text as="p" font="main-ui-action" color="text-04">
                 {savedName}
               </Text>
             </div>
