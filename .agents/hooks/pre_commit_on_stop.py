@@ -93,49 +93,70 @@ def _automatic_merge(repo: Path, *merge_args: str) -> str | None:
 
 
 def _merge_resolution_files(repo: Path, merge: str) -> set[str]:
-    parents = _git(repo, "rev-list", "--parents", "-n", "1", merge).split()[1:]
-    automatic = (
-        _automatic_merge(repo, "--allow-unrelated-histories", *parents)
-        if len(parents) == 2
-        else None
-    )
-    if automatic is not None:
-        return _git_paths(repo, "diff", "--name-only", automatic, merge)
-    # merge-tree takes two branches; otherwise keep files that match no parent.
-    return set.intersection(
-        *(_git_paths(repo, "diff", "--name-only", parent, merge) for parent in parents)
-    )
+    """Files a merge commit changed beyond Git's automatic merge of its parents."""
+    first, *others = _git(repo, "rev-list", "--parents", "-n", "1", merge).split()[1:]
+    combined = first
+    for index, parent in enumerate(others, start=1):
+        tree = _automatic_merge(repo, "--allow-unrelated-histories", combined, parent)
+        if tree is None:
+            return _git_paths(repo, "diff", "--name-only", first, merge)
+        # An octopus merge folds each parent into the result of the ones before.
+        combined = (
+            tree
+            if index == len(others)
+            else _git(
+                repo, "commit-tree", tree, "-p", combined, "-p", parent, "-m", "merge"
+            ).strip()
+        )
+    return _git_paths(repo, "diff", "--name-only", combined, merge) if others else set()
+
+
+_Original = tuple[str, str]  # (commit, author and subject)
+_IDENTITY = "%an%x00%ae%x00%s"
 
 
 def _replay_files(
-    repo: Path, before: str, after: str, originals: list[str]
+    repo: Path, before: str, after: str, originals: list[_Original]
 ) -> tuple[set[str], int | None]:
-    """Files a rebase step changed beyond an automatic replay of one original.
+    """Files a rebase step changed beyond an automatic replay of its original.
 
-    Returns the files and the index of the closest original. The closest replay
-    leaves only resolution edits. A step that replays no original, such as a
-    commit at an edit stop, keeps its whole diff.
+    A step that matches the automatic replay of any original is clean. Otherwise
+    its original is the next one with the same author and subject, and only the
+    files that differ from that replay count. A step without an original, such
+    as a commit at an edit stop, keeps its whole diff. Also returns the index of
+    the original used.
     """
-    closest = _git_paths(repo, "diff", "--name-only", before, after)
-    closest_index: int | None = None
-    for index, original in enumerate(originals):
-        if not closest:
-            break
+    identity = _git(repo, "show", "-s", f"--format={_IDENTITY}", after).strip()
+    named: tuple[set[str], int] | None = None
+    for index, (original, original_identity) in enumerate(originals):
         automatic = _automatic_merge(
             repo, "--merge-base", f"{original}^", before, original
         )
         if automatic is None:
             continue
         files = _git_paths(repo, "diff", "--name-only", automatic, after)
-        if len(files) < len(closest):
-            closest, closest_index = files, index
-    return closest, closest_index
+        if not files:
+            return files, index
+        if named is None and original_identity == identity:
+            named = files, index
+    if named is not None:
+        return named
+    return _git_paths(repo, "diff", "--name-only", before, after), None
 
 
-def _rebase_originals(repo: Path, original_tip: str, onto: str) -> list[str]:
-    return _git(
-        repo, "rev-list", "--reverse", "--no-merges", f"{onto}..{original_tip}"
-    ).split()
+def _rebase_originals(repo: Path, original_tip: str, onto: str) -> list[_Original]:
+    log = _git(
+        repo,
+        "log",
+        "--reverse",
+        "--no-merges",
+        f"--format=%H%x00{_IDENTITY}",
+        f"{onto}..{original_tip}",
+    )
+    return [
+        (commit, identity)
+        for commit, _, identity in (line.partition("\0") for line in log.splitlines())
+    ]
 
 
 def _rebase_in_progress(repo: Path) -> tuple[str, str] | None:
@@ -192,6 +213,10 @@ def _committed_files(
             originals = _rebase_originals(repo, before, after)
         elif step in ("finish", "abort"):
             originals = None
+        elif step == "reset":
+            continue
+        elif step == "merge":
+            files |= _merge_resolution_files(repo, after)
         elif originals is not None and (step or action.startswith(_COMMIT_ACTIONS)):
             replayed, index = _replay_files(repo, before, after, originals)
             files |= replayed

@@ -374,6 +374,49 @@ def test_octopus_merge_checks_edits_from_the_turn(repo: Path) -> None:
     assert _checked(repo) == {"base.txt"}
 
 
+def test_clean_octopus_merge_checks_nothing(repo: Path) -> None:
+    _commit(repo, "base.txt", "".join(f"{line}\n" for line in range(20)))
+    for branch, line in (("one", 1), ("two", 18)):
+        _git(repo, "checkout", "-qb", branch, "main")
+        lines = (repo / "base.txt").read_text().splitlines()
+        lines[line] = branch
+        _commit(repo, "base.txt", "\n".join(lines) + "\n")
+    _git(repo, "checkout", "-q", "main")
+    _commit(repo, "main.txt")
+    _start(repo)
+    _git(repo, "merge", "-q", "--no-commit", "one", "two")
+    _git(repo, "commit", "-q", "--no-edit")
+    _stop(repo)
+    assert _checked(repo) == set()
+
+
+def test_rebase_merges_checks_nothing_when_clean(repo: Path) -> None:
+    _diverge(repo)
+    _git(repo, "checkout", "-qb", "topic", "main")
+    _commit(repo, "topic.txt")
+    _git(repo, "checkout", "-q", "main")
+    _commit(repo, "local.txt")
+    _git(repo, "merge", "-q", "--no-ff", "--no-edit", "topic")
+    _start(repo)
+    _git(repo, "rebase", "-q", "--rebase-merges", "upstream")
+    _stop(repo)
+    assert _checked(repo) == set()
+
+
+def test_rebase_resolution_keeping_upstream_checks_resolved_file(repo: Path) -> None:
+    _diverge(repo)
+    (repo / "local.txt").write_text("local\n")
+    _git(repo, "add", "local.txt")
+    _commit(repo, "base.txt", "local edit\n")
+    _start(repo)
+    _conflict(repo, "rebase")
+    _git(repo, "checkout", "-q", "--ours", "base.txt")
+    _git(repo, "add", "base.txt")
+    _git(repo, "-c", "core.editor=true", "rebase", "--continue")
+    _stop(repo)
+    assert _checked(repo) == {"base.txt"}
+
+
 def test_linked_worktree_uses_its_own_reflog(repo: Path) -> None:
     linked = repo.parent / "linked"
     _git(repo, "worktree", "add", "-b", "linked", str(linked))
