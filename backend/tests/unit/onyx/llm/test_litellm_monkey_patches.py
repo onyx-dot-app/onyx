@@ -10,7 +10,7 @@ from litellm.completion_extras.litellm_responses_transformation.transformation i
 from litellm.litellm_core_utils.litellm_logging import Logging
 from litellm.llms.ollama.chat.transformation import OllamaChatCompletionResponseIterator
 from litellm.types.llms.openai import ResponseAPIUsage, ResponsesAPIResponse
-from litellm.types.utils import ModelResponse
+from litellm.types.utils import ChatCompletionDeltaToolCall, ModelResponse
 from openai.types.responses.response import IncompleteDetails
 from openai.types.responses.response_output_message import ResponseOutputMessage
 from openai.types.responses.response_output_text import ResponseOutputText
@@ -315,6 +315,7 @@ def test_responses_chunk_parser_ignores_empty_tool_argument_delta() -> None:
     )
     tool_calls = real.choices[0].delta.tool_calls
     assert tool_calls is not None
+    assert isinstance(tool_calls[0], ChatCompletionDeltaToolCall)
     assert tool_calls[0].function.arguments == '{"query": "onboarding"}'
 
 
