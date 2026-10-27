@@ -78,21 +78,70 @@ def _head_reflog(repo: Path) -> bytes:
         return b""
 
 
-def _merge_resolution_files(repo: Path, merge: str) -> set[str]:
-    """Files a merge commit changed beyond Git's automatic merge result."""
-    parents = _git(repo, "rev-list", "--parents", "-n", "1", merge).split()[1:]
-    if len(parents) != 2:
-        return set()
+def _changed_beyond_merge(repo: Path, result: str, *merge_args: str) -> set[str]:
+    """Files in commit `result` that differ from Git's automatic merge result."""
     automatic = subprocess.run(
-        ["git", "merge-tree", "--write-tree", *parents],
+        ["git", "merge-tree", "--write-tree", *merge_args],
         cwd=repo,
         capture_output=True,
         text=True,
     )
     # Exit code 1 means the automatic merge had conflicts; the tree still exists.
     if automatic.returncode not in (0, 1) or not automatic.stdout:
+        return _git_paths(repo, "diff", "--name-only", f"{result}^", result)
+    return _git_paths(repo, "diff", "--name-only", automatic.stdout.split()[0], result)
+
+
+def _merge_resolution_files(repo: Path, merge: str) -> set[str]:
+    parents = _git(repo, "rev-list", "--parents", "-n", "1", merge).split()[1:]
+    if len(parents) != 2:
         return set()
-    return _git_paths(repo, "diff", "--name-only", automatic.stdout.split()[0], merge)
+    return _changed_beyond_merge(repo, merge, *parents)
+
+
+def _rebase_resolution_files(
+    repo: Path, before: str, after: str, rebase: tuple[str, str]
+) -> set[str]:
+    """Files a replayed commit changed beyond Git's automatic replay.
+
+    A commit the rebase created without an original is new work, so all its
+    files count.
+    """
+    original_tip, onto = rebase
+    # A manual commit during a rebase gets a new author date, so match on the
+    # author and subject.
+    identity = "%an%x00%ae%x00%s"
+    replayed = _git(repo, "show", "-s", f"--format={identity}", after)
+    original = next(
+        (
+            line.split("\0", 1)[0]
+            for line in _git(
+                repo,
+                "log",
+                f"--format=%H%x00{identity}",
+                f"{onto}..{original_tip}",
+            ).splitlines()
+            if line.split("\0", 1)[-1] == replayed.strip()
+        ),
+        None,
+    )
+    if original is None:
+        return _git_paths(repo, "diff", "--name-only", before, after)
+    return _changed_beyond_merge(
+        repo, after, "--merge-base", f"{original}^", before, original
+    )
+
+
+_REBASE_START = re.compile(r"rebase( -i)? \(start\):")
+_REBASE_END = re.compile(r"rebase( -i)? \((finish|abort)\):")
+_COMMIT_ACTIONS = (
+    "commit:",
+    "commit (amend):",
+    "commit (cherry-pick):",
+    "cherry-pick:",
+    "revert:",
+    "rebase (continue):",
+)
 
 
 def _committed_files(repo: Path, offset: int, digest: str) -> set[str]:
@@ -101,25 +150,26 @@ def _committed_files(repo: Path, offset: int, digest: str) -> set[str]:
     if hashlib.sha256(log[:offset]).hexdigest() != digest:
         return set()  # The reflog was expired or rewritten during the turn.
     files: set[str] = set()
-    for entry in log[offset:].decode("utf-8", errors="replace").splitlines():
-        refs, separator, action = entry.partition("\t")
-        if not separator:
-            continue
-        before, after = refs.split()[:2]
-        if action.startswith("commit (merge):"):
-            files |= _merge_resolution_files(repo, after)
-        elif action.startswith(
-            (
-                "commit:",
-                "commit (amend):",
-                "commit (cherry-pick):",
-                "cherry-pick:",
-                "revert:",
-                # A rebased commit replays branch work, never upstream changes.
-                "rebase (continue):",
-            )
-        ):
-            files |= _git_paths(repo, "diff", "--name-only", before, after)
+    # (original tip, onto) of a rebase in progress; it can start before the turn.
+    rebase: tuple[str, str] | None = None
+    for chunk, in_turn in ((log[:offset], False), (log[offset:], True)):
+        for entry in chunk.decode("utf-8", errors="replace").splitlines():
+            refs, separator, action = entry.partition("\t")
+            if not separator:
+                continue
+            before, after = refs.split()[:2]
+            if _REBASE_START.match(action):
+                rebase = (before, after)
+            elif _REBASE_END.match(action):
+                rebase = None
+            elif not in_turn:
+                continue
+            elif action.startswith("commit (merge):"):
+                files |= _merge_resolution_files(repo, after)
+            elif rebase and action.startswith(("rebase (continue):", "commit:")):
+                files |= _rebase_resolution_files(repo, before, after, rebase)
+            elif action.startswith(_COMMIT_ACTIONS):
+                files |= _git_paths(repo, "diff", "--name-only", before, after)
     return files
 
 

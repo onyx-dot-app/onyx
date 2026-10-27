@@ -187,24 +187,29 @@ def test_explicit_commit_operations_are_checked(repo: Path, operation: str) -> N
     assert _checked(repo) == {"base.txt"}
 
 
-@pytest.mark.parametrize("operation", ["cherry-pick", "merge", "rebase"])
-def test_conflict_resolutions_are_checked(repo: Path, operation: str) -> None:
+@pytest.mark.parametrize(
+    "operation", ["cherry-pick", "merge", "rebase", "rebase-with-commit"]
+)
+def test_only_conflict_resolutions_are_checked(repo: Path, operation: str) -> None:
     _git(repo, "checkout", "-qb", "upstream")
     _commit(repo, "upstream.txt")
     _commit(repo, "base.txt", "upstream edit\n")
     _git(repo, "checkout", "-q", "main")
+    (repo / "local.txt").write_text("local\n")
+    _git(repo, "add", "local.txt")
     _commit(repo, "base.txt", "local edit\n")
+    command = operation.removesuffix("-with-commit")
     _start(repo)
     conflict = subprocess.run(
-        ["git", operation, "upstream"], cwd=repo, capture_output=True, text=True
+        ["git", command, "upstream"], cwd=repo, capture_output=True, text=True
     )
     assert conflict.returncode != 0, conflict.stdout
     (repo / "base.txt").write_text("resolved\n")
     _git(repo, "add", "base.txt")
-    if operation == "merge":
-        _git(repo, "commit", "-qm", "Merge upstream")
-    else:
-        _git(repo, "-c", "core.editor=true", operation, "--continue")
+    if command == "merge" or operation == "rebase-with-commit":
+        _git(repo, "commit", "-q", "--no-edit")
+    if command != "merge":
+        _git(repo, "-c", "core.editor=true", command, "--continue")
     _stop(repo)
     assert _checked(repo) == {"base.txt"}
 
