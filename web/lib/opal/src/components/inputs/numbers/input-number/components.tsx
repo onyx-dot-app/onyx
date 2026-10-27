@@ -261,7 +261,13 @@ export default function InputNumber({
         )}
       />
 
-      <div className="flex flex-row items-center gap-1">
+      {/* A pointer press on the controls keeps focus in the input. Otherwise
+          blur commits the typed value just before the control commits its own. */}
+      <div
+        role="presentation"
+        className="flex flex-row items-center gap-1"
+        onMouseDown={(e) => e.preventDefault()}
+      >
         {suffix && (
           // The placeholder's style: muted weight in text-02.
           <Text font="main-ui-muted" color={isDisabled ? "text-01" : "text-02"}>
