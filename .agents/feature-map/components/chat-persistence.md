@@ -135,6 +135,8 @@ Checkpoint bindings identify the tenant and response. Saved progress uses the ru
 `pending_tool_calls` and `human_tool_answers`.
 Feature state is a JSON object validated by its owning feature during restoration.
 Chat's `kind` discriminator selects the feature schema; message metadata and tool details retain their tagged codec.
+Prompt image metadata saves file IDs and token counts; restoration loads image bytes only when needed.
+The checkpoint writer rejects content-free sessions before creating or updating a checkpoint.
 
 ### `ChatSession` (`db/models.py:ChatSession`, table `chat_session`)
 
@@ -588,3 +590,17 @@ links and source cards when loading saved responses. Restoration rejects missing
 
 Restored root questions retain `chat:<question-id>` IDs. Child instructions retain
 their run-input IDs. Saved compaction boundaries use these same IDs after reload.
+
+### Detached replay and usage attribution
+
+`db/chat_response.py:read_response_replay_data` validates saved tool references against accepted message and call IDs.
+It loads source documents before `chat/presentation.py:replay_response` renders packets without ORM objects.
+Tool-linked sources fill missing documents; a root-selected version takes precedence when IDs match.
+Display projection rejects missing accepted message IDs instead of inventing replacement IDs.
+
+Displayed thinking preserves the recorded order of model thinking, text treated as thinking, and configured thinking-tool content.
+This order also applies when session details reload the response.
+
+Child sessions inherit the root's user, agent, Slack attribution, and recording mode.
+Usage exports include these attributed child runs because they consume tokens.
+Admin conversation history and query analytics still exclude child sessions from their conversation lists.

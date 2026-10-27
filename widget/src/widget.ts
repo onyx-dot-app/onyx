@@ -331,18 +331,23 @@ export class OnyxChatWidget extends LitElement {
     return html`
       <div class="citation-list">
         ${visible.map((c, i) => this.renderCitationBadge(c, i + 1))}
-        ${overflow.length > 0
-          ? html`
-              <button class="citation-more" @click=${this.toggleCitationExpand}>
-                +${overflow.length} more
-              </button>
-              <div class="citation-overflow">
-                ${overflow.map((c, i) =>
-                  this.renderCitationBadge(c, limit + i + 1)
-                )}
-              </div>
-            `
-          : ""}
+        ${
+          overflow.length > 0
+            ? html`
+                <button
+                  class="citation-more"
+                  @click=${this.toggleCitationExpand}
+                >
+                  +${overflow.length} more
+                </button>
+                <div class="citation-overflow">
+                  ${overflow.map((c, i) =>
+                    this.renderCitationBadge(c, limit + i + 1)
+                  )}
+                </div>
+              `
+            : ""
+        }
       </div>
     `;
   }
@@ -379,42 +384,51 @@ export class OnyxChatWidget extends LitElement {
     const message = this.inputValue.trim();
     if (!message || this.isLoading || this.isStreaming) return;
 
-    // Clear input immediately
-    this.inputValue = "";
-
-    // Add user message
+    const controller = new AbortController();
+    this.abortController = controller;
+    const stillOurs = () => this.abortController === controller;
+    let sentSessionId: string | undefined;
     const userMessage: ChatMessage = {
       id: `msg-${Date.now()}`,
       role: "user",
       content: message,
       timestamp: Date.now(),
     };
-    this.messages = [...this.messages, userMessage];
-
-    // Created before the first await so resetConversation() can cancel this
-    // send at any stage, not only once streaming starts.
-    const controller = new AbortController();
-    this.abortController = controller;
 
     try {
       this.isStreaming = true;
       this.error = undefined;
+      if (this.chatSessionId) {
+        await this.apiService.waitForSessionIdle(
+          this.chatSessionId,
+          controller.signal,
+          () => {
+            if (stillOurs())
+              this.error =
+                "Waiting to confirm that this conversation is ready.";
+          }
+        );
+      }
+      if (!stillOurs()) return;
 
       // Create session if needed
       if (!this.chatSessionId) {
         this.isLoading = true;
-        const chatSessionId = await this.apiService.createChatSession(
+        const sessionId = await this.apiService.createChatSession(
           this.config.agentId
         );
-        if (controller.signal.aborted) return;
-        this.chatSessionId = chatSessionId;
+        if (!stillOurs()) return;
+        this.chatSessionId = sessionId;
         this.isLoading = false;
       }
 
       // Resolved once per send, so every persisted transcript is tagged with
       // the user who actually produced it.
       const identity = await this.currentIdentity();
-      if (controller.signal.aborted) return;
+      if (!stillOurs()) return;
+      this.inputValue = "";
+      this.error = undefined;
+      this.messages = [...this.messages, userMessage];
 
       // Get parent message ID (last assistant message with a numeric ID from backend)
       const parentMessage = [...this.messages]
@@ -426,6 +440,7 @@ export class OnyxChatWidget extends LitElement {
           : null;
 
       // Stream response
+      sentSessionId = this.chatSessionId;
       let currentMessage: ChatMessage | null = null;
       let assistantMessageId: number | null = null;
 
@@ -436,7 +451,7 @@ export class OnyxChatWidget extends LitElement {
         signal: controller.signal,
         includeCitations: this.config.includeCitations,
       })) {
-        if (controller.signal.aborted) return;
+        if (!stillOurs()) return;
         const result = processPacket(packet, currentMessage);
 
         // Capture message IDs from backend and update local messages
@@ -535,25 +550,43 @@ export class OnyxChatWidget extends LitElement {
 
           // Clear streaming state and persist when message is complete
           if (!currentMessage.isStreaming) {
-            this.isStreaming = false;
             this.streamingStatus = "";
             saveSession(this.chatSessionId, this.messages, identity);
           }
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      if (!stillOurs()) return;
       console.error("Failed to send message:", err);
-      if (err.name !== "AbortError" && !controller.signal.aborted) {
-        this.error = err.message || "Failed to send message";
+      if (!(err instanceof Error && err.name === "AbortError")) {
+        this.error =
+          err instanceof Error ? err.message : "Failed to send message";
+        this.inputValue = message;
       }
     } finally {
-      // A reset may have handed this state to a newer send.
-      if (this.abortController === controller) {
-        this.isStreaming = false;
-        this.isLoading = false;
-        this.streamingStatus = "";
-        this.abortController = undefined;
+      if (!stillOurs()) return;
+      if (sentSessionId) {
+        try {
+          await this.apiService.waitForSessionIdle(
+            sentSessionId,
+            controller.signal,
+            () => {
+              if (stillOurs())
+                this.error =
+                  "Waiting to confirm that this conversation is ready.";
+            }
+          );
+        } catch {
+          return;
+        }
       }
+      if (!stillOurs()) return;
+      if (this.error === "Waiting to confirm that this conversation is ready.")
+        this.error = undefined;
+      this.isStreaming = false;
+      this.isLoading = false;
+      this.streamingStatus = "";
+      this.abortController = undefined;
     }
   }
 
@@ -566,37 +599,43 @@ export class OnyxChatWidget extends LitElement {
       !hasMessages;
 
     return html`
-      ${this.config.mode === "launcher"
-        ? html`
-            <button
-              class="launcher"
-              @click=${this.toggleOpen}
-              title="Open chat"
-            >
-              <img
-                src="${this.config.logo || DEFAULT_LOGO}"
-                alt="Logo"
-                style="width: 32px; height: 32px; object-fit: contain;"
-              />
-            </button>
-          `
-        : ""}
-      ${showContainer
-        ? html`
-            <div
-              class="container ${this.config.mode === "inline"
-                ? "inline"
-                : ""} ${isCompactInline ? "compact" : ""}"
-            >
-              ${isCompactInline
-                ? this.renderCompactInput()
-                : html`
-                    ${this.renderHeader()} ${this.renderMessages()}
-                    ${this.renderInput()}
-                  `}
-            </div>
-          `
-        : ""}
+      ${
+        this.config.mode === "launcher"
+          ? html`
+              <button
+                class="launcher"
+                @click=${this.toggleOpen}
+                title="Open chat"
+              >
+                <img
+                  src="${this.config.logo || DEFAULT_LOGO}"
+                  alt="Logo"
+                  style="width: 32px; height: 32px; object-fit: contain;"
+                />
+              </button>
+            `
+          : ""
+      }
+      ${
+        showContainer
+          ? html`
+              <div
+                class="container ${
+                  this.config.mode === "inline" ? "inline" : ""
+                } ${isCompactInline ? "compact" : ""}"
+              >
+                ${
+                  isCompactInline
+                    ? this.renderCompactInput()
+                    : html`
+                        ${this.renderHeader()} ${this.renderMessages()}
+                        ${this.renderInput()}
+                      `
+                }
+              </div>
+            `
+          : ""
+      }
     `;
   }
 
@@ -636,25 +675,31 @@ export class OnyxChatWidget extends LitElement {
               />
             </svg>
           </button>
-          ${this.config.mode === "launcher"
-            ? html`
-                <button class="icon-button" @click=${this.close} title="Close">
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 28 28"
-                    fill="none"
-                    stroke="currentColor"
+          ${
+            this.config.mode === "launcher"
+              ? html`
+                  <button
+                    class="icon-button"
+                    @click=${this.close}
+                    title="Close"
                   >
-                    <path
-                      d="M21 7L7 21M7 7L21 21"
-                      stroke-width="2"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-              `
-            : ""}
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 28 28"
+                      fill="none"
+                      stroke="currentColor"
+                    >
+                      <path
+                        d="M21 7L7 21M7 7L21 21"
+                        stroke-width="2"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </button>
+                `
+              : ""
+          }
         </div>
       </div>
     `;
@@ -679,38 +724,44 @@ export class OnyxChatWidget extends LitElement {
           (msg) => html`
             <div class="message ${msg.role}">
               <div class="message-bubble">
-                ${msg.role === "assistant"
-                  ? html`${this.renderMarkdown(
-                      msg.content,
-                      msg.citations
-                    )}${this.renderCitations(msg.citations)}`
-                  : msg.content}
+                ${
+                  msg.role === "assistant"
+                    ? html`${this.renderMarkdown(
+                        msg.content,
+                        msg.citations
+                      )}${this.renderCitations(msg.citations)}`
+                    : msg.content
+                }
               </div>
             </div>
           `
         )}
-        ${showEllipsis
-          ? html`
-              <div class="message assistant">
-                <div class="message-bubble">
-                  <div class="status-container">
-                    <div class="typing-indicator">
-                      <div class="typing-dot"></div>
-                      <div class="typing-dot"></div>
-                      <div class="typing-dot"></div>
+        ${
+          showEllipsis
+            ? html`
+                <div class="message assistant">
+                  <div class="message-bubble">
+                    <div class="status-container">
+                      <div class="typing-indicator">
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                      </div>
+                      ${
+                        this.streamingStatus
+                          ? html`
+                              <span class="status-text"
+                                >${this.streamingStatus}</span
+                              >
+                            `
+                          : ""
+                      }
                     </div>
-                    ${this.streamingStatus
-                      ? html`
-                          <span class="status-text"
-                            >${this.streamingStatus}</span
-                          >
-                        `
-                      : ""}
                   </div>
                 </div>
-              </div>
-            `
-          : ""}
+              `
+            : ""
+        }
       </div>
     `;
   }
@@ -731,9 +782,9 @@ export class OnyxChatWidget extends LitElement {
           <button
             class="send-button"
             @click=${this.sendMessage}
-            ?disabled=${!this.inputValue.trim() ||
-            this.isLoading ||
-            this.isStreaming}
+            ?disabled=${
+              !this.inputValue.trim() || this.isLoading || this.isStreaming
+            }
             title="Send message"
           >
             <svg
@@ -788,9 +839,9 @@ export class OnyxChatWidget extends LitElement {
         <button
           class="send-button"
           @click=${this.sendMessage}
-          ?disabled=${!this.inputValue.trim() ||
-          this.isLoading ||
-          this.isStreaming}
+          ?disabled=${
+            !this.inputValue.trim() || this.isLoading || this.isStreaming
+          }
           title="Send message"
         >
           <svg

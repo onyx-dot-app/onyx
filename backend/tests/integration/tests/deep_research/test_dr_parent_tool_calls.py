@@ -2,6 +2,7 @@ from sqlalchemy import select
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.models import ChatMessage
 from onyx.db.models import ToolCall as ToolCallModel
 from onyx.deep_research.tool_definitions import (
     GENERATE_PLAN_TOOL_NAME,
@@ -127,7 +128,7 @@ def test_research_child_tool_calls_attach_to_research_call(
     assert response.error is None, f"Unexpected stream error: {response.error}"
     assert response.full_message == _FINAL_REPORT
 
-    # The orchestrator replays only the research call, and the stray call never runs.
+    # Unavailable calls retain their identity and return a failure to the model.
     _, orchestrator_followup = mock_llm.requests_in("orchestrator")
     replayed_calls = [
         call.id
@@ -135,8 +136,10 @@ def test_research_child_tool_calls_attach_to_research_call(
         if message.role == "assistant"
         for call in message.tool_calls
     ]
-    assert replayed_calls == [_RESEARCH_CALL_ID]
-    assert all(r.tool_result(_STRAY_CALL_ID) is None for r in mock_llm.requests)
+    assert replayed_calls[-2:] == [_STRAY_CALL_ID, _RESEARCH_CALL_ID]
+    assert orchestrator_followup.tool_result(_STRAY_CALL_ID) == (
+        f"Tool {SearchTool.NAME} is unavailable for this step."
+    )
 
     _, child_followup = mock_llm.requests_in("research_agent")
     assert child_followup.tool_result(_CHILD_SEARCH_CALL_ID) is not None
@@ -151,16 +154,27 @@ def test_research_child_tool_calls_attach_to_research_call(
             )
         }
 
-        assert _STRAY_CALL_ID not in saved_calls
+        rejected_call = saved_calls[_STRAY_CALL_ID]
+        assert rejected_call.result is not None and rejected_call.result.is_error
 
         research_call = saved_calls[_RESEARCH_CALL_ID]
         assert research_call.parent_chat_message_id == response.assistant_message_id
         assert research_call.parent_tool_call_id is None
 
-        assert _CHILD_SEARCH_CALL_ID in saved_calls, (
-            "The research child's search was not saved under the research call."
+        child_response = db_session.scalar(
+            select(ChatMessage).where(
+                ChatMessage.invoking_tool_call_id == research_call.id
+            )
         )
-        child_search = saved_calls[_CHILD_SEARCH_CALL_ID]
-        assert child_search.parent_tool_call_id == research_call.id
-        assert child_search.parent_chat_message_id is None
+        assert child_response is not None
+        assert child_response.chat_session_id != chat_session.id
+        child_search = db_session.scalar(
+            select(ToolCallModel).where(
+                ToolCallModel.parent_chat_message_id == child_response.id,
+                ToolCallModel.tool_call_id == _CHILD_SEARCH_CALL_ID,
+            )
+        )
+        assert child_search is not None
+        assert child_search.chat_session_id == child_response.chat_session_id
+        assert child_search.parent_tool_call_id is None
         assert child_search.tool_call_arguments == _CHILD_SEARCH_ARGS

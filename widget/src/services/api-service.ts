@@ -10,6 +10,8 @@ import {
 } from "@/types/api-types";
 import { TokenProvider } from "@/types/widget-types";
 
+const READINESS_REQUEST_TIMEOUT_MS = 10_000;
+
 export class ApiService {
   private maxRetries = 3;
   private retryDelay = 1000;
@@ -52,6 +54,54 @@ export class ApiService {
 
     const data = (await response.json()) as CreateSessionResponse;
     return data.chat_session_id;
+  }
+
+  async waitForSessionIdle(
+    sessionId: string,
+    signal: AbortSignal,
+    onUnconfirmed: () => void
+  ): Promise<void> {
+    while (!signal.aborted) {
+      try {
+        const response = await fetch(
+          `${this.backendUrl}/chat/chat-session/${sessionId}/status`,
+          {
+            headers: await this.getHeaders(),
+            signal: AbortSignal.any([
+              signal,
+              AbortSignal.timeout(READINESS_REQUEST_TIMEOUT_MS),
+            ]),
+          }
+        );
+        if (!response.ok) throw new Error("Cannot confirm chat readiness");
+        const status: unknown = await response.json();
+        if (
+          typeof status !== "object" ||
+          status === null ||
+          !("is_processing" in status) ||
+          typeof status.is_processing !== "boolean"
+        ) {
+          throw new Error("Invalid chat readiness response");
+        }
+        if (!status.is_processing) return;
+      } catch (error) {
+        if (signal.aborted) throw error;
+        onUnconfirmed();
+      }
+      if (signal.aborted) break;
+      await new Promise<void>((resolve) => {
+        const onAbort = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+        const timer = setTimeout(() => {
+          signal.removeEventListener("abort", onAbort);
+          resolve();
+        }, 1000);
+        signal.addEventListener("abort", onAbort, { once: true });
+      });
+    }
+    throw new DOMException("Request cancelled", "AbortError");
   }
 
   /**

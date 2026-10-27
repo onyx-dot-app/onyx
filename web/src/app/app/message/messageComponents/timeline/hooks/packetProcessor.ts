@@ -326,15 +326,14 @@ function processPacket(state: ProcessorState, packet: Packet): void {
     state.groupKeysWithSectionEnd.add(groupKey);
   }
 
-  // Check if this is the first packet in the group (before adding)
-  const existingGroup = state.groupedPacketsMap.get(groupKey);
-  const isFirstPacket = !existingGroup;
-
   // Add packet to group
   addPacketToGroup(state, packet, groupKey);
 
-  // Categorize on first packet of each group
-  if (isFirstPacket) {
+  // Debug and control packets can precede the first rendered packet.
+  if (
+    !state.toolGroupKeys.has(groupKey) &&
+    !state.displayGroupKeys.has(groupKey)
+  ) {
     if (isToolPacket(packet, false)) {
       state.toolGroupKeys.add(groupKey);
     }

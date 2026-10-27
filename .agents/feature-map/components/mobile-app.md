@@ -80,7 +80,7 @@ redirects imperatively based on `resolveAuthGate` (`components/auth/authRoute.ts
 | `POST /chat/send-chat-message` | `api/chat/stream.ts:streamChatMessage` |
 | `GET /chat/chat-session/{id}/resume-stream?cursor=` | `api/chat/stream.ts:resumeChatMessage` |
 | `GET /chat/get-chat-session/{id}` | `api/chat/sessions.ts` |
-| `POST /chat/stop-chat-session/{id}?stream_id=` | `api/chat/sessions.ts:stopChatSession`, called from `hooks/useChatController.ts:stop`. `stream_id` is the reserved assistant message id; the app omits it before the id packet arrives, and the backend then stops the stream in flight. |
+| `POST /chat/stop-chat-session/{id}?stream_id=` | `api/chat/sessions.ts:stopChatSession`, called from `hooks/useChatController.ts:stop`. `stream_id` is the reserved assistant message id; the app waits for the ID packet before sending Stop. |
 | `POST /chat/create-chat-session`, `GET /chat/get-user-chat-sessions` | `api/chat/sessions.ts` |
 | `GET /auth/type` | `api/auth/useAuthConfig.ts` |
 | `GET /llm/persona/{id}/providers`, `GET /tool`, `GET/PUT /user/assistant/preferences` | `api/chat/llm.ts`, `api/tools.ts`, `api/chat/agentPreferences.ts` |
@@ -232,8 +232,17 @@ objects. `readNdjson` drops `chat_heartbeat` events unless `keepHeartbeats` is s
 `resumeStream` not filtering heartbeats (see [[streaming-protocol]] §4.4).
 
 Stop (`hooks/useChatController.ts:stop`) calls `POST /chat/stop-chat-session/{id}`
-(`api/chat/sessions.ts:stopChatSession`) and aborts the session's local
-`AbortController`, the same two-part contract as web (see [[core-chat-loop]] §4.6).
+(`api/chat/sessions.ts:stopChatSession`) with the acknowledged response ID, then aborts
+local delivery. Before acknowledgement, Stop waits up to 10 seconds for the response ID.
+If it does not arrive, the app closes local delivery and checks server readiness without sending an unscoped Stop.
+The request retains its controller while `chat/sessionReadiness.ts:waitForSessionIdle`
+polls `GET /chat/chat-session/{id}/status`. Stream completion alone does not enable Send.
+Failed checks keep input blocked and retry. A stale callback cannot release a newer
+controller. Drafts clear only after acknowledgement and only if unchanged since submission.
+Rejected sends and newer composer edits keep their drafts.
+Resumed streams confirm idle before loading saved history. They preserve errors for the current response while refreshing other messages.
+Navigating away releases the replay reader, so reopening can reconnect during a blocked read or status check.
+Releasing a reader does not mark the server idle. A reopened response with a local error resumes readiness checks without replaying output.
 
 ### 4.4 Parsing and rendering the stream
 

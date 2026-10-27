@@ -16,6 +16,7 @@ from onyx.deep_research.models import ResearchConfiguration
 from onyx.llm.models import (
     AssistantMessage,
     Message,
+    TextContent,
     ThinkingContent,
     ToolCall,
     ToolResultMessage,
@@ -48,12 +49,20 @@ def thinking_tool_text(call: ToolCall) -> str:
         return ""
 
 
-def message_thinking(message: AssistantMessage, think_tool: str | None = None) -> str:
+def message_thinking(
+    message: AssistantMessage,
+    think_tool: str | None = None,
+    *,
+    text_as_thinking: bool = False,
+) -> str:
     """Collect model and configured-tool thinking in accepted content order."""
     return "".join(
-        block.text if isinstance(block, ThinkingContent) else thinking_tool_text(block)
+        block.text
+        if isinstance(block, (ThinkingContent, TextContent))
+        else thinking_tool_text(block)
         for block in message.content
         if isinstance(block, ThinkingContent)
+        or (text_as_thinking and isinstance(block, TextContent))
         or (isinstance(block, ToolCall) and block.name == think_tool)
     )
 

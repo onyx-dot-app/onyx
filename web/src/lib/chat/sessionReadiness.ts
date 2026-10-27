@@ -25,7 +25,9 @@ async function pollSession(sessionId: string): Promise<void> {
       throw new Error(`Session readiness check failed: ${response.status}`);
     }
     const status: { is_processing: boolean } = await response.json();
-    if (!status.is_processing) return;
+    if (status.is_processing === false) return;
+    if (status.is_processing !== true)
+      throw new Error("Session readiness response is invalid");
     await new Promise<void>((resolve) => setTimeout(resolve, 1000));
   }
 }

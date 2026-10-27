@@ -16,10 +16,10 @@ from onyx.chat.chat_processing_checker import (
     PREPARATION_LEASE_SECONDS,
     ChatTurnAdmission,
 )
-from onyx.chat.incognito_context import IncognitoContext
 from onyx.chat.models import (
     ChatHistoryMessage,
     ChatHistoryResult,
+    IncognitoContext,
 )
 from onyx.chat.prepare import (
     _resolve_query_processing_hook_result,

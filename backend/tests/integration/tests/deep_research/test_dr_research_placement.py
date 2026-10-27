@@ -3,7 +3,9 @@ from typing import Any
 from sqlalchemy import select
 
 from onyx.configs.constants import DocumentSource
+from onyx.db.chat_response import read_response_steps
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.models import ChatMessage
 from onyx.db.models import ToolCall as ToolCallModel
 from onyx.deep_research.tool_definitions import (
     GENERATE_PLAN_TOOL_NAME,
@@ -192,7 +194,7 @@ def test_research_think_step_takes_one_sub_turn(
     }
     assert search_placements == {(turn_index, tab_index, think_sub_turn + 1)}
 
-    # The saved child search call uses the same sub-turn and keeps the think reasoning.
+    # Child history retains the think step before its search invocation.
     with get_session_with_current_tenant() as db_session:
         tool_calls = {
             tool_call.tool_call_id: tool_call
@@ -203,7 +205,20 @@ def test_research_think_step_takes_one_sub_turn(
             )
         }
         research_call = tool_calls[_RESEARCH_CALL_ID]
-        search_call = tool_calls[_SEARCH_CALL_ID]
-        assert search_call.parent_tool_call_id == research_call.id
+        child_response = db_session.scalar(
+            select(ChatMessage).where(
+                ChatMessage.invoking_tool_call_id == research_call.id
+            )
+        )
+        assert child_response is not None
+        search_call = db_session.scalar(
+            select(ToolCallModel).where(
+                ToolCallModel.parent_chat_message_id == child_response.id,
+                ToolCallModel.tool_call_id == _SEARCH_CALL_ID,
+            )
+        )
+        assert search_call is not None
         assert search_call.turn_number == think_sub_turn + 1
-        assert search_call.reasoning_tokens == _THINK_TEXT
+        steps = read_response_steps(child_response)
+        assert steps[0].message.tool_calls[0].arguments["reasoning"] == _THINK_TEXT
+        assert steps[1].message.tool_calls[0].id == _SEARCH_CALL_ID

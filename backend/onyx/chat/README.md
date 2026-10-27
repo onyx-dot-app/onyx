@@ -226,3 +226,29 @@ For the execution loop, tool calls, and cancellation contracts, see the [agent S
     Storage retains these shared types; history loading filters unfinished tool calls before agent execution.
   - **ChatCompletionMessage** is the LiteLLM request message type in [provider models](../llm/model_request.py).
     The LLM adapter converts SDK messages into this provider format.
+
+
+## Execution and caller deadlines
+
+`CHAT_RESPONSE_WAIT_TIMEOUT_S` limits how long a full-response caller waits after
+delivery ends. Its default is 3,600 seconds. Expiry returns a caller error; it does
+not cancel execution.
+
+`CHAT_EXECUTION_TIMEOUT_S` sets the execution deadline, also 3,600 seconds by
+default. Reaching it requests cancellation. The turn retains session ownership
+until model calls, tools, storage, and delivery drain. A disconnected browser
+only detaches its reader.
+
+## Deploying the shared runtime
+
+Deploy the session status endpoint before clients require it. A failed readiness
+check leaves input unconfirmed; clients cannot assume the session is idle.
+
+Before enabling the new runtime, stop new submissions to old generation owners
+and let their active work finish. Include API servers, Slack, and other in-process
+callers. Closing browser connections does not drain their work. Old processing
+fences and new ownership leases cannot safely coordinate overlapping writers.
+
+Stream reconnection replays cached packets. It does not restart computation.
+Only a valid suspended checkpoint, resumed through a runtime caller, restores
+computation. A cleaned-up coding sandbox cannot generally be restored.

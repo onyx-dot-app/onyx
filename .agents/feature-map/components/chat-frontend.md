@@ -583,3 +583,20 @@ hoc for a one-off check.
   the sidebar stuck folded.
 
 Shared spreadsheet payload validation lives in `web/src/lib/csv.ts`. Invalid CSV shows a spreadsheet error instead of an empty sheet.
+
+### Timeline classification after diagnostic packets
+
+`timeline/hooks/packetProcessor.ts` classifies each group when its first tool or display
+packet arrives. Debug and control packets can precede that event without hiding the group.
+The classification then stays fixed for mixed groups. `useTimelineHeader` uses the first
+rendered packet to choose the activity label, so leading debug packets cannot hide a tool name.
+
+Session readiness requires an explicit boolean from the status endpoint. Invalid responses
+keep the session blocked instead of treating a missing processing flag as completion.
+
+Settlement preserves live incognito messages because saved history can contain only usage
+metadata. Server readiness still gates the next send.
+
+`AgentMessage` reports when its final content has finished rendering. For multi-model turns,
+`MultiModelResponseView` waits for all visible successful panels before releasing queued
+messages. Failed or hidden panels have no answer animation to wait for.

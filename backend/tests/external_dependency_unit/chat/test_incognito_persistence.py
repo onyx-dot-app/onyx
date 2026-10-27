@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from onyx.agents.models import ExecutionStatus, StepRecord, ToolExecutionRecord
 from onyx.chat.incognito import delete_incognito_generated_files
 from onyx.chat.incognito_context import (
+    _context_key,
     append_incognito_message,
     load_incognito_agent_history,
     load_incognito_agent_metadata,
@@ -353,7 +354,7 @@ def test_temporary_agent_history_sources_and_lifetime() -> None:
         steps=[],
         child_runs=[child],
     )
-    key = f"incognito_ctx:{session_id}:agents"
+    key = _context_key(session_id)
     client = get_redis_client()
     try:
         append_incognito_message(session_id, UserMessage(content="root question"))
@@ -386,7 +387,7 @@ def test_temporary_agent_history_sources_and_lifetime() -> None:
         assert isinstance(restored_result, ToolResultMessage)
         assert restored_result.details is None
         assert tool_result.details is not None
-        saved = client.hget(key, "1")
+        saved = client.get(key)
         assert saved is not None
         assert b"private tool details" not in saved
         assert restored.sources[1].document_id == "private-source"

@@ -73,5 +73,38 @@ def test_metadata_only_files_keep_tool_instructions(
         content_text=None,
         token_count=0,
     )
+    # The attached tool is named read_file; "file_reader" matches nothing.
     assert "read_file" in result.message.text
+    assert "file_reader" not in result.message.text
+    assert CONTENT_UNAVAILABLE_NOTICE not in result.message.text
+
+
+def test_metadata_only_files_name_no_tool_when_reader_is_absent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FileReaderTool is only attached when the vector DB is off.
+
+    Tools are constructed after this runs, so the message cannot know what is
+    available and must not promise anything — not read_file, and not the
+    python or search tools either.
+    """
+    monkeypatch.setattr("onyx.chat.files.DISABLE_VECTOR_DB", False)
+    result = build_file_context(
+        tool_file_id="abc",
+        filename="sheet.xlsx",
+        file_type=ChatFileType.TABULAR,
+        content_text=None,
+        token_count=0,
+    )
+    assert "read_file" not in result.message.text
+    assert "file_reader" not in result.message.text
+    assert "internal search" not in result.message.text
+    # Pin the replacement text: dropping the hint entirely would otherwise
+    # satisfy the negative assertions above.
+    assert "Do not guess the contents" in result.message.text
+    # The failure this replaced was the model web-searching the document.
+    assert "do not search the web" in result.message.text
+    assert "sheet.xlsx" in result.message.text
+    # The UUID only means something to read_file, which is not attached here.
+    assert "abc" not in result.message.text
     assert CONTENT_UNAVAILABLE_NOTICE not in result.message.text

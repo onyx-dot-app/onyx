@@ -13,9 +13,11 @@ from onyx.chat.models import (
     MessageRendering,
     ResponseAncestry,
     ResponseRecord,
+    ResponseReplayData,
     ResponseStatus,
     SavedResponse,
     ToolRecordReference,
+    ToolReplayData,
 )
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc
@@ -31,6 +33,7 @@ from onyx.db.chat import (
     find_summary_for_ancestry,
     parent_session_id,
     root_response_id,
+    translate_db_search_doc_to_saved_search_doc,
     visible_message_ids,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -214,7 +217,7 @@ def save_chat_turn(
                     search_doc_key_to_id[key] = db_search_doc.id
                     search_doc_ids_for_tool.append(db_search_doc.id)
             tool_call_to_search_doc_ids[tool_call_info.execution_key] = list(
-                set(search_doc_ids_for_tool)
+                dict.fromkeys(search_doc_ids_for_tool)
             )
 
     citation_number_to_search_doc_id: dict[int, int] = {}
@@ -714,6 +717,9 @@ def reserve_child_response__no_commit(
         child_session = ChatSession(
             id=UUID(agent.id),
             spawned_by_message_id=parent.id,
+            user_id=root.chat_session.user_id,
+            persona_id=root.chat_session.persona_id,
+            onyxbot_flow=root.chat_session.onyxbot_flow,
             incognito_record_mode=root.chat_session.incognito_record_mode,
             agent_name=sanitize_string(agent.path.rsplit("/", 1)[-1]),
             description=sanitize_string(agent.description),
@@ -1158,3 +1164,75 @@ def save_response_record__no_commit(
             writer.tools[(assistant_message_id, tool.tool_call_id)] = tool
     writer.store(record, parent)
     session.flush()
+
+
+def read_response_replay_data(
+    execution: ChatExecutionRecord, db_session: Session
+) -> ResponseReplayData:
+    """Load detached display data for an already authorized response execution."""
+    root = db_session.get(ChatMessage, int(execution.response.run_id))
+    if root is None:
+        raise ValueError("Chat response is unavailable")
+    documents = {
+        document.document_id: translate_db_search_doc_to_saved_search_doc(document)
+        for document in root.search_docs or []
+    }
+    tools: dict[tuple[str, str], ToolReplayData] = {}
+    references = {
+        reference.record_id: reference for reference in execution.tool_records
+    }
+    accepted: set[tuple[str, str]] = set()
+    pending = [execution.response]
+    while pending:
+        response = pending.pop()
+        for step in response.steps:
+            if step.message.id is not None:
+                accepted.update(
+                    (step.message.id, call.id) for call in step.message.tool_calls
+                )
+        pending.extend(response.child_runs)
+    if len(references) != len(execution.tool_records) or any(
+        (reference.message_id, reference.tool_call_id) not in accepted
+        for reference in references.values()
+    ):
+        raise ValueError("Tool replay reference is not part of this response")
+
+    rows = (
+        db_session.execute(
+            select(ToolCall, ChatResponseItem.id)
+            .join(
+                ChatResponseItem,
+                (ChatResponseItem.chat_message_id == ToolCall.parent_chat_message_id)
+                & (ChatResponseItem.step_index == ToolCall.turn_number),
+            )
+            .where(ToolCall.id.in_(references))
+            .options(selectinload(ToolCall.search_docs))
+        ).all()
+        if references
+        else []
+    )
+    for tool, message_id in rows:
+        reference = references[tool.id]
+        if (
+            reference.message_id != message_id
+            or reference.tool_call_id != tool.tool_call_id
+        ):
+            raise ValueError(
+                "Tool replay reference does not match its accepted invocation"
+            )
+        search_docs = [
+            translate_db_search_doc_to_saved_search_doc(document)
+            for document in tool.search_docs or []
+        ]
+        for document in search_docs:
+            documents.setdefault(document.document_id, document)
+        tools[(message_id, tool.tool_call_id)] = ToolReplayData(
+            tool_id=tool.tool_id,
+            search_docs=search_docs,
+        )
+    if len(rows) != len(references):
+        raise ValueError("Accepted tool replay data is unavailable")
+    return ResponseReplayData(
+        tools=tools,
+        documents=documents,
+    )

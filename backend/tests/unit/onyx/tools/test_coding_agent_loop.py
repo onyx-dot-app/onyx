@@ -1,4 +1,4 @@
-"""Coding runtime output retains main's reasoning and narration placement."""
+"""Coding output uses the packets consumed by the coding card."""
 
 import json
 from collections.abc import Iterator
@@ -42,7 +42,6 @@ from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     CodingAgentThinkingDelta,
     Packet,
-    ReasoningDelta,
     ReasoningStart,
 )
 from onyx.tools.tool_implementations.bash.bash_tool import BashTool
@@ -223,12 +222,14 @@ class TestThinkPlacement:
             is_reasoning_model=False,
         )
 
-        assert reasoning_sub_turns(run.packets) == [0]
-        reasoning_text = "".join(
-            p.obj.reasoning for p in run.packets if isinstance(p.obj, ReasoningDelta)
-        )
-        assert reasoning_text.startswith("I should look at the repo")
-        assert thinking_sub_turns(run.packets) == [1]
+        assert reasoning_sub_turns(run.packets) == []
+        thinking = [
+            p.obj.content
+            for p in run.packets
+            if isinstance(p.obj, CodingAgentThinkingDelta)
+        ]
+        assert thinking == ["I should look at the repo layout first", "narration"]
+        assert thinking_sub_turns(run.packets) == [0, 1]
         assert "you are on cycle 1" in system_prompt(run.llm.prompts[1])
 
         tool_msgs = [m for m in run.llm.prompts[1] if isinstance(m, ToolMessage)]
@@ -277,8 +278,13 @@ class TestThinkPlacement:
             is_reasoning_model=True,
         )
 
-        assert reasoning_sub_turns(run.packets) == [0]
-        assert thinking_sub_turns(run.packets) == [1, 2]
+        assert reasoning_sub_turns(run.packets) == []
+        assert thinking_sub_turns(run.packets) == [0, 0, 1]
+        assert [
+            p.obj.content
+            for p in run.packets
+            if isinstance(p.obj, CodingAgentThinkingDelta)
+        ] == ["hmm", "narration", "more"]
         assert all(
             (p.placement.turn_index, p.placement.tab_index) == (TURN_INDEX, TAB_INDEX)
             for p in run.packets
@@ -291,14 +297,19 @@ def test_final_reasoning_uses_parent_card_without_duplicate_answer_text() -> Non
         [generate_answer(), reasoning("Final reasoning") + FINAL_ANSWER],
         is_reasoning_model=True,
     )
-    assert reasoning_sub_turns(run.packets) == [None]
+    assert reasoning_sub_turns(run.packets) == []
     assert (
         "".join(
-            packet.obj.reasoning
+            packet.obj.content
             for packet in run.packets
-            if isinstance(packet.obj, ReasoningDelta)
+            if isinstance(packet.obj, CodingAgentThinkingDelta)
         )
         == "Final reasoning"
     )
-    assert not thinking_sub_turns(run.packets)
+    assert all(
+        (packet.placement.turn_index, packet.placement.tab_index)
+        == (TURN_INDEX, TAB_INDEX)
+        for packet in run.packets
+        if isinstance(packet.obj, CodingAgentThinkingDelta)
+    )
     assert run.result.output.text == "The final answer."

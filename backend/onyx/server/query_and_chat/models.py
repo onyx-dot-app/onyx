@@ -288,6 +288,7 @@ class ChatSessionDetailResponse(BaseModel):
     packets: list[list[Packet]]
     # The buffer also retains interrupted work until its cache TTL expires.
     current_stream: CurrentStreamInfo | None = None
+    # Readiness is independent of whether a stream can be replayed.
     is_processing: bool = False
     # True for sessions pinned to an incognito record mode, so a reload can
     # restore the incognito UI state.

@@ -409,27 +409,37 @@ session's contract. Only `FULL_HISTORY` writes assembled content into
 (`incognito.py:content_free_file_descriptors`) and instead carries the live
 conversation in an out-of-Postgres store for the session's lifetime
 (`incognito_context.py:load_incognito_context`,
-`incognito_context.py:append_incognito_message`).
+`incognito_context.py:append_incognito_messages`).
 
-`incognito_context.py:_locked_incognito_state` supplies one tenant/session lock
-for saves and teardown. `_update_incognito_state` reads history and agent fields
-under that lock and commits both replacements atomically with the same idle
-TTL. Callbacks receive values, not Redis commands. The existing history save
-preserves agent fields and rejects stale versions without retrying. SDK response
-saves and root registration use the same helper, preserving storage limits and
-idempotent retries. Teardown uses the same lock to write the
-tombstone and delete the agent hash together. Before attempting teardown, it
-retains the session ID in a tenant-prefixed pending set. A busy lock queues
-the existing incognito cleanup task after 60 seconds. That task also runs
-periodically and retries pending sessions without waiting on busy locks.
-Requests remain pending until history, agent records, and buffered answers
-have been cleared, including when task publication fails.
+`incognito_context.py` stores canonical root messages and child response records in one JSON envelope.
+The envelope has a sliding one-hour TTL, a one-megabyte limit, and at most 200 root messages.
+It evicts older child records before older root messages. An oversized new response leaves stored state unchanged.
+The `incognito_ctx:v2` namespace starts fresh temporary sessions after deployment. Old content expires through its existing TTL.
+The obsolete tenant-scoped `incognito_ctx:pending_teardowns` set contains only session IDs and has no TTL.
+Deployment cleanup can delete that obsolete metadata key after old writers drain; no content migration or old-format reader is needed.
 
-Lock acquisition waits at most five seconds per attempt. The lease lasts 60
-seconds; ownership is checked immediately before writing. Work must finish
-within the lease, following the existing Redis lock pattern. Bounded lock
-retries reload state and rerun the callback; callbacks must not perform
-external writes.
+The store uses `CacheBackend`, but remains available only with Redis.
+Postgres cache must not receive USAGE_ONLY content. The internal cache accessor enforces this boundary.
+`_locked_incognito_state` supplies one tenant/session lock for saves and teardown.
+A single cache write replaces root and child state together. Version checks reject stale history replacements.
+Response saves retry transformations against fresh state and reject conflicting replay of the same response.
+
+Teardown sets a separate tombstone before waiting for cleanup. Reads and writes check that marker.
+Its TTL covers the history and stream-buffer lifetimes. Cleanup removes the envelope under the session lock.
+`CacheBackend.delete_prefix` removes every buffered stream for that session, including chunks without metadata.
+It matches literal prefixes within one tenant. Redis and Postgres implement the same operation.
+The operation does not stop concurrent writers; stream writers still check session teardown and clean up on completion.
+
+A cache set tracks pending cleanup IDs, registered before teardown fences the session.
+Retry work reads at most 100 members without scanning unrelated cache keys.
+A busy session queues the existing cleanup task after 60 seconds; periodic cleanup also retries it.
+IDs remain until history and buffered output are removed, even if task publication fails.
+Set insertion is atomic and requires no application-level index lock.
+Session liveness checks batch key existence without loading conversation content.
+
+Lock acquisition waits at most five seconds per attempt; the lease lasts 60 seconds.
+Ownership checks and bounded retries follow the existing lock policy. They do not make lease expiry and writes atomic.
+Retry callbacks must not perform external writes. Errors and logs omit temporary conversation content.
 
 ### Worked examples (from `chat/README.md`)
 

@@ -19,8 +19,11 @@ export interface ComposerDraftValue {
   setText: (draftKey: string, text: string) => void;
   addFiles: (draftKey: string, clientIds: string[]) => void;
   removeFile: (draftKey: string, id: string) => void;
-  consume: (draftKey: string) => void; // accepted composer send: drop text + clientIds
-  consumeAttachments: (draftKey: string) => void; // accepted starter send: drop clientIds, keep text
+  consume: (draftKey: string, submitted: DraftState | undefined) => void; // accepted composer send: drop text + clientIds
+  consumeAttachments: (
+    draftKey: string,
+    submitted: DraftState | undefined,
+  ) => void; // accepted starter send: drop clientIds, keep text
 }
 
 export const ComposerDraftContext = createContext<
@@ -67,22 +70,30 @@ export function ComposerDraftProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const consume = useCallback((draftKey: string) => {
-    setDrafts((prev) => {
-      if (!prev[draftKey]) return prev;
-      const next = { ...prev };
-      delete next[draftKey];
-      return next;
-    });
-  }, []);
+  const consume = useCallback(
+    (draftKey: string, submitted: DraftState | undefined) => {
+      setDrafts((prev) => {
+        // Acknowledgement can arrive after the user edits this draft.
+        if (!submitted || prev[draftKey] !== submitted) return prev;
+        const next = { ...prev };
+        delete next[draftKey];
+        return next;
+      });
+    },
+    [],
+  );
 
-  const consumeAttachments = useCallback((draftKey: string) => {
-    setDrafts((prev) => {
-      const current = prev[draftKey];
-      if (!current || current.clientIds.length === 0) return prev;
-      return { ...prev, [draftKey]: { ...current, clientIds: [] } };
-    });
-  }, []);
+  const consumeAttachments = useCallback(
+    (draftKey: string, submitted: DraftState | undefined) => {
+      setDrafts((prev) => {
+        const current = prev[draftKey];
+        if (!current || current !== submitted || current.clientIds.length === 0)
+          return prev;
+        return { ...prev, [draftKey]: { ...current, clientIds: [] } };
+      });
+    },
+    [],
+  );
 
   const value = useMemo<ComposerDraftValue>(
     () => ({

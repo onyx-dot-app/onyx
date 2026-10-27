@@ -102,6 +102,8 @@ api-server pod can replay and tail an in-flight run:
 - Both live in `CacheBackend` (Redis, or Postgres on the lite deployment flavor)
   with TTL `CHAT_STREAM_BUFFER_TTL_S`, extended to `CHAT_STREAM_BUFFER_DONE_TTL_S`
   once `mark_done` runs.
+- Temporary-history teardown deletes the session's literal stream-key prefix through `CacheBackend.delete_prefix`.
+  This includes orphaned chunks and earlier stream IDs; metadata counters alone cannot identify every stored chunk.
 - Incognito (content-free) runs set `delete_on_done=True`: `mark_done` deletes
   every chunk and the meta key immediately instead of expiring them, so no
   content survives past the run.

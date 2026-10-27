@@ -18,6 +18,7 @@ from onyx.db.chat import (
     get_chat_sessions_by_user,
     get_chat_sessions_older_than,
     get_owned_chat_session,
+    set_preferred_response,
 )
 from onyx.db.incognito import is_incognito_teardown_target
 from onyx.db.models import ChatMessage, ChatSession
@@ -167,3 +168,58 @@ def test_retention_uses_nested_child_activity(db_session: Session) -> None:
         delete_chat_session(
             None, root.id, db_session, include_deleted=True, hard_delete=True
         )
+
+
+@pytest.mark.parametrize("child_session", [False, True])
+def test_preferred_response_selection_requires_root_conversation(
+    db_session: Session, child_session: bool
+) -> None:
+    root = ChatSession(id=uuid4())
+    db_session.add(root)
+    db_session.flush()
+    target = root
+    if child_session:
+        invocation = ChatMessage(
+            chat_session_id=root.id,
+            message="Delegate",
+            token_count=1,
+            message_type=MessageType.ASSISTANT,
+        )
+        db_session.add(invocation)
+        db_session.flush()
+        target = ChatSession(id=uuid4(), spawned_by_message_id=invocation.id)
+        db_session.add(target)
+        db_session.flush()
+    question = ChatMessage(
+        chat_session_id=target.id,
+        message="Question",
+        token_count=1,
+        message_type=MessageType.USER,
+    )
+    db_session.add(question)
+    db_session.flush()
+    answer = ChatMessage(
+        chat_session_id=target.id,
+        parent_message_id=question.id,
+        message="Answer",
+        token_count=1,
+        message_type=MessageType.ASSISTANT,
+    )
+    db_session.add(answer)
+    db_session.commit()
+    root_id, question_id, answer_id = root.id, question.id, answer.id
+    try:
+        db_session.expire_all()
+        if child_session:
+            with pytest.raises(ValueError, match="not a user message"):
+                set_preferred_response(db_session, question_id, answer_id)
+        else:
+            set_preferred_response(db_session, question_id, answer_id)
+        saved = db_session.get(ChatMessage, question_id)
+        assert saved is not None
+        assert saved.preferred_response_id == (None if child_session else answer_id)
+        assert saved.latest_child_message_id == (None if child_session else answer_id)
+    finally:
+        db_session.rollback()
+        with patch("onyx.db.chat.get_default_file_store"):
+            delete_chat_session(None, root_id, db_session, hard_delete=True)

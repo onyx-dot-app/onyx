@@ -242,6 +242,28 @@ describe("useComposerDraft", () => {
     expect(cancel).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps edits and attachments made while a send awaits acknowledgement", () => {
+    const { result } = renderHook(() => useComposerDraft("chat-1:"), {
+      wrapper,
+    });
+    act(() => {
+      result.current.setText("sent question");
+      result.current.addRecent(recent({ id: "r1" }));
+    });
+    const accepted = result.current.consume;
+    const starterAccepted = result.current.consumeAttachments;
+    act(() => {
+      result.current.setText("next question");
+      result.current.addRecent(recent({ id: "r2" }));
+    });
+    act(() => {
+      accepted();
+      starterAccepted();
+    });
+    expect(result.current.text).toBe("next question");
+    expect(result.current.files.map((file) => file.id)).toEqual(["r1", "r2"]);
+  });
+
   it("consume clears text + attachments; consumeAttachments keeps the text", () => {
     const { result } = renderHook(() => useComposerDraft("chat-1:"), {
       wrapper,

@@ -26,7 +26,7 @@ from onyx.chat.stop_signal_checker import clear_stop, is_stop_requested
 from onyx.chat.stream_buffer import ChatDelivery, ChatStream, StreamBufferWriter
 from onyx.chat.subagents import create_chat_agent_coordinator
 from onyx.configs.chat_configs import (
-    CHAT_RESPONSE_WAIT_TIMEOUT_S,
+    CHAT_EXECUTION_TIMEOUT_S,
 )
 from onyx.db.enums import record_mode_persists_content
 from onyx.db.models import User
@@ -260,7 +260,7 @@ class ChatTurnExecution:
         self._wait_for_completion()
 
     def _wait_for_completion(self) -> None:
-        deadline = time.monotonic() + CHAT_RESPONSE_WAIT_TIMEOUT_S
+        deadline = time.monotonic() + CHAT_EXECUTION_TIMEOUT_S
         timed_out = False
         while True:
             # Clear before checking state so a concurrent completion cannot be lost.
@@ -277,7 +277,7 @@ class ChatTurnExecution:
                 logger.exception("Chat response polling failed; draining active work")
             if not timed_out and time.monotonic() >= deadline:
                 timed_out = True
-                logger.error("Chat turn exceeded its response wait bound")
+                logger.error("Chat turn exceeded its execution deadline")
                 self.cancellation.cancel()
             with self._lock:
                 stores = tuple(self._stores)

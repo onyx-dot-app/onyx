@@ -1108,8 +1108,11 @@ def get_chat_message_reasoning(chat_message: ChatMessage) -> str | None:
         )
         if rendering.mode != PresentationMode.ANSWER:
             continue
-        thinking = message_thinking(item.message, rendering.think_tool)
-        return thinking + (item.message.text if rendering.text_as_thinking else "")
+        return message_thinking(
+            item.message,
+            rendering.think_tool,
+            text_as_thinking=rendering.text_as_thinking,
+        )
     return None
 
 
