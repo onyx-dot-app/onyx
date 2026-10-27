@@ -61,6 +61,7 @@ func streamLine(objType string, extra map[string]any) string {
 func newAskServer(t *testing.T, rec *renameRecord, out *lockedBuffer) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
+	mux.HandleFunc("/api/chat/chat-session/"+testSessionID+"/status", func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, `{"is_processing":false}`) })
 	mux.HandleFunc("/api/chat/send-chat-message", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-ndjson")
 		fmt.Fprintf(w, "{\"chat_session_id\":%q}\n", testSessionID)

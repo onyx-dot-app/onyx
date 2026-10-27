@@ -32,24 +32,28 @@ type Model struct {
 	startMode startMode
 
 	// Chat state
-	chatSessionID   *string
-	agentID         int
-	agentName       string
-	agents          []models.AgentSummary
-	llmModels       []modelOption
-	modelOverride   *models.LLMOverride
-	parentMessageID *int
-	streamCancel    context.CancelFunc
-	streamCh        <-chan models.StreamEvent
-	citations       map[int]string
-	attachedFiles   []models.FileDescriptorPayload
+	chatSessionID    *string
+	agentID          int
+	agentName        string
+	agents           []models.AgentSummary
+	llmModels        []modelOption
+	modelOverride    *models.LLMOverride
+	parentMessageID  *int
+	submittedMessage string
+	streamCancel     context.CancelFunc
+	streamCh         <-chan models.StreamEvent
+	streamID         *int
+	settling         bool
+	citations        map[int]string
+	attachedFiles    []models.FileDescriptorPayload
 
 	// Configure state
 	configState *configState
 
-	isStreaming  bool
-	needsRename  bool
-	agentStarted bool
+	isStreaming          bool
+	readinessUnconfirmed bool
+	needsRename          bool
+	agentStarted         bool
 
 	// Quit state
 	quitPending    bool
@@ -155,6 +159,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case StreamDoneMsg:
 		return m.handleStreamDone(msg)
+	case sessionReadyMsg:
+		if msg.channel != m.streamCh || !m.isStreaming {
+			return m, nil
+		}
+		if msg.err != nil || msg.processing {
+			if msg.err != nil && !m.readinessUnconfirmed {
+				m.readinessUnconfirmed = true
+				m.viewport.addWarning("Waiting to confirm conversation readiness.")
+			}
+			return m, checkSessionReady(m.client, msg.sessionID, msg.channel)
+		}
+		return m.finishStream(nil)
 
 	case AgentsLoadedMsg:
 		return m.handleAgentsLoaded(msg)
@@ -293,6 +309,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "enter":
+		if m.isStreaming && !strings.HasPrefix(strings.TrimSpace(m.input.textInput.Value()), "/") {
+			return m, nil
+		}
 		if m.configState != nil {
 			text := strings.TrimSpace(m.input.textInput.Value())
 			m.input.textInput.SetValue("")
@@ -368,16 +387,20 @@ func (m Model) handleFileDrop(path string) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) cancelStream() (Model, tea.Cmd) {
+	if m.settling && m.streamID != nil && m.chatSessionID != nil {
+		sessionID, streamID := *m.chatSessionID, *m.streamID
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			m.client.StopChatSession(ctx, sessionID, streamID)
+		}()
+	}
 	if m.streamCancel != nil {
 		m.streamCancel()
 	}
-	if m.chatSessionID != nil {
-		sid := *m.chatSessionID
-		go m.client.StopChatSession(context.Background(), sid)
-	}
-	m, cmd := m.finishStream(nil)
-	m.viewport.addInfo("Generation stopped.")
-	return m, cmd
+	// The API stream owner sends Stop after acknowledgement. Keep input blocked.
+	m.viewport.addInfo("Stopping generation…")
+	return m, nil
 }
 
 func (m Model) sendMessage(message string) (Model, tea.Cmd) {
@@ -385,6 +408,7 @@ func (m Model) sendMessage(message string) (Model, tea.Cmd) {
 		return m, nil
 	}
 
+	m.submittedMessage = message
 	m.viewport.addUserMessage(message)
 	m.viewport.startAgent()
 
@@ -394,7 +418,10 @@ func (m Model) sendMessage(message string) (Model, tea.Cmd) {
 	m.attachedFiles = nil
 	m.input.clearFiles()
 
+	m.streamID = nil
+	m.settling = false
 	m.isStreaming = true
+	m.readinessUnconfirmed = false
 	m.agentStarted = false
 	m.citations = make(map[int]string)
 	m.status.setStreaming(true)
@@ -418,7 +445,7 @@ func (m Model) sendMessage(message string) (Model, tea.Cmd) {
 
 func (m Model) handleStreamEvent(msg StreamEventMsg) (tea.Model, tea.Cmd) {
 	// Ignore stale events after cancellation
-	if !m.isStreaming {
+	if !m.isStreaming || msg.Channel != m.streamCh {
 		return m, nil
 	}
 	switch e := msg.Event.(type) {
@@ -428,6 +455,7 @@ func (m Model) handleStreamEvent(msg StreamEventMsg) (tea.Model, tea.Cmd) {
 		m.status.setSession(e.ChatSessionID)
 
 	case models.MessageIDEvent:
+		m.streamID = &e.ReservedAgentMessageID
 		m.parentMessageID = &e.ReservedAgentMessageID
 
 	case models.MessageStartEvent:
@@ -490,22 +518,44 @@ func (m Model) handleStreamEvent(msg StreamEventMsg) (tea.Model, tea.Cmd) {
 		m.viewport.appendToken(e.Content)
 
 	case models.StopEvent:
-		return m.finishStream(nil)
+		// Delivery completion does not confirm the save. Drain the stream.
 
 	case models.ErrorEvent:
 		m.viewport.addError(e.Error)
-		return m.finishStream(nil)
+		if m.input.textInput.Value() == "" {
+			m.input.textInput.SetValue(m.submittedMessage)
+		}
 	}
 
 	return m, WaitForStreamEvent(m.streamCh)
 }
 
+type sessionReadyMsg struct {
+	sessionID  string
+	channel    <-chan models.StreamEvent
+	processing bool
+	err        error
+}
+
+func checkSessionReady(client api.ClientAPI, sessionID string, channel <-chan models.StreamEvent) tea.Cmd {
+	return func() tea.Msg {
+		time.Sleep(time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		processing, err := client.IsChatSessionProcessing(ctx, sessionID)
+		return sessionReadyMsg{sessionID, channel, processing, err}
+	}
+}
+
 func (m Model) handleStreamDone(msg StreamDoneMsg) (tea.Model, tea.Cmd) {
-	// Ignore if already cancelled
-	if !m.isStreaming {
+	if !m.isStreaming || msg.Channel != m.streamCh {
 		return m, nil
 	}
-	return m.finishStream(msg.Err)
+	if m.chatSessionID == nil {
+		return m.finishStream(msg.Err)
+	}
+	m.settling = true
+	return m, checkSessionReady(m.client, *m.chatSessionID, m.streamCh)
 }
 
 func (m Model) finishStream(err error) (Model, tea.Cmd) {
@@ -521,6 +571,8 @@ func (m Model) finishStream(err error) (Model, tea.Cmd) {
 	}
 	m.streamCancel = nil
 	m.streamCh = nil
+	m.streamID = nil
+	m.settling = false
 
 	// Auto-rename new sessions
 	if m.needsRename && m.chatSessionID != nil {
@@ -704,6 +756,7 @@ func (m Model) handleSessionResumed(msg SessionResumedMsg) (tea.Model, tea.Cmd) 
 	// Cancel any in-progress stream before replacing the session
 	if m.isStreaming {
 		m, _ = m.cancelStream()
+		m, _ = m.finishStream(nil)
 	}
 
 	detail := msg.Detail

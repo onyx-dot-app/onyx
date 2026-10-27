@@ -10,7 +10,7 @@ import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 
 import { useTypewriter } from "@/hooks/useTypewriter";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import {
   ChatPacket,
   PacketType,
@@ -37,7 +37,6 @@ import { rehypeDirection } from "@/lib/rehypeDirection";
 import { cn } from "@opal/utils";
 import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
-import { getLatestMessageChain } from "@/app/app/services/messageTree";
 
 /** Maps a visible-char count to a markdown index (skips formatting chars,
  *  extends to word boundary). Used by the voice-sync reveal path only. */
@@ -108,9 +107,6 @@ export const MessageTextRenderer: MessageRenderer<
 }) => {
   const t = useTranslations("chat.messages");
   const { enabled: smoothStreamingEnabled } = useSmoothStreaming();
-  const setLatestMessageRenderComplete = useChatSessionStore(
-    (state) => state.setLatestMessageRenderComplete
-  );
   const setIsStreamDraining = useChatSessionStore(
     (state) => state.setIsStreamDraining
   );
@@ -305,49 +301,13 @@ export const MessageTextRenderer: MessageRenderer<
   // "historical mount" (animate=false) for scroll draining below.
   const wasEverAnimatingRef = useRef(animate);
 
-  // Bind sessionId at mount so a navigation while the typewriter is still
-  // draining doesn't write the completion flag to the newly-active session.
+  // Keep scroll-draining updates on the session that mounted this renderer.
   const sessionIdAtMountRef = useRef(
     useChatSessionStore.getState().currentSessionId
   );
-  const requestAtMountRef = useRef(
-    useChatSessionStore
-      .getState()
-      .sessions.get(sessionIdAtMountRef.current ?? "")?.abortController
-  );
-
-  // A saved packet snapshot can reset the parent's processor without remounting
-  // this renderer. Confirm completion again, but release the queue only once.
-  const queueReleaseHandledRef = useRef(false);
   useEffect(() => {
-    if (streamFullyDisplayed) {
-      onComplete();
-    }
-    if (streamFullyDisplayed && !queueReleaseHandledRef.current) {
-      const session = useChatSessionStore
-        .getState()
-        .sessions.get(sessionIdAtMountRef.current ?? "");
-      // A fast answer can finish before its first render. Check request and
-      // message ownership instead of whether its text was ever animated.
-      if (
-        sessionIdAtMountRef.current &&
-        session &&
-        session.abortController === requestAtMountRef.current &&
-        session.chatState !== "loading" &&
-        typeof messageNodeId === "number" &&
-        getLatestMessageChain(session.messageTree).at(-1)?.nodeId ===
-          messageNodeId
-      ) {
-        queueReleaseHandledRef.current = true;
-        setLatestMessageRenderComplete(sessionIdAtMountRef.current, true);
-      }
-    }
-  }, [
-    streamFullyDisplayed,
-    onComplete,
-    messageNodeId,
-    setLatestMessageRenderComplete,
-  ]);
+    if (streamFullyDisplayed) onComplete();
+  }, [streamFullyDisplayed, onComplete]);
 
   // Mirror the typewriter's drain state into the chat-session store so
   // ChatScrollContainer can pause auto-scroll while the drain runs. Only
@@ -479,9 +439,11 @@ export const MessageTextRenderer: MessageRenderer<
       status: null,
       content:
         shouldShowThinkingPlaceholder || shouldShowSpeechWarmupIndicator ? (
-          <Text as="span" secondaryBody text04 className="italic">
-            {t("text.thinkingPlaceholder.text")}
-          </Text>
+          <span className="italic">
+            <Text font="secondary-body" color="text-04">
+              {t("text.thinkingPlaceholder.text")}
+            </Text>
+          </span>
         ) : displayedContent.length > 0 ? (
           <div
             dir="auto"

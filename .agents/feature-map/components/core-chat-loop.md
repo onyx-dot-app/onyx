@@ -164,6 +164,8 @@ Each worker constructs its feature agent and calls `Agent.start(background=False
 Child agents and parallel tools use additional workers when needed.
 `Agent.tools` registers executable tools. `prepare_step` selects registered instances;
 invalid selections fail before model generation. Restored selections must match saved tool declarations.
+Chat restores sources and citations from history, but each new question starts with query expansion enabled.
+Expected tool-selection and research-setting errors use typed application errors so clients receive actionable details.
 Waiting for a cancelled child raises `ChildRunCancelled`, which a tool can handle.
 An unhandled child cancellation becomes a tool error; cancelling the parent interrupts its wait.
 Each run owns its cancellation signal. Caller cancellation propagates into the run;
@@ -470,3 +472,9 @@ for that worker to release ownership.
 Context-limit retries are allowed only before model content arrives. Partial thinking,
 text, or tool calls remain part of the failed generation instead of disappearing during
 a retry.
+
+### Readiness during cache outages
+
+Session details remain readable when the processing cache fails. They report
+`is_processing=True` until the status endpoint confirms that the session is idle.
+A failed status lookup must not enable another send.

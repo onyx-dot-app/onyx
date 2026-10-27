@@ -1,41 +1,26 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
 from typing import Any, Literal, cast
 
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from onyx.agents.models import RunStatus
 from onyx.chat.citation_utils import extract_citation_order_from_text
-from onyx.chat.models import (
-    ChatExecutionRecord,
-    MessageRendering,
-    PresentationMode,
-    ResponseRecord,
-)
-from onyx.chat.renderer import (
-    HIDDEN_TOOLS,
-    MessageRenderer,
-    ResponseLayout,
-    ToolRenderer,
-)
+from onyx.chat.presentation import replay_response
 from onyx.coding_agent.tool_definitions import (
     CODING_AGENT_QUERY_KEY,
     CODING_AGENT_REPO_KEY,
-    CODING_AGENT_TOOL_NAME,
 )
 from onyx.configs.constants import MessageType
-from onyx.context.search.models import SavedSearchDoc, SearchDoc, SearchDocsResponse
+from onyx.context.search.models import SavedSearchDoc, SearchDoc
 from onyx.db.chat import (
     get_db_search_doc_by_id,
     translate_db_search_doc_to_saved_search_doc,
 )
-from onyx.db.chat_response import read_chat_execution
-from onyx.db.models import ChatMessage, ToolCall
+from onyx.db.chat_response import read_chat_execution, read_response_replay_data
+from onyx.db.models import ChatMessage
 from onyx.db.tools import (
-    get_response_tool_records,
     get_tool_by_id,
 )
 from onyx.deep_research.tool_definitions import (
@@ -557,7 +542,10 @@ def translate_assistant_message_to_packets(
     """
     execution = read_chat_execution(chat_message)
     if execution is not None:
-        return _execution_packets(chat_message, execution, db_session)
+        replay = read_response_replay_data(execution, db_session)
+        return replay_response(
+            execution.response, replay.tools, execution.presentation, replay.documents
+        )
     packet_list: list[Packet] = []
 
     if chat_message.message_type != MessageType.ASSISTANT:
@@ -905,123 +893,3 @@ def translate_assistant_message_to_packets(
     )
 
     return packet_list
-
-
-def _execution_packets(
-    chat_message: ChatMessage, execution: ChatExecutionRecord, db_session: Session
-) -> list[Packet]:
-    records = {
-        record.id: record
-        for record in get_response_tool_records(
-            [reference.record_id for reference in execution.tool_records],
-            chat_message.chat_session_id,
-            db_session,
-        )
-    }
-    references = {
-        (reference.message_id, reference.tool_call_id): records[reference.record_id]
-        for reference in execution.tool_records
-    }
-    documents = {
-        doc.document_id: translate_db_search_doc_to_saved_search_doc(doc)
-        for doc in chat_message.search_docs
-    }
-    for record in records.values():
-        documents.update(
-            {
-                doc.document_id: translate_db_search_doc_to_saved_search_doc(doc)
-                for doc in record.search_docs
-            }
-        )
-    return _response_packets(
-        execution.response,
-        references,
-        execution.presentation,
-        documents,
-    )
-
-
-def _response_packets(
-    response: ResponseRecord,
-    records: dict[tuple[str, str], ToolCall],
-    settings: dict[str, MessageRendering],
-    documents: Mapping[str, SearchDoc],
-    layout: ResponseLayout | None = None,
-    parent: Placement | None = None,
-    default_mode: PresentationMode = PresentationMode.ANSWER,
-) -> list[Packet]:
-    layout = layout or ResponseLayout()
-    packets: list[Packet] = []
-    for step_index, step in enumerate(response.steps):
-        message = step.message
-        message_id = message.id or f"{response.run_id}:{step_index}"
-        setting = settings.get(message_id, MessageRendering(mode=default_mode))
-        renderer = MessageRenderer(setting, documents, layout, parent)
-        packets.extend(renderer.complete(message))
-        calls = [
-            call
-            for call in message.tool_calls
-            if call.name not in HIDDEN_TOOLS and call.name != setting.think_tool
-        ]
-        if not calls:
-            continue
-        for call in calls:
-            tool_placement = renderer.tool_placement(call.id)
-            record = records.get((message_id, call.id))
-            execution = step.tools.get(call.id)
-            result = execution.result if execution is not None else None
-            if (
-                result is not None
-                and isinstance(result.details, SearchDocsResponse)
-                and record is not None
-            ):
-                # Saved document IDs support citation and source-card links.
-                search = result.details.model_copy(
-                    update={
-                        "search_docs": [
-                            translate_db_search_doc_to_saved_search_doc(doc)
-                            for doc in record.search_docs
-                        ]
-                    }
-                )
-                result = result.model_copy(update={"details": search})
-            tool_renderer = ToolRenderer(
-                call, tool_placement, record.tool_id if record is not None else None
-            )
-            packets.extend(tool_renderer.start())
-            for child in response.child_runs:
-                if (
-                    child.parent_message_id != message_id
-                    or child.parent_tool_call_id != call.id
-                ):
-                    continue
-                tool_renderer.has_child_output = True
-                child_mode = (
-                    PresentationMode.CODING_THINKING
-                    if call.name == CODING_AGENT_TOOL_NAME
-                    else PresentationMode.ANSWER
-                )
-                packets.extend(
-                    _response_packets(
-                        child,
-                        records,
-                        settings,
-                        documents,
-                        layout,
-                        tool_placement,
-                        child_mode,
-                    )
-                )
-            packets.extend(tool_renderer.complete(result))
-    if response.parent_run_id is None:
-        packets.append(
-            Packet(
-                placement=Placement(turn_index=0),
-                obj=OverallStop(
-                    stop_reason="user_cancelled"
-                    if response.status == RunStatus.CANCELLED
-                    else "finished"
-                ),
-            )
-        )
-    return packets

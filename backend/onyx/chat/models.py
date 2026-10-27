@@ -21,6 +21,7 @@ from onyx.agents.models import (
     StepRecord,
     messages_from_steps,
 )
+from onyx.agents.tools import InputDecision
 from onyx.cache.interface import CacheBackend
 from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.configs.constants import MessageType
@@ -202,6 +203,36 @@ class ResponseLink(BaseModel):
     previous_response_id: int | None
     root_id: int
     status: RunStatus
+
+
+class IncognitoContext(BaseModel):
+    """A session's history plus the version that makes save a compare-and-set."""
+
+    version: int
+    messages: list[Message]
+    previous_run_id: str | None = None
+
+
+class IncognitoAgentState(BaseModel):
+    parent_agent_id: str | None = None
+    agent_id: str
+    agent_path: str
+    description: str
+    configuration: ResearchConfiguration | None
+    responses: list[ResponseRecord]
+    sources: dict[int, SearchDoc] = Field(default_factory=dict)
+
+
+class IncognitoAgentResponse(BaseModel):
+    replay_digest: str
+    agents: list[IncognitoAgentState] = Field(default_factory=list)
+
+
+class IncognitoState(BaseModel):
+    version: int = Field(default=0, ge=0, le=999_999_999_999_999)
+    messages: list[dict[str, JsonValue]] = Field(default_factory=list)
+    previous_run_id: str | None = None
+    responses: dict[str, IncognitoAgentResponse] = Field(default_factory=dict)
 
 
 class SavedAgentContext(BaseModel):
@@ -585,6 +616,19 @@ class ResponseOwner(BaseModel):
     ownership_version: int | None = None
 
 
+class CheckpointPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tag: str
+    value: dict[str, JsonValue]
+
+
+class CheckpointToolAnswer(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    request_id: str
+    decision: InputDecision
+    result: dict[str, JsonValue] | None = None
+
+
 class CheckpointBinding(BaseModel):
     """Application identity; validating this record does not authorize access."""
 
@@ -617,3 +661,17 @@ class ResponseCheckpoint(BaseModel):
 class SavedCheckpoint(BaseModel):
     ownership_version: int
     data: ResponseCheckpoint
+
+
+class ToolReplayData(BaseModel):
+    """Saved application data needed to replay one accepted tool invocation."""
+
+    tool_id: int | None
+    search_docs: list[SearchDoc] = Field(default_factory=list)
+
+
+class ResponseReplayData(BaseModel):
+    """Detached source documents and tool identities for response replay."""
+
+    tools: dict[tuple[str, str], ToolReplayData]
+    documents: dict[str, SearchDoc]

@@ -7,6 +7,7 @@ import pytest
 
 from onyx.agents.models import ExecutionStatus, RunStatus, StepRecord
 from onyx.chat.models import MessageRendering, ResponseRecord
+from onyx.chat.presentation import replay_response
 from onyx.chat.renderer import MessageRenderer, ResponseLayout
 from onyx.chat.response import tool_arguments_for_display
 from onyx.llm.model_response import (
@@ -23,7 +24,6 @@ from onyx.llm.models import (
     ToolCallDeltaEvent,
     apply_generation_event,
 )
-from onyx.server.query_and_chat.session_loading import _response_packets
 from onyx.server.query_and_chat.streaming_models import (
     PythonToolStart,
     ToolCallArgumentDelta,
@@ -243,7 +243,7 @@ def test_interrupted_python_call_replays_the_streamed_code() -> None:
         ],
     )
     saved = ResponseRecord.model_validate_json(response.model_dump_json())
-    packets = _response_packets(saved, {}, {}, {})
+    packets = replay_response(saved, {}, {}, {})
     code = [
         packet.obj.code for packet in packets if isinstance(packet.obj, PythonToolStart)
     ]

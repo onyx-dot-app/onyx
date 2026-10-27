@@ -83,7 +83,8 @@ def test_memory_outcome_is_final_before_serialization(
         steps=[
             StepRecord(
                 message=AssistantMessage(
-                    content=[ToolCall(id="memory-1", name="memory", arguments={})]
+                    id="memory-run:0",
+                    content=[ToolCall(id="memory-1", name="memory", arguments={})],
                 ),
                 generation_status=ExecutionStatus.COMPLETE,
                 tools={

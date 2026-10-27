@@ -656,18 +656,25 @@ def create_chat_agent(
         if setup.forced_tool_id and setup.forced_tool_id not in {
             tool.id for tool in tools
         }:
-            raise ValueError(f"Forced tool {setup.forced_tool_id} not found in tools")
+            raise OnyxError(
+                OnyxErrorCode.BAD_REQUEST,
+                f"Forced tool {setup.forced_tool_id} not found in tools",
+            )
 
         agent_id = str(setup.chat_session_id)
 
         if len(setup.responses) == 1 and setup.new_msg_req.deep_research:
             if setup.chat_session_project_id:
-                raise RuntimeError("Deep research is not supported for projects")
+                raise OnyxError(
+                    OnyxErrorCode.BAD_REQUEST,
+                    "Deep research is not supported for projects",
+                )
             if setup.research_tool_id is None:
                 raise ValueError("Deep research tool configuration is missing")
             if llm.config.max_input_tokens < MIN_RESEARCH_CONTEXT_TOKENS:
-                raise ValueError(
-                    "Deep research requires a model with at least 50,000 input tokens"
+                raise OnyxError(
+                    OnyxErrorCode.BAD_REQUEST,
+                    "Deep research requires a model with at least 50,000 input tokens",
                 )
             return DeepResearchAgent(
                 agent_id=agent_id,

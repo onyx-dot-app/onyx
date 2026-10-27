@@ -24,7 +24,9 @@ from onyx.chat.models import (
     CitationMode,
     MessageRendering,
     PresentationMode,
+    ResponseRecord,
     ToolHistorySnapshot,
+    ToolReplayData,
 )
 from onyx.chat.renderer import (
     HIDDEN_TOOLS,
@@ -148,7 +150,7 @@ def _tool_record(
         generated_file_ids = data.tool_result.file_ids or None
 
     return ToolCallInfo(
-        message_id=output.id or f"{snapshot.run_id}:{turn}",
+        message_id=_message_identity(output),
         parent_message_id=snapshot.parent_message_id,
         parent_tool_call_id=snapshot.parent_tool_call_id,
         turn_index=turn,
@@ -297,7 +299,7 @@ def _project_response_display(
         call_names: dict[tuple[str, str], str] = {}
         for step_index, step in enumerate(node.steps):
             message = step.message
-            message_id = message.id or f"{node.run_id}:{step_index}"
+            message_id = _message_identity(message)
             call_names.update(
                 {(message_id, call.id): call.name for call in message.tool_calls}
             )
@@ -426,3 +428,95 @@ class ResponsePresenter:
                 )
         for packet in output:
             self.emitter.emit(packet)
+
+
+def _message_identity(message: AssistantMessage) -> str:
+    if not message.id:
+        raise ValueError("Accepted response message has no identity")
+    return message.id
+
+
+def replay_response(
+    response: ResponseRecord,
+    records: Mapping[tuple[str, str], ToolReplayData],
+    settings: dict[str, MessageRendering],
+    documents: Mapping[str, SearchDoc],
+    layout: ResponseLayout | None = None,
+    parent: Placement | None = None,
+    default_mode: PresentationMode = PresentationMode.ANSWER,
+) -> list[Packet]:
+    """Render saved accepted steps using detached tool records and source documents.
+
+    The session response carries the saved message error separately. Stop packets
+    close rendering; they do not classify execution success or failure.
+    """
+    layout = layout or ResponseLayout()
+    packets: list[Packet] = []
+    for step in response.steps:
+        message = step.message
+        message_id = _message_identity(message)
+        setting = settings.get(message_id, MessageRendering(mode=default_mode))
+        renderer = MessageRenderer(setting, documents, layout, parent)
+        packets.extend(renderer.complete(message))
+        calls = [
+            call
+            for call in message.tool_calls
+            if call.name not in HIDDEN_TOOLS and call.name != setting.think_tool
+        ]
+        if not calls:
+            continue
+        for call in calls:
+            tool_placement = renderer.tool_placement(call.id)
+            record = records.get((message_id, call.id))
+            execution = step.tools.get(call.id)
+            result = execution.result if execution is not None else None
+            if (
+                result is not None
+                and isinstance(result.details, SearchDocsResponse)
+                and record is not None
+            ):
+                # Saved document IDs support citation and source-card links.
+                search = result.details.model_copy(
+                    update={"search_docs": record.search_docs or []}
+                )
+                result = result.model_copy(update={"details": search})
+            tool_renderer = ToolRenderer(
+                call, tool_placement, record.tool_id if record is not None else None
+            )
+            packets.extend(tool_renderer.start())
+            for child in response.child_runs:
+                if (
+                    child.parent_message_id != message_id
+                    or child.parent_tool_call_id != call.id
+                ):
+                    continue
+                tool_renderer.has_child_output = True
+                child_mode = (
+                    PresentationMode.CODING_THINKING
+                    if call.name == CODING_AGENT_TOOL_NAME
+                    else PresentationMode.ANSWER
+                )
+                packets.extend(
+                    replay_response(
+                        child,
+                        records,
+                        settings,
+                        documents,
+                        layout,
+                        tool_placement,
+                        child_mode,
+                    )
+                )
+            packets.extend(tool_renderer.complete(result))
+    if response.parent_run_id is None:
+        packets.append(
+            Packet(
+                placement=Placement(turn_index=0),
+                obj=OverallStop(
+                    stop_reason="user_cancelled"
+                    if response.status == RunStatus.CANCELLED
+                    else "finished"
+                ),
+            )
+        )
+    return packets

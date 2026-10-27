@@ -1,5 +1,6 @@
 import type { Message } from "@/app/app/interfaces";
 import { processRawChatHistory } from "@/app/app/services/lib";
+import { getLatestMessageChain } from "@/app/app/services/messageTree";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import {
   fetchSettledChatSession,
@@ -19,12 +20,16 @@ function preserveFailedMessages(
   saved: Map<number, Message>,
   local: Map<number, Message>
 ): Map<number, Message> {
+  const latest = getLatestMessageChain(local).at(-1);
   for (const node of local.values()) {
     if (node.type !== "error") continue;
     const savedNode =
       node.messageId === undefined ? undefined : saved.get(node.messageId);
-    // A rejected send has no saved row. Keep its local turn available for retry.
-    if (!savedNode) return local;
+    if (!savedNode) {
+      // Keep the current rejected turn for retry; older rejected attempts are local only.
+      if (node.nodeId === latest?.nodeId) return local;
+      continue;
+    }
     saved.set(savedNode.nodeId, {
       ...savedNode,
       type: "error",
@@ -77,12 +82,16 @@ export async function settleChatSession({
       if (settled.is_processing || settled.current_stream)
         throw new Error("Session became busy during refresh");
       const store = useChatSessionStore.getState();
-      const local = store.sessions.get(sessionId)?.messageTree;
-      const saved = processRawChatHistory(settled.messages, settled.packets);
-      store.updateSessionMessageTree(
-        sessionId,
-        local ? preserveFailedMessages(saved, local) : saved
-      );
+      const session = store.sessions.get(sessionId);
+      // Incognito history can contain only usage metadata. Live content stays local.
+      if (!session?.incognito && !settled.incognito) {
+        const local = session?.messageTree;
+        const saved = processRawChatHistory(settled.messages, settled.packets);
+        store.updateSessionMessageTree(
+          sessionId,
+          local ? preserveFailedMessages(saved, local) : saved
+        );
+      }
     }
     const store = useChatSessionStore.getState();
     if (store.sessions.get(sessionId)?.uncaughtError === errorMessage) {

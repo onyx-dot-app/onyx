@@ -10,6 +10,8 @@ export interface SessionData {
   chatState: ChatState;
   abortController: AbortController | null;
   submittedMessage: string;
+  streamId: number | null;
+  stopRequested: boolean;
 }
 
 interface ChatSessionStore {
@@ -28,6 +30,8 @@ interface ChatSessionStore {
     abortController: AbortController | null,
   ) => void;
   abortSession: (sessionId: string) => void;
+  setStreamId: (sessionId: string, streamId: number) => void;
+  requestStop: (sessionId: string) => void;
   patchNode: (
     sessionId: string,
     nodeId: number,
@@ -41,6 +45,8 @@ function emptySession(): SessionData {
     chatState: "input",
     abortController: null,
     submittedMessage: "",
+    streamId: null,
+    stopRequested: false,
   };
 }
 
@@ -94,19 +100,28 @@ export const useChatSessionStore = create<ChatSessionStore>((set, get) => ({
 
   setAbortController: (sessionId, abortController) =>
     set((state) => ({
-      sessions: writeSession(state.sessions, sessionId, { abortController }),
+      sessions: writeSession(state.sessions, sessionId, {
+        abortController,
+        streamId: null,
+        stopRequested: false,
+      }),
     })),
 
   abortSession: (sessionId) => {
     const data = get().sessions.get(sessionId);
     data?.abortController?.abort();
+  },
+
+  setStreamId: (sessionId, streamId) =>
+    set((state) => ({
+      sessions: writeSession(state.sessions, sessionId, { streamId }),
+    })),
+  requestStop: (sessionId) =>
     set((state) => ({
       sessions: writeSession(state.sessions, sessionId, {
-        abortController: null,
-        chatState: "input",
+        stopRequested: true,
       }),
-    }));
-  },
+    })),
 
   patchNode: (sessionId, nodeId, patch) =>
     set((state) => {

@@ -166,10 +166,9 @@ def fetch_chat_sessions_eagerly_by_time(
     message_order: UnaryExpression = asc(ChatMessage.id)
 
     # Unfiltered on record mode: this backs the usage report, which carries
-    # token counts and no message content, and every mode meters usage.
+    # token counts and no message content. Child runs also meter attributed usage.
     filters: list[ColumnElement | BinaryExpression] = [
         ChatSession.time_created.between(start, end),
-        ChatSession.spawned_by_message_id.is_(None),
     ]
 
     if initial_time:

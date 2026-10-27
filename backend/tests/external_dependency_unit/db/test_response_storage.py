@@ -3,6 +3,7 @@
 import threading
 from collections.abc import Generator
 from contextlib import nullcontext
+from datetime import datetime, timedelta, timezone
 from queue import Queue
 from uuid import UUID, uuid4
 
@@ -12,6 +13,8 @@ from sqlalchemy import delete, event, func, inspect, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.unitofwork import UOWTransaction
 
+from ee.onyx.db.usage_export import get_empty_chat_messages_entries__paginated
+from ee.onyx.server.reporting.usage_export_models import FlowType
 from onyx.agents.compaction import working_messages
 from onyx.agents.events import (
     MessageEndEvent,
@@ -47,13 +50,14 @@ from onyx.chat.models import (
     ChatResponseSnapshot,
     CheckpointBinding,
     MessageRendering,
+    ResponseCheckpoint,
     ResponseRecord,
 )
-from onyx.chat.presentation import ResponsePresenter, project_response
+from onyx.chat.presentation import ResponsePresenter, project_response, replay_response
 from onyx.chat.response import response_record, response_snapshot
 from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.configs.constants import DocumentSource, MessageType
-from onyx.context.search.models import SearchDoc, SearchDocsResponse
+from onyx.context.search.models import SavedSearchDoc, SearchDoc, SearchDocsResponse
 from onyx.db import chat_subagents
 from onyx.db.chat import (
     checkpoint_from_summary,
@@ -69,10 +73,14 @@ from onyx.db.chat import (
     translate_db_message_to_chat_message_detail,
     visible_message_ids,
 )
-from onyx.db.chat_checkpoint import check_checkpoint_owner__no_commit
+from onyx.db.chat_checkpoint import (
+    check_checkpoint_owner__no_commit,
+    publish_checkpoint__no_commit,
+)
 from onyx.db.chat_response import (
     read_chat_execution,
     read_response__no_commit,
+    read_response_replay_data,
     read_response_steps,
     reserve_child_response__no_commit,
     save_chat_response_to_db,
@@ -90,9 +98,11 @@ from onyx.db.enums import IncognitoRecordMode
 from onyx.db.models import (
     ChatMessage,
     ChatMessage__SearchDoc,
+    ChatResponseCheckpoint,
     ChatResponseItem,
     ChatSession,
     Tool,
+    User,
 )
 from onyx.db.models import SearchDoc as StoredSearchDoc
 from onyx.db.models import ToolCall as StoredToolCall
@@ -116,6 +126,7 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
+from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
 from onyx.server.query_and_chat.session_loading import (
     translate_assistant_message_to_packets,
 )
@@ -2479,3 +2490,440 @@ def test_content_free_sessions_reject_incremental_content_writes(
     assert not response.tool_calls
     assert response.response_status is None
     assert db_session.get(ChatSession, child_id) is None
+
+
+def test_legacy_rows_keep_tool_results_and_display_text(
+    db_session: Session, conversation: ChatSession, tool_record: Tool
+) -> None:
+    response = _response(db_session, conversation)
+    response.message = "Existing answer"
+    response.reasoning_tokens = "Existing thinking"
+    db_session.add(
+        StoredToolCall(
+            chat_session_id=conversation.id,
+            parent_chat_message_id=response.id,
+            turn_number=0,
+            tab_index=0,
+            tool_id=tool_record.id,
+            tool_call_id="legacy-call",
+            reasoning_tokens="Tool thinking",
+            tool_call_arguments={"query": "cedar"},
+            legacy_response="Existing result",
+            tool_call_tokens=1,
+            result=None,
+        )
+    )
+    db_session.commit()
+    db_session.expire_all()
+    saved = db_session.get(ChatMessage, response.id)
+    assert saved is not None
+    assert saved.message == "Existing answer"
+    assert saved.reasoning_tokens == "Existing thinking"
+    assert saved.response_status is None
+    assert saved.response_items == []
+    assert read_chat_execution(saved) is None
+    tool = db_session.scalar(
+        select(StoredToolCall).where(
+            StoredToolCall.parent_chat_message_id == response.id
+        )
+    )
+    assert tool is not None
+    assert tool.tool_call_response == "Existing result"
+    assert tool.result is None
+    assert (
+        db_session.scalar(
+            select(StoredToolCall.legacy_response).where(StoredToolCall.id == tool.id)
+        )
+        == "Existing result"
+    )
+
+
+def test_projected_response_round_trip_replays_tool_and_answer(
+    db_session: Session, conversation: ChatSession, tool_record: Tool
+) -> None:
+    response = _response(db_session, conversation)
+    record = _record(response)
+    record.steps = _steps(
+        record.run_id,
+        [
+            AssistantMessage(
+                content=[
+                    ToolCall(
+                        id="remember", name="memory", arguments={"text": "Prefers tea"}
+                    )
+                ]
+            ),
+            ToolResultMessage(
+                tool_call_id="remember",
+                tool_name="memory",
+                content="Saved preference",
+                details=MemoryUpdated(
+                    memory_text="Prefers tea",
+                    operation=MemoryOperation.ADD,
+                    memory_id=7,
+                ),
+            ),
+            AssistantMessage(content=[TextContent(text="I saved your preference.")]),
+        ],
+    )
+    record.answer_step_index = 1
+    snapshot = RunState(
+        run_id=record.run_id,
+        agent_id=record.agent_id,
+        status=RunStatus.COMPLETE,
+        input_messages=record.input_messages,
+        steps=record.steps,
+        answer_step_index=1,
+    )
+    projected = project_response(snapshot, tool_ids={"memory": tool_record.id})
+    assert projected.error is None
+    message_id, session_id = response.id, conversation.id
+    db_session.commit()
+    assert (
+        save_chat_response_to_db(
+            message_id=message_id,
+            chat_session_id=session_id,
+            expected_persist_content=True,
+            response=projected,
+        )
+        == "I saved your preference."
+    )
+    db_session.expire_all()
+    stored = db_session.get(ChatMessage, message_id)
+    assert stored is not None
+    execution = read_chat_execution(stored)
+    assert execution is not None
+    assert [step.model_dump() for step in execution.response.steps] == [
+        step.model_dump() for step in record.steps
+    ]
+    assert len(execution.tool_records) == 1
+    replay = read_response_replay_data(execution, db_session)
+    packets = replay_response(
+        execution.response, replay.tools, execution.presentation, replay.documents
+    )
+    assert (
+        "".join(
+            packet.obj.content
+            for packet in packets
+            if isinstance(packet.obj, AgentResponseDelta)
+        )
+        == "I saved your preference."
+    )
+    memory = [
+        packet.obj for packet in packets if isinstance(packet.obj, MemoryToolDelta)
+    ]
+    assert len(memory) == 1
+    assert memory[0].memory_text == "Prefers tea"
+    assert memory[0].memory_id == 7
+    assert memory[0].operation == "add"
+
+
+def test_search_projection_restores_saved_source_cards(
+    db_session: Session, conversation: ChatSession, tool_record: Tool
+) -> None:
+    response = _response(db_session, conversation)
+    record = _record(response)
+    document = SearchDoc(
+        document_id="cedar-doc",
+        chunk_ind=0,
+        semantic_identifier="Cedar guide",
+        blurb="Cedar facts",
+        source_type=DocumentSource.WEB,
+        boost=1,
+        hidden=False,
+        metadata={},
+        match_highlights=[],
+    )
+    record.steps = _steps(
+        record.run_id,
+        [
+            AssistantMessage(
+                content=[
+                    ToolCall(
+                        id="search",
+                        name="internal_search",
+                        arguments={"query": "cedar"},
+                    )
+                ]
+            ),
+            ToolResultMessage(
+                tool_call_id="search",
+                tool_name="internal_search",
+                content="Cedar facts",
+                details=SearchDocsResponse(
+                    search_docs=[document], citation_mapping={1: document.document_id}
+                ),
+            ),
+            AssistantMessage(content=[TextContent(text="Cedar is a tree.")]),
+        ],
+    )
+    projected = project_response(
+        RunState(
+            run_id=record.run_id,
+            agent_id=record.agent_id,
+            status=RunStatus.COMPLETE,
+            input_messages=record.input_messages,
+            steps=record.steps,
+            answer_step_index=1,
+        ),
+        tool_ids={"internal_search": tool_record.id},
+    )
+    assert projected.error is None
+    message_id, session_id = response.id, conversation.id
+    db_session.commit()
+    save_chat_response_to_db(
+        message_id=message_id,
+        chat_session_id=session_id,
+        expected_persist_content=True,
+        response=projected,
+    )
+    db_session.expire_all()
+    stored = db_session.get(ChatMessage, message_id)
+    assert stored is not None
+    execution = read_chat_execution(stored)
+    assert execution is not None
+    replay = read_response_replay_data(execution, db_session)
+    saved_document = replay.documents[document.document_id]
+    assert isinstance(saved_document, SavedSearchDoc)
+    assert saved_document.db_doc_id > 0
+    packets = replay_response(
+        execution.response, replay.tools, execution.presentation, replay.documents
+    )
+    cards = [
+        packet.obj
+        for packet in packets
+        if isinstance(packet.obj, SearchToolDocumentsDelta)
+    ]
+    assert len(cards) == 1
+    assert cards[0].documents == [saved_document]
+    assert (
+        "".join(
+            packet.obj.content
+            for packet in packets
+            if isinstance(packet.obj, AgentResponseDelta)
+        )
+        == "Cedar is a tree."
+    )
+    reference = execution.tool_records[0]
+    assert (
+        replay.tools[(reference.message_id, reference.tool_call_id)].tool_id
+        == tool_record.id
+    )
+    invalid = execution.model_copy(deep=True)
+    invalid.tool_records[0].message_id = "unrelated-message"
+    with pytest.raises(ValueError, match="not part of this response"):
+        read_response_replay_data(invalid, db_session)
+
+
+def test_child_usage_is_reported_with_root_attribution(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    user = User(
+        id=uuid4(), email=f"usage-{uuid4()}@example.com", hashed_password="unused"
+    )
+    db_session.add(user)
+    db_session.flush()
+    conversation.user_id = user.id
+    conversation.onyxbot_flow = True
+    root = _response(db_session, conversation)
+    record = _record(root)
+    child = _child_record(db_session, record, uuid4(), "Child answer")
+    _save(db_session, root, record)
+    db_session.commit()
+    try:
+        child_session = db_session.get(ChatSession, UUID(child.agent_id or ""))
+        assert child_session is not None
+        assert child_session.user_id == user.id
+        assert child_session.persona_id == conversation.persona_id
+        assert child_session.onyxbot_flow is True
+        _, entries = get_empty_chat_messages_entries__paginated(
+            db_session,
+            (
+                datetime.now(timezone.utc) - timedelta(days=1),
+                datetime.now(timezone.utc) + timedelta(days=1),
+            ),
+            limit=None,
+        )
+        child_entries = [
+            entry for entry in entries if entry.chat_session_id == child_session.id
+        ]
+        assert len(child_entries) == 1
+        assert child_entries[0].user_id == str(user.id)
+        assert child_entries[0].user_email == user.email
+        assert child_entries[0].flow_type == FlowType.SLACK
+        assert child_entries[0].number_of_tokens > 0
+    finally:
+        db_session.rollback()
+        db_session.delete(user)
+        db_session.commit()
+
+
+def test_mixed_legacy_and_canonical_history_preserves_each_saved_format(
+    db_session: Session, conversation: ChatSession, tool_record: Tool
+) -> None:
+    legacy = _response(db_session, conversation, text="Old question")
+    legacy.message = "Old answer"
+    legacy_call = StoredToolCall(
+        chat_session_id=conversation.id,
+        parent_chat_message_id=legacy.id,
+        turn_number=0,
+        tab_index=0,
+        tool_id=tool_record.id,
+        tool_call_id="old-call",
+        tool_call_arguments={"query": "old"},
+        legacy_response="Old actual tool output",
+        tool_call_tokens=1,
+        result=None,
+    )
+    db_session.add(legacy_call)
+    current = _response(db_session, conversation, text="New question", previous=legacy)
+    record = _record(current, "New answer")
+    record.steps = _steps(
+        record.run_id,
+        [
+            AssistantMessage(
+                content=[ToolCall(id="new-call", name="lookup", arguments={})]
+            ),
+            ToolResultMessage(
+                tool_call_id="new-call",
+                tool_name="lookup",
+                content="New actual tool output",
+            ),
+            AssistantMessage(content=[TextContent(text="New answer")]),
+        ],
+    )
+    record.answer_step_index = 1
+    _save(db_session, current, record)
+    db_session.commit()
+    db_session.expire_all()
+
+    history = capture_chat_history([legacy, current], {tool_record.id: "lookup"}, len)
+    old_results = [
+        m for m in history[0].response_messages if isinstance(m, ToolResultMessage)
+    ]
+    new_results = [
+        m for m in history[1].response_messages if isinstance(m, ToolResultMessage)
+    ]
+    assert [m.text for m in old_results] == [TOOL_CALL_RESPONSE_CROSS_MESSAGE]
+    assert [m.text for m in new_results] == ["New actual tool output"]
+    assert legacy_call.result is None
+    assert legacy_call.tool_call_response == "Old actual tool output"
+    assert (
+        db_session.scalar(
+            select(StoredToolCall.legacy_response).where(
+                StoredToolCall.id == legacy_call.id
+            )
+        )
+        == "Old actual tool output"
+    )
+    assert not legacy.response_items
+    assert current.response_items
+
+
+def test_replay_sources_include_tool_documents_and_preserve_root_versions(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    response = _response(db_session, conversation)
+    record = _record(response)
+    record.steps = _steps(
+        record.run_id,
+        [
+            AssistantMessage(
+                content=[ToolCall(id="search", name="internal_search", arguments={})]
+            ),
+            AssistantMessage(content=[TextContent(text="Answer")]),
+        ],
+    )
+    record.answer_step_index = 1
+    _save(db_session, response, record)
+    documents = [
+        StoredSearchDoc(
+            document_id=document_id,
+            chunk_ind=0,
+            semantic_id="Guide",
+            blurb=version,
+            boost=1,
+            source_type=DocumentSource.WEB,
+            hidden=False,
+            doc_metadata={},
+            score=1.0,
+            match_highlights=[],
+        )
+        for document_id, version in (
+            ("shared", "root version"),
+            ("shared", "tool version"),
+            ("tool-only", "tool-only source"),
+        )
+    ]
+    db_session.add_all(documents)
+    response.search_docs = documents[:1]
+    assert response.tool_calls is not None
+    response.tool_calls[0].search_docs = documents[1:]
+    db_session.flush()
+    db_session.expire_all()
+
+    execution = read_chat_execution(response)
+    assert execution is not None
+    replay = read_response_replay_data(execution, db_session)
+    assert {key: doc.blurb for key, doc in replay.documents.items()} == {
+        "shared": "root version",
+        "tool-only": "tool-only source",
+    }
+    reference = execution.tool_records[0]
+    assert [
+        doc.blurb
+        for doc in replay.tools[
+            (reference.message_id, reference.tool_call_id)
+        ].search_docs
+    ] == ["tool version", "tool-only source"]
+
+
+@pytest.mark.parametrize("existing_checkpoint", [False, True])
+def test_content_free_sessions_reject_checkpoint_content_before_writes(
+    db_session: Session,
+    conversation: ChatSession,
+    executed_sql: list[str],
+    existing_checkpoint: bool,
+) -> None:
+    conversation.incognito_record_mode = IncognitoRecordMode.USAGE_ONLY
+    response = _response(db_session, conversation, text="")
+    response.response_status = RunStatus.RUNNING
+    if existing_checkpoint:
+        db_session.add(
+            ChatResponseCheckpoint(
+                chat_message_id=response.id, ownership_version=1, state={}
+            )
+        )
+    db_session.commit()
+    checkpoint = ResponseCheckpoint(
+        history_digest="history",
+        response_digest="response",
+        binding=CheckpointBinding(tenant_id="public", response_id=str(response.id)),
+        revision=1,
+        progress={"private": "answer"},
+        compaction_checkpoint=None,
+        request_params=None,
+        message_payloads=[],
+        input_payloads=[],
+    )
+    executed_sql.clear()
+    with pytest.raises(ValueError, match="Content-free"):
+        publish_checkpoint__no_commit(
+            db_session,
+            response.id,
+            checkpoint,
+            expected_ownership_version=1 if existing_checkpoint else None,
+        )
+    db_session.flush()
+    assert not any(
+        statement.lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
+        for statement in executed_sql
+    )
+    assert response.response_status == RunStatus.RUNNING
+    saved = db_session.get(ChatResponseCheckpoint, response.id)
+    if existing_checkpoint:
+        assert saved is not None
+        assert saved.state == {}
+        assert saved.ownership_version == 1
+    else:
+        assert saved is None

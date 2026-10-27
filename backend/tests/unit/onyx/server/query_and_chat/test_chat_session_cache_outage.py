@@ -48,4 +48,4 @@ def test_saved_session_loads_when_processing_cache_is_unavailable(
     assert response.chat_session_id == session.id
     assert response.description == "Saved conversation"
     assert response.current_stream is None
-    assert response.is_processing is False
+    assert response.is_processing is True
