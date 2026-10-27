@@ -295,6 +295,22 @@ def _restore_masked_embedding_api_key(
     return incoming
 
 
+def ensure_embedding_url_unchanged(
+    stored_api_url: str | None, requested_api_url: str | None
+) -> None:
+    """A stored API key may only go to the URL it was saved with, so a caller
+    who does not know the key cannot send it to another host."""
+
+    def normalize(url: str | None) -> str:
+        return (url or "").strip().rstrip("/")
+
+    if normalize(stored_api_url) != normalize(requested_api_url):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Enter the API key again to use a new API URL.",
+        )
+
+
 def upsert_cloud_embedding_provider(
     db_session: Session, provider: CloudEmbeddingProviderCreationRequest
 ) -> CloudEmbeddingProvider:
@@ -312,6 +328,18 @@ def upsert_cloud_embedding_provider(
             existing_provider.api_key,
             ApiKeyIntent.from_request_flag(provider.api_key_changed),
         )
+        stored_key: str | None = (
+            existing_provider.api_key.get_value(apply_mask=False)
+            if existing_provider.api_key is not None
+            else None
+        )
+        # Keeps the stored key without sending it, so the caller may not know it.
+        if (
+            stored_key is not None
+            and updates["api_key"] == stored_key
+            and provider.api_key != stored_key
+        ):
+            ensure_embedding_url_unchanged(existing_provider.api_url, provider.api_url)
         if "vertex_config" not in provider.model_fields_set:
             # Older clients do not send authentication metadata. Preserve it for
             # unrelated edits, but a supplied credential selects legacy auth.

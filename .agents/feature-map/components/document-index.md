@@ -88,9 +88,9 @@ dropped the migration tables, and #15336 removed Vespa and the retrieval toggle.
 | POST | `/search-settings/reindex/port/resume` | | Resumes a stalled reindex-port backfill. |
 | POST | `/search-settings/update-inference-settings` | | |
 | GET/PUT/DELETE | `/search-settings/unstructured-api-key-set`, `/upsert-unstructured-api-key`, `/delete-unstructured-api-key` | | Unrelated document-parsing key, colocated in this router. |
-| POST | `/admin/embedding/test-embedding` | `test_embedding_configuration` (`server/manage/embedding/api.py`) | Dry-run an embedding call against a candidate config. Returns the vector length as `dimension`. |
+| POST | `/admin/embedding/test-embedding` | `test_embedding_configuration` (`server/manage/embedding/api.py`) | Dry-run an embedding call against a candidate config. Returns the vector length as `dimension`. Without an `api_key`, it uses the stored key, but only with the stored `api_url`. |
 | GET | `/admin/embedding` | `list_embedding_models` | |
-| GET/PUT/DELETE | `/admin/embedding/embedding-provider[/{provider_type}]` | | Cloud embedding provider credentials. |
+| GET/PUT/DELETE | `/admin/embedding/embedding-provider[/{provider_type}]` | | Cloud embedding provider credentials. A PUT that keeps the stored key without sending it cannot change `api_url` (`INVALID_INPUT`). `vertex_config.location` must be a region name, because the Google client builds its hostname from it. |
 
 Per the frontend rule in `CLAUDE.md`, always call these through the web server
 (`http://localhost:3000/api/...`), never the backend port directly.
