@@ -44,14 +44,16 @@ for thresholds, timeouts, and recovery behavior.
 An admin experiences it directly on the embedding-model page. They pick a new
 embedding model and start a re-index. The picker lists only the selectable models of
 the registry (self-hosted Granite, Voyage 4 Nano and Nemotron; Cohere, OpenAI, Google
-and Voyage cloud models). Custom Hugging Face models, LiteLLM, Azure and Bifrost are in
-an Advanced section. It is collapsed by default, but the cloud section opens when the
-current or staged model is a LiteLLM, Azure or Bifrost model, and shows that model as a
-card. A search for that model's name also finds it. The admin can still close the
+and Voyage cloud models). Custom Hugging Face models, LiteLLM, Azure, Bifrost and
+OpenAI-compatible endpoints are in an Advanced section. It is collapsed by default, but
+the cloud section opens when the current or staged model is one of these cloud models,
+and shows that model as a card. The OpenAI-compatible setup can request shorter vectors
+(`reduced_dimension`, sent as the OpenAI `dimensions` parameter); a re-index keeps the
+stored value. A search for that model's name also finds it. The admin can still close the
 section. A legacy model (for example nomic, E5, Cohere v3) shows
 only while it is the current model. It can re-index, but it cannot be chosen as a new
 target. Before the re-index starts, the API embeds a fixed test string with the stored
-provider settings for Bifrost and for every selectable cloud model. From that point,
+provider settings for Bifrost, OpenAI-compatible and every selectable cloud model. From that point,
 Onyx builds a second, parallel index in the background using the new model while the
 old index keeps serving live search. A progress view shows re-index status and errors.
 When indexing catches up (the exact criterion depends on the switchover type chosen),
@@ -73,7 +75,7 @@ dropped the migration tables, and #15336 removed Vespa and the retrieval toggle.
 |---|---|---|---|
 | GET | `/manage/admin/opensearch-health` | `read_resource_health` | Cached resource pressure; requires `FULL_ADMIN_PANEL_ACCESS`. |
 | POST | `/manage/admin/opensearch-health/popup` | `claim_resource_popup` | Claims a tenant-scoped, per-admin 24-hour popup allowance in Redis. |
-| POST | `/search-settings/set-new-search-settings` | `set_new_search_settings` | Creates a FUTURE `SearchSettings` row, starts a re-index. Requires `FULL_ADMIN_PANEL_ACCESS`. For Bifrost and every selectable cloud model, it first embeds a test string with the stored provider settings (`_validate_cloud_embedding_model`) and rejects a failed call or a dimension mismatch. `_check_embedding_model_target` then refuses a legacy model or an unknown OpenAI, Cohere, Google or Voyage model as a new target with `INVALID_INPUT`. A re-index with the PRESENT model is allowed. |
+| POST | `/search-settings/set-new-search-settings` | `set_new_search_settings` | Creates a FUTURE `SearchSettings` row, starts a re-index. Requires `FULL_ADMIN_PANEL_ACCESS`. For Bifrost, OpenAI-compatible and every selectable cloud model, it first embeds a test string with the stored provider settings (`_validate_cloud_embedding_model`) and rejects a failed call or a dimension mismatch. `_check_embedding_model_target` then refuses a legacy model or an unknown OpenAI, Cohere, Google or Voyage model as a new target with `INVALID_INPUT`. A re-index with the PRESENT model is allowed. |
 | POST | `/search-settings/cancel-new-embedding` | `cancel_new_embedding` | Cancels the in-flight FUTURE re-index. |
 | DELETE | `/search-settings/delete-search-settings` | | |
 | GET | `/search-settings/get-current-search-settings` | | The PRESENT row. |
