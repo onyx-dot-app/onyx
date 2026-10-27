@@ -2,20 +2,13 @@
 
 import React, { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
-import { InputTypeIn, SelectCard, Text } from "@opal/components";
+import { IconContainer, InputTypeIn, SelectCard } from "@opal/components";
 import { updateUserPersonalization } from "@/lib/users/svc";
 import { useUser } from "@/providers/UserProvider";
 import { Button } from "@opal/components";
-import { InputAvatar } from "@opal/components";
 import { cn } from "@opal/utils";
 import { SvgCheckCircle, SvgEdit, SvgUser, SvgX } from "@opal/icons";
-import {
-  Content,
-  ContentAction,
-  InputHorizontal,
-  Section,
-  toast,
-} from "@opal/layouts";
+import { ContentAction, InputHorizontal, Section, toast } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
 import { useSettings } from "@/lib/settings/hooks";
 
@@ -145,49 +138,56 @@ export default function NonAdminStep() {
             onClick={handleEdit}
             aria-label={t("nameStep.edit.ariaLabel")}
           >
-            <Section
-              flexDirection="row"
-              justifyContent="between"
-              alignItems="center"
-              height="auto"
-            >
-              <Content
-                icon={({ className, style }) => (
-                  <InputAvatar
-                    style={style}
-                    className={cn(
-                      className,
-                      "flex items-center justify-center bg-background-neutral-inverted-00"
-                    )}
-                  >
-                    <Text as="p" font="secondary-body" color="text-inverted-05">
-                      {savedName?.[0]?.toUpperCase()}
-                    </Text>
-                  </InputAvatar>
+            <div className="pl-1">
+              <ContentAction
+                icon={() => (
+                  <IconContainer
+                    size="secondary"
+                    avatar="user"
+                    name={savedName ?? ""}
+                  />
                 )}
                 title={savedName}
                 sizePreset="main-ui"
                 variant="section"
+                padding={0}
+                center
+                rightChildren={
+                  <Section
+                    flexDirection="row"
+                    alignItems="center"
+                    gap={1}
+                    width="fit"
+                    height="auto"
+                  >
+                    <Hoverable.Item
+                      group="nonAdminName"
+                      variant="appear-on-hover"
+                    >
+                      <Button
+                        prominence="tertiary"
+                        size="md"
+                        icon={SvgEdit}
+                        tooltip={t("nameStep.edit.tooltip")}
+                      />
+                    </Hoverable.Item>
+                    <Section padding={1} width="fit" height="auto">
+                      <IconContainer
+                        icon={({ className, ...props }) => (
+                          <SvgCheckCircle
+                            className={cn(
+                              className,
+                              "stroke-status-success-05"
+                            )}
+                            {...props}
+                          />
+                        )}
+                      />
+                    </Section>
+                  </Section>
+                }
               />
-              <Section
-                flexDirection="row"
-                alignItems="center"
-                gap={1}
-                padding={1}
-                width="fit"
-                height="auto"
-              >
-                <Hoverable.Item group="nonAdminName" variant="appear-on-hover">
-                  <Button
-                    prominence="internal"
-                    size="md"
-                    icon={SvgEdit}
-                    tooltip={t("nameStep.edit.tooltip")}
-                  />
-                </Hoverable.Item>
-                <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
-              </Section>
-            </Section>
+            </div>
           </SelectCard>
         </Hoverable.Root>
       )}
