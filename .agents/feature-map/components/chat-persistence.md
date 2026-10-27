@@ -112,7 +112,7 @@ The tenant and response binding checks identity; callers must still authorize ac
 `chat/response_models.py:ResponseCheckpoint` defines this stored payload.
 
 `db/chat_checkpoint.py` publishes and claims checkpoints under a response row lock.
-Publication rejects content-free incognito sessions before writing checkpoint content.
+Publication rejects content-free incognito sessions and mismatched response bindings before writing checkpoint content.
 A claim increments the ownership version and changes SUSPENDED to RUNNING.
 Competing claimers cannot both acquire the checkpoint.
 A failed reconstruction can release its claim while its ownership version still matches.

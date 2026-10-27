@@ -244,12 +244,17 @@ def test_competing_publications_preserve_one_checkpoint(
 
 
 @pytest.mark.parametrize("existing_checkpoint", [False, True])
-def test_content_free_sessions_reject_checkpoint_content_before_writes(
-    db_session: Session, committed_response: int, existing_checkpoint: bool
+@pytest.mark.parametrize("rejection", ["content_free", "response_binding"])
+def test_invalid_checkpoint_publication_leaves_state_unchanged(
+    db_session: Session,
+    committed_response: int,
+    existing_checkpoint: bool,
+    rejection: str,
 ) -> None:
     response = db_session.get(ChatMessage, committed_response)
     assert response is not None
-    response.chat_session.incognito_record_mode = IncognitoRecordMode.USAGE_ONLY
+    if rejection == "content_free":
+        response.chat_session.incognito_record_mode = IncognitoRecordMode.USAGE_ONLY
     if existing_checkpoint:
         db_session.add(
             ChatResponseCheckpoint(
@@ -259,6 +264,10 @@ def test_content_free_sessions_reject_checkpoint_content_before_writes(
     db_session.commit()
     checkpoint = checkpoint_data(response.id)
     checkpoint.progress = {"private": "answer"}
+    if rejection == "response_binding":
+        checkpoint.binding = CheckpointBinding(
+            tenant_id="public", response_id=str(response.id + 1)
+        )
     statements: list[str] = []
 
     def capture(statement: str, **_event: object) -> None:
@@ -267,7 +276,8 @@ def test_content_free_sessions_reject_checkpoint_content_before_writes(
     engine = db_session.get_bind()
     event.listen(engine, "before_cursor_execute", capture, named=True)
     try:
-        with pytest.raises(ValueError, match="Content-free"):
+        expected_error = "Content-free" if rejection == "content_free" else "binding"
+        with pytest.raises(ValueError, match=expected_error):
             publish_checkpoint__no_commit(
                 db_session,
                 response.id,
