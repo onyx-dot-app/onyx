@@ -88,7 +88,7 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
      unconditionally and pass the remainder through as the literal model id
    STATUS: STILL NEEDED - v1.93.0 consults the registry before honoring the prefix.
 
-8. Disabled Thinking Dropped On Tool Turns (_patch_anthropic_keeps_disabled_thinking):
+8. Thinking Dropped On Tool Turns (_patch_anthropic_keeps_requested_thinking):
    - AnthropicConfig.transform_request drops the thinking param when the last
      assistant message with tool_calls carries no thinking blocks, guarding against
      "Expected thinking or redacted_thinking, but found tool_use"
@@ -98,6 +98,11 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
      thinking is the state in which Anthropic requires those blocks to be absent
    - Reasoning off then silently becomes the API's own default on every turn after a
      tool call, which on the Claude 5 line is full reasoning
+   - Anthropic's own API also accepts enabled thinking after tool calls without
+     thinking blocks. Onyx sends it there only when the model chose not to think
+     on that step, and the drop otherwise keeps thinking off for the rest of the
+     session. So AnthropicConfig itself (not Vertex, Azure or Bedrock) keeps any
+     thinking type
    - Bedrock Converse carries its own copy of the same check in
      AmazonConverseConfig._transform_request_helper, and keeps thinking under
      additionalModelRequestFields rather than at the top level, so both transforms
@@ -130,7 +135,7 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
 import re
 import time
 import uuid
-from typing import Any, List, Optional, cast
+from typing import TYPE_CHECKING, Any, List, Optional, cast
 
 from litellm.completion_extras.litellm_responses_transformation.transformation import (
     LiteLLMResponsesTransformationHandler,
@@ -152,6 +157,9 @@ from litellm.types.utils import (
 _original_responses_chunk_parser = (
     OpenAiResponsesToChatCompletionStreamIterator.chunk_parser
 )
+
+if TYPE_CHECKING:
+    from litellm.llms.anthropic.chat.transformation import AnthropicConfig
 
 
 def _patch_ollama_chunk_parser() -> None:
@@ -855,11 +863,27 @@ def _thinking_off(optional_params: dict) -> dict | None:
     return None
 
 
-def _patch_anthropic_keeps_disabled_thinking() -> None:
+def _anthropic_thinking_to_keep(
+    config: "AnthropicConfig", optional_params: dict
+) -> dict | None:
+    """The thinking param to restore if upstream drops it on a tool turn.
+
+    The Anthropic API itself accepts enabled thinking there. Other hosts of the
+    same transform (Vertex, Azure, Bedrock invoke) are not verified, so they
+    keep only the off types.
+    """
+    thinking = optional_params.get("thinking")
+    if config.custom_llm_provider == "anthropic" and isinstance(thinking, dict):
+        return thinking
+    return _thinking_off(optional_params)
+
+
+def _patch_anthropic_keeps_requested_thinking() -> None:
     """
     Patches the two Anthropic request transforms to keep an explicit off
     thinking type (disabled, or between_tools on Sonnet 5.5) on a turn whose
-    history carries tool calls with no thinking blocks.
+    history carries tool calls with no thinking blocks. The Anthropic API
+    itself also keeps enabled thinking there.
 
     Upstream drops the param there to avoid "Expected thinking or
     redacted_thinking, but found tool_use", but it gates on `thinking is not
@@ -889,7 +913,7 @@ def _patch_anthropic_keeps_disabled_thinking() -> None:
             litellm_params: dict,
             headers: dict,
         ) -> dict:
-            thinking = _thinking_off(optional_params)
+            thinking = _anthropic_thinking_to_keep(self, optional_params)
             body = original_transform_request(
                 self, model, messages, optional_params, litellm_params, headers
             )
@@ -1084,7 +1108,7 @@ def apply_monkey_patches() -> None:
     - Patching ResponsesAPIResponse.model_construct to fix usage format in all code paths
     - Patching Logging._get_assembled_streaming_response to avoid mutating original response
     - Patching responses_api_bridge_check to always honor an explicit responses/ prefix
-    - Patching AnthropicConfig.transform_request to keep disabled thinking on tool turns
+    - Patching AnthropicConfig.transform_request to keep requested thinking on tool turns
     - Patching OpenRouterChatCompletionStreamingHandler.chunk_parser to keep the served model
     - Patching VertexGeminiConfig for Gemini 4+ thinking and content-less candidates
     """
@@ -1095,6 +1119,6 @@ def apply_monkey_patches() -> None:
     _patch_responses_api_usage_format()
     _patch_logging_assembled_streaming_response()
     _patch_responses_api_bridge_check()
-    _patch_anthropic_keeps_disabled_thinking()
+    _patch_anthropic_keeps_requested_thinking()
     _patch_openrouter_routed_model()
     _patch_vertex_gemini_newer_models()

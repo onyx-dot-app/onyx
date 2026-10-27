@@ -444,12 +444,18 @@ def test_azure_should_fake_stream_inherits_registry_aware_patch() -> None:
         )
 
 
-def _anthropic_body(thinking: dict[str, str], messages: list[Any]) -> dict[str, Any]:
+def _anthropic_body(
+    thinking: dict[str, str], messages: list[Any], vertex: bool = False
+) -> dict[str, Any]:
     apply_monkey_patches()
     from litellm.llms.anthropic.chat.transformation import AnthropicConfig
+    from litellm.llms.vertex_ai.vertex_ai_partner_models.anthropic.transformation import (
+        VertexAIAnthropicConfig,
+    )
 
+    config = VertexAIAnthropicConfig() if vertex else AnthropicConfig()
     with mock.patch("litellm.modify_params", True):
-        return AnthropicConfig().transform_request(
+        return config.transform_request(
             model="claude-sonnet-5",
             messages=messages,
             optional_params={"thinking": dict(thinking), "max_tokens": 1024},
@@ -484,9 +490,15 @@ def test_disabled_thinking_survives_tool_call_history(off_type: str) -> None:
     assert body["thinking"] == {"type": off_type}
 
 
-def test_enabled_thinking_still_dropped_after_tool_calls() -> None:
-    """The guard itself must stay: we keep no signed blocks to replay."""
+def test_anthropic_api_keeps_enabled_thinking_after_tool_calls() -> None:
+    """Onyx sends thinking after a tool step with no blocks only when the model
+    chose not to think, and the Anthropic API accepts it."""
     body = _anthropic_body({"type": "adaptive"}, list(_TOOL_HISTORY))
+    assert body["thinking"] == {"type": "adaptive"}
+
+
+def test_vertex_still_drops_enabled_thinking_after_tool_calls() -> None:
+    body = _anthropic_body({"type": "adaptive"}, list(_TOOL_HISTORY), vertex=True)
     assert "thinking" not in body
 
 
