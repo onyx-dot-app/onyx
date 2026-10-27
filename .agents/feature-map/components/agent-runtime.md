@@ -116,6 +116,7 @@ Production chat does not call this module yet.
 - Application directories authorize saved-run access, including cached results across views.
 - Listener and output-flush failures mark affected deliveries failed without failing execution or storage.
 - Closing delivery rejects new events; accepted events remain pending through buffered-output flushes.
+  A worker startup failure still closes admission; the caller handles final output cleanup.
 - Immutable deltas can be shared; mutable event payloads remain isolated between listeners.
 - Token-count caches belong to one run and retain only the current request text.
 

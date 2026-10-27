@@ -263,10 +263,12 @@ class EventDispatcher:
     def close(self) -> None:
         """Reject new events and let the worker exit after accepted work drains."""
         with self._condition:
-            if self._flush is not None:
-                self.start()
-            self._closed = True
-            self._condition.notify_all()
+            try:
+                if self._flush is not None:
+                    self.start()
+            finally:
+                self._closed = True
+                self._condition.notify_all()
 
 
 class EventDelivery:
