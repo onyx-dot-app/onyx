@@ -1,7 +1,7 @@
 import base64
 from io import BytesIO
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 from onyx.configs.app_configs import (
     IMAGE_SUMMARIZATION_SYSTEM_PROMPT,
@@ -185,19 +185,23 @@ def _resize_image_if_needed(image_data: bytes) -> bytes:
         return image_data
 
     with Image.open(BytesIO(image_data)) as img:
-        img.thumbnail(
+        # The saved JPEG drops the EXIF orientation tag, so the rotation is
+        # applied to the pixels first.
+        upright = ImageOps.exif_transpose(img)
+        upright.thumbnail(
             (_RESIZED_MAX_DIMENSION_PX, _RESIZED_MAX_DIMENSION_PX),
             Image.Resampling.LANCZOS,
         )
         output = BytesIO()
-        _to_jpeg_compatible(img).save(output, format="JPEG", quality=85)
+        _to_jpeg_compatible(upright).save(output, format="JPEG", quality=85)
         return output.getvalue()
 
 
 def _to_jpeg_compatible(img: Image.Image) -> Image.Image:
     """JPEG stores only RGB or greyscale, so transparent and palette images are
-    flattened onto white."""
-    if img.mode in ("RGB", "L"):
+    flattened onto white. An RGB or greyscale PNG can still mark one colour as
+    transparent, so that is flattened too."""
+    if img.mode in ("RGB", "L") and "transparency" not in img.info:
         return img
     rgba = img.convert("RGBA")
     flattened = Image.new("RGB", rgba.size, (255, 255, 255))
