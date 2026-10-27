@@ -1257,7 +1257,6 @@
         "description": "选择用于未来分类和审核功能的模型。Onyx 尚未使用此模型。",
         "clear": "清除",
         "notConfigured": "未配置",
-        "saved": "决策模型已更新",
         "saveFailed": "无法更新决策模型"
       },
       "header": {
@@ -2846,18 +2845,14 @@
         "indexingStartUnexpectedError": "尝试启动索引时发生意外错误",
         "indexingUpdateStarted": "已成功启动索引更新",
         "nameUpdateFailed": "更新连接器名称失败",
-        "nameUpdated": "已成功更新连接器名称",
         "noUnresolvedErrors": "没有可重试的未解决错误。",
         "pruningFrequencyUpdateFailed": "更新连接器清理频率失败",
-        "pruningFrequencyUpdated": "已成功更新连接器清理频率",
         "refreshFrequencyUpdateFailed": "更新连接器刷新频率失败",
-        "refreshFrequencyUpdated": "已成功更新连接器刷新频率",
         "targetedReindexFailed": "定向重新索引失败：{message}",
         "targetedReindexRunning": "正在重试 {count, plural, one {# 个错误} other {# 个错误}}…",
         "targetedReindexDone": "重试完成。已解决 {resolved, plural, one {# 个错误} other {# 个错误}}。",
         "targetedReindexPartial": "重试完成。已解决 {resolved, plural, one {# 个错误} other {# 个错误}}，仍有 {failing, plural, one {# 个文档} other {# 个文档}} 失败。",
         "targetedReindexIncomplete": "重试未完成。未解决的错误仍保留在列表中。",
-        "checkFrequencyUpdated": "连接器检查频率已更新",
         "checkFrequencyUpdateFailed": "无法更新连接器检查频率",
         "runResolved": "已标记为已解决。",
         "runResolveFailed": "无法解决：{message}",
@@ -3441,9 +3436,6 @@
           },
           "shareFailed": {
             "toast": "无法更改可使用此账户的人员。请重试。"
-          },
-          "renameSaved": {
-            "toast": "账号已重命名。"
           },
           "renameFailed": {
             "toast": "无法重命名此账号。请重试。"
@@ -4865,9 +4857,6 @@
       }
     },
     "costOverrides": {
-      "allProviders": {
-        "label": "所有提供方"
-      },
       "deleteModal": {
         "description": "**{model}**（{provider}）的使用量将重新按内置价格计算。",
         "submit": {
@@ -4941,12 +4930,6 @@
     },
     "craft": {
       "accessCell": {
-        "disabledSuccess": {
-          "message": "已为该用户禁用 Craft"
-        },
-        "enabledSuccess": {
-          "message": "已为该用户启用 Craft"
-        },
         "error": {
           "message": "更新 Craft 访问权限失败"
         }
@@ -5061,14 +5044,8 @@
         "resetError": {
           "message": "清除默认模型失败"
         },
-        "resetSuccess": {
-          "message": "已清除 Craft 默认模型"
-        },
         "saveError": {
           "message": "保存默认模型失败"
-        },
-        "saveSuccess": {
-          "message": "已保存 Craft 默认模型"
         }
       },
       "header": {
@@ -5447,9 +5424,6 @@
         }
       },
       "defaultAgent": {
-        "cleared": {
-          "toast": "已清除默认智能体"
-        },
         "section": {
           "description": "机器人在所有频道中使用的智能体，除非被单独覆盖。",
           "title": "默认智能体"
@@ -5462,9 +5436,6 @@
         },
         "updateError": {
           "toast": "更新智能体失败"
-        },
-        "updated": {
-          "toast": "已更新默认智能体"
         }
       },
       "error": {
@@ -5517,15 +5488,9 @@
         "deleted": {
           "toast": "已删除服务器配置"
         },
-        "disabled": {
-          "toast": "已禁用服务器"
-        },
         "empty": {
           "description": "创建一个服务器配置即可开始。",
           "title": "尚未配置 Discord 服务器"
-        },
-        "enabled": {
-          "toast": "已启用服务器"
         },
         "fallbackName": "服务器 #{id}",
         "notRegistered": {
@@ -5649,9 +5614,6 @@
       "score": {
         "notANumber": {
           "toast": "评分必须是数字"
-        },
-        "updated": {
-          "toast": "已更新评分！"
         }
       },
       "sets": {
@@ -6076,8 +6038,7 @@
           "label": "（默认）"
         },
         "toasts": {
-          "renameFailed": "重命名用户组失败",
-          "renamed": "用户组已重命名为“{name}”"
+          "renameFailed": "重命名用户组失败"
         },
         "viewGroup": {
           "label": "查看用户组"
@@ -6156,8 +6117,6 @@
         "toasts": {
           "deleteFailed": "删除用户组失败",
           "deleted": "已删除用户组“{name}”",
-          "managerAssigned": "已指定管理者",
-          "managerRevoked": "已撤销管理者",
           "managerUpdateFailed": "更新管理者失败",
           "membersStranded": "其中部分成员将不属于任何用户组。请先将他们添加到另一个用户组。",
           "syncing": "此用户组正在同步。请稍候再试。",
@@ -6179,8 +6138,7 @@
           "text": "创建用户组以组织用户并管理访问权限。"
         },
         "loadError": {
-          "description": "请查看控制台以了解更多详情。",
-          "title": "加载用户组失败。"
+          "description": "请查看控制台以了解更多详情。"
         },
         "newGroup": {
           "label": "新建用户组"
@@ -6635,9 +6593,6 @@
       "deselectError": {
         "message": "取消选择失败"
       },
-      "deselectSuccess": {
-        "message": "已取消选择 {title}"
-      },
       "disconnectError": {
         "message": "断开连接失败"
       },
@@ -6808,9 +6763,6 @@
       },
       "setDefaultError": {
         "message": "设置默认项失败"
-      },
-      "setDefaultSuccess": {
-        "message": "已将 {title} 设为默认"
       }
     },
     "indexSettings": {
@@ -7094,7 +7046,7 @@
           "label": "添加自定义模型"
         },
         "bringYourOwn": {
-          "cloudDescription": "连接 LiteLLM 代理、Azure OpenAI 部署或 Bifrost 网关。模型名称由您自行填写。对于 LiteLLM 和 Azure，还需填写维度。",
+          "cloudDescription": "连接 LiteLLM 代理、Azure OpenAI 部署、Bifrost 网关或 OpenAI 兼容端点。模型名称由您自行填写。对于 LiteLLM、Azure 和 OpenAI 兼容端点，还需填写维度。",
           "selfHostedDescription": "运行上方列表中没有的 Hugging Face 嵌入模型。模型名称、维度和前缀由您自行填写。",
           "title": "高级：使用自己的模型或代理"
         },
@@ -7139,6 +7091,20 @@
           "label": "暂时不可用"
         },
         "title": "多轮索引"
+      },
+      "openaiCompatible": {
+        "apiUrl": {
+          "description": "OpenAI 兼容端点的基础 URL,例如 http://localhost:8000/v1。{appName} 会添加 /embeddings 路径。",
+          "title": "API 基础 URL"
+        },
+        "modelName": {
+          "description": "{appName} 将连接到你的 OpenAI 兼容端点上的此模型。"
+        },
+        "reducedDimension": {
+          "description": "请求更短的向量。仅使用 Matryoshka Representation Learning 训练的模型支持此功能。更短的向量占用更少存储并且搜索更快。留空则使用模型的完整维度。",
+          "placeholder": "例如 1024",
+          "title": "嵌入维度"
+        }
       },
       "progressBanner": {
         "attentionButton": {
@@ -7266,6 +7232,7 @@
         "modelDimPositive": "必须是正整数",
         "modelDimRequired": "模型维度为必填项",
         "modelNameRequired": "模型名称为必填项",
+        "reducedDimensionTooLarge": "必须小于模型维度",
         "serviceAccountJsonInvalid": "必须是有效的 Google 服务账号 JSON 文件",
         "serviceAccountJsonRequired": "服务账号 JSON 为必填项",
         "targetUrlRequired": "目标 URL 为必填项",
@@ -7370,8 +7337,7 @@
           },
           "placeholder": "选择模式",
           "toasts": {
-            "error": "无法更新搜索访问模式。",
-            "success": "搜索访问模式已设置为{mode}。"
+            "error": "无法更新搜索访问模式。"
           }
         },
         "loadError": {
@@ -7398,7 +7364,6 @@
           "period": "请输入 1 到 {max, number} 之间的整数秒数。"
         },
         "toasts": {
-          "saved": "速率限制已保存。",
           "failed": "无法保存速率限制。"
         }
       },
@@ -8452,9 +8417,6 @@
         "error": "加载 SCIM token 状态失败。"
       },
       "modal": {
-        "copied": {
-          "message": "Token 已复制到剪贴板"
-        },
         "copyFailed": {
           "error": "复制 token 失败"
         },
@@ -8715,9 +8677,7 @@
       },
       "toasts": {
         "securitySettingsUpdateFailed": "更新安全设置失败",
-        "securitySettingsUpdated": "安全设置已更新",
-        "settingsUpdateFailed": "更新设置失败",
-        "settingsUpdated": "设置已更新"
+        "settingsUpdateFailed": "更新设置失败"
       },
       "placeholders": {
         "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
@@ -8839,8 +8799,7 @@
       "page": {
         "description": "使用服务账号通过程序访问 {appName} API。",
         "error": {
-          "description": "请查看控制台了解更多详情。",
-          "title": "加载服务账号失败。"
+          "description": "请查看控制台了解更多详情。"
         }
       },
       "regenerateModal": {
@@ -8891,7 +8850,6 @@
       "toasts": {
         "deleteFailed": "删除 API 密钥失败。",
         "deleteFailedWithDetail": "删除 API 密钥失败：{detail}",
-        "keyCopied": "API 密钥已复制到剪贴板。",
         "regenerateFailed": "重新生成 API 密钥失败。",
         "regenerateFailedWithDetail": "重新生成 API 密钥失败：{detail}"
       },
@@ -9298,9 +9256,6 @@
         "fieldUpdateFailed": {
           "toast": "更新连接器 {field} 失败"
         },
-        "fieldUpdated": {
-          "toast": "连接器 {field} 更新成功"
-        },
         "updateTokensButton": {
           "label": "更新 Token"
         }
@@ -9325,9 +9280,7 @@
         "gatedTooltip": "同时启用多个 SSO 提供商需要 Business 或 Enterprise 方案。"
       },
       "copyRedirectUri": {
-        "tooltip": "复制重定向 URI",
-        "successToast": "已复制重定向 URI",
-        "errorToast": "无法复制"
+        "tooltip": "复制重定向 URI"
       },
       "deleteProvider": {
         "tooltip": "删除"
@@ -10046,8 +9999,7 @@
         }
       },
       "loadError": {
-        "description": "无法加载追踪配置。",
-        "title": "加载追踪设置失败"
+        "description": "无法加载追踪配置。"
       },
       "page": {
         "description": "连接可观测性平台，以监控和评估 LLM 调用。"
@@ -10815,7 +10767,6 @@
         "title": "每个用户在 设置 → LLM 网关 中配置自己的令牌和连接信息。"
       },
       "toasts": {
-        "settingsUpdated": "设置已更新",
         "settingsUpdateFailed": "更新设置失败"
       }
     },
@@ -11498,14 +11449,18 @@
         },
         "toasts": {
           "accessRemoved": "已移除访问权限。",
-          "copyLinkFailed": "复制链接失败。",
-          "linkCopied": "已复制链接。",
           "ownershipTransferred": "所有权已转移。",
           "sharingUpdated": "分享设置已更新。"
         },
         "transfer": {
           "label": "转移",
           "title": "转移 *{name}*"
+        },
+        "people": {
+          "label": "有权访问的人员"
+        },
+        "ownerOption": {
+          "disabledTooltip": "无法取消与所有者的共享。"
         }
       },
       "viewer": {
@@ -16085,6 +16040,12 @@
     "settingsHeader": {
       "cancel": "取消"
     },
+    "settingsBody": {
+      "error": {
+        "title": "无法加载{page}",
+        "description": "出了点问题。请稍后重试。"
+      }
+    },
     "table": {
       "alwaysShown": "始终显示",
       "ascending": "升序",
@@ -16739,8 +16700,7 @@
         "title": "智能体"
       },
       "craft": {
-        "label": "Craft",
-        "businessTag": "商业版"
+        "label": "Craft"
       },
       "exploreAgents": {
         "label": "探索智能体"

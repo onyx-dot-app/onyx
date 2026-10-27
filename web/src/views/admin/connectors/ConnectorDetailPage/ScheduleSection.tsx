@@ -143,10 +143,6 @@ export default function ScheduleSection({
   async function save(
     name: "refresh_frequency" | "pruning_frequency" | "check_frequency",
     seconds: number | null,
-    successKey:
-      | "refreshFrequencyUpdated"
-      | "pruningFrequencyUpdated"
-      | "checkFrequencyUpdated",
     failureKey:
       | "refreshFrequencyUpdateFailed"
       | "pruningFrequencyUpdateFailed"
@@ -168,7 +164,6 @@ export default function ScheduleSection({
       return false;
     }
     await mutate(buildCCPairInfoUrl(ccPair.id));
-    toast.success(tToasts(successKey));
     return true;
   }
 
@@ -237,7 +232,6 @@ export default function ScheduleSection({
               save(
                 "refresh_frequency",
                 minutes * 60,
-                "refreshFrequencyUpdated",
                 "refreshFrequencyUpdateFailed"
               )
             }
@@ -256,7 +250,6 @@ export default function ScheduleSection({
               save(
                 "pruning_frequency",
                 hours * 3600,
-                "pruningFrequencyUpdated",
                 "pruningFrequencyUpdateFailed"
               )
             }
@@ -275,18 +268,12 @@ export default function ScheduleSection({
               optional
               disabled={!editable}
               onClear={() =>
-                save(
-                  "check_frequency",
-                  null,
-                  "checkFrequencyUpdated",
-                  "checkFrequencyUpdateFailed"
-                )
+                save("check_frequency", null, "checkFrequencyUpdateFailed")
               }
               onSave={(hours) =>
                 save(
                   "check_frequency",
                   hours * 3600,
-                  "checkFrequencyUpdated",
                   "checkFrequencyUpdateFailed"
                 )
               }

@@ -21,8 +21,7 @@ interface SidebarTabProps {
    *
    * Leave this unset inside a sidebar: the enclosing `SidebarRoot` publishes
    * its fold state as a `data-folded` attribute, and CSS collapses the label.
-   * Set it only to override that — outside a sidebar, in Storybook, or in a
-   * skeleton.
+   * Set it only to override that — outside a sidebar, or in a skeleton.
    */
   folded?: boolean;
 

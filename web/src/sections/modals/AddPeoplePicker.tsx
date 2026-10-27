@@ -248,7 +248,6 @@ export function AddPeoplePicker({
               onChange={onStagedPermissionChange}
               options={permissionOptions}
               value={stagedPermission}
-              width="full"
             />
           </div>
         ) : null}

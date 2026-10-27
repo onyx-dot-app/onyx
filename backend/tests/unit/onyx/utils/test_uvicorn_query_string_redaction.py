@@ -7,6 +7,7 @@ import time
 from collections.abc import Generator
 from typing import Any
 
+import litellm  # noqa: F401  # attaches its own filter to uvicorn.error at import
 import pytest
 import uvicorn
 from websockets.sync.client import connect as websocket_connect
@@ -15,6 +16,7 @@ from onyx.utils.logger import (
     UVICORN_ACCESS_LOGGER_NAME,
     UVICORN_ERROR_LOGGER_NAME,
     ColoredFormatter,
+    UvicornQueryStringRedactionFilter,
     _strip_query_string_from_path,
     get_json_formatter,
     setup_uvicorn_logger,
@@ -138,6 +140,16 @@ def test_saml_redirect_binding_response_is_dropped(server: _Capture) -> None:
     output = server.access.getvalue()
     assert "PHNhbWw" not in output
     assert "/auth/saml/callback HTTP/1.1" in output
+
+
+@pytest.mark.usefixtures("server")
+def test_query_string_filter_runs_before_third_party_filters() -> None:
+    """litellm's secret filter substitutes the args into the message and clears
+    them, so the query string must already be gone from the args by then."""
+    for name in (UVICORN_ACCESS_LOGGER_NAME, UVICORN_ERROR_LOGGER_NAME):
+        assert isinstance(
+            logging.getLogger(name).filters[0], UvicornQueryStringRedactionFilter
+        )
 
 
 def test_websocket_handshake_token_is_dropped(server: _Capture) -> None:

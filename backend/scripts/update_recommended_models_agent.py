@@ -28,6 +28,7 @@ import json
 import os
 import re
 import sys
+from collections import deque
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -141,7 +142,7 @@ Selection rules:
 - Do not recommend models released more than ~12 months ago unless the vendor
   still sells them as the current model for that tier.
 - default_model is the vendor's balanced general-purpose tier: strong, current,
-  and mid-priced (e.g. OpenAI Sol, Anthropic Opus, Gemini Pro, GLM). It MUST
+  and mid-priced (e.g. OpenAI Sol, Anthropic Opus, Gemini Pro/Argon, GLM). It MUST
   fall in the family the curation rules below mark `is_default_source`. Never
   make a premium tier (OpenAI Astra, Anthropic Fable, "-pro" variants, anything
   priced several times the balanced tier) the default: it becomes the default
@@ -177,8 +178,12 @@ only — you may pick outside these families when the vendor lineup changed) ==
 FAILURE_CONTEXT_TEMPLATE = """\
 == PREVIOUS ATTEMPT FAILED CI ==
 The last generated PR failed the provider chat tests — real API calls against
-each recommended model. Fix your picks based on this failure output (drop or
-replace the failing models):
+each recommended model. Read the error for each failing model:
+- The provider rejected the model (unknown model, not found, deprecated, no
+  access): drop or replace that model.
+- Onyx failed while handling a model the vendor still recommends (for example
+  a 400 VALIDATION_ERROR with "An unexpected error occurred", or a 5xx): that
+  is an Onyx bug, not a bad pick. Keep the model; do not swap in an older one.
 
 {failure_context}
 """
@@ -189,6 +194,59 @@ Fix these problems and try again:
 
 {errors}
 """
+
+FAILURE_CONTEXT_CHARS = 60_000
+FAILURE_JOB_TAIL_LINES = 50
+# `gh run view --log-failed` prefixes each line with "<job>\t<step>\t<timestamp> ".
+_LOG_LINE_RE = re.compile(r"^(?P<job>[^\t]*)\t[^\t]*\t\S+Z ?(?P<text>.*)$")
+_PYTEST_FAILURES_RE = re.compile(r"^=+ FAILURES =+$")
+_PYTEST_SECTION_END_RE = re.compile(r"^(-+ Captured |=+ )")
+
+
+def extract_failure_context(log: str, limit: int = FAILURE_CONTEXT_CHARS) -> str:
+    """Keep the header and pytest failure sections of a failed-run log.
+
+    Failed-job logs end with container teardown output, so the tail of the
+    log rarely contains the assertion that failed. A failed job with no pytest
+    failure section (e.g. a setup error) keeps its last lines. Falls back to
+    the tail when the log has no pytest failure section.
+    """
+    header: list[str] = []
+    blocks: list[str] = []
+    block: list[str] | None = None
+    job_tails: dict[str, deque[str]] = {}
+    jobs_with_blocks: set[str] = set()
+    for line in log.splitlines():
+        match = _LOG_LINE_RE.match(line)
+        if match is None:
+            if not job_tails:
+                header.append(line)
+            continue
+        job = match.group("job")
+        text = match.group("text")
+        job_tails.setdefault(job, deque(maxlen=FAILURE_JOB_TAIL_LINES)).append(text)
+        if _PYTEST_FAILURES_RE.match(text):
+            block = [f"[{job}]"]
+            jobs_with_blocks.add(job)
+        elif block is not None:
+            if _PYTEST_SECTION_END_RE.match(text):
+                blocks.append("\n".join(block))
+                block = None
+            else:
+                block.append(text)
+    if block is not None:
+        blocks.append("\n".join(block))
+    if not blocks:
+        return log[-limit:]
+    # A retried job repeats the same failure.
+    unique_blocks = list(dict.fromkeys(blocks))
+    other_jobs = [
+        "\n".join([f"[{job}] (no pytest failure; last lines)", *tail])
+        for job, tail in job_tails.items()
+        if job not in jobs_with_blocks
+    ]
+    return "\n".join([*header, *unique_blocks, *other_jobs])[:limit]
+
 
 # Names are provider model ids — anything with braces, spaces, or commas is a
 # formatting glitch, not a pick.
@@ -593,7 +651,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     if args.failure_context_file and args.failure_context_file.exists():
         prompt += FAILURE_CONTEXT_TEMPLATE.format(
-            failure_context=args.failure_context_file.read_text()[-60_000:]
+            failure_context=extract_failure_context(
+                args.failure_context_file.read_text()
+            )
         )
 
     schema: dict[str, Any] = _output_schema(list(previous.providers))

@@ -891,7 +891,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                 !createReady ||
                 busy;
               return (
-                <SettingsLayouts.Root width="sm">
+                <SettingsLayouts.Root loading={credentialsLoading} width="sm">
                   <SettingsLayouts.Header
                     icon={sourceMetadata.icon}
                     moreIcon1={SvgArrowExchange}
@@ -986,9 +986,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                   </SettingsLayouts.Header>
 
                   <SettingsLayouts.Body>
-                    {credentialsLoading ? (
-                      <PageLoader />
-                    ) : credentialsFailed ? (
+                    {credentialsFailed ? (
                       // The same frame as PageLoader, so loading and failure sit
                       // in one place.
                       <PageCenter>

@@ -4,8 +4,15 @@ import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
-import { Button, Card, MessageCard, InputSwitch, Text } from "@opal/components";
-import { SvgCopy, SvgPlus, SvgSettings, SvgTrash } from "@opal/icons";
+import {
+  Button,
+  Card,
+  CopyButton,
+  MessageCard,
+  InputSwitch,
+  Text,
+} from "@opal/components";
+import { SvgPlus, SvgSettings, SvgTrash } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
 import {
   ConfirmationModalLayout,
@@ -26,9 +33,8 @@ import type {
 } from "@/lib/sso/types";
 import { tierAtLeast } from "@/lib/tiers/utils";
 import { deleteSSOProvider, setSSOProviderEnabled } from "@/lib/sso/svc";
-import { copyRedirectUri, SSO_PROVIDER_DETAILS } from "@/lib/sso/utils";
+import { SSO_PROVIDER_DETAILS } from "@/lib/sso/utils";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { PageLoader } from "@opal/loaders";
 import { useCreateModal } from "@opal/components";
 import { SSOProviderModal } from "@/sections/modals/sso/SSOProviderModal";
 
@@ -38,14 +44,15 @@ interface ShellProps {
   children: React.ReactNode;
   onAddProvider: () => void;
   addGated?: boolean;
+  loading?: boolean;
 }
 
-function Shell({ children, onAddProvider, addGated }: ShellProps) {
+function Shell({ children, onAddProvider, addGated, loading }: ShellProps) {
   const t = useTranslations("admin.ssoProviders");
   const adminRouteTitle = useAdminRouteTitle();
 
   return (
-    <SettingsLayouts.Root>
+    <SettingsLayouts.Root loading={loading}>
       <SettingsLayouts.Header
         icon={route.icon}
         title={adminRouteTitle(route)}
@@ -176,17 +183,13 @@ export default function SSOProvidersPage() {
     );
   }
 
-  if (isLoading) {
-    return (
-      <Shell onAddProvider={openCreateModal} addGated={addGated}>
-        <PageLoader />
-      </Shell>
-    );
-  }
-
   return (
     <>
-      <Shell onAddProvider={openCreateModal} addGated={addGated}>
+      <Shell
+        onAddProvider={openCreateModal}
+        addGated={addGated}
+        loading={isLoading}
+      >
         {!providers?.length ? (
           <IllustrationContent
             illustration={SvgNoResult}
@@ -214,15 +217,11 @@ export default function SSOProvidersPage() {
                           "flex h-full items-center gap-2 self-center"
                         )}
                       >
-                        <Button
-                          icon={SvgCopy}
-                          prominence="tertiary"
+                        <CopyButton
                           size="sm"
                           tooltip={t("copyRedirectUri.tooltip")}
                           disabled={isPending}
-                          onClick={() => {
-                            void copyRedirectUri(provider.redirect_uri, t);
-                          }}
+                          getCopyText={() => provider.redirect_uri}
                         />
                         <InputSwitch
                           checked={provider.enabled}

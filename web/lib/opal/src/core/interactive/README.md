@@ -1,6 +1,6 @@
 # Interactive
 
-The foundational layer for all clickable surfaces in the design system. Defines hover, active, disabled, and interaction-override state styling in a single place. Higher-level components (Button, SelectButton, OpenButton, etc.) compose on top of it.
+The foundational layer for all clickable surfaces in the design system. Defines hover, active, disabled, and interaction-override state styling in a single place. Higher-level components (Button, SelectButton, etc.) compose on top of it.
 
 ## Sub-components
 

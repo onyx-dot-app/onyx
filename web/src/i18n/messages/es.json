@@ -1257,7 +1257,6 @@
         "description": "Selecciona un modelo para futuras funciones de clasificación y revisión. Onyx aún no utiliza este modelo.",
         "clear": "Borrar",
         "notConfigured": "Sin configurar",
-        "saved": "Modelo de decisiones actualizado",
         "saveFailed": "No se pudo actualizar el modelo de decisiones"
       },
       "header": {
@@ -2846,18 +2845,14 @@
         "indexingStartUnexpectedError": "Ocurrió un error inesperado al intentar iniciar la indexación",
         "indexingUpdateStarted": "La actualización de la indexación se inició correctamente",
         "nameUpdateFailed": "No se pudo actualizar el nombre del conector",
-        "nameUpdated": "El nombre del conector se actualizó correctamente",
         "noUnresolvedErrors": "No hay errores sin resolver que reintentar.",
         "pruningFrequencyUpdateFailed": "No se pudo actualizar la frecuencia de purga del conector",
-        "pruningFrequencyUpdated": "La frecuencia de purga del conector se actualizó correctamente",
         "refreshFrequencyUpdateFailed": "No se pudo actualizar la frecuencia de actualización del conector",
-        "refreshFrequencyUpdated": "La frecuencia de actualización del conector se actualizó correctamente",
         "targetedReindexFailed": "Falló la reindexación selectiva: {message}",
         "targetedReindexRunning": "Reintentando {count, plural, one {# error} other {# errores}}…",
         "targetedReindexDone": "Reintento terminado. {resolved, plural, one {# error resuelto} other {# errores resueltos}}.",
         "targetedReindexPartial": "Reintento terminado. {resolved, plural, one {# error resuelto} other {# errores resueltos}}, {failing, plural, one {# documento sigue fallando} other {# documentos siguen fallando}}.",
         "targetedReindexIncomplete": "El reintento no terminó. Los errores sin resolver siguen en la lista.",
-        "checkFrequencyUpdated": "Frecuencia de comprobación del conector actualizada correctamente",
         "checkFrequencyUpdateFailed": "No se pudo actualizar la frecuencia de comprobación del conector",
         "runResolved": "Marcado como resuelto.",
         "runResolveFailed": "No se pudo resolver: {message}",
@@ -3441,9 +3436,6 @@
           },
           "shareFailed": {
             "toast": "No se pudo cambiar quién puede usar esta cuenta. Inténtalo de nuevo."
-          },
-          "renameSaved": {
-            "toast": "Cuenta renombrada."
           },
           "renameFailed": {
             "toast": "No se pudo cambiar el nombre de esta cuenta. Inténtalo de nuevo."
@@ -4865,9 +4857,6 @@
       }
     },
     "costOverrides": {
-      "allProviders": {
-        "label": "Todos los proveedores"
-      },
       "deleteModal": {
         "description": "El uso de **{model}** ({provider}) volverá a calcularse con el precio integrado.",
         "submit": {
@@ -4941,12 +4930,6 @@
     },
     "craft": {
       "accessCell": {
-        "disabledSuccess": {
-          "message": "Craft desactivado para el usuario"
-        },
-        "enabledSuccess": {
-          "message": "Craft activado para el usuario"
-        },
         "error": {
           "message": "No se pudo actualizar el acceso a Craft"
         }
@@ -5061,14 +5044,8 @@
         "resetError": {
           "message": "No se pudo borrar el modelo predeterminado"
         },
-        "resetSuccess": {
-          "message": "Modelo predeterminado de Craft borrado"
-        },
         "saveError": {
           "message": "No se pudo guardar el modelo predeterminado"
-        },
-        "saveSuccess": {
-          "message": "Modelo predeterminado de Craft guardado"
         }
       },
       "header": {
@@ -5447,9 +5424,6 @@
         }
       },
       "defaultAgent": {
-        "cleared": {
-          "toast": "Se quitó el agente predeterminado"
-        },
         "section": {
           "description": "El agente que usa el bot en todos los canales, salvo que se defina otro.",
           "title": "Agente predeterminado"
@@ -5462,9 +5436,6 @@
         },
         "updateError": {
           "toast": "No se pudo actualizar el agente"
-        },
-        "updated": {
-          "toast": "Agente predeterminado actualizado"
         }
       },
       "error": {
@@ -5517,15 +5488,9 @@
         "deleted": {
           "toast": "Configuración del servidor eliminada"
         },
-        "disabled": {
-          "toast": "Servidor desactivado"
-        },
         "empty": {
           "description": "Crea una configuración de servidor para empezar.",
           "title": "Todavía no hay servidores de Discord configurados"
-        },
-        "enabled": {
-          "toast": "Servidor activado"
         },
         "fallbackName": "Servidor n.º {id}",
         "notRegistered": {
@@ -5649,9 +5614,6 @@
       "score": {
         "notANumber": {
           "toast": "La puntuación debe ser un número"
-        },
-        "updated": {
-          "toast": "¡Puntuación actualizada!"
         }
       },
       "sets": {
@@ -6076,8 +6038,7 @@
           "label": "(Predeterminado)"
         },
         "toasts": {
-          "renameFailed": "No se pudo renombrar el grupo",
-          "renamed": "El grupo se renombró como \"{name}\""
+          "renameFailed": "No se pudo renombrar el grupo"
         },
         "viewGroup": {
           "label": "Ver el grupo"
@@ -6156,8 +6117,6 @@
         "toasts": {
           "deleteFailed": "No se pudo eliminar el grupo",
           "deleted": "Grupo \"{name}\" eliminado",
-          "managerAssigned": "Responsable asignado",
-          "managerRevoked": "Responsable revocado",
           "managerUpdateFailed": "No se pudo actualizar el responsable",
           "membersStranded": "Algunos de esos miembros se quedarían sin grupo. Añádelos primero a otro grupo.",
           "syncing": "Este grupo se está sincronizando. Espera un momento e inténtalo de nuevo.",
@@ -6179,8 +6138,7 @@
           "text": "Crea grupos para organizar a los usuarios y gestionar el acceso."
         },
         "loadError": {
-          "description": "Consulta la consola para ver más detalles.",
-          "title": "No se pudieron cargar los grupos."
+          "description": "Consulta la consola para ver más detalles."
         },
         "newGroup": {
           "label": "Nuevo grupo"
@@ -6635,9 +6593,6 @@
       "deselectError": {
         "message": "No se pudo anular la selección"
       },
-      "deselectSuccess": {
-        "message": "Selección de {title} anulada"
-      },
       "disconnectError": {
         "message": "No se pudo desconectar"
       },
@@ -6808,9 +6763,6 @@
       },
       "setDefaultError": {
         "message": "No se pudo establecer como predeterminado"
-      },
-      "setDefaultSuccess": {
-        "message": "{title} establecido como predeterminado"
       }
     },
     "indexSettings": {
@@ -7094,7 +7046,7 @@
           "label": "Añadir modelo personalizado"
         },
         "bringYourOwn": {
-          "cloudDescription": "Conecta un proxy de LiteLLM, una implementación de Azure OpenAI o una puerta de enlace de Bifrost. Tú indicas el nombre del modelo. Para LiteLLM y Azure, también indicas la dimensión.",
+          "cloudDescription": "Conecta un proxy de LiteLLM, una implementación de Azure OpenAI, una puerta de enlace de Bifrost o un endpoint compatible con OpenAI. Tú indicas el nombre del modelo. Para LiteLLM, Azure y los endpoints compatibles con OpenAI, también indicas la dimensión.",
           "selfHostedDescription": "Ejecuta un modelo de embeddings de Hugging Face que no esté en la lista anterior. Tú indicas el nombre, la dimensión y los prefijos del modelo.",
           "title": "Avanzado: usa tu propio modelo o proxy"
         },
@@ -7139,6 +7091,20 @@
           "label": "no disponible temporalmente"
         },
         "title": "Indexación multipaso"
+      },
+      "openaiCompatible": {
+        "apiUrl": {
+          "description": "La URL base de tu endpoint compatible con OpenAI, por ejemplo http://localhost:8000/v1. {appName} añade la ruta /embeddings.",
+          "title": "URL base de la API"
+        },
+        "modelName": {
+          "description": "{appName} se conectará a este modelo en tu endpoint compatible con OpenAI."
+        },
+        "reducedDimension": {
+          "description": "Solicita vectores más cortos. Solo los modelos entrenados con Matryoshka Representation Learning lo admiten. Los vectores más cortos ocupan menos almacenamiento y se buscan más rápido. Déjalo vacío para usar el tamaño completo del modelo.",
+          "placeholder": "p. ej., 1024",
+          "title": "Dimensiones de embedding"
+        }
       },
       "progressBanner": {
         "attentionButton": {
@@ -7266,6 +7232,7 @@
         "modelDimPositive": "Debe ser un número entero positivo",
         "modelDimRequired": "La dimensión del modelo es obligatoria",
         "modelNameRequired": "El nombre del modelo es obligatorio",
+        "reducedDimensionTooLarge": "Debe ser menor que la dimensión del modelo",
         "serviceAccountJsonInvalid": "Debe ser un archivo JSON válido de cuenta de servicio de Google",
         "serviceAccountJsonRequired": "El JSON de la cuenta de servicio es obligatorio",
         "targetUrlRequired": "La URL de destino es obligatoria",
@@ -7370,8 +7337,7 @@
           },
           "placeholder": "Selecciona un modo",
           "toasts": {
-            "error": "No se pudo actualizar el modo de acceso de búsqueda.",
-            "success": "Modo de acceso de búsqueda establecido en {mode}."
+            "error": "No se pudo actualizar el modo de acceso de búsqueda."
           }
         },
         "loadError": {
@@ -7398,7 +7364,6 @@
           "period": "Introduce un número entero de segundos de 1 a {max, number}."
         },
         "toasts": {
-          "saved": "Límite guardado.",
           "failed": "No se pudo guardar el límite."
         }
       },
@@ -8452,9 +8417,6 @@
         "error": "No se pudo cargar el estado del token de SCIM."
       },
       "modal": {
-        "copied": {
-          "message": "Token copiado al portapapeles"
-        },
         "copyFailed": {
           "error": "No se pudo copiar el token"
         },
@@ -8715,9 +8677,7 @@
       },
       "toasts": {
         "securitySettingsUpdateFailed": "No se pudo actualizar la configuración de seguridad",
-        "securitySettingsUpdated": "Configuración de seguridad actualizada",
-        "settingsUpdateFailed": "No se pudo actualizar la configuración",
-        "settingsUpdated": "Configuración actualizada"
+        "settingsUpdateFailed": "No se pudo actualizar la configuración"
       },
       "placeholders": {
         "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
@@ -8839,8 +8799,7 @@
       "page": {
         "description": "Usa cuentas de servicio para acceder de forma programática a la API de {appName}.",
         "error": {
-          "description": "Consulta la consola para ver más detalles.",
-          "title": "No se pudieron cargar las cuentas de servicio."
+          "description": "Consulta la consola para ver más detalles."
         }
       },
       "regenerateModal": {
@@ -8891,7 +8850,6 @@
       "toasts": {
         "deleteFailed": "No se pudo eliminar la clave de API.",
         "deleteFailedWithDetail": "No se pudo eliminar la clave de API: {detail}",
-        "keyCopied": "Clave de API copiada al portapapeles.",
         "regenerateFailed": "No se pudo regenerar la clave de API.",
         "regenerateFailedWithDetail": "No se pudo regenerar la clave de API: {detail}"
       },
@@ -9298,9 +9256,6 @@
         "fieldUpdateFailed": {
           "toast": "No se pudo actualizar {field} del conector"
         },
-        "fieldUpdated": {
-          "toast": "{field} del conector se actualizó correctamente"
-        },
         "updateTokensButton": {
           "label": "Actualizar los tokens"
         }
@@ -9325,9 +9280,7 @@
         "gatedTooltip": "Tener varios proveedores de SSO activados está disponible en el plan Business o Enterprise."
       },
       "copyRedirectUri": {
-        "tooltip": "Copiar el URI de redirección",
-        "successToast": "URI de redirección copiada",
-        "errorToast": "No se pudo copiar"
+        "tooltip": "Copiar el URI de redirección"
       },
       "deleteProvider": {
         "tooltip": "Eliminar"
@@ -10046,8 +9999,7 @@
         }
       },
       "loadError": {
-        "description": "No se pudo cargar la configuración del trazado.",
-        "title": "No se pudo cargar la configuración del trazado"
+        "description": "No se pudo cargar la configuración del trazado."
       },
       "page": {
         "description": "Conecta plataformas de observabilidad para monitorizar y evaluar las llamadas al LLM."
@@ -10815,7 +10767,6 @@
         "title": "Cada usuario configura su propio token y los datos de conexión en Configuración → LLM Gateway."
       },
       "toasts": {
-        "settingsUpdated": "Configuración actualizada",
         "settingsUpdateFailed": "No se pudo actualizar la configuración"
       }
     },
@@ -11498,14 +11449,18 @@
         },
         "toasts": {
           "accessRemoved": "Acceso quitado.",
-          "copyLinkFailed": "No se pudo copiar el enlace.",
-          "linkCopied": "Enlace copiado.",
           "ownershipTransferred": "Propiedad transferida.",
           "sharingUpdated": "Uso compartido actualizado."
         },
         "transfer": {
           "label": "Transferir",
           "title": "Transferir *{name}*"
+        },
+        "people": {
+          "label": "Personas con acceso"
+        },
+        "ownerOption": {
+          "disabledTooltip": "No se puede dejar de compartir con el propietario."
         }
       },
       "viewer": {
@@ -16085,6 +16040,12 @@
     "settingsHeader": {
       "cancel": "Cancelar"
     },
+    "settingsBody": {
+      "error": {
+        "title": "No se pudo cargar {page}",
+        "description": "Algo salió mal. Inténtalo de nuevo en un momento."
+      }
+    },
     "table": {
       "alwaysShown": "Siempre visible",
       "ascending": "Ascendente",
@@ -16739,8 +16700,7 @@
         "title": "Agentes"
       },
       "craft": {
-        "label": "Craft",
-        "businessTag": "Business"
+        "label": "Craft"
       },
       "exploreAgents": {
         "label": "Explorar agentes"

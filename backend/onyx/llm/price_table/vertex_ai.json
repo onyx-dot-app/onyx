@@ -95,6 +95,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-06-09",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -125,6 +126,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-10-15",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -199,6 +201,7 @@
       "reasoning": true,
       "release_date": "2025-08-05",
       "status": "deprecated",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -228,7 +231,8 @@
       "name": "Claude Opus 4.5",
       "open_weights": false,
       "reasoning": true,
-      "release_date": "2025-11-01",
+      "release_date": "2025-11-24",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -259,6 +263,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-02-05",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -289,6 +294,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-04-16",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -319,6 +325,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-05-28",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -350,6 +357,7 @@
       "reasoning": true,
       "release_date": "2025-05-22",
       "status": "deprecated",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -411,6 +419,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-07-24",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -442,6 +451,7 @@
       "reasoning": true,
       "release_date": "2025-09-29",
       "status": "deprecated",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -472,6 +482,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-02-17",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -503,6 +514,7 @@
       "reasoning": true,
       "release_date": "2025-05-22",
       "status": "deprecated",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -564,6 +576,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-06-30",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -1216,7 +1229,9 @@
       "modalities": {
         "input": [
           "text",
-          "image"
+          "image",
+          "video",
+          "pdf"
         ],
         "output": [
           "text",
@@ -1804,7 +1819,8 @@
         "input": [
           "text",
           "image",
-          "video"
+          "video",
+          "pdf"
         ],
         "output": [
           "text",

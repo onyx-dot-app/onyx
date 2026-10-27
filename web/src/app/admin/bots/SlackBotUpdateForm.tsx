@@ -63,7 +63,6 @@ export const ExistingSlackBotForm = ({
       if (!response.ok) {
         throw new Error(await response.text());
       }
-      toast.success(t("updateForm.fieldUpdated.toast", { field }));
     } catch (error) {
       toast.error(t("updateForm.fieldUpdateFailed.toast", { field }));
     }

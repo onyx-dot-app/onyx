@@ -14,9 +14,8 @@ import {
 import {
   Card,
   Dropdown,
-  FilterButton,
+  SelectButton,
   MessageCard,
-  OpenButton,
   Text,
 } from "@opal/components";
 import { Section } from "@opal/layouts";
@@ -331,14 +330,17 @@ export function ThroughputWindowPicker<W extends PickerWindow>({
     <Dropdown>
       <Dropdown.Trigger asChild>
         {selection === null || onClearSelection === undefined ? (
-          <OpenButton icon={SvgClock} state="empty">
+          <SelectButton chevron icon={SvgClock} state="empty">
             {label ?? tWindow(windowLabelKey(value))}
-          </OpenButton>
+          </SelectButton>
         ) : (
           // The span takes the picker's place, so the row keeps its shape. Its X returns to the window.
-          <FilterButton
+          <SelectButton
+            variant="select-filter"
+            chevron
+            labelFont="main-ui-action"
             icon={SvgClock}
-            active
+            state="selected"
             tooltip={t("rangeFilter")}
             onClear={onClearSelection}
           >
@@ -347,7 +349,7 @@ export function ThroughputWindowPicker<W extends PickerWindow>({
               new Date(selection.since),
               new Date(selection.until)
             )}
-          </FilterButton>
+          </SelectButton>
         )}
       </Dropdown.Trigger>
       <Dropdown.Data

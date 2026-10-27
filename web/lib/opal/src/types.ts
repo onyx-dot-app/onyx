@@ -132,12 +132,10 @@ export type ContextualMenuWidth = 30 | 40 | 50 | 60 | 70 | 80 | 90 | 120 | 160;
 export type ShadowVariants = "none" | Extract<SizeVariants, "sm" | "md" | "lg">;
 
 /**
- * Size variants with numeric overrides.
- *
- * Allows size specification as a named preset or a custom numeric value.
- * Used in components that need programmatic sizing flexibility.
+ * `"fit"`, `"full"`, or a fixed length as a {@link Spacing} step (`N / 4` rem,
+ * converted with `spacingToRem`), e.g. `46` is `11.5rem`.
  */
-export type OverridableExtremaSizeVariants = ExtremaSizeVariants | number;
+export type OverridableExtremaSizeVariants = ExtremaSizeVariants | Spacing;
 
 // ---------------------------------------------------------------------------
 // Orientation Variants

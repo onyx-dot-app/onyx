@@ -1,4 +1,4 @@
-import { SvgHardDrive, SvgServer } from "@opal/icons";
+import { SvgHardDrive, SvgPlug, SvgServer } from "@opal/icons";
 import {
   SvgAzure,
   SvgBifrost,
@@ -245,6 +245,13 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
     icon: SvgBifrost,
     apiLink:
       "https://docs.getbifrost.ai/providers/supported-providers/overview",
+    embeddingModels: [],
+  },
+  {
+    providerName: EmbeddingProviderName.OPENAI_COMPATIBLE,
+    displayName: "OpenAI-Compatible",
+    icon: SvgPlug,
+    apiLink: "https://platform.openai.com/docs/api-reference/embeddings/create",
     embeddingModels: [],
   },
 ];

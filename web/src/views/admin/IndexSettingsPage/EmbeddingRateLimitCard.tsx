@@ -154,7 +154,6 @@ export default function EmbeddingRateLimitCard() {
         });
         router.refresh();
         await mutate(SWR_KEYS.settings);
-        toast.success(t("toasts.saved"));
       } catch (error) {
         // The stored values are unknown now, so the next commit always saves.
         lastSentRef.current = null;
