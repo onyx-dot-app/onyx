@@ -92,6 +92,8 @@ interface SettingsRootProps extends WithoutStyles<
 
 /**
  * Wrapper for settings pages. Creates a centered, scrollable container.
+ * The scrollbar gutter is always reserved, so pages that scroll and pages
+ * that do not keep the same width and do not shift.
  * The `id="page-wrapper-scroll-container"` is referenced by `Header` for
  * scroll-shadow detection — do not remove it.
  */
@@ -111,7 +113,7 @@ function SettingsRoot({
     >
       <div
         id="page-wrapper-scroll-container"
-        className="w-full h-full flex flex-col items-center overflow-y-auto"
+        className="w-full h-full flex flex-col items-center overflow-y-auto [scrollbar-gutter:stable]"
       >
         <div className={cn("h-full", widthClasses[width])}>
           <div {...props} />

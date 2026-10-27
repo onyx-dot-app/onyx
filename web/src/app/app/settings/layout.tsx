@@ -106,7 +106,7 @@ export default function Layout({ children }: LayoutProps) {
           {/* Wide screens: left tab navigation */}
           <div
             data-testid="settings-left-tab-navigation"
-            className="hidden sm:flex flex-col px-2 min-w-50"
+            className="hidden sm:flex flex-col px-2 min-w-50 shrink-0"
           >
             {tabs.map((tab) => (
               <SidebarTab
