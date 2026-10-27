@@ -915,6 +915,7 @@ def run_llm_loop(
         )
 
         reasoning_cycles = 0
+        last_step_tools: list[Tool] = []
         for llm_cycle_count in range(MAX_LLM_CYCLES):
             # Handling tool calls based on cycle count and past cycle conditions
             out_of_cycles = llm_cycle_count == MAX_LLM_CYCLES - 1
@@ -927,10 +928,11 @@ def run_llm_loop(
                 forced_tool_id = None
             elif out_of_cycles or ran_image_gen:
                 # Last cycle, no tools allowed, just answer! Replayed thinking
-                # is bound to the tools it saw, so keep them and forbid calls.
+                # is bound to the tools the last step saw, so keep exactly
+                # those and forbid calls.
                 tool_choice = ToolChoiceOptions.NONE
                 final_tools = (
-                    tools
+                    last_step_tools
                     if any(
                         msg.thinking and msg.thinking.blocks
                         for msg in simple_chat_history
@@ -940,6 +942,7 @@ def run_llm_loop(
             else:
                 tool_choice = ToolChoiceOptions.AUTO
                 final_tools = tools
+            last_step_tools = final_tools
 
             # Handling the system prompt and custom agent prompt
             # The section below calculates the available tokens for history a bit more accurately

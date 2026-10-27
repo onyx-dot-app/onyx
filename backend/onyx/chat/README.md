@@ -267,8 +267,8 @@ flowchart TD
   `_drop_thinking_with_changed_prefix` clears a block whose prefix no longer matches, and every later
   block minted on top of it. A cleared block becomes an empty list, so thinking stays on.
 - To keep the prefix the same, the reminder a step saw stays in place before that step's tool-call
-  message (`thinking_reminder`). The last cycle keeps the tools and sets `tool_choice` to none instead
-  of removing them.
+  message (`thinking_reminder`). The last cycle keeps the tools the previous step saw and sets
+  `tool_choice` to none instead of removing them.
 - Blocks live in the turn only. History loaded from the database carries none, so the first step of a
   turn starts without them.
 
