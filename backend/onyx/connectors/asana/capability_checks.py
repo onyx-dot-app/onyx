@@ -5,20 +5,14 @@ workspace, the team or projects that narrow it, and tasks and their comments
 readable in those projects. Asana has no permission sync.
 """
 
-import functools
-from typing import Any
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from onyx.connectors.asana.config import AsanaConnectorConfig
-from onyx.connectors.asana.source_operations import AsanaSourceOperations
-from onyx.connectors.asana.validation import (
-    DOCS_LINK,
-    SIGN_IN_TIMEOUT_TEXT,
-    TIMEOUT_TEXT,
-    probe,
-    raise_for_project_scan,
-    read_team,
-    read_workspace,
-    scan_projects,
+from onyx.connectors.asana.scope import check_projects, read_team, read_workspace
+from onyx.connectors.asana.source_operations import (
+    AsanaApiError,
+    AsanaSourceOperations,
 )
 from onyx.connectors.capability_checks.form_state import FormState
 from onyx.connectors.capability_checks.models import (
@@ -29,10 +23,17 @@ from onyx.connectors.capability_checks.models import (
     CheckOutput,
     CredentialCapability,
     form_config,
+    sign_in_timeout_text,
 )
-from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    UnexpectedValidationError,
+)
 from onyx.connectors.models import CheckRowText, fit_summary
 
+T = TypeVar("T")
+
+DOCS_LINK: str = "https://docs.onyx.app/admins/connectors/official/asana"
 SIGN_IN_CHECK_ID: str = "asana_token"
 _WORKSPACE_CHECK_ID: str = "asana_workspace"
 _TEAM_CHECK_ID: str = "asana_team"
@@ -46,12 +47,18 @@ _DEPENDS_ON: dict[str, tuple[str, ...]] = {
     _PROJECTS_CHECK_ID: (_WORKSPACE_CHECK_ID,),
     _TASKS_CHECK_ID: (_WORKSPACE_CHECK_ID, _TEAM_CHECK_ID, _PROJECTS_CHECK_ID),
 }
-_WORKSPACE_FIELD: str = "asana_workspace_id"
-_REQUIRED_FIELDS: frozenset[str] = frozenset({_WORKSPACE_FIELD})
-# Projects the tasks sample reads to find one that is not archived.
+_REQUIRED_FIELDS: frozenset[str] = frozenset({"asana_workspace_id"})
+# Projects the tasks sample lists to find one that is not archived.
 _PROJECT_SAMPLE_SIZE: int = 20
 _STORY_SAMPLE_SIZE: int = 50
-_COMMENT_SUBTYPE: str = "comment_added"
+_TIMEOUT_TEXT = CheckRowText(
+    summary="Timed out",
+    description=(
+        "The check stopped after {time_limit} without an answer from Asana.\n"
+        "Re-run the checks."
+    ),
+)
+_SIGN_IN_TIMEOUT_TEXT = sign_in_timeout_text("Asana")
 
 
 def _gateway(context: CapabilityCheckContext) -> AsanaSourceOperations:
@@ -71,15 +78,20 @@ def _workspace_id(config: AsanaConnectorConfig) -> str:
 
 
 def _project_ids(config: AsanaConnectorConfig) -> list[str]:
-    return [
-        project_id.strip()
-        for project_id in (config.asana_project_ids or "").split(",")
-        if project_id.strip()
-    ]
+    return [p.strip() for p in (config.asana_project_ids or "").split(",") if p.strip()]
 
 
 def _team_id(config: AsanaConnectorConfig) -> str | None:
     return (config.asana_team_id or "").strip() or None
+
+
+def _probe(action: Callable[[], T], failed: str) -> T:
+    """The gateway maps a rejected token, a denied request, a rate limit and
+    a transport failure itself; any other error status is unexpected here."""
+    try:
+        return action()
+    except AsanaApiError as error:
+        raise UnexpectedValidationError(f"{failed} {error}") from error
 
 
 class _AsanaCheck(CapabilityCheck[AsanaConnectorConfig]):
@@ -94,7 +106,7 @@ class _AsanaCheck(CapabilityCheck[AsanaConnectorConfig]):
         requires_fields: frozenset[str] = _REQUIRED_FIELDS,
         validates_binding: bool = False,
         fails_when_unreachable: bool = False,
-        timeout_text: CheckRowText = TIMEOUT_TEXT,
+        timeout_text: CheckRowText = _TIMEOUT_TEXT,
     ) -> None:
         super().__init__(
             capability=CredentialCapability.INDEXING,
@@ -120,14 +132,12 @@ class _TokenCheck(_AsanaCheck):
             requires_fields=frozenset(),
             validates_binding=True,
             fails_when_unreachable=True,
-            timeout_text=SIGN_IN_TIMEOUT_TEXT,
+            timeout_text=_SIGN_IN_TIMEOUT_TEXT,
         )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
-        me: dict[str, Any] = probe(
-            _gateway(context).get_me,
-            "Asana did not answer for the token.",
-            sign_in=True,
+        me: dict[str, Any] = _probe(
+            _gateway(context).get_me, "Asana did not answer for the token."
         )
         identity: Any = me.get("email") or me.get("name")
         if not identity:
@@ -147,7 +157,10 @@ class _WorkspaceCheck(_AsanaCheck):
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         workspace_id: str = _workspace_id(_config(context))
-        workspace: dict[str, Any] = read_workspace(_gateway(context), workspace_id)
+        workspace: dict[str, Any] = _probe(
+            lambda: read_workspace(_gateway(context), workspace_id),
+            "Onyx could not read the workspace.",
+        )
         return CheckOutput(
             summary=fit_summary(
                 "Found workspace ", str(workspace.get("name") or workspace_id)
@@ -163,9 +176,7 @@ class _TeamCheck(_AsanaCheck):
         super().__init__(
             check_id=_TEAM_CHECK_ID,
             display_name="Find the team",
-            remediation=(
-                "Check the Team ID, or use the token of a member of the team."
-            ),
+            remediation="Check the Team ID, or use the token of a member of the team.",
         )
 
     def applies(self, form_state: FormState[AsanaConnectorConfig]) -> bool:
@@ -176,8 +187,9 @@ class _TeamCheck(_AsanaCheck):
         team_id: str | None = _team_id(config)
         if team_id is None or _project_ids(config):
             raise CheckNotApplicableError("No team filter applies.")
-        team: dict[str, Any] = read_team(
-            _gateway(context), team_id, _workspace_id(config)
+        team: dict[str, Any] = _probe(
+            lambda: read_team(_gateway(context), team_id, _workspace_id(config)),
+            "Onyx could not read the team.",
         )
         return CheckOutput(
             summary=fit_summary("Found team ", str(team.get("name") or team_id))
@@ -189,9 +201,7 @@ class _ProjectsCheck(_AsanaCheck):
         super().__init__(
             check_id=_PROJECTS_CHECK_ID,
             display_name="Find selected projects",
-            remediation=(
-                "Check each project ID, or add the token's user to the project."
-            ),
+            remediation="Check each project ID, or add the token's user to the project.",
         )
 
     def applies(self, form_state: FormState[AsanaConnectorConfig]) -> bool:
@@ -202,74 +212,36 @@ class _ProjectsCheck(_AsanaCheck):
         project_ids: list[str] = _project_ids(config)
         if not project_ids:
             raise CheckNotApplicableError("No projects are selected.")
-        scan = scan_projects(_gateway(context), project_ids, _workspace_id(config))
-        raise_for_project_scan(scan, project_ids)
+        archived: list[str] = _probe(
+            lambda: check_projects(
+                _gateway(context), project_ids, _workspace_id(config)
+            ),
+            "Onyx could not read the selected projects.",
+        )
         advisories: list[CheckAdvisory] = []
-        if scan.archived:
+        if archived:
             advisories.append(
                 CheckAdvisory(
                     message=(
-                        "Onyx skips archived projects: "
-                        f"{', '.join(scan.archived)}. Unarchive them to index "
-                        "their tasks."
+                        f"Onyx skips archived projects: {', '.join(archived)}. "
+                        "Unarchive them to index their tasks."
                     )
                 )
             )
-        if len(project_ids) == 1:
-            return CheckOutput(
-                summary=fit_summary(
-                    "Found project ",
-                    str(
-                        scan.readable[0].get("name")
-                        if scan.readable
-                        else project_ids[0]
-                    ),
-                ),
-                advisories=advisories,
-            )
         return CheckOutput(
-            summary=f"Found all {len(project_ids)} projects", advisories=advisories
+            summary=(
+                fit_summary("Found project ", project_ids[0])
+                if len(project_ids) == 1
+                else f"Found all {len(project_ids)} projects"
+            ),
+            advisories=advisories,
         )
-
-
-def _first_project(context: CapabilityCheckContext) -> dict[str, Any] | None:
-    """The first project that indexing would read: a configured one, else
-    the first one of the workspace. Archived projects are skipped, as in
-    indexing."""
-    gateway: AsanaSourceOperations = _gateway(context)
-    config: AsanaConnectorConfig = _config(context)
-    project_ids: list[str] = _project_ids(config)
-    if project_ids:
-        for project_id in project_ids:
-            project: dict[str, Any] = probe(
-                functools.partial(
-                    gateway.get_project,
-                    project_gid=project_id,
-                    opt_fields="name,archived",
-                ),
-                f"Onyx could not read project {project_id}.",
-            )
-            if not project.get("archived"):
-                return {**project, "gid": project.get("gid") or project_id}
-        return None
-    projects = gateway.iterate_projects(
-        workspace_gid=_workspace_id(config),
-        opt_fields="name,archived",
-        limit=_PROJECT_SAMPLE_SIZE,
-    )
-    return probe(
-        lambda: next(
-            (candidate for candidate in projects if not candidate.get("archived")),
-            None,
-        ),
-        "Onyx could not list the workspace's projects.",
-    )
 
 
 class _TasksCheck(_AsanaCheck):
     """Reads the first task of the first project in scope, its comments and
-    its creator. No project at all FAILS: the connector would index
-    nothing."""
+    its creator, as indexing does. No project at all FAILS: the connector
+    would index nothing."""
 
     def __init__(self) -> None:
         super().__init__(
@@ -278,25 +250,47 @@ class _TasksCheck(_AsanaCheck):
             remediation="Add the token's user to the projects to index.",
         )
 
+    def _first_project(self, context: CapabilityCheckContext) -> dict[str, Any] | None:
+        """The first project that is not archived: a selected one, else one
+        of the workspace."""
+        gateway: AsanaSourceOperations = _gateway(context)
+        config: AsanaConnectorConfig = _config(context)
+        project_ids: list[str] = _project_ids(config)
+        projects = (
+            (
+                gateway.get_project(project_gid=project_id, opt_fields="name,archived")
+                for project_id in project_ids
+            )
+            if project_ids
+            else gateway.iterate_projects(
+                workspace_gid=_workspace_id(config),
+                opt_fields="name,archived",
+                limit=_PROJECT_SAMPLE_SIZE,
+            )
+        )
+        return _probe(
+            lambda: next((p for p in projects if not p.get("archived")), None),
+            "Onyx could not read the projects in scope.",
+        )
+
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         gateway: AsanaSourceOperations = _gateway(context)
-        project: dict[str, Any] | None = _first_project(context)
+        project: dict[str, Any] | None = self._first_project(context)
         if project is None:
             raise ConnectorValidationError(
-                "Asana returned no project that is not archived in scope, so "
+                "Asana returned no project in scope that is not archived, so "
                 "the connector would index nothing.",
                 summary="No projects to index",
                 description=(
-                    "The token's user sees no project that is not archived in "
-                    "the scope.\nAdd the user to a project, or check the scope."
+                    "The token's user sees no project in scope that is not "
+                    "archived.\nAdd the user to a project, or check the scope."
                 ),
             )
-        project_gid: str = str(project["gid"])
-        project_name: str = str(project.get("name") or project_gid)
+        project_name: str = str(project.get("name") or project["gid"])
         tasks = gateway.iterate_project_tasks(
-            project_gid=project_gid, opt_fields="name,created_by", limit=1
+            project_gid=str(project["gid"]), opt_fields="name,created_by", limit=1
         )
-        task: dict[str, Any] | None = probe(
+        task: dict[str, Any] | None = _probe(
             lambda: next(tasks, None),
             f"Onyx could not read the tasks of project {project_name}.",
         )
@@ -312,51 +306,33 @@ class _TasksCheck(_AsanaCheck):
                     )
                 ],
             )
-        task_gid: str = str(task["gid"])
         stories = gateway.iterate_task_stories(
-            task_gid=task_gid, limit=_STORY_SAMPLE_SIZE
+            task_gid=str(task["gid"]), limit=_STORY_SAMPLE_SIZE
         )
-        comment: dict[str, Any] | None = probe(
+        comment: dict[str, Any] | None = _probe(
             lambda: next(
-                (
-                    story
-                    for story in stories
-                    if story.get("resource_subtype") == _COMMENT_SUBTYPE
-                ),
+                (s for s in stories if s.get("resource_subtype") == "comment_added"),
                 None,
             ),
             "Onyx could not read the task's comments.",
         )
         if comment is not None:
-            probe(
+            _probe(
                 lambda: gateway.get_story(
-                    story_gid=str(comment["gid"]),
-                    opt_fields="text,created_by,created_at",
+                    story_gid=str(comment["gid"]), opt_fields="text,created_by"
                 ),
                 "Onyx could not read a comment of the task.",
             )
-        creator: Any = task.get("created_by")
-        if isinstance(creator, dict) and creator.get("gid"):
-            probe(
+        creator: dict[str, Any] = task.get("created_by") or {}
+        if creator.get("gid"):
+            _probe(
                 lambda: gateway.get_user(
                     user_gid=str(creator["gid"]), opt_fields="name,email"
                 ),
                 "Onyx could not read the task's creator.",
             )
         return CheckOutput(
-            summary=fit_summary("Read task ", str(task.get("name") or task_gid)),
-            advisories=(
-                []
-                if comment is not None
-                else [
-                    CheckAdvisory(
-                        message=(
-                            "The sampled task has no comment, so comment access "
-                            "was not checked."
-                        )
-                    )
-                ]
-            ),
+            summary=fit_summary("Read task ", str(task.get("name") or task["gid"]))
         )
 
 

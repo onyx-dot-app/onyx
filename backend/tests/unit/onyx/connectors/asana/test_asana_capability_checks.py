@@ -1,26 +1,35 @@
 """The Asana checks name what is wrong: a rejected token, a workspace the
 token cannot read (with the ones it can), archived projects, and a scope
-without tasks or comments to sample."""
+without tasks or comments to sample. The gateway maps the SDK's errors."""
 
-import json
 from typing import Any
 from unittest.mock import MagicMock, create_autospec
 
 import pytest
 from asana.rest import ApiException
+from urllib3.exceptions import MaxRetryError, ReadTimeoutError
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.asana.capability_checks import build_asana_indexing_checks
 from onyx.connectors.asana.source_operations import (
     AsanaApiError,
     AsanaSourceOperations,
-    _translated,
+    _call,
 )
 from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CheckOutput,
 )
-from onyx.connectors.exceptions import ConnectorValidationError, CredentialInvalidError
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialInvalidError,
+    InsufficientPermissionsError,
+    RateLimitedValidationError,
+    TimedOutValidationError,
+    UnexpectedValidationError,
+    UnreachableValidationError,
+    ValidationError,
+)
 
 _WORKSPACE = {"gid": "1", "name": "Acme"}
 
@@ -61,13 +70,8 @@ def _ops() -> MagicMock:
     return ops
 
 
-def _error(status: int) -> AsanaApiError:
-    return AsanaApiError(
-        f"Asana answered {status}",
-        status_code=status,
-        method="GET",
-        url="https://app.asana.com/api/1.0/users/me",
-    )
+def _not_found(path: str) -> AsanaApiError:
+    return AsanaApiError(status_code=404, path=path, body=None)
 
 
 def test_sign_in_names_the_user() -> None:
@@ -77,21 +81,19 @@ def test_sign_in_names_the_user() -> None:
     assert output.summary == "Signed in as a@example.com"
 
 
-def test_rejected_token_says_how_to_get_a_new_one() -> None:
+def test_unexpected_status_is_wrapped() -> None:
     ops = _ops()
-    ops.get_me.side_effect = _error(401)
+    ops.get_me.side_effect = AsanaApiError(status_code=500, path="/users/me", body=None)
 
-    with pytest.raises(CredentialInvalidError) as raised:
+    with pytest.raises(UnexpectedValidationError) as raised:
         _run("asana_token", ops)
 
-    assert raised.value.summary == "Asana rejected the token"
-    assert raised.value.description is not None
-    assert "personal access token" in raised.value.description
+    assert raised.value.__cause__ is ops.get_me.side_effect
 
 
 def test_unknown_workspace_lists_the_readable_ones() -> None:
     ops = _ops()
-    ops.get_workspace.side_effect = _error(404)
+    ops.get_workspace.side_effect = _not_found("/workspaces/42")
 
     with pytest.raises(ConnectorValidationError) as raised:
         _run("asana_workspace", ops, {"asana_workspace_id": "42"})
@@ -154,19 +156,57 @@ def test_no_project_in_scope_fails() -> None:
     assert raised.value.summary == "No projects to index"
 
 
-def test_sdk_errors_carry_asana_s_message_and_the_request() -> None:
-    sdk_error = ApiException(status=400, reason="Bad Request")
-    sdk_error.body = json.dumps(
-        {"errors": [{"message": "workspace: Not a recognized ID: abc"}]}
-    ).encode()
+def _sdk_error(status: int) -> ApiException:
+    error = ApiException(status=status, reason="error")
+    error.body = b'{"errors":[{"message":"Not Authorized"}]}'
+    return error
 
+
+@pytest.mark.parametrize(
+    ("status", "expected", "summary"),
+    [
+        (401, CredentialInvalidError, "Asana rejected the token"),
+        (403, InsufficientPermissionsError, "Asana denied access"),
+        (429, RateLimitedValidationError, "Rate limited by Asana"),
+    ],
+)
+def test_gateway_maps_sdk_statuses_to_row_text(
+    status: int, expected: type[ValidationError], summary: str
+) -> None:
     def _fail() -> None:
-        raise sdk_error
+        raise _sdk_error(status)
+
+    with pytest.raises(expected) as raised:
+        _call("/users/me", _fail)
+
+    assert raised.value.summary == summary
+    assert raised.value.description is not None
+    if status == 401:
+        assert "personal access token" in raised.value.description
+
+
+def test_gateway_keeps_other_statuses_with_the_request_and_body() -> None:
+    def _fail() -> None:
+        raise _sdk_error(404)
 
     with pytest.raises(AsanaApiError) as raised:
-        _translated("GET", "/workspaces/abc", _fail)
+        _call("/workspaces/abc", _fail)
 
-    assert raised.value.status_code == 400
-    assert raised.value.asana_message == "workspace: Not a recognized ID: abc"
+    assert raised.value.not_found
     assert raised.value.url == "https://app.asana.com/api/1.0/workspaces/abc"
-    assert raised.value.body is not None
+    assert raised.value.body == '{"errors":[{"message":"Not Authorized"}]}'
+
+
+def test_gateway_maps_transport_failures() -> None:
+    def _time_out() -> None:
+        raise MaxRetryError(
+            MagicMock(), "https://app.asana.com", ReadTimeoutError(MagicMock(), "", "")
+        )
+
+    def _refuse() -> None:
+        raise MaxRetryError(MagicMock(), "https://app.asana.com")
+
+    with pytest.raises(TimedOutValidationError):
+        _call("/users/me", _time_out)
+    with pytest.raises(UnreachableValidationError):
+        _call("/users/me", _refuse)

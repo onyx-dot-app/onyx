@@ -475,10 +475,11 @@ The GitHub gateway calls the REST API through PyGithub's requester and parses th
 JSON into the models in `github/models.py`, so no PyGithub object leaves it.
 Its `GitHubApiError` is a `SourceApiError` that carries the request and the
 response body, so a check's Error Details show them.
-The Asana gateway is the only importer of the `asana` SDK. It iterates the SDK's
-lazy listings itself and raises `AsanaApiError`, a `SourceApiError` with
-Asana's first error message. `asana/validation.py` maps it to the row text that
-the Asana checks and `AsanaConnector.validate_connector_settings` share.
+The Asana gateway iterates the `asana` SDK's lazy listings itself. It maps a
+rejected token, a denied request, a rate limit and a transport failure to the
+validation errors, and raises `AsanaApiError`, a `SourceApiError`, for any
+other status. `asana/scope.py` reads the workspace, team and projects for both
+the checks and `AsanaConnector.validate_connector_settings`.
 
 A gateway instance must be safe to call from several threads at once: the
 capability check runner calls one instance from parallel checks. The

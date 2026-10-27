@@ -4,13 +4,8 @@ from typing import Any
 from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE, INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.asana import asana_api
+from onyx.connectors.asana.scope import check_projects, read_team, read_workspace
 from onyx.connectors.asana.source_operations import AsanaSourceOperations
-from onyx.connectors.asana.validation import (
-    raise_for_project_scan,
-    read_team,
-    read_workspace,
-    scan_projects,
-)
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.interfaces import (
     GenerateDocumentsOutput,
@@ -75,10 +70,7 @@ class AsanaConnector(LoadConnector, PollConnector):
         readable with the token. One message names every unusable project."""
         read_workspace(self.ops, self.workspace_id)
         if self.project_ids_to_index:
-            raise_for_project_scan(
-                scan_projects(self.ops, self.project_ids_to_index, self.workspace_id),
-                self.project_ids_to_index,
-            )
+            check_projects(self.ops, self.project_ids_to_index, self.workspace_id)
         elif self.asana_team_id:
             read_team(self.ops, self.asana_team_id, self.workspace_id)
 

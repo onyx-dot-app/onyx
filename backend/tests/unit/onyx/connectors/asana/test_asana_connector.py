@@ -15,12 +15,6 @@ from onyx.connectors.asana.source_operations import (
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialInvalidError,
-    InsufficientPermissionsError,
-    RateLimitedValidationError,
-    TimedOutValidationError,
-    UnexpectedValidationError,
-    UnreachableValidationError,
-    ValidationError,
 )
 from onyx.connectors.models import ConnectorMissingCredentialError
 
@@ -347,14 +341,8 @@ def _connector_with_ops(
     return connector
 
 
-def _api_error(status: int | None, *, timed_out: bool = False) -> AsanaApiError:
-    return AsanaApiError(
-        f"Asana answered {status}",
-        status_code=status,
-        method="GET",
-        url="https://app.asana.com/api/1.0/workspaces/123",
-        timed_out=timed_out,
-    )
+def _not_found(path: str) -> AsanaApiError:
+    return AsanaApiError(status_code=404, path=path, body=None)
 
 
 def _ops() -> MagicMock:
@@ -385,55 +373,24 @@ def test_validate_connector_settings_reads_configured_workspace() -> None:
     ops.get_workspace.assert_called_once_with(workspace_gid="123")
 
 
-@pytest.mark.parametrize(
-    ("status", "expected"),
-    [
-        (400, ConnectorValidationError),
-        (404, ConnectorValidationError),
-        (403, InsufficientPermissionsError),
-    ],
-)
-def test_unknown_workspace_names_the_readable_ones(
-    status: int, expected: type[Exception]
-) -> None:
+def test_unknown_workspace_names_the_readable_ones() -> None:
     ops = _ops()
-    ops.get_workspace.side_effect = _api_error(status)
+    ops.get_workspace.side_effect = _not_found("/workspaces/123")
 
-    with pytest.raises(expected) as raised:
+    with pytest.raises(ConnectorValidationError) as raised:
         _connector_with_ops(ops).validate_connector_settings()
 
-    error = raised.value
-    assert isinstance(error, ValidationError)
-    assert error.summary == "Workspace not found: 123"
-    assert error.description is not None
-    assert "The token can read: Other (999)." in error.description
+    assert raised.value.summary == "Workspace not found: 123"
+    assert raised.value.description is not None
+    assert "The token can read: Other (999)." in raised.value.description
 
 
-@pytest.mark.parametrize(
-    ("error", "expected", "summary"),
-    [
-        (_api_error(401), CredentialInvalidError, "Asana rejected the token"),
-        (_api_error(429), RateLimitedValidationError, "Rate limited by Asana"),
-        (_api_error(500), UnexpectedValidationError, "Asana had a server error"),
-        (_api_error(None), UnreachableValidationError, "Cannot reach Asana"),
-        (
-            _api_error(None, timed_out=True),
-            TimedOutValidationError,
-            "Timed out",
-        ),
-    ],
-)
-def test_workspace_errors_map_to_row_text(
-    error: AsanaApiError, expected: type[ValidationError], summary: str
-) -> None:
+def test_gateway_validation_errors_pass_through() -> None:
     ops = _ops()
-    ops.get_workspace.side_effect = error
+    ops.get_workspace.side_effect = CredentialInvalidError("rejected")
 
-    with pytest.raises(expected) as raised:
+    with pytest.raises(CredentialInvalidError):
         _connector_with_ops(ops).validate_connector_settings()
-
-    assert raised.value.summary == summary
-    assert raised.value.__cause__ is error
 
 
 def test_unusable_projects_are_named_in_one_error() -> None:
@@ -441,7 +398,7 @@ def test_unusable_projects_are_named_in_one_error() -> None:
 
     def _get_project(project_gid: str, **_kwargs: Any) -> dict[str, Any]:
         if project_gid == "1":
-            raise _api_error(404)
+            raise _not_found("/projects/1")
         if project_gid == "2":
             return {"gid": "2", "name": "Elsewhere", "workspace": {"gid": "999"}}
         return {"gid": project_gid, "name": "Ok", "workspace": {"gid": "123"}}
