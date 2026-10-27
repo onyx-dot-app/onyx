@@ -85,6 +85,7 @@ from onyx.db.index_attempt_metrics import (
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.db.models import Connector, Credential, IndexAttempt, SearchSettings
 from onyx.db.port_attempt import reindex_finalizing
+from onyx.db.search_settings import get_search_settings_by_id
 from onyx.file_store.document_batch_storage import (
     DocumentBatchStorage,
     get_document_batch_storage,
@@ -867,8 +868,8 @@ def connector_document_extraction(
                         last_finalizing_check = time.monotonic()
                         if reindex_finalizing(
                             db_session_tmp,
-                            db_session_tmp.get(
-                                SearchSettings, index_attempt.search_settings_id
+                            get_search_settings_by_id(
+                                db_session_tmp, index_attempt.search_settings_id
                             ),
                         ):
                             docprocessing_priority = OnyxCeleryPriority.HIGH
