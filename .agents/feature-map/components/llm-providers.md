@@ -217,21 +217,11 @@ designation and endpoints have been removed.
 
 ## 4. How it works
 
-### Shared messages and model-history replay
+### Shared messages
 
 `backend/onyx/llm/models.py:MessageRole` gives shared messages enum-based roles.
 System, user, assistant, and tool-result messages accept and serialize the existing role strings.
 Provider request conversion keeps its existing wire format.
-
-`backend/onyx/agents/execution_records.py` supplies stable input-message IDs and model-history replay.
-Its `messages_for_model` function creates model context from recorded messages.
-It retains partial text and signed thinking, but omits tool calls without adjacent results.
-Unsigned provider thinking blocks are incomplete and cannot be replayed; signed and redacted blocks remain intact.
-It also removes orphaned or duplicate tool results and copies messages by default.
-Calls with duplicate IDs in one assistant message are ambiguous; replay omits them and their results.
-This helper prepares history without deleting the recorded output.
-Production chat does not call this module yet.
-
 
 ### 4.1 Resolving which model answers a turn: `get_llm_for_persona`
 
