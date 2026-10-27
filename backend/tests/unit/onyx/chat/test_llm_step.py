@@ -1370,6 +1370,39 @@ class TestSignedThinkingReplay:
         edited[0] = edited[0].model_copy(update={"message": "Hello"})
         assert replayed(edited, tools) == [[], []]
 
+        # A block minted after an earlier one was cleared still replays.
+        steps = history("Hi")
+        cleared = _drop_thinking_with_changed_prefix(
+            translate_history_to_llm_format(history=steps, llm_config=config),
+            steps,
+            tools,
+        )
+        second = [
+            i for i, msg in enumerate(cleared) if isinstance(msg, AssistantMessage)
+        ][1]
+        steps[0] = steps[0].model_copy(update={"message": "Hello"})
+        thinking = steps[3].thinking
+        assert thinking is not None
+        steps[3] = steps[3].model_copy(
+            update={
+                "thinking": thinking.model_copy(
+                    update={
+                        "prefix": thinking_prefix(
+                            _drop_thinking_with_changed_prefix(
+                                translate_history_to_llm_format(
+                                    history=steps, llm_config=config
+                                ),
+                                steps,
+                                tools,
+                            )[:second],
+                            tools,
+                        )
+                    }
+                )
+            }
+        )
+        assert replayed(steps, tools) == [[], signed]
+
     @staticmethod
     def _run_stream(deltas: list[Any]) -> Any:
         from onyx.chat.llm_step import run_llm_step_pkt_generator

@@ -388,14 +388,16 @@ def thinking_prefix(
     messages: Sequence[ChatCompletionMessage], tools: Sequence[Mapping[str, Any]]
 ) -> str:
     """Fingerprint of what Anthropic binds a thinking block to: the tools and
-    every earlier message. Cache markers and earlier thinking are not bound."""
+    every earlier message. Cache markers are not bound. Earlier thinking counts
+    only as present or absent, since a block is valid only after the same
+    sequence of earlier blocks."""
 
     def strip(value: Any) -> Any:
         if isinstance(value, dict):
             return {
-                key: strip(item)
+                key: bool(item) if key == "thinking_blocks" else strip(item)
                 for key, item in value.items()
-                if key not in ("cache_control", "thinking_blocks")
+                if key != "cache_control"
             }
         if isinstance(value, list):
             return [strip(item) for item in value]
@@ -417,9 +419,10 @@ def _drop_thinking_with_changed_prefix(
 ) -> list[ChatCompletionMessage]:
     """Clear replayed blocks whose prefix changed since they were minted.
 
-    Anthropic rejects such a block, and any block after a removed one, so
-    every later block goes too. The empty list keeps thinking on: the API
-    accepts tool calls without thinking blocks.
+    Anthropic rejects such a block. Clearing one changes the prefix of later
+    blocks minted after it, so they are cleared too, while blocks minted after
+    it was already cleared still match. The empty list keeps thinking on: the
+    API accepts tool calls without thinking blocks.
     """
     thinking = [
         msg.thinking for msg in history if msg.message_type == MessageType.ASSISTANT
@@ -429,18 +432,12 @@ def _drop_thinking_with_changed_prefix(
     ]
     aligned = len(thinking) == len(assistant_indices)
     result = list(messages)
-    broken = not aligned
     for position, index in enumerate(assistant_indices):
         msg = result[index]
         if not isinstance(msg, AssistantMessage) or not msg.thinking_blocks:
             continue
         minted = thinking[position] if aligned else None
-        if (
-            broken
-            or minted is None
-            or minted.prefix != thinking_prefix(result[:index], tools)
-        ):
-            broken = True
+        if minted is None or minted.prefix != thinking_prefix(result[:index], tools):
             result[index] = msg.model_copy(update={"thinking_blocks": []})
     return result
 
