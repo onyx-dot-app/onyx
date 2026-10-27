@@ -1,18 +1,17 @@
 import datetime
 from typing import Any
 
-from asana.rest import ApiException
-
 from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE, INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.asana import asana_api
-from onyx.connectors.exceptions import (
-    ConnectorValidationError,
-    CredentialExpiredError,
-    InsufficientPermissionsError,
-    RateLimitedValidationError,
-    UnexpectedValidationError,
+from onyx.connectors.asana.source_operations import AsanaSourceOperations
+from onyx.connectors.asana.validation import (
+    raise_for_project_scan,
+    read_team,
+    read_workspace,
+    scan_projects,
 )
+from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.interfaces import (
     GenerateDocumentsOutput,
     LoadConnector,
@@ -52,56 +51,36 @@ class AsanaConnector(LoadConnector, PollConnector):
         self.asana_team_id = (asana_team_id.strip() or None) if asana_team_id else None
         self.batch_size = batch_size
         self.continue_on_failure = continue_on_failure
-        self.asana_client: asana_api.AsanaAPI | None = None
+        self._ops: AsanaSourceOperations | None = None
         logger.info(
             "AsanaConnector initialized with workspace_id: %s", asana_workspace_id
         )
 
+    @property
+    def ops(self) -> AsanaSourceOperations:
+        if self._ops is None:
+            raise ConnectorMissingCredentialError("Asana")
+        return self._ops
+
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        self.api_token = credentials["asana_api_token_secret"]
-        self.asana_client = asana_api.AsanaAPI(
-            api_token=self.api_token,
-            workspace_gid=self.workspace_id,
-            team_gid=self.asana_team_id,
+        self._ops = AsanaSourceOperations(
+            credentials_provider=OnyxStaticCredentialsProvider(
+                None, DocumentSource.ASANA.value, credentials
+            )
         )
-        logger.info("Asana credentials loaded and API client initialized")
         return None
 
     def validate_connector_settings(self) -> None:
-        """Confirm the token can read the configured workspace."""
-        if self.asana_client is None:
-            raise ConnectorMissingCredentialError("Asana")
-
-        try:
-            self.asana_client.workspaces_api.get_workspace(
-                self.workspace_id, {}, _request_timeout=(5, 15)
+        """The workspace, and the team or projects that narrow it, must be
+        readable with the token. One message names every unusable project."""
+        read_workspace(self.ops, self.workspace_id)
+        if self.project_ids_to_index:
+            raise_for_project_scan(
+                scan_projects(self.ops, self.project_ids_to_index, self.workspace_id),
+                self.project_ids_to_index,
             )
-        except ApiException as api_err:
-            status = api_err.status
-            if status == 401:
-                raise CredentialExpiredError(
-                    "Asana token is invalid or expired (HTTP 401)."
-                ) from api_err
-            if status == 403:
-                raise InsufficientPermissionsError(
-                    "Asana token cannot access this workspace (HTTP 403)."
-                ) from api_err
-            if status == 404:
-                raise ConnectorValidationError(
-                    f"Asana workspace {self.workspace_id} was not found (HTTP 404). "
-                    "Check the Workspace ID."
-                ) from api_err
-            if status == 429:
-                raise RateLimitedValidationError(
-                    "Asana rate limit reached during validation (HTTP 429). Try again later."
-                ) from api_err
-            raise UnexpectedValidationError(
-                f"Unexpected Asana HTTP error (status={status}): {api_err}"
-            ) from api_err
-        except Exception as exc:
-            raise UnexpectedValidationError(
-                f"Unexpected error during Asana settings validation: {exc}"
-            ) from exc
+        elif self.asana_team_id:
+            read_team(self.ops, self.asana_team_id, self.workspace_id)
 
     def poll_source(
         self,
@@ -111,7 +90,7 @@ class AsanaConnector(LoadConnector, PollConnector):
         start_time = datetime.datetime.fromtimestamp(start).isoformat()
         logger.info("Starting Asana poll from %s", start_time)
         asana = asana_api.AsanaAPI(
-            api_token=self.api_token,
+            ops=self.ops,
             workspace_gid=self.workspace_id,
             team_gid=self.asana_team_id,
         )

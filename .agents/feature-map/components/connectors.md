@@ -51,8 +51,7 @@ checks (§4), the admin sees a validation error at connector-creation time if
 credentials are wrong or a permission is missing. The base
 `validate_connector_settings` is a no-op. A connector that does not override
 it can pass creation with bad credentials. The problem then shows only when an
-index run fails or returns nothing. Asana overrides it with one
-`get_workspace` call that maps 401, 403, 404, and 429 to the validation errors.
+index run fails or returns nothing.
 
 ---
 
@@ -460,7 +459,7 @@ whose required permission depends on an argument) onto each public method;
 method on the subclass lacks the stamp, or if the subclass overrides
 `__init__`. Operations must return plain data, never live SDK objects, because
 lazily-evaluated SDK attribute access (PyGithub, office365) can fire network
-calls outside any wrapper. Only Slack, Confluence, OneDrive, Outlook, Jira, Linear, HubSpot, Google Drive, Notion, SharePoint, GitHub, and YouTrack have
+calls outside any wrapper. Only Slack, Confluence, OneDrive, Outlook, Jira, Linear, HubSpot, Google Drive, Notion, SharePoint, GitHub, YouTrack, and Asana have
 a gateway today (`<source>/source_operations.py`); most connectors still call their SDK directly.
 SharePoint's gateway is also the only importer of `msal`, `requests` and `office365`
 under `connectors/sharepoint/` and `ee/.../external_permissions/sharepoint/`. Its
@@ -476,6 +475,10 @@ The GitHub gateway calls the REST API through PyGithub's requester and parses th
 JSON into the models in `github/models.py`, so no PyGithub object leaves it.
 Its `GitHubApiError` is a `SourceApiError` that carries the request and the
 response body, so a check's Error Details show them.
+The Asana gateway is the only importer of the `asana` SDK. It iterates the SDK's
+lazy listings itself and raises `AsanaApiError`, a `SourceApiError` with
+Asana's first error message. `asana/validation.py` maps it to the row text that
+the Asana checks and `AsanaConnector.validate_connector_settings` share.
 
 A gateway instance must be safe to call from several threads at once: the
 capability check runner calls one instance from parallel checks. The
@@ -488,7 +491,7 @@ lock, so one thread redeems it (Linear, Google Drive). Confluence's
 `probe_site` probes on a new client, since the probe swaps the client's
 connection settings. `cross_connector_utils/rate_limit_wrapper.py:rate_limit_builder`
 locks its call history, so HubSpot's shared limiter holds across threads.
-Notion, YouTrack, OneDrive and Outlook keep no state that a race can break: a
+Notion, YouTrack, Asana, OneDrive and Outlook keep no state that a race can break: a
 duplicate build of a stateless client is harmless. With a DB-backed provider,
 Confluence holds the credential's rotation lock for each call, so its parallel
 calls run one at a time.
@@ -499,7 +502,7 @@ calls run one at a time.
 `EXTERNAL_GROUP_SYNC`) is the vocabulary. `capability_checks/applicability.py`
 decides which capabilities apply to a source on this build (CE: `INDEXING`
 only; EE adds the perm-sync ones). `capability_checks/registry.py` maps a
-source to named `CapabilityCheck`s (only Slack, Confluence, OneDrive, Outlook, Jira, Linear, HubSpot, Google Drive, Notion, SharePoint, GitHub, and YouTrack
+source to named `CapabilityCheck`s (only Slack, Confluence, OneDrive, Outlook, Jira, Linear, HubSpot, Google Drive, Notion, SharePoint, GitHub, YouTrack, and Asana
 register real ones today; every other source gets a synthesized fallback wrapping
 `validate_connector_settings`, the generic "Test connection" row of
 `capability_checks/generic_row.py`. A source whose connector keeps the no-op

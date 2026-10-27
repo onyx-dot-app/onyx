@@ -2,25 +2,32 @@
 
 from collections.abc import Iterator
 from typing import Any, NamedTuple
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, create_autospec
 
 import pytest
 
 from onyx.connectors.asana.asana_api import AsanaAPI
 from onyx.connectors.asana.connector import AsanaConnector
+from onyx.connectors.asana.source_operations import (
+    AsanaApiError,
+    AsanaSourceOperations,
+)
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
-    CredentialExpiredError,
+    CredentialInvalidError,
     InsufficientPermissionsError,
     RateLimitedValidationError,
+    TimedOutValidationError,
     UnexpectedValidationError,
+    UnreachableValidationError,
+    ValidationError,
 )
 from onyx.connectors.models import ConnectorMissingCredentialError
 
 
 class _AsanaTestSetup(NamedTuple):
     api: AsanaAPI
-    stories_api: MagicMock
+    ops: MagicMock
 
 
 @pytest.mark.parametrize(
@@ -89,29 +96,18 @@ def _build_api_with_mocks(
     team_gid: str | None = None,
     project_metadata: dict[str, dict[str, Any]] | None = None,
 ) -> _AsanaTestSetup:
-    """Construct an AsanaAPI with all SDK clients replaced by mocks.
+    """Construct an AsanaAPI over a mocked source-operations gateway.
 
-    `project_to_tasks` maps each project gid to the tasks `get_tasks_for_project`
-    will return when asked for that project. `project_metadata` lets a test
-    override per-project metadata returned by `get_project` (the default is a
-    public, team-bound, unarchived project). `team_gid` configures the API's
-    team filter.
+    `project_to_tasks` maps each project gid to the tasks
+    `iterate_project_tasks` will return when asked for that project.
+    `project_metadata` lets a test override per-project metadata returned by
+    `get_project` (the default is a public, team-bound, unarchived project).
+    `team_gid` configures the API's team filter.
 
-    Returns the api plus the stories-api mock so tests can introspect call
-    counts without fighting `ty` type inference on the original SDK attributes.
+    Returns the api plus the gateway mock so tests can introspect call counts.
     """
-    with patch("onyx.connectors.asana.asana_api.asana"):
-        api = AsanaAPI(api_token="token", workspace_gid="ws", team_gid=team_gid)
-
-    project_api = MagicMock()
-    tasks_api = MagicMock()
-    stories_api = MagicMock()
-    users_api = MagicMock()
-
-    api.project_api = project_api
-    api.tasks_api = tasks_api
-    api.stories_api = stories_api
-    api.users_api = users_api
+    ops = create_autospec(AsanaSourceOperations, instance=True)
+    api = AsanaAPI(ops=ops, workspace_gid="ws", team_gid=team_gid)
 
     default_metadata: dict[str, Any] = {
         "name": "p",
@@ -121,24 +117,22 @@ def _build_api_with_mocks(
     }
     metadata_overrides = project_metadata or {}
 
-    project_api.get_projects.return_value = iter(
-        [{"gid": gid} for gid in project_to_tasks]
-    )
+    ops.iterate_projects.return_value = iter([{"gid": gid} for gid in project_to_tasks])
 
-    def _get_project(gid: str, **_kwargs: Any) -> dict[str, Any]:
-        return {**default_metadata, **metadata_overrides.get(gid, {})}
+    def _get_project(project_gid: str, **_kwargs: Any) -> dict[str, Any]:
+        return {**default_metadata, **metadata_overrides.get(project_gid, {})}
 
-    project_api.get_project.side_effect = _get_project
+    ops.get_project.side_effect = _get_project
 
-    def _get_tasks_for_project(
-        gid: str, *_args: Any, **_kwargs: Any
+    def _iterate_project_tasks(
+        project_gid: str, **_kwargs: Any
     ) -> Iterator[dict[str, Any]]:
-        return iter(project_to_tasks.get(gid, []))
+        return iter(project_to_tasks.get(project_gid, []))
 
-    tasks_api.get_tasks_for_project.side_effect = _get_tasks_for_project
-    stories_api.get_stories_for_task.return_value = iter([])
+    ops.iterate_project_tasks.side_effect = _iterate_project_tasks
+    ops.iterate_task_stories.return_value = iter([])
 
-    return _AsanaTestSetup(api=api, stories_api=stories_api)
+    return _AsanaTestSetup(api=api, ops=ops)
 
 
 def test_get_tasks_dedupes_task_appearing_in_multiple_projects() -> None:
@@ -159,9 +153,10 @@ def test_get_tasks_dedupes_task_appearing_in_multiple_projects() -> None:
     assert setup.api.task_count == 3
     # Comments fetched only for unique tasks; the duplicate X is skipped before
     # `_fetch_and_add_comments` runs.
-    assert setup.stories_api.get_stories_for_task.call_count == 3
+    assert setup.ops.iterate_task_stories.call_count == 3
     fetched_gids = [
-        call.args[0] for call in setup.stories_api.get_stories_for_task.call_args_list
+        call.kwargs["task_gid"]
+        for call in setup.ops.iterate_task_stories.call_args_list
     ]
     assert sorted(fetched_gids) == ["X", "Y", "Z"]
 
@@ -182,7 +177,7 @@ def test_get_tasks_no_duplicates_unchanged() -> None:
 
     assert [t.id for t in yielded] == ["A", "B", "C"]
     assert setup.api.task_count == 3
-    assert setup.stories_api.get_stories_for_task.call_count == 3
+    assert setup.ops.iterate_task_stories.call_count == 3
 
 
 def test_get_tasks_processes_teamless_project_when_no_team_filter() -> None:
@@ -338,18 +333,38 @@ def test_get_tasks_skips_archived_project_even_when_allowlisted() -> None:
     assert yielded == []
 
 
-def _connector_with_workspaces_api(workspaces_api: MagicMock) -> AsanaConnector:
-    connector = AsanaConnector(asana_workspace_id="123")
-    connector.api_token = "token"
-    connector.asana_client = MagicMock()
-    connector.asana_client.workspaces_api = workspaces_api
+def _connector_with_ops(
+    ops: MagicMock,
+    asana_project_ids: str | None = None,
+    asana_team_id: str | None = None,
+) -> AsanaConnector:
+    connector = AsanaConnector(
+        asana_workspace_id="123",
+        asana_project_ids=asana_project_ids,
+        asana_team_id=asana_team_id,
+    )
+    connector._ops = ops
     return connector
 
 
-def _api_exception(status: int) -> Exception:
-    from asana.rest import ApiException
+def _api_error(status: int | None, *, timed_out: bool = False) -> AsanaApiError:
+    return AsanaApiError(
+        f"Asana answered {status}",
+        status_code=status,
+        method="GET",
+        url="https://app.asana.com/api/1.0/workspaces/123",
+        timed_out=timed_out,
+    )
 
-    return ApiException(status=status, reason="error")
+
+def _ops() -> MagicMock:
+    ops = create_autospec(AsanaSourceOperations, instance=True)
+    ops.get_workspace.return_value = {"gid": "123", "name": "Acme"}
+    ops.get_me.return_value = {
+        "gid": "u",
+        "workspaces": [{"gid": "999", "name": "Other"}],
+    }
+    return ops
 
 
 def test_validate_connector_settings_requires_credentials() -> None:
@@ -358,42 +373,110 @@ def test_validate_connector_settings_requires_credentials() -> None:
         connector.validate_connector_settings()
 
 
+def test_load_credentials_builds_the_gateway() -> None:
+    connector = AsanaConnector(asana_workspace_id="123")
+    connector.load_credentials({"asana_api_token_secret": "token"})
+    assert isinstance(connector.ops, AsanaSourceOperations)
+
+
 def test_validate_connector_settings_reads_configured_workspace() -> None:
-    workspaces_api = MagicMock()
-    connector = _connector_with_workspaces_api(workspaces_api)
-
-    connector.validate_connector_settings()
-
-    workspaces_api.get_workspace.assert_called_once_with(
-        "123", {}, _request_timeout=(5, 15)
-    )
+    ops = _ops()
+    _connector_with_ops(ops).validate_connector_settings()
+    ops.get_workspace.assert_called_once_with(workspace_gid="123")
 
 
 @pytest.mark.parametrize(
     ("status", "expected"),
     [
-        (401, CredentialExpiredError),
-        (403, InsufficientPermissionsError),
+        (400, ConnectorValidationError),
         (404, ConnectorValidationError),
-        (429, RateLimitedValidationError),
-        (500, UnexpectedValidationError),
+        (403, InsufficientPermissionsError),
     ],
 )
-def test_validate_connector_settings_maps_api_errors(
+def test_unknown_workspace_names_the_readable_ones(
     status: int, expected: type[Exception]
 ) -> None:
-    workspaces_api = MagicMock()
-    workspaces_api.get_workspace.side_effect = _api_exception(status)
-    connector = _connector_with_workspaces_api(workspaces_api)
+    ops = _ops()
+    ops.get_workspace.side_effect = _api_error(status)
 
-    with pytest.raises(expected):
+    with pytest.raises(expected) as raised:
+        _connector_with_ops(ops).validate_connector_settings()
+
+    error = raised.value
+    assert isinstance(error, ValidationError)
+    assert error.summary == "Workspace not found: 123"
+    assert error.description is not None
+    assert "The token can read: Other (999)." in error.description
+
+
+@pytest.mark.parametrize(
+    ("error", "expected", "summary"),
+    [
+        (_api_error(401), CredentialInvalidError, "Asana rejected the token"),
+        (_api_error(429), RateLimitedValidationError, "Rate limited by Asana"),
+        (_api_error(500), UnexpectedValidationError, "Asana had a server error"),
+        (_api_error(None), UnreachableValidationError, "Cannot reach Asana"),
+        (
+            _api_error(None, timed_out=True),
+            TimedOutValidationError,
+            "Timed out",
+        ),
+    ],
+)
+def test_workspace_errors_map_to_row_text(
+    error: AsanaApiError, expected: type[ValidationError], summary: str
+) -> None:
+    ops = _ops()
+    ops.get_workspace.side_effect = error
+
+    with pytest.raises(expected) as raised:
+        _connector_with_ops(ops).validate_connector_settings()
+
+    assert raised.value.summary == summary
+    assert raised.value.__cause__ is error
+
+
+def test_unusable_projects_are_named_in_one_error() -> None:
+    ops = _ops()
+
+    def _get_project(project_gid: str, **_kwargs: Any) -> dict[str, Any]:
+        if project_gid == "1":
+            raise _api_error(404)
+        if project_gid == "2":
+            return {"gid": "2", "name": "Elsewhere", "workspace": {"gid": "999"}}
+        return {"gid": project_gid, "name": "Ok", "workspace": {"gid": "123"}}
+
+    ops.get_project.side_effect = _get_project
+    connector = _connector_with_ops(ops, asana_project_ids="1,2,3")
+
+    with pytest.raises(ConnectorValidationError) as raised:
         connector.validate_connector_settings()
 
+    assert raised.value.summary == "2 of 3 projects not usable"
+    assert "Not found: 1." in raised.value.message
+    assert "In another workspace: 2." in raised.value.message
 
-def test_validate_connector_settings_wraps_unknown_errors() -> None:
-    workspaces_api = MagicMock()
-    workspaces_api.get_workspace.side_effect = RuntimeError("boom")
-    connector = _connector_with_workspaces_api(workspaces_api)
 
-    with pytest.raises(UnexpectedValidationError):
+def test_team_in_another_workspace_fails() -> None:
+    ops = _ops()
+    ops.get_team.return_value = {
+        "gid": "7",
+        "name": "Eng",
+        "organization": {"gid": "999"},
+    }
+    connector = _connector_with_ops(ops, asana_team_id="7")
+
+    with pytest.raises(ConnectorValidationError) as raised:
         connector.validate_connector_settings()
+
+    assert raised.value.summary == "Team is in another workspace"
+
+
+def test_team_is_not_read_when_projects_are_set() -> None:
+    ops = _ops()
+    ops.get_project.return_value = {"gid": "1", "workspace": {"gid": "123"}}
+    connector = _connector_with_ops(ops, asana_project_ids="1", asana_team_id="7")
+
+    connector.validate_connector_settings()
+
+    ops.get_team.assert_not_called()
