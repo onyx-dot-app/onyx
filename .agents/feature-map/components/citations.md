@@ -269,6 +269,14 @@ and by the time a replayed message's full text is available, its citation map is
 
 ---
 
+
+### 4.10 Saved model history
+
+`capture_chat_history` restores search source documents before the agent reads prior tool results.
+Durable and temporary history use `restore_search_documents` for this step.
+The saved citation mapping selects the documents, including evidence not cited in the final answer.
+Stored tool results remain unchanged; documents retain their existing storage relation.
+
 ## 5. Contracts and invariants
 
 1. **Citation numbering ranges must not collide across parallel tool calls.**

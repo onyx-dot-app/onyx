@@ -572,8 +572,7 @@ export class OnyxChatWidget extends LitElement {
         }
       }
     } finally {
-      if (!stillOurs()) return;
-      if (sentSessionId) {
+      if (stillOurs() && sentSessionId) {
         try {
           await this.apiService.waitForSessionIdle(
             sentSessionId,
@@ -585,8 +584,10 @@ export class OnyxChatWidget extends LitElement {
             }
           );
         } catch (error) {
-          if (!stillOurs()) return;
-          if (!(error instanceof Error && error.name === "AbortError")) {
+          if (
+            stillOurs() &&
+            !(error instanceof Error && error.name === "AbortError")
+          ) {
             this.error ??=
               error instanceof Error
                 ? error.message
@@ -594,11 +595,12 @@ export class OnyxChatWidget extends LitElement {
           }
         }
       }
-      if (!stillOurs()) return;
-      this.isStreaming = false;
-      this.isLoading = false;
-      this.streamingStatus = "";
-      this.abortController = undefined;
+      if (stillOurs()) {
+        this.isStreaming = false;
+        this.isLoading = false;
+        this.streamingStatus = "";
+        this.abortController = undefined;
+      }
     }
   }
 
@@ -608,7 +610,8 @@ export class OnyxChatWidget extends LitElement {
     const isCompactInline =
       this.config.mode === "inline" &&
       !this.config.startExpanded &&
-      !hasMessages;
+      !hasMessages &&
+      !this.error;
 
     return html`
       ${

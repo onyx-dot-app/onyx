@@ -42,6 +42,8 @@ from onyx.agents.models import (
 from onyx.agents.tools import InputMode, PendingToolInput, ToolProgress
 from onyx.chat.chat_utils import capture_chat_history, convert_chat_history
 from onyx.chat.checkpoint import deserialize_checkpoint, serialize_checkpoint
+from onyx.chat.citation_processor import DynamicCitationProcessor
+from onyx.chat.citation_utils import update_citation_processor_from_tool_result
 from onyx.chat.emitter import Emitter
 from onyx.chat.history_store import get_chat_history_store
 from onyx.chat.models import (
@@ -2204,6 +2206,10 @@ def test_history_loads_items_only_for_selected_ancestry(
     assert "tool_calls" in inspect(sibling).unloaded
     assert "tool_calls" in inspect(later).unloaded
     assert sum("FROM chat_response_item" in query for query in executed_sql) == 1
+    assert "search_docs" not in inspect(selected).unloaded
+    executed_sql.clear()
+    capture_chat_history(history, {}, len)
+    assert not any("search_doc" in query for query in executed_sql)
 
 
 @pytest.mark.parametrize("invalid_character", ["\x00", "\ud800"])
@@ -2713,6 +2719,27 @@ def test_search_projection_restores_saved_source_cards(
         )
         == "Cedar is a tree."
     )
+    # Model history must recover uncited evidence as well as displayed citations.
+    assert not stored.citations
+    captured = capture_chat_history([stored], {}, len)
+    restored_result = next(
+        message
+        for entry in captured
+        for message in entry.response_messages
+        if isinstance(message, ToolResultMessage)
+    )
+    processor = DynamicCitationProcessor()
+    update_citation_processor_from_tool_result(restored_result, processor)
+    assert processor.get_next_citation_number() == 2
+    assert isinstance(restored_result.details, SearchDocsResponse)
+    assert restored_result.details.search_docs == [saved_document]
+    assert restored_result.details.citation_mapping == {1: document.document_id}
+    assert stored.tool_calls is not None
+    stored_result = stored.tool_calls[0].result
+    assert stored_result is not None
+    assert isinstance(stored_result.details, SearchDocsResponse)
+    assert stored_result.details.search_docs == []
+
     reference = execution.tool_records[0]
     assert (
         replay.tools[(reference.message_id, reference.tool_call_id)].tool_id

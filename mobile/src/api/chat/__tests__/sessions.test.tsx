@@ -5,7 +5,11 @@ import { act, renderHook, waitFor } from "@testing-library/react-native";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { apiFetch, type ApiFetchInit } from "@/api/client";
-import { useChatSessions, type ChatSessionSummary } from "@/api/chat/sessions";
+import {
+  stopChatSession,
+  useChatSessions,
+  type ChatSessionSummary,
+} from "@/api/chat/sessions";
 
 // `jest.mock` is hoisted above the imports by babel-jest.
 jest.mock("@/api/client");
@@ -38,6 +42,38 @@ function wrapper({ children }: { children: React.ReactNode }) {
   });
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
+
+it("aborts a stalled Stop request so its caller can retry", async () => {
+  jest.useFakeTimers();
+  apiFetchMock.mockReset();
+  apiFetchMock.mockImplementationOnce(
+    (_path, init) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener(
+          "abort",
+          () => reject(new Error("aborted")),
+          { once: true },
+        );
+      }),
+  );
+  try {
+    const stopped = expect(stopChatSession("s1", 11)).rejects.toThrow(
+      "aborted",
+    );
+    await jest.advanceTimersByTimeAsync(10_000);
+    await stopped;
+    expect(apiFetchMock).toHaveBeenCalledWith(
+      "/chat/stop-chat-session/s1?stream_id=11",
+      {
+        method: "POST",
+        signal: expect.any(AbortSignal),
+      },
+    );
+    expect(jest.getTimerCount()).toBe(0);
+  } finally {
+    jest.useRealTimers();
+  }
+});
 
 describe("useChatSessions", () => {
   beforeEach(() => {

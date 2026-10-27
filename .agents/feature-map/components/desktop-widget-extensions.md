@@ -469,10 +469,11 @@ The widget keeps Send disabled after a STOP packet and after delivery ends.
 `widget/src/services/api-service.ts:ApiService.waitForSessionIdle` confirms server idle
 through the authenticated session status endpoint. Transient failures retry without enabling
 Send. A 403 or 404 ends the wait and asks the user to start a new conversation.
-Each request has a ten-second deadline; the wait has no overall deadline.
+Each request has a ten-second deadline, including credential resolution; the wait has no overall deadline.
 Each poll owns an abort controller and timer, including on supported browsers without `AbortSignal.any` or `AbortSignal.timeout`.
 Each poll resolves the current credential. Reset aborts and clears the request controller;
 the next send creates a new controller. An old callback cannot change the new conversation.
 Readiness status does not replace a failed send's error message. Before acknowledgement, a failed
 send removes its optimistic message and restores the draft if the input is empty.
 After acknowledgement, the widget keeps the accepted message without restoring a duplicate draft.
+Inline mode keeps the full conversation panel open while an error is present, even with no messages.

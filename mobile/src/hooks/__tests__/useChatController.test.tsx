@@ -16,6 +16,7 @@ import { streamChatMessage, type StreamEvent } from "@/api/chat/stream";
 import { ChatFileType, type FileDescriptor } from "@/chat/interfaces";
 import { PacketType, StopReason } from "@/chat/streamingModels";
 import { useChatController } from "@/hooks/useChatController";
+import { toast } from "@/hooks/useToast";
 import { useChatSessionStore } from "@/state/chatSessionStore";
 
 // `jest.mock` is hoisted above the imports by babel-jest, so the imports above receive the mocks.
@@ -42,6 +43,9 @@ jest.mock("@/api/chat/sessions", () => ({
   getChatSessionStatus: jest.fn(async () => ({ is_processing: false })),
   renameChatSession: jest.fn(),
   stopChatSession: jest.fn(),
+}));
+jest.mock("@/hooks/useToast", () => ({
+  toast: { info: jest.fn(), error: jest.fn() },
 }));
 
 const streamMock = streamChatMessage as unknown as Mock<
@@ -722,6 +726,26 @@ describe("useChatController", () => {
     });
     expect(accepted).not.toHaveBeenCalled();
     expect(streamMock).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith(
+      "Could not confirm this conversation is ready. Try again.",
+    );
+  });
+
+  it("explains a busy session without accepting the draft", async () => {
+    useChatSessionStore.getState().ensureSession("s1");
+    jest
+      .mocked(getChatSessionStatus)
+      .mockResolvedValueOnce({ is_processing: true });
+    const accepted = jest.fn();
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+    await act(async () => {
+      await result.current.submit("retry me", [], accepted);
+    });
+    expect(accepted).not.toHaveBeenCalled();
+    expect(streamMock).not.toHaveBeenCalled();
+    expect(toast.info).toHaveBeenCalledWith(
+      "This conversation is still processing. Try again shortly.",
+    );
   });
 
   it("waits for acknowledgement before sending scoped Stop", async () => {
