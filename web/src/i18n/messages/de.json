@@ -7351,12 +7351,13 @@
         "requests": {
           "title": "Anfragen pro Zeitfenster",
           "description": "Die maximale Anzahl an Embedding-Anfragen, die die Indexierung in einem Zeitfenster senden darf. Leer lassen für kein Limit.",
-          "placeholder": "Kein Limit"
+          "placeholder": "Kein Limit",
+          "suffix": "Anfragen"
         },
         "period": {
           "title": "Länge des Zeitfensters",
           "description": "Wie lange ein Zeitfenster dauert. Verwenden Sie 60 für ein Limit pro Minute.",
-          "suffix": "(Sekunden)"
+          "suffix": "Sekunden"
         },
         "toasts": {
           "failed": "Das Limit konnte nicht gespeichert werden."

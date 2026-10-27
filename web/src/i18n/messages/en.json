@@ -7351,12 +7351,13 @@
         "requests": {
           "title": "Requests per Window",
           "description": "The most embedding requests indexing can send in one window. Leave empty for no limit.",
-          "placeholder": "No limit"
+          "placeholder": "No limit",
+          "suffix": "requests"
         },
         "period": {
           "title": "Window Length",
           "description": "How long one window lasts. Use 60 for a per-minute limit.",
-          "suffix": "(seconds)"
+          "suffix": "seconds"
         },
         "toasts": {
           "failed": "Could not save the rate limit."

@@ -7351,12 +7351,13 @@
         "requests": {
           "title": "Solicitudes por ventana",
           "description": "El máximo de solicitudes de embedding que la indexación puede enviar en una ventana. Déjalo vacío para no tener límite.",
-          "placeholder": "Sin límite"
+          "placeholder": "Sin límite",
+          "suffix": "solicitudes"
         },
         "period": {
           "title": "Duración de la ventana",
           "description": "Cuánto dura una ventana. Usa 60 para un límite por minuto.",
-          "suffix": "(segundos)"
+          "suffix": "segundos"
         },
         "toasts": {
           "failed": "No se pudo guardar el límite."

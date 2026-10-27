@@ -8,20 +8,20 @@ With a negative `min`, the value can be typed with a leading minus sign.
 
 ## Props
 
-| Prop            | Type                              | Default     | Description                                                                           |
-| --------------- | --------------------------------- | ----------- | ------------------------------------------------------------------------------------- |
-| `value`         | `number \| null`                  | —           | Controlled value                                                                      |
-| `onChange`      | `(value: number \| null) => void` | —           | Fires on each valid keystroke, on blur, and on a stepper or reset click               |
-| `onCommit`      | `(value: number \| null) => void` | —           | Fires with the settled value on blur and on a stepper or reset click. Use it to save. |
-| `min` / `max`   | `number`                          | —           | Bounds: the steppers and blur clamp to them                                           |
-| `step`          | `number`                          | `1`         | Stepper increment                                                                     |
-| `decimalPlaces` | `number`                          | `0`         | Allowed precision                                                                     |
-| `defaultValue`  | `number`                          | —           | Target of the reset action                                                            |
-| `showReset`     | `boolean`                         | `false`     | Shows the reset button                                                                |
-| `variant`       | input variant union               | `"primary"` | Chrome variant (`data-variant` CSS)                                                   |
-| `disabled`      | `boolean`                         | `false`     | Disables input and steppers                                                           |
-| `placeholder`   | `string`                          | —           | Shown while the field is empty                                                        |
-| `suffix`        | `string`                          | —           | Unit text after the value                                                             |
-| `id`            | `string`                          | —           | Input id, for `<label htmlFor>`                                                       |
-| `allowEmpty`    | `boolean`                         | `true`      | When false, blur restores a blank field instead of committing `null`                  |
-| `plain`         | `boolean`                         | `false`     | A plain type-in field: no steppers, the value in mono, the unit in `text-02`          |
+| Prop            | Type                              | Default     | Description                                                                                |
+| --------------- | --------------------------------- | ----------- | ------------------------------------------------------------------------------------------ |
+| `value`         | `number \| null`                  | —           | Controlled value                                                                           |
+| `onChange`      | `(value: number \| null) => void` | —           | Fires on each valid keystroke, on blur and Enter, and on a stepper or reset click          |
+| `onCommit`      | `(value: number \| null) => void` | —           | Fires with the settled value on blur, Enter, and a stepper or reset click. Use it to save. |
+| `min` / `max`   | `number`                          | —           | Bounds: the steppers and blur clamp to them                                                |
+| `step`          | `number`                          | `1`         | Stepper increment                                                                          |
+| `decimalPlaces` | `number`                          | `0`         | Allowed precision                                                                          |
+| `defaultValue`  | `number`                          | —           | Target of the reset action                                                                 |
+| `showReset`     | `boolean`                         | `false`     | Shows the reset button                                                                     |
+| `variant`       | input variant union               | `"primary"` | Chrome variant (`data-variant` CSS)                                                        |
+| `disabled`      | `boolean`                         | `false`     | Disables input and steppers                                                                |
+| `placeholder`   | `string`                          | —           | Shown while the field is empty                                                             |
+| `suffix`        | `string`                          | —           | Unit text after the value                                                                  |
+| `id`            | `string`                          | —           | Input id, for `<label htmlFor>`                                                            |
+| `allowEmpty`    | `boolean`                         | `true`      | When false, a blank field settles to `defaultValue` (or its last value) instead of `null`  |
+| `plain`         | `boolean`                         | `false`     | A plain type-in field: no steppers, the value in mono, the unit in `text-02`               |

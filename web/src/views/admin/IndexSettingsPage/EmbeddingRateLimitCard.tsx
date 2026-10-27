@@ -126,13 +126,14 @@ export default function EmbeddingRateLimitCard() {
               onCommit={(value) => commit(value, period)}
               min={1}
               max={MAX_EMBEDDING_RATE_LIMIT_REQUESTS}
+              // No unit beside the "No limit" placeholder.
+              suffix={requests === null ? undefined : t("requests.suffix")}
               placeholder={t("requests.placeholder")}
             />
           </InputHorizontal>
           <InputHorizontal
             title={t("period.title")}
             description={t("period.description")}
-            suffix={t("period.suffix")}
             withLabel
             fillInput
           >
@@ -152,6 +153,7 @@ export default function EmbeddingRateLimitCard() {
               defaultValue={DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS}
               showReset
               allowEmpty={false}
+              suffix={t("period.suffix")}
               placeholder={String(DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS)}
             />
           </InputHorizontal>

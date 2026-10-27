@@ -7351,12 +7351,13 @@
         "requests": {
           "title": "Requisições por janela",
           "description": "O máximo de requisições de embedding que a indexação pode enviar em uma janela. Deixe vazio para não ter limite.",
-          "placeholder": "Sem limite"
+          "placeholder": "Sem limite",
+          "suffix": "requisições"
         },
         "period": {
           "title": "Duração da janela",
           "description": "Quanto tempo dura uma janela. Use 60 para um limite por minuto.",
-          "suffix": "(segundos)"
+          "suffix": "segundos"
         },
         "toasts": {
           "failed": "Não foi possível salvar o limite."

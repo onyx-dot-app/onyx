@@ -7351,12 +7351,13 @@
         "requests": {
           "title": "每个窗口的请求数",
           "description": "索引在一个窗口内最多可发送的嵌入请求数。留空表示不限制。",
-          "placeholder": "不限制"
+          "placeholder": "不限制",
+          "suffix": "个请求"
         },
         "period": {
           "title": "窗口长度",
           "description": "一个窗口的时长。设为 60 即为每分钟的限制。",
-          "suffix": "（秒）"
+          "suffix": "秒"
         },
         "toasts": {
           "failed": "无法保存速率限制。"

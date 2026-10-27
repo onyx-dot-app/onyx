@@ -75,7 +75,7 @@ export interface InputNumberProps {
   suffix?: string;
   /** Applied to the input so a `<label htmlFor>` can target it. */
   id?: string;
-  /** Whether leaving the field blank commits `null`. When false, a blank field gets its value back on blur. */
+  /** Whether leaving the field blank commits `null`. When false, a blank field settles to `defaultValue`, or gets its value back if there is none. */
   allowEmpty?: boolean;
   /** A plain type-in field: no stepper buttons, the value in mono and the unit in `text-02`. */
   plain?: boolean;
@@ -160,15 +160,20 @@ export default function InputNumber({
     }
   };
 
-  // Whether the text was typed into since the field took focus. Blur clamps
-  // only a typed value, so a stored value outside the bounds stays as is.
+  // Whether the text was typed into since the field took focus. Settling
+  // clamps only a typed value, so a stored value outside the bounds stays as is.
   const typedRef = React.useRef(false);
 
-  const handleBlur = () => {
+  // Blur and Enter both settle the value: clamp it, sync the text, commit it.
+  const settle = () => {
     const typed: boolean = typedRef.current;
     typedRef.current = false;
     let settled: number | null = value;
-    if (inputValue.trim() === "" && !allowEmpty) {
+    if (inputValue.trim() === "" && !allowEmpty && defaultValue !== undefined) {
+      settled = defaultValue;
+      onChange(defaultValue);
+      setInputValue(String(defaultValue));
+    } else if (inputValue.trim() === "" && !allowEmpty) {
       setInputValue(value === null ? "" : String(value));
     } else if (inputValue.trim() === "") {
       // Kept as null so the placeholder shows.
@@ -187,6 +192,13 @@ export default function InputNumber({
       setInputValue((typed) => textFor(value, typed));
     }
     onCommit?.(settled);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Enter") return;
+    // Settle in place; an enclosing form must not submit the unclamped value.
+    e.preventDefault();
+    settle();
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -240,7 +252,8 @@ export default function InputNumber({
         placeholder={placeholder}
         aria-invalid={variant === "error" || undefined}
         onChange={handleInputChange}
-        onBlur={handleBlur}
+        onBlur={settle}
+        onKeyDown={handleKeyDown}
         className={cn(
           "w-full h-6 bg-transparent p-0.5 focus:outline-hidden disabled:cursor-not-allowed placeholder:!font-main-ui-muted placeholder:text-text-02",
           plain ? "font-main-ui-mono" : "font-main-ui-body",

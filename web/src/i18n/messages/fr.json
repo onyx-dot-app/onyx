@@ -7351,12 +7351,13 @@
         "requests": {
           "title": "Requêtes par fenêtre",
           "description": "Le nombre maximal de requêtes d'embedding que l'indexation peut envoyer dans une fenêtre. Laissez vide pour ne pas fixer de limite.",
-          "placeholder": "Aucune limite"
+          "placeholder": "Aucune limite",
+          "suffix": "requêtes"
         },
         "period": {
           "title": "Durée de la fenêtre",
           "description": "La durée d'une fenêtre. Utilisez 60 pour une limite par minute.",
-          "suffix": "(secondes)"
+          "suffix": "secondes"
         },
         "toasts": {
           "failed": "Impossible d'enregistrer la limite."

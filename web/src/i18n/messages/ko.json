@@ -7351,12 +7351,13 @@
         "requests": {
           "title": "시간 범위당 요청 수",
           "description": "인덱싱이 한 시간 범위 동안 보낼 수 있는 임베딩 요청의 최대 개수입니다. 비워 두면 한도가 없습니다.",
-          "placeholder": "한도 없음"
+          "placeholder": "한도 없음",
+          "suffix": "요청"
         },
         "period": {
           "title": "시간 범위 길이",
           "description": "한 시간 범위의 길이입니다. 분당 한도를 두려면 60을 입력하세요.",
-          "suffix": "(초)"
+          "suffix": "초"
         },
         "toasts": {
           "failed": "요청 한도를 저장하지 못했습니다."
