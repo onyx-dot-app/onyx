@@ -1,0 +1,139 @@
+name: Docs Publish
+
+# Publishes documentation/ to docs.onyx.app. Mintlify deploys the docs/live branch, and only
+# this workflow moves it: to the latest stable release tag, plus the generated logos and
+# openapi.json. deployment.yml calls it when a tag is the latest stable release.
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Latest stable release tag to publish
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      docs-from-release-branch:
+        description: >-
+          Docs hotfix: take documentation/ from the release/vX.Y branch of the latest stable
+          tag instead of from the tag itself. Code and openapi.json still come from the tag.
+        type: boolean
+        default: false
+
+concurrency:
+  group: docs-publish
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: release
+    steps:
+      - name: Mint GitHub App installation token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          client-id: ${{ vars.DOCS_PUBLISH_APP_ID }}
+          private-key: ${{ secrets.DOCS_PUBLISH_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+
+      - name: Resolve what to publish
+        id: target
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          FROM_BRANCH: ${{ inputs.docs-from-release-branch }}
+        run: |
+          latest="$(git tag --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)"
+          tag="${INPUT_TAG:-$latest}"
+          if [ "$tag" != "$latest" ]; then
+            echo "::error::$tag is not the latest stable tag ($latest)"
+            exit 1
+          fi
+          docs_ref="$tag"
+          if [ "$FROM_BRANCH" = "true" ]; then
+            minor="${tag%.*}"
+            docs_ref="origin/release/${minor}"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "docs-ref=$docs_ref" >> "$GITHUB_OUTPUT"
+          echo "Publishing $tag with documentation/ from $docs_ref"
+
+      - name: Check out the tag and its docs
+        env:
+          TAG: ${{ steps.target.outputs.tag }}
+          DOCS_REF: ${{ steps.target.outputs.docs-ref }}
+        run: |
+          git checkout --detach "$TAG"
+          if [ "$DOCS_REF" != "$TAG" ]; then
+            git rm -rq --ignore-unmatch documentation
+            git checkout "$DOCS_REF" -- documentation
+          fi
+          test -f documentation/docs.json
+
+      - name: Setup Python and Install Dependencies
+        uses: ./.github/actions/setup-python-and-install-dependencies
+        with:
+          requirements: |
+            backend/requirements/default.txt
+            backend/requirements/ee.txt
+      - name: Setup bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # ratchet:oven-sh/setup-bun@v2 # zizmor: ignore[cache-poisoning]
+        with:
+          bun-version: "1.3.13"
+      - name: Install web dependencies
+        working-directory: ./web
+        run: bun install --frozen-lockfile
+      - name: Generate logos, icons and openapi.json
+        run: documentation/scripts/generate.sh
+
+      - name: Push docs/live
+        env:
+          TAG: ${{ steps.target.outputs.tag }}
+          DOCS_REF: ${{ steps.target.outputs.docs-ref }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          git config user.name "onyx-docs-publish[bot]"
+          git config user.email "onyx-docs-publish[bot]@users.noreply.github.com"
+          git add -A documentation
+          # Generated files are gitignored on branches; docs/live must contain them.
+          git add -f documentation/assets/overview/core_features/connectors documentation/assets/logo \
+            documentation/assets/icons documentation/developers/api_reference/openapi.json
+          git commit -q -m "docs: publish $TAG (documentation/ from $DOCS_REF)"
+          gh auth setup-git
+          git push --force "https://github.com/${REPO}.git" HEAD:refs/heads/docs/live
+
+      - name: Deploy on Mintlify
+        env:
+          MINTLIFY_API_KEY: ${{ secrets.MINTLIFY_API_KEY }}
+          MINTLIFY_PROJECT_ID: ${{ vars.MINTLIFY_PROJECT_ID }}
+        run: |
+          if [ -z "$MINTLIFY_PROJECT_ID" ] || [ -z "$MINTLIFY_API_KEY" ]; then
+            echo "::warning::Mintlify is not configured; docs/live was updated but no deploy was triggered"
+            exit 0
+          fi
+          api="https://api.mintlify.com/v1/project"
+          status_id="$(curl -fsS -X POST -H "Authorization: Bearer $MINTLIFY_API_KEY" \
+            "$api/update/$MINTLIFY_PROJECT_ID" | jq -r '.statusId')"
+          for _ in $(seq 1 40); do
+            status="$(curl -fsS -H "Authorization: Bearer $MINTLIFY_API_KEY" \
+              "$api/update-status/$status_id" | jq -r '.status')"
+            echo "Mintlify deploy: $status"
+            case "$status" in
+              success) exit 0 ;;
+              failure) exit 1 ;;
+            esac
+            sleep 15
+          done
+          echo "::error::Mintlify deploy did not finish in 10 minutes"
+          exit 1
