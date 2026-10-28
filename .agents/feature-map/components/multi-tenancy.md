@@ -323,6 +323,17 @@ The risk is a new call site that crosses a raw thread boundary without copying.
    `AuditAction.IMPERSONATE` via `emit_audit_event` on both success and failure.
    A new cross-tenant capability that skips either the scoping or the audit call
    is a security regression, not a style issue.
+9. **A tenant migration's search_path is pinned per transaction, not per
+   connection.** Tenant provisioning (`/auth/register` and the pool top-up task)
+   runs the `alembic/` chain through the API and Celery `POSTGRES_HOST`, which
+   in cloud is PgBouncer in transaction pooling. After a migration commits
+   mid-run, the next transaction can run on another server connection.
+   `alembic/env.py` therefore calls
+   `onyx/db/engine/migration_search_path.py:pin_search_path_per_transaction`,
+   which starts every transaction with `SET search_path`. Do not replace it with
+   a one-time `SET`: later unqualified DDL would go to whatever schema that
+   server connection has, while `alembic_version` (schema-qualified) still
+   records the tenant as migrated.
 
 ---
 

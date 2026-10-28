@@ -1,0 +1,26 @@
+"""Keeps an Alembic migration connection on its tenant schema across commits.
+
+A migration that commits mid-run (to build an index CONCURRENTLY) starts a new
+transaction on the same connection. Through PgBouncer transaction pooling that
+transaction can run on another server connection, which does not carry the
+session-level search_path. Setting search_path as the first statement of every
+transaction pins the tenant schema whichever server connection runs it.
+"""
+
+from sqlalchemy import event
+from sqlalchemy.engine import Connection
+
+
+def pin_search_path_per_transaction(connection: Connection, schema_name: str) -> None:
+    """Set search_path to ``schema_name`` now and at the start of every later
+    transaction on ``connection``."""
+    set_search_path = f'SET search_path TO "{schema_name}"'
+
+    # Runs before the DBAPI begins, so the SET is the transaction's first
+    # statement; SQLAlchemy does not autobegin again inside this hook.
+    def _on_begin(conn: Connection) -> None:
+        conn.exec_driver_sql(set_search_path)
+
+    event.listen(connection, "begin", _on_begin)
+    if connection.in_transaction():
+        connection.exec_driver_sql(set_search_path)
