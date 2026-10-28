@@ -75,8 +75,22 @@ def _run(
     return _run_raw(repo, json.dumps(payload), **env)
 
 
+def _event(stdin: str) -> str:
+    """The event the hook reports for `stdin`: its event name, else SessionStart."""
+    try:
+        payload = json.loads(stdin)
+    except ValueError:
+        return "SessionStart"
+    event = payload.get("hook_event_name") if isinstance(payload, dict) else None
+    return event if isinstance(event, str) and event else "SessionStart"
+
+
 def _run_raw(repo: Path, stdin: str, **env: str) -> subprocess.CompletedProcess[str]:
-    """Run the hook with `stdin` as its payload, from `repo` as the cwd."""
+    """Run the hook with `stdin` as its payload, from `repo` as the cwd.
+
+    The hook prints JSON; the returned `stdout` is its `additionalContext`, or ""
+    when it printed nothing.
+    """
     result = subprocess.run(
         [sys.executable, str(_HOOK)],
         input=stdin,
@@ -87,6 +101,10 @@ def _run_raw(repo: Path, stdin: str, **env: str) -> subprocess.CompletedProcess[
         timeout=60,
     )
     assert result.returncode == 0
+    if result.stdout:
+        output = json.loads(result.stdout)
+        assert output["hookSpecificOutput"]["hookEventName"] == _event(stdin)
+        result.stdout = output["hookSpecificOutput"]["additionalContext"]
     return result
 
 

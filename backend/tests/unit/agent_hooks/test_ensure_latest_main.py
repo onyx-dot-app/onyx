@@ -2,10 +2,11 @@
 
 These run no git process and touch no files. The tests that run the hook against
 real git repos live in
-`backend/tests/external_dependency_unit/scripts/test_ensure_latest_main_repos.py`.
+`backend/tests/external_dependency_unit/agent_hooks/test_ensure_latest_main_repos.py`.
 """
 
 import importlib.util
+import sys
 from pathlib import Path
 from types import ModuleType
 
@@ -16,6 +17,9 @@ _REPO = Path("/nonexistent/repo")  # never read: `_git` is stubbed
 
 
 def _load_hook() -> ModuleType:
+    # The hook imports its sibling `agent_hook_io`, as it does when run as a script.
+    if str(_HOOK.parent) not in sys.path:
+        sys.path.insert(0, str(_HOOK.parent))
     spec = importlib.util.spec_from_file_location("ensure_latest_main", _HOOK)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
