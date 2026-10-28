@@ -7,16 +7,16 @@ import { useTranslations } from "next-intl";
 import { Button, SelectCard } from "@opal/components";
 import { SvgExternalLink } from "@opal/icons";
 import { ContentAction, Section } from "@opal/layouts";
-import type { IconFunctionComponent } from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { FINAL_SETUP_CONFIG } from "@/lib/onboarding/constants";
 import { useSettings } from "@/lib/settings/hooks";
 import { noProp } from "@/lib/utils";
 
 interface FinalStepItemProps {
   icon: IconFunctionComponent;
-  title: string;
-  description: string;
-  buttonText: string;
+  title: string | RichStr;
+  description: string | RichStr;
+  buttonText: string | RichStr;
   buttonHref: Route;
 }
 
