@@ -83,7 +83,7 @@
   overflow-y: clip;
 }
 @starting-style {
-  .opal-presence[data-presence-grow] {
+  .opal-presence[data-presence-grow]:not([data-presence-skip-open]) {
     grid-template-rows: 0fr;
   }
 }
@@ -128,7 +128,8 @@
     animation: none;
   }
   .opal-presence[data-presence-grow],
-  .opal-presence-swap {
+  .opal-presence-swap,
+  .opal-presence-swap[data-swap-axis="inline"] {
     transition: none;
   }
 }

@@ -127,11 +127,15 @@ function PresenceRoot({
     show ? (appear ? "entering" : "shown") : "hidden"
   );
   const [shownFor, setShownFor] = useState(show);
+  // With `appear={false}`, `grow` content present on mount also skips the
+  // height opening, until it first leaves.
+  const [skipOpen, setSkipOpen] = useState(!appear && show);
   // An exit skipped for reduced motion reports `onExited` after the commit.
   const [skippedExit, setSkippedExit] = useState(false);
 
   if (show !== shownFor) {
     setShownFor(show);
+    if (!show) setSkipOpen(false);
     if (prefersReducedMotion()) {
       setPhase(show ? "shown" : "hidden");
       if (!show && phase !== "hidden") setSkippedExit(true);
@@ -171,20 +175,24 @@ function PresenceRoot({
 
   if (phase === "hidden") return null;
 
+  function advance(event: React.AnimationEvent<HTMLDivElement>) {
+    // Only this layer's own animation, not one inside the content.
+    if (event.target !== event.currentTarget) return;
+    if (phase === "entering") setPhase("shown");
+    else if (phase === "leaving") {
+      if (grow) setPhase("collapsing");
+      else finishExit();
+    }
+  }
+
   const motionProps = {
     "data-presence-phase": phase,
     "data-presence-from": from,
     "data-presence-to": to ?? from,
     inert: phase === "leaving" || phase === "collapsing" || undefined,
-    onAnimationEnd: (event: React.AnimationEvent<HTMLDivElement>) => {
-      // Only this layer's own animation, not one inside the content.
-      if (event.target !== event.currentTarget) return;
-      if (phase === "entering") setPhase("shown");
-      else if (phase === "leaving") {
-        if (grow) setPhase("collapsing");
-        else finishExit();
-      }
-    },
+    onAnimationEnd: advance,
+    // Reduced motion turned on mid-animation removes it without an end event.
+    onAnimationCancel: advance,
   };
   const rootClassName = cn(
     "opal-presence",
@@ -213,6 +221,7 @@ function PresenceRoot({
       className={rootClassName}
       data-presence-grow=""
       data-presence-phase={phase}
+      data-presence-skip-open={skipOpen || undefined}
       onTransitionEnd={(event) => {
         if (
           phase === "collapsing" &&
