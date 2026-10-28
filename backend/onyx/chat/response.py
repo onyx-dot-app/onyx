@@ -10,7 +10,7 @@ from onyx.agents.models import (
     StepRecord,
     ToolExecutionRecord,
 )
-from onyx.chat.models import ResponseRecord
+from onyx.chat.models import ChatMessageMetadata, MessageRendering, ResponseRecord
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.deep_research.models import ResearchConfiguration
 from onyx.llm.models import (
@@ -131,11 +131,28 @@ def response_snapshot(record: ResponseRecord) -> RunState:
     )
 
 
-def restore_search_documents(
-    messages: list[Message], documents: Mapping[str, SearchDoc]
+def restore_response_sources(
+    messages: list[Message],
+    documents: Mapping[str, SearchDoc],
+    presentation: Mapping[str, MessageRendering],
 ) -> None:
     """Attach sources to an owned history list without changing its borrowed messages."""
     for index, message in enumerate(messages):
+        if isinstance(message, AssistantMessage):
+            rendering = presentation.get(message.id) if message.id is not None else None
+            if rendering is not None and rendering.citation_documents:
+                messages[index] = message.model_copy(
+                    update={
+                        "metadata": ChatMessageMetadata(
+                            sources={
+                                number: documents[document_id]
+                                for number, document_id in rendering.citation_documents.items()
+                                if document_id in documents
+                            }
+                        )
+                    }
+                )
+            continue
         if not isinstance(message, ToolResultMessage) or not isinstance(
             message.details, SearchDocsResponse
         ):

@@ -16,7 +16,7 @@ from onyx.agents.runtime import Agent, RestorableFeature
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.citation_utils import (
     build_context_file_citation_mapping,
-    update_citation_processor_from_tool_result,
+    message_citation_sources,
 )
 from onyx.chat.errors import build_empty_llm_response_error
 from onyx.chat.files import build_python_chat_files_from_search_docs
@@ -34,7 +34,7 @@ from onyx.chat.prompt_utils import (
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
 from onyx.context.models import UserMemoryContext
 from onyx.context.search.models import SearchDocsResponse
-from onyx.deep_research.models import ResearchAgentCallResult, ResearchMessageMetadata
+from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
 from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
 from onyx.llm.models import (
@@ -107,16 +107,10 @@ class ChatAgent(Agent, RestorableFeature):
         )
         # History owns existing numbers; adding or reordering project files must not reuse them.
         for message in messages:
-            if isinstance(
-                message.metadata, (ChatMessageMetadata, ResearchMessageMetadata)
-            ):
-                self.citation_processor.update_citation_mapping(
-                    message.metadata.sources, update_duplicate_keys=True
-                )
-            if isinstance(message, ToolResultMessage):
-                update_citation_processor_from_tool_result(
-                    message, self.citation_processor
-                )
+            self.citation_processor.update_citation_mapping(
+                message_citation_sources(message),
+                update_duplicate_keys=isinstance(message, AssistantMessage),
+            )
         self.initial_citations = build_context_file_citation_mapping(
             context_files.file_metadata, self.citation_processor.citation_to_doc
         )
@@ -218,8 +212,8 @@ class ChatAgent(Agent, RestorableFeature):
                 self.chat_files.extend(
                     file for file in data.staged_files if file.filename not in existing
                 )
-            update_citation_processor_from_tool_result(
-                response, self.citation_processor
+            self.citation_processor.update_citation_mapping(
+                message_citation_sources(response)
             )
             if isinstance(data, (SearchDocsResponse, ResearchAgentCallResult)):
                 for number in data.citation_mapping:

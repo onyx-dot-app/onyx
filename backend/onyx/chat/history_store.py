@@ -25,7 +25,7 @@ from onyx.chat.models import (
     ResponseRecord,
     SavedAgentContext,
 )
-from onyx.chat.response import restore_search_documents
+from onyx.chat.response import restore_response_sources
 from onyx.db.chat_response import save_chat_response_to_db
 from onyx.db.chat_subagents import (
     load_agent_history,
@@ -187,7 +187,7 @@ class RedisChatHistoryStore(ChatHistoryStore):
                 **{doc.document_id: doc for doc in response.citation_to_doc.values()},
                 **response.all_search_docs,
             }
-            restore_search_documents(messages, documents)
+            restore_response_sources(messages, documents, response.presentation)
             pending = list(response.response.child_runs)
             while pending:
                 record = pending.pop()

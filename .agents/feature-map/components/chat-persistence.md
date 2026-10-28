@@ -126,9 +126,12 @@ Tool names and argument parsing details stay in the saved model message. Tool ro
 SDK rendering reads the saved details without looking up the current tool definition.
 Search documents retain their existing relation; saved details contain queries, filters, citations, and the selection state.
 Rendering loads those documents into a detached result. It does not change the saved conversation or checkpoint input.
-Model history also restores mapped search documents from the response’s source relation.
+Model history restores search sources and assistant citation mappings from the response’s source relation.
+Assistant mappings use the saved rendering settings, including project-file citations without a tool call.
+Temporary history retains these sources in its message serialization too.
 The selected branch loads these sources in a batch, including documents not cited in the final answer.
 Application enums define response, generation, and tool statuses; historical response and tool rows can have null statuses.
+Message details expose `response_status`, including null, so clients can distinguish reserved placeholder text from saved execution outcomes.
 
 `chat_response_checkpoint` stores resume progress alongside response history, rather than another copy of that history.
 Its `ownership_version` changes when a checkpoint is published or claimed, preventing stale owners from saving.

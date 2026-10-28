@@ -217,6 +217,73 @@ describe("useChatSessionController", () => {
     expect(getSessionMock).not.toHaveBeenCalled();
   });
 
+  it.each(["complete", null] as const)(
+    "rechecks unresolved readiness on reopen with saved status %s and no current stream",
+    async (savedStatus) => {
+      seedLiveSession(null);
+      useChatSessionStore.getState().setStreamId("s1", 2);
+      useChatSessionStore
+        .getState()
+        .patchNode("s1", 2, { type: "error", message: "Original failure" });
+      useChatSessionStore.getState().updateChatState("s1", "unconfirmed");
+      jest
+        .mocked(getChatSessionStatus)
+        .mockRejectedValueOnce(
+          new ApiError({ status: 403, detail: "Access denied" }),
+        );
+      const { rerender } = renderHook(
+        ({ sessionId }: { sessionId: string | null }) =>
+          useChatSessionController(sessionId),
+        { initialProps: { sessionId: "s1" }, wrapper },
+      );
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith("Access denied"),
+      );
+      expect(
+        useChatSessionStore.getState().sessions.get("s1")?.abortController,
+      ).toBeNull();
+      expect(useChatSessionStore.getState().sessions.get("s1")?.chatState).toBe(
+        "unconfirmed",
+      );
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 30));
+      });
+      expect(getChatSessionStatus).toHaveBeenCalledTimes(1);
+      expect(resumeMock).not.toHaveBeenCalled();
+
+      rerender({ sessionId: null });
+      getSessionMock.mockResolvedValueOnce({
+        chat_session_id: "s1",
+        description: "",
+        persona_id: 0,
+        messages: backendMessages("Saved answer").map((message) =>
+          message.message_type === "assistant"
+            ? { ...message, response_status: savedStatus }
+            : message,
+        ),
+        packets: [[historyPacket("Saved answer")]],
+        time_created: "",
+        current_stream: null,
+      });
+      rerender({ sessionId: "s1" });
+      await waitFor(() =>
+        expect(
+          useChatSessionStore.getState().sessions.get("s1")?.chatState,
+        ).toBe("input"),
+      );
+      expect(getChatSessionStatus).toHaveBeenCalledTimes(2);
+      expect(resumeMock).not.toHaveBeenCalled();
+      const tree = useChatSessionStore
+        .getState()
+        .sessions.get("s1")!.messageTree;
+      expect(getMessageByMessageId(tree, 2)).toMatchObject(
+        savedStatus === "complete"
+          ? { type: "assistant", message: "Saved answer" }
+          : { type: "error", message: "Original failure" },
+      );
+    },
+  );
+
   it("resumes an in-flight run then settles from the persisted session", async () => {
     seedLiveSession(2);
     resumeMock.mockReturnValue(
@@ -509,25 +576,48 @@ describe("useChatSessionController", () => {
 
   it.each([
     {
+      status: undefined,
       errorCode: "STREAM_GAP",
       savedAnswer: "saved answer",
       retainsError: false,
     },
-    { errorCode: undefined, savedAnswer: "saved answer", retainsError: false },
-    { errorCode: "STREAM_GAP", savedAnswer: "", retainsError: true },
     {
+      status: undefined,
+      errorCode: undefined,
+      savedAnswer: "saved answer",
+      retainsError: false,
+    },
+    {
+      status: undefined,
+      errorCode: "STREAM_GAP",
+      savedAnswer: "",
+      retainsError: true,
+    },
+    {
+      status: undefined,
       errorCode: "RESPONSE_SAVE_ERROR",
       savedAnswer: "",
       retainsError: true,
     },
     {
+      status: undefined,
       errorCode: "RESPONSE_SAVE_ERROR",
       savedAnswer: "saved answer",
       retainsError: false,
     },
+    ...(
+      [null, "running", "suspended", "complete", "limit", "cancelled"] as const
+    ).map((status) => ({
+      errorCode: "RESPONSE_SAVE_ERROR",
+      savedAnswer:
+        "Response was terminated prior to completion, try regenerating.",
+      status,
+      retainsError:
+        status === null || status === "running" || status === "suspended",
+    })),
   ])(
-    "settles error $errorCode with saved answer '$savedAnswer'",
-    async ({ errorCode, savedAnswer, retainsError }) => {
+    "settles error $errorCode with saved status $status and answer '$savedAnswer'",
+    async ({ errorCode, savedAnswer, retainsError, status }) => {
       seedLiveSession(2);
       resumeMock.mockReturnValue(
         scripted([streamError("replay failed", errorCode)]),
@@ -539,7 +629,7 @@ describe("useChatSessionController", () => {
         messages: backendMessages(savedAnswer).map((message) =>
           message.message_type === "user"
             ? { ...message, message: "saved question" }
-            : message,
+            : { ...message, response_status: status },
         ),
         packets: [[historyPacket(savedAnswer || "partial output")]],
         time_created: "",
@@ -567,6 +657,37 @@ describe("useChatSessionController", () => {
       );
     },
   );
+
+  it("replaces a replay error with the saved response failure", async () => {
+    seedLiveSession(2);
+    resumeMock.mockReturnValue(
+      scripted([streamError("replay failed", "STREAM_GAP")]),
+    );
+    getSessionMock.mockResolvedValue({
+      chat_session_id: "s1",
+      description: "",
+      persona_id: 0,
+      messages: backendMessages("").map((message) =>
+        message.message_type === "assistant"
+          ? { ...message, error: "provider failed", response_status: "error" }
+          : message,
+      ),
+      packets: [],
+      time_created: "",
+      current_stream: null,
+    });
+
+    renderHook(() => useChatSessionController("s1"), { wrapper });
+    await waitFor(() => {
+      const tree = useChatSessionStore
+        .getState()
+        .sessions.get("s1")!.messageTree;
+      expect(getMessageByMessageId(tree, 2)).toMatchObject({
+        type: "error",
+        message: "provider failed",
+      });
+    });
+  });
 
   it("does not resume when the snapshot reports no live run", async () => {
     seedLiveSession(null);

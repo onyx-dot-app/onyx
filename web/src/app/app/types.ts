@@ -149,6 +149,15 @@ export interface SearchSession {
 }
 
 export interface Message {
+  // Null means no saved SDK outcome; absent means an older API.
+  responseStatus?:
+    | "running"
+    | "suspended"
+    | "complete"
+    | "limit"
+    | "cancelled"
+    | "error"
+    | null;
   is_generating?: boolean;
   messageId?: number;
   nodeId: number; // Unique identifier for tree structure (can be negative for temp messages)
@@ -234,6 +243,7 @@ export function toChatSession(backend: BackendChatSession): ChatSession {
 }
 
 export interface BackendMessage {
+  response_status?: Message["responseStatus"];
   message_id: number;
   message_type: string;
   research_type: string | null;

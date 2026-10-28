@@ -30,12 +30,15 @@ export function preserveFailedMessages(
       if (node.nodeId === latest?.nodeId) return local;
       continue;
     }
-    // Persisted failures and final answers are authoritative; packets can precede either save.
-    if (
-      savedNode.type === "error" ||
-      (savedNode.type === "assistant" &&
-        (savedNode.message || savedNode.files.length > 0))
-    ) {
+    // A reserved row can contain fallback text without a saved execution outcome.
+    const hasSavedAnswer =
+      savedNode.type === "assistant" &&
+      (savedNode.responseStatus === undefined
+        ? Boolean(savedNode.message || savedNode.files.length > 0)
+        : savedNode.responseStatus === "complete" ||
+          savedNode.responseStatus === "limit" ||
+          savedNode.responseStatus === "cancelled");
+    if (savedNode.type === "error" || hasSavedAnswer) {
       continue;
     }
     saved.set(savedNode.nodeId, {

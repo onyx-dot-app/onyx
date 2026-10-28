@@ -24,6 +24,7 @@ from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.citation_utils import (
     collapse_citations,
     extract_citation_order_from_text,
+    message_citation_sources,
 )
 from onyx.chat.models import PromptMetadata
 from onyx.chat.prompt_utils import prepare_prompt, with_language_section
@@ -59,7 +60,6 @@ from onyx.llm.models import (
     ToolChoiceOptions,
     ToolDefinition,
     ToolResult,
-    ToolResultMessage,
     UserMessage,
 )
 from onyx.prompts.deep_research.orchestration_layer import (
@@ -196,12 +196,9 @@ class DeepResearchAgent(Agent, RestorableFeature):
     def _prepare_step(self, state: StepInput) -> PreparedStep:
         if state.previous is None:
             self.started = time.monotonic()
-            for message in state.history:
-                if isinstance(message, ToolResultMessage) and isinstance(
-                    message.details, ResearchAgentCallResult
-                ):
-                    with self._citation_lock:
-                        self.citation_mapping.update(message.details.citation_mapping)
+            with self._citation_lock:
+                for message in state.history:
+                    self.citation_mapping.update(message_citation_sources(message))
         phase = self._next_phase(state)
         plan = ""
         research_steps = 0

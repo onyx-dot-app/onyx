@@ -10,12 +10,15 @@ from onyx.chat.chat_utils import (
     capture_chat_history,
     convert_chat_history,
 )
+from onyx.chat.citation_utils import message_citation_sources
+from onyx.chat.models import MessageRendering
 from onyx.chat.prompt_formatting import prompt_metadata
-from onyx.configs.constants import MessageType
+from onyx.configs.constants import DocumentSource, MessageType
 from onyx.db.models import (
     ChatMessage,
     ChatResponseItem,
     ChatSession,
+    SearchDoc,
 )
 from onyx.file_store.models import ChatFileType, ChatLoadedFile
 from onyx.llm.models import (
@@ -214,3 +217,57 @@ def test_saved_response_history_preserves_generation_content() -> None:
     assert isinstance(assistant, AssistantMessage)
     assert assistant.id == "generation-1"
     assert assistant.text == "Accepted partial output"
+
+
+def test_saved_file_citations_restore_without_search_tool_results() -> None:
+    response = ChatMessage(
+        id=42,
+        chat_session=ChatSession(),
+        message_type=MessageType.ASSISTANT,
+        message="Evidence [7]",
+        token_count=2,
+        is_clarification=False,
+        response_status=RunStatus.COMPLETE,
+    )
+    response.search_docs = [
+        SearchDoc(
+            id=12,
+            document_id="previous-project-file",
+            chunk_ind=0,
+            semantic_id="Project.txt",
+            link="https://example.com/project",
+            blurb="Evidence",
+            source_type=DocumentSource.FILE,
+            boost=0,
+            hidden=False,
+            doc_metadata={},
+            score=1,
+            is_internet=False,
+            match_highlights=[],
+        )
+    ]
+    response.response_items = [
+        ChatResponseItem(
+            id="generation-1",
+            chat_message_id=42,
+            step_index=0,
+            generation_status=ExecutionStatus.COMPLETE,
+            message=AssistantMessage.model_validate_json(
+                AssistantMessage(
+                    id="generation-1", content=[TextContent(text="Evidence [7]")]
+                ).model_dump_json()
+            ),
+            rendering=MessageRendering(
+                citation_documents={7: "previous-project-file"}
+            ).model_dump(mode="json"),
+        )
+    ]
+
+    history = capture_chat_history([response], {}, len)
+    assistant = history[0].response_messages[0]
+    assert assistant.text == "Evidence [7]"
+    assert {
+        number: source.document_id
+        for number, source in message_citation_sources(assistant).items()
+    } == {7: "previous-project-file"}
+    assert response.response_items[0].message.metadata is None

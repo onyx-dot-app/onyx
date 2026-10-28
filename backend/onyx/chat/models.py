@@ -241,7 +241,12 @@ def _read_incognito_message(value: dict[str, JsonValue] | Message) -> Message:
     if not isinstance(value, dict):
         return value
     data = dict(value)
-    metadata = PromptMetadata.model_validate(data.pop("metadata", {}))
+    raw_metadata = data.pop("metadata", {})
+    metadata = (
+        ChatMessageMetadata.model_validate(raw_metadata)
+        if isinstance(raw_metadata, dict) and "sources" in raw_metadata
+        else PromptMetadata.model_validate(raw_metadata)
+    )
     details = data.pop("details", None)
     message = _MESSAGE_ADAPTER.validate_python(data)
     message.metadata = metadata
@@ -257,8 +262,14 @@ def serialize_incognito_message(message: Message) -> dict[str, JsonValue]:
         if isinstance(message.metadata, PromptMetadata)
         else PromptMetadata()
     )
-    data: dict[str, JsonValue] = message.model_dump(mode="json", exclude={"details"})
-    data["metadata"] = metadata.model_dump(exclude={"image_files", "image_token_count"})
+    data: dict[str, JsonValue] = message.model_dump(
+        mode="json", exclude={"details", "metadata"}
+    )
+    data["metadata"] = (
+        message.metadata.model_dump(mode="json", include={"sources"})
+        if isinstance(message.metadata, ChatMessageMetadata)
+        else metadata.model_dump(exclude={"image_files", "image_token_count"})
+    )
     if isinstance(message, ToolResultMessage):
         if isinstance(message.details, SearchDocsResponse):
             data["details"] = message.details.model_dump(

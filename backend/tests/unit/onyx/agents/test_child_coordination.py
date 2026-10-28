@@ -3356,3 +3356,90 @@ def test_conflicting_restore_keeps_accepted_result_and_latest_run(
     assert info.latest_run_id == ("newer" if newer_run else "accepted")
     assert info.status == RunStatus.COMPLETE
     assert owner.close(2)
+
+
+@pytest.mark.parametrize("next_state", ["active", "terminal", "closed"])
+def test_remote_dependency_recovers_after_observation_timeout(
+    next_state: Literal["active", "terminal", "closed"], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    terminal = RunState(
+        run_id="remote-run",
+        agent_id="remote-agent",
+        status=RunStatus.COMPLETE,
+        answer_step_index=0,
+        steps=[
+            StepRecord(
+                message=AssistantMessage(content=[TextContent(text="remote finished")]),
+                generation_status=ExecutionStatus.COMPLETE,
+            )
+        ],
+    )
+    active = RunState(
+        run_id=terminal.run_id,
+        agent_id=terminal.agent_id,
+        status=RunStatus.SUSPENDED,
+    )
+    complete, retrying, observing = (
+        threading.Event(),
+        threading.Event(),
+        threading.Event(),
+    )
+
+    def read_status(_run_id: str, _parent_id: str) -> RunStatus:
+        if retrying.is_set():
+            observing.set()
+            assert complete.wait(3)
+        return RunStatus.COMPLETE if complete.is_set() else RunStatus.SUSPENDED
+
+    directory = FakeAgentDirectory(
+        read_run=lambda *_: terminal if complete.is_set() else active,
+        read_run_status=read_status,
+    )
+    owner = AgentCoordinator(directory=directory)
+    owner.register(
+        AgentInfo(
+            id="remote-agent",
+            path="/root/remote",
+            parent_id="root",
+            description="",
+            restoration_config=None,
+        )
+    )
+    view = owner.view()
+    monkeypatch.setattr("onyx.agents.agent_coordination.OPERATION_TIMEOUT_SECONDS", 0)
+    try:
+        expired = owner.child_completion(terminal.run_id, "root")
+        with pytest.raises(TimeoutError, match="Remote run did not complete"):
+            expired.result(timeout=3)
+        monkeypatch.undo()
+        if next_state == "closed":
+            assert owner.close(3)
+            with pytest.raises(RuntimeError, match="closed"):
+                view.child_completion(terminal.run_id, "root")
+            return
+        retrying.set()
+        if next_state == "terminal":
+            complete.set()
+        ready = threading.Barrier(3)
+
+        def lookup(coordinator: AgentCoordinator) -> Future[RunState]:
+            ready.wait(timeout=3)
+            return coordinator.child_completion(terminal.run_id, "root")
+
+        first = start_thread_future(lambda: lookup(owner), name="lookup-remote-owner")
+        second = start_thread_future(lambda: lookup(view), name="lookup-remote-view")
+        ready.wait(timeout=3)
+        recovered = first.result(timeout=3)
+        assert second.result(timeout=3) is recovered
+        assert recovered is not expired
+        if next_state == "active":
+            assert observing.wait(3)
+            assert not recovered.done()
+            complete.set()
+        assert recovered.result(timeout=3) == terminal
+        assert owner.child_completion(terminal.run_id, "root") is recovered
+        assert expired.exception(timeout=0) is not None
+    finally:
+        complete.set()
+        monkeypatch.undo()
+        assert owner.close(3)

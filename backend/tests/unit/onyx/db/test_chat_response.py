@@ -8,7 +8,7 @@ import pytest
 from pydantic import JsonValue, ValidationError
 from pytest import MonkeyPatch
 
-from onyx.agents.models import RunFailure, RunFailureKind
+from onyx.agents.models import RunFailure, RunFailureKind, RunStatus
 from onyx.chat.errors import chat_error
 from onyx.configs.constants import MessageType
 from onyx.db import chat_response
@@ -352,3 +352,22 @@ def test_history_returns_failure_separately_from_partial_answer(
     message.error = None
     message.response_failure = None
     assert translate_db_message_to_chat_message_detail(message).error_info is None
+
+
+@pytest.mark.parametrize("status", [None, *RunStatus])
+def test_message_detail_exposes_saved_response_status(status: RunStatus | None) -> None:
+    response = ChatMessage(
+        id=1,
+        chat_session_id=uuid4(),
+        message="Response was terminated prior to completion, try regenerating.",
+        token_count=15,
+        message_type=MessageType.ASSISTANT,
+        time_sent=datetime.now(timezone.utc),
+        response_status=status,
+        response_items=[],
+        chat_message_feedbacks=[],
+        search_docs=[],
+    )
+    detail = translate_db_message_to_chat_message_detail(response)
+    assert detail.response_status == status
+    assert detail.model_dump()["response_status"] == status

@@ -107,6 +107,7 @@ api-server pod can replay and tail an in-flight run:
 - Incognito (content-free) runs set `delete_on_done=True`: `mark_done` deletes
   every chunk and the meta key immediately instead of expiring them, so no
   content survives past the run.
+- Failed truncation metadata writes are retried on later flushes, at most once per second. Replay stays disabled; chunk writes do not resume.
 - A missing chunk before `done` is set (`allkeys-lru` eviction, expiry) is a
   **gap**: `read_stream_chunks` returns `gap=True`, and callers must fall back to
   the persisted message rather than replay a broken sequence.

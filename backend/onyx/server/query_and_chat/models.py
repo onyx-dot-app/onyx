@@ -5,6 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, model_validator
 
+from onyx.agents.models import RunStatus
 from onyx.configs.constants import DocumentSource, MessageType, SessionType
 from onyx.context.search.models import BaseFilters, SavedSearchDoc, SearchDoc, Tag
 from onyx.db.enums import ChatSessionSharedStatus
@@ -238,6 +239,7 @@ class ChatMessageDetail(BaseModel):
     files: list[FileDescriptor]
     error: str | None = None
     error_info: StreamingError | None = None
+    response_status: RunStatus | None = None
     current_feedback: str | None = None  # "like" | "dislike" | null
     processing_duration_seconds: float | None = None
     preferred_response_id: int | None = None

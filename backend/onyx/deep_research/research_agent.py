@@ -15,7 +15,7 @@ from onyx.agents.runtime import Agent, RestorableFeature
 from onyx.agents.tools import AgentTool
 from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
 from onyx.chat.citation_utils import (
-    update_citation_processor_from_tool_result,
+    message_citation_sources,
 )
 from onyx.chat.models import CitationMode, PromptMetadata
 from onyx.chat.prompt_utils import prepare_prompt, with_language_section
@@ -299,4 +299,6 @@ class ResearchAgent(Agent, RestorableFeature):
     def _update_sources(self, result: ToolResultMessage) -> None:
         if isinstance(result.details, SearchDocsResponse):
             self.citation_mapping.update(result.details.citation_mapping)
-            update_citation_processor_from_tool_result(result, self.citation_processor)
+            self.citation_processor.update_citation_mapping(
+                message_citation_sources(result)
+            )

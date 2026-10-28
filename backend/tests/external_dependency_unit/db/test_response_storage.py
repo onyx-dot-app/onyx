@@ -43,7 +43,7 @@ from onyx.agents.tools import InputMode, PendingToolInput, ToolProgress
 from onyx.chat.chat_utils import capture_chat_history, convert_chat_history
 from onyx.chat.checkpoint import deserialize_checkpoint, serialize_checkpoint
 from onyx.chat.citation_processor import DynamicCitationProcessor
-from onyx.chat.citation_utils import update_citation_processor_from_tool_result
+from onyx.chat.citation_utils import message_citation_sources
 from onyx.chat.emitter import Emitter
 from onyx.chat.history_store import get_chat_history_store
 from onyx.chat.models import (
@@ -2729,7 +2729,7 @@ def test_search_projection_restores_saved_source_cards(
         if isinstance(message, ToolResultMessage)
     )
     processor = DynamicCitationProcessor()
-    update_citation_processor_from_tool_result(restored_result, processor)
+    processor.update_citation_mapping(message_citation_sources(restored_result))
     assert processor.get_next_citation_number() == 2
     assert isinstance(restored_result.details, SearchDocsResponse)
     assert restored_result.details.search_docs == [saved_document]

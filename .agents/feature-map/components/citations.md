@@ -171,12 +171,13 @@ behavior, not a style preference (`backend/onyx/chat/README.md`).
 allocating project-file citations (`build_context_file_citation_mapping`). Files reuse
 their existing number by file ID; new files receive unused numbers. Prompt documents,
 tool context, and rendering use the same mapping. The processor updates after every
-tool response via `citation_utils.py:update_citation_processor_from_tool_result`,
+tool response via `citation_utils.py:message_citation_sources`,
 which turns a `SearchDocsResponse.citation_mapping` (`dict[int, str]`, number to
 document id) into a `dict[int, SearchDoc]` by matching against
 `search_docs_response.search_docs`.
-Research results carry the number-to-document mapping directly. Ordinary chat restores it
-when replaying a research turn, preserving its links and reserving its citation numbers for later searches.
+Research results carry the number-to-document mapping directly. Chat and deep research
+both read saved answer and tool sources. Switching modes preserves links and reserves
+existing citation numbers for later searches.
 
 `backend/onyx/chat/renderer.py:MessageRenderer._content` feeds answer text to
 `citation_processor.process_token`. The processor holds
@@ -276,9 +277,11 @@ and by the time a replayed message's full text is available, its citation map is
 
 ### 4.10 Saved model history
 
-`capture_chat_history` restores search source documents before the agent reads prior tool results.
-Durable and temporary history use `restore_search_documents` for this step.
-The saved citation mapping selects the documents, including evidence not cited in the final answer.
+`restore_response_sources` restores search sources and assistant citation mappings before history reaches an agent.
+Postgres history joins each saved answer's `MessageRendering.citation_documents` to its response's source documents.
+This includes project files cited without a tool call, even when the current project no longer includes those files.
+Temporary history retains these sources in its existing message serialization.
+The saved citation mapping also selects search evidence not cited in the final answer.
 Stored tool results remain unchanged; documents retain their existing storage relation.
 
 ## 5. Contracts and invariants
@@ -355,7 +358,7 @@ Stored tool results remain unchanged; documents retain their existing storage re
 | If your change… | Also check |
 |---|---|
 | changes the LLM-facing document JSON format (`convert_inference_sections_to_llm_string`) | the citation guidance text in `prompts/chat_prompts.py`; every citeable tool (`SearchTool`, `WebSearchTool`, `OpenURLTool`); run a citation eval, not just a unit test, since this is a behavior-sensitive prompt surface |
-| adds a new citing tool | `backend/onyx/tools/interface.py:CITATIONS_PER_TOOL_CALL` and each tool's call-index offset; `citation_utils.py:update_citation_processor_from_tool_result`'s `CITEABLE_TOOLS_NAMES` check (`tools/built_in_tools.py`); [[tools-framework]] |
+| adds a new citing tool | `backend/onyx/tools/interface.py:CITATIONS_PER_TOOL_CALL` and each tool's call-index offset; `citation_utils.py:message_citation_sources`'s `CITEABLE_TOOLS_NAMES` check (`tools/built_in_tools.py`); [[tools-framework]] |
 | changes `CitationInfo` or adds a citation-adjacent packet type | [[streaming-protocol]] §5 and §7 in full: `StreamingType`, both hand-mirrored frontend enums, `findRenderer` |
 | changes markdown or link rendering (`MemoizedAnchor`, `processContent`, `useMarkdownComponents`) | the `[Q]` sub-question link path shares the same anchor component; verify ordinary numeric citations are unaffected |
 | changes what `save_chat` persists for citations | `session_loading.py:translate_assistant_message_to_packets`; a saved-session reload must still reproduce the live citation set |

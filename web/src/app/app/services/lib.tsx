@@ -488,6 +488,7 @@ export function processRawChatHistory(
       // all that matters is that the nodeId is unique for a given chat session
       nodeId: messageInfo.message_id,
       messageId: messageInfo.message_id,
+      responseStatus: messageInfo.response_status,
       message: messageInfo.message,
       errorMessage: messageInfo.error_info?.error ?? messageInfo.error,
       errorCode: messageInfo.error_info?.error_code,

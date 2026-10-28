@@ -548,7 +548,9 @@ def test_context_file_citations_keep_history_numbers_across_turns(
             number: doc.document_id
             for number, doc in projection.citation_to_doc.items()
         } == {1: "reference", 2: "file-a", 3: "file-b"}
-        history = feature.state.messages
+        history = IncognitoState.model_validate_json(
+            IncognitoState(messages=feature.state.messages).model_dump_json()
+        ).messages
 
 
 @pytest.mark.parametrize("replace_base", [False, True])

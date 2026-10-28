@@ -214,30 +214,61 @@ test("stopping waits for saved history and preserves error retry details", async
 });
 
 test.each([
-  { code: null, savedType: "assistant", text: "Saved answer", recover: true },
   {
+    status: undefined,
+    code: null,
+    savedType: "assistant",
+    text: "Saved answer",
+    recover: true,
+  },
+  {
+    status: undefined,
     code: "STREAM_GAP",
     savedType: "assistant",
     text: "Saved answer",
     recover: true,
   },
-  { code: null, savedType: "assistant", text: "", recover: false },
-  { code: null, savedType: "error", text: "Partial answer", recover: true },
   {
+    status: undefined,
+    code: null,
+    savedType: "assistant",
+    text: "",
+    recover: false,
+  },
+  {
+    status: undefined,
+    code: null,
+    savedType: "error",
+    text: "Partial answer",
+    recover: true,
+  },
+  {
+    status: undefined,
     code: "RESPONSE_SAVE_ERROR",
     savedType: "assistant",
     text: "",
     recover: false,
   },
   {
+    status: undefined,
     code: "RESPONSE_SAVE_ERROR",
     savedType: "assistant",
     text: "Saved answer",
     recover: true,
   },
+  ...(
+    [null, "running", "suspended", "complete", "limit", "cancelled"] as const
+  ).map((status) => ({
+    code: "RESPONSE_SAVE_ERROR",
+    savedType: "assistant" as const,
+    text: "Response was terminated prior to completion, try regenerating.",
+    status,
+    recover:
+      status === "complete" || status === "limit" || status === "cancelled",
+  })),
 ] as const)(
-  "recovery prefers successful saved answers and retains unresolved errors ($code, $savedType, '$text')",
-  async ({ code, savedType, text, recover }) => {
+  "recovery prefers successful saved answers and retains unresolved errors ($code, $savedType, $status, '$text')",
+  async ({ code, savedType, text, recover, status }) => {
     const failed: Message = {
       ...message(-2, "error", ""),
       errorMessage: "Could not finish this response",
@@ -247,6 +278,7 @@ test.each([
     };
     const saved: Message = {
       ...message(42, savedType, text),
+      responseStatus: status,
       messageId: 42,
       errorMessage: savedType === "error" ? "Saved refusal" : undefined,
       packets: [

@@ -5,6 +5,7 @@ Missing chunks require fallback to persisted conversation history.
 
 import queue
 import threading
+import time
 import zlib
 from collections.abc import Callable, Iterator
 from concurrent.futures import Future
@@ -36,6 +37,7 @@ _PREFIX = "chatstream"
 # Idle flushes bound latency below the chunk-size threshold.
 _FLUSH_THRESHOLD_BYTES = 32 * 1024
 _REPLAY_BACKLOG_MAX_BYTES = 4 * 1024 * 1024
+_TRUNCATION_RETRY_INTERVAL_S = 1.0
 
 
 class StreamBufferMeta(BaseModel):
@@ -92,6 +94,8 @@ class StreamBufferWriter:
         # if the run never reaches completion.
         self._session_ended = session_ended
         self._meta = StreamBufferMeta()
+        self._truncation_persisted = False
+        self._next_truncation_retry_at = 0.0
         self._pending: list[str] = []
         self._pending_bytes = 0
         self._compressed_total = 0
@@ -113,7 +117,12 @@ class StreamBufferWriter:
             self.flush()
 
     def flush(self) -> None:
-        if not self._pending or self._meta.truncated or self._meta.done:
+        if self._meta.done:
+            return
+        if self._meta.truncated:
+            self.mark_truncated()
+            return
+        if not self._pending:
             return
         if self._session_ended is not None and self._session_ended():
             self._pending = []
@@ -164,7 +173,9 @@ class StreamBufferWriter:
 
     def mark_truncated(self) -> None:
         """Require persisted-history fallback when stream delivery loses data."""
-        if self._meta.truncated:
+        if self._meta.done or self._truncation_persisted:
+            return
+        if time.monotonic() < self._next_truncation_retry_at:
             return
         self._meta.truncated = True
         self._pending.clear()
@@ -215,11 +226,16 @@ class StreamBufferWriter:
             )
 
     def _write_meta(self, ttl: int) -> None:
+        if self._meta.truncated:
+            self._next_truncation_retry_at = (
+                time.monotonic() + _TRUNCATION_RETRY_INTERVAL_S
+            )
         self._cache.set(
             _meta_key(self._chat_session_id, self._stream_id),
             self._meta.model_dump_json(),
             ex=ttl,
         )
+        self._truncation_persisted = self._meta.truncated
 
 
 def has_stream_buffer(

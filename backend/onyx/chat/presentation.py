@@ -16,7 +16,7 @@ from onyx.agents.events import (
 )
 from onyx.agents.models import AgentInfo, ExecutionStatus, RunState, RunStatus
 from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
-from onyx.chat.citation_utils import update_citation_processor_from_tool_result
+from onyx.chat.citation_utils import message_citation_sources
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import (
     ChatMessageMetadata,
@@ -107,7 +107,7 @@ def _collect_tool_history(
             if isinstance(result.details, ResearchAgentCallResult):
                 for document in result.details.citation_mapping.values():
                     documents.setdefault(document.document_id, document)
-            update_citation_processor_from_tool_result(result, citations)
+            citations.update_citation_mapping(message_citation_sources(result))
     for child in snapshot.child_runs:
         child_history = _collect_tool_history(child, tool_ids)
         records.extend(child_history.tool_calls)

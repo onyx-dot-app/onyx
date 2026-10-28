@@ -7,13 +7,22 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.agents.models import ExecutionStatus, RunState, RunStatus, StepRecord
+from onyx.chat.citation_utils import message_citation_sources
 from onyx.chat.history_store import (
     PostgresChatHistoryStore,
     RedisChatHistoryStore,
     get_chat_history_store,
 )
-from onyx.chat.models import ChatResponseSnapshot, IncognitoContext
-from onyx.configs.constants import MessageType
+from onyx.chat.models import (
+    ChatMessageMetadata,
+    ChatResponseSnapshot,
+    IncognitoContext,
+    IncognitoState,
+)
+from onyx.chat.presentation import project_response
+from onyx.configs.constants import DocumentSource, MessageType
+from onyx.context.search.models import SearchDoc
 from onyx.db.chat_response import save_chat_response_to_db
 from onyx.db.enums import IncognitoRecordMode
 from onyx.db.models import ChatMessage, ChatSession
@@ -176,3 +185,55 @@ def test_database_save_rejects_mismatched_storage_before_mutation(
     session.commit.assert_not_called()
     assert message.message == "original content"
     assert message.error == "original error"
+
+
+def test_temporary_response_restores_file_sources_before_serialization() -> None:
+    source = SearchDoc(
+        document_id="project-file",
+        chunk_ind=0,
+        semantic_identifier="Project.txt",
+        link="https://example.com/project",
+        blurb="Evidence",
+        source_type=DocumentSource.FILE,
+        boost=0,
+        hidden=False,
+        metadata={},
+        match_highlights=[],
+    )
+    message = AssistantMessage(
+        id="answer",
+        content=[TextContent(text="Evidence [7]")],
+        metadata=ChatMessageMetadata(sources={7: source}),
+    )
+    response = project_response(
+        RunState(
+            run_id="17",
+            status=RunStatus.COMPLETE,
+            answer_step_index=0,
+            steps=[
+                StepRecord(message=message, generation_status=ExecutionStatus.COMPLETE)
+            ],
+        ),
+        tool_ids={},
+    )
+    store = RedisChatHistoryStore(
+        message_id=17,
+        chat_session_id=uuid4(),
+        visible_message_ids=(),
+    )
+    with (
+        patch(
+            "onyx.chat.history_store.save_chat_response_to_db",
+            return_value="Evidence [7]",
+        ),
+        patch("onyx.chat.history_store.save_incognito_response") as save_temporary,
+    ):
+        store.save_response(response)
+    restored = IncognitoState.model_validate_json(
+        IncognitoState(
+            messages=save_temporary.call_args.kwargs["messages"]
+        ).model_dump_json()
+    )
+    assert message_citation_sources(restored.messages[0]) == {7: source}
+    assert response.response is not None
+    assert response.response.messages[0].metadata is None

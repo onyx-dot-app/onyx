@@ -1,38 +1,37 @@
 import re
 from collections.abc import Mapping
 
-from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
+from onyx.chat.citation_processor import CitationMapping
+from onyx.chat.models import ChatMessageMetadata
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
-from onyx.deep_research.models import ResearchAgentCallResult
+from onyx.deep_research.models import ResearchAgentCallResult, ResearchMessageMetadata
 from onyx.file_store.models import ContextFileMetadata
-from onyx.llm.models import ToolResultMessage
+from onyx.llm.models import Message, ToolResultMessage
 from onyx.tools.constants import CITEABLE_TOOLS_NAMES
 
 
-def update_citation_processor_from_tool_result(
-    tool_response: ToolResultMessage,
-    citation_processor: DynamicCitationProcessor,
-) -> None:
-    """Add source references from search results and research reports."""
-    data = tool_response.details
+def message_citation_sources(message: Message) -> CitationMapping:
+    """Read citation numbers shared by chat answers, search results, and research reports."""
+    if isinstance(message.metadata, (ChatMessageMetadata, ResearchMessageMetadata)):
+        return message.metadata.sources
+    if not isinstance(message, ToolResultMessage):
+        return {}
+    data = message.details
     if isinstance(data, ResearchAgentCallResult):
-        citation_processor.update_citation_mapping(data.citation_mapping)
-        return
-    if tool_response.tool_name not in CITEABLE_TOOLS_NAMES or not isinstance(
+        return data.citation_mapping
+    if message.tool_name not in CITEABLE_TOOLS_NAMES or not isinstance(
         data, SearchDocsResponse
     ):
-        return
+        return {}
     documents: dict[str, SearchDoc] = {}
     for document in data.search_docs:
         documents.setdefault(document.document_id, document)
-    citation_processor.update_citation_mapping(
-        {
-            number: documents[document_id]
-            for number, document_id in data.citation_mapping.items()
-            if document_id in documents
-        }
-    )
+    return {
+        number: documents[document_id]
+        for number, document_id in data.citation_mapping.items()
+        if document_id in documents
+    }
 
 
 def extract_citation_order_from_text(text: str) -> list[int]:

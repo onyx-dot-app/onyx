@@ -10,7 +10,7 @@ from datetime import datetime
 from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
 from onyx.chat.citation_utils import (
     collapse_citations,
-    update_citation_processor_from_tool_result,
+    message_citation_sources,
 )
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc
@@ -500,6 +500,6 @@ def test_research_results_restore_sources_and_reserve_citation_numbers() -> None
         ),
     )
     processor = DynamicCitationProcessor()
-    update_citation_processor_from_tool_result(result, processor)
+    processor.update_citation_mapping(message_citation_sources(result))
     assert processor.citation_to_doc == {4: document}
     assert processor.get_next_citation_number() == 5

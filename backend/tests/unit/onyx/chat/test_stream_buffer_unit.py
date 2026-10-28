@@ -94,6 +94,82 @@ def test_append_flush_and_cursor_read_roundtrip() -> None:
     assert later.next_cursor == 2
 
 
+@pytest.mark.parametrize("fail_during_flush", [True, False])
+def test_flush_retries_truncation_metadata_without_resuming_replay(
+    fail_during_flush: bool,
+) -> None:
+    cache = FakeCache()
+    session_id = uuid4()
+    writer = _make_writer(cache, session_id)
+    writer.append_line('{"text": "prefix"}\n')
+    writer.flush()
+    original_set = cache.set
+    failures_remaining = 2
+
+    def set_with_metadata_failure(
+        key: str,
+        value: str | bytes | int | float,
+        ex: int | None = None,
+    ) -> None:
+        nonlocal failures_remaining
+        if key.endswith(":meta") and failures_remaining:
+            failures_remaining -= 1
+            raise RuntimeError("metadata unavailable")
+        original_set(key, value, ex)
+
+    with (
+        patch.object(cache, "set", side_effect=set_with_metadata_failure) as write,
+        patch.object(stream_buffer.time, "monotonic", return_value=0.0) as clock,
+    ):
+        if fail_during_flush:
+            writer.append_line('{"text": "unpublished"}\n')
+            writer.flush()
+        else:
+            writer.mark_truncated()
+            clock.return_value = stream_buffer._TRUNCATION_RETRY_INTERVAL_S
+            writer.flush()
+        stale = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
+        assert stale is not None
+        assert not stale.gap
+        assert not stale.done
+        assert failures_remaining == 0
+
+        write.reset_mock()
+        writer.flush()
+        write.assert_not_called()
+
+        clock.return_value += stream_buffer._TRUNCATION_RETRY_INTERVAL_S
+        writer.flush()
+        recovered = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
+        assert recovered is not None
+        assert recovered.gap
+        assert not recovered.done
+
+        write.reset_mock()
+        writer.append_line('{"text": "discarded"}\n')
+        writer.flush()
+        writer.mark_truncated()
+        write.assert_not_called()
+
+
+def test_final_metadata_write_does_not_wait_for_truncation_retry() -> None:
+    cache = FakeCache()
+    session_id = uuid4()
+    writer = _make_writer(cache, session_id)
+    writer.append_line('{"text": "prefix"}\n')
+    writer.flush()
+
+    with patch.object(stream_buffer.time, "monotonic", return_value=0.0):
+        with patch.object(cache, "set", side_effect=RuntimeError("cache unavailable")):
+            writer.mark_truncated()
+        writer.mark_done()
+
+    result = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
+    assert result is not None
+    assert result.done
+    assert result.gap
+
+
 def test_chunks_are_compressed() -> None:
     cache = FakeCache()
     writer = _make_writer(cache, uuid4())

@@ -16,9 +16,14 @@ from onyx.chat.incognito import (
     resolve_incognito_record_mode,
 )
 from onyx.chat.incognito_context import incognito_context_available
-from onyx.chat.models import ChatHistoryMessage, ChatHistoryResult, PromptMetadata
+from onyx.chat.models import (
+    ChatHistoryMessage,
+    ChatHistoryResult,
+    MessageRendering,
+    PromptMetadata,
+)
 from onyx.chat.prompt_formatting import count_message_tokens
-from onyx.chat.response import restore_search_documents
+from onyx.chat.response import restore_response_sources
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.db.chat import (
     create_chat_session,
@@ -302,13 +307,18 @@ def capture_chat_history(
                     messages_from_steps(read_response_steps(message)),
                     copy_messages=False,
                 )
-                restore_search_documents(
+                restore_response_sources(
                     response_messages,
                     {
                         document.document_id: translate_db_search_doc_to_saved_search_doc(
                             document
                         )
                         for document in message.search_docs
+                    },
+                    {
+                        item.id: MessageRendering.model_validate(item.rendering)
+                        for item in message.response_items
+                        if item.rendering is not None
                     },
                 )
                 for response_message in response_messages:

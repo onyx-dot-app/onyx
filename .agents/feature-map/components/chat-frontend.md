@@ -332,12 +332,11 @@ all, because the mode is pinned at session creation and cannot be changed mid-se
   `regenerationRequest` that reuses the existing user node and only creates a new
   assistant node (`useChatController.ts`, the `onSubmit` branches on
   `regenerationRequest`).
-- **Stop** calls `stopChatSession` (`useChatController.ts:stopChatSession`, `POST
-  /api/chat/stop-chat-session/{id}`) (with the session's `streamId`, so the stop hits only that stream) **and** aborts the session's local
-  `AbortController` (`abortController.abort()` in the store). Both must fire: the server
-  call stops the backend turn (see [[core-chat-loop]] §4.6); the local abort stops the
-  fetch reader so the UI does not keep waiting on a connection the server may not close
-  immediately.
+- **Stop** uses `lib/chat/stopChatSession.ts`. It waits for send acknowledgement,
+  then targets the accepted response through `POST /api/chat/stop-chat-session/{id}?stream_id=`.
+  The reader stays open to receive final packets. Settlement waits for reader completion,
+  confirms server idleness, and reloads saved history before enabling input.
+  Stop aborts local preparation only when no send has been dispatched.
 - **Feedback** goes through `useFeedbackController.ts:handleFeedbackChange`: it
   optimistically calls `updateCurrentMessageFeedback` before the request, and rolls back
   to the previous feedback value if the request fails or throws.
@@ -620,8 +619,10 @@ releasing input. Server idleness alone does not mean the local response is compl
 Settlement belongs to both the request controller and its reader. Replacing the reader
 with replay prevents an earlier settlement from releasing input or replacing history.
 Recovery preserves the latest unsaved failed turn during both initial history loading and settlement.
-Saved answers replace local errors when history contains successful final text or files.
-Saved failures restore their error text, code, and retryability. Empty response placeholders retain local errors and partial packets; packets alone do not confirm a successful save.
+Saved responses with `response_status` of `complete`, `limit`, or `cancelled` replace local errors.
+Null, running, or suspended status preserves the local error, even when the saved row contains placeholder text.
+For older servers that omit this field, nonempty text or files remain the completion signal.
+Saved failures restore their error text, code, and retryability; packets alone do not confirm a successful save.
 Manual completion checks belong to their sessions; switching chats does not disable another chat's controls.
 Chat, search, and voice submission preserve drafts while readiness is unconfirmed.
 

@@ -1187,6 +1187,7 @@ def translate_db_message_to_chat_message_detail(
         files=chat_message.files or [],
         error=error_info.error if error_info is not None else None,
         error_info=error_info,
+        response_status=chat_message.response_status,
         current_feedback=current_feedback,
         processing_duration_seconds=chat_message.processing_duration_seconds,
         preferred_response_id=chat_message.preferred_response_id,

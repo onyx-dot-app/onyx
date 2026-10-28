@@ -49,6 +49,8 @@ See `backend/onyx/agents/README.md` for the public contracts and usage.
 `backend/onyx/agents/agent_coordination.py:AgentCoordinator.restore_completed`
 resolves the existing completion future so waiting parents resume. It updates
 latest-run discovery only for that run and rejects conflicting terminal records.
+A later dependency lookup can retry a failed remote observation or load its saved
+terminal result. Local execution and persistence failures remain authoritative.
 
 Cancelling a suspended child can start another worker.
 `backend/onyx/agents/agent_coordination.py:RunCoordination.finish` tracks its new
@@ -104,7 +106,7 @@ Chat uses this replay path when restoring saved conversations and preparing mode
 - Model events recheck cancellation under the execution lock before changing recorded state.
 - Result readiness, saved completion, suspension, and idle state have distinct meanings.
 - Recorded partial output survives even when replay excludes incomplete exchanges or thinking without replayable provider blocks.
-- Tool results and completion callbacks follow the original model-call order.
+- Tool completion callbacks run as results become ready; stored results retain model-call order.
 - Run owns recorded mutations; tool scheduling receives explicit borrowed step data.
 - Collaborators lock borrowed step data with execution_lock and use recording methods for changes.
 - Step callback inputs and public snapshots do not share mutable recorded state.
