@@ -697,3 +697,9 @@ See `backend/AGENTS.md` for authoritative commands and required env
 Related: [[core-chat-loop]], [[agents-personas]], [[observability]],
 [[llm-gateway]], [[rate-and-usage-limits]], [[auth-and-identity]],
 [[document-index]].
+
+
+Generic provider `APIError` failures use a concise public message and the `API_ERROR`
+code. The public message excludes raw provider JSON. Specific error classifications
+and configured error mappings retain their behavior. Runtime logs and tracing retain
+the underlying exception for diagnosis under their existing redaction rules.

@@ -180,10 +180,10 @@ test("a resumed save error survives a failed readiness check and retry", async (
   const session = useChatSessionStore.getState().sessions.get("session")!;
   expect(session.messageTree.get(42)).toMatchObject({
     type: "error",
-    message: "Response could not be saved",
+    errorMessage: "Response could not be saved",
     errorCode: "RESPONSE_SAVE_ERROR",
-    packets: [],
   });
+  expect(session.messageTree.get(42)?.packets.at(-1)?.obj.type).toBe("stop");
   await act(async () => {
     await settleChatSession({
       sessionId: "session",
@@ -196,11 +196,10 @@ test("a resumed save error survives a failed readiness check and retry", async (
   expect(recovered.queuedMessagesPaused).toBe(true);
   expect(recovered.messageTree.get(42)).toMatchObject({
     type: "error",
-    message: "Response could not be saved",
+    errorMessage: "Response could not be saved",
     errorCode: "RESPONSE_SAVE_ERROR",
     isRetryable: true,
     stackTrace: "save trace",
-    packets: [],
   });
 });
 

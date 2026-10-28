@@ -281,3 +281,92 @@ test("Stop drains multi-model packets and finishes every panel before releasing 
     ]);
   }
 });
+
+test.each([false, true])(
+  "provider failure preserves streamed content (multi-model: %s)",
+  async (multiModel) => {
+    jest.spyOn(console, "log").mockImplementation(() => {});
+    useChatSessionStore.setState({
+      sessions: new Map(),
+      currentSessionId: "session",
+    });
+    useChatSessionStore
+      .getState()
+      .createSession("session", { incognito: true });
+    jest.mocked(sendMessage).mockImplementation(async function* () {
+      if (multiModel) {
+        yield {
+          user_message_id: 11,
+          responses: [
+            { message_id: 12, model_name: "First" },
+            { message_id: 13, model_name: "Second" },
+          ],
+        };
+      } else {
+        yield { user_message_id: 11, reserved_assistant_message_id: 12 };
+      }
+      yield {
+        placement: { turn_index: 0, model_index: multiModel ? 0 : undefined },
+        obj: { type: "message_delta", content: "Partial answer" },
+      };
+      yield {
+        error: "Provider failed",
+        error_code: "API_ERROR",
+        is_retryable: true,
+        stack_trace: "",
+        details: multiModel ? { model_index: 0 } : {},
+      };
+      if (multiModel)
+        yield { placement: { turn_index: 0 }, obj: { type: "stop" } };
+    });
+    const { result } = renderHook(() =>
+      useChatController({
+        llmManager: createLlmManager(),
+        toolConfiguration,
+        activeAgent: undefined,
+        availableAgents: [],
+        existingChatSessionId: "session",
+        selectedDocuments: [],
+        searchParams: new ReadonlyURLSearchParams(),
+        resetInputBar: jest.fn(),
+        restoreInputBar: jest.fn(),
+      })
+    );
+    await act(async () =>
+      result.current.onSubmit({
+        message: "Question",
+        currentMessageFiles: [],
+        deepResearch: false,
+        selectedModels: multiModel
+          ? ["First", "Second"].map((name) => ({
+              name: "provider",
+              provider: "openai",
+              modelName: name,
+              displayName: name,
+              modelConfigurationId: null,
+            }))
+          : undefined,
+      })
+    );
+    const error = [
+      ...useChatSessionStore
+        .getState()
+        .sessions.get("session")!
+        .messageTree.values(),
+    ].find((message) => message.type === "error");
+    expect(error).toMatchObject({
+      errorMessage: "Provider failed",
+      errorCode: "API_ERROR",
+      isRetryable: true,
+    });
+    expect(error?.message).not.toBe("Provider failed");
+    expect(
+      error?.packets.some(
+        (packet) =>
+          packet.obj.type === "message_delta" &&
+          packet.obj.content === "Partial answer"
+      )
+    ).toBe(true);
+    expect(error?.packets.at(-1)?.obj.type).toBe("stop");
+  }
+);

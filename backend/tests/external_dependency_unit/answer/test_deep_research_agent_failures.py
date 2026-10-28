@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 from sqlalchemy.orm import Session
 
-from onyx.chat.models import AnswerStreamPart, StreamingError
+from onyx.chat.models import AnswerStreamPart
 from onyx.chat.process_message import handle_stream_message_objects
 from onyx.db.chat import get_chat_messages_by_session
 from onyx.db.tools import get_tool_by_name
@@ -21,6 +21,7 @@ from onyx.llm.models import (
     ToolResultMessage,
 )
 from onyx.server.query_and_chat.models import MessageResponseIDInfo, SendMessageRequest
+from onyx.server.query_and_chat.streaming_models import StreamingError
 from tests.common.models import CI_OPENAI_MODEL
 from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider
 from tests.external_dependency_unit.answer.stream_test_utils import create_chat_session

@@ -605,3 +605,10 @@ This order also applies when session details reload the response.
 Child sessions inherit the root's user, agent, Slack attribution, and recording mode.
 Usage exports include these attributed child runs because they consume tokens.
 Admin conversation history and query analytics still exclude child sessions from their conversation lists.
+
+
+`ChatMessageDetail.error_info` projects stored `response_failure` into the same public
+error payload used by streaming. It includes the message, error code, retryability,
+and safe model diagnostics. History responses omit stack traces. Legacy rows use
+`chat_message.error` when structured failure data is absent. The existing content
+recording policy still controls persistence; this projection adds no stored fields.

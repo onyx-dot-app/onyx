@@ -57,7 +57,7 @@ export function getMultiModelResponses(
       messageId: msg.messageId,
       currentFeedback: msg.currentFeedback,
       isGenerating: msg.is_generating || false,
-      errorMessage: isError ? msg.message : null,
+      errorMessage: isError ? msg.errorMessage : null,
       errorCode: isError ? msg.errorCode : null,
       isRetryable: isError ? msg.isRetryable : undefined,
       errorStackTrace: isError ? msg.stackTrace : null,

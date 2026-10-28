@@ -72,3 +72,18 @@ def test_413_in_message_classified_when_status_code_absent() -> None:
     # status_code 500 won't match the numeric branch, but the body text will.
     _, code, _ = litellm_exception_to_error_msg(exc, None)
     assert code == "REQUEST_TOO_LARGE"
+
+
+def test_generic_api_error_keeps_provider_payload_out_of_public_message() -> None:
+    payload = '{"provider_error": "' + "sensitive upstream detail " * 300 + '"}'
+    error = APIError(
+        status_code=500, message=payload, llm_provider="openrouter", model="test"
+    )
+    message, code, retryable = litellm_exception_to_error_msg(error, None)
+    assert (
+        message
+        == "The model provider could not complete this request. Please try again."
+    )
+    assert code == "API_ERROR"
+    assert retryable is True
+    assert payload in str(error)

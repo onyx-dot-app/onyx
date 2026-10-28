@@ -979,7 +979,11 @@ export default function useChatController({
             {
               ...initialAgentNode,
               messageId: newAgentMessageId ?? undefined,
-              message: error || answer,
+              message: answer,
+              errorMessage: error,
+              errorCode,
+              isRetryable,
+              errorDetails,
               type: error ? "error" : "assistant",
               retrievalType,
               query: finalMessage?.rephrased_query || query,
@@ -1287,29 +1291,27 @@ export default function useChatController({
                   errorModelIndex >= 0 &&
                   errorModelIndex < initialAssistantNodes.length
                 ) {
-                  const errorNode = initialAssistantNodes[errorModelIndex]!;
+                  const failedPackets = packetsPerModel[errorModelIndex]!;
+                  failedPackets.push({
+                    placement: {
+                      turn_index: 0,
+                      tab_index: 0,
+                      model_index: errorModelIndex,
+                    },
+                    obj: { type: "stop" },
+                  });
                   erroredModelIndices.add(errorModelIndex);
                   dirtyModelIndices.delete(errorModelIndex);
                   currentMessageTreeLocal = upsertToCompleteMessageTree({
                     messages: [
                       {
-                        ...errorNode,
-                        messageId:
-                          assistantMessageIds[errorModelIndex] ?? undefined,
-                        message: streamingError.error,
+                        ...buildAssistantNodeUpdate(errorModelIndex),
+                        errorMessage: streamingError.error,
                         type: "error",
                         stackTrace: streamingError.stack_trace || null,
                         errorCode: streamingError.error_code || null,
                         isRetryable: streamingError.is_retryable ?? true,
                         errorDetails: streamingError.details || null,
-                        overridden_model:
-                          selectedModels?.[errorModelIndex]?.modelName,
-                        modelDisplayName:
-                          modelDisplayNames[errorModelIndex] ||
-                          selectedModels?.[errorModelIndex]?.displayName ||
-                          null,
-                        packets: [],
-                        packetCount: 0,
                         is_generating: false,
                       },
                     ],
@@ -1334,7 +1336,6 @@ export default function useChatController({
                 isRetryable = streamingError.is_retryable ?? true;
                 errorDetails = streamingError.details || null;
 
-                setUncaughtError(frozenSessionId, streamingError.error);
                 updateSubmittedMessage(getCurrentSessionId(), "");
 
                 throw new Error(streamingError.error);
@@ -1460,6 +1461,18 @@ export default function useChatController({
         if (controller.signal.aborted || !ownsStream()) return;
         console.log("Error:", e);
         const errorMsg = e.message;
+        for (const output of isMultiModel
+          ? packetsPerModel.filter(
+              (_, index) => !erroredModelIndices.has(index)
+            )
+          : [packets]) {
+          if (!output.some((packet) => packet.obj.type === "stop")) {
+            output.push({
+              placement: { turn_index: 0, tab_index: 0 },
+              obj: { type: "stop" },
+            });
+          }
+        }
         const userErrorNode: Message = {
           nodeId: initialUserNode.nodeId,
           message: currMessage,
@@ -1476,10 +1489,8 @@ export default function useChatController({
         // In single-model mode, mark the one agent node.
         const errorAssistantNodes: Message[] = isMultiModel
           ? buildNonErroredNodes({
-              message: errorMsg,
+              errorMessage: errorMsg,
               type: "error" as const,
-              packets: [],
-              packetCount: 0,
               stackTrace,
               errorCode,
               isRetryable,
@@ -1488,15 +1499,20 @@ export default function useChatController({
             })
           : [
               {
-                nodeId: initialAgentNode.nodeId,
+                ...(currentMessageTreeLocal.get(initialAgentNode.nodeId) ??
+                  initialAgentNode),
                 messageId: newAgentMessageId ?? undefined,
-                message: errorMsg,
+                message: answer,
+                errorMessage: errorMsg,
                 type: "error" as const,
                 files: aiMessageImages || [],
-                toolCall: null,
+                documents,
+                citations,
+                toolCall,
                 parentNodeId: initialUserNode.nodeId,
-                packets: [],
-                packetCount: 0,
+                is_generating: false,
+                packets,
+                packetCount: packets.length,
                 stackTrace: stackTrace,
                 errorCode: errorCode,
                 isRetryable: isRetryable,

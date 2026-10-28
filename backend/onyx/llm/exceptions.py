@@ -263,7 +263,9 @@ def litellm_exception_to_error_msg(  # noqa: C901 - Provider errors have distinc
         error_code = "REQUEST_TOO_LARGE"
         is_retryable = False
     elif isinstance(core_exception, APIError):
-        error_msg = f"API error: An error occurred while communicating with the API. Details: {str(core_exception)}"
+        error_msg = (
+            "The model provider could not complete this request. Please try again."
+        )
         error_code = "API_ERROR"
         is_retryable = True
     elif not fallback_to_error_msg:
