@@ -52,6 +52,8 @@ These rules apply to the shared runtime, which has no production chat caller yet
 `backend/onyx/agents/agent_coordination.py:AgentCoordinator.restore_completed`
 resolves the existing completion future so waiting parents resume. It updates
 latest-run discovery only for that run and rejects conflicting terminal records.
+A later dependency lookup can retry a failed remote observation or load its saved
+terminal result. Local execution and persistence failures remain authoritative.
 
 Cancelling a suspended child can start another worker.
 `backend/onyx/agents/agent_coordination.py:RunCoordination.finish` tracks its new
