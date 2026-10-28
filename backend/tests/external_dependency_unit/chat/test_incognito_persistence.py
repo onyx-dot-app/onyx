@@ -15,7 +15,13 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.agents.models import ExecutionStatus, StepRecord, ToolExecutionRecord
+from onyx.agents.agent_coordination import AgentCoordinator
+from onyx.agents.models import (
+    AgentInfo,
+    ExecutionStatus,
+    StepRecord,
+    ToolExecutionRecord,
+)
 from onyx.chat.incognito import delete_incognito_generated_files
 from onyx.chat.incognito_context import (
     _context_key,
@@ -27,6 +33,7 @@ from onyx.chat.incognito_context import (
     teardown_incognito_session,
 )
 from onyx.chat.models import PromptMetadata, ResponseRecord, SavedAgentContext
+from onyx.chat.subagents import ChatAgentDirectory
 from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import (
@@ -475,7 +482,6 @@ def test_incognito_response_restores_agents_without_database_content(
     from onyx.agents.tools import AgentTool, ToolInvocation
     from onyx.chat.history_store import get_chat_history_store
     from onyx.chat.models import ChatResponseSnapshot, MessageRendering
-    from onyx.chat.subagents import create_chat_agent_coordinator
     from onyx.db.enums import IncognitoRecordMode
     from onyx.db.models import ChatResponseItem
     from onyx.llm.interfaces import LLMUserIdentity
@@ -529,15 +535,28 @@ def test_incognito_response_restores_agents_without_database_content(
         append_incognito_message(
             session.id, UserMessage(content="private root question")
         )
-        coordinator = create_chat_agent_coordinator(
-            root,
-            previous_run_id=None,
+        history_store = get_chat_history_store(
             message_id=assistant.id,
             chat_session_id=session.id,
             persist_content=False,
+            visible_message_ids=[assistant.id],
+        )
+        directory = ChatAgentDirectory(
+            history_store=history_store,
             llm=llm,
             tools=[],
             user_identity=identity,
+            store=None,
+        )
+        coordinator = AgentCoordinator(directory=directory)
+        coordinator.register(
+            AgentInfo(
+                id=root.id,
+                path="/root",
+                parent_id=None,
+                description="",
+                restoration_config=None,
+            )
         )
         handles = []
         run_agent(
@@ -579,9 +598,6 @@ def test_incognito_response_restores_agents_without_database_content(
             },
             cancelled=False,
         )
-        history_store = get_chat_history_store(
-            message_id=assistant.id, chat_session_id=session.id, persist_content=False
-        )
         if history_full:
             before = load_incognito_context(session.id)
             with patch("onyx.chat.incognito_context._MAX_CONTEXT_BYTES", 1):
@@ -618,15 +634,18 @@ def test_incognito_response_restores_agents_without_database_content(
             generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
             agent_id=root.id,
         )
-        restored_coordinator = create_chat_agent_coordinator(
-            restored_root,
-            previous_run_id=transcript.run_id,
-            message_id=assistant.id,
-            chat_session_id=session.id,
-            persist_content=False,
-            llm=llm,
-            tools=[],
-            user_identity=identity,
+        restored_coordinator = AgentCoordinator(directory=directory)
+        for info in history_store.list_agents():
+            restored_coordinator.register(info)
+        restored_coordinator.register(
+            AgentInfo(
+                id=restored_root.id,
+                path="/root",
+                parent_id=None,
+                description="",
+                restoration_config=None,
+                latest_run_id=transcript.run_id,
+            )
         )
         assert restored_root.id == root.id
         saved_run = restored_coordinator.saved_run(child_run_id, restored_root.id)

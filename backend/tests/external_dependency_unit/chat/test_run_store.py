@@ -35,11 +35,12 @@ from onyx.agents.tools import (
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.agent import ChatAgent
 from onyx.chat.checkpoint import CHECKPOINT_PAYLOAD_TYPES
-from onyx.chat.history_store import get_chat_history_store
+from onyx.chat.history_store import PostgresChatHistoryStore, get_chat_history_store
 from onyx.chat.models import ChatFeatureState, CheckpointBinding
 from onyx.chat.presentation import project_response
 from onyx.chat.restoration import persist_checkpoint_files
 from onyx.chat.run_store import ChatRunStore
+from onyx.chat.subagents import ChatAgentDirectory
 from onyx.configs.constants import FileOrigin, MessageType
 from onyx.db.chat import delete_messages_and_files_from_chat_session, root_response_id
 from onyx.db.chat_checkpoint import (
@@ -52,7 +53,7 @@ from onyx.db.models import ChatMessage, ChatResponseCheckpoint, ChatSession
 from onyx.file_store.models import ExtractedContextFiles
 from onyx.file_store.postgres_file_store import PostgresBackedFileStore
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
-from onyx.llm.interfaces import GenerationContext
+from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
 from onyx.llm.models import (
     AssistantMessage,
     GenerationRequest,
@@ -68,10 +69,22 @@ from onyx.utils.threadpool_concurrency import start_thread_future
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.unit.onyx.agents.checkpoint_storage import CheckpointStorage
 from tests.unit.onyx.agents.fakes import (
-    FakeAgentDirectory,
     FakeModelClient,
     FakeRunStore,
 )
+
+
+def directory(run_store: ChatRunStore) -> ChatAgentDirectory:
+    return ChatAgentDirectory(
+        history_store=PostgresChatHistoryStore(
+            message_id=run_store.response_id,
+            chat_session_id=run_store.chat_session_id,
+        ),
+        llm=Mock(spec=LLM),
+        tools=[],
+        user_identity=LLMUserIdentity(),
+        store=run_store,
+    )
 
 
 @pytest.fixture
@@ -288,22 +301,12 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
 
     coordinator = owner.bind(
         first,
-        directory=FakeAgentDirectory(
-            lookup_agent=owner.lookup_agent,
-            read_run=owner.read_run,
-            read_run_status=owner.read_run_status,
-            cancel_run=owner.cancel_run,
-        ),
+        directory=directory(owner),
         build_agent=rebuild,
     )
     remote.bind(
         second,
-        directory=FakeAgentDirectory(
-            lookup_agent=remote.lookup_agent,
-            read_run=remote.read_run,
-            read_run_status=remote.read_run_status,
-            cancel_run=remote.cancel_run,
-        ),
+        directory=directory(remote),
         build_agent=rebuild,
     )
     agent = Agent(
@@ -481,12 +484,7 @@ def _resume_response_in_process(session_id: str, message_id: str, run_id: str) -
 
     remote.bind(
         coordinator,
-        directory=FakeAgentDirectory(
-            lookup_agent=remote.lookup_agent,
-            read_run=remote.read_run,
-            read_run_status=remote.read_run_status,
-            cancel_run=remote.cancel_run,
-        ),
+        directory=directory(remote),
         build_agent=rebuild,
     )
     finished = threading.Event()
@@ -530,12 +528,7 @@ def test_transfer_rejects_input_missing_from_history_before_handoff(
 
     view = owner.bind(
         coordinator,
-        directory=FakeAgentDirectory(
-            lookup_agent=owner.lookup_agent,
-            read_run=owner.read_run,
-            read_run_status=owner.read_run_status,
-            cancel_run=owner.cancel_run,
-        ),
+        directory=directory(owner),
         build_agent=unexpected_resume,
     )
     agent = Agent(
@@ -593,12 +586,7 @@ def test_competing_resume_claims_and_stale_writer(
 
     view = owner.bind(
         coordinator,
-        directory=FakeAgentDirectory(
-            lookup_agent=owner.lookup_agent,
-            read_run=owner.read_run,
-            read_run_status=owner.read_run_status,
-            cancel_run=owner.cancel_run,
-        ),
+        directory=directory(owner),
         build_agent=unexpected_resume,
     )
     agent = Agent(
@@ -775,12 +763,7 @@ def test_owner_cleanup_failure_releases_local_control(
 
     view = owner.bind(
         coordinator,
-        directory=FakeAgentDirectory(
-            lookup_agent=owner.lookup_agent,
-            read_run=owner.read_run,
-            read_run_status=owner.read_run_status,
-            cancel_run=owner.cancel_run,
-        ),
+        directory=directory(owner),
         build_agent=unexpected_restore,
     )
     agent = Agent(
@@ -830,12 +813,7 @@ def test_terminal_run_retains_control_until_cancelled_tool_drains(
     coordinator = AgentCoordinator()
     view = owner.bind(
         coordinator,
-        directory=FakeAgentDirectory(
-            lookup_agent=owner.lookup_agent,
-            read_run=owner.read_run,
-            read_run_status=owner.read_run_status,
-            cancel_run=owner.cancel_run,
-        ),
+        directory=directory(owner),
         build_agent=unexpected_restore,
     )
     agent = Agent(
@@ -881,12 +859,7 @@ def test_parallel_children_use_reserved_response_identity(
 
     view = owner.bind(
         coordinator,
-        directory=FakeAgentDirectory(
-            lookup_agent=owner.lookup_agent,
-            read_run=owner.read_run,
-            read_run_status=owner.read_run_status,
-            cancel_run=owner.cancel_run,
-        ),
+        directory=directory(owner),
         build_agent=unexpected_restore,
     )
 
@@ -988,12 +961,7 @@ def test_failed_child_start_can_retry_without_an_orphan_response(
 
     view = owner.bind(
         coordinator,
-        directory=FakeAgentDirectory(
-            lookup_agent=owner.lookup_agent,
-            read_run=owner.read_run,
-            read_run_status=owner.read_run_status,
-            cancel_run=owner.cancel_run,
-        ),
+        directory=directory(owner),
         build_agent=unexpected_restore,
     )
     child = Agent(
@@ -1120,12 +1088,7 @@ def test_root_start_failure_releases_reserved_response_for_retry(
 
     view = owner.bind(
         coordinator,
-        directory=FakeAgentDirectory(
-            lookup_agent=owner.lookup_agent,
-            read_run=owner.read_run,
-            read_run_status=owner.read_run_status,
-            cancel_run=owner.cancel_run,
-        ),
+        directory=directory(owner),
         build_agent=unexpected_restore,
     )
     agent = Agent(
@@ -1219,12 +1182,7 @@ def test_resumed_child_keeps_its_original_response_tree(
 
     view = owner.bind(
         first,
-        directory=FakeAgentDirectory(
-            lookup_agent=owner.lookup_agent,
-            read_run=owner.read_run,
-            read_run_status=owner.read_run_status,
-            cancel_run=owner.cancel_run,
-        ),
+        directory=directory(owner),
         build_agent=rebuild,
     )
 
@@ -1312,12 +1270,7 @@ def test_resumed_child_keeps_its_original_response_tree(
         )
         remote.bind(
             second,
-            directory=FakeAgentDirectory(
-                lookup_agent=remote.lookup_agent,
-                read_run=remote.read_run,
-                read_run_status=remote.read_run_status,
-                cancel_run=remote.cancel_run,
-            ),
+            directory=directory(remote),
             build_agent=rebuild,
         )
         sibling_store = store((branch[0], sibling.id))

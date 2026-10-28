@@ -137,7 +137,10 @@ The application and SDK divide the work as follows:
 3. `backend/onyx/llm/multi_llm.py` converts provider streams into generation events.
    `backend/onyx/chat/renderer.py` converts recorded events into browser packets.
 4. `backend/onyx/chat/persistence.py:ChatResponsePersistence` saves completed responses
-   through the configured history store.
+   through the configured history store. Each response gets its own coordinator and
+   persistence object before its worker starts, so startup failures can be saved.
+   `_run_response` connects branch history, subagent discovery, and ownership before
+   starting the agent. It registers durable stores directly with turn control.
 
 ### 4.2 Setup: `prepare_chat_turn`
 

@@ -1,5 +1,6 @@
 """A new request restores registered research conversations and their source references."""
 
+from functools import partial
 from uuid import uuid4
 
 from sqlalchemy import delete, select
@@ -15,10 +16,14 @@ from onyx.agents.models import (
 )
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolInvocation
+from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_utils import capture_chat_history, convert_chat_history
+from onyx.chat.history_store import get_chat_history_store
 from onyx.chat.models import MessageRendering, ResponseRecord
 from onyx.chat.prompt_utils import prepare_prompt
-from onyx.chat.subagents import create_chat_agent_coordinator
+from onyx.chat.restoration import restore_chat_agent
+from onyx.chat.run_store import ChatRunStore
+from onyx.chat.subagents import ChatAgentDirectory
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import create_db_search_doc
@@ -28,6 +33,7 @@ from onyx.db.chat_response import (
 )
 from onyx.db.chat_subagents import (
     load_agent_history,
+    load_chat_branch,
     load_session_agent_metadata,
 )
 from onyx.db.enums import IncognitoRecordMode
@@ -49,6 +55,7 @@ from onyx.llm.models import (
 )
 from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
 from onyx.tracing.flows import LLMFlow
+from shared_configs.contextvars import get_current_tenant_id
 from tests.unit.onyx.agents.fakes import FakeModelClient
 
 
@@ -260,15 +267,45 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
         persisted_run_id = saved_child.previous_run_id
         assert persisted_run_id is not None
         saved_run_id = persisted_run_id
-        coordinator = create_chat_agent_coordinator(
-            root,
+        branch = load_chat_branch(response_id)
+        history_store = get_chat_history_store(
             message_id=response_id,
             chat_session_id=session_id,
             persist_content=True,
-            previous_run_id=str(previous_id),
-            llm=research_llm,
-            tools=[],
-            user_identity=LLMUserIdentity(),
+            branch=branch,
+        )
+        run_store = ChatRunStore(
+            tenant_id=get_current_tenant_id(),
+            chat_session_id=session_id,
+            response_id=response_id,
+            visible_response_ids=branch.message_ids,
+            cache=get_cache_backend(),
+        )
+        identity = LLMUserIdentity()
+        coordinator = run_store.bind(
+            AgentCoordinator(),
+            build_agent=partial(
+                restore_chat_agent, llm=research_llm, tools=[], user_identity=identity
+            ),
+            directory=ChatAgentDirectory(
+                history_store=history_store,
+                llm=research_llm,
+                tools=[],
+                user_identity=identity,
+                store=run_store,
+            ),
+        )
+        for info in history_store.list_agents():
+            coordinator.register(info)
+        coordinator.register(
+            AgentInfo(
+                id=root.id,
+                path="/root",
+                parent_id=None,
+                description="",
+                restoration_config=None,
+                latest_run_id=str(previous_id),
+            )
         )
         assert root.id == root_id
         assert (

@@ -13,7 +13,7 @@ from collections.abc import Callable, Generator
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from typing import Any, cast
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -404,6 +404,7 @@ def _make_setup(n_models: int = 1) -> MagicMock:
         user_id="test-user", session_id="test-session"
     )
     setup.forced_tool_id = None
+    setup.previous_run_id = None
     setup.messages = []
     setup.input_messages = []
     setup.chat_session_id = uuid4()
@@ -1378,14 +1379,29 @@ def patch_execution(
 
 @pytest.fixture(autouse=True)
 def _mock_settings() -> Generator[None, None, None]:
+    def run_store(
+        *, root_response: ChatResponsePersistence, tenant_id: str, **_kwargs: object
+    ) -> MagicMock:
+        store = MagicMock(spec=ChatRunStore)
+        store.tenant_id = tenant_id
+        store.has_owned_work = False
+        store.bind.side_effect = lambda coordinator, **_kwargs: coordinator.view(
+            store=root_response
+        )
+        return store
+
     with (
         patch("onyx.chat.execution.load_settings"),
         patch(
-            "onyx.chat.execution.create_chat_agent_coordinator",
-            side_effect=lambda *_args, **kwargs: AgentCoordinator(
-                store=kwargs["response_store"]
-            ),
+            "onyx.chat.execution.load_chat_branch",
+            return_value=MagicMock(chat_session_id=ANY, message_ids=[]),
         ),
+        patch(
+            "onyx.chat.history_store.PostgresChatHistoryStore.list_agents",
+            return_value=[],
+        ),
+        patch("onyx.chat.execution.get_cache_backend"),
+        patch("onyx.chat.execution.ChatRunStore", side_effect=run_store),
     ):
         yield
 
@@ -1445,7 +1461,9 @@ def test_persistence_failure_reaches_live_and_resumed_readers() -> None:
     buffer.mark_done.assert_called_once()
 
 
-@pytest.mark.parametrize("failure_stage", ["startup", "worker", "launch"])
+@pytest.mark.parametrize(
+    "failure_stage", ["startup", "worker", "launch", "branch_load", "branch_mismatch"]
+)
 def test_startup_failure_finishes_every_response(failure_stage: str) -> None:
     setup = _make_setup(2)
     buffer = MagicMock(truncated=False)
@@ -1468,9 +1486,27 @@ def test_startup_failure_finishes_every_response(failure_stage: str) -> None:
         )
         if failure_stage == "startup"
         else nullcontext(),
+        patch(
+            "onyx.chat.execution.load_chat_branch",
+            side_effect=RuntimeError("Branch unavailable"),
+        )
+        if failure_stage == "branch_load"
+        else patch(
+            "onyx.chat.execution.load_chat_branch",
+            return_value=MagicMock(chat_session_id=uuid4(), message_ids=[]),
+        )
+        if failure_stage == "branch_mismatch"
+        else nullcontext(),
         patch("onyx.chat.execution.create_chat_agent") as prepare,
         patch("onyx.chat.history_store.save_chat_response_to_db") as save,
     ):
+        if failure_stage in {"branch_load", "branch_mismatch"}:
+            prepare.return_value = _chat_agent(
+                Agent(
+                    FakeModelClient(lambda *_: pytest.fail("Model must not start")),
+                    generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+                )
+            )
         if failure_stage == "launch":
             with pytest.raises(RuntimeError, match="Startup failed"):
                 _start_chat_turn(setup, MagicMock(), stream_buffer=buffer)
@@ -1484,7 +1520,10 @@ def test_startup_failure_finishes_every_response(failure_stage: str) -> None:
             }
             assert all(call.kwargs["response"].error for call in save.call_args_list)
             assert any(isinstance(packet, StreamingError) for packet in packets)
-        prepare.assert_not_called()
+        if failure_stage in {"branch_load", "branch_mismatch"}:
+            assert prepare.call_count == 2
+        else:
+            prepare.assert_not_called()
         assert replay_finished.wait(2)
     buffer.mark_done.assert_called_once()
 
@@ -2549,10 +2588,13 @@ def test_stop_after_suspension_retains_root_cancellation_and_saves_once(
     with (
         patch("onyx.chat.execution.create_chat_agent", return_value=_chat_agent(agent)),
         patch(
-            "onyx.chat.execution.create_chat_agent_coordinator",
-            side_effect=lambda *_args, **kwargs: coordinator.view(
-                store=kwargs["response_store"],
-                ownership=FakeRunOwnership(register=register),
+            "onyx.chat.execution.ChatRunStore",
+            side_effect=lambda **kwargs: MagicMock(
+                has_owned_work=False,
+                bind=lambda *_args, **_kwargs: coordinator.view(
+                    store=kwargs["root_response"],
+                    ownership=FakeRunOwnership(register=register),
+                ),
             ),
         ),
         patch("onyx.chat.history_store.save_chat_response_to_db") as save,
@@ -2617,7 +2659,7 @@ def test_stop_cache_failure_retries_and_keeps_polling_ownership(
     store.poll_control.side_effect = poll_owned_runs
     setup.cache.exists.side_effect = stop_read
     turn = ChatTurnExecution(setup, MagicMock(), outcome)
-    turn._register_store(store)
+    turn._stores.append(store)
     with (
         patch(
             "onyx.chat.execution.create_chat_agent",
@@ -2663,8 +2705,11 @@ def test_storage_ownership_failure_reports_failed_response_without_writing(
     with (
         mock_model_execution(),
         patch(
-            "onyx.chat.execution.create_chat_agent_coordinator",
-            return_value=coordinator,
+            "onyx.chat.execution.ChatRunStore",
+            return_value=MagicMock(
+                has_owned_work=False,
+                bind=lambda *_args, **_kwargs: coordinator,
+            ),
         ),
         patch("onyx.chat.history_store.save_chat_response_to_db") as save,
     ):
@@ -2693,7 +2738,7 @@ def test_stop_cache_timeout_allows_next_ownership_poll(
     setup.admission.cache = control_cache
     store = MagicMock(spec=ChatRunStore)
     turn = ChatTurnExecution(setup, MagicMock())
-    turn._register_store(store)
+    turn._stores.append(store)
     turn._last_stop_check = 0
     turn._poll_control()
     assert "Failed to read chat Stop request" in caplog.text
@@ -2886,7 +2931,7 @@ def test_control_failure_retains_turn_and_polls_ownership_until_workers_drain(
     store = MagicMock(spec=ChatRunStore)
     store.has_owned_work = True
     turn = ChatTurnExecution(_make_setup(), MagicMock(), outcome)
-    turn._register_store(store)
+    turn._stores.append(store)
     prepared = _chat_agent(
         Agent(
             FakeModelClient(
@@ -2944,8 +2989,8 @@ def test_failed_ownership_poll_does_not_starve_other_stores() -> None:
     failed = MagicMock(spec=ChatRunStore)
     healthy = MagicMock(spec=ChatRunStore)
     failed.poll_control.side_effect = RuntimeError("Ownership poll failed")
-    turn._register_store(failed)
-    turn._register_store(healthy)
+    turn._stores.append(failed)
+    turn._stores.append(healthy)
     turn._poll_control()
     assert turn.cancellation.cancelled
     healthy.poll_control.assert_called_once()
@@ -2985,6 +3030,7 @@ def test_missing_response_outcome_cancels_run_and_drains_other_responses() -> No
     run.wait_for_idle.return_value = True
     run.delivery_failed = False
     persistence = ChatResponsePersistence(
+        coordinator=AgentCoordinator(),
         history_store=MagicMock(),
         model_index=0,
         llm=turn.setup.responses[0].llm,
@@ -2996,6 +3042,7 @@ def test_missing_response_outcome_cancels_run_and_drains_other_responses() -> No
     other_worker = Future[Run | None]()
     other_worker.set_result(None)
     other_persistence = ChatResponsePersistence(
+        coordinator=AgentCoordinator(),
         history_store=MagicMock(),
         model_index=1,
         llm=turn.setup.responses[0].llm,

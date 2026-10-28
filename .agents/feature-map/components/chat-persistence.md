@@ -332,6 +332,10 @@ Final root persistence writes display text, documents, citations, execution cont
 and completion status in one transaction. It updates the reserved response row.
 Usage-only incognito keeps conversation content in temporary storage instead.
 
+`ChatAgentDirectory` resolves agent identities through `ChatHistoryStore` in the
+response's tenant context. Durable run reads and cancellation use `ChatRunStore`,
+which checks branch access and execution ownership.
+
 Tool calls retain their response owner and step. Child calls can also link to their
 invoking parent tool for nested display. Result content is stored once on `ToolCall`;
 model generations retain the original call names, arguments, and order.

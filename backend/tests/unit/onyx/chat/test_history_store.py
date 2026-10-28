@@ -7,7 +7,13 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.agents.models import ExecutionStatus, RunState, RunStatus, StepRecord
+from onyx.agents.models import (
+    AgentInfo,
+    ExecutionStatus,
+    RunState,
+    RunStatus,
+    StepRecord,
+)
 from onyx.chat.citation_utils import message_citation_sources
 from onyx.chat.history_store import (
     PostgresChatHistoryStore,
@@ -21,12 +27,15 @@ from onyx.chat.models import (
     IncognitoState,
 )
 from onyx.chat.presentation import project_response
+from onyx.chat.subagents import ChatAgentDirectory
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat_response import save_chat_response_to_db
 from onyx.db.enums import IncognitoRecordMode
 from onyx.db.models import ChatMessage, ChatSession
+from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.models import AssistantMessage, TextContent, UserMessage
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 
 @pytest.mark.parametrize("persist_content", [False, True])
@@ -237,3 +246,45 @@ def test_temporary_response_restores_file_sources_before_serialization() -> None
     assert message_citation_sources(restored.messages[0]) == {7: source}
     assert response.response is not None
     assert response.response.messages[0].metadata is None
+
+
+@pytest.mark.parametrize("lookup_fails", [False, True])
+def test_agent_lookup_uses_its_tenant_and_restores_the_callers_context(
+    lookup_fails: bool,
+) -> None:
+    agent = AgentInfo(
+        id="child",
+        path="/root/child",
+        parent_id="root",
+        description="",
+        restoration_config=None,
+    )
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set("conversation-tenant")
+    try:
+        directory = ChatAgentDirectory(
+            history_store=PostgresChatHistoryStore(
+                message_id=17, chat_session_id=uuid4()
+            ),
+            llm=Mock(spec=LLM),
+            tools=[],
+            user_identity=LLMUserIdentity(),
+            store=None,
+        )
+        CURRENT_TENANT_ID_CONTEXTVAR.set("caller-tenant")
+
+        def lookup(message_id: int, agent_id: str, parent_id: str) -> AgentInfo:
+            assert CURRENT_TENANT_ID_CONTEXTVAR.get() == "conversation-tenant"
+            assert (message_id, agent_id, parent_id) == (17, "child", "root")
+            if lookup_fails:
+                raise RuntimeError("Storage unavailable")
+            return agent
+
+        with patch("onyx.chat.history_store.lookup_session_agent", side_effect=lookup):
+            if lookup_fails:
+                with pytest.raises(RuntimeError, match="Storage unavailable"):
+                    directory.lookup_agent("child", "root")
+            else:
+                assert directory.lookup_agent("child", "root") == agent
+        assert CURRENT_TENANT_ID_CONTEXTVAR.get() == "caller-tenant"
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)

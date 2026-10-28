@@ -1,21 +1,11 @@
 """Restore subagents from the selected chat branch with current tools and LLM settings."""
 
-from collections.abc import Callable
-from uuid import UUID
-
-from onyx.agents.agent_coordination import (
-    AgentCoordinator,
-    AgentDirectory,
-    RunStore,
-)
+from onyx.agents.agent_coordination import AgentDirectory
 from onyx.agents.models import AgentInfo, RunState, RunStatus
 from onyx.agents.runtime import Agent
-from onyx.cache.factory import get_cache_backend
-from onyx.chat.history_store import ChatHistoryStore, get_chat_history_store
+from onyx.chat.history_store import ChatHistoryStore
 from onyx.chat.response import response_snapshot
-from onyx.chat.restoration import restore_chat_agent
 from onyx.chat.run_store import ChatRunStore
-from onyx.db.chat_subagents import load_chat_branch
 from onyx.deep_research.research_agent import ResearchAgent
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM, LLMUserIdentity
@@ -48,9 +38,11 @@ class ChatAgentDirectory(AgentDirectory):
         )
 
     def lookup_agent(self, agent_id: str, parent_id: str) -> AgentInfo | None:
-        if self.store is not None:
-            return self.store.lookup_agent(agent_id, parent_id)
-        return self.history_store.lookup_agent(agent_id, parent_id)
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set(self.tenant_id)
+        try:
+            return self.history_store.lookup_agent(agent_id, parent_id)
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
     def restore_agent(self, agent_id: str, parent_id: str) -> Agent:
         saved = self.lookup_agent(agent_id, parent_id)
@@ -107,79 +99,3 @@ class ChatAgentDirectory(AgentDirectory):
             return
         if not self.read_run_status(run_id, parent_id).is_terminal:
             raise ValueError("Remote cancellation requires durable execution ownership")
-
-
-def create_chat_agent_coordinator(
-    root: Agent,
-    *,
-    message_id: int,
-    previous_run_id: str | None,
-    chat_session_id: UUID,
-    persist_content: bool,
-    llm: LLM,
-    tools: list[Tool],
-    user_identity: LLMUserIdentity,
-    owner: AgentCoordinator | None = None,
-    register_store: Callable[[ChatRunStore], None] | None = None,
-    response_store: RunStore | None = None,
-) -> AgentCoordinator:
-    """Create a coordinator that can discover and restore subagents on this chat branch."""
-    branch = load_chat_branch(message_id)
-    if branch.chat_session_id != chat_session_id:
-        raise ValueError("Response belongs to another chat session")
-    durable = (
-        ChatRunStore(
-            tenant_id=get_current_tenant_id(),
-            chat_session_id=chat_session_id,
-            response_id=message_id,
-            visible_response_ids=branch.message_ids,
-            cache=get_cache_backend(),
-            root_response=response_store,
-        )
-        if persist_content
-        else None
-    )
-    if durable is not None and register_store is not None:
-        register_store(durable)
-    history_store = get_chat_history_store(
-        message_id=message_id,
-        chat_session_id=chat_session_id,
-        visible_message_ids=branch.message_ids,
-        persist_content=persist_content,
-        branch=branch,
-    )
-    saved_agents = history_store.list_agents()
-
-    directory = ChatAgentDirectory(
-        history_store=history_store,
-        llm=llm,
-        tools=tools,
-        user_identity=user_identity,
-        store=durable,
-    )
-    coordinator = (
-        owner if owner is not None and durable is not None else AgentCoordinator()
-    )
-    if durable is not None:
-        coordinator = durable.bind(
-            coordinator,
-            build_agent=lambda checkpoint: restore_chat_agent(
-                checkpoint, llm=llm, tools=tools, user_identity=user_identity
-            ),
-            directory=directory,
-        )
-    else:
-        coordinator = coordinator.view(directory=directory, store=response_store)
-    for info in saved_agents:
-        coordinator.register(info)
-    coordinator.register(
-        AgentInfo(
-            id=root.id,
-            path="/root",
-            parent_id=None,
-            description="",
-            restoration_config=None,
-            latest_run_id=previous_run_id,
-        )
-    )
-    return coordinator

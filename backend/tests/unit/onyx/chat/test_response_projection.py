@@ -9,6 +9,7 @@ from uuid import uuid4
 
 import pytest
 
+from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent, MessageEndEvent
 from onyx.agents.models import (
     AgentInfo,
@@ -20,7 +21,7 @@ from onyx.agents.models import (
     ToolExecutionRecord,
 )
 from onyx.agents.runtime import Agent, Run
-from onyx.agents.tools import AgentTool
+from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.chat.emitter import Emitter
 from onyx.chat.history_store import get_chat_history_store
 from onyx.chat.models import (
@@ -52,6 +53,7 @@ from onyx.llm.models import (
     ToolDefinition,
     ToolResult,
     ToolResultMessage,
+    UserMessage,
 )
 from onyx.server.query_and_chat.models import MessageResponseIDInfo
 from onyx.tracing.flows import LLMFlow
@@ -415,6 +417,7 @@ def test_response_save_captures_run_once() -> None:
     outcome: Future[ChatResponseOutcome] = Future()
     delivery = ChatDelivery(None)
     persistence = ChatResponsePersistence(
+        coordinator=AgentCoordinator(),
         history_store=get_chat_history_store(
             message_id=42, chat_session_id=uuid4(), persist_content=True
         ),
@@ -444,4 +447,79 @@ def test_response_save_captures_run_once() -> None:
         assert saved[0].request_params == params[1]
         assert outcome.result(0).persistence_status == PersistenceStatus.SAVED
     finally:
+        delivery.finish()
+
+
+def test_response_save_includes_children_registered_through_execution_view() -> None:
+    coordinator = AgentCoordinator()
+    outcome: Future[ChatResponseOutcome] = Future()
+    delivery = ChatDelivery(None)
+    persistence = ChatResponsePersistence(
+        coordinator=coordinator,
+        history_store=get_chat_history_store(
+            message_id=42, chat_session_id=uuid4(), persist_content=True
+        ),
+        model_index=0,
+        llm=FakeModelClient(lambda *_: AssistantMessage()),
+        delivery=delivery,
+        outcome=outcome,
+    )
+    execution = coordinator.view(store=persistence)
+
+    def research(invocation: ToolInvocation) -> ToolResult:
+        child = invocation.agents.spawn_agent(
+            Agent(
+                FakeModelClient(
+                    lambda *_: AssistantMessage(
+                        content=[TextContent(text="Research findings")]
+                    )
+                ),
+                generation_context=GenerationContext(flow=LLMFlow.RESEARCH_AGENT),
+            ),
+            name="research",
+            description="Find supporting evidence",
+            max_steps=1,
+            messages=[UserMessage(content="Find evidence")],
+        )
+        result = invocation.agents.wait_run(child.run_id, timeout=5)
+        assert result is not None
+        return ToolResult(content=result.output.text)
+
+    replies = iter(
+        [
+            AssistantMessage(
+                content=[ToolCall(id="delegate", name="research", arguments={})]
+            ),
+            AssistantMessage(content=[TextContent(text="Final answer")]),
+        ]
+    )
+    agent = Agent(
+        FakeModelClient(lambda *_: next(replies)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name="research", description="Research", parameters={}
+                ),
+                execute=research,
+            )
+        ],
+    )
+    try:
+        with patch("onyx.chat.history_store.save_chat_response_to_db") as save:
+            run = agent.start(max_steps=2, coordinator=execution)
+            assert run.result(timeout=5).output.text == "Final answer"
+            saved = outcome.result(timeout=5)
+            assert run.wait_for_idle(timeout=5)
+        save.assert_called_once()
+        assert saved.persistence_status == PersistenceStatus.SAVED
+        response = saved.response.response
+        assert response is not None
+        (child,) = response.child_runs
+        assert child.agent_path == "/root/research"
+        assert child.agent_description == "Find supporting evidence"
+        assert child.parent_run_id == run.id
+        assert child.messages[-1].text == "Research findings"
+    finally:
+        assert coordinator.close(timeout=5)
         delivery.finish()

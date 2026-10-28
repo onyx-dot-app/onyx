@@ -50,10 +50,7 @@ from onyx.db.chat_response import (
     reserve_child_response__no_commit,
     save_response_record__no_commit,
 )
-from onyx.db.chat_subagents import (
-    load_session_agent_metadata,
-    lookup_session_agent,
-)
+from onyx.db.chat_subagents import load_session_agent_metadata
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.llm.models import Message, UserMessage
 from onyx.utils.logger import setup_logger
@@ -219,11 +216,6 @@ class ChatRunStore(RunStore, RunOwnership):
 
     def discovery(self) -> list[AgentInfo]:
         return self._with_tenant(lambda: load_session_agent_metadata(self.response_id))
-
-    def lookup_agent(self, agent_id: str, parent_id: str) -> AgentInfo | None:
-        return self._with_tenant(
-            lambda: lookup_session_agent(self.response_id, agent_id, parent_id)
-        )
 
     def read_run(self, run_id: str, parent_id: str) -> RunState | None:
         if not run_id.isdecimal():

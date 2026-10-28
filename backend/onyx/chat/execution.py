@@ -6,9 +6,11 @@ from concurrent.futures import Future
 from contextlib import ExitStack
 from functools import partial
 
+from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.concurrency import WorkTracker
-from onyx.agents.models import RunState
+from onyx.agents.models import AgentInfo, RunState
 from onyx.agents.runtime import Run
+from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheLockLostError
 from onyx.chat.agent import ChatAgent
 from onyx.chat.chat_processing_checker import (
@@ -23,15 +25,17 @@ from onyx.chat.models import ChatResponseOutcome, ChatTurnSetup, CreateChatSessi
 from onyx.chat.persistence import ChatResponsePersistence
 from onyx.chat.presentation import ResponsePresenter
 from onyx.chat.prompt_utils import build_language_section
+from onyx.chat.restoration import restore_chat_agent
 from onyx.chat.run_store import ChatRunStore
 from onyx.chat.stop_signal_checker import clear_stop, is_stop_requested
 from onyx.chat.stream_buffer import ChatDelivery, ChatStream, StreamBufferWriter
-from onyx.chat.subagents import create_chat_agent_coordinator
+from onyx.chat.subagents import ChatAgentDirectory
 from onyx.configs.chat_configs import (
     CHAT_EXECUTION_TIMEOUT_S,
     SKIP_DEEP_RESEARCH_CLARIFICATION,
 )
 from onyx.configs.constants import DEFAULT_PERSONA_ID, DocumentSource
+from onyx.db.chat_subagents import load_chat_branch
 from onyx.db.enums import record_mode_persists_content
 from onyx.db.models import User
 from onyx.deep_research.agent import MIN_RESEARCH_CONTEXT_TOKENS, DeepResearchAgent
@@ -65,6 +69,7 @@ from onyx.utils.threadpool_concurrency import start_thread_future
 from shared_configs.contextvars import (
     CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR,
     CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR,
+    get_current_tenant_id,
 )
 
 logger = setup_logger()
@@ -247,6 +252,7 @@ class ChatTurnExecution:
             )
         for index, response in enumerate(self.setup.responses):
             persistence = ChatResponsePersistence(
+                coordinator=AgentCoordinator(),
                 history_store=get_chat_history_store(
                     message_id=response.message_id,
                     chat_session_id=self.setup.chat_session_id,
@@ -317,10 +323,6 @@ class ChatTurnExecution:
                 if self.delivery.finished.done() and self._clear_processing_status():
                     return
             self._completion_changed.wait(_CANCEL_POLL_INTERVAL_S)
-
-    def _register_store(self, store: ChatRunStore) -> None:
-        with self._lock:
-            self._stores.append(store)
 
     def _poll_responses(self) -> None:
         for worker, persistence in tuple(self._response_workers.items()):
@@ -403,21 +405,70 @@ class ChatTurnExecution:
                 )
             else:
                 persistence.initial_citations = dict(chat_agent.initial_citations)
-            coordinator = create_chat_agent_coordinator(
-                chat_agent,
-                message_id=self.setup.responses[index].message_id,
-                previous_run_id=self.setup.previous_run_id,
+            branch = load_chat_branch(persistence.message_id)
+            if branch.chat_session_id != self.setup.chat_session_id:
+                raise ValueError("Response belongs to another chat session")
+            persist_content = record_mode_persists_content(
+                self.setup.incognito_record_mode
+            )
+            store = (
+                ChatRunStore(
+                    tenant_id=get_current_tenant_id(),
+                    chat_session_id=self.setup.chat_session_id,
+                    response_id=persistence.message_id,
+                    visible_response_ids=branch.message_ids,
+                    cache=get_cache_backend(),
+                    root_response=persistence,
+                )
+                if persist_content
+                else None
+            )
+            if store is not None:
+                with self._lock:
+                    self._stores.append(store)
+            history_store = get_chat_history_store(
+                message_id=persistence.message_id,
                 chat_session_id=self.setup.chat_session_id,
-                persist_content=record_mode_persists_content(
-                    self.setup.incognito_record_mode
-                ),
-                llm=self.setup.responses[index].llm,
+                visible_message_ids=branch.message_ids,
+                persist_content=persist_content,
+                branch=branch,
+            )
+            saved_agents = history_store.list_agents()
+            directory = ChatAgentDirectory(
+                history_store=history_store,
+                llm=persistence.llm,
                 tools=chat_agent.application_tools,
                 user_identity=self.setup.user_identity,
-                register_store=self._register_store,
-                response_store=persistence,
+                store=store,
             )
-            persistence.coordinator = coordinator
+            coordinator = (
+                store.bind(
+                    persistence.coordinator,
+                    build_agent=partial(
+                        restore_chat_agent,
+                        llm=persistence.llm,
+                        tools=chat_agent.application_tools,
+                        user_identity=self.setup.user_identity,
+                    ),
+                    directory=directory,
+                )
+                if store is not None
+                else persistence.coordinator.view(
+                    directory=directory, store=persistence
+                )
+            )
+            for info in saved_agents:
+                coordinator.register(info)
+            coordinator.register(
+                AgentInfo(
+                    id=chat_agent.id,
+                    path="/root",
+                    parent_id=None,
+                    description="",
+                    restoration_config=None,
+                    latest_run_id=self.setup.previous_run_id,
+                )
+            )
             cancellation.check()
             research = (
                 len(self.setup.responses) == 1 and self.setup.new_msg_req.deep_research

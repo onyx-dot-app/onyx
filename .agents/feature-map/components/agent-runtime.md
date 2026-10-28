@@ -32,7 +32,9 @@ models; this package adds no database writes or schema changes.
 
 `Agent.start` reserves conversation ownership and starts a `Run`. The run prepares
 model requests, accepts streaming output, executes tools, and decides whether to
-continue. `ToolBatch` preserves model-call order while tools complete concurrently.
+continue. `ToolBatch` schedules the selected tools and identifies completed calls.
+`Run` reads their recorded results, invokes finalization hooks, and emits completion
+events. Recorded results retain model-call order while tools complete concurrently.
 
 `ToolExecutionMode.SEQUENTIAL` orders calls to the same registered tool name within a step.
 An earlier call holds that place until finalization, including waits for input or children.

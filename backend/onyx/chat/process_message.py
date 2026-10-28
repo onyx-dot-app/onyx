@@ -274,8 +274,8 @@ def prepare_chat_turn(
         get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
     )
     try:
-        with get_session_with_current_tenant() as session:
-            chat_session = _load_session(new_msg_req, user, session)
+        with get_session_with_current_tenant() as db_session:
+            chat_session = _load_session(new_msg_req, user, db_session)
             # Reserve the session before model setup or changes to its message tree.
             admission.claim(chat_session.id)
             selected_models = _select_models(
@@ -284,17 +284,17 @@ def prepare_chat_turn(
                 user,
                 llm_overrides,
                 litellm_additional_headers,
-                session,
+                db_session,
             )
             token_counter = get_llm_token_counter(selected_models[0][0])
             chat_history, parent_message = load_message_branch(
-                chat_session.id, new_msg_req.parent_message_id, session
+                chat_session.id, new_msg_req.parent_message_id, db_session
             )
             accepted_text = None
             # Regeneration reuses the user message and its accepted query.
             if parent_message.message_type != MessageType.USER:
                 accepted_text = _process_query(
-                    new_msg_req.message, chat_session, user, session
+                    new_msg_req.message, chat_session, user, db_session
                 )
                 # Use one tokenizer for stored counts, including after model switches.
                 user_token_count = len(get_tokenizer(None, None).encode(accepted_text))
@@ -313,7 +313,7 @@ def prepare_chat_turn(
                         if keeps_content
                         else content_free_file_descriptors(new_msg_req.file_descriptors)
                     ),
-                    db_session=session,
+                    db_session=db_session,
                     commit=True,
                 )
                 chat_history.append(user_message)
@@ -321,7 +321,7 @@ def prepare_chat_turn(
             user_message_id = chat_history[-1].id
             context_user_files = capture_user_file_metadata(
                 resolve_context_user_files(
-                    persona, chat_session.project_id, user.id, session
+                    persona, chat_session.project_id, user.id, db_session
                 )
             )
             # Collect file IDs for the file reader tool *before* summary truncation so
@@ -330,7 +330,7 @@ def prepare_chat_turn(
             available_files = collect_available_file_ids(
                 chat_history, context_user_files
             )
-            memory = get_memories(user, session)
+            memory = get_memories(user, db_session)
             project_instructions = (
                 chat_session.project.instructions if chat_session.project else None
             )
@@ -348,11 +348,11 @@ def prepare_chat_turn(
                 )
             else:
                 custom_prompt = agent_instructions or project_instructions or None
-            base_system_prompt = get_default_base_system_prompt(session)
+            base_system_prompt = get_default_base_system_prompt(db_session)
             # Reserve against the placeholder-substituted text sent to the model,
             # so long directory values cannot invalidate the reservation.
             reserved_tokens = calculate_reserved_tokens(
-                db_session=session,
+                db_session=db_session,
                 persona_system_prompt=substitute_user_placeholders(
                     (
                         (persona.system_prompt or "")
@@ -369,7 +369,7 @@ def prepare_chat_turn(
                 else memory.without_memories(),
                 base_system_prompt=base_system_prompt,
             )
-            tools = get_tools(session)
+            tools = get_tools(db_session)
             research_tool_id = next(
                 (
                     tool.id
@@ -388,7 +388,7 @@ def prepare_chat_turn(
                 if not is_tool_available_for_persona(tool, persona.id)
             }:
                 forced_tool_id = None
-            summary_message = find_summary_for_branch(session, chat_history)
+            summary_message = find_summary_for_branch(db_session, chat_history)
             checkpoint = checkpoint_from_summary(summary_message)
             descriptors = {
                 descriptor["id"]: descriptor
@@ -425,7 +425,9 @@ def prepare_chat_turn(
                 token_counter,
                 checkpoint,
             )
-            file_inputs = prepare_chat_file_inputs(list(descriptors.values()), session)
+            file_inputs = prepare_chat_file_inputs(
+                list(descriptors.values()), db_session
+            )
             reasoning_effort = (
                 chat_session.reasoning_effort_override or ReasoningEffort.AUTO
             )
@@ -497,9 +499,9 @@ def prepare_chat_turn(
                 raise RuntimeError("Incognito session ended")
         admission.refresh()
         # Reserve assistant message IDs so each model response has a saved identity.
-        with get_session_with_current_tenant() as session:
+        with get_session_with_current_tenant() as db_session:
             response_ids = reserve_chat_response_ids(
-                db_session=session,
+                db_session=db_session,
                 chat_session_id=chat_session_id,
                 parent_message_id=user_message_id,
                 model_display_names=[name for _, name in selected_models],

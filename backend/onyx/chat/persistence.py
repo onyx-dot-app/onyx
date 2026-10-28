@@ -35,6 +35,7 @@ class ChatResponsePersistence(RunStore):
         self,
         *,
         history_store: ChatHistoryStore,
+        coordinator: AgentCoordinator,
         model_index: int,
         llm: LLM,
         delivery: ChatDelivery,
@@ -48,7 +49,7 @@ class ChatResponsePersistence(RunStore):
         self.outcome = outcome
         self.tool_ids: dict[str, int] = {}
         self.initial_citations: CitationMapping = {}
-        self.coordinator: AgentCoordinator | None = None
+        self.coordinator = coordinator
         self._lock = threading.Lock()
         self._pending_save: PendingChatResponseSave | None = None
 
@@ -214,5 +215,5 @@ class ChatResponsePersistence(RunStore):
             snapshot,
             tool_ids=self.tool_ids,
             initial_citations=self.initial_citations,
-            registrations=self.coordinator.registrations() if self.coordinator else (),
+            registrations=self.coordinator.registrations(),
         ).model_copy(update={"delivery_failed": delivery_failed})

@@ -484,7 +484,7 @@ class Run:
             Callable[[ToolCallContext, ToolResult], ToolResult] | None
         ) = None
         self._restoration: RestorableFeature | None = None
-        self._prepared_step: PreparedStep | None = None
+        self._step_tools: list[AgentTool] | None = None
         self.work = ExecutionWork()
         self.coordination: RunCoordination | None = None
         self._thread_context = copy_context()
@@ -769,9 +769,24 @@ class Run:
             del self._progress.pending_tool_calls[call.id]
             self._state.revision += 1
 
-    def finish_tool(
-        self, result: ToolResult, call: ToolCall, context: ToolCallContext | None
-    ) -> None:
+    def finish_tool(self, call: ToolCall, context: ToolCallContext | None) -> None:
+        with self.execution_lock:
+            record = self._state.steps[self._progress.step_index]
+            execution = record.tools[call.id]
+            result_message = execution.result
+            if result_message is None:
+                raise RuntimeError("Completed tool result is missing from history")
+            message_id = record.message.id
+            if message_id is None:
+                raise RuntimeError("Tool execution requires a message ID")
+            result = ToolResult(
+                content=result_message.content,
+                metadata=result_message.metadata,
+                cacheable=result_message.cacheable,
+                details=result_message.details,
+                is_error=result_message.is_error,
+                terminate=result_message.terminate,
+            )
         finalized = False
         try:
             if self.after_tool_call is not None:
@@ -784,15 +799,6 @@ class Run:
         finally:
             with self.execution_lock:
                 if self.is_accepting and not self.cancellation_signal.cancelled:
-                    record = self._state.steps[self._progress.step_index]
-                    execution = record.tools[call.id]
-                    if execution.result is None:
-                        raise RuntimeError(
-                            "Completed tool result is missing from history"
-                        )
-                    message_id = record.message.id
-                    if message_id is None:
-                        raise RuntimeError("Tool execution requires a message ID")
                     if finalized and self.after_tool_call is not None:
                         execution.result = _tool_result_message(
                             result, call, message_id
@@ -1171,7 +1177,7 @@ class Run:
     def _clear_execution_config(self) -> None:
         self._token_counts.clear()
         self._llm = None
-        self._prepared_step = None
+        self._step_tools = None
         self._defaults = PreparedStep()
         self._generation_context = GenerationContext()
         self._prepare_step = None
@@ -1352,7 +1358,7 @@ def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -
             else None,
         }
     )
-    run._prepared_step = prepared
+    run._step_tools = prepared.tools
     generation_context = run._generation_context.model_copy(
         update={
             "stall_timeout_s": prepared.stall_timeout_s
@@ -1591,9 +1597,7 @@ def _limit_output(
 
 def _execute_tools(run: Run) -> bool:
     progress = run._progress
-    if run._prepared_step is None:
-        if progress.options is None:
-            raise ValueError("Saved step is missing generation options")
+    if run._step_tools is None:
         available = {tool.name: tool for tool in run._defaults.tools}
         tools: list[AgentTool] = []
         for declaration in progress.tools:
@@ -1601,10 +1605,10 @@ def _execute_tools(run: Run) -> bool:
             if tool is None or tool.definition != declaration:
                 raise ValueError("Restored tools do not match the saved step")
             tools.append(tool)
-        run._prepared_step = PreparedStep(tools=tools, options=progress.options)
+        run._step_tools = tools
     batch = ToolBatch(
         run,
-        prepared=run._prepared_step,
+        tools=run._step_tools,
         progress=progress,
         record=run._state.steps[progress.step_index],
         history=working_messages(
