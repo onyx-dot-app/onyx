@@ -8656,6 +8656,9 @@
       "toasts": {
         "settingsUpdated": "Settings updated",
         "settingsUpdateFailed": "Failed to update settings"
+      },
+      "settingsLoadError": {
+        "description": "Failed to load settings. Please try refreshing the page."
       }
     }
   },

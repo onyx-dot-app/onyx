@@ -95,3 +95,28 @@ def test_gateway_scope_hidden_and_rejected_on_community() -> None:
         assert exc_info.value.error_code == OnyxErrorCode.FEATURE_NOT_AVAILABLE
         pat_api._validate_assignable_scopes([Permission.READ_SEARCH])
         pat_api._validate_assignable_scopes(None)
+
+
+def test_community_scope_list_skips_settings_read() -> None:
+    failing_load = MagicMock(side_effect=RuntimeError("settings unavailable"))
+    with (
+        patch.object(pat_api, "get_current_tier", return_value=Tier.COMMUNITY),
+        patch.object(pat_api, "load_settings", failing_load),
+    ):
+        scopes = [
+            option.scope for option in pat_api.list_selectable_scopes(MagicMock())
+        ]
+    assert Permission.READ_SEARCH in scopes
+    failing_load.assert_not_called()
+
+
+def test_scope_list_fails_closed_when_settings_read_fails() -> None:
+    with (
+        patch.object(
+            pat_api,
+            "load_settings",
+            MagicMock(side_effect=RuntimeError("settings unavailable")),
+        ),
+        pytest.raises(RuntimeError),
+    ):
+        pat_api.list_selectable_scopes(MagicMock())

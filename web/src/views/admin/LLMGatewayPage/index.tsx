@@ -6,15 +6,14 @@ import { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { SettingsLayouts, toast } from "@opal/layouts";
 import { Content, InputHorizontal } from "@opal/layouts";
-import { Card, InputSwitch, MessageCard } from "@opal/components";
-import { Disabled } from "@opal/core";
-import { SvgOrganization } from "@opal/icons";
+import { Card, InputSwitch, MessageCard, Text } from "@opal/components";
+import { SvgOrganization, SvgSimpleLoader } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useSettings } from "@/lib/settings/hooks";
 import { updateAdminSettings } from "@/lib/settings/svc";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import { LLM_GATEWAY_MIN_TIER } from "@/lib/tiers";
 
 const route = ADMIN_ROUTES.LLM_GATEWAY;
 
@@ -22,8 +21,8 @@ export default function LLMGatewayPage() {
   const t = useTranslations("admin.llmGateway");
   const router = useRouter();
   const settings = useSettings();
-  const businessTier = useTierAtLeast(Tier.BUSINESS);
-  const enabled = settings.llm_gateway_enabled ?? true;
+  const tierAllowed: boolean = useTierAtLeast(LLM_GATEWAY_MIN_TIER);
+  const enabled: boolean = settings.llm_gateway_enabled ?? true;
 
   async function save(checked: boolean) {
     try {
@@ -45,23 +44,28 @@ export default function LLMGatewayPage() {
         divider
       />
       <SettingsLayouts.Body>
-        <Section gap={3} alignItems="stretch">
-          <Content
-            title={t("access.title")}
-            description={t("access.description")}
-            sizePreset="main-content"
-            variant="section"
-          />
-          <Card border="solid" rounding={4}>
-            <Disabled
-              disabled={!businessTier}
-              allowClick={businessTier}
-              tooltip={!businessTier ? t("tierTooltip") : undefined}
-            >
+        {/* useSettings returns defaults while loading and on error, so the stored value is unknown. */}
+        {settings.error ? (
+          <Text font="main-ui-body" color="text-03">
+            {t("settingsLoadError.description")}
+          </Text>
+        ) : settings.isLoading ? (
+          <div className="flex justify-center py-12">
+            <SvgSimpleLoader className="h-6 w-6" />
+          </div>
+        ) : (
+          <Section gap={3} alignItems="stretch">
+            <Content
+              title={t("access.title")}
+              description={t("access.description")}
+              sizePreset="main-content"
+              variant="section"
+            />
+            <Card border="solid" rounding={4}>
               <InputHorizontal
                 title={t("access.toggle.title")}
                 tag={
-                  !businessTier
+                  !tierAllowed
                     ? {
                         title: t("businessPlanTag.label"),
                         color: "amber",
@@ -69,23 +73,27 @@ export default function LLMGatewayPage() {
                       }
                     : undefined
                 }
-                description={t("access.toggle.description")}
-                disabled={!businessTier}
+                description={
+                  tierAllowed
+                    ? t("access.toggle.description")
+                    : t("tierTooltip")
+                }
+                disabled={!tierAllowed}
                 withLabel
               >
                 <InputSwitch
                   id="llm_gateway_enabled"
-                  checked={businessTier ? enabled : false}
+                  checked={tierAllowed ? enabled : false}
                   onCheckedChange={(checked: boolean) => {
                     void save(checked);
                   }}
-                  disabled={!businessTier}
+                  disabled={!tierAllowed}
                 />
               </InputHorizontal>
-            </Disabled>
-          </Card>
-          <MessageCard variant="info" title={t("scopeNote.title")} />
-        </Section>
+            </Card>
+            <MessageCard variant="info" title={t("scopeNote.title")} />
+          </Section>
+        )}
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );

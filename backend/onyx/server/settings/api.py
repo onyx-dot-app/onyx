@@ -34,6 +34,7 @@ from onyx.server.features.build.utils import (
     is_craft_locked_by_tier,
 )
 from onyx.server.features.notifications.models import NotificationResponse
+from onyx.server.gateway.configs import LLM_GATEWAY_MIN_TIER
 from onyx.server.settings.models import (
     DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_NO_VECTOR_DB,
     DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB,
@@ -120,10 +121,10 @@ def admin_patch_settings(
                 OnyxErrorCode.FEATURE_NOT_AVAILABLE,
                 "Chat history retention requires the Enterprise plan.",
             )
-        # The LLM gateway is Business+; keep the write gate aligned with the
-        # tier_gate middleware that rejects /api/gateway calls below it.
+        # Keep the write gate aligned with the tier_gate middleware that
+        # rejects /api/gateway calls below LLM_GATEWAY_MIN_TIER.
         if merged.llm_gateway_enabled != existing.llm_gateway_enabled and (
-            not tier_at_least(current_tier, Tier.BUSINESS)
+            not tier_at_least(current_tier, LLM_GATEWAY_MIN_TIER)
         ):
             raise OnyxError(
                 OnyxErrorCode.FEATURE_NOT_AVAILABLE,

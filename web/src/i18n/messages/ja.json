@@ -8656,6 +8656,9 @@
       "toasts": {
         "settingsUpdated": "設定を更新しました",
         "settingsUpdateFailed": "設定の更新に失敗しました"
+      },
+      "settingsLoadError": {
+        "description": "設定の読み込みに失敗しました。ページを再読み込みしてください。"
       }
     }
   },
