@@ -96,19 +96,22 @@ export default function NonAdminStep() {
           role="group"
           aria-label="non-admin-name-prompt"
         >
-          <InputHorizontal
-            withLabel
-            fillInput
-            icon={SvgUser}
-            title={t("nameStep.title", { appName })}
-            description={t("nameStep.description")}
+          {/* Save sits outside the input's label: a label must not contain a
+              second control. */}
+          <Section
+            flexDirection="row"
+            justifyContent="start"
+            alignItems="center"
+            gap={2}
+            height="auto"
           >
-            <Section
-              flexDirection="row"
-              justifyContent="start"
-              alignItems="center"
-              gap={2}
-              height="auto"
+            <InputHorizontal
+              withLabel
+              fillInput
+              responsive
+              icon={SvgUser}
+              title={t("nameStep.title", { appName })}
+              description={t("nameStep.description")}
             >
               <InputTypeIn
                 placeholder={t("nameStep.input.placeholder")}
@@ -123,11 +126,11 @@ export default function NonAdminStep() {
                   }
                 }}
               />
-              <Button disabled={name === ""} onClick={handleSave}>
-                {t("nonAdminStep.save.label")}
-              </Button>
-            </Section>
-          </InputHorizontal>
+            </InputHorizontal>
+            <Button disabled={name === ""} onClick={handleSave}>
+              {t("nonAdminStep.save.label")}
+            </Button>
+          </Section>
         </div>
       ) : (
         <Hoverable.Root group="nonAdminName" width="full">
