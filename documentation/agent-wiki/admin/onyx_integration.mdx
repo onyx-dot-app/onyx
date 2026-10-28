@@ -1,0 +1,89 @@
+---
+title: "Onyx Integration"
+description: "Push documents from Onyx into the wiki"
+icon: "plug"
+---
+
+Connect an Onyx instance and its indexed documents flow into the wiki automatically.
+Rather than landing as a dump of new pages, a built-in agent finds the right existing page and updates it.
+
+## Setup
+
+Go to **Admin → Onyx Integration** and copy the two connection details shown there:
+the ingest URL (it ends in `/api/documents/ingest`) and the API key.
+Then configure your Onyx deployment to push with them, in one of two ways.
+
+### Recommended: a Document Push hook (Enterprise)
+
+On Onyx Enterprise Edition,
+create a **Document Push hook** under **Admin → Hooks** in Onyx with the ingest URL and API key.
+Everything is managed from the UI — no deployment changes,
+no restart — and failed pushes are recorded in the hook execution log so delivery problems are visible.
+
+### Alternative: environment variables (all editions)
+
+If you're not on Enterprise (or prefer config-driven setup),
+set the connection details as environment variables in your Onyx deployment and restart it:
+
+| Variable | Required | What it is |
+| --- | --- | --- |
+| `DOCUMENT_PUSH_ENDPOINT_URL` | yes | The ingest URL copied from the admin page. Setting it is what turns the push on. |
+| `DOCUMENT_PUSH_API_KEY` | yes | The API key copied from the admin page, sent as a bearer token. |
+| `DOCUMENT_PUSH_TIMEOUT_SECONDS` | no | Per-push timeout. Defaults to 30. |
+
+The two mechanisms are either/or, never both: when the environment variable is set,
+it wins and the hook is not consulted. Push failures on this path go to the service logs only.
+
+### What gets pushed
+
+Either way, every document a **public** connector successfully indexes is pushed to the wiki.
+The push is fire-and-forget: a failure is logged on the Onyx side and never blocks or fails indexing.
+It also doesn't fire during a connector's initial from-the-beginning run — only on the incremental updates after it,
+which is what keeps the wiki current without replaying your whole corpus.
+Document push works on single-tenant deployments only.
+
+## Ingest settings
+
+Below the connection details, the same admin page carries the wiki-side knobs for the pipeline:
+
+- **Max document size** (default 100,000 characters). Pushes larger than this are rejected outright —
+  and since the Onyx push is fire-and-forget, a rejected document doesn't come back on its own.
+  If your sources include long documents like meeting transcripts, raise this before connecting them.
+- **Auto-update health.** Two guardrails against pages that auto-update too often, both counted over
+  a sliding 24-hour window:
+  - **Default warning threshold** (default 30/24h). A page crossing it puts an event in the activity
+    feed and notifies its owner — advisory only, updates continue. This is just the wiki-wide default:
+    owners can override it per page from the page's [Update Policy](/agent-wiki/using/update_policies#update-health)
+    panel.
+  - **Auto-update cap** (default 100/24h). The hard limit. A page over the cap has further ingestion
+    updates skipped until its 24-hour count falls back under. Set it to 0 to disable the cap.
+
+## How incoming documents are handled
+
+Pushed content is matched against existing pages and merged in — that's what makes the wiki a living source of truth
+rather than an archive of everything your connectors have ever seen.
+
+Two controls govern it:
+
+- **Update policies.** A page or folder with [Update](/agent-wiki/using/update_policies) switched off is never
+  rewritten by ingestion. This is how you protect records that shouldn't change after the fact.
+- **Page instructions.** Free-text guidance the updater honors when it does edit — *"keep entries terse"*, *"never
+  touch the SLA table"*.
+
+The pipeline doesn't have to run on the default model. You can select a model just for ingestion here,
+from the pool enabled under [Language Models](/agent-wiki/admin/language_models)
+— and since ingestion is high-volume background work, a cheaper model (e.g. Luna)
+than your daily-usage default is usually the right choice.
+
+<Warning>
+  **Push organization-public sources only.** Wiki ingestion is not permission-aware yet:
+  content from a permission-synced or private Onyx connector would land in the wiki without carrying its access
+  restrictions along.
+  Keep those connectors out of wiki ingestion until that changes — permission-aware ingestion is on the roadmap and
+  coming soon.
+</Warning>
+
+## Related
+
+Connecting in the other direction — letting Onyx and Craft agents read and write the wiki — is [Connect an
+Agent](/agent-wiki/automate/mcp).

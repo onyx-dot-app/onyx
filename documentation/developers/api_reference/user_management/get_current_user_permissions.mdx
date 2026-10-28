@@ -1,0 +1,19 @@
+---
+title: "Get Current User Permissions"
+openapi: "GET /me/permissions"
+---
+
+<Info>
+  **Required permission:** Basic access (`basic`) &mdash; any signed-in user or service account.
+</Info>
+
+Returns the caller's resolved permissions, with implied permissions already expanded.
+Use it to check what a token can do before calling an endpoint.
+
+`is_manager` is `true` when the caller is a **Group Manager** of at least one group,
+and `managed_group_ids` lists those groups. A Group Manager holds their management permissions only inside those groups.
+
+<Note>
+  This endpoint applies to Onyx **v4.7 and later**. It replaces `GET /get-user-role`,
+  which was removed with the role model in v4.7.
+</Note>

@@ -1,0 +1,84 @@
+---
+title: "Desktop App"
+description: "Accessing Onyx via the desktop application"
+icon: "desktop"
+---
+
+Features include:
+
+- A global shortcut that opens Onyx from any app
+- Quick launch from the menu bar or system tray
+- Multiple windows, with window size and position remembered between sessions
+
+<img className="rounded-image" src="/assets/overview/onyx_anywhere/desktop_app.webp" alt="Onyx Desktop App"/>
+
+<Note>
+  The desktop app shows the same Onyx web app in a native window. It is available on all editions.
+</Note>
+
+## Download
+
+<CardGroup cols={3}>
+  <Card title="Windows" icon="windows" href="https://github.com/onyx-dot-app/onyx/releases/latest/download/Onyx_x64.exe">
+    Download .exe
+  </Card>
+
+  <Card title="macOS" icon="apple" href="https://github.com/onyx-dot-app/onyx/releases/latest/download/Onyx_universal.dmg">
+    Download .dmg
+  </Card>
+
+  <Card title="Linux" icon="linux" href="https://github.com/onyx-dot-app/onyx/releases/latest/download/Onyx_amd64.deb">
+    Download .deb
+  </Card>
+</CardGroup>
+
+<Tip>
+  Other formats and architectures are on the [GitHub Releases
+  page](https://github.com/onyx-dot-app/onyx/releases/latest): `.msi` and ARM64 `.exe` for Windows,
+  `.rpm` and ARM64 `.deb` for Linux, and `.app.tar.gz` for macOS.
+</Tip>
+
+## Getting Started
+
+**For Onyx Cloud users**: Download the app from the links above. It connects to `https://cloud.onyx.app` by default.
+
+**For self-hosted users**: Point the app at your Onyx server. If the app cannot reach a server,
+it shows a **Settings** page. Enter your server URL and select **Save & Connect**.
+
+You can also edit the config file. Select **Open Config File** from the app menu (`Cmd+,` on macOS,
+`Ctrl+,` on Windows and Linux), change `server_url`, and restart the app:
+
+```json
+{
+  "server_url": "https://onyx.example.com",
+  "window_title": "Onyx"
+}
+```
+
+The config file is at:
+
+- **macOS**: `~/Library/Application Support/app.onyx.onyx-desktop/config.json`
+- **Linux**: `~/.config/onyx-desktop/config.json`
+- **Windows**: `%APPDATA%\onyx\onyx-desktop\config\config.json`
+
+## Summon Onyx from anywhere
+
+Press the summon shortcut to bring Onyx to the front from any app:
+
+- **macOS**: `Cmd+Shift+Space`
+- **Windows and Linux**: `Ctrl+Alt+Space`
+
+By default, the summon shortcut starts a new chat. Use the menu bar or tray icon to turn **New Chat on Summon** off,
+or to hide the icon with **Show in Menu Bar**. To change the shortcut, set `summon_shortcut` in the config file.
+Set it to `null` to turn the shortcut off.
+
+## Keyboard Shortcuts
+
+| Shortcut (macOS / Windows and Linux) | Action |
+| --- | --- |
+| `Cmd+N` / `Ctrl+N` | New Chat |
+| `Cmd+Shift+N` / `Ctrl+Shift+N` | New Window |
+| `Cmd+R` / `Ctrl+R` | Reload |
+| `Cmd+[` / `Ctrl+[` | Back |
+| `Cmd+]` / `Ctrl+]` | Forward |
+| `Cmd+,` / `Ctrl+,` | Open Config File |
