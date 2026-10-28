@@ -7,6 +7,9 @@ and required changes.
 
 Thank you for your contribution!
 
+For Jira Service Management project issues, see the
+[existing Jira connector setup](jira/SERVICE_MANAGEMENT.md) before adding a source.
+
 ### Connector Overview
 
 Connectors come in 3 different flows:
