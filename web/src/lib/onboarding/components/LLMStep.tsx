@@ -184,13 +184,12 @@ const LLMStep = memo(
                           actionLabel={t("llmStep.providerCard.connect.label")}
                           actionIcon={SvgArrowExchange}
                           isConnected={isConnected}
+                          // Connected: the card and its settings button both
+                          // open the provider's modal in edit mode.
                           onClick={() =>
                             isConnected
-                              ? openAdminPanel()
+                              ? void openProviderSettings(llmDescriptor.name)
                               : handleProviderClick(llmDescriptor, false)
-                          }
-                          onSettingsClick={() =>
-                            void openProviderSettings(llmDescriptor.name)
                           }
                         />
                       );

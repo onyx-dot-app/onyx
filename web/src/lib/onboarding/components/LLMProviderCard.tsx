@@ -19,9 +19,8 @@ export interface LLMProviderCardProps {
   actionIcon: IconFunctionComponent;
   /** A connected card shows a check in place of the button. */
   isConnected?: boolean;
+  /** Runs on a click on the card or on its button (Connect or settings). */
   onClick: () => void;
-  /** The connected card's settings button. Without it, the button acts as a card click. */
-  onSettingsClick?: () => void;
 }
 
 /**
@@ -36,7 +35,6 @@ function LLMProviderCardInner({
   actionIcon,
   isConnected,
   onClick,
-  onSettingsClick,
 }: LLMProviderCardProps) {
   const t = useTranslations("onboarding");
   return (
@@ -73,7 +71,7 @@ function LLMProviderCardInner({
                 icon={SvgSettings}
                 tooltip={t("llmStep.providerCard.settingsButton.ariaLabel")}
                 aria-label={t("llmStep.providerCard.settingsButton.ariaLabel")}
-                onClick={noProp(onSettingsClick ?? onClick)}
+                onClick={noProp(onClick)}
               />
               <Section padding={1} width="fit" height="auto">
                 <IconContainer
