@@ -28,6 +28,7 @@ from onyx.agents.tools import (
     InputDecision,
     InputMode,
     PendingToolInput,
+    ToolExecutionMode,
     ToolInvocation,
 )
 from onyx.chat.checkpoint import CHECKPOINT_PAYLOAD_TYPES
@@ -276,6 +277,7 @@ def _make_executable_agent(counts: dict[str, int], context: AgentState) -> Agent
             content=[
                 ToolCall(id="send", name="send", arguments={}),
                 ToolCall(id="search", name="search", arguments={}),
+                ToolCall(id="send-follow-up", name="send", arguments={}),
             ]
         )
 
@@ -283,12 +285,14 @@ def _make_executable_agent(counts: dict[str, int], context: AgentState) -> Agent
         counts["search"] += 1
         return ToolResult(content="found", details=SearchDetails(documents=["source"]))
 
-    def send(_invocation: ToolInvocation) -> ToolResult:
+    def send(invocation: ToolInvocation) -> ToolResult:
+        assert counts["send"] == (0 if invocation.call_id == "send" else 1)
+        assert counts["finalize-send"] == counts["send"]
         counts["send"] += 1
         return ToolResult(content="sent")
 
     def gate(context: ToolCallContext) -> PendingToolInput | None:
-        if context.call.name == "send":
+        if context.call.id == "send":
             counts["gate"] += 1
             return PendingToolInput(
                 request_id="approve-send", prompt="Send?", mode=InputMode.EXECUTE
@@ -312,6 +316,7 @@ def _make_executable_agent(counts: dict[str, int], context: AgentState) -> Agent
             AgentTool(
                 definition=ToolDefinition(name="send", description="", parameters={}),
                 execute=send,
+                execution_mode=ToolExecutionMode.SEQUENTIAL,
             ),
         ],
         before_tool_call=gate,
@@ -372,7 +377,7 @@ def test_answer_resumes_in_the_execution_owners_context() -> None:
         tenant.reset(token)
 
 
-def test_fresh_objects_resume_json_checkpoint_without_repeating_tools(
+def test_json_resume_preserves_tool_order_without_blocking_independent_tools(
     tmp_path: Path,
 ) -> None:
     counts = dict.fromkeys(
@@ -385,6 +390,15 @@ def test_fresh_objects_resume_json_checkpoint_without_repeating_tools(
     captured = run.capture()
     assert captured.run_state.progress is not None
     assert captured.run_state.progress.finalized_tool_call_ids == {"search"}
+    assert set(captured.run_state.progress.pending_tool_calls) == {"send"}
+    assert counts == {
+        "generation": 1,
+        "search": 1,
+        "send": 0,
+        "gate": 1,
+        "finalize-search": 1,
+        "finalize-send": 0,
+    }
     assert captured.agent_state.messages == []
     assert len(captured.run_state.input_messages) == 1
     run_id = run.id
@@ -417,10 +431,10 @@ def test_fresh_objects_resume_json_checkpoint_without_repeating_tools(
     assert counts == {
         "generation": 2,
         "search": 1,
-        "send": 1,
+        "send": 2,
         "gate": 1,
         "finalize-search": 1,
-        "finalize-send": 1,
+        "finalize-send": 2,
     }
 
 
