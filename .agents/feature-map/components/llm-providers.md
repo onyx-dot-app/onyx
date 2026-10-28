@@ -706,3 +706,6 @@ See `backend/AGENTS.md` for authoritative commands and required env
 Related: [[core-chat-loop]], [[agents-personas]], [[observability]],
 [[llm-gateway]], [[rate-and-usage-limits]], [[auth-and-identity]],
 [[document-index]].
+
+Explicitly classified model failures retain safe tool-choice and finish-reason diagnostics across saved runs.
+Generic provider API failures return a fixed public message; raw upstream payloads remain in the exception.
