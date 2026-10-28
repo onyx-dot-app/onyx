@@ -602,3 +602,6 @@ Database modules import those models instead of defining separate data contracts
 
 Replay includes sources linked only to a tool. Root-selected document versions
 take precedence for answer citations; tool cards retain their own saved versions.
+
+Checkpoint format version 2 stores finalized tool-call IDs instead of a completed-tool count.
+This preserves independent completion when parallel calls finish out of order. Older formats are rejected.
