@@ -1,6 +1,6 @@
 ---
 name: "docs-writing"
-description: "Write, rewrite, audit, or review a page of the Onyx customer docs (this Mintlify repo). Use for new pages, release refreshes, screenshot updates, connector and provider guides, API guides, and docs quality reviews. Covers audience, source-of-truth checks against the onyx repo, ASD-STE100 prose rules, Mintlify page patterns, screenshot capture, and the checks to run before a PR."
+description: "Write, rewrite, audit, or review a page of the Onyx customer docs (the Mintlify site in `documentation/`). Use for new pages, release refreshes, screenshot updates, connector and provider guides, API guides, and docs quality reviews. Covers audience, source-of-truth checks against the onyx repo, ASD-STE100 prose rules, Mintlify page patterns, screenshot capture, and the checks to run before a PR."
 ---
 
 # Onyx docs writing
@@ -18,7 +18,7 @@ split the page or link out.
 
 ### Ground every claim in source truth
 
-Do not document from memory or from the old page. Check the onyx repo (`onyx-dot-app/onyx`), in this order:
+Do not document from memory or from the old page. Check the code in this repo, in this order:
 
 | Claim | Where to verify |
 | --- | --- |
@@ -149,9 +149,10 @@ Every page must be in `docs.json` or reachable by a `redirects` entry. Removed p
 
 ## 5. Checks before you open a PR
 
-Run from the repo root:
+Run from `documentation/`:
 
 ```bash
+scripts/generate.sh                      # builds the opal SVGs and openapi.json (not committed)
 python3 scripts/format_docs.py --write   # formats MDX and runs mintlify broken-links
 python3 scripts/format_docs.py --check   # what the pre-commit hook runs
 pre-commit run --files <changed files>
@@ -159,7 +160,7 @@ pre-commit run --files <changed files>
 
 Also confirm:
 
-- every `src="/assets/..."` on the changed pages resolves to a file,
+- every `src="/assets/..."` on the changed pages resolves to a file (logos and icons come from `web/lib/opal`; add new ones to `scripts/generated_assets.json`, not as SVG files),
 - `docs.json` lists new pages and has a redirect for each removed page,
 - the page renders in `mint dev` with no MDX error,
 - no secrets, license files, or local URLs in the diff.
