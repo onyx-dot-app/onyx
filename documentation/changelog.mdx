@@ -938,7 +938,11 @@ rss: true
   and default groups only ever change membership. Group managers are tagged in member lists,
   and the whole permission surface now emits audit events - group lifecycle, grants and revokes, manager assignment,
   and SCIM group writes (tagged `source: scim`).
-  SIEM consumers should note that three existing user events moved to new OCSF classes; see `docs/AUDIT_LOGGING.md`.
+  SIEM consumers should note that three existing user events moved to new OCSF classes:
+  `user.group_change` now uses `group_management`,
+  and `user.role_change` and `user.craft_access_change` now use `user_access_management`.
+  Update rules that match a child logger name or `ocsf_class`.
+  See [Audit Logs & SIEM Integration](/admins/auditing/audit_logs).
 
   ## Contributor Highlights
 

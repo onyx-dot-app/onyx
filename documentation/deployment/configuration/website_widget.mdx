@@ -227,6 +227,46 @@ JWT passthrough works on self-hosted Onyx only. It does not work on Onyx Cloud.
   </Step>
 </Steps>
 
+The widget calls `tokenProvider` again for each retry, so a token that expires during a retry is replaced.
+The widget does not retry a `401` response.
+
+The widget stores the conversation in the browser tab and links it to the token subject (the `sub` claim).
+If a different person signs in on the same tab, the widget starts a new conversation.
+To clear the conversation on demand, for example on sign-out, call `widget.resetConversation()`.
+
+<Warning>
+  Each visitor who opens the widget becomes an Onyx user and can use a seat.
+  Monitor your seat count after you turn on the widget.
+</Warning>
+
+For the full list of token checks and server log messages, see [JWT Header Auth](/deployment/authentication/jwt).
+
+#### Verify JWT passthrough
+
+<Steps>
+  <Step title="Send a message as a signed-in visitor">
+    Open the host page as a signed-in user and send a message in the widget.
+    The answer cites only documents that this user can read.
+  </Step>
+
+  <Step title="Check the user list">
+    In the Admin Panel, open the user list. The visitor's email is in the list.
+  </Step>
+
+  <Step title="Test rejected tokens">
+    Send a request with an expired token, and a request with a token for a different audience. Onyx rejects both.
+  </Step>
+</Steps>
+
+#### Troubleshoot JWT passthrough
+
+| Symptom                                       | Cause                                                                                        |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Every request is unauthorized                 | `JWT_PUBLIC_KEY_URL` is not set, so Onyx does not read the `Authorization` header.           |
+| The browser blocks the request                | The host page origin is not in `CORS_ALLOWED_ORIGIN`.                                        |
+| The widget shows `No Onyx credential available` | The element has no `api-key` attribute and no `tokenProvider` function.                     |
+| `no email claim found` in the API server log  | The token has no `email`, `preferred_username`, or `upn` claim. Add the claim in your IdP.   |
+
 ## API Key Security
 
 <Warning>

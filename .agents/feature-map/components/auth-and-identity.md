@@ -641,6 +641,18 @@ is marked as such.
    POST also requires the web origin. Workspace membership is rechecked at
    consent, on refresh (`_with_authorized_refresh` revokes the grant of a
    removed owner) and on every token use.
+12. **The UI capability projection equals write-side enforcement.**
+   `auth/permission_projection.py` stamps a per-resource `permissions` map
+   (`edit`, `delete`, `share`, and so on) on resource DTOs. Each key comes from
+   the same `can_*` predicate the write guard calls (for example
+   `db/persona.py:can_delete_persona`, `db/tools.py:can_manage_own_tool`), so the
+   client does not derive policy itself. `/me` returns `admin_capabilities`
+   (effective permissions plus the scoped manager bundle) for admin navigation,
+   and `effective_permissions` stays global-only. Both are hints to show or
+   hide controls, never an authorization input. A missing key reads as
+   `False`. A new guard or action needs its projection key and a case in
+   `tests/external_dependency_unit/auth/test_permission_projection_contract.py`,
+   which drives the real guard and compares the result to the stamped boolean.
 
 ---
 

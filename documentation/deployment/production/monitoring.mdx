@@ -1,0 +1,148 @@
+---
+title: "Monitoring"
+description: "Scrape Onyx Prometheus metrics and set alerts for a self-hosted deployment"
+icon: "chart-mixed"
+---
+
+Self-hosted Onyx exposes Prometheus metrics for the API server, the MCP server, and the background workers.
+Use them to build dashboards and alerts for request latency, database connections, background tasks, connector health,
+search, and license seats.
+
+## Metrics endpoints
+
+| Process | Endpoint | Authentication |
+| --- | --- | --- |
+| API server | `GET /metrics` on port `8080` | Bearer token (`METRICS_AUTH_TOKEN`) |
+| MCP server | `GET /metrics` on port `8090` | Bearer token (`METRICS_AUTH_TOKEN`) |
+| Background workers | `GET /metrics` on the worker port (see below) | None |
+
+Each background worker serves its metrics on its own port:
+
+| Worker | Port |
+| --- | --- |
+| `docfetching` | `9092` |
+| `docprocessing` | `9093` |
+| `heavy` | `9094` |
+| `light` | `9095` |
+| `monitoring` | `9096` |
+| `primary` | `9097` |
+| `scheduled_tasks` | `9098` |
+
+<Warning>
+  The worker metrics ports have no authentication. Do not expose them outside your cluster network.
+</Warning>
+
+## Set up scraping
+
+<Tabs>
+  <Tab title="Kubernetes (Helm)">
+    <Steps>
+      <Step title="Set the metrics token">
+        Enable `auth.metricsAuth` and set `metrics_auth_token`. Generate a value with `openssl rand -hex 32`.
+        See [Security Hardening](/deployment/production/security#credentials).
+      </Step>
+
+      <Step title="Create the ServiceMonitors">
+        Set `monitoring.serviceMonitors.enabled: true`. This needs the Prometheus Operator CRDs.
+        Use `monitoring.serviceMonitors.labels` to match the `serviceMonitorSelector` of your Prometheus resource.
+        The API and MCP ServiceMonitors send the metrics token automatically.
+      </Step>
+
+      <Step title="Add the dashboards (optional)">
+        Set `monitoring.grafana.dashboards.enabled: true` to deploy Grafana dashboard ConfigMaps.
+        The Grafana sidecar must watch the Onyx namespace for the label `grafana_dashboard=1`.
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="Other deployments">
+    <Steps>
+      <Step title="Set the metrics token">
+        Set `METRICS_AUTH_TOKEN` on the API server and the MCP server to a random secret.
+      </Step>
+
+      <Step title="Configure Prometheus">
+        Scrape the API and MCP servers with the header `Authorization: Bearer <METRICS_AUTH_TOKEN>`.
+        In a Prometheus scrape config, use the `authorization` block.
+        Scrape the worker ports from inside the container network.
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+If `METRICS_AUTH_TOKEN` is not set, the API and MCP `/metrics` endpoints return `401` for every request.
+Set `DISABLE_METRICS_AUTH=true` only on a network that users cannot reach.
+
+## Configuration
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `METRICS_AUTH_TOKEN` | Not set | Bearer token for `/metrics` on the API and MCP servers. |
+| `DISABLE_METRICS_AUTH` | `false` | Removes authentication from `/metrics` on the API and MCP servers. |
+| `PROMETHEUS_METRICS_ENABLED` | `true` | Set to `false` to stop the metrics server on a worker. |
+| `PROMETHEUS_METRICS_PORT` | Worker default | Changes the metrics port of a worker. |
+| `PROMETHEUS_METRICS_BIND_ADDR` | All interfaces | Binds the worker metrics server to one address. |
+| `SLOW_REQUEST_THRESHOLD_SECONDS` | `1.0` | Request duration that counts in `onyx_api_slow_requests_total`. |
+
+## Metric families
+
+All Onyx-specific metrics start with `onyx_`. Each scrape returns a help string for every metric.
+
+| Area | Metric prefix | Served by | What it shows |
+| --- | --- | --- | --- |
+| HTTP requests | `http_request*`, `onyx_api_slow_requests_total` | API and MCP servers | Request count, latency, size, and in-flight requests by handler and status. |
+| Database connections | `onyx_db_pool_*`, `onyx_db_connection*` | API server | Connection pool use, checkout timeouts, and connections held by each endpoint. |
+| Connector state | `onyx_connector_*` | API server, `docfetching`, `docprocessing` | Status, access type, last index, prune, and sync times, error state, and document counts for each connector. |
+| License | `onyx_license_*` | API server | Seats in total, used, and available, and the license expiry time. No series when no license is installed. |
+| Search | `onyx_opensearch_search_*`, `onyx_opensearch_searches_in_progress` | API server | OpenSearch search latency, volume, errors, and searches in progress by search type. |
+| Embeddings | `onyx_embedding*`, `onyx_query_embedding_cache_*` | API server, workers | Embedding request latency, volume, and query embedding cache use. |
+| MCP | `onyx_mcp_server_*`, `onyx_mcp_client_*` | MCP server, API server | MCP server token checks and tool calls, and calls from Onyx to external MCP tools. |
+| Background tasks | `onyx_celery_task_*`, `onyx_celery_tasks_active` | Workers | Tasks started, completed, retried, and in progress, task duration, and time in the queue. |
+| Indexing | `onyx_indexing_task_*`, `onyx_index_attempt_transitions_total`, `onyx_connector_docs_indexed_total` | `docfetching`, `docprocessing` | Indexing tasks and attempts, and documents indexed for each connector. |
+| Connector jobs | `onyx_pruning_*`, `onyx_deletion_*`, `onyx_doc_perm_sync_*`, `onyx_group_sync_*` | Workers | Duration, volume, and errors of pruning, connector deletion, and permission sync. |
+| Queues and workers | `onyx_queue_*`, `onyx_celery_worker_up`, `onyx_celery_active_worker_count` | `monitoring` | Queue length, unacknowledged and oldest tasks, and which workers send heartbeats. |
+| Redis | `onyx_redis_*` | `monitoring` | Redis memory and connected clients. |
+
+## Example alerts
+
+```promql
+# 5xx error rate by handler
+sum by (handler) (rate(http_requests_total{status=~"5.."}[5m]))
+
+# P99 request latency by handler
+histogram_quantile(0.99, sum by (handler, le) (rate(http_request_duration_seconds_bucket[5m])))
+
+# Database connection checkout timeouts
+sum by (engine) (rate(onyx_db_pool_checkout_timeout_total[5m])) > 0
+
+# Background task failure rate
+sum by (task_name) (rate(onyx_celery_task_completed_total{outcome="failure"}[5m]))
+  / sum by (task_name) (rate(onyx_celery_task_completed_total[5m]))
+
+# Tasks wait in a queue
+onyx_queue_depth > 100
+
+# A worker stopped sending heartbeats
+onyx_celery_worker_up == 0
+
+# The connector state read failed or timed out
+onyx_connector_state_collection_success == 0
+
+# A connector has had no successful index in 24 hours (a value of zero means never)
+time() - onyx_connector_last_successful_index_timestamp_seconds > 86400
+
+# A connector is in a repeated error state
+onyx_connector_repeated_error_state == 1
+
+# Fewer than 5 license seats are available
+onyx_license_seats_available < 5
+
+# The license expires in less than 14 days
+onyx_license_expires_timestamp_seconds - time() < 14 * 86400
+```
+
+## Related
+
+- [Security Hardening](/deployment/production/security): the metrics token and other credentials.
+- [High Availability and Scaling](/deployment/production/high_availability): autoscale workers on `onyx_queue_depth`.
+- [Audit Logs & SIEM Integration](/admins/auditing/audit_logs): forward security events to a SIEM.

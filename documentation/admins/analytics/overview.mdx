@@ -41,8 +41,19 @@ Open **Admin Panel > Analytics** to see activity over time.
 ### Usage reports
 
 On the Analytics page you can generate a usage report for a period, or for all time.
-The report is a ZIP of CSV files with per-user and per-system usage.
 Reports build in the background and stay available on the page for later download.
+
+The report is a ZIP file with these files:
+
+| File                  | Contents                                                                                     |
+| --------------------- | -------------------------------------------------------------------------------------------- |
+| `usage_report.pdf`    | A summary to share: active people, spend over time, top models and users, and unused seats.  |
+| `chat_messages.csv`   | One row per message: session, user, time, Agent, tokens, and model.                         |
+| `users.csv`           | Each user ID and whether the user is active.                                                 |
+| `usage_by_user.csv`   | Tokens and cost for each user, day, model, and feature.                                      |
+| `usage_by_system.csv` | Tokens and cost for background features that are not tied to one user, by day and model.     |
+
+Days in the report are in UTC. If the PDF cannot be built, the ZIP still contains the CSV files.
 
 ## Query History
 

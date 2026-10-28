@@ -18,11 +18,9 @@
 `web/src/app/craft/hooks/useBuildStreaming.ts`, `utils/parsePacket.ts`,
 `utils/subagentRouting.ts`, `services/apiServices.ts`
 
-**Read first:** `docs/craft/features/streaming/opencode-serve-client.md` for the
-client's design intent, and `docs/craft/issues/opencode-serve-event-stream-pitfalls.md`
-for three real bugs this layer had to fix. Both are still accurate: **most of
-`docs/craft/features/streaming/` describes history, not present behaviour**
-(see §9).
+**Read first:** the module docstring of `sandbox/opencode/serve_client.py`. It
+lists the event-stream rules that the translator must keep, and the bug that
+each rule prevents.
 
 ---
 
@@ -401,15 +399,15 @@ It does not delay stream attachment. See [[craft-sessions]] for name persistence
    `message.updated` with `info.error` and `session.error` both
    emit an `Error` terminator. `message.updated` fires once per inner opencode step, not once per
    turn; treating it as a terminator drops every step after the first (see
-   `docs/craft/issues/opencode-serve-event-stream-pitfalls.md` §1). This is
+   the `serve_client.py` module docstring, rule 1). This is
    fixed in `translate_opencode_event`, not a live risk, but any new
    consumer of the opencode event stream must respect it.
 5. **Tagged-union payloads (`session.status`) are inspected by `.type`, not by
-   string equality on the outer field**, per the same pitfalls doc §2.
+   string equality on the outer field** (module docstring, rule 2).
 6. **Content deltas can arrive before their message's role is known.**
    `_is_assistant_message` (`serve_client.py`) hydrates unknown message ids via
    a synchronous `GET /session/{id}/message/{id}` rather than buffering and
-   hoping metadata arrives later (pitfalls doc §3). A new content-classifying
+   hoping metadata arrives later (module docstring, rule 3). A new content-classifying
    code path must go through this cache-or-hydrate chokepoint, not invent its
    own buffering.
 7. **The runner is the only writer of persisted turn state; the browser
@@ -510,10 +508,9 @@ exercises `persist_sandbox_event` against real sandbox-event payloads.
 
 ### Manual reproduction
 
-`docs/craft/dev/local-compose-craft.md` is the setup guide for the Docker
-sandbox backend specifically (proxy iteration); for general Craft streaming
-work against the default Kubernetes backend, follow
-`docs/craft/dev/local-kubernetes.md` instead (referenced by the compose doc).
+For local setup, see `[[craft-sandboxes]]`. Use the default Kubernetes backend
+for general streaming work. Use the Docker backend only for Docker-sandbox or
+proxy work.
 
 1. Confirm services are up: `tail -f backend/log/api_server_debug.log`.
 2. Open the browser devtools Network tab, send a Craft message, and inspect
@@ -530,34 +527,31 @@ work against the default Kubernetes backend, follow
 
 ## 9. Footguns
 
-- **`docs/craft/features/streaming/` is mostly history, not a design to
-  verify against.** `drop-acp-layer.md` states the ACP transport (`opencode
-  acp`, `ACPExecClient`/`DockerACPExecClient`, `AGENT_TRANSPORT` env var) is
-  fully deleted, and this is confirmed in code: only `event_schema.py`'s
-  wrapper, `serve_client.py`'s docstring, and a few docstrings/imports in
-  `session/{streaming,manager,api}.py` still say "acp" (as the name of the
-  PyPI wrapper module, `sandbox.event_schema`, or historical comments); there
-  is no live ACP exec-client code path left. `shared-acp-exec-client.md` and
-  `docker-opencode-serve.md` describe now-deleted machinery entirely.
-  `opencode-serve-client.md` and `preserve-opencode-sessions.md` are closer to
-  current (the latter is actively cited by `session/streaming.py`'s own
-  `_ensure_opencode_session_id`), but treat every doc under this directory as
-  something to verify against `serve_client.py`/`serve_transport.py` before
-  trusting, not as ground truth.
-- **The event stream is a hint, not the source of truth.** All three bugs in
-  `docs/craft/issues/opencode-serve-event-stream-pitfalls.md` (premature
-  per-step termination, string-vs-tagged-union comparison, racing content
-  deltas) share one lesson: when the stream is ambiguous, fall back to a REST
-  call against opencode's persisted state (`get_message`), don't invent
-  compensating stream-side logic.
-- **Deploy-time gotchas are RBAC and env-refresh, not streaming logic**
-  (`docs/craft/issues/opencode-serve-deploy-gotchas.md`): a missing `secrets`
-  RBAC verb on the sandbox namespace, Kubernetes not refreshing
-  `OPENCODE_CONFIG_CONTENT` on a live pod after a Secret update (needs a pod
-  delete), and mutable image tags serving stale content under
-  `IfNotPresent`. None of these are bugs in the translator; they surface as
-  streaming symptoms (`ProviderModelNotFoundError`, connection refused on
-  `/session`) that look like transport bugs but aren't.
+- **"ACP" names are only the schema package.** The `opencode acp` transport,
+  the ACP exec clients, and `AGENT_TRANSPORT` do not exist. "acp" remains only
+  as the `agent-client-protocol` PyPI package that `sandbox/event_schema.py`
+  re-exports. Production code imports event types from that wrapper, not from
+  `acp.schema`.
+- **The event stream is a hint, not the source of truth.** When the stream is
+  ambiguous, read opencode's REST state (`get_message`). Do not add
+  compensating stream-side logic. See the `serve_client.py` module docstring.
+- **Some deploy faults look like streaming bugs.** Check these before you
+  debug the translator:
+  - Connection refused on `POST /session`: opencode-serve has not bound
+    `:4096` yet, or it crashed. `_http_with_cold_pod_retry` retries
+    `ConnectError` a few times. It never retries `POST /session` on
+    `RemoteProtocolError`, because the server can have created the session.
+  - 401 from opencode: the Basic-auth username is `opencode`
+    (`OPENCODE_SERVER_USERNAME`), not `onyx`. The password comes from the
+    per-pod `sandbox-<id>-opencode-auth` Secret. Kubernetes reads
+    `secretKeyRef` env only at container start, so a Secret update does not
+    reach a running pod. `_request` reloads the password once on a 401.
+  - The pod runs an old sandbox image: a mutable tag with
+    `SANDBOX_IMAGE_PULL_POLICY=IfNotPresent` (the default) uses the node's
+    cached image. Use immutable tags, or set the policy to `Always`.
+  - `/event` never becomes ready: after 20 consecutive failed reconnects a
+    `PodEventBus` closes itself. `serve_transport.py` replaces a closed bus on
+    the next turn.
 - **No terminal/PTY channel exists.** An old design note that mentions one
   describes an unbuilt branch; see §5.10.
 - **The sub-agent view follows the main turn stream, with no stream of its own.**
