@@ -2025,6 +2025,8 @@ jobs:
     uses: ./.github/workflows/docs-publish.yml
     with:
       tag: ${{ github.ref_name }}
+    # Environment secrets reach a reusable workflow only when the caller passes them.
+    secrets: inherit # zizmor: ignore[secrets-inherit] docs-publish.yml reads only its release-environment secrets
 
   # A failed audit usually means a new advisory, so the CVE Alerts run opens
   # its tracking issue, fix PR, and Slack post. Every release tag also gets a
