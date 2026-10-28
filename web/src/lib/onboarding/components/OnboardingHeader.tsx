@@ -96,7 +96,6 @@ function OnboardingHeader({
         justifyContent="between"
         alignItems="center"
         gap={2}
-        padding={1}
         height="fit"
       >
         {/* The prompt: the step's progress and one sentence, which comes in
@@ -106,6 +105,7 @@ function OnboardingHeader({
           justifyContent="start"
           alignItems="center"
           gap={1}
+          padding={1}
           height="fit"
         >
           <ProgressContext value={progress}>

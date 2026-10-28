@@ -1,13 +1,11 @@
 import { cn } from "@opal/utils";
-import SvgCheckCircle from "@opal/icons/check-circle";
 import type { IconProps } from "@opal/types";
 
 export interface SvgProgressCircleProps extends IconProps {
-  /** Progress from 0 to 100. 0 is an empty ring, 100 is a green check. */
+  /** Progress from 0 to 100. 0 is an empty ring, 100 is a full green pie. */
   value?: number;
 }
 
-// The ring matches the circle of `SvgCheckCircle`, so 100 does not jump.
 const RING_RADIUS = 6.667;
 // The pie is a thick stroke on a circle at half the pie's radius, so the
 // stroke spans from the centre out to the pie's radius.
@@ -16,9 +14,9 @@ const STROKE_RADIUS = PIE_RADIUS / 2;
 const CIRCUMFERENCE = 2 * Math.PI * STROKE_RADIUS;
 
 /**
- * A ring that fills like a pie as `value` rises, and turns into a green check
- * at 100. The pie animates between values. Ring and pie use `currentColor`,
- * like every other Opal icon.
+ * A ring that fills like a pie as `value` rises. The pie animates between
+ * values. Ring and pie use `currentColor`, like every other Opal icon, and
+ * turn green once the pie is full at 100.
  */
 const SvgProgressCircle = ({
   value = 100,
@@ -27,16 +25,7 @@ const SvgProgressCircle = ({
   ...props
 }: SvgProgressCircleProps) => {
   const progress = Math.min(Math.max(value, 0), 100);
-
-  if (progress >= 100) {
-    return (
-      <SvgCheckCircle
-        size={size}
-        className={cn(className, "stroke-status-success-05")}
-        {...props}
-      />
-    );
-  }
+  const complete = progress >= 100;
 
   return (
     <svg
@@ -46,7 +35,12 @@ const SvgProgressCircle = ({
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       stroke="currentColor"
-      className={className}
+      className={cn(
+        className,
+        "transition-colors duration-150 ease-out motion-reduce:transition-none",
+        // The green waits for the pie to fill. Leaving 100, it goes at once.
+        complete && "text-status-success-05 delay-300"
+      )}
       {...props}
     >
       {/* The ring: the outline of the whole. */}
