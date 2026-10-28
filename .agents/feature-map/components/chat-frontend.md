@@ -382,8 +382,7 @@ enforced by lint (`i18n/no-raw-jsx-text`) and pre-commit (`typescript-check`) wh
    equivalents.
 4. **No naked text nodes.** Use `Text` from `@opal/components` with `font` and `color`
    props. `Text` **strips `className`**; a caller that needs layout must wrap it, not
-   style it directly (see §9). The boolean-flag API on `refresh-components/texts/Text` is
-   deprecated.
+   style it directly (see §9).
 5. **Icons only from `@opal/icons`.** Never `lucide-react` or `react-icons`. A missing
    icon is imported from Figma into `lib/opal/src/icons/`, not substituted.
 6. **No `dark:` Tailwind modifier.** Design tokens already define both themes; the one

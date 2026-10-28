@@ -1,8 +1,7 @@
 import React from "react";
-import { cn } from "@opal/utils";
+import { cn, richNodes } from "@opal/utils";
 import type { IconProps } from "@opal/types";
-import { Text } from "@opal/components";
-import Truncated from "@/refresh-components/texts/Truncated";
+import { OverflowText, Text } from "@opal/components";
 import Link from "next/link";
 import type { Route } from "next";
 import { Section } from "@/layouts/general-layouts";
@@ -262,12 +261,24 @@ export default function LineItem({
         {children ? (
           <>
             <Section flexDirection="row" gap={2}>
-              <Truncated
-                mainUiMuted
-                className={cn("text-start w-full", textClassNames[variant])}
-              >
-                {children}
-              </Truncated>
+              {/* The variant class sets the color (and hover/selected states),
+                  so it sits on a wrapper and the text inherits it. */}
+              <div className={cn("w-full min-w-0", textClassNames[variant])}>
+                {typeof children === "string" ? (
+                  <OverflowText as="p" font="main-ui-muted" color="inherit">
+                    {children}
+                  </OverflowText>
+                ) : (
+                  <Text
+                    as="p"
+                    font="main-ui-muted"
+                    color="inherit"
+                    maxLines={1}
+                  >
+                    {richNodes(children)}
+                  </Text>
+                )}
+              </div>
               {rightChildren && (
                 <Section alignItems="end" width="fit">
                   {rightChildren}
@@ -287,9 +298,11 @@ export default function LineItem({
                   </Text>
                 </div>
               ) : (
-                <Truncated secondaryBody text03 className="text-start w-full">
-                  {description}
-                </Truncated>
+                <div className="w-full min-w-0">
+                  <OverflowText as="p" font="secondary-body" color="text-03">
+                    {description}
+                  </OverflowText>
+                </div>
               ))}
           </>
         ) : description ? (
@@ -306,9 +319,11 @@ export default function LineItem({
                 </Text>
               </div>
             ) : (
-              <Truncated secondaryBody text03 className="text-start w-full">
-                {description}
-              </Truncated>
+              <div className="w-full min-w-0">
+                <OverflowText as="p" font="secondary-body" color="text-03">
+                  {description}
+                </OverflowText>
+              </div>
             )}
             {rightChildren && (
               <Section alignItems="end" width="fit">
