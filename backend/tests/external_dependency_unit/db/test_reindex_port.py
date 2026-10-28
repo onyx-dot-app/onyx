@@ -2489,8 +2489,9 @@ def test_reindex_finalizing_needs_every_connector_port_success(
 def test_docfetching_priority_finalizing(
     db_session: Session, cc_pair_and_port_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
-    """FUTURE fetch tasks go out HIGH while the reindex finalizes; PRESENT
-    refreshes keep MEDIUM, and first-time indexing stays HIGH."""
+    """While the reindex finalizes, FUTURE fetch tasks go out HIGH when the connector
+    has docs pending for FUTURE, else MEDIUM, and PRESENT refreshes drop to LOW.
+    First-time indexing stays HIGH."""
     cc_pair, future_id = cc_pair_and_port_future
     future = db_session.get(SearchSettings, future_id)
     assert future is not None
@@ -2520,14 +2521,24 @@ def test_docfetching_priority_finalizing(
             == OnyxCeleryPriority.MEDIUM
         )
 
-        # finalizing: FUTURE goes first, PRESENT refreshes keep their place
+        # finalizing with nothing pending for FUTURE: still ahead of PRESENT
         attempt = create_port_attempt(db_session, cc_pair.id, future_id)
         mark_port_in_progress(db_session, attempt.id)
         mark_port_terminal(db_session, attempt.id, PortAttemptStatus.SUCCESS)
         assert (
+            docfetching_priority(db_session, cc_pair, future)
+            == OnyxCeleryPriority.MEDIUM
+        )
+
+        # finalizing with a doc pending for FUTURE: FUTURE goes first
+        [doc_id] = _seed_cc_pair_documents(db_session, cc_pair, 1, unique=True)
+        doc = db_session.get(DbDocument, doc_id)
+        assert doc is not None
+        doc.secondary_only_sync_pending = True
+        db_session.commit()
+        assert (
             docfetching_priority(db_session, cc_pair, future) == OnyxCeleryPriority.HIGH
         )
         assert (
-            docfetching_priority(db_session, cc_pair, present)
-            == OnyxCeleryPriority.MEDIUM
+            docfetching_priority(db_session, cc_pair, present) == OnyxCeleryPriority.LOW
         )
