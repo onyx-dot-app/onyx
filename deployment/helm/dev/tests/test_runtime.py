@@ -9,8 +9,10 @@ import sys
 import tempfile
 import threading
 import unittest
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
@@ -238,29 +240,61 @@ class RuntimeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "HTTP"):
             application_ready("file:///etc/passwd")
 
-    def test_agent_stale_requires_an_injected_agent_unknown_to_the_manager(
+    def test_agent_stale_requires_an_established_agent_unknown_to_the_manager(
         self,
     ) -> None:
-        """Flag only pods that run a traffic agent the traffic manager does not list."""
-        with_agent = [
-            {
-                "spec": {
-                    "containers": [{"name": "api-server"}, {"name": "traffic-agent"}]
-                }
+        """Flag only agents past their registration grace that the traffic manager does not list."""
+        now = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+
+        def pod(started: str | None, deleting: bool = False) -> dict[str, Any]:
+            state = {"running": {"startedAt": started}} if started else {"waiting": {}}
+            return {
+                "metadata": {"deletionTimestamp": "now"} if deleting else {},
+                "status": {
+                    "containerStatuses": [
+                        {"name": "api-server", "state": {"running": {}}},
+                        {"name": "traffic-agent", "state": state},
+                    ]
+                },
             }
-        ]
-        without_agent = [{"spec": {"containers": [{"name": "api-server"}]}}]
-        terminating = [{"metadata": {"deletionTimestamp": "now"}, **with_agent[0]}]
+
+        established = [pod("2026-01-01T11:50:00Z")]
         known = [{"name": "api", "agent_version": "v2.31.2"}]
         unknown = [{"name": "api"}]
-        self.assertTrue(agent_stale("api", unknown, with_agent))
-        self.assertTrue(agent_stale("api", [], with_agent))
-        self.assertFalse(agent_stale("api", known, with_agent))
-        self.assertFalse(agent_stale("api", unknown, without_agent))
-        self.assertFalse(agent_stale("api", unknown, terminating))
+        self.assertTrue(agent_stale("api", unknown, established, now))
+        self.assertTrue(agent_stale("api", [], established, now))
         self.assertTrue(
-            agent_stale("api", [{"name": "other", "agent_version": "v2"}], with_agent)
+            agent_stale(
+                "api", [{"name": "other", "agent_version": "v2"}], established, now
+            )
         )
+        self.assertFalse(agent_stale("api", known, established, now))
+        self.assertFalse(
+            agent_stale("api", unknown, [pod("2026-01-01T11:59:50Z")], now)
+        )
+        self.assertFalse(agent_stale("api", unknown, [pod(None)], now))
+        self.assertFalse(
+            agent_stale("api", unknown, [pod("2026-01-01T11:50:00Z", True)], now)
+        )
+        self.assertFalse(
+            agent_stale(
+                "api",
+                unknown,
+                [{"status": {"containerStatuses": [{"name": "api-server"}]}}],
+                now,
+            )
+        )
+
+    def test_agent_session_rejection_reads_only_logs_since_the_attempt(self) -> None:
+        """Bound the log search to the current attempt so earlier rejections do not restart a recovered agent."""
+        since = datetime(2026, 1, 1, 4, 0, 5, tzinfo=timezone(timedelta(hours=-8)))
+        with patch.object(
+            Cluster,
+            "kube",
+            return_value='code = NotFound desc = Session "agent:stale" not found',
+        ) as kube:
+            self.assertTrue(Cluster(Path.cwd()).agent_session_rejected(since))
+        self.assertIn("--since-time=2026-01-01T12:00:05Z", kube.call_args.args)
 
     def test_intercept_restarts_a_stale_agent_before_intercepting(self) -> None:
         """Replace a stale agent up front, and do not restart again if intercept still fails."""
@@ -278,13 +312,8 @@ class RuntimeTests(unittest.TestCase):
                 patch.object(
                     Cluster, "telepresence_workloads", return_value=[{"name": "api"}]
                 ),
-                patch.object(
-                    Cluster,
-                    "api_pods",
-                    return_value=[
-                        {"spec": {"containers": [{"name": "traffic-agent"}]}}
-                    ],
-                ),
+                patch.object(Cluster, "api_pods", return_value=[]),
+                patch("runtime.agent_stale", return_value=True),
                 patch.object(Cluster, "agent_session_rejected", return_value=True),
                 patch.object(Cluster, "command", side_effect=failure) as command,
                 patch.object(Cluster, "kube", return_value="") as kube,

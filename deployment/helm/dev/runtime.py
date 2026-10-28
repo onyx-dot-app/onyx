@@ -11,11 +11,14 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 API_SELECTOR = "app=api-server,app.kubernetes.io/instance=onyx"
+# Time a new traffic agent gets to register with the traffic manager.
+AGENT_REGISTRATION_GRACE = timedelta(seconds=30)
 
 
 @dataclass(frozen=True)
@@ -386,8 +389,8 @@ class Cluster:
             "items"
         ]
 
-    def agent_session_rejected(self) -> bool:
-        """Check the API traffic agents' recent logs for a session the manager rejected."""
+    def agent_session_rejected(self, since: datetime) -> bool:
+        """Check the API traffic agents' logs since ``since`` for a session the manager rejected."""
         try:
             logs = self.kube(
                 "logs",
@@ -395,7 +398,7 @@ class Cluster:
                 API_SELECTOR,
                 "-c",
                 "traffic-agent",
-                "--tail=50",
+                f"--since-time={since.astimezone(timezone.utc):%Y-%m-%dT%H:%M:%SZ}",
                 "--prefix=true",
             )
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
@@ -450,18 +453,24 @@ class Cluster:
             print(f"Reusing API intercept {name}", flush=True)
         else:
             restarted = False
-            if agent_stale(name, self.telepresence_workloads(), self.api_pods()):
+            if agent_stale(
+                name,
+                self.telepresence_workloads(),
+                self.api_pods(),
+                datetime.now(timezone.utc),
+            ):
                 print(
                     f"Restarting {name}: its traffic agent is unknown to the traffic manager",
                     flush=True,
                 )
                 self.restart_api(name)
                 restarted = True
+            attempt_started = datetime.now(timezone.utc)
             try:
                 self.create_intercept(name)
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
                 # Retry once if the manager rejected an agent the list still reported.
-                if restarted or not self.agent_session_rejected():
+                if restarted or not self.agent_session_rejected(attempt_started):
                     raise
                 self.restart_api(name)
                 self.create_intercept(name)
@@ -497,18 +506,24 @@ class Cluster:
 
 
 def agent_stale(
-    name: str, workloads: list[dict[str, Any]], pods: list[dict[str, Any]]
+    name: str,
+    workloads: list[dict[str, Any]],
+    pods: list[dict[str, Any]],
+    now: datetime,
 ) -> bool:
-    """Report a traffic agent that runs in a pod but is unknown to the traffic manager.
+    """Report a traffic agent that has run past its registration grace but is unknown to the traffic manager.
 
     Telepresence sets ``agent_version`` only for agents with a live manager session.
     An injected agent without one makes ``telepresence intercept`` hang or fail.
+    Agents that started within the grace period may still be registering.
     """
     has_agent = any(
-        container.get("name") == "traffic-agent"
+        status.get("name") == "traffic-agent"
+        and (started := status.get("state", {}).get("running", {}).get("startedAt"))
+        and now - datetime.fromisoformat(started) > AGENT_REGISTRATION_GRACE
         for pod in pods
         if not pod.get("metadata", {}).get("deletionTimestamp")
-        for container in pod.get("spec", {}).get("containers", [])
+        for status in pod.get("status", {}).get("containerStatuses", [])
     )
     known = any(
         workload.get("name") == name and workload.get("agent_version")
