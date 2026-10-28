@@ -76,10 +76,15 @@ const LLMStep = memo(
         (provider) => provider.provider === name
       )?.id;
       if (configuredId === undefined) {
-        const fresh = await refetchProviders();
-        configuredId = fresh?.providers.find(
-          (provider) => provider.provider === name
-        )?.id;
+        try {
+          const fresh = await refetchProviders();
+          configuredId = fresh?.providers.find(
+            (provider) => provider.provider === name
+          )?.id;
+        } catch {
+          toast.error(t("llmStep.providerCard.settingsLoadError"));
+          return;
+        }
       }
       if (configuredId !== undefined) setEditingProviderId(configuredId);
     };
