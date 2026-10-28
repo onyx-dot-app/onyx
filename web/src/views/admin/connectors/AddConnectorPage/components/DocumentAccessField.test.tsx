@@ -1,6 +1,7 @@
-import { render, screen, userEvent, waitFor } from "@tests/setup/test-utils";
+import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import { Formik } from "formik";
 import type { SelectOption } from "@opal/components";
+import { useTierAtLeast, useTierLockedOptions } from "@/lib/tiers/hooks";
 import DocumentAccessField from "@/views/admin/connectors/AddConnectorPage/components/DocumentAccessField";
 import {
   ConfigurableSources,
@@ -28,10 +29,10 @@ jest.mock("@/lib/connectors/components/GroupShareList", () => ({
 }));
 
 const { usePermissionAuthority } = jest.requireMock("@/lib/permissions/hooks");
-const { useTierAtLeast, useTierLockedOptions } =
-  jest.requireMock("@/lib/tiers/hooks");
+const mockedUseTierAtLeast = jest.mocked(useTierAtLeast);
+const mockedUseTierLockedOptions = jest.mocked(useTierLockedOptions);
 const { useTierLockedOptions: actualUseTierLockedOptions } =
-  jest.requireActual("@/lib/tiers/hooks");
+  jest.requireActual<typeof import("@/lib/tiers/hooks")>("@/lib/tiers/hooks");
 
 function renderForm(connector: ConfigurableSources) {
   return render(
@@ -82,8 +83,8 @@ function AccessFormWithMountKey({
 
 describe("DocumentAccessField", () => {
   beforeEach(() => {
-    useTierAtLeast.mockReturnValue(true);
-    useTierLockedOptions.mockImplementation(actualUseTierLockedOptions);
+    mockedUseTierAtLeast.mockReturnValue(true);
+    mockedUseTierLockedOptions.mockImplementation(actualUseTierLockedOptions);
     usePermissionAuthority.mockReturnValue({
       isGlobalHolder: true,
       isScopedManager: false,
@@ -132,10 +133,10 @@ describe("DocumentAccessField", () => {
 
   it("keeps a picked access type when the field remounts", async () => {
     // The options are pickable, as on a Business deployment.
-    useTierLockedOptions.mockReturnValue(
+    mockedUseTierLockedOptions.mockReturnValue(
       (options: SelectOption[]): SelectOption[] => options
     );
-    const user = userEvent.setup();
+    const user = setupUser();
     const { rerender } = render(
       <AccessFormWithMountKey
         connector={ValidSources.Confluence as ConfigurableSources}
@@ -164,8 +165,8 @@ describe("DocumentAccessField", () => {
   });
 
   it("lists the Business options locked under an upgrade link below Business", async () => {
-    useTierAtLeast.mockReturnValue(false);
-    const user = userEvent.setup();
+    mockedUseTierAtLeast.mockReturnValue(false);
+    const user = setupUser();
     renderForm(ValidSources.Confluence as ConfigurableSources);
 
     expect(screen.getByText("Business Plan")).toBeInTheDocument();
