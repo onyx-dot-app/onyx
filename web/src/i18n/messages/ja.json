@@ -15834,6 +15834,12 @@
       }
     },
     "header": {
+      "finishButton": {
+        "label": "セットアップを完了"
+      },
+      "nextButton": {
+        "label": "次へ"
+      },
       "progress": {
         "label": "ステップ {current}/{total}"
       }
@@ -15887,27 +15893,15 @@
     },
     "steps": {
       "complete": {
-        "button": {
-          "label": "セットアップを完了"
-        },
         "title": "準備が完了しました。任意の設定を確認するか、「セットアップを完了」をクリックしてください"
       },
       "llmSetup": {
-        "button": {
-          "label": "次へ"
-        },
         "title": "あと少しです。モデルを接続してチャットを始めましょう。"
       },
       "name": {
-        "button": {
-          "label": "次へ"
-        },
         "title": "少しだけお時間をいただき、セットアップを行いましょう。"
       },
       "welcome": {
-        "button": {
-          "label": "はじめる"
-        },
         "title": "少しだけお時間をいただき、セットアップを行いましょう。"
       }
     }

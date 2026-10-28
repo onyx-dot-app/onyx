@@ -15834,6 +15834,12 @@
       }
     },
     "header": {
+      "finishButton": {
+        "label": "Concluir configuração"
+      },
+      "nextButton": {
+        "label": "Próxima"
+      },
       "progress": {
         "label": "Etapa {current} de {total}"
       }
@@ -15887,27 +15893,15 @@
     },
     "steps": {
       "complete": {
-        "button": {
-          "label": "Concluir configuração"
-        },
         "title": "Tudo pronto: revise as configurações opcionais ou clique em Concluir configuração"
       },
       "llmSetup": {
-        "button": {
-          "label": "Próxima"
-        },
         "title": "Quase lá! Conecte seus modelos para começar a conversar."
       },
       "name": {
-        "button": {
-          "label": "Próxima"
-        },
         "title": "Vamos dedicar um momento para configurar tudo."
       },
       "welcome": {
-        "button": {
-          "label": "Vamos lá"
-        },
         "title": "Vamos dedicar um momento para configurar tudo."
       }
     }

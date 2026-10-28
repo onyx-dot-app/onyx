@@ -15834,6 +15834,12 @@
       }
     },
     "header": {
+      "finishButton": {
+        "label": "Einrichtung abschließen"
+      },
+      "nextButton": {
+        "label": "Weiter"
+      },
       "progress": {
         "label": "Schritt {current} von {total}"
       }
@@ -15887,27 +15893,15 @@
     },
     "steps": {
       "complete": {
-        "button": {
-          "label": "Einrichtung abschließen"
-        },
         "title": "Alles bereit. Prüfen Sie die optionalen Einstellungen oder klicken Sie auf „Einrichtung abschließen“"
       },
       "llmSetup": {
-        "button": {
-          "label": "Weiter"
-        },
         "title": "Fast geschafft! Verbinden Sie Ihre Modelle, um mit dem Chatten zu beginnen."
       },
       "name": {
-        "button": {
-          "label": "Weiter"
-        },
         "title": "Nehmen wir uns einen Moment Zeit für die Einrichtung."
       },
       "welcome": {
-        "button": {
-          "label": "Los geht’s"
-        },
         "title": "Nehmen wir uns einen Moment Zeit für die Einrichtung."
       }
     }

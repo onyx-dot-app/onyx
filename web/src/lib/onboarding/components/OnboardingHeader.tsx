@@ -29,12 +29,13 @@ function OnboardingHeader({
   const tCommon = useTranslations("common");
   const iconPercentage =
     STEP_CONFIG[onboardingState.currentStep].iconPercentage;
-  const stepButtonText = t(
-    STEP_CONFIG[onboardingState.currentStep].buttonTextKey
-  );
   const isWelcomeStep = onboardingState.currentStep === OnboardingStep.Welcome;
   const isCompleteStep =
     onboardingState.currentStep === OnboardingStep.Complete;
+  // The main button reads Next on every step but the last.
+  const stepButtonText = isCompleteStep
+    ? t("header.finishButton.label")
+    : t("header.nextButton.label");
   const hasPreviousStep =
     STEP_NAVIGATION[onboardingState.currentStep].prev !== undefined;
 

@@ -15834,6 +15834,12 @@
       }
     },
     "header": {
+      "finishButton": {
+        "label": "Finish Setup"
+      },
+      "nextButton": {
+        "label": "Next"
+      },
       "progress": {
         "label": "Step {current} of {total}"
       }
@@ -15887,27 +15893,15 @@
     },
     "steps": {
       "complete": {
-        "button": {
-          "label": "Finish Setup"
-        },
         "title": "You're all set, review the optional settings or click Finish Setup"
       },
       "llmSetup": {
-        "button": {
-          "label": "Next"
-        },
         "title": "Almost there! Connect your models to start chatting."
       },
       "name": {
-        "button": {
-          "label": "Next"
-        },
         "title": "Let's take a moment to get you set up."
       },
       "welcome": {
-        "button": {
-          "label": "Let's Go"
-        },
         "title": "Let's take a moment to get you set up."
       }
     }

@@ -9,7 +9,6 @@ import type { IconFunctionComponent } from "@opal/types";
 type StepConfig = {
   index: number;
   titleKey: string;
-  buttonTextKey: string;
   iconPercentage: number;
 };
 
@@ -17,25 +16,21 @@ export const STEP_CONFIG = {
   [OnboardingStep.Welcome]: {
     index: 0,
     titleKey: "steps.welcome.title",
-    buttonTextKey: "steps.welcome.button.label",
     iconPercentage: 10,
   },
   [OnboardingStep.Name]: {
     index: 1,
     titleKey: "steps.name.title",
-    buttonTextKey: "steps.name.button.label",
     iconPercentage: 40,
   },
   [OnboardingStep.LlmSetup]: {
     index: 2,
     titleKey: "steps.llmSetup.title",
-    buttonTextKey: "steps.llmSetup.button.label",
     iconPercentage: 70,
   },
   [OnboardingStep.Complete]: {
     index: 3,
     titleKey: "steps.complete.title",
-    buttonTextKey: "steps.complete.button.label",
     iconPercentage: 100,
   },
 } as const satisfies Record<OnboardingStep, StepConfig>;
