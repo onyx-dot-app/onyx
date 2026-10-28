@@ -32,6 +32,7 @@ def log_dir(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(logger_module, "LOG_TO_FILE", True)
     monkeypatch.setattr(logger_module, "DEV_LOGGING_ENABLED", True)
+    monkeypatch.setattr(logger_module, "_truncated_log_files", set())
     monkeypatch.setattr(logger_module, "is_running_in_container", lambda: False)
     monkeypatch.delenv("LOG_LEVEL", raising=False)
     monkeypatch.setattr(sys, "argv", ["celery", "-A", "app", "worker"])
@@ -138,3 +139,18 @@ def test_task_prefix_added_once_per_handler(
         assert output.count("[docprocessing_task(abc)]") == 1
         assert "batch 7 done" in output
     assert record.msg == "batch %s done"
+
+
+def test_dev_log_files_truncated_once_per_process(log_dir: Path) -> None:
+    log_dir.mkdir()
+    info_file = log_dir / f"{logger_module.LOG_FILE_NAME}_info.log"
+    info_file.write_text("stale-line\n")
+
+    _setup_celery_logging()
+    logging.getLogger("celery.app.trace").error("after-first-setup-line")
+    # The second setup adds file handlers again; it must not wipe this line.
+    _setup_celery_logging()
+
+    content = _info_log(log_dir)
+    assert "stale-line" not in content
+    assert "after-first-setup-line" in content

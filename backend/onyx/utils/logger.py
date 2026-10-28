@@ -389,6 +389,8 @@ def get_standard_formatter() -> logging.Formatter:
 # file handlers skip it when the record propagates up.
 _FILE_LOGGED_RECORD_ATTR = "onyx_file_logged"
 
+_truncated_log_files: set[str] = set()
+
 
 class _MarkFileLoggedFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
@@ -429,12 +431,18 @@ def add_file_handlers(
             if not os.path.exists(log_dir):
                 os.makedirs(log_dir, exist_ok=True)
 
-            # Truncate log file if DEV_LOGGING_ENABLED (for clean dev experience)
-            if DEV_LOGGING_ENABLED and os.path.exists(file_name):
+            # Truncate log file if DEV_LOGGING_ENABLED (for clean dev experience).
+            # Once per process: later calls must keep lines already written.
+            if (
+                DEV_LOGGING_ENABLED
+                and file_name not in _truncated_log_files
+                and os.path.exists(file_name)
+            ):
                 try:
                     open(file_name, "w").close()  # Truncate the file
                 except Exception:
                     pass  # Ignore errors, just proceed with normal logging
+            _truncated_log_files.add(file_name)
 
             file_handler = RotatingFileHandler(
                 file_name,
