@@ -3179,6 +3179,16 @@ class IndexAttemptError(Base):
     # This is the reverse side of the relationship
     index_attempt = relationship("IndexAttempt", back_populates="error_rows")
 
+    # Each docprocessing batch resolves its documents' open errors.
+    __table_args__ = (
+        Index(
+            "ix_index_attempt_errors_unresolved_cc_pair_document",
+            "connector_credential_pair_id",
+            "document_id",
+            postgresql_where=text("NOT is_resolved"),
+        ),
+    )
+
 
 class CCPairRunResolution(Base):
     """A failed run, or a run with errors, an admin marked resolved. It keeps

@@ -459,7 +459,9 @@ writer of the attempt's aggregate counters:
   `SELECT ... FOR UPDATE` on the `IndexAttempt` row. The row lock alone
   serializes concurrent batches, and Postgres releases it when a worker dies.
   After the update, `resolve_index_attempt_errors_for_documents` resolves the
-  batch's open document errors with one bounded `UPDATE`, outside any lock.
+  batch's open document errors with one bounded `UPDATE`, outside any lock. The
+  partial index `ix_index_attempt_errors_unresolved_cc_pair_document` keeps that
+  `UPDATE` independent of the pair's error history.
 - `check_cancellation_requested` / `request_cancellation__no_commit` implement admin-triggered
   cancellation without Redis fencing: a boolean column on `IndexAttempt`, polled by
   both docfetching (`_check_connector_and_attempt_status`) and
