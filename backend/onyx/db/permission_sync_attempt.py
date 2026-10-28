@@ -32,8 +32,7 @@ _SYNC_BACKOFF_LOOKBACK = 8
 
 _FAILURE_STATUSES = (PermissionSyncStatus.FAILED, PermissionSyncStatus.CANCELED)
 _OPEN_STATUSES = (PermissionSyncStatus.NOT_STARTED, PermissionSyncStatus.IN_PROGRESS)
-# The terminal statuses that say how the source did. CANCELED is left out:
-# something outside the sync, such as a connector deletion, stopped it.
+# The terminal statuses the retry backoff reads; see _get_sync_retry_after.
 _SYNC_OUTCOME_STATUSES = (
     PermissionSyncStatus.SUCCESS,
     PermissionSyncStatus.COMPLETED_WITH_ERRORS,
@@ -604,34 +603,6 @@ def get_external_group_sync_attempt(
     return db_session.scalars(stmt).first()
 
 
-def get_recent_external_group_sync_attempts_for_cc_pair(
-    cc_pair_id: int | None,
-    limit: int,
-    db_session: Session,
-) -> list[ExternalGroupPermissionSyncAttempt]:
-    """Get recent external group sync attempts for a cc pair, most recent first.
-    If cc_pair_id is None, gets global group sync attempts."""
-    stmt = select(ExternalGroupPermissionSyncAttempt)
-
-    if cc_pair_id is not None:
-        stmt = stmt.where(
-            ExternalGroupPermissionSyncAttempt.connector_credential_pair_id
-            == cc_pair_id
-        )
-    else:
-        stmt = stmt.where(
-            ExternalGroupPermissionSyncAttempt.connector_credential_pair_id.is_(None)
-        )
-
-    return list(
-        db_session.execute(
-            stmt.order_by(ExternalGroupPermissionSyncAttempt.time_created.desc()).limit(
-                limit
-            )
-        ).scalars()
-    )
-
-
 def source_group_sync_is_cc_pair_agnostic(source: DocumentSource) -> bool:
     """Whether the source's group sync covers all its pairs in one run."""
     is_agnostic: bool = fetch_ee_implementation_or_noop(
@@ -802,10 +773,11 @@ def _get_sync_retry_after(
     attempts. None when the newest attempt that counts did not fail. A manual
     sync ignores this, and its success clears it.
 
-    Two kinds of attempt do not count. A CANCELED attempt neither adds a
-    failure nor ends a run of them: something outside the sync stopped it, so
-    it says nothing about the source. An attempt created before the pair
-    began to wait for its first permission sync (perm_sync_pending_since) is
+    A CANCELED attempt neither adds a failure nor ends a run of them: a
+    cancel comes from outside the sync, so it says nothing about the source.
+    A FAILED attempt counts whatever ended it, including a lost task, an
+    expired lease, or the stop signal. Attempts created before the pair began
+    to wait for its first permission sync (perm_sync_pending_since) are
     ignored, so failures from before the access change do not delay that
     sync."""
     outcomes = (

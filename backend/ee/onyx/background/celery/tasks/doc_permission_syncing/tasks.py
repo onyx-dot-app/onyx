@@ -188,7 +188,8 @@ def fail_lost_queued_doc_permission_sync_attempts(app: Celery) -> None:
     lost task (e.g. a Redis restart without persistence) does not hold the
     pair's lock until the task would have expired. A task that a worker has
     already taken also looks lost here; its claim then fails and the beat
-    dispatches the pair again, so the check errs only toward a redispatch."""
+    dispatches the pair again once the retry backoff for that failure ends,
+    so the check errs only toward a later redispatch."""
     with get_session_with_current_tenant() as db_session:
         candidates = get_not_started_doc_permission_sync_attempts_older_than(
             db_session, timedelta(seconds=PERMISSION_SYNC_LOST_TASK_GRACE)
