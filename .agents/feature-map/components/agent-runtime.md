@@ -98,7 +98,9 @@ Production chat does not call this module yet.
 - Model events recheck cancellation under the execution lock before changing recorded state.
 - Result readiness, saved completion, suspension, and idle state have distinct meanings.
 - Recorded partial output survives even when replay excludes incomplete exchanges or thinking without replayable provider blocks.
-- Tool results and completion callbacks follow the original model-call order.
+- Model history retains original tool-call order. Completion callbacks and events follow result readiness.
+  A slow call does not delay another call's completion. Callbacks remain serial on the execution thread.
+  Saved progress identifies finalized callbacks by call ID and rejects old counter-based snapshots.
 - Run owns recorded mutations; tool scheduling receives explicit borrowed step data.
 - Collaborators lock borrowed step data with execution_lock and use recording methods for changes.
 - Step callback inputs and public snapshots do not share mutable recorded state.

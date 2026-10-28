@@ -94,8 +94,8 @@ model can inspect. Cancellation propagates. Errors in coordination or tool hooks
 can fail the run.
 
 Tools run in parallel unless a called tool declares `SEQUENTIAL`; then the entire
-step runs sequentially. Results and final callbacks follow model-call order,
-regardless of worker completion order. A tool can provide `merge_arguments` to
+step runs sequentially. Model history retains tool-call order. Final callbacks run as results become ready,
+serially on the execution thread. A slow tool does not delay another tool's completion event. A tool can provide `merge_arguments` to
 combine compatible calls. Each original call retains its identity and result.
 
 | Callback | Responsibility |
