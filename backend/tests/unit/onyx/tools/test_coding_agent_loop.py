@@ -2,7 +2,7 @@
 
 import json
 import queue
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from typing import Any
 from unittest.mock import patch
@@ -20,7 +20,12 @@ from onyx.deep_research.tool_definitions import (
     THINK_TOOL_RESPONSE_MESSAGE,
 )
 from onyx.llm.interfaces import LLMConfig, LLMUserIdentity
-from onyx.llm.model_request import ChatCompletionMessage, SystemMessage, ToolMessage
+from onyx.llm.model_request import (
+    ChatCompletionMessage,
+    SerializedToolDefinition,
+    SystemMessage,
+    ToolMessage,
+)
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,
@@ -124,7 +129,7 @@ class ScriptedLLM(LitellmLLM):
     def stream_raw(
         self,
         prompt: list[ChatCompletionMessage],
-        tools: list[dict] | None = None,  # noqa: ARG002
+        tools: Sequence[SerializedToolDefinition] | None = None,  # noqa: ARG002
         tool_choice: ToolChoice | None = None,  # noqa: ARG002
         structured_response_format: dict | None = None,  # noqa: ARG002
         max_tokens: int | None = None,  # noqa: ARG002

@@ -1,6 +1,6 @@
 import json
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from functools import partial
 from typing import Any, Literal
 
@@ -47,7 +47,7 @@ from onyx.llm.constants import LlmProviderNames
 from onyx.llm.exceptions import ClassifiedLLMError
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.model_capabilities import is_true_openai_model
-from onyx.llm.model_request import serialize_tools
+from onyx.llm.model_request import SerializedToolDefinition, serialize_tools
 from onyx.llm.models import ReasoningEffort, ToolChoiceOptions
 from onyx.llm.token_budget import resolve_token_budget
 from onyx.llm.tool_parsing import looks_like_xml_tool_call_payload
@@ -212,7 +212,7 @@ def _try_fallback_tool_extraction(
     llm_step_result: LlmStepResult,
     tool_choice: ToolChoiceOptions,
     fallback_extraction_attempted: bool,
-    tool_defs: list[dict],
+    tool_defs: Sequence[SerializedToolDefinition],
     turn_index: int,
 ) -> tuple[LlmStepResult, bool]:
     """Attempt to extract tool calls from response text as a fallback.

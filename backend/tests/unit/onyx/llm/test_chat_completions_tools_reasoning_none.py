@@ -9,7 +9,7 @@ from unittest.mock import patch
 from litellm.exceptions import BadRequestError
 
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.model_request import UserMessage
+from onyx.llm.model_request import SerializedToolDefinition, UserMessage
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.well_known_providers.constants import (
@@ -18,7 +18,7 @@ from onyx.llm.well_known_providers.constants import (
     BIFROST_API_MODE_RESPONSES,
 )
 
-_TOOLS: list[dict[str, Any]] = [
+_TOOLS: list[SerializedToolDefinition] = [
     {
         "type": "function",
         "function": {
@@ -53,7 +53,7 @@ def _azure_llm(model_name: str) -> LitellmLLM:
 
 def _sent_kwargs(
     llm: LitellmLLM,
-    tools: list[dict] | None,
+    tools: list[SerializedToolDefinition] | None,
     effort: ReasoningEffort = ReasoningEffort.AUTO,
 ) -> dict[str, Any]:
     with patch("onyx.llm.litellm_singleton.litellm.completion") as completion:

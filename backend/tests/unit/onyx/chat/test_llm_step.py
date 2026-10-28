@@ -18,7 +18,12 @@ from onyx.configs.constants import MessageType
 from onyx.file_store.models import ChatFileType, ChatLoadedFile
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLMConfig
-from onyx.llm.model_request import AssistantMessage, ToolMessage, UserMessage
+from onyx.llm.model_request import (
+    AssistantMessage,
+    SerializedToolDefinition,
+    ToolMessage,
+    UserMessage,
+)
 from onyx.llm.models import ImageContentPart, TextContentPart, ToolChoiceOptions
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.tool_parsing import XmlToolCallContentFilter, _resolve_tool_arguments
@@ -168,7 +173,7 @@ class TestParseToolArgsToDict:
 
 
 class TestExtractToolCallsFromResponseText:
-    def _tool_defs(self) -> list[dict]:
+    def _tool_defs(self) -> list[SerializedToolDefinition]:
         return [
             {
                 "type": "function",

@@ -32,6 +32,7 @@ from onyx.llm.model_request import (
     AssistantMessage,
     ChatCompletionMessage,
     RequestFunctionCall,
+    SerializedToolDefinition,
     SystemMessage,
     ToolCall,
     ToolMessage,
@@ -305,7 +306,7 @@ def _extract_tool_call_kickoffs(
 
 def extract_tool_calls_from_response_text(
     response_text: str | None,
-    tool_definitions: list[dict],
+    tool_definitions: Sequence[SerializedToolDefinition],
     placement: Placement,
 ) -> list[ToolCallKickoff]:
     """Recover tool calls that the model wrote as text instead of native calls.
@@ -792,7 +793,7 @@ def _delta_has_action(delta: Delta) -> bool:
 
 def run_llm_step_pkt_generator(
     history: list[ChatMessageSimple],
-    tool_definitions: list[dict],
+    tool_definitions: Sequence[SerializedToolDefinition],
     tool_choice: ToolChoiceOptions,
     llm: LLM,
     placement: Placement,
@@ -1313,7 +1314,7 @@ def run_llm_step_pkt_generator(
 def run_llm_step(
     emitter: Emitter,
     history: list[ChatMessageSimple],
-    tool_definitions: list[dict],
+    tool_definitions: Sequence[SerializedToolDefinition],
     tool_choice: ToolChoiceOptions,
     llm: LLM,
     placement: Placement,

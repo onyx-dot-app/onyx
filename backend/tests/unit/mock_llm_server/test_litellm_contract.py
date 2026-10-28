@@ -10,7 +10,12 @@ import httpx
 import pytest
 
 from onyx.chat import llm_step
-from onyx.llm.model_request import ChatCompletionMessage, SystemMessage, UserMessage
+from onyx.llm.model_request import (
+    ChatCompletionMessage,
+    SerializedToolDefinition,
+    SystemMessage,
+    UserMessage,
+)
 from onyx.llm.model_response import ModelResponseStream
 from onyx.llm.models import ToolChoiceOptions
 from onyx.llm.multi_llm import LitellmLLM
@@ -30,7 +35,7 @@ PROMPT: list[ChatCompletionMessage] = [
 ]
 
 
-def _tool(name: str) -> dict[str, Any]:
+def _tool(name: str) -> SerializedToolDefinition:
     return {
         "type": "function",
         "function": {
@@ -47,7 +52,7 @@ def _tool(name: str) -> dict[str, Any]:
     }
 
 
-TOOLS = [_tool("internal_search"), _tool("web_search")]
+TOOLS: list[SerializedToolDefinition] = [_tool("internal_search"), _tool("web_search")]
 
 # Tool-free requests only reach conversations that allow them.
 TOOL_FREE = RequestConditions(has_tools=False)

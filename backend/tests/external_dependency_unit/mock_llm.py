@@ -3,7 +3,7 @@ from __future__ import annotations
 import abc
 import threading
 import time
-from collections.abc import Generator, Iterator
+from collections.abc import Generator, Iterator, Sequence
 from contextlib import contextmanager
 from enum import Enum
 from typing import Any, Generic, Literal, TypeVar, cast
@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from onyx.configs.chat_configs import LLM_INVOKE_TIMEOUT_S, LLM_SOCKET_READ_TIMEOUT
 from onyx.llm.interfaces import LLMConfig, LLMUserIdentity
-from onyx.llm.model_request import ChatCompletionMessage
+from onyx.llm.model_request import ChatCompletionMessage, SerializedToolDefinition
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,
@@ -305,7 +305,7 @@ class MockLLM(LitellmLLM, MockLLMController):
     def invoke_raw(
         self,
         prompt: list[ChatCompletionMessage],
-        tools: list[dict] | None = None,
+        tools: Sequence[SerializedToolDefinition] | None = None,
         tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
         max_tokens: int | None = None,
@@ -319,7 +319,7 @@ class MockLLM(LitellmLLM, MockLLMController):
     def stream_raw(
         self,
         prompt: list[ChatCompletionMessage],  # noqa: ARG002
-        tools: list[dict] | None = None,  # noqa: ARG002
+        tools: Sequence[SerializedToolDefinition] | None = None,  # noqa: ARG002
         tool_choice: ToolChoice | None = None,  # noqa: ARG002
         structured_response_format: dict | None = None,  # noqa: ARG002
         max_tokens: int | None = None,  # noqa: ARG002
