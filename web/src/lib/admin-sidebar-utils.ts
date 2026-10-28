@@ -23,6 +23,7 @@ export type AdminNavItemId =
   | "voice"
   | "codeInterpreter"
   | "chatPreferences"
+  | "llmGateway"
   | "craftAccess"
   | "craftApps"
   | "craftPreferences"
@@ -79,6 +80,7 @@ export const NAV_ITEM_IDS: Record<
   VOICE: "voice",
   CODE_INTERPRETER: "codeInterpreter",
   CHAT_PREFERENCES: "chatPreferences",
+  LLM_GATEWAY: "llmGateway",
   CRAFT_ACCESS: "craftAccess",
   CRAFT_APPS: "craftApps",
   CRAFT_PREFERENCES: "craftPreferences",
