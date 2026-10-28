@@ -115,7 +115,8 @@ indexing them by following the shared convention:
 #### Docs Changes
 
 Create the new connector page (with guiding images!) with how to get the connector credentials and how to set up the
-connector in Onyx. Then create a Pull Request in [https://github.com/onyx-dot-app/documentation](https://github.com/onyx-dot-app/documentation).
+connector in Onyx. Add it under `documentation/admins/connectors/official/` in the same PR as the connector, list it in
+`documentation/docs.json`, and map its logo in `documentation/scripts/generated_assets.json`. See `documentation/AGENTS.md`.
 
 ### Before opening PR
 

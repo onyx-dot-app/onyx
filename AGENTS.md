@@ -64,6 +64,8 @@ there:
 - `web/` — Next.js frontend. Standards (also cover `desktop/`, the Tauri shell): `web/AGENTS.md`.
 - `mobile/` — React Native + Expo app. Standards: `mobile/AGENTS.md`. Mobile differs from web on
   several points (no DOM, NativeWind, expo-router), so do **not** assume the web rules apply there.
+- `documentation/` — customer docs (Mintlify, docs.onyx.app). Standards: `documentation/AGENTS.md`. Update docs in
+  the same PR as the change they describe. Production docs follow the latest stable release, not `main`.
 
 Explore the tree with `ls` rather than relying on docs for the full package list.
 
