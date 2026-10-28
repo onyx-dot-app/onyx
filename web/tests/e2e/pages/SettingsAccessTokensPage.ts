@@ -30,6 +30,12 @@ export class SettingsAccessTokensPage {
       .getByPlaceholder("Name your token", { exact: true })
       .fill(name);
     await expect(
+      this.page.getByText(
+        "Includes your permissions at creation. New permissions require a new token.",
+        { exact: true }
+      )
+    ).toBeVisible();
+    await expect(
       this.page.getByRole("combobox", {
         name: "Select permissions",
         exact: true,

@@ -19,28 +19,23 @@ def is_craft_gateway_request(request: Request, user: User) -> bool:
 
 
 def gateway_request_flow(request: Request, user: User) -> LLMFlow | None:
-    """A CRAFT_SANDBOX token must stay on the Craft policy, craft-enabled
-    requirement included; only a directly granted USE_LLM_GATEWAY skips it.
-    Future caller-declared sources should become additional LLMFlow return
-    values here, not booleans."""
+    """Apply Craft policy to internal tokens and the stored cap to user tokens."""
     state = request.scope.get("state", {})
     token_scopes: list[Permission] | None = state.get("token_scopes")
-    if token_scopes is None:
-        return None
     credential: UsageCredentialIdentity | None = state.get("usage_credential")
     if credential is None:
         return None
-    raw_scopes = {s.value for s in token_scopes}
     if credential.credential_type is UsageCredentialType.CRAFT_PAT:
-        if Permission.CRAFT_SANDBOX.value in raw_scopes and is_craft_gateway_request(
-            request, user
+        if (
+            token_scopes is not None
+            and Permission.CRAFT_SANDBOX in token_scopes
+            and is_craft_gateway_request(request, user)
         ):
             return LLMFlow.CRAFT_LLM_GENERATION
         return None
     cap = get_token_permission_cap(request)
     if (
         credential.credential_type is UsageCredentialType.PAT
-        and Permission.USE_LLM_GATEWAY in token_scopes
         and cap is not None
         and Permission.USE_LLM_GATEWAY in cap
     ):

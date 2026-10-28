@@ -85,12 +85,12 @@ async def test_full_manager_cap_preserves_scoped_authority(admin: User) -> None:
 @pytest.mark.parametrize(
     "scopes", [None, [Permission.BASIC_ACCESS], [Permission.FULL_ADMIN_PANEL_ACCESS]]
 )
-def test_gateway_requires_explicit_selection(
+def test_new_broad_token_includes_gateway_permission(
     admin: User, scopes: list[Permission] | None
 ) -> None:
     cap = materialize_pat_permission_cap(admin, scopes)
     assert Permission.READ_CHAT in cap
-    assert Permission.USE_LLM_GATEWAY not in cap
+    assert Permission.USE_LLM_GATEWAY in cap
     assert Permission.CRAFT_SANDBOX not in cap
     assert materialize_pat_permission_cap(
         admin, [Permission.USE_LLM_GATEWAY]
@@ -148,17 +148,43 @@ async def test_capped_callers_cannot_issue_uncapped_credentials(
     assert error.value.error_code is OnyxErrorCode.INSUFFICIENT_PERMISSIONS
 
 
-def test_external_gateway_never_expands_basic_or_admin_scopes(admin: User) -> None:
-    for scope in (Permission.BASIC_ACCESS, Permission.FULL_ADMIN_PANEL_ACCESS):
-        request = _token_request([scope], frozenset({Permission.USE_LLM_GATEWAY}))
-        request.state.usage_credential = UsageCredentialIdentity(
-            UsageCredentialType.PAT
-        )
-        assert gateway_request_flow(request, admin) is None
-    request = _token_request(
-        [Permission.USE_LLM_GATEWAY], frozenset({Permission.USE_LLM_GATEWAY})
-    )
+@pytest.mark.parametrize(
+    "scopes", [None, [Permission.BASIC_ACCESS], [Permission.FULL_ADMIN_PANEL_ACCESS]]
+)
+def test_gateway_uses_stored_cap_without_expanding_raw_scopes(
+    admin: User, scopes: list[Permission] | None
+) -> None:
+    request = _token_request(scopes, frozenset({Permission.READ_CHAT}))
     request.state.usage_credential = UsageCredentialIdentity(UsageCredentialType.PAT)
+    assert gateway_request_flow(request, admin) is None
+    request.state.token_permission_cap = frozenset({Permission.USE_LLM_GATEWAY})
+    assert gateway_request_flow(request, admin) is LLMFlow.LLM_GATEWAY
+
+
+def test_new_chat_token_excludes_gateway_without_a_gateway_grant(admin: User) -> None:
+    assert materialize_pat_permission_cap(admin, [Permission.WRITE_CHAT]) == frozenset(
+        {Permission.WRITE_CHAT, Permission.READ_CHAT}
+    )
+    admin.effective_permissions = [Permission.READ_CHAT.value]
+    cap = materialize_pat_permission_cap(admin, None)
+    assert Permission.READ_CHAT in cap
+    assert Permission.USE_LLM_GATEWAY not in cap
+
+
+@pytest.mark.asyncio
+async def test_full_token_does_not_gain_gateway_after_owner_grant(admin: User) -> None:
+    admin.effective_permissions = [Permission.READ_CHAT.value]
+    request = _token_request(None, materialize_pat_permission_cap(admin, None))
+    request.state.usage_credential = UsageCredentialIdentity(UsageCredentialType.PAT)
+
+    admin.effective_permissions = [Permission.BASIC_ACCESS.value]
+    with pytest.raises(OnyxError) as error:
+        await require_permission(Permission.USE_LLM_GATEWAY)(request, admin)
+    assert error.value.error_code is OnyxErrorCode.INSUFFICIENT_PERMISSIONS
+    assert gateway_request_flow(request, admin) is None
+
+    request.state.token_permission_cap = materialize_pat_permission_cap(admin, None)
+    assert await require_permission(Permission.USE_LLM_GATEWAY)(request, admin) is admin
     assert gateway_request_flow(request, admin) is LLMFlow.LLM_GATEWAY
 
 

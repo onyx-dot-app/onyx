@@ -4,7 +4,9 @@ from collections.abc import Iterator
 
 import pytest
 
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import Permission
+from onyx.db.models import PersonalAccessToken
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.pat import PATManager
@@ -35,6 +37,10 @@ def test_full_pat_does_not_gain_permissions_after_owner_promotion(
 ) -> None:
     original = PATManager.create("before-promotion", None, token_owner)
     assert original.token is not None
+    with get_session_with_current_tenant() as db_session:
+        stored = db_session.get(PersonalAccessToken, original.id)
+        assert stored is not None
+        assert Permission.USE_LLM_GATEWAY.value in stored.permission_cap
     original_headers = PATManager.get_auth_headers(original.token)
     before = client.get(
         f"{API_SERVER_URL}/manage/users/counts", headers=original_headers, timeout=60

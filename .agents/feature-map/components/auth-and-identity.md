@@ -578,10 +578,13 @@ is marked as such.
    `db/pat.py:create_pat` expands selections once and intersects them with the
    owner's authority at creation. `require_permission` checks exact membership
    in `permission_cap` and the owner's live authority. Neither a new permission
-   nor a changed implication expands an existing token. External Gateway needs
-   an explicit `use:llm_gateway` selection. A child PAT cannot exceed its parent.
+   nor a changed implication expands an existing token. Full-access tokens include
+   Gateway when the owner holds it at creation. A child PAT cannot exceed its parent.
    The migration freezes legacy rules, handles SQL NULL and JSON null, and
-   preserves scoped-manager and Community Edition access. Raw selections remain
+   preserves scoped-manager and Community Edition access. Legacy USER caps keep
+   Gateway only for an original Gateway selection. Old Basic/admin-scoped
+   tokens lose implicit Gateway access and need reissue. New full-access tokens
+   follow the owner's current grants. Raw selections remain
    separate. `_scoped_pat_permitted_on_route` rejects limited tokens on routes
    without `require_permission` or `scope_exempt()`. Full-token compatibility on
    existing unguarded routes remains. Inline user-permission

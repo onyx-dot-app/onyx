@@ -16128,7 +16128,7 @@
           "title": "token 이름"
         },
         "permissions": {
-          "fullAccessNote": "생성 시점의 권한을 포함하며 LLM Gateway는 제외됩니다. 새 권한에는 새 토큰이 필요합니다.",
+          "fullAccessNote": "생성 시점의 권한을 포함합니다. 새 권한에는 새 토큰이 필요합니다.",
           "fullAccessOption": "전체 접근",
           "limitedAccessNote": "이 token을 특정 기능으로 제한합니다.",
           "limitedAccessOption": "제한 접근",

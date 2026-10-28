@@ -25,8 +25,9 @@ covers only what is specific to exposing them as an external API.
 
 ## 1. What the user experiences
 
-A developer or an admin mints a Personal Access Token (PAT) scoped to
-`use:llm_gateway`, or Craft mints one automatically for a sandbox. They point
+A developer or an admin mints a Personal Access Token (PAT) whose stored cap
+contains `use:llm_gateway`. Full-access tokens include that permission when
+the owner holds it at creation. Craft mints its internal sandbox token separately. They point
 an OpenAI- or Anthropic-compatible client (the OpenAI SDK, `codex`,
 `claude -p`, opencode) at `https://<onyx-host>/gateway`, using the PAT as the
 bearer token. The client lists models, sends a chat/response/message request,
@@ -84,11 +85,12 @@ gates, plus the workspace setting, exist.
 `min_tier=LLM_GATEWAY_MIN_TIER` (Business): below that tier `GET /user/pats/scopes`
 omits it and minting it fails with `FEATURE_NOT_AVAILABLE`. It is also implied
 by `Permission.BASIC_ACCESS` and by `Permission.CRAFT_SANDBOX`
-(`backend/onyx/auth/permissions.py`, `IMPLIED_PERMISSIONS`). GATE 1 therefore
-accepts users whose permissions include `BASIC_ACCESS`, and Craft PATs with the
-explicit `CRAFT_SANDBOX` scope. GATE 2 rejects an unscoped PAT, because
-`token_scopes` is `None`. A user needs a USER PAT with the literal `USE_LLM_GATEWAY` selection and that permission in its stored cap. See §4.2 and [[auth-and-identity]] for what `PAT scope`
-means mechanically.
+(`backend/onyx/auth/permissions.py`, `IMPLIED_PERMISSIONS`). New full-access
+PATs snapshot that grant. At request time, both the stored cap and live owner
+must grant Gateway. Legacy USER caps retain Gateway only for an original Gateway selection.
+Legacy Basic/admin-scoped tokens lose implicit Gateway access and need reissue.
+New full-access tokens follow current owner grants. See §4.2 and
+[[auth-and-identity]] for the token scope rules.
 
 ### Configuration (`backend/onyx/server/gateway/configs.py`)
 
@@ -183,17 +185,18 @@ per-Craft-sandbox enablement GATE 2 already checks; a Craft sandbox's
 
 **GATE 1** (`require_permission(Permission.USE_LLM_GATEWAY)`, every endpoint
 in `api.py`) requires live user authority and literal membership in the PAT's
-stored `permission_cap`. Issuance expands permissions once. USER caps omit
-Gateway unless the original selections contain `use:llm_gateway` literally.
-New implication rules cannot expand an existing token.
+stored `permission_cap`. Issuance expands permissions once. New full-access
+tokens include Gateway when the owner holds it. Narrow selections grant only
+their resolved permissions. New implication rules cannot expand an existing token.
 
 **GATE 2** (`craft_gateway.py:gateway_request_flow`) selects the credential policy.
-Session and service API-key requests have no raw PAT selections and are rejected.
+Session and service API-key credentials are rejected regardless of user authority.
 A CRAFT_PAT credential must carry the `craft_sandbox` marker, hold Gateway in its
 stored cap, and pass `is_craft_enabled_for_user`. It uses `CRAFT_LLM_GENERATION`.
-A USER PAT must literally select `use:llm_gateway` and hold it in its stored cap.
-It uses `LLM_GATEWAY`. Basic and admin bundles never select external Gateway
-implicitly. A USER token cannot impersonate Craft through a raw scope marker.
+A USER PAT must hold `use:llm_gateway` in its stored cap, including when its
+original selection was full access. It uses `LLM_GATEWAY`. The request path
+never expands raw scope labels. A USER token cannot impersonate Craft through
+a raw scope marker.
 
 This asymmetry matters because a Craft sandbox's PAT is minted with exactly
 `scopes=[Permission.CRAFT_SANDBOX]`
@@ -402,12 +405,12 @@ records the span before signalling `_STREAM_END`.
    `provider.api_key` on every call (§4.5). A change that starts copying any
    inbound header wholesale toward the provider, or that echoes an upstream
    response header back to the caller unfiltered, breaks this.
-2. **A token without a gateway-capable scope must be rejected, and session
+2. **A token without a gateway-capable cap must be rejected, and session
    or API-key auth must never satisfy the gateway.**
-   `gateway_request_flow` returns `None` whenever
-   `request.state.token_scopes` is `None`, which is exactly the case for
-   cookie-session and API-key requests (`craft_gateway.py`, §4.2). Do not add
-   a fallback that infers a flow from the user object alone.
+   `gateway_request_flow` checks the credential type and stored cap
+   (`craft_gateway.py`, §4.2). Full-access USER PATs can carry Gateway in
+   their cap with `scopes=None`. Cookie sessions and service API keys cannot
+   become Gateway credentials through their owner's authority alone.
 3. **A `CRAFT_SANDBOX` token must stay bound to the Craft policy.** It may
    only produce `LLMFlow.CRAFT_LLM_GENERATION`, and only when
    `is_craft_enabled_for_user` also passes; it must never fall through to the
@@ -550,9 +553,9 @@ See `backend/AGENTS.md` for required env and secrets.
 ## 9. Footguns
 
 - **User authority and token scope are separate.** Basic still implies Gateway
-  for live user permission resolution. USER PAT issuance and Gateway flow
-  selection require the literal Gateway scope. Preserve the stored cap and
-  credential type checks when adding a Gateway endpoint.
+  for live user permission resolution and new full-access snapshots. Gateway
+  requests check the stored cap without expanding scope labels. Preserve the
+  cap and credential type checks when adding a Gateway endpoint.
 - **The cost cap needs the resolved provider, so it runs after model
   resolution.** A new generating endpoint must resolve through
   `_resolve_metered_gateway_model`, not `resolve_gateway_model`, or it skips

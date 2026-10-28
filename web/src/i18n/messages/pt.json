@@ -16128,7 +16128,7 @@
           "title": "Nome do token"
         },
         "permissions": {
-          "fullAccessNote": "Inclui suas permissões no momento da criação, exceto LLM Gateway. Novas permissões exigem um novo token.",
+          "fullAccessNote": "Inclui suas permissões no momento da criação. Novas permissões exigem um novo token.",
           "fullAccessOption": "Acesso completo",
           "limitedAccessNote": "Limite este token a recursos específicos.",
           "limitedAccessOption": "Acesso limitado",

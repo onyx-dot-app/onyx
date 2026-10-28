@@ -26,8 +26,6 @@ class PatScopeOption(BaseModel):
     @property
     def implies(self) -> list[Permission]:
         covered = resolve_effective_permissions({self.scope.value})
-        if self.scope is not Permission.USE_LLM_GATEWAY:
-            covered.discard(Permission.USE_LLM_GATEWAY.value)
         return sorted(Permission(v) for v in covered if v != self.scope.value)
 
 
@@ -75,7 +73,7 @@ class CreateTokenRequest(BaseModel):
     )
     scopes: list[Permission] | None = Field(
         None,
-        description="API-surface scopes to select. null snapshots current user permissions, excluding the LLM gateway.",
+        description="API-surface scopes to select. null snapshots current user permissions.",
     )
 
 

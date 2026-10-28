@@ -129,7 +129,7 @@ def create_pat(
 ) -> tuple[PersonalAccessToken, str]:
     """Create new PAT. Returns (db_record, raw_token).
 
-    None snapshots the owner's current permissions, excluding external Gateway.
+    None snapshots the owner's current permissions.
     An authenticating parent can only reduce the stored authorization ceiling.
 
     Raises ValueError if user is inactive or not found.

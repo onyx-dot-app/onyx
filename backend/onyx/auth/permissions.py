@@ -353,8 +353,6 @@ def materialize_pat_permission_cap(
             permission for permission in permissions if permission.value in covered
         }
     permissions.discard(Permission.CRAFT_SANDBOX)
-    if scopes is None or Permission.USE_LLM_GATEWAY not in scopes:
-        permissions.discard(Permission.USE_LLM_GATEWAY)
     return frozenset(permissions)
 
 

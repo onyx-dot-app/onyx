@@ -17,7 +17,10 @@ from sqlalchemy.orm import Session
 from ee.onyx.server.gateway import api as gateway_api
 from ee.onyx.server.gateway import stream_bridge
 from ee.onyx.server.gateway.api import _MESSAGES_ADAPTER
-from onyx.auth.permissions import resolve_effective_permissions
+from onyx.auth.permissions import (
+    materialize_pat_permission_cap,
+    resolve_effective_permissions,
+)
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -1132,6 +1135,7 @@ class TestGatewayAuthComposition:
     def _basic_user() -> User:
         user = MagicMock()
         user.effective_permissions = ["basic"]
+        user.is_group_manager = False
         return cast(User, user)
 
     @staticmethod
@@ -1167,12 +1171,27 @@ class TestGatewayAuthComposition:
             assert gateway_request_flow(request, user) is None
 
     @pytest.mark.asyncio
-    async def test_unrestricted_pat_is_rejected(self) -> None:
-        """scopes=None is an unrestricted PAT, not a scope-less one."""
+    async def test_full_pat_without_gateway_cap_is_rejected(self) -> None:
         user = self._basic_user()
         request = _pat_request(None)
+        request.state.usage_credential = UsageCredentialIdentity(
+            UsageCredentialType.PAT
+        )
+        request.state.token_permission_cap = frozenset({Permission.READ_CHAT})
 
         assert gateway_request_flow(request, user) is None
+
+    @pytest.mark.asyncio
+    async def test_new_full_pat_passes_both_gateway_checks(self) -> None:
+        user = self._basic_user()
+        request = _pat_request(None)
+        request.state.usage_credential = UsageCredentialIdentity(
+            UsageCredentialType.PAT
+        )
+        request.state.token_permission_cap = materialize_pat_permission_cap(user, None)
+
+        assert await self._base_dep()(request=request, user=user) is user
+        assert gateway_request_flow(request, user) is LLMFlow.LLM_GATEWAY
 
     @pytest.mark.asyncio
     async def test_session_and_api_key_auth_are_rejected(self) -> None:
