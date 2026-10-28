@@ -1400,6 +1400,17 @@ BLOB_STORAGE_SIZE_THRESHOLD = int(
     os.environ.get("BLOB_STORAGE_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )
 
+# Azure Data Lake permission sync: the most users one file's access may expand
+# to, when its ACL denies some members of a group or of ``other``. Above it the
+# file stays private.
+AZURE_DATALAKE_MAX_EXPANDED_USERS_PER_DOC = int(
+    os.environ.get("AZURE_DATALAKE_MAX_EXPANDED_USERS_PER_DOC") or 25_000
+)
+# Concurrent ACL reads per listing page during Azure Data Lake permission sync.
+AZURE_DATALAKE_ACL_READ_CONCURRENCY = int(
+    os.environ.get("AZURE_DATALAKE_ACL_READ_CONCURRENCY") or 16
+)
+
 BOX_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("BOX_CONNECTOR_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )

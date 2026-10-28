@@ -4,8 +4,14 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import quote
 
+from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import BLOB_STORAGE_SIZE_THRESHOLD
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.azure_datalake.access import (
+    AzureDataLakeAccessWalker,
+    build_access_walker,
+    prefix_azure_datalake_external_groups,
+)
 from onyx.connectors.azure_datalake.models import (
     AzureDataLakeCheckpoint,
     AzureDataLakePath,
@@ -31,6 +37,7 @@ from onyx.connectors.interfaces import (
     Resolver,
     SecondsSinceUnixEpoch,
     SlimConnector,
+    SlimConnectorWithPermSync,
 )
 from onyx.connectors.microsoft_utils.graph_errors import (
     MicrosoftAuthError,
@@ -105,6 +112,7 @@ def is_indexable_file(
 class AzureDataLakeConnector(
     CheckpointedConnector[AzureDataLakeCheckpoint],
     SlimConnector,
+    SlimConnectorWithPermSync,
     Resolver,
     CredentialsConnector,
 ):
@@ -336,6 +344,87 @@ class AzureDataLakeConnector(
             yield batch
             if callback is not None:
                 callback.progress("azure_datalake_slim_docs", len(files))
+            continuation_token = page.continuation_token
+            if continuation_token is None:
+                return
+        raise RuntimeError(f"Azure Data Lake listing passed {_MAX_PAGES} pages")
+
+    def _prefix_nodes(
+        self, walker: AzureDataLakeAccessWalker | None
+    ) -> list[HierarchyNode]:
+        """The container and the path prefix's directories, with who may list
+        each."""
+        nodes: list[HierarchyNode] = self._ancestor_nodes(
+            f"{self.path_prefix}/" if self.path_prefix else ""
+        )
+        if walker is None:
+            return nodes
+        for node in nodes:
+            access: ExternalAccess = (
+                walker.container_access()
+                if node.raw_node_id == self._container_node_id()
+                else walker.directory_access(
+                    node.raw_node_id.removeprefix(self.document_id(""))
+                )
+            )
+            node.external_access = prefix_azure_datalake_external_groups(access)
+        return nodes
+
+    def retrieve_all_slim_docs_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        """Every file in scope with who may read it, and every directory with
+        who may list it. The doc sync makes any indexed file this does not
+        list private, so the window is ignored."""
+        walker: AzureDataLakeAccessWalker | None = build_access_walker(
+            self.ops, self.account_name, self.container_name
+        )
+        prefix_nodes: list[HierarchyNode] = self._prefix_nodes(walker)
+        continuation_token: str | None = None
+        for _ in range(_MAX_PAGES):
+            if callback is not None and callback.should_stop():
+                raise RuntimeError(
+                    "Azure Data Lake permission sync: stop signal detected"
+                )
+            page = self.ops.list_paths_page(
+                path_prefix=self.path_prefix,
+                recursive=True,
+                page_size=PAGE_SIZE,
+                continuation_token=continuation_token,
+            )
+            entries: list[AzureDataLakePath] = [
+                path
+                for path in page.paths
+                if path.is_directory or self._is_indexable(path)
+            ]
+            access: dict[str, ExternalAccess] = (
+                walker.page_access(entries) if walker is not None else {}
+            )
+            batch: list[SlimDocument | HierarchyNode] = list(prefix_nodes)
+            prefix_nodes = []
+            for path in entries:
+                path_access: ExternalAccess | None = access.get(path.name)
+                if path.is_directory:
+                    node: HierarchyNode = self._directory_node(path.name)
+                    if path_access is not None:
+                        node.external_access = prefix_azure_datalake_external_groups(
+                            path_access
+                        )
+                    batch.append(node)
+                    continue
+                batch.append(
+                    SlimDocument(
+                        id=self.document_id(path.name),
+                        external_access=path_access,
+                        parent_hierarchy_raw_node_id=self._parent_node_id(path.name),
+                    )
+                )
+            yield batch
+            if callback is not None:
+                callback.progress("azure_datalake_perm_sync", len(entries))
             continuation_token = page.continuation_token
             if continuation_token is None:
                 return

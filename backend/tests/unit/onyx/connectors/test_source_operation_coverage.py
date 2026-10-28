@@ -17,6 +17,12 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.azure_datalake.models import (
     AzureDataLakePath,
     AzureDataLakePathPage,
+    AzureRoleAssignment,
+    AzureRoleDefinition,
+    AzureStorageAccountPage,
+    AzureStorageAccountResource,
+    AzureSubscription,
+    AzureSubscriptionPage,
 )
 from onyx.connectors.capability_checks.registry import get_capability_checks
 from onyx.connectors.confluence.source_operations import (
@@ -342,7 +348,33 @@ def _configure_youtrack_spy(spy: MagicMock) -> None:
 
 
 def _configure_azure_datalake_spy(spy: MagicMock) -> None:
-    """A container holding one file, so the read check reaches the download."""
+    """A container holding one file, so the read check reaches the download,
+    in an account that Azure Resource Manager lists with one role assignment,
+    in a tenant with one group."""
+    spy.list_subscriptions.return_value = AzureSubscriptionPage(
+        subscriptions=[AzureSubscription(subscription_id="sub")]
+    )
+    spy.list_storage_accounts.return_value = AzureStorageAccountPage(
+        accounts=[
+            AzureStorageAccountResource(
+                id="/subscriptions/sub/resourceGroups/rg/providers/"
+                "Microsoft.Storage/storageAccounts/onyxtest",
+                name="onyxtest",
+            )
+        ]
+    )
+    spy.list_role_assignments.return_value = [
+        AzureRoleAssignment(
+            id="assignment",
+            principal_id="user",
+            principal_type="User",
+            role_definition_id="/providers/Microsoft.Authorization/roleDefinitions/r",
+            scope="/subscriptions/sub",
+        )
+    ]
+    spy.get_role_definition.return_value = AzureRoleDefinition(id="r")
+    spy.list_deny_assignments.return_value = []
+    spy.list_groups.return_value = EntraPage[EntraGroup](items=[EntraGroup(id="group")])
     spy.list_paths_page.return_value = AzureDataLakePathPage(
         paths=[
             AzureDataLakePath(

@@ -55,13 +55,13 @@ CONTAINER_CHECK_ID = "adls_container"
 PATH_PREFIX_CHECK_ID = "adls_path_prefix"
 FILE_READ_CHECK_ID = "adls_file_read"
 
-_DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/azure_datalake"
-_ACCOUNT_LABELS = MicrosoftAccountLabels.with_prefix(
+DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/azure_datalake"
+ACCOUNT_LABELS = MicrosoftAccountLabels.with_prefix(
     "Azure Data Lake", private_key="Azure Data Lake Certificate"
 )
 _ACCOUNT_FIELDS = frozenset({"account_name"})
-_CONTAINER_FIELDS = frozenset({"account_name", "container_name"})
-_ALL_FIELDS = frozenset({"account_name", "container_name", "path_prefix"})
+CONTAINER_FIELDS = frozenset({"account_name", "container_name"})
+ALL_FIELDS = frozenset({"account_name", "container_name", "path_prefix"})
 # The file check reads the smallest file among this many listed paths.
 _FILE_PROBE_PAGE_SIZE = 100
 _FILE_PROBE_MAX_PAGES = 5
@@ -71,7 +71,9 @@ _ROLE_REMEDIATION = (
 )
 
 
-def _gateway(context: CapabilityCheckContext) -> AzureDataLakeSourceOperations:
+def gateway_from_context(
+    context: CapabilityCheckContext,
+) -> AzureDataLakeSourceOperations:
     if not isinstance(context.source_operations, AzureDataLakeSourceOperations):
         raise TypeError(
             "Bug: the runner constructs the registered gateway for migrated sources."
@@ -79,7 +81,7 @@ def _gateway(context: CapabilityCheckContext) -> AzureDataLakeSourceOperations:
     return context.source_operations
 
 
-def _probe(action: Callable[[], T], failed: str) -> T:
+def probe(action: Callable[[], T], failed: str) -> T:
     """Validation errors from the gateway already carry a user-facing message,
     so only unmapped storage errors are wrapped."""
     try:
@@ -92,7 +94,7 @@ def _sign_in(gateway: AzureDataLakeSourceOperations) -> MicrosoftTokenInfo | Non
     try:
         return gateway.check_sign_in()
     except MicrosoftAuthError as error:
-        raise_for_auth_error(error, _ACCOUNT_LABELS)
+        raise_for_auth_error(error, ACCOUNT_LABELS)
     except MicrosoftGraphError as error:
         raise_for_sign_in_error(error)
 
@@ -161,7 +163,7 @@ class _AzureDataLakeCheck(CapabilityCheck[AzureDataLakeConnectorConfig]):
             requires_fields=requires_fields,
             config_fields=config_fields,
             remediation=remediation,
-            docs_link=_DOCS_LINK,
+            docs_link=DOCS_LINK,
             depends_on=depends_on,
             validates_binding=validates_binding,
             fails_when_unreachable=fails_when_unreachable,
@@ -185,12 +187,12 @@ class _SignInCheck(_AzureDataLakeCheck):
         )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
-        token: MicrosoftTokenInfo | None = _probe(
-            lambda: _sign_in(_gateway(context)), "The sign-in could not be checked."
+        token: MicrosoftTokenInfo | None = probe(
+            lambda: _sign_in(gateway_from_context(context)), "The sign-in could not be checked."
         )
         if token is None:
             return CheckOutput(summary="Signed in with the account key")
-        text: MicrosoftSignIn = sign_in_text(token, _ACCOUNT_LABELS)
+        text: MicrosoftSignIn = sign_in_text(token, ACCOUNT_LABELS)
         return CheckOutput(
             summary=text.summary,
             description=text.description,
@@ -204,15 +206,15 @@ class _ContainerCheck(_AzureDataLakeCheck):
             check_id=CONTAINER_CHECK_ID,
             display_name="The container is readable",
             remediation=f"Check the container name. {_ROLE_REMEDIATION}",
-            requires_fields=_CONTAINER_FIELDS,
-            config_fields=_ALL_FIELDS,
+            requires_fields=CONTAINER_FIELDS,
+            config_fields=ALL_FIELDS,
             depends_on=(SIGN_IN_CHECK_ID,),
         )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
-        gateway = _gateway(context)
+        gateway = gateway_from_context(context)
         try:
-            _probe(
+            probe(
                 lambda: gateway.list_paths_page(
                     path_prefix="",
                     recursive=False,
@@ -245,8 +247,8 @@ class _PathPrefixCheck(_AzureDataLakeCheck):
             check_id=PATH_PREFIX_CHECK_ID,
             display_name="The path prefix exists",
             remediation="Check the path prefix: a directory in the container.",
-            requires_fields=_CONTAINER_FIELDS,
-            config_fields=_ALL_FIELDS,
+            requires_fields=CONTAINER_FIELDS,
+            config_fields=ALL_FIELDS,
             depends_on=(CONTAINER_CHECK_ID,),
         )
 
@@ -254,9 +256,9 @@ class _PathPrefixCheck(_AzureDataLakeCheck):
         return bool(form_state.config.path_prefix)
 
     def run(self, context: CapabilityCheckContext) -> None:
-        gateway = _gateway(context)
+        gateway = gateway_from_context(context)
         path_prefix: str = self.config(context).path_prefix
-        _probe(
+        probe(
             lambda: gateway.list_paths_page(
                 path_prefix=path_prefix,
                 recursive=False,
@@ -273,15 +275,15 @@ class _FileReadCheck(_AzureDataLakeCheck):
             check_id=FILE_READ_CHECK_ID,
             display_name="Files are readable",
             remediation=_ROLE_REMEDIATION,
-            requires_fields=_CONTAINER_FIELDS,
-            config_fields=_ALL_FIELDS,
+            requires_fields=CONTAINER_FIELDS,
+            config_fields=ALL_FIELDS,
             depends_on=(CONTAINER_CHECK_ID,),
         )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
-        gateway = _gateway(context)
+        gateway = gateway_from_context(context)
         path_prefix: str = self.config(context).path_prefix
-        file: AzureDataLakePath | None = _probe(
+        file: AzureDataLakePath | None = probe(
             lambda: _smallest_file(gateway, path_prefix),
             "The files could not be listed.",
         )
@@ -293,7 +295,7 @@ class _FileReadCheck(_AzureDataLakeCheck):
                     )
                 ]
             )
-        _probe(
+        probe(
             lambda: gateway.read_file(path=file.name, max_bytes=0),
             f"The file {file.name} could not be read.",
         )

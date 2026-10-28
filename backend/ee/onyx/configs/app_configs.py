@@ -179,6 +179,20 @@ YOUTRACK_PERMISSION_DOC_SYNC_FREQUENCY = int(
 )
 
 #####
+# Azure Data Lake Storage
+#####
+
+# In seconds, default 1 hour. Each run reads the ACL of every file and
+# directory in scope.
+AZURE_DATALAKE_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("AZURE_DATALAKE_PERMISSION_DOC_SYNC_FREQUENCY") or 60 * 60
+)
+# In seconds, default 30 minutes. Each run reads every Entra group's members.
+AZURE_DATALAKE_PERMISSION_GROUP_SYNC_FREQUENCY = int(
+    os.environ.get("AZURE_DATALAKE_PERMISSION_GROUP_SYNC_FREQUENCY") or 30 * 60
+)
+
+#####
 # Zoom
 #####
 # In seconds, default is 5 minutes

@@ -3,6 +3,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 from azure.core.exceptions import (
     ClientAuthenticationError,
     HttpResponseError,
@@ -11,6 +12,7 @@ from azure.core.exceptions import (
 
 from onyx.connectors.azure_datalake.source_operations import (
     STORAGE_RESOURCE,
+    AzureDataLakeNotFoundError,
     AzureDataLakeRequestError,
     AzureDataLakeSourceOperations,
 )
@@ -142,38 +144,92 @@ def test_a_credential_with_an_unknown_method_is_invalid() -> None:
         gateway.check_sign_in()
 
 
-class _Pager:
-    """A page iterator that hands back the cursor it was given."""
-
-    def __init__(self, continuation_token: str | None) -> None:
-        self.continuation_token = continuation_token
-
-    def __iter__(self) -> "_Pager":
-        return self
-
-    def __next__(self) -> list[Any]:
-        return []
+_APP_CREDENTIAL: dict[str, Any] = {
+    "authentication_method": "client_secret",
+    "adls_client_id": "client",
+    "adls_directory_id": "tenant",
+    "adls_client_secret": "secret",
+}
 
 
-def test_a_listing_cursor_that_does_not_advance_raises() -> None:
+def _http_error(status: int) -> requests.HTTPError:
+    response = requests.Response()
+    response.status_code = status
+    return requests.HTTPError(response=response)
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (_http_error(401), CredentialInvalidError),
+        (_http_error(403), InsufficientPermissionsError),
+        (_http_error(404), AzureDataLakeNotFoundError),
+        (_http_error(500), AzureDataLakeRequestError),
+        (requests.ConnectionError("reset"), UnreachableValidationError),
+    ],
+)
+def test_resource_manager_errors_map_to_the_validation_family(
+    error: Exception, expected: type[Exception]
+) -> None:
+    gateway = _gateway(_APP_CREDENTIAL)
+
+    with (
+        patch(f"{MODULE}.build_graph_auth_context"),
+        patch(f"{MODULE}.graph_api_get_json", side_effect=error),
+        pytest.raises(expected),
+    ):
+        gateway.list_role_assignments(scope="/subscriptions/sub")
+
+
+def test_role_assignments_follow_next_link_and_read_properties() -> None:
+    gateway = _gateway(_APP_CREDENTIAL)
+    pages = [
+        {
+            "value": [
+                {
+                    "id": "a1",
+                    "properties": {
+                        "principalId": "user",
+                        "principalType": "User",
+                        "roleDefinitionId": "/role",
+                        "scope": "/subscriptions/sub",
+                        "condition": "@Resource[x]",
+                    },
+                }
+            ],
+            "nextLink": "https://management.azure.com/next",
+        },
+        {"value": [{"id": "a2", "properties": {"principalId": "group"}}]},
+    ]
+
+    with (
+        patch(f"{MODULE}.build_graph_auth_context"),
+        patch(f"{MODULE}.graph_api_get_json", side_effect=pages) as get_json,
+    ):
+        assignments = gateway.list_role_assignments(scope="/subscriptions/sub")
+
+    assert [a.id for a in assignments] == ["a1", "a2"]
+    assert assignments[0].principal_type == "User"
+    assert assignments[0].condition == "@Resource[x]"
+    assert get_json.call_args_list[0].args[1] == (
+        "https://management.azure.com/subscriptions/sub/providers/"
+        "Microsoft.Authorization/roleAssignments"
+    )
+    assert get_json.call_args_list[0].args[2]["$filter"] == "atScope()"
+    assert get_json.call_args_list[1].args[2] is None
+
+
+def test_account_key_cannot_read_resource_manager() -> None:
     gateway = _gateway(
         {
             "authentication_method": "account_key",
             "adls_account_name": "onyxtest",
-            "adls_account_key": "key",
+            "adls_account_key": "a2V5",
         }
     )
 
-    with patch(f"{MODULE}.DataLakeServiceClient") as client_class:
-        file_system = client_class.return_value.get_file_system_client.return_value
-        file_system.get_paths.return_value.by_page.side_effect = _Pager
-        with pytest.raises(RuntimeError, match="same listing cursor"):
-            gateway.list_paths_page(
-                path_prefix="",
-                recursive=True,
-                page_size=10,
-                continuation_token="cursor",
-            )
+    with pytest.raises(CredentialInvalidError, match="app registration"):
+        gateway.list_subscriptions()
 
 
 @pytest.mark.parametrize(("size", "expected"), [(3, b"raw"), (11, None)])
