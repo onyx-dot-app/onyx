@@ -2,7 +2,7 @@
 
 import { useReducer, useCallback, useEffect, useRef, useState } from "react";
 import { onboardingReducer, initialState } from "@/lib/onboarding/reducer";
-import { STEP_NAVIGATION } from "@/lib/onboarding/constants";
+import { STEP_CONFIG, STEP_NAVIGATION } from "@/lib/onboarding/constants";
 import {
   OnboardingActions,
   OnboardingActionType,
@@ -18,6 +18,43 @@ import { useProviderStatus } from "@/components/chat/ProviderContext";
 
 function getOnboardingCompletedKey(userId: string): string {
   return `onyx:onboardingCompleted:${userId}`;
+}
+
+// Saved progress lets onboarding resume at the same step after the user
+// leaves the page (e.g. for an admin page) and comes back. It lives until
+// onboarding is finished or dismissed.
+function getOnboardingProgressKey(userId: string): string {
+  return `onyx:onboardingProgress:${userId}`;
+}
+
+function isOnboardingStep(value: string | null): value is OnboardingStep {
+  return Object.values(OnboardingStep).some((step) => step === value);
+}
+
+function readOnboardingProgress(userId: string): OnboardingStep | null {
+  try {
+    const saved = localStorage.getItem(getOnboardingProgressKey(userId));
+    return isOnboardingStep(saved) ? saved : null;
+  } catch {
+    // Storage can be unavailable (e.g. blocked); onboarding then starts fresh.
+    return null;
+  }
+}
+
+function writeOnboardingProgress(userId: string, step: OnboardingStep): void {
+  try {
+    localStorage.setItem(getOnboardingProgressKey(userId), step);
+  } catch {
+    // Storage can be unavailable; the step just is not resumed later.
+  }
+}
+
+function clearOnboardingProgress(userId: string): void {
+  try {
+    localStorage.removeItem(getOnboardingProgressKey(userId));
+  } catch {
+    // Storage can be unavailable; nothing to clear then.
+  }
 }
 
 function useOnboardingState(activeAgent?: MinimalAgent): {
@@ -74,6 +111,31 @@ function useOnboardingState(activeAgent?: MinimalAgent): {
       type: OnboardingActionType.UPDATE_DATA,
       payload: { llmProviders: (llmProviders ?? []).map((p) => p.provider) },
     });
+
+    // Resume where the user left off, as long as every earlier step is still
+    // done. Otherwise, fall through to the earliest incomplete step.
+    const savedStep = readOnboardingProgress(user.id);
+    const furthestReachable = !userName
+      ? OnboardingStep.Name
+      : !hasLlmProviders
+        ? OnboardingStep.LlmSetup
+        : OnboardingStep.Complete;
+    if (
+      savedStep !== null &&
+      STEP_CONFIG[savedStep].index <= STEP_CONFIG[furthestReachable].index
+    ) {
+      dispatch({
+        type: OnboardingActionType.SET_BUTTON_ACTIVE,
+        isButtonActive:
+          savedStep === OnboardingStep.Name
+            ? !!userName
+            : savedStep === OnboardingStep.LlmSetup
+              ? hasLlmProviders
+              : true,
+      });
+      dispatch({ type: OnboardingActionType.GO_TO_STEP, step: savedStep });
+      return;
+    }
 
     // Determine the earliest incomplete step
     // Name step is incomplete if userName is not set
@@ -325,15 +387,28 @@ export function useShowOnboarding({
       return;
     }
 
+    // Onboarding left mid-way comes back, even once a provider exists.
+    const hasSavedProgress = readOnboardingProgress(userId) !== null;
+
     // Only check once per user — but allow self-correction from true→false
     // when provider data arrives (e.g. after a transient fetch error).
     if (hasCheckedOnboardingForUserId.current === userId) {
-      if (showOnboarding && hasAnyProvider && onboardingState.stepIndex === 0) {
+      if (
+        showOnboarding &&
+        hasAnyProvider &&
+        onboardingState.stepIndex === 0 &&
+        !hasSavedProgress
+      ) {
         setShowOnboarding(false);
       }
       return;
     }
     hasCheckedOnboardingForUserId.current = userId;
+
+    if (hasSavedProgress) {
+      setShowOnboarding(true);
+      return;
+    }
 
     // Skip onboarding if user has any chat sessions
     if (chatSessionsCount > 0) {
@@ -354,11 +429,26 @@ export function useShowOnboarding({
     onboardingState.stepIndex,
   ]);
 
+  // Save the step while onboarding is showing, so a return resumes it. Users
+  // who never see onboarding get nothing saved, and neither does Welcome:
+  // only a started onboarding has progress to resume.
+  useEffect(() => {
+    if (
+      !showOnboarding ||
+      userId === undefined ||
+      onboardingState.currentStep === OnboardingStep.Welcome
+    ) {
+      return;
+    }
+    writeOnboardingProgress(userId, onboardingState.currentStep);
+  }, [showOnboarding, userId, onboardingState.currentStep]);
+
   const dismissOnboarding = useCallback(() => {
     if (userId === undefined) return;
     setShowOnboarding(false);
     setOnboardingDismissed(true);
     localStorage.setItem(getOnboardingCompletedKey(userId), "true");
+    clearOnboardingProgress(userId);
   }, [userId]);
 
   const hideOnboarding = dismissOnboarding;
