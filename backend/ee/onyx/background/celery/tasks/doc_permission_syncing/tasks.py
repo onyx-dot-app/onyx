@@ -77,6 +77,7 @@ from onyx.db.permission_sync_attempt import (
     fail_expired_doc_permission_sync_attempts,
     fail_not_started_doc_permission_sync_attempts,
     get_cc_pair_ids_with_open_doc_permission_sync_attempt,
+    get_doc_permission_sync_retry_after,
     get_not_started_doc_permission_sync_attempts_older_than,
     lock_doc_permission_sync_attempt_if_owned,
     mark_doc_permission_sync_attempt_failed,
@@ -300,12 +301,25 @@ def check_for_doc_permissions_sync(self: Task, *, tenant_id: str) -> bool | None
                 db_session
             )
 
-            cc_pair_ids_to_sync.extend(
-                cc_pair.id
-                for cc_pair in cc_pairs
-                if cc_pair.id not in running_cc_pair_ids
-                and is_external_doc_permissions_sync_due(cc_pair)
-            )
+            now = datetime.now(timezone.utc)
+            for cc_pair in cc_pairs:
+                if cc_pair.id in running_cc_pair_ids:
+                    continue
+
+                if not is_external_doc_permissions_sync_due(cc_pair):
+                    continue
+
+                retry_after = get_doc_permission_sync_retry_after(
+                    cc_pair_id=cc_pair.id, db_session=db_session
+                )
+                if retry_after is not None and now < retry_after:
+                    task_logger.debug(
+                        f"Skipping doc permission sync for cc_pair={cc_pair.id}: "
+                        f"backing off after failures until {retry_after}"
+                    )
+                    continue
+
+                cc_pair_ids_to_sync.append(cc_pair.id)
 
         # Tenant-work-gating hook: refresh this tenant's active-set membership
         # whenever doc-permission sync has any due cc_pairs to dispatch.
