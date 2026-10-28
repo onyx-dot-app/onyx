@@ -15,6 +15,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
+API_SELECTOR = "app=api-server,app.kubernetes.io/instance=onyx"
+
 
 @dataclass(frozen=True)
 class Cluster:
@@ -71,7 +73,7 @@ class Cluster:
                 "get",
                 "deployments",
                 "-l",
-                "app=api-server,app.kubernetes.io/instance=onyx",
+                API_SELECTOR,
                 "-o",
                 "json",
             )
@@ -335,16 +337,9 @@ class Cluster:
             timeout=120,
         )
 
-    def intercept_active(self, name: str) -> bool:
-        """Check for an active API intercept in this cluster and namespace."""
-        status = json.loads(self.command("telepresence", "status", "--format", "json"))
-        user = status.get("user_daemon", {})
-        if (
-            user.get("kubernetes_context") != self.context
-            or user.get("namespace") != self.namespace
-        ):
-            return False
-        workloads = json.loads(
+    def telepresence_workloads(self) -> list[dict[str, Any]]:
+        """List workloads as the traffic manager sees them in the application namespace."""
+        return json.loads(
             self.command(
                 "telepresence",
                 "list",
@@ -354,6 +349,17 @@ class Cluster:
                 "json",
             )
         )
+
+    def intercept_active(self, name: str) -> bool:
+        """Check for an active API intercept in this cluster and namespace."""
+        status = json.loads(self.command("telepresence", "status", "--format", "json"))
+        user = status.get("user_daemon", {})
+        if (
+            user.get("kubernetes_context") != self.context
+            or user.get("namespace") != self.namespace
+        ):
+            return False
+        workloads = self.telepresence_workloads()
         # Telepresence's InterceptDispositionType.ACTIVE is protobuf enum value 1.
         for workload in workloads:
             if workload.get("name") != name:
@@ -374,6 +380,59 @@ class Cluster:
                 return True
         return False
 
+    def api_pods(self) -> list[dict[str, Any]]:
+        """List the API deployment's pods."""
+        return json.loads(self.kube("get", "pods", "-l", API_SELECTOR, "-o", "json"))[
+            "items"
+        ]
+
+    def agent_session_rejected(self) -> bool:
+        """Check the API traffic agents' recent logs for a session the manager rejected."""
+        try:
+            logs = self.kube(
+                "logs",
+                "-l",
+                API_SELECTOR,
+                "-c",
+                "traffic-agent",
+                "--tail=50",
+                "--prefix=true",
+            )
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            return False
+        return bool(
+            re.search(
+                r'code = NotFound desc = Session "agent:|code = PermissionDenied desc = agent session .*bound to another workload identity',
+                logs,
+            )
+        )
+
+    def restart_api(self, name: str) -> None:
+        """Restart the API deployment so Telepresence injects a fresh traffic agent."""
+        self.kube("rollout", "restart", f"deployment/{name}")
+        self.kube(
+            "rollout",
+            "status",
+            f"deployment/{name}",
+            "--timeout=120s",
+            "--request-timeout=130s",
+            timeout=135,
+        )
+
+    def create_intercept(self, name: str) -> None:
+        self.command(
+            "telepresence",
+            "intercept",
+            name,
+            "--namespace",
+            self.namespace,
+            "--port",
+            "8080:8080",
+            "--mount=false",
+            capture=False,
+            timeout=150,
+        )
+
     def application_ready(self, frontend_url: str, timeout: float = 180) -> None:
         name = self.api_workload()["metadata"]["name"]
         if not self.intercept_active(name):
@@ -383,67 +442,29 @@ class Cluster:
         application_ready(frontend_url, timeout)
 
     def intercept(self, ownership_file: Path | None = None) -> None:
-        """Reuse or create the API intercept, recovering a known stale agent once."""
+        """Reuse or create the API intercept, replacing a stale traffic agent first."""
         self.connect()
         name = self.api_workload()["metadata"]["name"]
         reused = self.intercept_active(name)
         if reused:
             print(f"Reusing API intercept {name}", flush=True)
         else:
+            restarted = False
+            if agent_stale(name, self.telepresence_workloads(), self.api_pods()):
+                print(
+                    f"Restarting {name}: its traffic agent is unknown to the traffic manager",
+                    flush=True,
+                )
+                self.restart_api(name)
+                restarted = True
             try:
-                self.command(
-                    "telepresence",
-                    "intercept",
-                    name,
-                    "--namespace",
-                    self.namespace,
-                    "--port",
-                    "8080:8080",
-                    "--mount=false",
-                    capture=False,
-                    timeout=150,
-                )
+                self.create_intercept(name)
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-                # Retry once only for the known stale-agent identity failure.
-                try:
-                    logs = self.kube(
-                        "logs",
-                        "-l",
-                        "app=api-server,app.kubernetes.io/instance=onyx",
-                        "-c",
-                        "traffic-agent",
-                        "--since=2m",
-                        "--tail=1",
-                        "--prefix=true",
-                    )
-                except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-                    logs = ""
-                if not re.search(
-                    r'code = NotFound desc = Session "agent:|code = PermissionDenied desc = agent session .*bound to another workload identity',
-                    logs,
-                ):
+                # Retry once if the manager rejected an agent the list still reported.
+                if restarted or not self.agent_session_rejected():
                     raise
-                self.kube("rollout", "restart", f"deployment/{name}")
-                self.kube(
-                    "rollout",
-                    "status",
-                    f"deployment/{name}",
-                    "--timeout=120s",
-                    "--request-timeout=130s",
-                    timeout=135,
-                )
-                self.command(
-                    "telepresence",
-                    "intercept",
-                    name,
-                    "--namespace",
-                    self.namespace,
-                    "--port",
-                    "8080:8080",
-                    "--mount=false",
-                    capture=False,
-                    timeout=150,
-                )
+                self.restart_api(name)
+                self.create_intercept(name)
         try:
             if not reused and ownership_file is not None:
                 ownership_file.write_text(name + "\n")
@@ -473,6 +494,27 @@ class Cluster:
             "API intercept ready. Start the local API, then run make craft-ready after starting the frontend.",
             flush=True,
         )
+
+
+def agent_stale(
+    name: str, workloads: list[dict[str, Any]], pods: list[dict[str, Any]]
+) -> bool:
+    """Report a traffic agent that runs in a pod but is unknown to the traffic manager.
+
+    Telepresence sets ``agent_version`` only for agents with a live manager session.
+    An injected agent without one makes ``telepresence intercept`` hang or fail.
+    """
+    has_agent = any(
+        container.get("name") == "traffic-agent"
+        for pod in pods
+        if not pod.get("metadata", {}).get("deletionTimestamp")
+        for container in pod.get("spec", {}).get("containers", [])
+    )
+    known = any(
+        workload.get("name") == name and workload.get("agent_version")
+        for workload in workloads
+    )
+    return has_agent and not known
 
 
 def application_ready(frontend_url: str, timeout: float = 180) -> None:
