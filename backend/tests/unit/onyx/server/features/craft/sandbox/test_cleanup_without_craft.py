@@ -106,10 +106,15 @@ def test_orphan_resources_reconciled_without_sandbox_rows(
         ({}, set(), False),
         (
             {"KUBERNETES_SERVICE_HOST": "10.0.0.1", "KUBERNETES_SERVICE_PORT": "443"},
-            {"token"},
+            {"token", "ca.crt"},
             True,
         ),
-        ({"KUBERNETES_SERVICE_HOST": "10.0.0.1"}, {"token"}, False),
+        (
+            {"KUBERNETES_SERVICE_HOST": "10.0.0.1", "KUBERNETES_SERVICE_PORT": "443"},
+            {"token"},
+            False,
+        ),
+        ({"KUBERNETES_SERVICE_HOST": "10.0.0.1"}, {"token", "ca.crt"}, False),
         ({}, {"kubeconfig"}, True),
     ],
 )
@@ -122,6 +127,7 @@ def test_kube_config_available(
 ) -> None:
     root = tmp_path
     token = root / "token"
+    cert = root / "ca.crt"
     kubeconfig = root / "kubeconfig"
     for name in files:
         (root / name).write_text("x")
@@ -132,6 +138,7 @@ def test_kube_config_available(
     monkeypatch.setattr(
         k8s_client.incluster_config, "SERVICE_TOKEN_FILENAME", str(token)
     )
+    monkeypatch.setattr(k8s_client.incluster_config, "SERVICE_CERT_FILENAME", str(cert))
     monkeypatch.setattr(
         k8s_client.kube_config,
         "KUBE_CONFIG_DEFAULT_LOCATION",

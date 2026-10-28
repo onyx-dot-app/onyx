@@ -42,6 +42,7 @@ def kube_config_available() -> bool:
         os.environ.get(incluster_config.SERVICE_HOST_ENV_NAME)
         and os.environ.get(incluster_config.SERVICE_PORT_ENV_NAME)
         and os.path.isfile(incluster_config.SERVICE_TOKEN_FILENAME)
+        and os.path.isfile(incluster_config.SERVICE_CERT_FILENAME)
     ):
         return True
     return any(
