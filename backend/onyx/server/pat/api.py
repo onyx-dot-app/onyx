@@ -17,6 +17,7 @@ from onyx.server.pat.models import (
     PatScopeOption,
     TokenResponse,
 )
+from onyx.server.settings.store import load_settings
 from onyx.server.settings.tier_order import get_current_tier, tier_at_least
 from onyx.utils.logger import setup_logger
 
@@ -50,6 +51,14 @@ def _validate_assignable_scopes(scopes: list[Permission] | None) -> None:
             f"Token scope(s) not available on the {tier.value.title()} plan: "
             f"{', '.join(s.value for s in below_tier)}",
         )
+    if (
+        Permission.USE_LLM_GATEWAY in scopes
+        and not load_settings(raise_on_error=True).llm_gateway_enabled
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "The LLM gateway is disabled for this workspace.",
+        )
 
 
 @router.get("/scopes")
@@ -58,11 +67,22 @@ def list_selectable_scopes(
 ) -> list[PatScopeOption]:
     """The scopes a user may assign when minting a token, with display metadata."""
     tier = get_current_tier()
-    return [
+    options: list[PatScopeOption] = [
         option
         for option in SELECTABLE_PAT_SCOPES.values()
         if tier_at_least(tier, option.min_tier)
     ]
+
+    # Read the switch only when it can change the result, so a settings
+    # outage cannot break the picker on plans without the gateway scope.
+    if (
+        any(option.scope == Permission.USE_LLM_GATEWAY for option in options)
+        and not load_settings(raise_on_error=True).llm_gateway_enabled
+    ):
+        options = [
+            option for option in options if option.scope != Permission.USE_LLM_GATEWAY
+        ]
+    return options
 
 
 @router.get("")
