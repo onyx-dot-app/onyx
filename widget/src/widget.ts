@@ -21,6 +21,7 @@ import { ApiService } from "./services/api-service";
 import { processPacket } from "./services/stream-parser";
 import { saveSession, loadSession, clearSession } from "./utils/storage";
 import { DEFAULT_LOGO } from "./assets/logo";
+import { resolveLocale, translations, type Locale } from "./locales";
 
 @customElement("onyx-chat-widget")
 export class OnyxChatWidget extends LitElement {
@@ -55,6 +56,15 @@ export class OnyxChatWidget extends LitElement {
   @state() private streamingStatus = ""; // e.g., "Searching the web...", "Generating response..."
   @state() private error?: string;
   @state() private inputValue = "";
+  @state() private locale: Locale = resolveLocale();
+
+  private get strings() {
+    return translations[this.locale];
+  }
+
+  private handleLanguageChange = () => {
+    this.locale = resolveLocale();
+  };
 
   private config!: WidgetConfig;
   private apiService!: ApiService;
@@ -103,6 +113,8 @@ export class OnyxChatWidget extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    this.handleLanguageChange();
+    window.addEventListener("languagechange", this.handleLanguageChange);
 
     // Resolve configuration
     this.config = resolveConfig({
@@ -168,6 +180,11 @@ export class OnyxChatWidget extends LitElement {
     return deriveCredentialIdentity(
       await resolveAuthToken(this.tokenProvider, this.config.apiKey)
     );
+  }
+
+  disconnectedCallback() {
+    window.removeEventListener("languagechange", this.handleLanguageChange);
+    super.disconnectedCallback();
   }
 
   private applyCustomColors() {
@@ -287,7 +304,7 @@ export class OnyxChatWidget extends LitElement {
     c: ResolvedCitation,
     displayNum: number
   ): TemplateResult {
-    const title = c.semantic_identifier || "Source";
+    const title = c.semantic_identifier || this.strings.source;
     const safeHref =
       c.link && /^https?:\/\//i.test(c.link) ? c.link : undefined;
     return safeHref
@@ -334,7 +351,7 @@ export class OnyxChatWidget extends LitElement {
         ${overflow.length > 0
           ? html`
               <button class="citation-more" @click=${this.toggleCitationExpand}>
-                +${overflow.length} more
+                ${this.strings.moreCitations(overflow.length)}
               </button>
               <div class="citation-overflow">
                 ${overflow.map((c, i) =>
@@ -429,7 +446,7 @@ export class OnyxChatWidget extends LitElement {
         signal: this.abortController.signal,
         includeCitations: this.config.includeCitations,
       })) {
-        const result = processPacket(packet, currentMessage);
+        const result = processPacket(packet, currentMessage, this.strings);
 
         // Capture message IDs from backend and update local messages
         if (result.messageIds) {
@@ -536,7 +553,7 @@ export class OnyxChatWidget extends LitElement {
     } catch (err: any) {
       console.error("Failed to send message:", err);
       if (err.name !== "AbortError") {
-        this.error = err.message || "Failed to send message";
+        this.error = err.message || this.strings.sendFailed;
       }
     } finally {
       this.isStreaming = false;
@@ -560,11 +577,11 @@ export class OnyxChatWidget extends LitElement {
             <button
               class="launcher"
               @click=${this.toggleOpen}
-              title="Open chat"
+              title=${this.strings.openChat}
             >
               <img
                 src="${this.config.logo || DEFAULT_LOGO}"
-                alt="Logo"
+                alt=${this.strings.logo}
                 style="width: 32px; height: 32px; object-fit: contain;"
               />
             </button>
@@ -573,6 +590,7 @@ export class OnyxChatWidget extends LitElement {
       ${showContainer
         ? html`
             <div
+              lang=${this.locale}
               class="container ${this.config.mode === "inline"
                 ? "inline"
                 : ""} ${isCompactInline ? "compact" : ""}"
@@ -596,19 +614,19 @@ export class OnyxChatWidget extends LitElement {
           <div class="avatar">
             <img
               src="${this.config.logo || DEFAULT_LOGO}"
-              alt="Logo"
+              alt=${this.strings.logo}
               style="width: 100%; height: 100%; object-fit: contain;"
             />
           </div>
           <div class="header-title">
-            ${this.config.agentName || "Assistant"}
+            ${this.config.agentName || this.strings.assistant}
           </div>
         </div>
         <div class="header-right">
           <button
             class="icon-button"
             @click=${this.resetConversation}
-            title="Reset conversation"
+            title=${this.strings.resetConversation}
           >
             <svg
               width="16"
@@ -627,7 +645,7 @@ export class OnyxChatWidget extends LitElement {
           </button>
           ${this.config.mode === "launcher"
             ? html`
-                <button class="icon-button" @click=${this.close} title="Close">
+                <button class="icon-button" @click=${this.close} title=${this.strings.close}>
                   <svg
                     width="16"
                     height="16"
@@ -660,7 +678,7 @@ export class OnyxChatWidget extends LitElement {
 
     return html`
       <div class="disclaimer">
-        Responses are generated by AI and may be inaccurate
+        ${this.strings.disclaimer}
       </div>
       <div class="messages">
         ${this.error ? html` <div class="error">${this.error}</div> ` : ""}
@@ -714,7 +732,7 @@ export class OnyxChatWidget extends LitElement {
             .value=${this.inputValue}
             @input=${this.handleInput}
             @keydown=${this.handleKeyDown}
-            placeholder="Type your message..."
+            placeholder=${this.strings.messagePlaceholder}
             ?disabled=${this.isLoading || this.isStreaming}
           />
           <button
@@ -723,7 +741,7 @@ export class OnyxChatWidget extends LitElement {
             ?disabled=${!this.inputValue.trim() ||
             this.isLoading ||
             this.isStreaming}
-            title="Send message"
+            title=${this.strings.sendMessage}
           >
             <svg
               width="20"
@@ -761,7 +779,7 @@ export class OnyxChatWidget extends LitElement {
         <div class="compact-avatar">
           <img
             src="${this.config.logo || DEFAULT_LOGO}"
-            alt="Logo"
+            alt=${this.strings.logo}
             style="width: 100%; height: 100%; object-fit: contain;"
           />
         </div>
@@ -771,7 +789,9 @@ export class OnyxChatWidget extends LitElement {
           .value=${this.inputValue}
           @input=${this.handleInput}
           @keydown=${this.handleKeyDown}
-          placeholder="Ask ${this.config.agentName || "Assistant"} anything..."
+          placeholder=${this.strings.askPlaceholder(
+            this.config.agentName || this.strings.assistant
+          )}
           ?disabled=${this.isLoading || this.isStreaming}
         />
         <button
@@ -780,7 +800,7 @@ export class OnyxChatWidget extends LitElement {
           ?disabled=${!this.inputValue.trim() ||
           this.isLoading ||
           this.isStreaming}
-          title="Send message"
+          title=${this.strings.sendMessage}
         >
           <svg
             width="18"
