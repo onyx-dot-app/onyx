@@ -1,6 +1,7 @@
 """Advance parallel tools and finalize completed results on the execution thread."""
 
 import threading
+from collections.abc import Sequence
 from concurrent.futures import Future
 from typing import TYPE_CHECKING
 
@@ -9,13 +10,13 @@ from pydantic import JsonValue
 from onyx.agents.events import ToolUpdateEvent
 from onyx.agents.models import (
     AgentStep,
-    PreparedStep,
     RunProgress,
     RunState,
     StepRecord,
     ToolCallContext,
 )
 from onyx.agents.tools import (
+    AgentTool,
     ChildRunWait,
     InputDecision,
     InputMode,
@@ -30,7 +31,6 @@ from onyx.llm.models import (
     ToolCall,
     ToolChoiceOptions,
     ToolResult,
-    ToolResultMessage,
 )
 from onyx.utils.logger import setup_logger
 
@@ -49,7 +49,7 @@ class ToolBatch:
         self,
         run: "Run",
         *,
-        prepared: PreparedStep,
+        tools: Sequence[AgentTool],
         progress: RunProgress,
         record: StepRecord,
         history: list[Message],
@@ -73,7 +73,7 @@ class ToolBatch:
             raise ValueError(
                 f"A step requires unique tool call IDs and at most {MAX_TOOL_CALLS_PER_STEP} calls"
             )
-        self.tools = {tool.name: tool for tool in prepared.tools}
+        self.tools = {tool.name: tool for tool in tools}
         self.call_indices = {call.id: index for index, call in enumerate(self.calls)}
         self.futures: dict[str, Future[ToolOutcome]] = {}
 
@@ -85,10 +85,10 @@ class ToolBatch:
             messages=[item.model_copy(deep=True) for item in self.context_messages],
         )
 
-    def _raw_results(self) -> dict[str, ToolResultMessage]:
+    def _completed_call_ids(self) -> set[str]:
         with self.run.execution_lock:
             return {
-                call_id: execution.result
+                call_id
                 for call_id, execution in self.record.tools.items()
                 if execution.result is not None
             }
@@ -131,28 +131,6 @@ class ToolBatch:
             if not isinstance(result, ToolResult):
                 self.run.record_pending_tool(call, result)
 
-    def _finalize_ready(self) -> None:
-        results = self._raw_results()
-        for call in self.calls:
-            if call.id in self.progress.finalized_tool_call_ids:
-                continue
-            result_message = results.get(call.id)
-            if result_message is None:
-                continue
-            result = ToolResult(
-                content=result_message.content,
-                metadata=result_message.metadata,
-                cacheable=result_message.cacheable,
-                details=result_message.details,
-                is_error=result_message.is_error,
-                terminate=result_message.terminate,
-            )
-            self.run.finish_tool(
-                result,
-                call,
-                self._context(call) if self.run.after_tool_call is not None else None,
-            )
-
     def execute(self) -> bool:
         try:
             with self.run.cancellation_signal.on_cancel(self.run.notify_tool_activity):
@@ -160,8 +138,20 @@ class ToolBatch:
                     self.run.cancellation_signal.check()
                     self.run.begin_work_cycle()
                     self._collect_results()
-                    self._finalize_ready()
-                    results = self._raw_results()
+                    completed_call_ids = self._completed_call_ids()
+                    for call in self.calls:
+                        if (
+                            call.id in self.progress.finalized_tool_call_ids
+                            or call.id not in completed_call_ids
+                        ):
+                            continue
+                        self.run.finish_tool(
+                            call,
+                            self._context(call)
+                            if self.run.after_tool_call is not None
+                            else None,
+                        )
+                    completed_call_ids = self._completed_call_ids()
                     if len(self.progress.finalized_tool_call_ids) == len(self.calls):
                         return True
                     blocked_tool_names: set[str] = set()
@@ -174,7 +164,7 @@ class ToolBatch:
                                 continue
                             # Pending input and child waits retain their place in order.
                             blocked_tool_names.add(call.name)
-                        if call.id in results or call.id in self.futures:
+                        if call.id in completed_call_ids or call.id in self.futures:
                             continue
                         with self.run.execution_lock:
                             pending = self.progress.pending_tool_calls.get(call.id)
@@ -212,9 +202,9 @@ class ToolBatch:
                             self.run.resolve_tool_wait(call)
                             self._start([call], children=children)
                             continue
-                        self._start_compatible_calls(call, index, results)
+                        self._start_compatible_calls(call, index, completed_call_ids)
                     if not self.futures:
-                        if len(self._raw_results()) > len(results):
+                        if len(self._completed_call_ids()) > len(completed_call_ids):
                             continue
                         return False
                     self.run.wait_for_tool_activity(
@@ -226,7 +216,7 @@ class ToolBatch:
             raise
 
     def _start_compatible_calls(
-        self, call: ToolCall, index: int, results: dict[str, ToolResultMessage]
+        self, call: ToolCall, index: int, completed_call_ids: set[str]
     ) -> None:
         tool = self.tools.get(call.name)
         if (
@@ -245,7 +235,7 @@ class ToolBatch:
             if candidate.name != call.name:
                 continue
             eligible = (
-                candidate.id not in results
+                candidate.id not in completed_call_ids
                 and candidate.id not in self.futures
                 and candidate.id not in self.progress.pending_tool_calls
                 and candidate.arguments_complete
