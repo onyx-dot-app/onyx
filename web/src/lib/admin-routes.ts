@@ -155,6 +155,16 @@ export const ADMIN_ROUTES = {
     requiredTier: null,
     visibleWhen: null,
   },
+  LLM_GATEWAY: {
+    path: "/admin/llm-gateway",
+    icon: SvgGlobe,
+    title: "LLM Gateway",
+    sidebarLabel: "LLM Gateway",
+    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
+    section: "",
+    requiredTier: Tier.BUSINESS,
+    visibleWhen: null,
+  },
   // ── Craft ─────────────────────────────────────────────────────────
   CRAFT_ACCESS: {
     path: "/admin/craft/access",
