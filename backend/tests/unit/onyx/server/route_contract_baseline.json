@@ -58,6 +58,11 @@
     "GET /users/{id}": "Existing fastapi-users current_user_dependency gate without an Onyx permission declaration.",
     "PATCH /users/me": "Existing fastapi-users current_user_dependency gate without an Onyx permission declaration.",
     "PATCH /users/{id}": "Existing fastapi-users current_user_dependency gate without an Onyx permission declaration.",
+    "POST /auth/logout": "Existing FastAPI Users logout authenticates session tokens through cookie or mobile bearer backends, not PATs or service API keys.",
+    "POST /auth/mobile/logout": "Existing FastAPI Users mobile logout authenticates session tokens, not PATs or service API keys.",
+    "POST /auth/mobile/refresh": "Existing FastAPI Users mobile refresh authenticates session tokens through its own bearer backend, not PATs or service API keys.",
+    "POST /auth/refresh": "Existing FastAPI Users refresh authenticates session tokens through its own cookie backend, not PATs or service API keys.",
+    "POST /auth/saml/logout": "Existing SAML logout uses FastAPI Users current_user_token_dependency with session backends, not PATs or service API keys.",
     "POST /chat/create-chat-message-feedback": "Legacy current_chat_accessible_user gate. Retained for raw scopes=NULL token compatibility.",
     "POST /enterprise-settings/refresh-token": "Legacy current_user_with_expired_token gate. Retained for raw scopes=NULL token compatibility.",
     "POST /evals/eval_run": "Existing current_cloud_superuser gate also validates a separate cloud API key."

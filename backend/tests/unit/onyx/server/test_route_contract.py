@@ -7,7 +7,6 @@
    a registered GATE-2 helper.
 3. A GET/HEAD handler must not commit or call a ``__no_commit`` writer.
 4. A token-authenticated HTTP handler must declare a permission or exemption.
-   Session-only handlers reject tokens and do not need this declaration.
 
 Checks 2 and 3 walk the handler source and the onyx/ee functions it calls.
 ``route_contract_baseline.json`` lists the existing violations. It can only
@@ -21,6 +20,7 @@ import json
 import os
 import textwrap
 import types
+from collections import Counter
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -35,11 +35,17 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.auth.scoped_permissions import assert_global
-from onyx.auth.users import current_user, scope_exempt, uncapped_credential_user
+from onyx.auth.users import (
+    current_user,
+    fastapi_users,
+    scope_exempt,
+    uncapped_credential_user,
+)
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.mcp import update_mcp_server__no_commit
 from onyx.db.models import User
+from onyx.server.gateway.craft_session import craft_session_binder
 
 _HERE = Path(__file__).parent
 MANIFEST_PATH = _HERE / "route_contract_manifest.json"
@@ -101,22 +107,23 @@ class RouteInfo:
 
 _TOKEN_AUTH_DEPENDENCY_NAMES: frozenset[str] = frozenset(
     {
+        "bind_craft_session",
         "current_chat_accessible_user",
         "current_cloud_superuser",
         "current_limited_user",
         "current_user",
         "current_user_dependency",
+        "current_user_token_dependency",
         "current_user_with_expired_token",
         "optional_user",
+        "uncapped_credential_user",
     }
 )
 
 # Non-permission auth dependencies, labelled by name in the manifest.
 _AUTH_DEPENDENCY_NAMES: frozenset[str] = _TOKEN_AUTH_DEPENDENCY_NAMES | frozenset(
     {
-        "bind_craft_session",
         "control_plane_dep",
-        "uncapped_credential_user",
         "current_user_from_websocket",
         "current_user_from_websocket_cookie",
         "get_license_payload",
@@ -282,19 +289,21 @@ def get_write_violations(app: FastAPI) -> set[str]:
 
 def token_route_violations(app: FastAPI) -> set[str]:
     violations: set[str] = set()
-    for route in iter_routes(app):
+    routes = list(iter_routes(app))
+    registration_counts = Counter(route.key for route in routes)
+    for route in routes:
         if route.method == "WS" or _permission_dependencies(route):
             continue
-        if any(
-            _attr(call, "_is_scope_exempt")
-            or _attr(call, "__name__") == "uncapped_credential_user"
-            for call in route.dependency_calls
-        ):
+        if any(_attr(call, "_is_scope_exempt") for call in route.dependency_calls):
             continue
         if any(
             _attr(call, "__name__") in _TOKEN_AUTH_DEPENDENCY_NAMES
             for call in route.dependency_calls
         ):
+            assert registration_counts[route.key] == 1, (
+                f"Duplicate registrations include an unguarded token route: {route.key}. "
+                "Declare a permission or scope exemption on each token handler."
+            )
             violations.add(route.key)
     return violations
 
@@ -445,25 +454,36 @@ def test_checks_flag_a_violating_route() -> None:
     }
 
 
-def test_token_route_check_requires_a_permission_or_exemption() -> None:
+@pytest.mark.parametrize(
+    "user_dependency,expected_gate",
+    [
+        (current_user, "current_user"),
+        (uncapped_credential_user, "uncapped_credential_user"),
+        (
+            fastapi_users.authenticator.current_user_token(active=True),
+            "current_user_token_dependency",
+        ),
+        (craft_session_binder(current_user), "bind_craft_session"),
+    ],
+)
+def test_token_route_check_requires_a_permission_or_exemption(
+    user_dependency: Callable[..., object], expected_gate: str
+) -> None:
     router = APIRouter()
 
     @router.get("/new-token-route")
-    def token_route(_user: User = Depends(current_user)) -> None:
+    def token_route(_user: object = Depends(user_dependency)) -> None:
         return None
 
     @router.get("/permitted-token-route")
     def permitted_route(
         _user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+        _credential: object = Depends(user_dependency),
     ) -> None:
         return None
 
     @router.get("/exempt-token-route", dependencies=[Depends(scope_exempt)])
-    def exempt_route(_user: User = Depends(current_user)) -> None:
-        return None
-
-    @router.get("/session-only-route")
-    def session_route(_user: User = Depends(uncapped_credential_user)) -> None:
+    def exempt_route(_user: object = Depends(user_dependency)) -> None:
         return None
 
     @router.get("/public-route")
@@ -477,6 +497,53 @@ def test_token_route_check_requires_a_permission_or_exemption() -> None:
     dummy = FastAPI()
     dummy.include_router(router)
     assert token_route_violations(dummy) == {"GET /new-token-route"}
-    assert (
-        build_manifest(dummy)["GET /session-only-route"] == "uncapped_credential_user"
+    assert build_manifest(dummy)["GET /new-token-route"] == expected_gate
+
+
+@pytest.mark.parametrize("same_handler", [False, True])
+@pytest.mark.parametrize("first_permitted", [False, True])
+def test_token_route_check_rejects_unguarded_duplicate_registrations(
+    same_handler: bool, first_permitted: bool
+) -> None:
+    def existing_route(_user: User = Depends(current_user)) -> None:
+        return None
+
+    def new_route(_user: User = Depends(current_user)) -> None:
+        return None
+
+    dummy = FastAPI()
+    dummy.add_api_route(
+        "/agents",
+        existing_route,
+        methods=["GET"],
+        dependencies=(
+            [Depends(require_permission(Permission.BASIC_ACCESS))]
+            if first_permitted
+            else []
+        ),
     )
+    dummy.add_api_route(
+        "/agents", existing_route if same_handler else new_route, methods=["GET"]
+    )
+    with pytest.raises(AssertionError, match="Duplicate.*GET /agents"):
+        token_route_violations(dummy)
+
+
+def test_token_route_check_allows_guarded_and_public_duplicate_registrations() -> None:
+    router = APIRouter()
+
+    @router.get("/permitted-duplicate")
+    @router.get("/permitted-duplicate")
+    def permitted_route(
+        _user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    ) -> None:
+        return None
+
+    @router.get("/public-duplicate")
+    @router.get("/public-duplicate")
+    def public_route() -> None:
+        return None
+
+    dummy = FastAPI()
+    dummy.include_router(router)
+    assert token_route_violations(dummy) == set()

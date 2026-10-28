@@ -588,9 +588,15 @@ is marked as such.
    separate. `_scoped_pat_permitted_on_route` rejects limited tokens on routes
    without `require_permission` or `scope_exempt()`. Full-token compatibility on
    existing unguarded routes remains. The route contract baseline blocks new
-   token-reachable routes without an explicit gate. Inline user-permission
-   checks still inspect user authority, not the token cap. API-key creation,
-   regeneration, and Discord registration require `uncapped_credential_user`.
+   token-reachable routes without an explicit gate.
+   The check includes `uncapped_credential_user`, which also accepts service API
+   keys and JWTs. It also covers FastAPI Users session-token dependencies and
+   Craft session binders.
+   A duplicate method/path registration with an unguarded token handler fails
+   before baseline comparison. Existing public and permission-gated duplicates
+   remain valid. Inline user-permission checks still inspect user authority,
+   not the token cap. API-key creation, regeneration, and Discord registration
+   require `uncapped_credential_user`.
    Capped tokens cannot mint uncapped credentials through these routes. Existing
    service API-key and JWT callers remain supported. Legacy caps include
    `add:agents` for CE compatibility; EE still checks the owner's live grant.
