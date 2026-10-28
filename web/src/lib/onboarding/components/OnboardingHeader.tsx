@@ -110,10 +110,11 @@ function OnboardingHeader({
           <ProgressContext value={progress}>
             <IconContainer icon={ProgressIcon} />
           </ProgressContext>
+          {/* Block axis: a long prompt wraps instead of pushing the buttons
+              off a narrow header. */}
           <Presence.Swap
             swapKey={onboardingState.currentStep}
             direction={direction}
-            axis="inline"
           >
             <Text font="main-ui-body" color="text-03">
               {t(STEP_CONFIG[onboardingState.currentStep].titleKey)}
@@ -122,14 +123,21 @@ function OnboardingHeader({
         </Section>
         {stepButtonText ? (
           <Section flexDirection="row" justifyContent="end" width="fit">
-            {/* The step counter shows on the numbered steps only. */}
+            {/* The step counter shows on the numbered steps only, and swaps
+                its number like the prompt. */}
             <Presence show={currentNumber !== null} from="end" width="fit">
-              <Text as="p" font="main-ui-body" color="text-03">
-                {t("header.progress.label", {
-                  current: counterNumber,
-                  total: TOTAL_STEPS,
-                })}
-              </Text>
+              <Presence.Swap
+                swapKey={counterNumber}
+                direction={direction}
+                axis="inline"
+              >
+                <Text as="p" font="main-ui-body" color="text-03">
+                  {t("header.progress.label", {
+                    current: counterNumber,
+                    total: TOTAL_STEPS,
+                  })}
+                </Text>
+              </Presence.Swap>
             </Presence>
             <Section flexDirection="row" gap={1} width="fit">
               <Presence show={hasPreviousStep} from="end" width="fit">
