@@ -29,6 +29,7 @@ from onyx.llm.well_known_providers.constants import (
 from onyx.prompts.chat_prompts import IMAGE_DROP_REMINDER
 from onyx.prompts.constants import SYSTEM_REMINDER_TAG_CLOSE, SYSTEM_REMINDER_TAG_OPEN
 from onyx.server.query_and_chat.placement import Placement
+from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.utils.postgres_sanitization import sanitize_string
 
 
@@ -1293,3 +1294,93 @@ class TestFinishReasonPropagation:
         result = self._run_stream([("Hello", None), (" world", "stop")])
         assert result.finish_reason == "stop"
         assert result.answer == "Hello world"
+
+
+def _history_message(text: str, message_type: MessageType) -> ChatMessageSimple:
+    return ChatMessageSimple(
+        message=text, token_count=5, message_type=message_type, should_cache=True
+    )
+
+
+@pytest.mark.parametrize(
+    ("history", "offers_tools", "expected_mark_tail"),
+    [
+        # First turn, no tools: one-shot prompt, nothing re-reads the tail.
+        (
+            [
+                _history_message("system", MessageType.SYSTEM),
+                _history_message("question", MessageType.USER),
+            ],
+            False,
+            False,
+        ),
+        # First turn with tools: the loop re-sends the prefix after a call.
+        (
+            [
+                _history_message("system", MessageType.SYSTEM),
+                _history_message("question", MessageType.USER),
+            ],
+            True,
+            True,
+        ),
+        # Later turn: the next turn re-reads the prefix, so the tail stays
+        # marked even without tools.
+        (
+            [
+                _history_message("system", MessageType.SYSTEM),
+                _history_message("old question", MessageType.USER),
+                _history_message("old answer", MessageType.ASSISTANT),
+                _history_message("question", MessageType.USER),
+            ],
+            False,
+            True,
+        ),
+    ],
+)
+def test_translate_history_marks_tail_only_when_it_will_be_reread(
+    monkeypatch: pytest.MonkeyPatch,
+    history: list[ChatMessageSimple],
+    offers_tools: bool,
+    expected_mark_tail: bool,
+) -> None:
+    monkeypatch.setattr(llm_step_module, "PROMPT_CACHE_CHAT_HISTORY", True)
+    captured: dict[str, Any] = {}
+
+    def _fake_process(**kw: Any) -> tuple[list[Any], None]:
+        captured.update(kw)
+        return kw["cacheable_prefix"] + kw["suffix"], None
+
+    monkeypatch.setattr(llm_step_module, "process_with_prompt_cache", _fake_process)
+
+    translate_history_to_llm_format(
+        history,
+        _make_llm_config(LlmProviderNames.ANTHROPIC),
+        offers_tools=offers_tools,
+    )
+
+    assert captured["mark_tail"] is expected_mark_tail
+
+
+def _tool_def(name: str) -> dict[str, Any]:
+    return {"type": "function", "function": {"name": name, "parameters": {}}}
+
+
+@pytest.mark.parametrize(
+    ("tool_definitions", "tool_choice", "expected"),
+    [
+        ([], ToolChoiceOptions.AUTO, False),
+        ([_tool_def(MemoryTool.NAME)], ToolChoiceOptions.AUTO, False),
+        (
+            [_tool_def(MemoryTool.NAME), _tool_def("internal_search")],
+            ToolChoiceOptions.AUTO,
+            True,
+        ),
+        ([_tool_def("internal_search")], ToolChoiceOptions.NONE, False),
+    ],
+)
+def test_step_offers_tools_ignores_memory_only_toolset(
+    tool_definitions: list[dict[str, Any]],
+    tool_choice: ToolChoiceOptions,
+    expected: bool,
+) -> None:
+    assert llm_step_module._step_offers_tools(tool_definitions, tool_choice) is expected

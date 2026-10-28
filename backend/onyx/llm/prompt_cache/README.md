@@ -77,7 +77,7 @@ processed_prompt, _ = process_with_prompt_cache(
 
 ### Anthropic
 - **Caching Type**: Explicit (requires `cache_control` parameter)
-- **Behavior**: Automatically adds `cache_control={"type": "ephemeral"}` to the **last message** of the cacheable prefix
+- **Behavior**: Adds `cache_control={"type": "ephemeral"}` to the **first message** of the cacheable prefix (system prompt) and to the **last message** (so later tool-loop iterations re-read the whole prefix). The tail breakpoint is skipped for a first-turn step with no tools: nothing would re-read it, and a cache write costs more than plain input
 - **Cache Lifetime**: 5 minutes (default)
 - **Limitations**: Supports up to 4 cache breakpoints
 
