@@ -752,7 +752,9 @@ def _model_error_details(
         "model_index": model_index,
     }
     if isinstance(error, EmptyLLMResponseError):
-        details["tool_choice"] = error.tool_choice.value
+        details["tool_choice"] = (
+            error.tool_choice.value if error.tool_choice is not None else None
+        )
         details["finish_reason"] = error.finish_reason
 
     return details
@@ -1450,7 +1452,9 @@ def _stream_chat_turn(
             details={
                 "model": e.model,
                 "provider": e.provider,
-                "tool_choice": e.tool_choice.value,
+                "tool_choice": (
+                    e.tool_choice.value if e.tool_choice is not None else None
+                ),
                 "finish_reason": e.finish_reason,
             },
         )

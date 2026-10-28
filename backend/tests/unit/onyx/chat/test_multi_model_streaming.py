@@ -558,7 +558,10 @@ class TestRunModels:
         assert errors[0].error_code == "CONTEXT_TOO_LONG"
         assert errors[0].is_retryable is False
 
-    def test_model_refusal_preserves_error_classification(self) -> None:
+    @pytest.mark.parametrize("tool_choice", [ToolChoiceOptions.AUTO, None])
+    def test_model_refusal_preserves_error_classification(
+        self, tool_choice: ToolChoiceOptions | None
+    ) -> None:
         refusal_message = "The selected model declined to respond."
         refusal = EmptyLLMResponseError(
             provider="anthropic",
@@ -569,6 +572,7 @@ class TestRunModels:
             is_retryable=False,
             finish_reason=CONTENT_FILTER_FINISH_REASON,
         )
+        refusal.tool_choice = tool_choice
 
         with (
             patch("onyx.chat.process_message.run_llm_loop", side_effect=refusal),
