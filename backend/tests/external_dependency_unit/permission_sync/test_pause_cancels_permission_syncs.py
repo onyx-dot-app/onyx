@@ -1,9 +1,9 @@
 """A pause ends the pair's doc permission sync and queued group sync as
 CANCELED, not FAILED. A doc permission sync that sees the pause's stop signal
 keeps the cancel, a dispatch that races the pause creates no attempt, the pause
-waits for the sync's writes before it locks the pair and never makes a
-dispatch wait on the attempt, a running group sync stays open, and a manual
-permission sync of a paused pair is refused."""
+waits for the sync's writes before it locks the pair and never under it, nor
+makes a dispatch wait on the attempt, a running group sync stays open, and a
+manual permission sync of a paused pair is refused."""
 
 import threading
 import time
@@ -364,6 +364,61 @@ def test_a_dispatch_holding_the_pair_does_not_wait_on_the_pauses_attempt_lock(
     attempt = get_doc_permission_sync_attempt(db_session, attempt_id)
     assert attempt is not None
     assert attempt.status == PermissionSyncStatus.CANCELED
+
+
+def test_the_pause_does_not_wait_on_a_doc_sync_started_after_its_first_lock(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    admin: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cc_pair_id = cc_pair.id
+    monkeypatch.setattr(cc_pair_api, "client_app", MagicMock())
+
+    write_holds_lock = threading.Event()
+    write_may_commit = threading.Event()
+    started_attempt_id: int | None = None
+    write: _CallOnItsOwnSession | None = None
+
+    def sync_write(session: Session) -> None:
+        assert started_attempt_id is not None
+        lock_doc_permission_sync_attempt_if_owned(started_attempt_id, session)
+        write_holds_lock.set()
+        assert write_may_commit.wait(_WAIT_SECONDS)
+        session.commit()
+
+    lock_row = cc_pair_api.lock_connector_credential_pair_row
+
+    # A sync is dispatched, claimed and writing after the pause's first lock
+    def start_a_sync_then_lock(
+        session: Session, pair_id: int
+    ) -> ConnectorCredentialPair | None:
+        nonlocal started_attempt_id, write
+        with get_session_with_current_tenant() as sync_session:
+            started_attempt_id = _running_doc_permission_sync(sync_session, pair_id)
+        write = _CallOnItsOwnSession(sync_write)
+        assert write_holds_lock.wait(_WAIT_SECONDS)
+        return lock_row(session, pair_id)
+
+    monkeypatch.setattr(
+        cc_pair_api, "lock_connector_credential_pair_row", start_a_sync_then_lock
+    )
+
+    try:
+        # Waiting under the pair lock for that write would stall the pause
+        # until the write gives up
+        _pause(db_session, cc_pair_id, admin)
+    finally:
+        db_session.rollback()
+        write_may_commit.set()
+        if write is not None:
+            write.result()
+
+    assert started_attempt_id is not None
+    db_session.expire_all()
+    attempt = get_doc_permission_sync_attempt(db_session, started_attempt_id)
+    assert attempt is not None
+    assert attempt.status == PermissionSyncStatus.IN_PROGRESS
 
 
 @pytest.mark.parametrize(

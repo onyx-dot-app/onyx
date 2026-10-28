@@ -804,12 +804,12 @@ def lock_connector_credential_pair_row(
 
     Lock order: the Redis attempt-creation lock (when taken), the pair's open
     doc permission sync attempt (a pause takes it first), then this row, then
-    the pair's index attempt rows and its queued group sync attempt. Attempt
-    creation and status changes that stop indexing (pause, delete) take this
-    lock, so they run one after the other. A doc permission sync attempt is
-    created under a key share lock on this row, so it waits for them too.
-    Deletion's final cleanup deletes the pair's attempt rows before this row,
-    without this lock.
+    the pair's index attempt rows and its queued permission sync attempts.
+    Attempt creation and status changes that stop indexing (pause, delete)
+    take this lock, so they run one after the other. A doc permission sync
+    attempt is created under a key share lock on this row, so it waits for
+    them too. Deletion's final cleanup deletes the pair's attempt rows before
+    this row, without this lock.
 
     Never wait under this lock for a running sync's attempt row. The sync's
     writes hold that row while they wait for this one: a group sync write

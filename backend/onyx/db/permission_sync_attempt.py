@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import ColumnElement, delete, func, or_, select, update
+from sqlalchemy import ColumnElement, delete, func, or_, select, true, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine.cursor import CursorResult
 from sqlalchemy.orm import Session, joinedload
@@ -181,17 +181,18 @@ def _open_cc_pair_ids(model: _AttemptModel, db_session: Session) -> set[int]:
     }
 
 
-def _cancel_attempt__no_commit(
+def _cancel_open_attempt_where__no_commit(
     model: _AttemptModel,
     connector_credential_pair_id: int,
-    statuses: tuple[PermissionSyncStatus, ...],
     db_session: Session,
+    condition: ColumnElement[bool],
     reason: str,
 ) -> int | None:
     return db_session.execute(
         update(model)
         .where(model.connector_credential_pair_id == connector_credential_pair_id)
-        .where(model.status.in_(statuses))
+        .where(model.status.in_(_OPEN_STATUSES))
+        .where(condition)
         .values(
             status=PermissionSyncStatus.CANCELED,
             time_finished=func.now(),
@@ -207,8 +208,8 @@ def _cancel_open_attempt(
     db_session: Session,
     reason: str,
 ) -> int | None:
-    attempt_id = _cancel_attempt__no_commit(
-        model, connector_credential_pair_id, _OPEN_STATUSES, db_session, reason
+    attempt_id = _cancel_open_attempt_where__no_commit(
+        model, connector_credential_pair_id, db_session, true(), reason
     )
     db_session.commit()
     return attempt_id
@@ -273,32 +274,15 @@ def cancel_open_doc_permission_sync_attempt(
     )
 
 
-def cancel_open_doc_permission_sync_attempt__no_commit(
-    connector_credential_pair_id: int,
-    db_session: Session,
-    reason: str,
-) -> int | None:
-    """cancel_open_doc_permission_sync_attempt for a caller that commits the
-    cancel with its own changes. Until then the row stays locked, so a worker
-    that writes a failure waits and then keeps the cancel."""
-    return _cancel_attempt__no_commit(
-        DocPermissionSyncAttempt,
-        connector_credential_pair_id,
-        _OPEN_STATUSES,
-        db_session,
-        reason,
-    )
-
-
 def lock_open_doc_permission_sync_attempt__no_commit(
     connector_credential_pair_id: int,
     db_session: Session,
-) -> None:
-    """Row-locks the cc_pair's open attempt, if any, until the caller commits.
-    Waits for the sync's writes in flight, which hold a share lock on it. The
-    row stays unchanged, so a dispatch that meets it still sees an open
-    attempt and creates none, without waiting."""
-    db_session.execute(
+) -> int | None:
+    """Row-locks the cc_pair's open attempt, if any, until the caller commits,
+    and returns its ID. Waits for the sync's writes in flight, which hold a
+    share lock on it. The row stays unchanged, so a dispatch that meets it
+    still sees an open attempt and creates none, without waiting."""
+    return db_session.execute(
         select(DocPermissionSyncAttempt.id)
         .where(
             DocPermissionSyncAttempt.connector_credential_pair_id
@@ -308,6 +292,30 @@ def lock_open_doc_permission_sync_attempt__no_commit(
         # FOR NO KEY UPDATE, the lock the cancel's UPDATE takes
         .with_for_update(key_share=True)
     ).scalar_one_or_none()
+
+
+def cancel_locked_or_queued_doc_permission_sync_attempt__no_commit(
+    connector_credential_pair_id: int,
+    locked_attempt_id: int | None,
+    db_session: Session,
+    reason: str,
+) -> int | None:
+    """Marks CANCELED the attempt the caller locked with
+    lock_open_doc_permission_sync_attempt__no_commit, or the cc_pair's queued
+    attempt. A running attempt the caller did not lock is left alone, so this
+    never waits on a sync's writes. Until the caller commits the row stays
+    locked, so a worker that writes a failure waits and then keeps the cancel.
+    Returns its ID."""
+    target = DocPermissionSyncAttempt.status == PermissionSyncStatus.NOT_STARTED
+    if locked_attempt_id is not None:
+        target = or_(target, DocPermissionSyncAttempt.id == locked_attempt_id)
+    return _cancel_open_attempt_where__no_commit(
+        DocPermissionSyncAttempt,
+        connector_credential_pair_id,
+        db_session,
+        target,
+        reason,
+    )
 
 
 def get_doc_permission_sync_attempt(
@@ -635,11 +643,11 @@ def cancel_queued_external_group_sync_attempt__no_commit(
 ) -> int | None:
     """Marks the cc_pair's NOT_STARTED attempt CANCELED, so its task skips it,
     and leaves a running one alone. The caller commits. Returns its ID."""
-    return _cancel_attempt__no_commit(
+    return _cancel_open_attempt_where__no_commit(
         ExternalGroupPermissionSyncAttempt,
         connector_credential_pair_id,
-        (PermissionSyncStatus.NOT_STARTED,),
         db_session,
+        ExternalGroupPermissionSyncAttempt.status == PermissionSyncStatus.NOT_STARTED,
         reason,
     )
 
