@@ -17,6 +17,7 @@ from ee.onyx.external_permissions.azure_datalake.principals import (
 )
 from onyx.access.models import ExternalAccess
 from onyx.connectors.azure_datalake.models import AzureDataLakeAccessControl
+from onyx.connectors.exceptions import InsufficientPermissionsError
 from tests.unit.ee.onyx.external_permissions.azure_datalake.azure_datalake_fakes import (
     ACCOUNT,
     ADMIN,
@@ -331,3 +332,42 @@ def test_group_shared_by_both_sides_stays_a_group() -> None:
     # No user of group A is listed: the group stays whole.
     assert "raunak@onyx.app" not in result.external_user_emails
     assert ADMIN not in result.external_user_emails
+
+
+def test_unreadable_group_used_as_an_exclusion_fails_closed() -> None:
+    acls = _matrix()
+    ops = fake_ops(acls)
+    members = ops.list_transitive_group_members.side_effect
+
+    def hidden(*, group_id: str, next_link: str | None = None) -> object:
+        if group_id == GROUP_A:
+            raise InsufficientPermissionsError("hidden membership")
+        return members(group_id=group_id, next_link=next_link)
+
+    ops.list_transitive_group_members.side_effect = hidden
+    resolver = AzureDataLakeAccessResolver(ops, ACCOUNT, CONTAINER)
+    name = "60-other-minus-group/other-minus-group-a.txt"
+
+    result = resolver.page_access([directory("60-other-minus-group"), file(name)])[name]
+
+    # Raunak is in group A, so counting A as empty would let him read.
+    assert result.external_user_emails == set()
+    assert result.external_user_group_ids == set()
+
+
+def test_listing_a_directory_needs_execute_on_it() -> None:
+    acls = _matrix()
+    acls["read-only"] = access("user::rwx,group::---,other::r--")
+    resolver = _resolver(acls)
+
+    result = resolver.directory_access("read-only")
+
+    assert result.external_user_group_ids == BASE_GROUPS
+
+
+def test_sticky_bit_keeps_other_execute() -> None:
+    sticky = AzureDataLakeAccessControl(
+        owner=OWNER, group="$superuser", permissions="rwxr-x--t", acl=""
+    )
+
+    assert granted_principals(sticky, AclBit.EXECUTE) == frozenset({EVERYONE_TERM})

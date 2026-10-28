@@ -49,6 +49,10 @@ def user_email(user: EntraUser) -> str | None:
     return normalize_email(address).lower()
 
 
+class GroupMembersUnreadableError(Exception):
+    """Microsoft Graph refuses to list a group's members."""
+
+
 class GraphDirectory(EntraDirectory):
     def __init__(self, ops: AzureDataLakeSourceOperations) -> None:
         self._ops = ops
@@ -90,14 +94,12 @@ class GraphDirectory(EntraDirectory):
             # An ACL can still name a deleted group, which holds nobody.
             logger.info("Entra group %s no longer exists", group_id)
             members = set()
-        except InsufficientPermissionsError:
-            # Hidden membership needs Member.Read.Hidden. Its members get no
-            # access through this group.
-            logger.warning(
-                "Cannot read the members of Entra group %s. Grant "
-                "Member.Read.Hidden for groups with hidden membership.",
-                group_id,
-            )
-            members = set()
+        except InsufficientPermissionsError as e:
+            # Hidden membership needs Member.Read.Hidden. An empty set would be
+            # wrong wherever the group excludes people, so the caller decides.
+            raise GroupMembersUnreadableError(
+                f"Cannot read the members of Entra group {group_id}. Grant "
+                "Member.Read.Hidden for groups with hidden membership."
+            ) from e
         self._members[group_id] = frozenset(members)
         return self._members[group_id]

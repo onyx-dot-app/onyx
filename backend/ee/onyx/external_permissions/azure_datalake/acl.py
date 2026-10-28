@@ -71,7 +71,11 @@ def parse_acl(acl: str) -> list[AclEntry]:
 def _short_form_entries(permissions: str) -> list[AclEntry]:
     """The three base entries of a permission string such as ``rwxr-x---``,
     for a path that returns no ACL."""
-    bits: str = permissions[:9].ljust(9, "-")
+    # A sticky bit shows in other's execute slot: "t" with execute, "T"
+    # without.
+    bits: str = permissions[:9].ljust(9, "-")[:8] + {"t": "x", "T": "-"}.get(
+        permissions[8:9], permissions[8:9] or "-"
+    )
     return [
         AclEntry(entry_type=AclEntryType.USER, qualifier="", permissions=bits[0:3]),
         AclEntry(entry_type=AclEntryType.GROUP, qualifier="", permissions=bits[3:6]),

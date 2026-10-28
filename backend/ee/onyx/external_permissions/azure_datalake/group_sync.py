@@ -12,6 +12,7 @@ from ee.onyx.external_permissions.azure_datalake.connector import (
 )
 from ee.onyx.external_permissions.azure_datalake.directory import (
     GraphDirectory,
+    GroupMembersUnreadableError,
     everyone_group_id,
 )
 from onyx.configs.app_configs import PERMISSION_SYNC_TIMEOUT
@@ -21,6 +22,9 @@ from onyx.connectors.azure_datalake.source_operations import (
 )
 from onyx.connectors.microsoft_utils.entra import iter_entra_items
 from onyx.db.models import ConnectorCredentialPair
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 def _emails(directory: GraphDirectory, user_ids: frozenset[str]) -> list[str]:
@@ -53,10 +57,13 @@ def tenant_groups(
                 f"Azure Data Lake group sync passed its {PERMISSION_SYNC_TIMEOUT}s "
                 "timeout"
             )
-        yield ExternalUserGroup(
-            id=group.id,
-            user_emails=_emails(directory, directory.group_members(group.id)),
-        )
+        try:
+            members: frozenset[str] = directory.group_members(group.id)
+        except GroupMembersUnreadableError as e:
+            # Synced empty, the group grants nothing.
+            logger.warning("%s", e)
+            members = frozenset()
+        yield ExternalUserGroup(id=group.id, user_emails=_emails(directory, members))
 
 
 def azure_datalake_group_sync(

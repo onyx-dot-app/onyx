@@ -8,10 +8,12 @@ directories on the current path. A container with anonymous access is public.
 """
 
 import posixpath
+from collections.abc import Callable
 
 from ee.onyx.external_permissions.azure_datalake.acl import AclBit, granted_principals
 from ee.onyx.external_permissions.azure_datalake.directory import (
     GraphDirectory,
+    GroupMembersUnreadableError,
     everyone_group_id,
 )
 from ee.onyx.external_permissions.azure_datalake.principals import (
@@ -124,18 +126,22 @@ class AzureDataLakeAccessResolver(AzureDataLakeAccessWalker):
             self._everyone_group_id = everyone_group_id(self._ops)
         return self._everyone_group_id
 
-    def _external_access(self, acl_readers: PrincipalSet, name: str) -> ExternalAccess:
+    def _external_access(
+        self, acl_readers: Callable[[], PrincipalSet], name: str
+    ) -> ExternalAccess:
         if self._is_public():
             return ExternalAccess.public()
-        readers: PrincipalSet = union(self._rbac_readers(), acl_readers)
+        # Outside the fallback below: RBAC is read once, and an error in it
+        # fails the sync rather than every document.
+        rbac: PrincipalSet = self._rbac_readers()
         try:
             resolved: ResolvedPrincipals = resolve(
-                readers, self._directory, self._max_expanded_users
+                union(rbac, acl_readers()), self._directory, self._max_expanded_users
             )
-        except ExpansionLimitError as e:
+        except (ExpansionLimitError, GroupMembersUnreadableError) as e:
             logger.error(
-                "Azure Data Lake path %s stays private: %s Raise "
-                "AZURE_DATALAKE_MAX_EXPANDED_USERS_PER_DOC to sync it.",
+                "Azure Data Lake path %s stays private: %s If the user cap was "
+                "passed, raise AZURE_DATALAKE_MAX_EXPANDED_USERS_PER_DOC.",
                 name,
                 e,
             )
@@ -197,26 +203,35 @@ class AzureDataLakeAccessResolver(AzureDataLakeAccessWalker):
     def _readers(
         self,
         path: str,
+        is_directory: bool,
         acl: AzureDataLakeAccessControl | None,
         known: dict[str, AzureDataLakeAccessControl | None],
     ) -> PrincipalSet:
-        """ACL readers of a file, or listers of a directory: read on it, and
-        reach from its parent."""
+        """ACL readers of a file: read on it, and reach from its parent. Of a
+        directory, its listers: read and execute on it, and reach."""
         if acl is None:
             return frozenset()
         readers: PrincipalSet = granted_principals(acl, AclBit.READ)
+        if is_directory:
+            readers = intersect(
+                readers, granted_principals(acl, AclBit.EXECUTE), self._directory
+            )
         if path == ROOT:
             return readers
         return intersect(self._reach(_parent(path), known), readers, self._directory)
 
     def container_access(self) -> ExternalAccess:
         root_acl = self._read_acl_if_present(ROOT, True)
-        return self._external_access(self._readers(ROOT, root_acl, {}), "/")
+        return self._external_access(
+            lambda: self._readers(ROOT, True, root_acl, {}), "/"
+        )
 
     def directory_access(self, path: str) -> ExternalAccess:
         self._leave_other_directories(_parent(path))
         acl = self._read_acl_if_present(path, True)
-        return self._external_access(self._readers(path, acl, {path: acl}), path)
+        return self._external_access(
+            lambda: self._readers(path, True, acl, {path: acl}), path
+        )
 
     def page_access(self, paths: list[AzureDataLakePath]) -> dict[str, ExternalAccess]:
         acls: list[AzureDataLakeAccessControl | None] = (
@@ -237,7 +252,10 @@ class AzureDataLakeAccessResolver(AzureDataLakeAccessWalker):
         for path, acl in zip(paths, acls, strict=True):
             self._leave_other_directories(_parent(path.name))
             access[path.name] = self._external_access(
-                self._readers(path.name, acl, known), path.name
+                lambda path=path, acl=acl: self._readers(
+                    path.name, path.is_directory, acl, known
+                ),
+                path.name,
             )
         return access
 
