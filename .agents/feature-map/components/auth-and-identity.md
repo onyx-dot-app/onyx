@@ -587,7 +587,8 @@ is marked as such.
    follow the owner's current grants. Raw selections remain
    separate. `_scoped_pat_permitted_on_route` rejects limited tokens on routes
    without `require_permission` or `scope_exempt()`. Full-token compatibility on
-   existing unguarded routes remains. Inline user-permission
+   existing unguarded routes remains. The route contract baseline blocks new
+   token-reachable routes without an explicit gate. Inline user-permission
    checks still inspect user authority, not the token cap. API-key creation,
    regeneration, and Discord registration require `uncapped_credential_user`.
    Capped tokens cannot mint uncapped credentials through these routes. Existing

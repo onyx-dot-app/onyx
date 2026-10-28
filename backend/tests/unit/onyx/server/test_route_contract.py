@@ -6,6 +6,8 @@
 2. A handler that admits scoped group managers (``allow_scope=True``) must reach
    a registered GATE-2 helper.
 3. A GET/HEAD handler must not commit or call a ``__no_commit`` writer.
+4. A token-authenticated HTTP handler must declare a permission or exemption.
+   Session-only handlers reject tokens and do not need this declaration.
 
 Checks 2 and 3 walk the handler source and the onyx/ee functions it calls.
 ``route_contract_baseline.json`` lists the existing violations. It can only
@@ -33,6 +35,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.auth.scoped_permissions import assert_global
+from onyx.auth.users import current_user, scope_exempt, uncapped_credential_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.mcp import update_mcp_server__no_commit
@@ -43,6 +46,7 @@ MANIFEST_PATH = _HERE / "route_contract_manifest.json"
 BASELINE_PATH = _HERE / "route_contract_baseline.json"
 SCOPE_SECTION = "allow_scope_without_gate2"
 GET_WRITE_SECTION = "get_handler_writes"
+TOKEN_AUTH_SECTION = "token_auth_without_permission"
 
 # Functions that apply a scoped manager's object-level limit (GATE 2).
 GATE2_HELPERS: frozenset[str] = frozenset(
@@ -95,24 +99,29 @@ class RouteInfo:
         return f"{self.method} {self.path}"
 
 
-# Non-permission auth dependencies, labelled by name in the manifest.
-_AUTH_DEPENDENCY_NAMES: frozenset[str] = frozenset(
+_TOKEN_AUTH_DEPENDENCY_NAMES: frozenset[str] = frozenset(
     {
-        "bind_craft_session",
-        "control_plane_dep",
-        "uncapped_credential_user",
         "current_chat_accessible_user",
         "current_cloud_superuser",
         "current_limited_user",
         "current_user",
         "current_user_dependency",
+        "current_user_with_expired_token",
+        "optional_user",
+    }
+)
+
+# Non-permission auth dependencies, labelled by name in the manifest.
+_AUTH_DEPENDENCY_NAMES: frozenset[str] = _TOKEN_AUTH_DEPENDENCY_NAMES | frozenset(
+    {
+        "bind_craft_session",
+        "control_plane_dep",
+        "uncapped_credential_user",
         "current_user_from_websocket",
         "current_user_from_websocket_cookie",
-        "current_user_with_expired_token",
         "get_license_payload",
         "get_license_payload_allow_expired",
         "get_optional_license_payload",
-        "optional_user",
         "scope_exempt",
         "verify_metrics_token",
         "verify_scim_token",
@@ -271,6 +280,25 @@ def get_write_violations(app: FastAPI) -> set[str]:
     return violations
 
 
+def token_route_violations(app: FastAPI) -> set[str]:
+    violations: set[str] = set()
+    for route in iter_routes(app):
+        if route.method == "WS" or _permission_dependencies(route):
+            continue
+        if any(
+            _attr(call, "_is_scope_exempt")
+            or _attr(call, "__name__") == "uncapped_credential_user"
+            for call in route.dependency_calls
+        ):
+            continue
+        if any(
+            _attr(call, "__name__") in _TOKEN_AUTH_DEPENDENCY_NAMES
+            for call in route.dependency_calls
+        ):
+            violations.add(route.key)
+    return violations
+
+
 # --- fixtures ---------------------------------------------------------------
 
 
@@ -351,6 +379,16 @@ def test_get_handlers_do_not_write(app: FastAPI) -> None:
     )
 
 
+def test_token_authenticated_handlers_declare_permission_or_exemption(
+    app: FastAPI,
+) -> None:
+    _assert_matches_baseline(
+        token_route_violations(app),
+        TOKEN_AUTH_SECTION,
+        "Token-authenticated HTTP handlers without a permission or scope exemption",
+    )
+
+
 # --- the checks catch a violating route --------------------------------------
 
 
@@ -405,3 +443,40 @@ def test_checks_flag_a_violating_route() -> None:
         "GET /read-that-commits": "basic",
         "GET /read-that-calls-a-writer": "basic",
     }
+
+
+def test_token_route_check_requires_a_permission_or_exemption() -> None:
+    router = APIRouter()
+
+    @router.get("/new-token-route")
+    def token_route(_user: User = Depends(current_user)) -> None:
+        return None
+
+    @router.get("/permitted-token-route")
+    def permitted_route(
+        _user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    ) -> None:
+        return None
+
+    @router.get("/exempt-token-route", dependencies=[Depends(scope_exempt)])
+    def exempt_route(_user: User = Depends(current_user)) -> None:
+        return None
+
+    @router.get("/session-only-route")
+    def session_route(_user: User = Depends(uncapped_credential_user)) -> None:
+        return None
+
+    @router.get("/public-route")
+    def public_route() -> None:
+        return None
+
+    @router.websocket("/token-websocket")
+    def websocket_route(_user: User = Depends(current_user)) -> None:
+        return None
+
+    dummy = FastAPI()
+    dummy.include_router(router)
+    assert token_route_violations(dummy) == {"GET /new-token-route"}
+    assert (
+        build_manifest(dummy)["GET /session-only-route"] == "uncapped_credential_user"
+    )
