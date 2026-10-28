@@ -18,6 +18,7 @@ Interactive.Stateless          <- variant, prominence, interaction, disabled, hr
 - **Colors are not in the Button.** `Interactive.Stateless` sets `background-color`, `--interactive-foreground`, and `--interactive-foreground-icon` per variant/prominence/state. Descendants opt in via the `.interactive-foreground` and `.interactive-foreground-icon` utility classes.
 - **Icon-only buttons render as squares** because `Interactive.Container` enforces `min-width >= height`.
 - **Border is automatic for `prominence="secondary"`.** The Container receives `border={prominence === "secondary"}` internally.
+- **A label change animates.** When the label text changes, the old text fades out, the width adjusts to the new text, then the new text fades in (150ms each). Labels that never change cost nothing. With reduced motion, or without layout (a hidden button, tests), the text changes at once.
 
 ## Props
 

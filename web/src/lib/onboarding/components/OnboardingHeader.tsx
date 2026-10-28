@@ -63,7 +63,7 @@ function OnboardingHeader({
   if (currentNumber !== null && currentNumber !== counterNumber) {
     setCounterNumber(currentNumber);
   }
-  // The prompt and the main button swap in the direction of the step change.
+  // The prompt swaps in the direction of the step change.
   const [lastStep, setLastStep] = useState(onboardingState.currentStep);
   const [direction, setDirection] = useState<PresenceSwapDirection>("forward");
   if (onboardingState.currentStep !== lastStep) {
@@ -142,21 +142,14 @@ function OnboardingHeader({
                   onClick={onboardingActions.prevStep}
                 />
               </Presence>
-              {/* Next turns into Finish Setup on the final step. The swap
-                  animates the width, so the wider label does not push the
-                  buttons beside it. */}
-              <Presence.Swap
-                swapKey={isPostStep ? "finish" : "next"}
-                direction={direction}
-                axis="inline"
+              {/* Next turns into Finish Setup on the final step; the
+                  button animates its own label and width. */}
+              <Button
+                disabled={!onboardingState.isButtonActive}
+                onClick={handleButtonClick}
               >
-                <Button
-                  disabled={!onboardingState.isButtonActive}
-                  onClick={handleButtonClick}
-                >
-                  {stepButtonText}
-                </Button>
-              </Presence.Swap>
+                {stepButtonText}
+              </Button>
             </Section>
           </Section>
         ) : (
