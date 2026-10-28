@@ -1,0 +1,71 @@
+---
+title: "Data Flows"
+description: "How data and queries are handled and stored"
+icon: "arrows-split-up-and-left"
+---
+
+## Indexing Flow
+
+Documents from connectors and user uploads pass through the Onyx indexing pipeline. With the default configuration,
+no document data leaves your deployment.
+
+<img className="rounded-image" src="/assets/security/OnyxIndexingFlow.webp" alt="Onyx Indexing Flow"/>
+
+<Note>
+  LLM-based contextual retrieval and image captioning are off by default.
+</Note>
+
+Not shown in the diagram, the object store (which runs inside your deployment)
+holds the original document before processing steps such as chunking.
+
+Admins can turn on these options:
+
+<Info>
+  If you turn on these options, Onyx sends document content to the selected third-party service for processing.
+</Info>
+
+- **API-based embedding model** (**Admin Panel > Index Settings**). Teams choose this instead of running
+  their own GPUs, using a smaller embedding model, or accepting a slower initial indexing.
+- **Image captioning**. A vision-capable LLM describes images inside files and standalone image files
+  so that Onyx can retrieve them as text.
+- **Contextual Retrieval** (**Admin Panel > Index Settings**). An LLM adds a short, document-aware
+  summary to each chunk. This improves retrieval for chunks that are ambiguous on their own.
+
+## Query Flow
+
+<img className="rounded-image" src="/assets/security/OnyxQueryFlow.webp" alt="Onyx Query Flow"/>
+
+When a user sends a message, the LLM decides whether to answer directly or to fetch more context.
+
+To fetch context, the agent can run an internal search over your indexed documents, use a built-in tool (code execution,
+web search, image generation),
+or call a custom action that your admins configured under **Admin Panel > Plugins** (OpenAPI Actions and MCP Actions).
+
+Internal search applies the user's document permissions before any result reaches the LLM. By default,
+Onyx sends data only to the LLM provider that your admins configured.
+
+### Configurable External Services
+
+**Web Search** (**Admin Panel > Web Search**): sends search queries to the configured search provider.
+Supported providers are Google PSE, Serper, Exa, Firecrawl, Brave, Tavily, and SearXNG.
+Onyx then fetches page contents with its built-in crawler or a configured content provider such as Exa or Serper.
+
+**Image Generation** (**Admin Panel > Image Generation**): sends prompts to an OpenAI, Azure OpenAI,
+or Vertex AI image model.
+
+**Code Interpreter** (**Admin Panel > Code Interpreter**): runs Python that the LLM writes.
+The code runs in a separate container inside your deployment. Admins can turn it off for the whole deployment.
+
+**Plugins**: OpenAPI Actions and MCP Actions call the external APIs that your admins configure.
+Each action has a policy of **Auto-approve**, **Ask**, or **Disabled**.
+
+**Craft**: runs agent-generated code in a per-user sandbox.
+All sandbox traffic passes through a proxy that injects credentials and enforces app policies.
+See [Craft Architecture](/security/architecture/craft).
+
+**Tracing** (optional): when an admin sets `BRAINTRUST_API_KEY` or the `LANGFUSE_*` variables,
+Onyx sends LLM call traces to Braintrust or Langfuse. See [Tracing](/admins/advanced_configs/tracing).
+
+**Hook Extensions** (Enterprise, optional):
+admin-installed hooks run inside the Onyx pipeline and can call the external services your admins choose.
+See [Hook Extensions](/admins/advanced_configs/hook_extensions).

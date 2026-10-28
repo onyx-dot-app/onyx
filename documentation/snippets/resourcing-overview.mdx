@@ -1,0 +1,28 @@
+## Resourcing Overview
+
+### Onyx Lite
+
+| Resource | Minimum | Preferred |
+| --- | --- | --- |
+| CPU | 2 vCPU | 4 vCPU |
+| RAM | 2 GB | 4 GB |
+| Disk | 10 GB | 50 GB |
+
+<Info>
+  Onyx Lite uses under 1GB of memory at baseline.
+  Disk and memory usage scale with the number of files users upload to the system,
+  since PostgreSQL handles file storage in Lite mode.
+</Info>
+
+### Onyx Standard
+
+| Resource | Minimum | Preferred |
+| --- | --- | --- |
+| CPU | 4 vCPU | 8+ vCPU |
+| RAM | 10 GB | 16+ GB |
+| Disk | 32 GB + ~2.5x indexed data | 500 GB for organizations \<5000 users |
+
+<Warning>
+  OpenSearch enforces a read-only block on indices when disk usage hits the flood stage watermark (default 95%),
+  which effectively blocks all writes. Monitor disk usage and plan capacity accordingly.
+</Warning>

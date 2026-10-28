@@ -1,0 +1,526 @@
+---
+title: "Create Connectors"
+description: "Learn how to create and configure connectors programmatically"
+icon: "link"
+---
+
+<Tip>
+  This is an advanced guide for automating connector creation.
+  Try the Admin Panel or the [Ingestion API](/developers/guides/index_files_ingestion_api) first.
+</Tip>
+
+To see available connectors, see the [Connectors page](/admins/connectors/overview).
+
+<Note>
+  Connector management needs a vector database. On deployments running with `DISABLE_VECTOR_DB` set (Onyx Lite),
+  the `/manage/admin/connector` endpoints answer with `501`.
+</Note>
+
+## Guide
+
+Skip to the [Full Code](#full-code) section if you don't want the step-by-step guide.
+
+In this example, we'll automate creating Jira Connectors for a selection of projects.
+
+**You will need an API key that can manage connectors.** Its service account must be in the Admin group,
+or in a group granting **Manage Connectors & Document Sets**.
+Every request in this guide is gated on `manage:connectors`.
+A full-access Personal Access Token from a user with that permission also works. A limited-access token does not,
+because no token scope grants `manage:connectors`.
+See [Understanding Permissions](/admins/permissions/understanding_permissions).
+
+<Steps>
+  <Step title="Prepare your request">
+    <CodeGroup>
+      ```python Python
+      import requests
+
+      API_BASE_URL = "https://cloud.onyx.app/api"   # or your own domain
+      API_KEY = "YOUR_KEY_HERE"
+
+      headers = {
+        "Authorization": f"Bearer {API_KEY}",
+        "Content-Type": "application/json"
+      }
+      ```
+
+      ```bash Shell
+      API_BASE_URL="https://cloud.onyx.app/api"
+      API_KEY="YOUR_KEY_HERE"
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Prepare your ConnectorSpecificConfig">
+    Each Connector type has a different `ConnectorSpecificConfig`. To find the correct configuration,
+    find your relevant Connector in
+    [`backend/onyx/connectors/`](https://github.com/onyx-dot-app/onyx/tree/main/backend/onyx/connectors).
+
+    For Jira, we index a selection of projects rather than everything, so we set `jira_base_url` and `project_key`.
+    `comment_email_blacklist` is optional.
+
+    ```json JSON
+    {
+      "jira_base_url": "string",
+      "project_key": "string | null",
+      "jql_query": "string | null",
+      "comment_email_blacklist": ["string"] | null,
+      "labels_to_skip": ["string"] | null
+    }
+    ```
+
+    Leave `project_key` and `jql_query` empty to index everything.
+    Set `jql_query` instead of `project_key` to scope the connector with a JQL query.
+    Issues that carry a label in `labels_to_skip` are not indexed.
+
+    <Note>
+      The `ConnectorSpecificConfig` fields are the same fields you fill out in the Admin Panel when you create a
+      Connector.
+    </Note>
+  </Step>
+
+  <Step title="Prepare your Connector payload">
+    In addition to the `ConnectorSpecificConfig`,
+    we also need to satisfy the schema for the `ConnectorUpdateRequest` object. See [Core Concepts:
+    Connectors](/developers/core_concepts#connectors) for more details.
+
+    | Field | Description |
+    |-------|-------------|
+    | `name` | Display name of the Connector. |
+    | `source` | Source type, for example `jira`. |
+    | `input_type` | `poll` for sources Onyx polls on a schedule, `load_state` for one-time loads. |
+    | `access_type` | `public`, `private`, `sync`, or `sync_restricted`. `sync` and `sync_restricted` need a connector with permission sync (Enterprise). |
+    | `groups` | IDs of the user groups that manage the Connector. Omit it for Admin-managed Connectors. |
+    | `refresh_freq` | Seconds between indexing runs. `null` indexes once and never refreshes. |
+    | `prune_freq` | Seconds between pruning runs that remove deleted documents. |
+    | `check_freq` | Seconds between connector health checks. Omit it to run checks only on request. |
+    | `indexing_start` | ISO 8601 timestamp. Only documents updated after this time are indexed. |
+    <CodeGroup>
+      ```python Python
+      connector_payload = {
+        "name": f"jira-{project_key}",
+        "source": "jira",
+        "input_type": "poll",
+        "access_type": "public",
+        "connector_specific_config": {
+          "jira_base_url": JIRA_BASE_URL,
+          "project_key": project_key,
+          "comment_email_blacklist": ["legal@company.com"]
+        },
+        "refresh_freq": 3600,  # Refresh every hour (3600 seconds)
+        "prune_freq": 86400,   # Prune every day (86400 seconds)
+      }
+      ```
+
+      ```json JSON
+      {
+        "name": "jira-TECH",
+        "source": "jira",
+        "input_type": "poll",
+        "access_type": "public",
+        "connector_specific_config": {
+          "jira_base_url": "https://your-company.atlassian.net",
+          "project_key": "TECH",
+          "comment_email_blacklist": ["legal@company.com"]
+        },
+        "refresh_freq": 3600,
+        "prune_freq": 86400
+      }
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Make the request">
+    <Tip>
+      Save the Connector ID from the response! You will need this later.
+    </Tip>
+
+    <CodeGroup>
+      ```python Python expandable
+      import requests
+      import json
+      from datetime import datetime
+
+      PROJECTS_TO_INDEX = [
+        "TECH",
+        "SALES",
+        "OPS",
+      ]
+
+      JIRA_BASE_URL = "https://your-company.atlassian.net"
+      connector_ids = []
+
+      for project_key in PROJECTS_TO_INDEX:
+        connector_payload = {
+          "name": f"jira-{project_key}",
+          "source": "jira",
+          "input_type": "poll",
+          "access_type": "public",
+          "connector_specific_config": {
+            "jira_base_url": JIRA_BASE_URL,
+            "project_key": project_key,
+            "comment_email_blacklist": ["legal@company.com"]
+          },
+          "refresh_freq": 3600,  # Refresh every hour (3600 seconds)
+          "prune_freq": 86400,   # Prune every day (86400 seconds)
+        }
+
+        response = requests.post(
+          f"{API_BASE_URL}/manage/admin/connector",
+          headers=headers,
+          json=connector_payload
+        )
+
+        if response.status_code == 200:
+          connector_data = response.json()
+          connector_id = connector_data.get('id')
+          connector_ids.append(connector_id)
+          print(f"Successfully created connector for project {project_key}")
+          print(f"Connector ID: {connector_id}")
+        else:
+          print(f"Failed to create connector for project {project_key}")
+          print(f"Status: {response.status_code}")
+          print(f"Error: {response.text}")
+      ```
+
+      ```bash Shell expandable
+      # Create connector for TECH project
+      curl -X POST "${API_BASE_URL}/manage/admin/connector" \
+        -H "Authorization: Bearer ${API_KEY}" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "name": "jira-TECH",
+          "source": "jira",
+          "input_type": "poll",
+          "access_type": "public",
+          "connector_specific_config": {
+            "jira_base_url": "https://your-company.atlassian.net",
+            "project_key": "TECH",
+            "comment_email_blacklist": ["legal@company.com"]
+          },
+          "refresh_freq": 3600,
+          "prune_freq": 86400
+        }'
+
+      # Create connector for SALES project
+      curl -X POST "${API_BASE_URL}/manage/admin/connector" \
+        -H "Authorization: Bearer ${API_KEY}" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "name": "jira-SALES",
+          "source": "jira",
+          "input_type": "poll",
+          "access_type": "public",
+          "connector_specific_config": {
+            "jira_base_url": "https://your-company.atlassian.net",
+            "project_key": "SALES",
+            "comment_email_blacklist": ["legal@company.com"]
+          },
+          "refresh_freq": 3600,
+          "prune_freq": 86400
+        }'
+
+      # Create connector for OPS project
+      curl -X POST "${API_BASE_URL}/manage/admin/connector" \
+        -H "Authorization: Bearer ${API_KEY}" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "name": "jira-OPS",
+          "source": "jira",
+          "input_type": "poll",
+          "access_type": "public",
+          "connector_specific_config": {
+            "jira_base_url": "https://your-company.atlassian.net",
+            "project_key": "OPS",
+            "comment_email_blacklist": ["legal@company.com"]
+          },
+          "refresh_freq": 3600,
+          "prune_freq": 86400
+        }'
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Find your Credentials for the Connector">
+    The easiest way to create a Credential is the **Add Connector** flow in **Admin Panel** > **Connectors**.
+    Credentials created this way are reusable across Connectors of the same source.
+
+    Certain Connectors, such as the File and Web connectors, do not need a Credential. `credential_id:
+    0` is a default empty Credential you can use for these Connectors.
+
+    To list your Credentials, you can use the `GET manage/admin/credential` endpoint.
+
+    <CodeGroup>
+      ```python Python
+      response = requests.get(
+        f"{API_BASE_URL}/manage/admin/credential",
+        headers=headers
+      )
+
+      credentials = response.json()
+      jira_credential_id = next(cred for cred in credentials if cred['source'] == 'jira')['id']
+      ```
+
+      ```bash Shell
+      curl -X GET "${API_BASE_URL}/manage/admin/credential" \
+        -H "Authorization: Bearer ${API_KEY}" \
+        -H "Content-Type: application/json"
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Associate the Credential with the Connector">
+    <Note>
+      If you do not do this step, your `Connector` is not fully created and you will not see it in the Admin Panel!
+    </Note>
+
+    The request body names the connector-credential pair and sets who can read its documents.
+    `name` and `access_type` are required. Optional fields: `groups` (user group IDs that manage the pair)
+    and `auto_sync_options` (settings for permission sync, when `access_type` is `sync` or `sync_restricted`).
+
+    <CodeGroup>
+      ```python Python
+      for connector_id in connector_ids:
+        try:
+          response = requests.put(
+            f"{API_BASE_URL}/manage/admin/connector/{connector_id}/credential/{jira_credential_id}",
+            headers=headers,
+            json={
+              "name": f"jira-{connector_id}",
+              "access_type": "public",
+            },
+          )
+
+          if response.status_code == 200:
+            print(f"Successfully associated credential with connector {connector_id}")
+          else:
+            print(f"Failed to associate credential with connector {connector_id}")
+            print(f"Status: {response.status_code}. Error: {response.text}")
+        except Exception as e:
+          print(f"Failed to associate credential with connector {connector_id}: {e}")
+      ```
+
+      ```bash Shell
+      # Replace CONNECTOR_ID and CREDENTIAL_ID with actual values
+      curl -X PUT "${API_BASE_URL}/manage/admin/connector/CONNECTOR_ID/credential/CREDENTIAL_ID" \
+        -H "Authorization: Bearer ${API_KEY}" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "name": "jira-TECH",
+          "access_type": "public"
+        }'
+      ```
+    </CodeGroup>
+  </Step>
+</Steps>
+
+## Full Code
+
+<CodeGroup>
+  ```python Python expandable
+  import requests
+  import json
+  from datetime import datetime
+
+  # Configuration
+  API_BASE_URL = "https://cloud.onyx.app/api"   # or your own domain
+  API_KEY = "YOUR_KEY_HERE"
+
+  headers = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Content-Type": "application/json"
+  }
+
+  # Projects to create connectors for
+  PROJECTS_TO_INDEX = [
+    "TECH",
+    "SALES",
+    "OPS",
+  ]
+
+  JIRA_BASE_URL = "https://your-company.atlassian.net"
+  connector_ids = []
+
+  # Step 1: Create connectors for each project
+  print("Creating connectors...")
+  for project_key in PROJECTS_TO_INDEX:
+    connector_payload = {
+      "name": f"jira-{project_key}",
+      "source": "jira",
+      "input_type": "poll",
+      "access_type": "public",
+      "connector_specific_config": {
+        "jira_base_url": JIRA_BASE_URL,
+        "project_key": project_key,
+        "comment_email_blacklist": ["legal@company.com"]
+      },
+      "refresh_freq": 3600,  # Refresh every hour (3600 seconds)
+      "prune_freq": 86400,   # Prune every day (86400 seconds)
+    }
+
+    response = requests.post(
+      f"{API_BASE_URL}/manage/admin/connector",
+      headers=headers,
+      json=connector_payload
+    )
+
+    if response.status_code == 200:
+      connector_data = response.json()
+      connector_id = connector_data.get('id')
+      connector_ids.append(connector_id)
+      print(f"Successfully created connector for project {project_key}")
+      print(f"Connector ID: {connector_id}")
+    else:
+      print(f"Failed to create connector for project {project_key}")
+      print(f"Status: {response.status_code}")
+      print(f"Error: {response.text}")
+
+  # Step 2: Get credentials
+  print("\nFetching credentials...")
+  response = requests.get(
+    f"{API_BASE_URL}/manage/admin/credential",
+    headers=headers
+  )
+
+  if response.status_code == 200:
+    credentials = response.json()
+    # Find Jira credential (assumes you have one created)
+    jira_credential = next((cred for cred in credentials if cred['source'] == 'jira'), None)
+
+    if jira_credential:
+      jira_credential_id = jira_credential['id']
+      print(f"Found Jira credential with ID: {jira_credential_id}")
+    else:
+      print("No Jira credential found. Please create one in the Admin Panel first.")
+      exit(1)
+  else:
+    print(f"Failed to fetch credentials: {response.status_code}")
+    print(f"Error: {response.text}")
+    exit(1)
+
+  # Step 3: Associate credentials with connectors
+  print("\nAssociating credentials with connectors...")
+  for connector_id in connector_ids:
+    try:
+      response = requests.put(
+        f"{API_BASE_URL}/manage/admin/connector/{connector_id}/credential/{jira_credential_id}",
+        headers=headers,
+        json={
+          "name": f"jira-{connector_id}",
+          "access_type": "public",
+        },
+      )
+
+      if response.status_code == 200:
+        print(f"Successfully associated credential with connector {connector_id}")
+      else:
+        print(f"Failed to associate credential with connector {connector_id}")
+        print(f"Status: {response.status_code}. Error: {response.text}")
+    except Exception as e:
+      print(f"Failed to associate credential with connector {connector_id}: {e}")
+
+  print(f"\nCompleted! Created {len(connector_ids)} connectors with IDs: {connector_ids}")
+  ```
+
+  ```bash Shell expandable
+  #!/bin/bash
+
+  # Configuration
+  API_BASE_URL="https://cloud.onyx.app/api"
+  API_KEY="YOUR_KEY_HERE"
+
+  # Array of projects to create connectors for
+  PROJECTS=("TECH" "SALES" "OPS")
+  JIRA_BASE_URL="https://your-company.atlassian.net"
+
+  # Array to store connector IDs
+  CONNECTOR_IDS=()
+
+  echo "Creating connectors..."
+
+  # Step 1: Create connectors for each project
+  for PROJECT in "${PROJECTS[@]}"; do
+    echo "Creating connector for project: $PROJECT"
+
+    RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "${API_BASE_URL}/manage/admin/connector" \
+      -H "Authorization: Bearer ${API_KEY}" \
+      -H "Content-Type: application/json" \
+      -d "{
+        \"name\": \"jira-${PROJECT}\",
+        \"source\": \"jira\",
+        \"input_type\": \"poll\",
+        \"access_type\": \"public\",
+        \"connector_specific_config\": {
+          \"jira_base_url\": \"${JIRA_BASE_URL}\",
+          \"project_key\": \"${PROJECT}\",
+          \"comment_email_blacklist\": [\"legal@company.com\"]
+        },
+        \"refresh_freq\": 3600,
+        \"prune_freq\": 86400
+      }"
+    )
+
+    HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+    BODY=$(echo "$RESPONSE" | head -n -1)
+
+    if [ "$HTTP_CODE" -eq 200 ]; then
+      CONNECTOR_ID=$(echo "$BODY" | jq -r '.id')
+      CONNECTOR_IDS+=("$CONNECTOR_ID")
+      echo "Successfully created connector for project $PROJECT"
+      echo "Connector ID: $CONNECTOR_ID"
+    else
+      echo "Failed to create connector for project $PROJECT"
+      echo "Status: $HTTP_CODE"
+      echo "Error: $BODY"
+    fi
+  done
+
+  # Step 2: Get credentials
+  echo -e "\nFetching credentials..."
+  CRED_RESPONSE=$(curl -s -w "\n%{http_code}" -X GET "${API_BASE_URL}/manage/admin/credential" \
+  -H "Authorization: Bearer ${API_KEY}" \
+  -H "Content-Type: application/json")
+
+  CRED_HTTP_CODE=$(echo "$CRED_RESPONSE" | tail -n1)
+  CRED_BODY=$(echo "$CRED_RESPONSE" | head -n -1)
+
+  if [ "$CRED_HTTP_CODE" -eq 200 ]; then
+    JIRA_CREDENTIAL_ID=$(echo "$CRED_BODY" | jq -r '.[] | select(.source == "jira") | .id' | head -n1)
+
+    if [ "$JIRA_CREDENTIAL_ID" != "null" ] && [ -n "$JIRA_CREDENTIAL_ID" ]; then
+      echo "Found Jira credential with ID: $JIRA_CREDENTIAL_ID"
+    else
+      echo "No Jira credential found. Please create one in the Admin Panel first."
+      exit 1
+    fi
+  else
+    echo "Failed to fetch credentials: $CRED_HTTP_CODE"
+    echo "Error: $CRED_BODY"
+    exit 1
+  fi
+
+  # Step 3: Associate credentials with connectors
+  echo -e "\nAssociating credentials with connectors..."
+  for CONNECTOR_ID in "${CONNECTOR_IDS[@]}"; do
+    echo "Associating credential with connector: $CONNECTOR_ID"
+
+    ASSOC_RESPONSE=$(curl -s -w "\n%{http_code}" -X PUT "${API_BASE_URL}/manage/admin/connector/${CONNECTOR_ID}/credential/${JIRA_CREDENTIAL_ID}" \
+      -H "Authorization: Bearer ${API_KEY}" \
+      -H "Content-Type: application/json" \
+      -d "{\"name\": \"jira-${CONNECTOR_ID}\", \"access_type\": \"public\"}")
+
+    ASSOC_HTTP_CODE=$(echo "$ASSOC_RESPONSE" | tail -n1)
+    ASSOC_BODY=$(echo "$ASSOC_RESPONSE" | head -n -1)
+
+    if [ "$ASSOC_HTTP_CODE" -eq 200 ]; then
+      echo "Successfully associated credential with connector $CONNECTOR_ID"
+    else
+      echo "Failed to associate credential with connector $CONNECTOR_ID"
+      echo "Status: $ASSOC_HTTP_CODE"
+      echo "Error: $ASSOC_BODY"
+    fi
+  done
+
+  echo -e "\nCompleted! Created ${#CONNECTOR_IDS[@]} connectors with IDs: ${CONNECTOR_IDS[*]}"
+  ```
+</CodeGroup>

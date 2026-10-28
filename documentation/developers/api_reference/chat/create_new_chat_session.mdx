@@ -1,0 +1,10 @@
+---
+title: "Create New Chat Session"
+openapi: "POST /chat/create-chat-session"
+---
+
+<Info>
+  **Required permission:** Chat &mdash; Write (`write:chat`), which `basic` includes, so any signed-in user has it.
+  A limited [Personal Access Token](/developers/overview#personal-access-tokens) needs the Chat &mdash; Write scope.
+  A service account in no group also holds it. Anonymous users can call this when anonymous access is enabled.
+</Info>

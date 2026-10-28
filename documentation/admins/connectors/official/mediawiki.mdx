@@ -1,0 +1,49 @@
+---
+title: "MediaWiki"
+description: "Access wiki articles from MediaWiki"
+---
+
+## How it works
+
+The MediaWiki connector indexes pages from any public MediaWiki site, for example a company wiki or a Fandom wiki.
+You choose the pages to index by category, by page name, or both. Each wiki page becomes one document.
+The page categories are stored as document metadata.
+
+The connector reads the wiki through its public API. It does not need a credential. On each poll,
+the connector re-indexes pages that changed since the last run.
+
+<Note>
+  To index Wikipedia, use the [Wikipedia connector](/admins/connectors/official/wikipedia) instead.
+</Note>
+
+## Setting up
+
+<Steps>
+  <Step title="Enter the site details">
+    Go to **Admin Panel → Connectors** and select **MediaWiki**.
+
+    - **Language Code**: the language code of the wiki, for example `en`. The default is `en`.
+    - **MediaWiki Site URL**: the URL of the wiki, for example `https://wiki.example.com`.
+  </Step>
+
+  <Step title="Choose what to index">
+    - **Categories to Index**: category names to index, with or without the `Category:` prefix. The connector indexes every page in each category.
+    - **Pages**: names of individual pages to index.
+    - **Recursion Depth**: how many levels of subcategories to follow. `0` indexes only the listed categories. `-1` follows every subcategory.
+
+    Enter at least one category or page.
+  </Step>
+
+  <Step title="Choose document access">
+    Under **Document Access**, select **Everyone in Your Organization** or **Specific Groups**.
+    **Specific Groups** needs the Business or Enterprise tier on Onyx Cloud, or the Enterprise Edition when self-hosted.
+  </Step>
+
+  <Step title="Start indexing">
+    Select **Create Connector** to start indexing.
+  </Step>
+</Steps>
+
+<Note>
+  The MediaWiki connector does not support **Sync with MediaWiki** (permission sync).
+</Note>

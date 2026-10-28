@@ -1,0 +1,106 @@
+---
+title: "Service Accounts"
+description: "Create and manage service accounts for programmatic access"
+icon: "key"
+---
+
+A service account is a non-human user that exists only to call the Onyx API. Creating one gives you an API key.
+
+<Info>
+  This page applies to Onyx **v4.7 and later**. For older versions,
+  see [Service Accounts before v4.7](/admins/user_management/api_keys_legacy).
+</Info>
+
+<Info>
+  Service accounts require a **Business** or **Enterprise** plan, or Onyx Cloud. On Onyx Cloud,
+  trial workspaces cannot create API keys. Upgrade to a paid plan first.
+</Info>
+
+<Note>
+  A service account is a distinct user in Onyx, so you can trace its activity, keep its chat sessions private,
+  and scope resources to it. It cannot sign in with a password. It authenticates only with its API key.
+</Note>
+
+## How a Service Account Gets Its Access
+
+A service account has no permissions of its own.
+Its access is the combination of the permissions of every **group** you assign it, exactly like a person's access.
+
+| Groups assigned | What the key can do |
+|---|---|
+| None | Chat only. It can create sessions and send messages, but it cannot search and cannot reach any admin endpoint. |
+| Basic | Chat, search, projects, and its own agents. |
+| Admin | Everything, including every `admin/` endpoint. |
+| A custom group | Whatever that group grants. A group with **Manage Connectors & Document Sets**, for example, lets the key manage connectors. |
+
+Assigning several groups adds their permissions together.
+
+<Tip>
+  If a key can chat but search returns nothing, check whether its service account is in a group.
+</Tip>
+
+For how groups and permissions fit together,
+see [Understanding Permissions](/admins/permissions/understanding_permissions).
+
+## Who Can Manage Service Accounts
+
+Managing service accounts requires the **Manage Service Accounts** permission, which an admin grants to a group.
+Admins always have it.
+
+<Warning>
+  Granting **Manage Service Accounts** is equivalent to granting Admin. The group selector is deliberately uncapped,
+  so anyone who can create a service account can put it in the Admin group and then use its key.
+</Warning>
+
+## Creating a Service Account
+
+<Steps>
+  <Step title="Create the account">
+    Go to **Admin Panel → Service Accounts** and click **New Service Account**.
+    Enter a **Name** and select the **Groups** it should belong to. You can change both later.
+  </Step>
+
+  <Step title="Save and copy the key">
+    The **Service Account API Key** dialog shows the key once. Copy or download it before you close the dialog.
+  </Step>
+</Steps>
+
+## Managing Service Accounts
+
+For each account you can:
+
+| Action | What it does |
+|---|---|
+| Regenerate | Issues a new key and revokes the current one. |
+| Groups | Adds the account to groups or removes it from them, which changes what its key can do. |
+| Delete Account | Removes the account and its key. |
+
+<Warning>
+  Regenerating or deleting a key breaks any application still using the old one.
+</Warning>
+
+## Personal Access Tokens
+
+Service accounts are for applications. When you want a token that acts as a **person**,
+use a Personal Access Token instead.
+
+Any user with the **Create User Access Token** permission can create one from **Settings** > **Accounts & Access** >
+**Access Tokens**. Click **New Access Token**, then set:
+
+| Field | Options |
+|---|---|
+| **Expires in** | 7 days, 30 days, 365 days, or no expiration. |
+| **Permissions** | **Full access** inherits all of the user's permissions. **Limited access** restricts the token to the capabilities you select. |
+
+A token can never do more than the user who created it. Users see and revoke only their own tokens.
+
+The **Basic** group grants **Create User Access Token** by default.
+An admin can turn it off on the Basic group's page to stop users from creating tokens.
+The same permission controls whether users can authorize external MCP clients that connect to Onyx.
+
+<Note>
+  Changing or resetting a user's password revokes all of their Personal Access Tokens. API keys are not affected.
+  On Onyx Cloud, Personal Access Tokens require a paid plan.
+</Note>
+
+See [Overview & Auth](/developers/overview#personal-access-tokens) for token scopes and usage.

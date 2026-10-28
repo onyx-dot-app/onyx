@@ -1,0 +1,112 @@
+---
+title: "OIDC"
+description: "OpenID Connect authentication setup"
+icon: "id-card"
+---
+
+Let users sign in to Onyx with any OpenID Connect identity provider, such as Okta, Microsoft Entra ID, Auth0,
+or Keycloak. You create an application in the identity provider and add it as an SSO provider in the Onyx admin panel.
+No restart is needed.
+
+This guide uses Okta as the example. The steps are similar for other providers.
+
+<Note>
+  One enabled SSO provider is available in all editions.
+  Two or more enabled providers at the same time need the Business or Enterprise plan.
+</Note>
+
+## Guide
+
+### Step 1: Create an Application in Your Identity Provider
+
+1. In the Okta admin console, go to **Applications → Applications** and click **Create App Integration**.
+2. Select **OIDC - OpenID Connect** and **Web Application**.
+
+![Create an Okta app integration](/assets/deployment/oidc_create_integration.webp)
+
+3. Enter a name for the application.
+4. Under **Sign-in redirect URIs**, add the redirect URI for your Onyx provider. It has this form:
+
+```
+https://<your-onyx-domain>/api/auth/oidc/<provider-name>/callback
+```
+
+Use the provider name you plan to enter in Onyx, for example `okta`.
+
+5. Under **Assignments**, select who can use the application. Save.
+
+![Okta application settings](/assets/deployment/oidc_config.webp)
+
+### Step 2: Collect the Client Details
+
+From the application's **General** tab, copy:
+
+- **Client ID**
+- **Client secret**
+
+![Okta client credentials](/assets/deployment/oidc_secrets.webp)
+
+You also need the OpenID configuration URL. For Okta it is:
+
+```
+https://<your-okta-domain>/.well-known/openid-configuration
+```
+
+For Microsoft Entra ID it is `https://login.microsoftonline.com/<tenant-id>/v2.0/.well-known/openid-configuration`.
+
+### Step 3: Add the Provider in Onyx
+
+1. In Onyx, go to **Admin Panel → Organization → SSO Providers**.
+2. Click **Add Provider** and set **Provider Type** to **OIDC**.
+3. Fill in the form:
+
+| Field                            | Value                                                                                |
+| -------------------------------- | ------------------------------------------------------------------------------------ |
+| **Name**                         | A lowercase slug such as `okta`. It is part of the redirect URI and cannot change.   |
+| **Display Name**                 | The label on the sign-in button, for example `Okta`.                                 |
+| **Allowed Email Domains**        | Domains that can sign in with this provider. Recommended. Required on Onyx Cloud.    |
+| **OpenID Configuration URL**     | The `.well-known/openid-configuration` URL from Step 2.                              |
+| **Client ID**                    | From your identity provider.                                                         |
+| **Client Secret**                | From your identity provider.                                                         |
+| **Require Verified Email Claim** | Reject sign-ins whose ID token has no `email_verified: true` claim. Turn this off for Microsoft Entra ID, which does not send the claim. |
+
+4. Copy the **Redirect URI** shown in the modal and make sure it matches the URI in your identity provider.
+
+Users now see a **Sign in with &lt;Display Name&gt;** button on the login page.
+
+## Customizing Requested Scopes
+
+By default Onyx requests `openid`, `email`, and `profile`. To request different scopes,
+edit the provider and set **Scopes**. Leave it empty to use the defaults.
+
+To set the default for all OIDC providers on the deployment,
+set `OIDC_SCOPE_OVERRIDE` as a comma-separated list of scopes. Onyx always adds `openid` and `email`.
+
+## Enabling PKCE
+
+Turn on **Enable PKCE** in the provider form to add Proof Key for Code Exchange to the sign-in flow.
+Most identity providers support PKCE for web applications.
+
+To force PKCE for every OAuth and OIDC provider on the deployment, set `OIDC_PKCE_ENABLED=true`.
+The form then shows the switch as on and locked.
+
+## Changing the Client or App Registration
+
+If you create a new app registration in your identity provider, the provider issues new subject IDs.
+Existing users then fail to sign in because their account is linked to the old subject.
+
+To let them back in,
+turn on **Relink Accounts After an OIDC Client Change** in **Admin Panel → Organization → Security & Hardening**.
+Users sign in once and Onyx updates the link. Turn the setting off again when the move is complete.
+
+## Upgrading from an Older Version
+
+Before v4.4, OIDC sign-in was set with `AUTH_TYPE=oidc`, `OPENID_CONFIG_URL`, `OAUTH_CLIENT_ID`,
+and `OAUTH_CLIENT_SECRET`. When you upgrade, Onyx creates an SSO provider named `oidc` from these variables.
+Existing users keep their accounts.
+
+After the upgrade:
+
+1. Go to **Admin Panel → Organization → SSO Providers** and check the `oidc` provider.
+2. Add its redirect URI (`/api/auth/oidc/oidc/callback`) to your identity provider application.
+3. Remove `AUTH_TYPE`, `OPENID_CONFIG_URL`, `OAUTH_CLIENT_ID`, and `OAUTH_CLIENT_SECRET` from your deployment. Onyx logs a warning while `AUTH_TYPE` is still set.
