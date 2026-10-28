@@ -84,7 +84,10 @@ class Settings(BaseModel):
 
     # Image processing settings
     image_extraction_and_analysis_enabled: bool | None = True
-    image_analysis_max_size_mb: int | None = 20
+    # Unused. Stored and returned only so that Terraform provider releases up to
+    # 0.3.0, which still send it, do not fail apply. Remove after a provider
+    # release without it.
+    image_analysis_max_size_mb: int | None = None
 
     # Global limit on indexing embedding requests: at most this many in any
     # window of `embedding_rate_limit_period_seconds`. None means no limit.

@@ -1998,9 +1998,6 @@ SIGNUP_RATE_LIMIT_ENABLED = (
 
 MOCK_CONNECTOR_FILE_PATH = os.environ.get("MOCK_CONNECTOR_FILE_PATH")
 
-
-DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB = 20
-
 # Global limit on indexing embedding requests (see embedding_rate_limit.py).
 # The window is stored in Redis, one entry per request, so the request count
 # is capped. Gemini Embedding 2 on Vertex allows 60,000 requests per minute.

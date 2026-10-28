@@ -476,6 +476,13 @@ def setup_logger(
     return OnyxLoggingAdapter(logger, extra=extra)
 
 
+def _prepend_filter(logger: logging.Logger, log_filter: logging.Filter) -> None:
+    # Filters run in list order. litellm attaches a filter to uvicorn.error at
+    # import that substitutes the args into the message and clears them, so the
+    # query string has to be stripped from the args before that filter runs.
+    logger.filters.insert(0, log_filter)
+
+
 def setup_uvicorn_logger(
     log_level: int = get_log_level_from_str(),
     shared_file_handlers: list[logging.FileHandler] | None = None,
@@ -494,9 +501,10 @@ def setup_uvicorn_logger(
     uvicorn_logger.addHandler(handler)
     uvicorn_logger.setLevel(log_level)
     uvicorn_logger.addFilter(OnyxRequestIDFilter())
-    uvicorn_logger.addFilter(UvicornQueryStringRedactionFilter())
-    logging.getLogger(UVICORN_ERROR_LOGGER_NAME).addFilter(
-        UvicornQueryStringRedactionFilter()
+    _prepend_filter(uvicorn_logger, UvicornQueryStringRedactionFilter())
+    _prepend_filter(
+        logging.getLogger(UVICORN_ERROR_LOGGER_NAME),
+        UvicornQueryStringRedactionFilter(),
     )
 
     if shared_file_handlers:

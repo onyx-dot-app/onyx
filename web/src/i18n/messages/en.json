@@ -6995,11 +6995,6 @@
           "description": "{appName} will connect to this model on your {provider} proxy."
         }
       },
-      "maxImageSize": {
-        "description": "Images above this size will be skipped to limit resource usage.",
-        "suffix": "(MB)",
-        "title": "Max Image Size for Analysis"
-      },
       "modal": {
         "cancelButton": {
           "label": "Cancel"
@@ -7045,11 +7040,6 @@
         "addCustomModel": {
           "label": "Add Custom Model"
         },
-        "bringYourOwn": {
-          "cloudDescription": "Connect a LiteLLM proxy, an Azure OpenAI deployment or a Bifrost gateway. You supply the model name. For LiteLLM and Azure, you also supply the dimension.",
-          "selfHostedDescription": "Run a Hugging Face embedding model that is not in the list above. You supply the model name, dimension and prefixes.",
-          "title": "Advanced: bring your own model or proxy"
-        },
         "cloudTab": {
           "label": "Cloud-based"
         },
@@ -7057,6 +7047,7 @@
           "title": "Set up a custom embedding model."
         },
         "customModels": {
+          "hint": "Use a [SentenceTransformers](https://www.sbert.net/)-compatible model available on [Hugging Face](https://huggingface.co/models?library=sentence-transformers&sort=trending). {appName} will download the model to set up for self-hosting. Compatibility isn't guaranteed.",
           "title": "Custom Models"
         },
         "foldModels": {
@@ -7091,6 +7082,20 @@
           "label": "temporarily unavailable"
         },
         "title": "Multipass Indexing"
+      },
+      "openaiCompatible": {
+        "apiUrl": {
+          "description": "The base URL of your OpenAI-compatible endpoint, for example http://localhost:8000/v1. {appName} adds the /embeddings path.",
+          "title": "API Base URL"
+        },
+        "modelName": {
+          "description": "{appName} will connect to this model on your OpenAI-compatible endpoint."
+        },
+        "reducedDimension": {
+          "description": "Request shorter vectors. Only models trained with Matryoshka Representation Learning support this. Shorter vectors use less storage and search faster. Leave empty to use the full size of the model.",
+          "placeholder": "e.g., 1024",
+          "title": "Embedding Dimensions"
+        }
       },
       "progressBanner": {
         "attentionButton": {
@@ -7218,6 +7223,7 @@
         "modelDimPositive": "Must be a positive integer",
         "modelDimRequired": "Model dimension is required",
         "modelNameRequired": "Model name is required",
+        "reducedDimensionTooLarge": "Must be smaller than the model dimension",
         "serviceAccountJsonInvalid": "Must be a valid Google service account JSON file",
         "serviceAccountJsonRequired": "Service account JSON is required",
         "targetUrlRequired": "Target URL is required",
@@ -7282,11 +7288,11 @@
             "off": "Every chunk in the search index has its connector IDs. Search uses the document access lists. Connector-level access is turned off.",
             "shadow": "Every chunk in the search index has its connector IDs. Search uses the document access lists and compares them with connector-level access."
           },
-          "title": "Connector access update complete"
+          "title": "Connector access update complete."
         },
         "notStarted": {
           "description": "A background job will add connector IDs to the existing chunks in the search index. It starts within a few minutes.",
-          "title": "Connector access update has not started"
+          "title": "Connector access update has not started."
         },
         "progress": {
           "ariaLabel": "Connector access update progress"
@@ -7305,7 +7311,7 @@
           "description": "How search decides which documents a user can see.",
           "enforcePending": "Enforce is set and starts when the update completes.",
           "enforceUnavailable": "Available after the search index update completes.",
-          "label": "Search access mode",
+          "label": "Search Access Mode",
           "options": {
             "enforce": {
               "description": "Search uses connector-level access.",
@@ -7327,26 +7333,22 @@
         },
         "loadError": {
           "description": "Reload the page to try again.",
-          "title": "Could not load the connector access update"
+          "title": "Could not load the connector access update."
         }
       },
       "embeddingRateLimit": {
-        "title": "Embedding rate limit",
+        "title": "Embedding Rate Limit",
         "description": "Limits how many embedding requests indexing sends in a time window, across all indexing workers. At the limit, indexing waits and tries again instead of failing, so workers take less new work. A batch fails only if it waits too long. Search queries are not limited.",
         "requests": {
-          "title": "Requests per window",
-          "description": "Leave empty for no limit.",
-          "placeholder": "No limit"
+          "title": "Requests per Window",
+          "description": "The most embedding requests indexing can send in one window. Leave empty for no limit.",
+          "placeholder": "No limit",
+          "suffix": "requests"
         },
         "period": {
-          "title": "Window length",
-          "description": "For example, 60 for a limit per minute.",
-          "suffix": "(seconds)"
-        },
-        "restoreDefault": "Restore default",
-        "validation": {
-          "requests": "Enter a whole number from 1 to {max, number}, or leave the field empty for no limit.",
-          "period": "Enter a whole number of seconds from 1 to {max, number}."
+          "title": "Window Length",
+          "description": "How long one window lasts. Use 60 for a per-minute limit.",
+          "suffix": "seconds"
         },
         "toasts": {
           "failed": "Could not save the rate limit."

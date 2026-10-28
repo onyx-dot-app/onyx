@@ -6995,11 +6995,6 @@
           "description": "{appName}가 {provider} 프록시에서 이 모델에 연결합니다."
         }
       },
-      "maxImageSize": {
-        "description": "이 크기를 초과하는 이미지는 리소스 사용을 제한하기 위해 건너뜁니다.",
-        "suffix": "(MB)",
-        "title": "분석할 최대 이미지 크기"
-      },
       "modal": {
         "cancelButton": {
           "label": "취소"
@@ -7045,11 +7040,6 @@
         "addCustomModel": {
           "label": "사용자 지정 모델 추가"
         },
-        "bringYourOwn": {
-          "cloudDescription": "LiteLLM 프록시, Azure OpenAI 배포 또는 Bifrost 게이트웨이를 연결합니다. 모델 이름은 직접 입력합니다. LiteLLM과 Azure는 차원도 입력합니다.",
-          "selfHostedDescription": "위 목록에 없는 Hugging Face 임베딩 모델을 실행합니다. 모델 이름, 차원, 접두사는 직접 입력합니다.",
-          "title": "고급: 자체 모델 또는 프록시 사용"
-        },
         "cloudTab": {
           "label": "클라우드 기반"
         },
@@ -7057,6 +7047,7 @@
           "title": "사용자 지정 embedding 모델을 설정하세요."
         },
         "customModels": {
+          "hint": "[Hugging Face](https://huggingface.co/models?library=sentence-transformers&sort=trending)에서 제공되는 [SentenceTransformers](https://www.sbert.net/) 호환 모델을 사용하세요. {appName}이(가) 셀프 호스팅을 위해 모델을 다운로드합니다. 호환성은 보장되지 않습니다.",
           "title": "사용자 지정 모델"
         },
         "foldModels": {
@@ -7091,6 +7082,20 @@
           "label": "일시적으로 사용 불가"
         },
         "title": "멀티패스 인덱싱"
+      },
+      "openaiCompatible": {
+        "apiUrl": {
+          "description": "OpenAI 호환 엔드포인트의 기본 URL입니다(예: http://localhost:8000/v1). {appName}이(가) /embeddings 경로를 추가합니다.",
+          "title": "API 기본 URL"
+        },
+        "modelName": {
+          "description": "{appName}이(가) OpenAI 호환 엔드포인트의 이 모델에 연결합니다."
+        },
+        "reducedDimension": {
+          "description": "더 짧은 벡터를 요청합니다. Matryoshka Representation Learning으로 학습된 모델만 지원합니다. 짧은 벡터는 저장 공간을 덜 쓰고 검색이 더 빠릅니다. 모델의 전체 크기를 사용하려면 비워 두세요.",
+          "placeholder": "예: 1024",
+          "title": "임베딩 차원"
+        }
       },
       "progressBanner": {
         "attentionButton": {
@@ -7218,6 +7223,7 @@
         "modelDimPositive": "양의 정수여야 합니다",
         "modelDimRequired": "모델 차원은 필수입니다",
         "modelNameRequired": "모델 이름은 필수입니다",
+        "reducedDimensionTooLarge": "모델 차원보다 작아야 합니다",
         "serviceAccountJsonInvalid": "유효한 Google 서비스 계정 JSON 파일이어야 합니다",
         "serviceAccountJsonRequired": "서비스 계정 JSON은 필수입니다",
         "targetUrlRequired": "대상 URL은 필수입니다",
@@ -7282,11 +7288,11 @@
             "off": "검색 인덱스의 모든 청크에 커넥터 ID가 있습니다. 검색은 문서 액세스 목록을 사용합니다. 커넥터 수준 액세스는 꺼져 있습니다.",
             "shadow": "검색 인덱스의 모든 청크에 커넥터 ID가 있습니다. 검색은 문서 액세스 목록을 사용하고 커넥터 수준 액세스와 비교합니다."
           },
-          "title": "커넥터 액세스 업데이트 완료"
+          "title": "커넥터 액세스 업데이트 완료."
         },
         "notStarted": {
           "description": "백그라운드 작업이 검색 인덱스의 기존 청크에 커넥터 ID를 추가합니다. 몇 분 안에 시작됩니다.",
-          "title": "커넥터 액세스 업데이트가 시작되지 않았습니다"
+          "title": "커넥터 액세스 업데이트가 시작되지 않았습니다."
         },
         "progress": {
           "ariaLabel": "커넥터 액세스 업데이트 진행률"
@@ -7327,7 +7333,7 @@
         },
         "loadError": {
           "description": "페이지를 새로 고쳐 다시 시도하세요.",
-          "title": "커넥터 액세스 업데이트를 불러올 수 없습니다"
+          "title": "커넥터 액세스 업데이트를 불러올 수 없습니다."
         }
       },
       "embeddingRateLimit": {
@@ -7335,18 +7341,14 @@
         "description": "인덱싱이 일정 시간 동안 보내는 임베딩 요청 수를 모든 인덱싱 워커에 걸쳐 제한합니다. 한도에 도달하면 인덱싱은 실패하지 않고 대기한 후 다시 시도하므로 워커는 새 작업을 덜 가져갑니다. 배치는 너무 오래 기다린 경우에만 실패합니다. 검색 쿼리는 제한되지 않습니다.",
         "requests": {
           "title": "시간 범위당 요청 수",
-          "description": "비워 두면 한도가 없습니다.",
-          "placeholder": "한도 없음"
+          "description": "인덱싱이 한 시간 범위 동안 보낼 수 있는 임베딩 요청의 최대 개수입니다. 비워 두면 한도가 없습니다.",
+          "placeholder": "한도 없음",
+          "suffix": "요청"
         },
         "period": {
           "title": "시간 범위 길이",
-          "description": "예: 분당 한도는 60.",
-          "suffix": "(초)"
-        },
-        "restoreDefault": "기본값 복원",
-        "validation": {
-          "requests": "1부터 {max, number}까지의 정수를 입력하거나, 한도를 없애려면 비워 두세요.",
-          "period": "1부터 {max, number}까지의 정수 초를 입력하세요."
+          "description": "한 시간 범위의 길이입니다. 분당 한도를 두려면 60을 입력하세요.",
+          "suffix": "초"
         },
         "toasts": {
           "failed": "요청 한도를 저장하지 못했습니다."

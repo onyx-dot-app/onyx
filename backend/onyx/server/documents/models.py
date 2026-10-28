@@ -317,16 +317,7 @@ class IndexAttemptSnapshot(BaseModel):
         open_error_count: int,
         open_doc_error_count: int,
     ) -> "IndexAttemptSnapshot":
-        # Attempts from before time_finished existed end at their last heartbeat
-        # check, and at their start when they never reached one.
-        finished = (
-            index_attempt.time_finished
-            or index_attempt.last_heartbeat_time
-            or index_attempt.time_started
-            or index_attempt.time_created
-            if index_attempt.is_finished()
-            else None
-        )
+        finished = index_attempt.end_time
         return IndexAttemptSnapshot(
             id=index_attempt.id,
             status=index_attempt.status,

@@ -29,7 +29,6 @@ from onyx.image_gen.interfaces import (
 from onyx.llm.models import ToolDefinition
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
-    GeneratedImage,
     ImageGenerationFinal,
     ImageGenerationToolHeartbeat,
     ImageGenerationToolStart,
@@ -37,6 +36,7 @@ from onyx.server.query_and_chat.streaming_models import (
 )
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolCallException, ToolExecutionException, ToolResponse
+from onyx.tools.results import GeneratedImage
 from onyx.tools.tool_implementations.images.models import (
     FinalImageGenerationResponse,
     ImageGenerationResponse,

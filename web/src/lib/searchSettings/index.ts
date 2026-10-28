@@ -44,8 +44,9 @@ export function isCloudBased(providerName: EmbeddingProviderName): boolean {
 
 /**
  * `true` for the cloud providers that have no registry models (LiteLLM,
- * Azure, Bifrost). The admin enters the model spec in the connect modal. The
- * picker shows them in the "bring your own" section, not in the main list.
+ * Azure, Bifrost, OpenAI-compatible). The admin enters the model spec in the
+ * connect modal. The picker shows them in the "bring your own" section, not
+ * in the main list.
  */
 export function isBringYourOwnProvider(
   providerName: EmbeddingProviderName
@@ -53,7 +54,8 @@ export function isBringYourOwnProvider(
   return (
     providerName === EmbeddingProviderName.LITELLM ||
     providerName === EmbeddingProviderName.AZURE ||
-    providerName === EmbeddingProviderName.BIFROST
+    providerName === EmbeddingProviderName.BIFROST ||
+    providerName === EmbeddingProviderName.OPENAI_COMPATIBLE
   );
 }
 

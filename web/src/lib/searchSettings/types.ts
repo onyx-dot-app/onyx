@@ -21,6 +21,7 @@ export enum EmbeddingProviderName {
   LITELLM = "litellm",
   AZURE = "azure",
   BIFROST = "bifrost",
+  OPENAI_COMPATIBLE = "openai_compatible",
 
   // Self-hosted display groups. Frontend-only: the backend stores
   // provider_type=null for every self-hosted model, so these values are never
@@ -88,6 +89,8 @@ export interface EmbeddingModel {
   legacy?: boolean;
   /** Indexing on CPU is too slow for practical use. */
   gpuRecommended?: boolean;
+  /** Shorter vector width requested via the OpenAI `dimensions` parameter. */
+  reducedDimension?: number | null;
 }
 
 /** The fields sent to the backend. Registry display flags are left out. */
@@ -154,6 +157,7 @@ export interface EmbeddingModelResponse {
   api_key: string | null;
   api_url: string | null;
   index_name: string | null;
+  reduced_dimension: number | null;
   switchover_type?: SwitchoverType;
 }
 
@@ -164,6 +168,7 @@ export interface EmbeddingModelRequest {
   normalize: boolean;
   queryPrefix?: string | null;
   passagePrefix?: string | null;
+  reducedDimension?: number | null;
 }
 
 /** Shape returned by `GET /api/admin/embedding/embedding-provider`. */

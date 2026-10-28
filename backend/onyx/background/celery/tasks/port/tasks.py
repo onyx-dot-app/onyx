@@ -632,7 +632,12 @@ def _enqueue_run_port_attempt(
     scope: PortScope = "connector",
 ) -> None:
     """Enqueue a port task on the scope's queue. The TTL means a task not consumed
-    within BEAT_EXPIRES_DEFAULT is dropped; check_for_port re-issues it next tick."""
+    within BEAT_EXPIRES_DEFAULT is dropped; check_for_port re-issues it next tick.
+
+    HIGHEST priority: the `port` queue shares its worker with `docprocessing`, and
+    kombu drains the lists in priority order with `docprocessing` first at each
+    level. At MEDIUM a port task under crawl load expired before it was read, so
+    the attempt never left NOT_STARTED and the reindex froze without an error."""
     if scope == "user_file":
         task_name = OnyxCeleryTask.RUN_USER_FILE_PORT_ATTEMPT
         queue = OnyxCeleryQueues.USER_FILE_PORT
@@ -643,7 +648,7 @@ def _enqueue_run_port_attempt(
         task_name,
         kwargs={"port_attempt_id": port_attempt_id, "tenant_id": tenant_id},
         queue=queue,
-        priority=OnyxCeleryPriority.MEDIUM,
+        priority=OnyxCeleryPriority.HIGHEST,
         expires=BEAT_EXPIRES_DEFAULT,
     )
 

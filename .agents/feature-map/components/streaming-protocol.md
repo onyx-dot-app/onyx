@@ -10,7 +10,7 @@
 **Edition:** CE
 **Owns:**
 `backend/onyx/server/query_and_chat/streaming_models.py`, `placement.py`,
-`backend/onyx/chat/emitter.py`, `stream_buffer.py`,
+`backend/onyx/chat/emitter.py`, `stream_buffer.py`, `renderer.py`, `presentation.py`,
 `web/src/app/app/services/streamingModels.ts`, `web/src/lib/search/streamingUtils.ts`,
 `mobile/src/chat/streamingModels.ts`, `mobile/src/chat/ndjson.ts`
 
@@ -59,6 +59,30 @@ one JSON object per line this way.
 resume read.
 
 ---
+
+### Shared runtime presentation
+
+`chat/renderer.py` converts accepted model content and tool results into existing
+browser packets. `chat/presentation.py:ResponsePresenter` consumes shared runtime
+events. `replay_response` uses the same renderers for saved response records.
+The caller supplies saved search documents and tool IDs as detached tool records.
+Neither path runs a model or executes a tool.
+
+`chat/response.py` captures accepted steps before display processing. A display
+failure can therefore leave a complete response record available for saving.
+`chat/response_models.py` separates response content from per-message rendering
+settings, such as citation display and research phase.
+
+The detached response record is an in-memory aggregate. Database codecs restore
+concrete tool-result types before replay. It is not a standalone JSON storage schema.
+The response owner classifies execution failures and reports them separately.
+Session reload carries the saved message error alongside rendered packets.
+`OverallStop` ends rendering; it does not assert that execution succeeded.
+Only tool failures explicitly marked for public display produce error packets.
+Other tool errors remain available to the model for recovery.
+
+These APIs prepare the shared runtime transition. Production chat, research,
+coding, and session reload still use their existing execution and loading paths.
 
 ## 3. Data model
 
@@ -362,3 +386,29 @@ packets to assert which tool ran and with what arguments
 - **A capped buffer read (`max_chunks`) can return `done=True` with more data
   still pending.** Any new reader of `read_stream_chunks` must loop until
   `blocks` comes back empty, not stop at the first `done=True`.
+
+
+### Response rendering safeguards
+
+Malformed tool arguments use a generic card so saved errors and later answers can
+still render. Replay hides the configured thinking tool. Answers that start with a
+citation retain its metadata. Interrupted responses retain citations only for the
+selected answer text. Tool debug packets appear only in integration-test mode,
+before the tool start packet.
+
+Generic model-facing error text is not displayed. Explicit public error details and
+structured tool output retain their existing rendering.
+Coding-child reasoning uses `CodingAgentThinkingDelta`, including native thinking
+and configured thinking-tool output. Replay assigns sections in accepted content
+order. Answer sections close before intervening thinking or tool calls; later answer text starts a new section.
+Only consecutive top-level tool calls share tabs. Text or reasoning between calls starts a new section. Citation removal also applies to citation-only and interrupted answers.
+Generated-message metadata supplies saved source references, including previously
+retrieved sources that the current response did not retrieve again.
+
+When a run ends, unfinished tool cards receive the same start and end packets as
+saved replay. This closes Python code-writing indicators when execution stops
+before a tool starts. Completed tool cards do not emit another end packet.
+Tool-card ownership includes the run ID, so child completion does not close a
+parent's cards. Completed coding tools emit final-answer packets without repeating
+the answer as thinking. Research reports emit once, whether supplied through
+progress or directly at completion.

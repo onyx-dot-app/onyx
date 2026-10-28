@@ -336,9 +336,28 @@ def _configure_youtrack_spy(spy: MagicMock) -> None:
     )
 
 
+def _configure_asana_spy(spy: MagicMock) -> None:
+    """One project holding one task with a comment and a creator, so the
+    tasks sample reaches the comment and user reads."""
+    workspace = {"gid": "1", "name": "Acme"}
+    project = {"gid": "2", "name": "Roadmap", "archived": False, "workspace": workspace}
+    spy.get_me.return_value = {"gid": "u", "workspaces": [workspace]}
+    spy.get_workspace.return_value = workspace
+    spy.get_team.return_value = {"gid": "3", "name": "Eng", "organization": workspace}
+    spy.get_project.return_value = project
+    spy.iterate_projects.side_effect = lambda **_kwargs: iter([project])
+    spy.iterate_project_tasks.side_effect = lambda **_kwargs: iter(
+        [{"gid": "4", "name": "Task", "created_by": {"gid": "u"}}]
+    )
+    spy.iterate_task_stories.side_effect = lambda **_kwargs: iter(
+        [{"gid": "5", "resource_subtype": "comment_added"}]
+    )
+
+
 # A unit is covered when the checks exercise it under any one configuration:
 # a source whose credential picks the API family needs one per family.
 _SPY_CONFIGURATIONS: dict[DocumentSource, list[Callable[[MagicMock], None]]] = {
+    DocumentSource.ASANA: [_configure_asana_spy],
     DocumentSource.CONFLUENCE: [
         _configure_confluence_spy,
         _configure_confluence_rest_spy,
@@ -354,6 +373,12 @@ _SPY_CONFIGURATIONS: dict[DocumentSource, list[Callable[[MagicMock], None]]] = {
 # The connector config the checks read, per source (default: empty). Every
 # spy configuration runs with every config listed here.
 _CONNECTOR_CONFIGS: dict[DocumentSource, list[dict[str, Any]]] = {
+    # The team filter applies only without project IDs, and the workspace
+    # listing only without them too.
+    DocumentSource.ASANA: [
+        {"asana_workspace_id": "1", "asana_project_ids": "2"},
+        {"asana_workspace_id": "1", "asana_team_id": "3"},
+    ],
     DocumentSource.GITHUB: [
         {
             "repo_owner": "acme",

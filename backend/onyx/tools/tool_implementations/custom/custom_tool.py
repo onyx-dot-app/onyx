@@ -17,7 +17,6 @@ from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     CustomToolArgs,
     CustomToolDelta,
-    CustomToolErrorInfo,
     CustomToolStart,
     Packet,
 )
@@ -29,11 +28,14 @@ from onyx.tools.models import (
     MESSAGE_ID_PLACEHOLDER,
     USER_EMAIL_PLACEHOLDER,
     USER_ID_PLACEHOLDER,
-    CustomToolCallSummary,
-    CustomToolUserFileSnapshot,
     DynamicSchemaInfo,
     ToolCallException,
     ToolResponse,
+)
+from onyx.tools.results import (
+    CustomToolCallSummary,
+    CustomToolErrorInfo,
+    CustomToolUserFileSnapshot,
 )
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     REQUEST_BODY,

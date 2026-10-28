@@ -164,6 +164,7 @@ def attempt_rows(db_session: Session, since: datetime) -> list[dict[str, Any]]:
             IndexAttempt.completed_batches,
             IndexAttempt.time_started.label("started_at"),
             IndexAttempt.time_updated,
+            IndexAttempt.end_time.label("ended_at"),
             IndexAttempt.last_progress_time.label("last_progress_at"),
             IndexAttempt.last_heartbeat_time.label("last_heartbeat_at"),
             func.left(IndexAttempt.error_msg, 2048).label("error_sample"),

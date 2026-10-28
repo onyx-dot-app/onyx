@@ -1,24 +1,34 @@
 from collections.abc import Iterator
-from enum import Enum
-from typing import Any, Callable
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel
 
+from onyx.agents.models import CompactionMetadata
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
-from onyx.file_store.models import ChatFileType, InMemoryChatFile
+from onyx.file_store.models import (
+    ChatLoadedFile,
+    FileToolMetadata,
+)
 from onyx.server.query_and_chat.models import (
     MessageResponseIDInfo,
     MultiModelMessageResponseIDInfo,
 )
-from onyx.server.query_and_chat.streaming_models import (
-    CitationInfo,
-    GeneratedImage,
-    Packet,
-)
+from onyx.server.query_and_chat.streaming_models import CitationInfo, Packet
 from onyx.tools.models import SearchToolUsage, ToolCallKickoff
+from onyx.tools.results import GeneratedImage
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
+
+
+class PromptMetadata(CompactionMetadata):
+    token_count: int | None = None
+    image_files: list[ChatLoadedFile] | None = None
+    image_token_count: int = 0
+    should_cache: bool = False
+    file_id: str | None = None
+    is_reminder: bool = False
+    omit_tool_result_content: bool = False
 
 
 class HistoryImageReplay(BaseModel):
@@ -26,29 +36,6 @@ class HistoryImageReplay(BaseModel):
     image_cap: int | None = None
     keep_image_indices: set[tuple[int, int]] | None = None
     dropped_image_count: int = 0
-
-
-class CitationMode(str, Enum):
-    """Defines how citations should be handled in the output.
-
-    REMOVE: Citations are completely removed from output text.
-            No CitationInfo objects are emitted.
-            Use case: When you need to remove citations from the output if they are not shared with the user
-            (e.g. in discord bot, public slack bot).
-
-    KEEP_MARKERS: Original citation markers like [1], [2] are preserved unchanged.
-                  No CitationInfo objects are emitted.
-                  Use case: When you need to track citations in research agent and later process
-                  them with collapse_citations() to renumber.
-
-    HYPERLINK: Citations are replaced with markdown links like [[1]](url).
-               CitationInfo objects are emitted for UI tracking.
-               Use case: Final reports shown to users with clickable links.
-    """
-
-    REMOVE = "remove"
-    KEEP_MARKERS = "keep_markers"
-    HYPERLINK = "hyperlink"
 
 
 class StreamingError(BaseModel):
@@ -133,47 +120,6 @@ class ChatFullResponse(BaseModel):
     error_msg: str | None = None
 
 
-class ChatLoadedFile(InMemoryChatFile):
-    content_text: str | None
-    token_count: int
-    # True while the user-file worker is still processing the file — its
-    # canonical plaintext (e.g. including image captions) doesn't exist yet.
-    content_pending: bool = False
-
-    # Named distinctly from the base ``lazy_from_descriptor`` so the subclass
-    # can require ``content_text`` / ``token_count`` without violating LSP on
-    # the override (ty correctly flag the broader subclass signature).
-    @classmethod
-    def lazy_loaded(
-        cls,
-        *,
-        file_id: str,
-        file_type: ChatFileType,
-        filename: str | None,
-        content_text: str | None,
-        token_count: int,
-        loader: Callable[[], bytes],
-        content_pending: bool = False,
-    ) -> "ChatLoadedFile":
-        """Construct a ``ChatLoadedFile`` whose ``content`` bytes are loaded
-        only on first access. ``content_text`` and ``token_count`` are passed
-        eagerly because they're cheap (DB lookup + cached plaintext store hit).
-        """
-        from onyx.file_store.models import install_lazy_content_loader
-
-        inst = cls(
-            file_id=file_id,
-            content=b"",
-            file_type=file_type,
-            filename=filename,
-            content_text=content_text,
-            token_count=token_count,
-            content_pending=content_pending,
-        )
-        install_lazy_content_loader(inst, loader)
-        return inst
-
-
 class ToolCallSimple(BaseModel):
     """Tool call for ChatMessageSimple representation (mirrors OpenAI format).
 
@@ -212,33 +158,6 @@ class ChatMessageSimple(BaseModel):
     file_id: str | None = None
 
 
-class ContextFileMetadata(BaseModel):
-    """Metadata for a context-injected file to enable citation support."""
-
-    file_id: str
-    filename: str
-    file_content: str
-
-
-class FileToolMetadata(BaseModel):
-    """Lightweight metadata for exposing files to the FileReaderTool.
-
-    Used when files cannot be loaded directly into context (project too large
-    or persona-attached user_files without direct-load path). The LLM receives
-    a listing of these so it knows which files it can read via ``read_file``.
-    """
-
-    file_id: str
-    filename: str
-    approx_char_count: int
-    # Whether this file's bytes reached ``chat_files_for_tools``, and so are
-    # available to tools that receive the files themselves (PythonTool).
-    # Messages dropped by summary truncation are filtered out of
-    # ``chat_history`` before ``load_all_chat_files`` runs, so their files are
-    # listed for the LLM but never staged. Only ``read_file`` can fetch those.
-    staged_for_tools: bool = True
-
-
 class ChatHistoryResult(BaseModel):
     """Result of converting chat history to simple format.
 
@@ -251,20 +170,6 @@ class ChatHistoryResult(BaseModel):
 
     simple_messages: list[ChatMessageSimple]
     all_injected_file_metadata: dict[str, FileToolMetadata]
-
-
-class ExtractedContextFiles(BaseModel):
-    """Result of attempting to load user files (from a project or persona) into context."""
-
-    file_texts: list[str]
-    image_files: list[ChatLoadedFile]
-    use_as_search_filter: bool
-    total_token_count: int
-    # Lightweight metadata for files exposed via FileReaderTool
-    # (populated when files don't fit in context and vector DB is disabled).
-    file_metadata: list[ContextFileMetadata]
-    uncapped_token_count: int | None
-    file_metadata_for_tool: list[FileToolMetadata] = []
 
 
 class SearchParams(BaseModel):
@@ -295,3 +200,10 @@ class AvailableFiles(BaseModel):
     user_file_ids: list[UUID] = []
     # IDs from the ``file_record`` table (chat-attached files).
     chat_file_ids: list[UUID] = []
+
+
+class FileContextResult(BaseModel):
+    """Result of building a file's LLM context representation."""
+
+    message: ChatMessageSimple
+    tool_metadata: FileToolMetadata
