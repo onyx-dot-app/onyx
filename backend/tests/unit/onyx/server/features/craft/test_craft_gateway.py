@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 from fastapi import Request
 
 from onyx.auth.permissions import resolve_effective_permissions
-from onyx.db.enums import Permission
+from onyx.db.enums import Permission, PermissionAuthority
 from onyx.db.models import User
 from onyx.server.features.build import craft_gateway
 from onyx.server.features.build.craft_gateway import (
@@ -22,12 +22,12 @@ def _request(token_scopes: list[Permission] | None) -> Request:
     request = Request({"type": "http", "headers": []})
     if token_scopes is not None:
         request.state.token_scopes = token_scopes
-        request.state.token_permission_cap = frozenset(
-            Permission(value)
+        request.state.token_permission_cap = {
+            Permission(value): PermissionAuthority.GLOBAL
             for value in resolve_effective_permissions(
                 {scope.value for scope in token_scopes}
             )
-        )
+        }
         request.state.usage_credential = UsageCredentialIdentity(
             UsageCredentialType.CRAFT_PAT
             if Permission.CRAFT_SANDBOX in token_scopes

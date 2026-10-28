@@ -92,8 +92,8 @@ def upgrade() -> None:
             SELECT 'admin', permission FROM known_permissions
         ), owners AS (
             SELECT DISTINCT user_id FROM personal_access_token
-        ), owner_permissions(user_id, permission) AS (
-            SELECT owner.id, known.permission
+        ), owner_permissions(user_id, permission, authority) AS (
+            SELECT owner.id, known.permission, 'global'
             FROM "user" AS owner
             JOIN owners ON owners.user_id = owner.id
             CROSS JOIN LATERAL jsonb_array_elements_text(
@@ -101,9 +101,12 @@ def upgrade() -> None:
             ) AS direct(permission)
             JOIN known_permissions AS known ON known.permission = direct.permission
             UNION
-            SELECT user_id, 'add:agents' FROM owners
+            SELECT owner.id, 'add:agents', 'global'
+            FROM "user" AS owner
+            JOIN owners ON owners.user_id = owner.id
+            WHERE NOT owner.is_group_manager
             UNION
-            SELECT owner.id, scoped.permission
+            SELECT owner.id, scoped.permission, 'scoped'
             FROM "user" AS owner
             JOIN owners ON owners.user_id = owner.id
             CROSS JOIN (
@@ -118,7 +121,7 @@ def upgrade() -> None:
             ) AS scoped(permission)
             WHERE owner.is_group_manager
             UNION
-            SELECT owner.user_id, implications.implied
+            SELECT owner.user_id, implications.implied, owner.authority
             FROM owner_permissions AS owner
             JOIN implications ON implications.granted = owner.permission
         ), selected_permissions(token_id, permission) AS (
@@ -132,8 +135,9 @@ def upgrade() -> None:
             SELECT selected.token_id, implications.implied
             FROM selected_permissions AS selected
             JOIN implications ON implications.granted = selected.permission
-        ), capped_permissions(token_id, permission) AS (
-            SELECT token.id, owner.permission
+        ), capped_permissions(token_id, permission, authority) AS (
+            SELECT token.id, owner.permission,
+                   CASE WHEN token.pat_type = 'CRAFT' THEN 'global' ELSE owner.authority END
             FROM personal_access_token AS token
             JOIN owner_permissions AS owner ON owner.user_id = token.user_id
             WHERE (
@@ -151,20 +155,25 @@ def upgrade() -> None:
                 OR token.scopes ? 'use:llm_gateway'
             )
             UNION
-            SELECT token.id, 'craft_sandbox'
+            SELECT token.id, 'craft_sandbox', 'global'
             FROM personal_access_token AS token
             JOIN selected_permissions AS selected ON selected.token_id = token.id
             WHERE token.pat_type = 'CRAFT'
               AND selected.permission = 'craft_sandbox'
-        ), caps AS (
-            SELECT token_id, jsonb_agg(permission ORDER BY permission) AS permissions
+        ), strongest_permissions AS (
+            SELECT token_id, permission,
+                   CASE WHEN bool_or(authority = 'global') THEN 'global' ELSE 'scoped' END AS authority
             FROM capped_permissions
+            GROUP BY token_id, permission
+        ), caps AS (
+            SELECT token_id, jsonb_object_agg(permission, authority) AS permissions
+            FROM strongest_permissions
             GROUP BY token_id
         )
         UPDATE personal_access_token AS token
         SET permission_cap = COALESCE(
             (SELECT permissions FROM caps WHERE caps.token_id = token.id),
-            '[]'::jsonb
+            '{}'::jsonb
         )
         """
     )

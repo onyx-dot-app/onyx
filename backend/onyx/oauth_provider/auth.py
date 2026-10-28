@@ -9,7 +9,7 @@ from onyx.auth.constants import (
 )
 from onyx.auth.oauth_provider import OAuthProviderTokenKind, parse_oauth_provider_token
 from onyx.auth.permissions import has_global_permission
-from onyx.db.enums import Permission
+from onyx.db.enums import Permission, PermissionAuthority
 from onyx.db.models import User
 from onyx.db.oauth_provider import (
     OAUTH_PROVIDER_STORAGE_ERRORS,
@@ -128,7 +128,9 @@ async def authenticate_oauth_provider_request(
     ):
         raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)
     request.state.token_scopes = [Permission.READ_SEARCH]
-    request.state.token_permission_cap = frozenset({Permission.READ_SEARCH})
+    request.state.token_permission_cap = {
+        Permission.READ_SEARCH: PermissionAuthority.GLOBAL
+    }
     request.state.usage_credential = UsageCredentialIdentity(
         UsageCredentialType.OAUTH_PROVIDER,
         str(info.grant.id),

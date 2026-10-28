@@ -115,7 +115,7 @@ class TestEnsureSandboxPat:
             .filter_by(hashed_token=hash_pat(original_token))
             .one()
         )
-        original.permission_cap = [Permission.READ_SEARCH.value]
+        original.permission_cap = {Permission.READ_SEARCH.value: "global"}
         db_session.flush()
 
         replacement = ensure_sandbox_pat(db_session, sandbox, test_user)

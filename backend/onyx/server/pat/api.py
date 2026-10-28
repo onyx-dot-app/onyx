@@ -4,7 +4,11 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from onyx.auth.pat import get_token_permission_cap
-from onyx.auth.permissions import materialize_pat_permission_cap, require_permission
+from onyx.auth.permissions import (
+    intersect_pat_permission_caps,
+    materialize_pat_permission_cap,
+    require_permission,
+)
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import PatType, Permission
 from onyx.db.models import User
@@ -109,12 +113,11 @@ def create_token(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "A scoped token must select explicit scopes for its child token.",
         )
+    requested_cap = materialize_pat_permission_cap(user, request.scopes)
     if (
         parent_cap is not None
         and request.scopes is not None
-        and not materialize_pat_permission_cap(user, request.scopes).issubset(
-            parent_cap
-        )
+        and requested_cap != intersect_pat_permission_caps(requested_cap, parent_cap)
     ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,

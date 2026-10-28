@@ -79,7 +79,11 @@ from onyx.auth.mobile_sso.sso_completion import (
 )
 from onyx.auth.oidc_client import log_token_exchange_failure
 from onyx.auth.pat import get_hashed_pat_from_request, get_token_permission_cap
-from onyx.auth.permissions import get_effective_permissions, has_global_permission
+from onyx.auth.permissions import (
+    get_effective_permissions,
+    has_global_permission,
+    pat_permission_cap_is_stale,
+)
 from onyx.auth.pkce import generate_pkce_pair
 from onyx.auth.schemas import AuthBackend, UserCreate
 from onyx.auth.session_tokens import (
@@ -2448,6 +2452,11 @@ async def _resolve_optional_user(
         if hashed_pat := get_hashed_pat_from_request(request):
             pat = await resolve_pat(hashed_pat, async_db_session)
             if pat is not None:
+                if pat_permission_cap_is_stale(pat.user, pat.permission_cap):
+                    raise OnyxError(
+                        OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                        "This token's scoped authority has changed. Create a new token.",
+                    )
                 user = pat.user
                 request.state.token_scopes = pat.scopes
                 request.state.token_permission_cap = pat.permission_cap

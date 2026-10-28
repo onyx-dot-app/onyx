@@ -690,7 +690,7 @@ class PersonalAccessToken(Base):
     )
 
     # Finite authorization ceiling, never expanded through current permission rules.
-    permission_cap: Mapped[list[str]] = mapped_column(
+    permission_cap: Mapped[dict[str, str]] = mapped_column(
         postgresql.JSONB(), nullable=False
     )
 

@@ -10,16 +10,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session, contains_eager
 
 from onyx.auth.pat import (
+    TokenPermissionCap,
     build_displayable_pat,
     calculate_expiration,
     generate_pat,
     hash_pat,
 )
-from onyx.auth.permissions import materialize_pat_permission_cap
+from onyx.auth.permissions import (
+    intersect_pat_permission_caps,
+    materialize_pat_permission_cap,
+)
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
-from onyx.db.enums import PatType, Permission
+from onyx.db.enums import PatType, Permission, PermissionAuthority
 from onyx.db.models import PersonalAccessToken, User
 from onyx.db.permissions import parse_permission_values
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -35,7 +41,7 @@ class PatAuthResult(NamedTuple):
     pat_name: str
     pat_display: str
     pat_type: PatType
-    permission_cap: frozenset[Permission]
+    permission_cap: TokenPermissionCap
 
 
 async def resolve_pat(
@@ -72,9 +78,21 @@ async def resolve_pat(
     )
     if pat is None:
         return None
+    if not isinstance(pat.permission_cap, dict):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "This token's permission cap is obsolete. Create a new token.",
+        )
 
     _schedule_pat_last_used_update(hashed_token, now)
     scopes = parse_permission_values(pat.scopes) if pat.scopes is not None else None
+    cap: TokenPermissionCap = {}
+    for permission in parse_permission_values(pat.permission_cap):
+        stored_authority = pat.permission_cap[permission.value]
+        if stored_authority == PermissionAuthority.GLOBAL.value:
+            cap[permission] = PermissionAuthority.GLOBAL
+        elif stored_authority == PermissionAuthority.SCOPED.value:
+            cap[permission] = PermissionAuthority.SCOPED
     return PatAuthResult(
         user=pat.user,
         scopes=scopes,
@@ -82,7 +100,7 @@ async def resolve_pat(
         pat_name=pat.name,
         pat_display=pat.token_display,
         pat_type=pat.pat_type,
-        permission_cap=frozenset(parse_permission_values(pat.permission_cap)),
+        permission_cap=cap,
     )
 
 
@@ -125,7 +143,7 @@ def create_pat(
     pat_type: PatType = PatType.USER,
     scopes: list[Permission] | None = None,
     *,
-    parent_cap: frozenset[Permission] | None = None,
+    parent_cap: TokenPermissionCap | None = None,
 ) -> tuple[PersonalAccessToken, str]:
     """Create new PAT. Returns (db_record, raw_token).
 
@@ -145,7 +163,7 @@ def create_pat(
 
     cap = materialize_pat_permission_cap(user, scopes, pat_type)
     if parent_cap is not None:
-        cap &= parent_cap
+        cap = intersect_pat_permission_caps(cap, parent_cap)
 
     pat = PersonalAccessToken(
         name=name,
@@ -155,7 +173,10 @@ def create_pat(
         expires_at=calculate_expiration(expiration_days),
         pat_type=pat_type,
         scopes=[s.value for s in scopes] if scopes is not None else None,
-        permission_cap=sorted(permission.value for permission in cap),
+        permission_cap={
+            permission.value: authority.value
+            for permission, authority in sorted(cap.items())
+        },
     )
     db_session.add(pat)
     db_session.flush()

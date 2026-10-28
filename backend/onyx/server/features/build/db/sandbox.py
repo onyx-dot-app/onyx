@@ -43,12 +43,12 @@ def ensure_sandbox_pat(db_session: Session, sandbox: Sandbox, user: User) -> str
         if (
             hash_pat(raw_token) == existing.hashed_token
             and existing.scopes == [Permission.CRAFT_SANDBOX.value]
-            and set(existing.permission_cap)
+            and existing.permission_cap
             == {
-                permission.value
-                for permission in materialize_pat_permission_cap(
+                permission.value: authority.value
+                for permission, authority in materialize_pat_permission_cap(
                     user, [Permission.CRAFT_SANDBOX], PatType.CRAFT
-                )
+                ).items()
             }
         ):
             return raw_token

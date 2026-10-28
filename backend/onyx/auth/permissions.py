@@ -12,7 +12,7 @@ from typing import Any
 from fastapi import Depends, Request
 from pydantic import BaseModel, computed_field, field_validator
 
-from onyx.auth.pat import get_token_permission_cap
+from onyx.auth.pat import TokenPermissionCap, get_token_permission_cap
 from onyx.db.enums import AccountType, PatType, Permission, PermissionAuthority
 from onyx.db.models import User
 from onyx.db.permissions import parse_permission_values
@@ -336,24 +336,50 @@ def has_global_permission(user: User, permission: Permission) -> bool:
 
 def materialize_pat_permission_cap(
     user: User, scopes: list[Permission] | None, pat_type: PatType = PatType.USER
-) -> frozenset[Permission]:
+) -> TokenPermissionCap:
     if pat_type is PatType.CRAFT:
-        return frozenset(
-            Permission(value)
+        return {
+            Permission(value): PermissionAuthority.GLOBAL
             for value in resolve_effective_permissions({Permission.CRAFT_SANDBOX.value})
-        )
-    permissions = get_effective_permissions(user)
-    if user.is_group_manager:
-        permissions |= {
-            Permission(value) for value in SCOPED_MANAGER_PERMISSIONS_EXPANDED
         }
+    permissions: TokenPermissionCap = dict.fromkeys(
+        get_effective_permissions(user), PermissionAuthority.GLOBAL
+    )
+    if user.is_group_manager:
+        for value in SCOPED_MANAGER_PERMISSIONS_EXPANDED:
+            permissions.setdefault(Permission(value), PermissionAuthority.SCOPED)
     if scopes is not None:
         covered = resolve_effective_permissions({scope.value for scope in scopes})
         permissions = {
-            permission for permission in permissions if permission.value in covered
+            permission: authority
+            for permission, authority in permissions.items()
+            if permission.value in covered
         }
-    permissions.discard(Permission.CRAFT_SANDBOX)
-    return frozenset(permissions)
+    permissions.pop(Permission.CRAFT_SANDBOX, None)
+    return permissions
+
+
+def intersect_pat_permission_caps(
+    child: TokenPermissionCap, parent: TokenPermissionCap
+) -> TokenPermissionCap:
+    return {
+        permission: (
+            PermissionAuthority.GLOBAL
+            if authority is PermissionAuthority.GLOBAL
+            and parent[permission] is PermissionAuthority.GLOBAL
+            else PermissionAuthority.SCOPED
+        )
+        for permission, authority in child.items()
+        if permission in parent
+    }
+
+
+def pat_permission_cap_is_stale(user: User, cap: TokenPermissionCap) -> bool:
+    global_permissions = get_effective_permissions(user)
+    return any(
+        authority is PermissionAuthority.SCOPED and permission in global_permissions
+        for permission, authority in cap.items()
+    )
 
 
 def require_permission(
@@ -386,7 +412,14 @@ def require_permission(
             permitted_by_user = authority is not PermissionAuthority.NONE
         else:
             permitted_by_user = authority is PermissionAuthority.GLOBAL
-        permitted_by_token = token_cap is None or required in token_cap
+        permitted_by_token = token_cap is None or (
+            token_cap.get(required) is PermissionAuthority.GLOBAL
+            or (
+                allow_scope
+                and authority is PermissionAuthority.SCOPED
+                and token_cap.get(required) is PermissionAuthority.SCOPED
+            )
+        )
         permitted = permitted_by_user and permitted_by_token
         if not permitted:
             raise OnyxError(

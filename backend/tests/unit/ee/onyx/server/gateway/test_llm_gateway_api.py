@@ -21,7 +21,7 @@ from onyx.auth.permissions import (
     materialize_pat_permission_cap,
     resolve_effective_permissions,
 )
-from onyx.db.enums import Permission
+from onyx.db.enums import Permission, PermissionAuthority
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -81,12 +81,12 @@ def _pat_request(token_scopes: list[Permission] | None) -> Request:
     request = Request({"type": "http", "headers": []})
     if token_scopes is not None:
         request.state.token_scopes = token_scopes
-        request.state.token_permission_cap = frozenset(
-            Permission(value)
+        request.state.token_permission_cap = {
+            Permission(value): PermissionAuthority.GLOBAL
             for value in resolve_effective_permissions(
                 {scope.value for scope in token_scopes}
             )
-        )
+        }
         request.state.usage_credential = UsageCredentialIdentity(
             UsageCredentialType.CRAFT_PAT
             if Permission.CRAFT_SANDBOX in token_scopes
@@ -1177,7 +1177,9 @@ class TestGatewayAuthComposition:
         request.state.usage_credential = UsageCredentialIdentity(
             UsageCredentialType.PAT
         )
-        request.state.token_permission_cap = frozenset({Permission.READ_CHAT})
+        request.state.token_permission_cap = {
+            Permission.READ_CHAT: PermissionAuthority.GLOBAL
+        }
 
         assert gateway_request_flow(request, user) is None
 

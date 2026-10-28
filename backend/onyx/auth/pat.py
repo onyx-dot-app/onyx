@@ -3,21 +3,27 @@
 import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
+from typing import Literal
 from urllib.parse import quote
 
 from fastapi import Request
 
 from onyx.auth.constants import PAT_LENGTH, PAT_PREFIX
 from onyx.auth.utils import get_hashed_bearer_token_from_request
-from onyx.db.enums import Permission
+from onyx.db.enums import Permission, PermissionAuthority
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import UsageCredentialIdentity
 from shared_configs.enums import UsageCredentialType
 
+type TokenPermissionAuthority = Literal[
+    PermissionAuthority.GLOBAL, PermissionAuthority.SCOPED
+]
+type TokenPermissionCap = dict[Permission, TokenPermissionAuthority]
 
-def get_token_permission_cap(request: Request) -> frozenset[Permission] | None:
+
+def get_token_permission_cap(request: Request) -> TokenPermissionCap | None:
     state = request.scope.get("state", {})
-    cap: frozenset[Permission] | None = state.get("token_permission_cap")
+    cap: TokenPermissionCap | None = state.get("token_permission_cap")
     if cap is not None:
         return cap
     credential: UsageCredentialIdentity | None = state.get("usage_credential")
@@ -31,7 +37,7 @@ def get_token_permission_cap(request: Request) -> frozenset[Permission] | None:
             UsageCredentialType.OAUTH_PROVIDER,
         }
     ):
-        return frozenset()
+        return {}
     return None
 
 

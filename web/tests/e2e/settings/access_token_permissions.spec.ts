@@ -4,6 +4,7 @@ import { SettingsAccessTokensPage } from "@tests/e2e/pages/SettingsAccessTokensP
 import { loginAsWorkerUser } from "@tests/e2e/utils/auth";
 import {
   TEST_ADMIN_CREDENTIALS,
+  WORKER_USER_POOL_SIZE,
   workerUserCredentials,
 } from "@tests/e2e/constants";
 
@@ -29,7 +30,9 @@ test("a full access token keeps its original permissions after promotion @exclus
     },
   });
   expect(adminLogin.status()).toBe(204);
-  const credentials = workerUserCredentials(testInfo.workerIndex);
+  const credentials = workerUserCredentials(
+    testInfo.workerIndex % WORKER_USER_POOL_SIZE
+  );
   const tokenIds: number[] = [];
   let userId: string | undefined;
   let promoted = false;

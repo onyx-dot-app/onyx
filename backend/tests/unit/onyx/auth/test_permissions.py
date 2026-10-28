@@ -35,12 +35,12 @@ def _request(token_scopes: list[Permission] | None = None) -> Request:
     state = SimpleNamespace()
     if token_scopes is not None:
         state.token_scopes = token_scopes
-        state.token_permission_cap = frozenset(
-            Permission(value)
+        state.token_permission_cap = {
+            Permission(value): PermissionAuthority.GLOBAL
             for value in resolve_effective_permissions(
                 {scope.value for scope in token_scopes}
             )
-        )
+        }
     return Request({"type": "http", "state": vars(state)})
 
 

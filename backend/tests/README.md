@@ -55,6 +55,9 @@ To test a running deployment, set `ONYX_TEST_EXTERNAL_API=true` and configure
 `API_SERVER_HOST` and `API_SERVER_PORT` for its frontend proxy. For example,
 `API_SERVER_HOST=localhost API_SERVER_PORT=3002/api` uses `http://localhost:3002/api`.
 This mode reuses deployed workers instead of starting test workers.
+The runner also needs access to its configured PostgreSQL database. Session
+setup runs Alembic migrations and initializes the database before the HTTP client
+becomes available.
 
 ### Playwright / E2E Tests (`web/tests/e2e/`)
 

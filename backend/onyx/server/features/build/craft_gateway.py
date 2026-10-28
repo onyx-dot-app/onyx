@@ -1,7 +1,7 @@
 from fastapi import Request
 
 from onyx.auth.pat import get_token_permission_cap
-from onyx.db.enums import Permission
+from onyx.db.enums import Permission, PermissionAuthority
 from onyx.db.models import User
 from onyx.server.features.build.utils import is_craft_enabled_for_user
 from onyx.tracing.flows import LLMFlow
@@ -14,7 +14,10 @@ def is_craft_gateway_request(request: Request, user: User) -> bool:
     ``require_permission`` alone can't express "a gateway-capable scope must
     be present"."""
     cap = get_token_permission_cap(request)
-    token_grants_gateway = cap is not None and Permission.USE_LLM_GATEWAY in cap
+    token_grants_gateway = (
+        cap is not None
+        and cap.get(Permission.USE_LLM_GATEWAY) is PermissionAuthority.GLOBAL
+    )
     return token_grants_gateway and is_craft_enabled_for_user(user)
 
 
@@ -37,7 +40,7 @@ def gateway_request_flow(request: Request, user: User) -> LLMFlow | None:
     if (
         credential.credential_type is UsageCredentialType.PAT
         and cap is not None
-        and Permission.USE_LLM_GATEWAY in cap
+        and cap.get(Permission.USE_LLM_GATEWAY) is PermissionAuthority.GLOBAL
     ):
         return LLMFlow.LLM_GATEWAY
     return None

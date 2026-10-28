@@ -78,6 +78,7 @@ def test_pat_permission_caps_upgrade_downgrade_upgrade(
         "craft_unknown": ["future:permission"],
         "unrestricted_manager": None,
         "narrow_manager": ["read:search"],
+        "manager_with_global_agents": None,
     }
     expected_caps = {
         "unrestricted_basic": basic_cap,
@@ -130,6 +131,36 @@ def test_pat_permission_caps_upgrade_downgrade_upgrade(
             "read:users",
         },
         "narrow_manager": {"read:search"},
+        "manager_with_global_agents": basic_cap
+        | {
+            "manage:actions",
+            "manage:agents",
+            "manage:connectors",
+            "manage:document_sets",
+            "manage:skills",
+            "manage:user_groups",
+            "read:agent_analytics",
+            "read:agents",
+            "read:connectors",
+            "read:document_sets",
+            "read:user_groups",
+            "read:users",
+        },
+    }
+    scoped_manager_permissions = {
+        "add:agents",
+        "manage:actions",
+        "manage:agents",
+        "manage:connectors",
+        "manage:document_sets",
+        "manage:skills",
+        "manage:user_groups",
+        "read:agent_analytics",
+        "read:agents",
+        "read:connectors",
+        "read:document_sets",
+        "read:user_groups",
+        "read:users",
     }
     schema = f"pat_cap_migration_{uuid4().hex}"
     with isolated_engine.connect() as connection, connection.begin():
@@ -163,7 +194,8 @@ def test_pat_permission_caps_upgrade_downgrade_upgrade(
                     (6, 'null'),
                     (7, NULL);
                 INSERT INTO "user" VALUES
-                    (8, '["basic", "create:user_api_keys"]', true);
+                    (8, '["basic", "create:user_api_keys"]', true),
+                    (9, '["basic", "create:user_api_keys", "manage:agents"]', true);
             """)
         )
         insert = text("""
@@ -181,6 +213,7 @@ def test_pat_permission_caps_upgrade_downgrade_upgrade(
             "user_craft_bundle": 2,
             "unrestricted_manager": 8,
             "narrow_manager": 8,
+            "manager_with_global_agents": 9,
         }
         connection.execute(
             insert,
@@ -248,9 +281,28 @@ def test_pat_permission_caps_upgrade_downgrade_upgrade(
                 assert {
                     row.name: set(row.permission_cap) for row in rows
                 } == expected_caps
-                assert all(
-                    row.permission_cap == sorted(row.permission_cap) for row in rows
-                )
+                for row in rows:
+                    assert row.permission_cap == {
+                        permission: (
+                            "scoped"
+                            if row.name
+                            in {"unrestricted_manager", "manager_with_global_agents"}
+                            and permission in scoped_manager_permissions
+                            and not (
+                                row.name == "manager_with_global_agents"
+                                and permission
+                                in {
+                                    "add:agents",
+                                    "manage:agents",
+                                    "read:agents",
+                                    "read:document_sets",
+                                    "read:agent_analytics",
+                                }
+                            )
+                            else "global"
+                        )
+                        for permission in expected_caps[row.name]
+                    }
                 with pytest.raises(IntegrityError), connection.begin_nested():
                     connection.execute(
                         text("""

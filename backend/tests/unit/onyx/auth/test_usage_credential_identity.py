@@ -4,9 +4,12 @@ import pytest
 from fastapi import Request
 
 from onyx.auth import users
-from onyx.db.enums import PatType, Permission
+from onyx.auth.permissions import materialize_pat_permission_cap
+from onyx.db.enums import PatType, Permission, PermissionAuthority
 from onyx.db.models import User
 from onyx.db.pat import PatAuthResult
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.security.store import _build_env_defaults
 from shared_configs.contextvars import UsageCredentialIdentity
 from shared_configs.enums import UsageCredentialType
@@ -76,7 +79,9 @@ async def test_pat_type_selects_credential_type(
     pat_type: PatType,
     expected_credential_type: UsageCredentialType,
 ) -> None:
-    pat_user = cast(User, object())
+    pat_user = User(
+        effective_permissions=[Permission.BASIC_ACCESS.value], is_group_manager=False
+    )
     pat = PatAuthResult(
         user=pat_user,
         scopes=None,
@@ -84,7 +89,7 @@ async def test_pat_type_selects_credential_type(
         pat_name="my-token",
         pat_display="onyx_pat_...abcd",
         pat_type=pat_type,
-        permission_cap=frozenset({Permission.BASIC_ACCESS}),
+        permission_cap={Permission.BASIC_ACCESS: PermissionAuthority.GLOBAL},
     )
 
     async def fake_resolve_pat(*_: Any, **__: Any) -> PatAuthResult:
@@ -98,6 +103,43 @@ async def test_pat_type_selects_credential_type(
     assert request.state.usage_credential == UsageCredentialIdentity(
         expected_credential_type, "7", "my-token", "onyx_pat_...abcd"
     )
+
+
+@pytest.mark.parametrize(
+    "promotion", [Permission.FULL_ADMIN_PANEL_ACCESS, Permission.MANAGE_USER_GROUPS]
+)
+@pytest.mark.asyncio
+async def test_promoted_manager_token_is_denied_before_handler_checks(
+    monkeypatch: pytest.MonkeyPatch, promotion: Permission
+) -> None:
+    owner = User(
+        effective_permissions=[
+            Permission.BASIC_ACCESS.value,
+            Permission.MANAGE_LLMS.value,
+        ],
+        is_group_manager=True,
+    )
+    pat = PatAuthResult(
+        user=owner,
+        scopes=None,
+        pat_id=7,
+        pat_name="manager",
+        pat_display="onyx_pat_...abcd",
+        pat_type=PatType.USER,
+        permission_cap=materialize_pat_permission_cap(owner, None),
+    )
+
+    async def fake_resolve_pat(*_: Any, **__: Any) -> PatAuthResult:
+        return pat
+
+    monkeypatch.setattr(users, "get_hashed_pat_from_request", lambda _: "hashed")
+    monkeypatch.setattr(users, "resolve_pat", fake_resolve_pat)
+    assert await _resolve(_bare_request(), None) is owner
+    owner.effective_permissions = [promotion.value]
+    with pytest.raises(OnyxError) as error:
+        await _resolve(_bare_request(), None)
+    assert error.value.error_code is OnyxErrorCode.INSUFFICIENT_PERMISSIONS
+    assert await _resolve(_bare_request(), owner) is owner
 
 
 @pytest.mark.asyncio

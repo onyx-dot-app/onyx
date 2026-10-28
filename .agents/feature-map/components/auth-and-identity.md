@@ -122,7 +122,7 @@ the coding-agent sandbox).
 |---|---|---|---|
 | CRUD | `/admin/api-key*` | `server/api_key/api.py` | `Permission.MANAGE_SERVICE_ACCOUNT_API_KEYS`. Creating or updating a key is **admin-equivalent by design**: `group_ids` is uncapped, so a holder can add a key to the Admin group (`api.py:create_api_key` comment). |
 | GET | `/user/pats/scopes` | `server/pat/api.py:list_selectable_scopes` | `Permission.BASIC_ACCESS`. Drops scopes whose `min_tier` is above the current tier (`use:llm_gateway` is Business+), and drops `use:llm_gateway` while the workspace `llm_gateway_enabled` setting is off. |
-| GET/POST/DELETE | `/user/pats` | `server/pat/api.py` | Create needs `CREATE_USER_API_KEYS`. The seeded Basic group grants it by default, and a full admin can switch it off or on from the Basic group's page (`auth/permissions.py:DEFAULT_GROUP_TOGGLEABLE_PERMISSIONS`). The same permission gates MCP OAuth consent (`server/oauth_provider/api.py`), so the toggle covers both. List and delete need `BASIC_ACCESS`, and a user only ever sees or revokes their own. Minting rejects scopes outside the owner's current authority or the authenticating parent's cap. A full child inherits at most its parent's cap. Minting a PAT with a scope above the current tier is rejected with `FEATURE_NOT_AVAILABLE`, and minting one with `use:llm_gateway` while the setting is off is rejected with `INVALID_INPUT` (`server/pat/api.py:_validate_assignable_scopes`). |
+| GET/POST/DELETE | `/user/pats` | `server/pat/api.py` | Create needs `CREATE_USER_API_KEYS`. The seeded Basic group grants it by default, and a full admin can switch it off or on from the Basic group's page (`auth/permissions.py:DEFAULT_GROUP_TOGGLEABLE_PERMISSIONS`). The same permission gates MCP OAuth consent (`server/oauth_provider/api.py`), so the toggle covers both. List and delete need `BASIC_ACCESS`, and a user only ever sees or revokes their own. Minting narrows selected permissions to the owner's current authority. An explicit child selection that exceeds the authenticating parent's cap is rejected. A full child inherits at most its parent's cap. Minting a PAT with a scope above the current tier is rejected with `FEATURE_NOT_AVAILABLE`, and minting one with `use:llm_gateway` while the setting is off is rejected with `INVALID_INPUT` (`server/pat/api.py:_validate_assignable_scopes`). |
 | GET/PUT | `/admin/security`, GET `/admin/security/pinned-fields` | `server/security/api.py` | `FULL_ADMIN_PANEL_ACCESS`. Workspace security overrides: password policy, `password_auth_enabled`, `valid_email_domains`, the two admin-gated claim windows (`allow_same_provider_subject_relink`, `allow_renamed_account_claim`, both KV-backed and off by default), JWT validation fields, SSRF level, incognito availability, `allow_connector_group_restrictions`, and `allow_connector_check_findings` (on by default; off, capability checks store and return no findings). Env-pinned fields win over stored values. Turning on `allow_connector_group_restrictions` needs the Business tier. |
 | CRUD | `/admin/user-group*` | `ee/onyx/server/user_group/api.py` | See [[access-control]] §2; this is where group membership, and thus `PermissionGrant`-derived capability, is actually assigned. |
 | GET/POST/PATCH/DELETE | `/admin/sso/provider*`, `/admin/sso/domain/*` | `server/manage/sso/api.py` | `FULL_ADMIN_PANEL_ACCESS` (exact gating per route). Domain-routing SSO providers beyond the first require business tier (`_require_business_tier_for_additional_enabled_provider`). Disable keeps the provider's `OAuthAccount` links. Delete removes them and, on cloud, their catalog copies (`forget_oauth_identities`), so a sign-in through another provider can claim an unlinked account by email; a renamed one only while `allow_renamed_account_claim` is on. An OIDC or Google login share-locks its provider row in the transaction of each link and catalog write (`UserManager._hold_sso_provider`), so a delete waits for those in-flight logins and removes their links and catalog copies too, and such a login whose provider is gone fails before writing. SAML logins write no links, so they take no lock. GET `/admin/sso/provider/{id}/handoff` counts the users a delete would unlink and how many were renamed. Disable and delete both refuse to remove the last enabled provider while password login is off. |
@@ -201,7 +201,7 @@ group to draw chat scope from).
 | Hash | `hashed_api_key` (SHA-256 hex, or salted `sha256_crypt` for the deprecated prefix) | `hashed_token` (SHA-256, `String(64)`) |
 | Display | `api_key_display` (masked) | `token_display` (masked) |
 | Owner vs. bearer | `user_id` (the synthetic service-account identity the key authenticates as) is distinct from `owner_id` (the human who created it) | `user_id` is the creator; a PAT always authenticates as its owner, there is no separate bearer identity |
-| Scoping | Capability comes entirely from the service-account user's group memberships | `pat_type: PatType` (`USER` \| `CRAFT`); original `scopes` plus a finite `permission_cap`. Minting snapshots the owner's global and scoped-manager authority. `require_permission` intersects the stored cap with live user authority |
+| Scoping | Capability comes entirely from the service-account user's group memberships | `pat_type: PatType` (`USER` \| `CRAFT`); original `scopes` plus a finite `permission_cap` map from permission names to `global` or `scoped`. Minting snapshots the owner's global and scoped-manager authority. `require_permission` intersects the stored cap with live user authority |
 | Expiry/revocation | No expiry column; deleted to revoke | `expires_at` (`NULL` = no expiration; revocation sets it to `NOW()`), `is_revoked` |
 
 Both `hashed_api_key` and `hashed_token` are unique-constrained and are the
@@ -374,6 +374,7 @@ Authorization: Bearer <token>  or raw key (API keys only, historically)
     │    falls back to the session cookie
     ├─ SAML/JWT check
     ├─ get_hashed_pat_from_request → resolve_pat → sets request.state.token_scopes and token_permission_cap
+    │    rejects a token if any stored scoped permission is now global
     │    (Bearer-only; api_key.py additionally accepts a raw, non-Bearer key)
     └─ get_hashed_api_key_from_request → fetch_api_key_auth_result
   → user = the PAT's owning User, or for an API key its synthetic
@@ -402,8 +403,9 @@ require_permission(Permission.X, allow_anonymous=, allow_scope=)
        └─ NONE    otherwise
   └─ permitted_by_user = (authority is GLOBAL) or
                          (allow_scope and authority is not NONE)
-  └─ permitted_by_token = token_permission_cap is None or X is in the stored cap
-       (caps a scoped PAT to what its own scopes allow)
+  └─ permitted_by_token = uncapped, or X is stored as GLOBAL, or
+       X is stored as SCOPED and live authority is SCOPED and allow_scope
+       (caps each PAT to the permission and authority stored at creation)
   └─ 403 INSUFFICIENT_PERMISSIONS unless both hold
 ```
 
@@ -577,8 +579,12 @@ is marked as such.
 4. **Every PAT has a finite stored permission ceiling.**
    `db/pat.py:create_pat` expands selections once and intersects them with the
    owner's authority at creation. `require_permission` checks exact membership
-   in `permission_cap` and the owner's live authority. Neither a new permission
-   nor a changed implication expands an existing token. Full-access tokens include
+   in `permission_cap` with its stored authority and the owner's live authority.
+   New permission names and changed implications do not expand gated access.
+   Authentication rejects the whole token if any stored scoped permission
+   becomes global. This protects secondary handler checks and requires token
+   reissue after such a promotion. Child caps keep the lower authority for
+   each permission. Full-access tokens include
    Gateway when the owner holds it at creation. A child PAT cannot exceed its parent.
    The migration freezes legacy rules, handles SQL NULL and JSON null, and
    preserves scoped-manager and Community Edition access. Legacy USER caps keep
@@ -588,11 +594,19 @@ is marked as such.
    separate. `_scoped_pat_permitted_on_route` rejects limited tokens on routes
    without `require_permission` or `scope_exempt()`. Full-token compatibility on
    existing unguarded routes remains. Inline user-permission
-   checks still inspect user authority, not the token cap. API-key creation,
+   checks still inspect live user authority for permissions outside the cap.
+   The cap does not freeze resource visibility controlled by those checks. API-key creation,
    regeneration, and Discord registration require `uncapped_credential_user`.
    Capped tokens cannot mint uncapped credentials through these routes. Existing
    service API-key and JWT callers remain supported. Legacy caps include
    `add:agents` for CE compatibility; EE still checks the owner's live grant.
+   Drain old API pods and other PAT writers before applying this migration.
+   Keep them stopped until the updated writers serve traffic. Old writers omit
+   the required cap and their inserts fail after migration. A normal rolling
+   update does not satisfy this coordinated rollout.
+   Preview databases that already applied the earlier list-shaped cap migration
+   need USER token reissue. Authentication rejects obsolete caps. Craft remints
+   its own tokens. Alembic does not rerun a revision already marked as applied.
    Re-gating an existing route to a new permission requires token reissue.
    Never reuse a removed permission string for a different capability.
 5. **Anonymous access must stay limited to the routes and documents intended

@@ -10,6 +10,7 @@ from onyx.db.models import PersonalAccessToken
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.pat import PATManager
+from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser
 
 
@@ -115,6 +116,61 @@ def test_child_pat_cannot_gain_permissions_beyond_its_parent(
         timeout=60,
     )
     assert response.status_code == 403, response.text
+
+
+def test_manager_pat_and_child_cannot_gain_global_authority(
+    admin_user: DATestUser, token_owner: DATestUser
+) -> None:
+    group = UserGroupManager.create(admin_user, user_ids=[token_owner.id])
+    try:
+        assigned = UserGroupManager.set_manager(group, token_owner, True, admin_user)
+        assert assigned.status_code == 200, assigned.text
+        original = PATManager.create("manager-before-promotion", None, token_owner)
+        assert original.token is not None
+        headers = PATManager.get_auth_headers(original.token)
+        groups_url = f"{API_SERVER_URL}/manage/admin/user-group"
+        boosts_url = f"{API_SERVER_URL}/manage/admin/doc-boosts?ascending=false&limit=1"
+        before = client.get(groups_url, headers=headers, timeout=60)
+        assert before.status_code == 200, before.text
+        assert {entry["id"] for entry in before.json()} == {group.id}
+        assert client.get(boosts_url, headers=headers, timeout=60).status_code == 403
+        parent_user = token_owner.model_copy(update={"headers": headers, "cookies": {}})
+        child = PATManager.create("manager-child-before-promotion", None, parent_user)
+        assert child.token is not None
+
+        promotion = client.patch(
+            f"{API_SERVER_URL}/manage/admin/users/admin-access",
+            json={"user_email": token_owner.email, "is_admin": True},
+            headers=admin_user.headers,
+            cookies=admin_user.cookies,
+            timeout=60,
+        )
+        assert promotion.status_code == 200, promotion.text
+        stale_child = PATManager.create_response(
+            "stale-parent-child", None, parent_user
+        )
+        assert stale_child.status_code == 403, stale_child.text
+        fresh = PATManager.create("manager-reissued-after-promotion", None, token_owner)
+        assert fresh.token is not None
+        for url in (groups_url, boosts_url):
+            for token in (original.token, child.token):
+                response = client.get(
+                    url, headers=PATManager.get_auth_headers(token), timeout=60
+                )
+                assert response.status_code == 403, response.text
+            response = client.get(
+                url, headers=PATManager.get_auth_headers(fresh.token), timeout=60
+            )
+            assert response.status_code == 200, response.text
+    finally:
+        try:
+            unassigned = UserGroupManager.set_manager(
+                group, token_owner, False, admin_user
+            )
+            assert unassigned.status_code == 200, unassigned.text
+        finally:
+            UserGroupManager.wait_for_sync(admin_user, [group])
+            UserGroupManager.delete(group, admin_user)
 
 
 def test_explicit_child_cannot_escape_selected_parent_scope(

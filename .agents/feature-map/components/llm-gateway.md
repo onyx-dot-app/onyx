@@ -127,7 +127,8 @@ The gateway introduces no new tables. It reads the same rows
   `fetch_all_accessible_llm_providers`.
 - `PersonalAccessToken` (`db/models.py`, via `db/pat.py`), whose `scopes`
   column preserves the original nullable selections. Its non-null
-  `permission_cap` stores the finite permissions granted at creation.
+  `permission_cap` maps each permission to its authority at creation.
+  Gateway access requires a stored `global` value.
 
 It writes the same usage ledger [[llm-providers]] and
 [[rate-and-usage-limits]] already document: `UserUsage`
@@ -184,7 +185,7 @@ per-Craft-sandbox enablement GATE 2 already checks; a Craft sandbox's
 `CRAFT_SANDBOX`-scoped PAT is never subject to it.
 
 **GATE 1** (`require_permission(Permission.USE_LLM_GATEWAY)`, every endpoint
-in `api.py`) requires live user authority and literal membership in the PAT's
+in `api.py`) requires live global user authority and a `global` entry in the PAT's
 stored `permission_cap`. Issuance expands permissions once. New full-access
 tokens include Gateway when the owner holds it. Narrow selections grant only
 their resolved permissions. New implication rules cannot expand an existing token.
