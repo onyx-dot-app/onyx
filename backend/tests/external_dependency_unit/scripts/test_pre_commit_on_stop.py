@@ -417,6 +417,31 @@ def test_rebase_resolution_keeping_upstream_checks_resolved_file(repo: Path) -> 
     assert _checked(repo) == {"base.txt"}
 
 
+def test_reworded_rebase_resolution_checks_only_resolved_file(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _diverge(repo)
+    (repo / "local.txt").write_text("local\n")
+    _git(repo, "add", "local.txt")
+    _commit(repo, "base.txt", "local edit\n")
+    _start(repo)
+    conflict = subprocess.run(
+        ["git", "-c", "sequence.editor=sed -i.bak s/^pick/reword/"]
+        + ["rebase", "-i", "upstream"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    )
+    assert conflict.returncode != 0, conflict.stdout
+    (repo / "base.txt").write_text("resolved\n")
+    _git(repo, "add", "base.txt")
+    monkeypatch.setenv("GIT_EDITOR", "sed -i.bak 1s/.*/Reworded/")
+    _git(repo, "rebase", "--continue")
+    _stop(repo)
+    assert _git(repo, "log", "-1", "--format=%s") == "Reworded"
+    assert _checked(repo) == {"base.txt"}
+
+
 def test_linked_worktree_uses_its_own_reflog(repo: Path) -> None:
     linked = repo.parent / "linked"
     _git(repo, "worktree", "add", "-b", "linked", str(linked))

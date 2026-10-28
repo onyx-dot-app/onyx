@@ -111,8 +111,20 @@ def _merge_resolution_files(repo: Path, merge: str) -> set[str]:
     return _git_paths(repo, "diff", "--name-only", combined, merge) if others else set()
 
 
-_Original = tuple[str, str]  # (commit, author and subject)
-_IDENTITY = "%an%x00%ae%x00%s"
+_Original = tuple[str, list[str]]  # (commit, [author name, email, date, subject])
+_IDENTITY = "%an%x00%ae%x00%ad%x00%s"
+
+
+def _identity_rank(replayed: list[str], original: list[str]) -> int | None:
+    """How well a step's identity names an original; lower is closer.
+
+    `rebase --continue` keeps the author date and subject. A manual
+    `git commit` during a rebase keeps the subject but not the date.
+    """
+    same_date, same_subject = replayed[2] == original[2], replayed[3] == original[3]
+    if replayed[:2] != original[:2] or not (same_date or same_subject):
+        return None
+    return (not same_date) + (not same_subject)
 
 
 def _replay_files(
@@ -121,14 +133,21 @@ def _replay_files(
     """Files a rebase step changed beyond an automatic replay of its original.
 
     A step that matches the automatic replay of any original is clean. Otherwise
-    its original is the next one with the same author and subject, and only the
+    its original is the next one with the closest author identity, and only the
     files that differ from that replay count. A step without an original, such
     as a commit at an edit stop, keeps its whole diff. Also returns the index of
     the original used.
     """
-    identity = _git(repo, "show", "-s", f"--format={_IDENTITY}", after).strip()
-    named: tuple[set[str], int] | None = None
-    for index, (original, original_identity) in enumerate(originals):
+    plain = _git_paths(repo, "diff", "--name-only", before, after)
+    if not plain:
+        return plain, None
+    replayed = (
+        _git(repo, "show", "-s", "--date=raw", f"--format={_IDENTITY}", after)
+        .strip()
+        .split("\0")
+    )
+    named: tuple[int, set[str], int] | None = None
+    for index, (original, identity) in enumerate(originals):
         automatic = _automatic_merge(
             repo, "--merge-base", f"{original}^", before, original
         )
@@ -137,11 +156,12 @@ def _replay_files(
         files = _git_paths(repo, "diff", "--name-only", automatic, after)
         if not files:
             return files, index
-        if named is None and original_identity == identity:
-            named = files, index
+        rank = _identity_rank(replayed, identity)
+        if rank is not None and (named is None or rank < named[0]):
+            named = rank, files, index
     if named is not None:
-        return named
-    return _git_paths(repo, "diff", "--name-only", before, after), None
+        return named[1], named[2]
+    return plain, None
 
 
 def _rebase_originals(repo: Path, original_tip: str, onto: str) -> list[_Original]:
@@ -150,11 +170,12 @@ def _rebase_originals(repo: Path, original_tip: str, onto: str) -> list[_Origina
         "log",
         "--reverse",
         "--no-merges",
+        "--date=raw",
         f"--format=%H%x00{_IDENTITY}",
         f"{onto}..{original_tip}",
     )
     return [
-        (commit, identity)
+        (commit, identity.split("\0"))
         for commit, _, identity in (line.partition("\0") for line in log.splitlines())
     ]
 
