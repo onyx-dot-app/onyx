@@ -146,6 +146,10 @@ the setting at every extraction site; list them with
 `git grep -n 'skip_content=' -- backend/onyx/connectors`. [[indexing-pipeline]]
 owns the chunking of the sections.
 
+**Storage files.** An object-storage connector builds each `Document` from a
+downloaded file with
+`connectors/cross_connector_utils/storage_file_document.py:build_storage_file_document`.
+
 ---
 
 ## Contracts and traps
