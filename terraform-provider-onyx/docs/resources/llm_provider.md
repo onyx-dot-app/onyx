@@ -60,7 +60,7 @@ resource "onyx_llm_provider" "openai" {
 - `custom_config_wo` (Map of String, Sensitive, [Write-only](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments)) Provider-specific config key/values, held only in configuration. Terraform sends them on every apply and stores nothing, so they never reach state. Pair with `custom_config_wo_version` to rotate them. Needs Terraform 1.11 or later.
 - `custom_config_wo_version` (Number) Rotation counter for `custom_config_wo`. Terraform never stores a write-only value and so cannot tell that the secret changed; raise this number to make the next apply send the current one. Do not derive it from the secret itself — unlike the secret, this number is kept in state.
 - `deployment_name` (String) Deployment name (Azure).
-- `force_delete` (Boolean) Allow destroying this provider even while it holds the deployment default model. Defaults to false, where such a destroy fails.
+- `force_delete` (Boolean) Allow destroying this provider even while it holds the deployment default model. Defaults to false, where such a destroy fails. It does not override the decision model: a provider that holds it cannot be destroyed until the decision model is cleared.
 - `groups` (Set of Number) User group ids the provider is restricted to (EE).
 - `is_auto_mode` (Boolean) Onyx Auto mode: the model list is managed by Onyx. When enabled, the server owns `model_configurations`: Terraform stops drift-checking the list, and updates re-assert the server's current models instead of the configured ones, so registry-managed models are never removed.
 - `is_public` (Boolean) Whether the provider is available to all users.

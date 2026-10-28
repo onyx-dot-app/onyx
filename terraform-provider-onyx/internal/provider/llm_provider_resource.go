@@ -198,7 +198,9 @@ func (r *llmProviderResource) Schema(_ context.Context, _ resource.SchemaRequest
 			"force_delete": schema.BoolAttribute{
 				Optional: true,
 				MarkdownDescription: "Allow destroying this provider even while it holds the deployment " +
-					"default model. Defaults to false, where such a destroy fails.",
+					"default model. Defaults to false, where such a destroy fails. It does not override " +
+					"the decision model: a provider that holds it cannot be destroyed until the decision " +
+					"model is cleared.",
 			},
 			"model_configurations": schema.SetNestedAttribute{
 				Required: true,
@@ -521,7 +523,8 @@ func (r *llmProviderResource) Delete(ctx context.Context, req resource.DeleteReq
 		resp.Diagnostics.AddError(
 			"Failed to delete Onyx LLM provider",
 			err.Error()+"\n\nIf this provider holds the deployment default model, either repoint "+
-				"the default first or set force_delete = true.",
+				"the default first or set force_delete = true. If it holds the decision model, clear "+
+				"the decision model first: force_delete does not override it.",
 		)
 	}
 }
