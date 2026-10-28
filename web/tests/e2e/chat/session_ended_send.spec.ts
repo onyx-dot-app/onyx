@@ -13,8 +13,10 @@ const SESSION_TERMINATED_BODY = JSON.stringify({
 });
 
 // Mocks a session revoked elsewhere (e.g. a password change in another tab).
+// Logout is mocked too: the session watcher calls it on the 403, and a real
+// logout would end the test session and redirect to the login page.
 async function revokeSession(page: Page, endpoint: string): Promise<void> {
-  for (const url of [endpoint, "**/api/me"]) {
+  for (const url of [endpoint, "**/api/me", "**/auth/logout"]) {
     await page.route(url, async (route) => {
       await route.fulfill({
         status: 403,
