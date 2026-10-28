@@ -151,10 +151,13 @@ class DecisionClient:
         timeout: float = 30.0,
         extra_headers: dict[str, str] | None = None,
         api_key_resolver: Callable[[], str] | None = None,
+        model_configuration_id: int | None = None,
     ) -> None:
         self.provider = provider
         self._api_key_resolver = api_key_resolver
         self.model = model
+        # The saved model configuration; admin cost overrides are keyed on it.
+        self.model_configuration_id = model_configuration_id
         base, path = _ENDPOINTS[provider]
         if provider == DecisionProvider.ZOOM_AI and api_base:
             raise ValueError("Zoom Decisions uses its fixed hosted endpoint")
@@ -188,6 +191,7 @@ class DecisionClient:
             model=self.model,
             provider=self.provider.value,
             input_messages=body,
+            model_configuration_id=self.model_configuration_id,
         ) as span:
             with httpx.Client(timeout=self.timeout) as client:
                 headers = dict(self._headers)

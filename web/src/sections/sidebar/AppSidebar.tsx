@@ -56,7 +56,7 @@ import { Button as OpalButton } from "@opal/components";
 import { cn } from "@opal/utils";
 import { Disabled } from "@opal/core";
 import { usePlans, useTierAtLeast } from "@/lib/tiers/hooks";
-import { BetaTag } from "@/lib/tiers/components";
+import { BetaTag, PlanTag } from "@/lib/tiers/components";
 import { Tier } from "@/lib/tiers/types";
 import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
 import { PHFeatureFlag, usePHFeatureFlag } from "@/lib/analytics/hooks";
@@ -65,7 +65,7 @@ import {
   showErrorNotification,
 } from "@/lib/sidebar/utils";
 import { handleMoveOperation } from "@/lib/sidebar/svc";
-import { SidebarTab, Tag } from "@opal/components";
+import { SidebarTab } from "@opal/components";
 import { ChatSession } from "@/app/app/interfaces";
 import { useUser } from "@/providers/UserProvider";
 import { getFirstPermittedAdminRoute } from "@/lib/permissions/utils";
@@ -658,10 +658,7 @@ export default function AppSidebar() {
                   }
                   rightChildren={
                     isOnyxCraftUpsell ? (
-                      <Tag
-                        title={t("appSidebar.craft.businessTag")}
-                        color="blue"
-                      />
+                      <PlanTag plan={Tier.BUSINESS} />
                     ) : (
                       <BetaTag />
                     )

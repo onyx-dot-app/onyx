@@ -32,11 +32,9 @@ from onyx.server.query_and_chat.streaming_models import (
     CodingAgentStart,
     CustomToolArgs,
     CustomToolDelta,
-    CustomToolErrorInfo,
     CustomToolStart,
     FileReaderResult,
     FileReaderStart,
-    GeneratedImage,
     ImageGenerationFinal,
     ImageGenerationToolStart,
     IntermediateReportDelta,
@@ -58,6 +56,7 @@ from onyx.server.query_and_chat.streaming_models import (
     SearchToolStart,
     SectionEnd,
 )
+from onyx.tools.results import CustomToolErrorInfo, GeneratedImage
 from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
     CodingAgentTool,
 )

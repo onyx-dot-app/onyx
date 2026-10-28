@@ -39,7 +39,7 @@ output "license_tier" {
 - `file_token_count_threshold_k` (Number)
 - `gpu_enabled` (Boolean)
 - `hide_query_history_from_admin_panel` (Boolean)
-- `image_analysis_max_size_mb` (Number)
+- `image_analysis_max_size_mb` (Number, Deprecated) Deprecated: Onyx no longer has this setting. Always null.
 - `image_extraction_and_analysis_enabled` (Boolean)
 - `invite_only_enabled` (Boolean)
 - `maximum_chat_retention_days` (Number)

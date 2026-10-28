@@ -123,6 +123,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-12-06",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": false
     },

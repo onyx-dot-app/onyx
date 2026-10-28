@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { SvgCpu } from "@opal/icons";
 import { Divider } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
-import LLMProviderCard from "@/sections/onboarding/components/LLMProviderCard";
+import { LLMProviderCard } from "@/lib/onboarding/components";
 import { getProvider } from "@/lib/languageModels/utils";
 import { useProviderNames } from "@/lib/languageModels/useProviderNames";
 import { useLLMProviderOptions } from "@/lib/hooks/useLLMProviderOptions";

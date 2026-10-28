@@ -337,6 +337,32 @@ Configured utility clients receive one provider cost check in the factory.
 Naming keeps its existing rate-limit check and text fallback on failure. Sessions whose
 incognito mode does not persist content skip the naming call.
 
+### Canonical response storage APIs
+
+`db/chat_response.py` adds storage APIs for accepted runtime records. Each response
+item stores one model generation, including thinking blocks and provider metadata.
+`ToolCall.result` stores the actual tool result and typed application details.
+Readers rebuild model history from these records in step and tool-call order.
+The existing production loop still uses `chat/save_chat.py` and its legacy rows.
+Both writers use `db/chat_display.py` for recording policy, token counts, source
+links, citations, and referenced files. Their tool-record writes remain separate.
+These APIs prepare the runtime transition; they do not switch chat execution.
+
+`db/chat_subagents.py` loads child history from the selected conversation branch.
+A child session belongs to the root conversation that created it. Public chat
+lists, search, message reads, and admin history exclude child sessions. Deleting
+a root removes its descendants and files. Retention considers descendant activity.
+Child discovery rejects unrelated branches and bounds traversal and payload size.
+Usage exports include child prompts and retain the root user, persona, and flow
+attribution. Excluding children from content-history views does not exclude their usage.
+
+The canonical writer enforces the session's recording policy. Content-free sessions
+retain status and usage without response items, tool results, or child content.
+Projected saves update the displayed answer and accepted records in one transaction.
+`read_response_replay_data` loads detached tool IDs and saved source documents.
+It checks references against accepted calls and keeps saved document IDs for source cards.
+Existing legacy tool response text remains a mapped column for the production writer.
+
 ## 5. Contracts and invariants
 
 1. **Messages alternate user and assistant.** The empty `SYSTEM` root row is
@@ -528,3 +554,34 @@ uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit/db/
 [[core-chat-loop]] [[citations]] [[context-assembly]] [[streaming-protocol]]
 [[chat-frontend]] [[tools-framework]] [[access-control]] [[multi-tenancy]]
 [[background-jobs]]
+
+
+### Incremental response content
+
+Canonical response writers reject content-free sessions before writing content.
+Durable child reservations enforce the same root-session policy. Child sessions
+inherit the root recording mode. Production chat still uses its existing writer.
+
+
+Saved sources include root and child message display metadata, even without a new
+search. Citation links and source cards survive database reloads.
+
+Restored root questions retain `chat:<question-id>` identities. Child instructions
+retain their run-input identities. Compaction boundaries match these identities
+after reload.
+
+
+Root metadata reads only the latest selected response. The child-history limit
+applies to child responses. A long root conversation does not consume this limit
+or hide its child agents.
+
+
+Root history restoration uses the validated message-branch limit. Child history
+uses the child-response limit. Citation-only documents also link to the root
+response; restoration reports missing cited sources explicitly.
+
+Shared history and response data models live in `chat/response_models.py`.
+Database modules import those models instead of defining separate data contracts.
+
+Replay includes sources linked only to a tool. Root-selected document versions
+take precedence for answer citations; tool cards retain their own saved versions.

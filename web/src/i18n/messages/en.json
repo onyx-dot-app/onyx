@@ -1257,7 +1257,6 @@
         "description": "Select a model for future classification and review features. Onyx does not use this model yet.",
         "clear": "Clear",
         "notConfigured": "Not configured",
-        "saved": "Decision model updated",
         "saveFailed": "Failed to update decision model"
       },
       "header": {
@@ -2849,18 +2848,14 @@
         "indexingStartUnexpectedError": "An unexpected error occurred while trying to start indexing",
         "indexingUpdateStarted": "Indexing update started successfully",
         "nameUpdateFailed": "Failed to update connector name",
-        "nameUpdated": "Connector name updated successfully",
         "noUnresolvedErrors": "No unresolved errors to retry.",
         "pruningFrequencyUpdateFailed": "Failed to update connector pruning frequency",
-        "pruningFrequencyUpdated": "Connector pruning frequency updated successfully",
         "refreshFrequencyUpdateFailed": "Failed to update connector refresh frequency",
-        "refreshFrequencyUpdated": "Connector refresh frequency updated successfully",
         "targetedReindexFailed": "Targeted reindex failed: {message}",
         "targetedReindexRunning": "Retrying {count, plural, one {# error} other {# errors}}…",
         "targetedReindexDone": "Retry finished. {resolved, plural, one {# error} other {# errors}} resolved.",
         "targetedReindexPartial": "Retry finished. {resolved, plural, one {# error} other {# errors}} resolved, {failing, plural, one {# document} other {# documents}} still failing.",
         "targetedReindexIncomplete": "The retry did not finish. Unresolved errors stay in the list.",
-        "checkFrequencyUpdated": "Connector check frequency updated successfully",
         "checkFrequencyUpdateFailed": "Failed to update connector check frequency",
         "runResolved": "Marked resolved.",
         "runResolveFailed": "Could not resolve: {message}",
@@ -3444,9 +3439,6 @@
           },
           "shareFailed": {
             "toast": "Couldn't change who can use this account. Try again."
-          },
-          "renameSaved": {
-            "toast": "Account renamed."
           },
           "renameFailed": {
             "toast": "Couldn't rename this account. Try again."
@@ -4888,9 +4880,6 @@
       }
     },
     "costOverrides": {
-      "allProviders": {
-        "label": "All providers"
-      },
       "deleteModal": {
         "description": "Usage of **{model}** ({provider}) will be priced at the built-in rate again.",
         "submit": {
@@ -4964,12 +4953,6 @@
     },
     "craft": {
       "accessCell": {
-        "disabledSuccess": {
-          "message": "Craft disabled for user"
-        },
-        "enabledSuccess": {
-          "message": "Craft enabled for user"
-        },
         "error": {
           "message": "Failed to update Craft access"
         }
@@ -5084,14 +5067,8 @@
         "resetError": {
           "message": "Failed to clear the default model"
         },
-        "resetSuccess": {
-          "message": "Craft default model cleared"
-        },
         "saveError": {
           "message": "Failed to save the default model"
-        },
-        "saveSuccess": {
-          "message": "Craft default model saved"
         }
       },
       "header": {
@@ -5470,9 +5447,6 @@
         }
       },
       "defaultAgent": {
-        "cleared": {
-          "toast": "Default agent cleared"
-        },
         "section": {
           "description": "The agent used by the bot in all channels unless overridden.",
           "title": "Default Agent"
@@ -5485,9 +5459,6 @@
         },
         "updateError": {
           "toast": "Failed to update agent"
-        },
-        "updated": {
-          "toast": "Default agent updated"
         }
       },
       "error": {
@@ -5540,15 +5511,9 @@
         "deleted": {
           "toast": "Server configuration deleted"
         },
-        "disabled": {
-          "toast": "Server disabled"
-        },
         "empty": {
           "description": "Create a server configuration to get started.",
           "title": "No Discord servers configured yet"
-        },
-        "enabled": {
-          "toast": "Server enabled"
         },
         "fallbackName": "Server #{id}",
         "notRegistered": {
@@ -5672,9 +5637,6 @@
       "score": {
         "notANumber": {
           "toast": "Score must be a number"
-        },
-        "updated": {
-          "toast": "Updated score!"
         }
       },
       "sets": {
@@ -6099,8 +6061,7 @@
           "label": "(Default)"
         },
         "toasts": {
-          "renameFailed": "Failed to rename group",
-          "renamed": "Group renamed to \"{name}\""
+          "renameFailed": "Failed to rename group"
         },
         "viewGroup": {
           "label": "View group"
@@ -6179,8 +6140,6 @@
         "toasts": {
           "deleteFailed": "Failed to delete group",
           "deleted": "Group \"{name}\" deleted",
-          "managerAssigned": "Manager assigned",
-          "managerRevoked": "Manager revoked",
           "managerUpdateFailed": "Failed to update manager",
           "membersStranded": "Some of those members would be left without a group. Add them to another group first.",
           "syncing": "This group is currently syncing. Please wait a moment and try again.",
@@ -6202,8 +6161,7 @@
           "text": "Create groups to organize users and manage access."
         },
         "loadError": {
-          "description": "Please check the console for more details.",
-          "title": "Failed to load groups."
+          "description": "Please check the console for more details."
         },
         "newGroup": {
           "label": "New Group"
@@ -6658,9 +6616,6 @@
       "deselectError": {
         "message": "Failed to deselect"
       },
-      "deselectSuccess": {
-        "message": "{title} deselected"
-      },
       "disconnectError": {
         "message": "Failed to disconnect"
       },
@@ -6831,9 +6786,6 @@
       },
       "setDefaultError": {
         "message": "Failed to set default"
-      },
-      "setDefaultSuccess": {
-        "message": "{title} set as default"
       }
     },
     "indexSettings": {
@@ -7066,11 +7018,6 @@
           "description": "{appName} will connect to this model on your {provider} proxy."
         }
       },
-      "maxImageSize": {
-        "description": "Images above this size will be skipped to limit resource usage.",
-        "suffix": "(MB)",
-        "title": "Max Image Size for Analysis"
-      },
       "modal": {
         "cancelButton": {
           "label": "Cancel"
@@ -7116,11 +7063,6 @@
         "addCustomModel": {
           "label": "Add Custom Model"
         },
-        "bringYourOwn": {
-          "cloudDescription": "Connect a LiteLLM proxy, an Azure OpenAI deployment or a Bifrost gateway. You supply the model name. For LiteLLM and Azure, you also supply the dimension.",
-          "selfHostedDescription": "Run a Hugging Face embedding model that is not in the list above. You supply the model name, dimension and prefixes.",
-          "title": "Advanced: bring your own model or proxy"
-        },
         "cloudTab": {
           "label": "Cloud-based"
         },
@@ -7128,6 +7070,7 @@
           "title": "Set up a custom embedding model."
         },
         "customModels": {
+          "hint": "Use a [SentenceTransformers](https://www.sbert.net/)-compatible model available on [Hugging Face](https://huggingface.co/models?library=sentence-transformers&sort=trending). {appName} will download the model to set up for self-hosting. Compatibility isn't guaranteed.",
           "title": "Custom Models"
         },
         "foldModels": {
@@ -7162,6 +7105,20 @@
           "label": "temporarily unavailable"
         },
         "title": "Multipass Indexing"
+      },
+      "openaiCompatible": {
+        "apiUrl": {
+          "description": "The base URL of your OpenAI-compatible endpoint, for example http://localhost:8000/v1. {appName} adds the /embeddings path.",
+          "title": "API Base URL"
+        },
+        "modelName": {
+          "description": "{appName} will connect to this model on your OpenAI-compatible endpoint."
+        },
+        "reducedDimension": {
+          "description": "Request shorter vectors. Only models trained with Matryoshka Representation Learning support this. Shorter vectors use less storage and search faster. Leave empty to use the full size of the model.",
+          "placeholder": "e.g., 1024",
+          "title": "Embedding Dimensions"
+        }
       },
       "progressBanner": {
         "attentionButton": {
@@ -7289,6 +7246,7 @@
         "modelDimPositive": "Must be a positive integer",
         "modelDimRequired": "Model dimension is required",
         "modelNameRequired": "Model name is required",
+        "reducedDimensionTooLarge": "Must be smaller than the model dimension",
         "serviceAccountJsonInvalid": "Must be a valid Google service account JSON file",
         "serviceAccountJsonRequired": "Service account JSON is required",
         "targetUrlRequired": "Target URL is required",
@@ -7353,11 +7311,11 @@
             "off": "Every chunk in the search index has its connector IDs. Search uses the document access lists. Connector-level access is turned off.",
             "shadow": "Every chunk in the search index has its connector IDs. Search uses the document access lists and compares them with connector-level access."
           },
-          "title": "Connector access update complete"
+          "title": "Connector access update complete."
         },
         "notStarted": {
           "description": "A background job will add connector IDs to the existing chunks in the search index. It starts within a few minutes.",
-          "title": "Connector access update has not started"
+          "title": "Connector access update has not started."
         },
         "progress": {
           "ariaLabel": "Connector access update progress"
@@ -7376,7 +7334,7 @@
           "description": "How search decides which documents a user can see.",
           "enforcePending": "Enforce is set and starts when the update completes.",
           "enforceUnavailable": "Available after the search index update completes.",
-          "label": "Search access mode",
+          "label": "Search Access Mode",
           "options": {
             "enforce": {
               "description": "Search uses connector-level access.",
@@ -7393,35 +7351,29 @@
           },
           "placeholder": "Select a mode",
           "toasts": {
-            "error": "Could not update the search access mode.",
-            "success": "Search access mode set to {mode}."
+            "error": "Could not update the search access mode."
           }
         },
         "loadError": {
           "description": "Reload the page to try again.",
-          "title": "Could not load the connector access update"
+          "title": "Could not load the connector access update."
         }
       },
       "embeddingRateLimit": {
-        "title": "Embedding rate limit",
+        "title": "Embedding Rate Limit",
         "description": "Limits how many embedding requests indexing sends in a time window, across all indexing workers. At the limit, indexing waits and tries again instead of failing, so workers take less new work. A batch fails only if it waits too long. Search queries are not limited.",
         "requests": {
-          "title": "Requests per window",
-          "description": "Leave empty for no limit.",
-          "placeholder": "No limit"
+          "title": "Requests per Window",
+          "description": "The most embedding requests indexing can send in one window. Leave empty for no limit.",
+          "placeholder": "No limit",
+          "suffix": "requests"
         },
         "period": {
-          "title": "Window length",
-          "description": "For example, 60 for a limit per minute.",
-          "suffix": "(seconds)"
-        },
-        "restoreDefault": "Restore default",
-        "validation": {
-          "requests": "Enter a whole number from 1 to {max, number}, or leave the field empty for no limit.",
-          "period": "Enter a whole number of seconds from 1 to {max, number}."
+          "title": "Window Length",
+          "description": "How long one window lasts. Use 60 for a per-minute limit.",
+          "suffix": "seconds"
         },
         "toasts": {
-          "saved": "Rate limit saved.",
           "failed": "Could not save the rate limit."
         }
       },
@@ -8475,9 +8427,6 @@
         "error": "Failed to load SCIM token status."
       },
       "modal": {
-        "copied": {
-          "message": "Token copied to clipboard"
-        },
         "copyFailed": {
           "error": "Failed to copy token"
         },
@@ -8738,9 +8687,7 @@
       },
       "toasts": {
         "securitySettingsUpdateFailed": "Failed to update security settings",
-        "securitySettingsUpdated": "Security settings updated",
-        "settingsUpdateFailed": "Failed to update settings",
-        "settingsUpdated": "Settings updated"
+        "settingsUpdateFailed": "Failed to update settings"
       },
       "placeholders": {
         "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
@@ -8862,8 +8809,7 @@
       "page": {
         "description": "Use service accounts to programmatically access {appName} API.",
         "error": {
-          "description": "Please check the console for more details.",
-          "title": "Failed to load service accounts."
+          "description": "Please check the console for more details."
         }
       },
       "regenerateModal": {
@@ -8914,7 +8860,6 @@
       "toasts": {
         "deleteFailed": "Failed to delete API Key.",
         "deleteFailedWithDetail": "Failed to delete API Key: {detail}",
-        "keyCopied": "API key copied to clipboard.",
         "regenerateFailed": "Failed to regenerate API Key.",
         "regenerateFailedWithDetail": "Failed to regenerate API Key: {detail}"
       },
@@ -9321,9 +9266,6 @@
         "fieldUpdateFailed": {
           "toast": "Failed to update connector {field}"
         },
-        "fieldUpdated": {
-          "toast": "Connector {field} updated successfully"
-        },
         "updateTokensButton": {
           "label": "Update Tokens"
         }
@@ -9348,9 +9290,7 @@
         "gatedTooltip": "Multiple enabled SSO providers are available on the Business or Enterprise plan."
       },
       "copyRedirectUri": {
-        "tooltip": "Copy redirect URI",
-        "successToast": "Redirect URI copied",
-        "errorToast": "Could not copy"
+        "tooltip": "Copy redirect URI"
       },
       "deleteProvider": {
         "tooltip": "Delete"
@@ -10069,8 +10009,7 @@
         }
       },
       "loadError": {
-        "description": "Unable to load tracing configuration.",
-        "title": "Failed to load tracing settings"
+        "description": "Unable to load tracing configuration."
       },
       "page": {
         "description": "Connect observability platforms to monitor and evaluate LLM calls."
@@ -10838,7 +10777,6 @@
         "title": "Each user configures their own token and connection details under Settings → LLM Gateway."
       },
       "toasts": {
-        "settingsUpdated": "Settings updated",
         "settingsUpdateFailed": "Failed to update settings"
       }
     },
@@ -11521,14 +11459,18 @@
         },
         "toasts": {
           "accessRemoved": "Access removed.",
-          "copyLinkFailed": "Failed to copy link.",
-          "linkCopied": "Copied link.",
           "ownershipTransferred": "Ownership transferred.",
           "sharingUpdated": "Sharing updated."
         },
         "transfer": {
           "label": "Transfer",
           "title": "Transfer *{name}*"
+        },
+        "people": {
+          "label": "People with access"
+        },
+        "ownerOption": {
+          "disabledTooltip": "Owner cannot be unshared."
         }
       },
       "viewer": {
@@ -16108,6 +16050,12 @@
     "settingsHeader": {
       "cancel": "Cancel"
     },
+    "settingsBody": {
+      "error": {
+        "title": "{page} failed to load",
+        "description": "Something went wrong. Try again in a moment."
+      }
+    },
     "table": {
       "alwaysShown": "Always Shown",
       "ascending": "Ascending",
@@ -16762,8 +16710,7 @@
         "title": "Agents"
       },
       "craft": {
-        "label": "Craft",
-        "businessTag": "Business"
+        "label": "Craft"
       },
       "exploreAgents": {
         "label": "Explore Agents"

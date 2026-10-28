@@ -30,7 +30,6 @@ export default function LLMGatewayPage() {
       await updateAdminSettings({ llm_gateway_enabled: checked });
       router.refresh();
       await mutate(SWR_KEYS.settings);
-      toast.success(t("toasts.settingsUpdated"));
     } catch {
       toast.error(t("toasts.settingsUpdateFailed"));
     }

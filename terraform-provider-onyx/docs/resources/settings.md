@@ -37,7 +37,7 @@ resource "onyx_settings" "workspace" {
 - `deep_research_enabled` (Boolean) Enable the Deep Research feature.
 - `disable_default_assistant` (Boolean) Disable the built-in default assistant.
 - `file_token_count_threshold_k` (Number) File token threshold (thousands) before indexing instead of inlining.
-- `image_analysis_max_size_mb` (Number) Max image size for analysis, in MB.
+- `image_analysis_max_size_mb` (Number, Deprecated) Deprecated: Onyx no longer has this setting, and the value has no effect.
 - `image_extraction_and_analysis_enabled` (Boolean) Extract and analyze images during indexing.
 - `invite_only_enabled` (Boolean) Restrict registration to invited users.
 - `maximum_chat_retention_days` (Number) Days to retain chat history (Enterprise tier).

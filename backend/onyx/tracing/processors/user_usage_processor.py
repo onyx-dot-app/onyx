@@ -58,6 +58,8 @@ class _UsageRecord:
     system_attribution: SystemUsageAttribution | None
     model: str
     routed_model: str | None
+    # Keys admin cost overrides; None when the call ran no saved configuration.
+    model_configuration_id: int | None
     flow: str
     provider: str | None
     incognito: bool
@@ -168,6 +170,7 @@ class UserUsageTracingProcessor(TracingProcessor):
             system_attribution=(_system_attribution(flow) if user_id is None else None),
             model=model,
             routed_model=data.routed_model,
+            model_configuration_id=data.model_configuration_id,
             flow=flow,
             provider=provider,
             incognito=incognito_mode is not None,
@@ -235,6 +238,7 @@ class UserUsageTracingProcessor(TracingProcessor):
                 SystemUsageAttribution | None,
                 str,
                 str | None,
+                int | None,
                 str,
                 str | None,
                 bool,
@@ -249,6 +253,7 @@ class UserUsageTracingProcessor(TracingProcessor):
                 record.system_attribution,
                 record.model,
                 record.routed_model,
+                record.model_configuration_id,
                 record.flow,
                 record.provider,
                 record.incognito,
@@ -305,6 +310,7 @@ class UserUsageTracingProcessor(TracingProcessor):
                 model=record.model,
                 served_model=record.routed_model,
                 provider=record.provider,
+                model_configuration_id=record.model_configuration_id,
                 prompt_tokens=p_in,
                 completion_tokens=p_out,
                 cache_read_tokens=p_read,

@@ -3,6 +3,10 @@
   "models": {
     "c4ai-aya-expanse-32b": {
       "attachment": false,
+      "cost": {
+        "input": 0.5,
+        "output": 1.5
+      },
       "limit": {
         "context": 128000,
         "output": 4000
@@ -19,6 +23,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-10-24",
+      "structured_output": false,
       "temperature": true,
       "tool_call": false
     },
@@ -41,6 +46,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-03-04",
+      "structured_output": false,
       "temperature": true,
       "tool_call": false
     },
@@ -67,6 +73,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-03-13",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -121,6 +128,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2025-08-21",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -147,6 +155,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-08-28",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -174,6 +183,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-07-31",
+      "structured_output": true,
       "temperature": true,
       "tool_call": false
     },
@@ -200,6 +210,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-08-30",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -226,6 +237,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-08-30",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -251,7 +263,8 @@
       "name": "Command R7B",
       "open_weights": true,
       "reasoning": false,
-      "release_date": "2024-12-02",
+      "release_date": "2024-12-13",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -278,6 +291,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-02-27",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -382,7 +396,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-06-09",
-      "structured_output": true,
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -409,6 +423,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2026-09-09",
+      "structured_output": false,
       "temperature": true,
       "tool_call": false
     },
@@ -494,6 +509,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2026-02-17",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -515,6 +531,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2026-02-17",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -536,6 +553,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2026-02-17",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -557,6 +575,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2026-02-17",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     }

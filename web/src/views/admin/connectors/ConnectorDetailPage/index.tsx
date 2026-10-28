@@ -229,7 +229,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
       );
       if (!response.ok) throw new Error(await response.text());
       mutate(buildCCPairInfoUrl(ccPairId));
-      toast.success(t("toasts.nameUpdated"));
     } catch {
       toast.error(t("toasts.nameUpdateFailed"));
     }

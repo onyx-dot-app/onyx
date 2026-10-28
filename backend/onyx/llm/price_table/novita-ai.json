@@ -180,6 +180,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2026-01-27",
+      "temperature": true,
       "tool_call": false
     },
     "deepseek/deepseek-r1-0528": {
@@ -342,7 +343,7 @@
       "name": "DeepSeek V4 Pro 0813",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-08-12",
+      "release_date": "2026-08-13",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -456,7 +457,7 @@
       "reasoning": false,
       "release_date": "2025-03-12",
       "temperature": true,
-      "tool_call": true
+      "tool_call": false
     },
     "google/gemma-3-27b-it": {
       "attachment": true,
@@ -483,7 +484,7 @@
       "reasoning": false,
       "release_date": "2025-03-12",
       "temperature": true,
-      "tool_call": true
+      "tool_call": false
     },
     "google/gemma-4-26b-a4b-it": {
       "attachment": true,
@@ -617,6 +618,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-08-27",
+      "temperature": true,
       "tool_call": true
     },
     "inclusionai/ling-3.0-flash-sante": {
@@ -696,9 +698,10 @@
         ]
       },
       "name": "Ling 3.1 Flash",
-      "open_weights": false,
+      "open_weights": true,
       "reasoning": true,
       "release_date": "2026-09-29",
+      "temperature": true,
       "tool_call": true
     },
     "meta-llama/llama-3.1-8b-instruct": {
@@ -726,7 +729,7 @@
       "release_date": "2024-07-23",
       "structured_output": true,
       "temperature": true,
-      "tool_call": true
+      "tool_call": false
     },
     "meta-llama/llama-3.2-1b-instruct": {
       "attachment": false,
@@ -753,7 +756,7 @@
       "release_date": "2024-09-25",
       "structured_output": true,
       "temperature": true,
-      "tool_call": true
+      "tool_call": false
     },
     "meta-llama/llama-3.3-70b-instruct": {
       "attachment": false,
@@ -808,7 +811,7 @@
       "release_date": "2025-04-05",
       "structured_output": true,
       "temperature": true,
-      "tool_call": true
+      "tool_call": false
     },
     "meta-llama/llama-4-scout-17b-16e-instruct": {
       "attachment": true,
@@ -835,7 +838,7 @@
       "reasoning": false,
       "release_date": "2025-04-05",
       "temperature": true,
-      "tool_call": true
+      "tool_call": false
     },
     "microsoft/wizardlm-2-8x22b": {
       "attachment": false,
@@ -1046,6 +1049,36 @@
       "temperature": true,
       "tool_call": true
     },
+    "minimax/minimax-m3.1-flash": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.015,
+        "input": 0.15,
+        "output": 0.6
+      },
+      "family": "minimax",
+      "limit": {
+        "context": 1000000,
+        "output": 524288
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "MiniMax-M3.1-Flash",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-19",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "minimaxai/minimax-m1-80k": {
       "attachment": false,
       "cost": {
@@ -1179,7 +1212,7 @@
       "name": "Kimi K2.5",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-01",
+      "release_date": "2026-01-27",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -1209,7 +1242,7 @@
       "name": "Kimi K2.6",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-04-21",
+      "release_date": "2026-04-20",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -1274,12 +1307,73 @@
       "temperature": false,
       "tool_call": true
     },
+    "moonshotai/kimi-k3.1-pro": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "input": 2,
+        "output": 10
+      },
+      "family": "kimi-k3",
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Kimi K3.1 Pro",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-23",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "moonshotai/kimi-k3.1-pro-highspeed": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "input": 4,
+        "output": 20
+      },
+      "family": "kimi-k3",
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Kimi K3.1 Pro Highspeed",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-23",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
     "nousresearch/hermes-2-pro-llama-3-8b": {
       "attachment": false,
       "cost": {
         "input": 0.14,
         "output": 0.14
       },
+      "family": "hermes",
       "limit": {
         "context": 8192,
         "output": 8192
@@ -1298,7 +1392,7 @@
       "release_date": "2024-04-30",
       "structured_output": true,
       "temperature": true,
-      "tool_call": true
+      "tool_call": false
     },
     "nvidia/nemotron-3-nano-30b-a3b": {
       "attachment": false,
@@ -1805,6 +1899,7 @@
       "reasoning": true,
       "release_date": "2026-08-26",
       "structured_output": true,
+      "temperature": true,
       "tool_call": true
     },
     "qwen/qwen3.8-max": {
@@ -1894,6 +1989,7 @@
       "reasoning": true,
       "release_date": "2026-09-16",
       "structured_output": true,
+      "temperature": true,
       "tool_call": true
     },
     "tencent/hy3": {

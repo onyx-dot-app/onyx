@@ -4,12 +4,12 @@ version = "0.0.0"
 requires-python = ">=3.13"
 # Shared dependencies between backend and model_server
 dependencies = [
-    "aioboto3==15.1.0",
+    "aiobotocore==3.8.0",
     "cohere==7.0.5",
     "fastapi==0.133.1",
     "google-genai==2.18.1",
     "huggingface-hub==1.26.0",
-    "litellm[google]==1.93.2",
+    "litellm[google]==1.100.4",
     "openai==2.38.0",
     "pydantic==2.12.5",
     # Shared so structured JSON logging (LOG_FORMAT=json) works in the
@@ -27,7 +27,7 @@ dependencies = [
 
 [dependency-groups]
 backend = [
-    "aiohttp==3.14.3",
+    "aiohttp==3.14.4",
     "alembic==1.18.4",
     "asyncpg==0.30.0",
     "atlassian-python-api==4.0.7",
@@ -35,7 +35,7 @@ backend = [
     "azure-identity>=1.23.0,<2.0.0",
     "azure-storage-blob>=12.24.0,<13.0.0",
     "beautifulsoup4==4.12.3",
-    "boto3==1.39.11",
+    "boto3==1.43.3",
     "boxsdk==10.12.0",
     "celery==5.5.1",
     "chardet==5.2.0",
@@ -48,11 +48,11 @@ backend = [
     "fastapi-users==15.0.4",
     "fastapi-users-db-sqlalchemy==7.0.0",
     "fastapi-limiter==0.1.6",
-    "fastmcp==3.2.0",
+    "fastmcp==3.4.10",
     "google-api-python-client==2.86.0",
     "google-auth-oauthlib==1.4.0",
     "google-cloud-storage>=3.0.0,<4.0.0",
-    "graphql-core==3.2.8",
+    "graphql-core==3.2.12",
     # GPT4All library has issues running on Macs and python:3.11.4-slim-bookworm
     # will reintroduce this when library version catches up
     # "gpt4all==2.0.2",
@@ -69,11 +69,11 @@ backend = [
     # backend/onyx/file_processing/extract_file_text.py and what impacts
     # updating might have on this behavior.
     "markitdown[pdf, docx, pptx, xlsx, xls]==0.1.7",
-    "mcp[cli]==1.28.1",
+    "mcp[cli]==1.30.0",
     "msal==1.37.0",
     "msoffcrypto-tool==6.0.0",
     "Office365-REST-Python-Client==2.6.2",
-    "oauthlib==3.2.2",
+    "oauthlib==4.0.0",
     # NOTE: This is frozen to avoid https://foss.heptapod.net/openpyxl/openpyxl/-/issues/2147
     "openpyxl==3.0.10",
     "opensearch-py==3.2.0",
@@ -92,7 +92,7 @@ backend = [
     "python-docx==1.1.2",
     "python-gitlab==5.6.0",
     "python-pptx==0.6.23",
-    "pypdf==6.19.0",
+    "pypdf==6.21.2",
     "pypdfium2==5.9.0",
     "python-dotenv==1.2.2",
     "python-slugify==8.0.4",
@@ -134,7 +134,7 @@ backend = [
 
 # Dev tools
 dev = [
-    "boto3-stubs[s3]==1.39.11",
+    "boto3-stubs[s3]==1.43.3",
     "celery-types==0.26.0",
     "faker==40.38.0",
     "hatchling==1.28.0",

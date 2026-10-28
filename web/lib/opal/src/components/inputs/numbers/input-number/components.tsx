@@ -60,6 +60,8 @@ const INNER_CLASSES: Record<InputNumberVariant, string | null> = {
 export interface InputNumberProps {
   value: number | null;
   onChange: (value: number | null) => void;
+  /** Called with the settled value: on blur, and on a stepper or reset click. Not called per keystroke. */
+  onCommit?: (value: number | null) => void;
   min?: number;
   max?: number;
   step?: number;
@@ -73,7 +75,7 @@ export interface InputNumberProps {
   suffix?: string;
   /** Applied to the input so a `<label htmlFor>` can target it. */
   id?: string;
-  /** Whether leaving the field blank commits `null`. When false, a blank field gets its value back on blur. */
+  /** Whether leaving the field blank commits `null`. When false, a blank field settles to `defaultValue`, or gets its value back if there is none. */
   allowEmpty?: boolean;
   /** A plain type-in field: no stepper buttons, the value in mono and the unit in `text-02`. */
   plain?: boolean;
@@ -92,6 +94,7 @@ function textFor(value: number | null, typed: string): string {
 export default function InputNumber({
   value,
   onChange,
+  onCommit,
   min,
   max,
   step = 1,
@@ -132,48 +135,76 @@ export default function InputNumber({
   const normalizePrecision = (newValue: number) =>
     Number(newValue.toFixed(decimalPlaces));
 
+  // A typed value is not clamped until it settles, so a step from it can still
+  // be out of range; clamp to both bounds.
+  const clampToBounds = (n: number) =>
+    Math.min(max ?? Infinity, Math.max(min ?? -Infinity, n));
+
   const handleIncrement = () => {
     if (canIncrement) {
-      const newValue = normalizePrecision(effectiveValue + step);
-      onChange(max !== undefined ? Math.min(newValue, max) : newValue);
+      const next = clampToBounds(normalizePrecision(effectiveValue + step));
+      onChange(next);
+      onCommit?.(next);
     }
   };
 
   const handleDecrement = () => {
     if (canDecrement) {
-      const newValue = normalizePrecision(effectiveValue - step);
-      onChange(min !== undefined ? Math.max(newValue, min) : newValue);
+      const next = clampToBounds(normalizePrecision(effectiveValue - step));
+      onChange(next);
+      onCommit?.(next);
     }
   };
 
   const handleReset = () => {
     if (defaultValue !== undefined) {
       onChange(defaultValue);
+      onCommit?.(defaultValue);
     }
   };
 
-  // Whether the text was typed into since the field took focus. Blur clamps
-  // only a typed value, so a stored value outside the bounds stays as is.
+  // Whether the text was typed into since the field took focus. Settling
+  // clamps only a typed value, so a stored value outside the bounds stays as is.
   const typedRef = React.useRef(false);
 
-  const handleBlur = () => {
+  // Blur and Enter both settle the value: clamp it, sync the text, commit it.
+  const settle = () => {
     const typed: boolean = typedRef.current;
     typedRef.current = false;
-    if (inputValue.trim() === "" && !allowEmpty) {
+    let settled: number | null = value;
+    if (inputValue.trim() === "" && !allowEmpty && defaultValue !== undefined) {
+      settled = defaultValue;
+      onChange(defaultValue);
+      setInputValue(String(defaultValue));
+    } else if (inputValue.trim() === "" && !allowEmpty) {
       setInputValue(value === null ? "" : String(value));
     } else if (inputValue.trim() === "") {
       // Kept as null so the placeholder shows.
+      settled = null;
       onChange(null);
     } else if (typed && value !== null && min !== undefined && value < min) {
       // Typing is free; leaving the field clamps to the nearest bound.
+      settled = min;
       onChange(min);
       setInputValue(String(min));
     } else if (typed && value !== null && max !== undefined && value > max) {
+      settled = max;
       onChange(max);
       setInputValue(String(max));
     } else {
       setInputValue((typed) => textFor(value, typed));
     }
+    onCommit?.(settled);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Enter that confirms an IME composition is not a commit.
+    if (e.key !== "Enter" || e.nativeEvent.isComposing || e.keyCode === 229) {
+      return;
+    }
+    // Settle in place; an enclosing form must not submit the unclamped value.
+    e.preventDefault();
+    settle();
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -227,7 +258,8 @@ export default function InputNumber({
         placeholder={placeholder}
         aria-invalid={variant === "error" || undefined}
         onChange={handleInputChange}
-        onBlur={handleBlur}
+        onBlur={settle}
+        onKeyDown={handleKeyDown}
         className={cn(
           "w-full h-6 bg-transparent p-0.5 focus:outline-hidden disabled:cursor-not-allowed placeholder:!font-main-ui-muted placeholder:text-text-02",
           plain ? "font-main-ui-mono" : "font-main-ui-body",
@@ -235,7 +267,13 @@ export default function InputNumber({
         )}
       />
 
-      <div className="flex flex-row items-center gap-1">
+      {/* A pointer press on the controls keeps focus in the input. Otherwise
+          blur commits the typed value just before the control commits its own. */}
+      <div
+        role="presentation"
+        className="flex flex-row items-center gap-1"
+        onMouseDown={(e) => e.preventDefault()}
+      >
         {suffix && (
           // The placeholder's style: muted weight in text-02.
           <Text font="main-ui-muted" color={isDisabled ? "text-01" : "text-02"}>
@@ -248,6 +286,7 @@ export default function InputNumber({
             icon={SvgRevert}
             onClick={handleReset}
             prominence="tertiary"
+            size="sm"
           />
         )}
         {!plain && (

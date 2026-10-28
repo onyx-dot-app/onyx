@@ -29,6 +29,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-06-09",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -60,6 +61,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-01",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -167,6 +169,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-04-16",
+      "status": "deprecated",
       "temperature": false,
       "tool_call": true
     },
@@ -199,6 +202,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-05-28",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -263,6 +267,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-22",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -326,6 +331,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-06-30",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -357,6 +363,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-28",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -390,6 +397,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-05-19",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -421,6 +429,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-07-21",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -452,6 +461,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-08-13",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -472,7 +482,8 @@
       "modalities": {
         "input": [
           "text",
-          "image"
+          "image",
+          "pdf"
         ],
         "output": [
           "text"
@@ -503,8 +514,6 @@
         "input": [
           "text",
           "image",
-          "video",
-          "audio",
           "pdf"
         ],
         "output": [
@@ -547,6 +556,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-08-07",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -627,6 +637,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-03-05",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -658,6 +669,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-03-17",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -737,6 +749,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-04-23",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -1224,8 +1237,7 @@
       "modalities": {
         "input": [
           "text",
-          "image",
-          "pdf"
+          "image"
         ],
         "output": [
           "text"
@@ -1266,6 +1278,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-06-12",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -1300,35 +1313,6 @@
       "temperature": false,
       "tool_call": true
     },
-    "mai-code-1-flash-picker": {
-      "attachment": false,
-      "cost": {
-        "cache_read": 0.075,
-        "input": 0.75,
-        "output": 4.5
-      },
-      "family": "mai",
-      "limit": {
-        "context": 256000,
-        "input": 128000,
-        "output": 128000
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "MAI-Code-1-Flash",
-      "open_weights": false,
-      "reasoning": true,
-      "release_date": "2026-06-02",
-      "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
     "mai-code-1.1-flash": {
       "attachment": true,
       "cost": {
@@ -1358,6 +1342,7 @@
       "reasoning": true,
       "release_date": "2026-08-11",
       "structured_output": true,
+      "temperature": false,
       "tool_call": true
     },
     "text-embedding-3-small": {
