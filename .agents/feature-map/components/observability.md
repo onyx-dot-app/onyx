@@ -137,10 +137,13 @@ previous container's log after a restart, a pod status summary with the last
 termination reason (for example `OOMKilled`), and the namespace events for
 those pods. The result is `piece_kubernetes_api.zip` with a `kubernetes`
 receipt. It needs the Role in
-`deployment/helm/charts/onyx/templates/log-export-rbac.yaml`
-(`logExport.kubernetesRbac.enabled`, default on). Without that access the
-receipt is `failed` with the fix in its error, and the rest of the bundle is
-unchanged.
+`deployment/helm/charts/onyx/templates/log-export-rbac.yaml`.
+`logExport.kubernetesRbac.mode` controls it: `auto` (default) binds only a
+named service account (`serviceAccount.create` or `serviceAccount.name`), never
+the namespace's `default` one; `true` always binds; `false` never binds.
+Without access to pods the receipt is `failed`; without access to pod logs or
+events it is `uploaded` with a partial piece. Both name the fix in the
+receipt's error, and the rest of the bundle is unchanged.
 
 ### Fleet telemetry
 

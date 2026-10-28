@@ -5,7 +5,7 @@ disk. This collector runs in the api_server and reads, for every Onyx pod of the
 Helm release, each container's stdout (plus the previous container after a
 restart, e.g. an OOM kill), a pod status summary, and the namespace events for
 those pods. It needs get/list on pods, pods/log, and events in its namespace,
-which the Helm chart grants through ``logExport.kubernetesRbac``.
+which the Helm chart grants through ``logExport.kubernetesRbac.mode``.
 """
 
 import os
@@ -83,9 +83,12 @@ _STREAM_CAP_REACHED = "truncated at the per-log byte cap"
 _TOTAL_CAP_REACHED = "total byte cap reached"
 _HTTP_FORBIDDEN = 403
 _RBAC_HINT = (
-    "The Kubernetes API denied access. Grant the api-server service account "
-    "get/list on pods, pods/log, and events (Helm value "
-    "logExport.kubernetesRbac.enabled)."
+    "The Kubernetes API denied access to pods, pods/log, or events. The Helm "
+    "chart grants it only to a named service account by default "
+    "(logExport.kubernetesRbac.mode=auto). To fix: set serviceAccount.create=true "
+    "(move any IRSA or Workload Identity annotation to serviceAccount.annotations "
+    "and update the IAM trust policy), or set logExport.kubernetesRbac.mode=true "
+    "to also grant it to the namespace's default service account."
 )
 _EPOCH = datetime.min.replace(tzinfo=timezone.utc)
 # Workload kinds whose pods are named ``<owner name>-<suffix>``.

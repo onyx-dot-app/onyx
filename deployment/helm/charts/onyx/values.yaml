@@ -410,13 +410,30 @@ serviceAccount:
 
 logExport:
   kubernetesRbac:
-    # Grants the service account above get/list on pods, pods/log, and events in
-    # the release namespace. The admin log export uses it to collect stdout from
-    # every Onyx pod, the logs of crashed containers, pod status, and events.
-    # Every pod that runs as this service account gets the same read access.
-    # When false, the export still collects log files from one replica per
-    # worker type.
-    enabled: true
+    # A Role and RoleBinding that give the service account above get/list on
+    # pods, pods/log, and events in the release namespace. The admin log export
+    # uses them to collect stdout from every Onyx pod, the logs of crashed
+    # containers, pod status, and events. Every pod that runs as that service
+    # account gets the same read access. Without them, the export still collects
+    # log files from one replica per worker type.
+    #
+    # mode:
+    #   auto  (default) Bind only a named service account: serviceAccount.create
+    #         is true or serviceAccount.name is set. Never bind the namespace's
+    #         shared "default" service account.
+    #   true  Always bind, also to "default". Every pod in the namespace that
+    #         uses "default" can then read pod specs, logs, and events.
+    #   false Never bind.
+    #
+    # To get full logs in the export:
+    #   - You set serviceAccount.create or serviceAccount.name: do nothing.
+    #   - Your pods use "default": set serviceAccount.create=true. If you use
+    #     IRSA or Workload Identity, also move the role annotation from the
+    #     "default" service account to serviceAccount.annotations, and update
+    #     the IAM trust policy to the new service account name (the release
+    #     fullname, or serviceAccount.name).
+    #   - Or set mode=true to accept the shared read access described above.
+    mode: auto
 
 nginx:
   enabled: true
@@ -1867,7 +1884,7 @@ configMap:
   # Logging
   # Optional Telemetry, please keep it on (nothing sensitive is collected)? <3
   DISABLE_TELEMETRY: ""
-  # Admin log export through the Kubernetes API (needs logExport.kubernetesRbac).
+  # Admin log export through the Kubernetes API (needs logExport.kubernetesRbac.mode).
   # "false" skips it. Empty uses the defaults: last 100000 lines per container
   # log, 25 MiB per container log, 500 MiB per export.
   LOG_EXPORT_KUBERNETES_ENABLED: ""

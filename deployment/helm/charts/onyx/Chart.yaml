@@ -23,7 +23,9 @@ annotations:
     - kind: added
       description: Grant the api-server read access to pods, pod logs, and
         events in the release namespace, so the admin log export collects
-        stdout from every pod (logExport.kubernetesRbac.enabled).
+        stdout from every pod. logExport.kubernetesRbac.mode auto (default)
+        binds only a named service account, never "default"; true always
+        binds; false never does.
     - kind: changed
       description: Add the release labels to the inference model server pods
         (pod template only), so the log export finds them. The pods restart

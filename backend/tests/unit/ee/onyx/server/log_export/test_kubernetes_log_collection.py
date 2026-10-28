@@ -511,7 +511,7 @@ def test_denied_logs_and_events_mark_the_uploaded_receipt(
     assert saved_receipts == [receipt]
     assert receipt.status is LogExportReceiptStatus.UPLOADED
     assert receipt.error is not None
-    assert "logExport.kubernetesRbac.enabled" in receipt.error
+    assert "logExport.kubernetesRbac.mode=true" in receipt.error
     assert "pods/log (1 of 1 logs)" in receipt.error
     assert "events" in receipt.error
 
@@ -545,4 +545,4 @@ def test_missing_rbac_writes_failed_receipt(
     assert saved_receipts == [receipt]
     assert receipt.status is LogExportReceiptStatus.FAILED
     assert receipt.error is not None
-    assert "logExport.kubernetesRbac.enabled" in receipt.error
+    assert "logExport.kubernetesRbac.mode=true" in receipt.error

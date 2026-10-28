@@ -85,6 +85,19 @@ Create the name of the service account to use
 {{- end }}
 
 {{/*
+"true" when the log-export Role and RoleBinding render, empty otherwise.
+logExport.kubernetesRbac.mode: auto binds only a named service account (never
+the namespace's shared "default" one), true always binds, false never does.
+*/}}
+{{- define "onyx.logExportRbacEnabled" -}}
+{{- $mode := toString .Values.logExport.kubernetesRbac.mode -}}
+{{- if not (has $mode (list "auto" "true" "false")) -}}
+{{- fail (printf "logExport.kubernetesRbac.mode must be auto, true, or false; got %q" $mode) -}}
+{{- end -}}
+{{- if or (eq $mode "true") (and (eq $mode "auto") (ne (include "onyx.serviceAccountName" .) "default")) -}}true{{- end -}}
+{{- end }}
+
+{{/*
 Render a container securityContext. Kubernetes rejects
 allowPrivilegeEscalation=false alongside privileged or CAP_SYS_ADMIN, so the
 default is dropped when an override asks for either.

@@ -1,11 +1,19 @@
-"""The chart grants the api-server's service account read access to pods, pod
-logs, and events for the log export, and drops the grant when disabled."""
+"""The chart grants the log export read access to pods, pod logs, and events:
+``logExport.kubernetesRbac.mode`` auto binds only a named service account,
+true always binds (also to "default"), and false never binds."""
 
 from typing import Any
 
+import pytest
 import yaml
 
 from tests.external_dependency_unit.craft_helm.rendering import render_chart
+
+# Service account setups: the namespace default, one the chart creates, and one
+# the operator names.
+_DEFAULT_SA: list[str] = []
+_CREATED_SA = ["--set", "serviceAccount.create=true"]
+_NAMED_SA = ["--set", "serviceAccount.name=onyx-runtime"]
 
 
 def _log_export_resources(extra_args: list[str]) -> list[dict[str, Any]]:
@@ -20,8 +28,34 @@ def _log_export_resources(extra_args: list[str]) -> list[dict[str, Any]]:
     ]
 
 
-def test_log_export_rbac_binds_read_access_to_service_account() -> None:
-    resources = _log_export_resources(["--set", "serviceAccount.create=true"])
+@pytest.mark.parametrize(
+    ("mode_args", "service_account_args", "bound_service_account"),
+    [
+        ([], _DEFAULT_SA, None),
+        ([], _CREATED_SA, "onyx"),
+        ([], _NAMED_SA, "onyx-runtime"),
+        (["--set", "logExport.kubernetesRbac.mode=true"], _DEFAULT_SA, "default"),
+        (["--set", "logExport.kubernetesRbac.mode=true"], _CREATED_SA, "onyx"),
+        (
+            ["--set-string", "logExport.kubernetesRbac.mode=true"],
+            _NAMED_SA,
+            "onyx-runtime",
+        ),
+        (["--set", "logExport.kubernetesRbac.mode=false"], _DEFAULT_SA, None),
+        (["--set", "logExport.kubernetesRbac.mode=false"], _CREATED_SA, None),
+        (["--set", "logExport.kubernetesRbac.mode=false"], _NAMED_SA, None),
+    ],
+)
+def test_log_export_rbac_modes(
+    mode_args: list[str],
+    service_account_args: list[str],
+    bound_service_account: str | None,
+) -> None:
+    resources = _log_export_resources([*mode_args, *service_account_args])
+
+    if bound_service_account is None:
+        assert resources == []
+        return
 
     role = next(r for r in resources if r["kind"] == "Role")
     [rule] = role["rules"]
@@ -32,13 +66,15 @@ def test_log_export_rbac_binds_read_access_to_service_account() -> None:
     binding = next(r for r in resources if r["kind"] == "RoleBinding")
     assert binding["roleRef"]["name"] == role["metadata"]["name"]
     assert binding["subjects"] == [
-        {"kind": "ServiceAccount", "name": "onyx", "namespace": "onyx"}
+        {"kind": "ServiceAccount", "name": bound_service_account, "namespace": "onyx"}
     ]
 
 
-def test_log_export_rbac_disabled() -> None:
-    assert (
-        _log_export_resources(["--set", "logExport.kubernetesRbac.enabled=false"]) == []
+def test_log_export_rbac_rejects_unknown_mode() -> None:
+    result = render_chart(["--set", "logExport.kubernetesRbac.mode=sometimes"])
+    assert result.returncode != 0
+    assert "logExport.kubernetesRbac.mode must be auto, true, or false" in (
+        result.stderr
     )
 
 

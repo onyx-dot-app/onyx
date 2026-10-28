@@ -1,4 +1,4 @@
-{{- if .Values.logExport.kubernetesRbac.enabled }}
+{{- if eq (include "onyx.logExportRbacEnabled" .) "true" }}
 {{- $name := include "onyx.resourceName" (list . "log-export") }}
 # Lets the api-server read pod logs, pod status, and events in this namespace
 # for the admin log export (ee/onyx/server/log_export/kubernetes_collection.py).
