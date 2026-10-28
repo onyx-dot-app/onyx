@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { Card, InputTypeIn } from "@opal/components";
 import { OnboardingState, OnboardingActions } from "@/lib/onboarding/types";
@@ -19,6 +19,12 @@ const NameStep = React.memo(
     const { appName } = useSettings();
     const { userName } = onboardingState.data;
     const { updateName, nextStep } = onboardingActions;
+
+    // The step's only control: ready to type as soon as the step appears.
+    const inputRef = useRef<HTMLInputElement>(null);
+    useEffect(() => {
+      inputRef.current?.focus();
+    }, []);
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === "Enter" && userName && userName.trim().length > 0) {
@@ -43,6 +49,7 @@ const NameStep = React.memo(
           description={t("nameStep.description")}
         >
           <InputTypeIn
+            ref={inputRef}
             placeholder={t("nameStep.input.placeholder")}
             value={userName || ""}
             onChange={(e) => updateName(e.target.value)}
