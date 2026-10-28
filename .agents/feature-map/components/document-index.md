@@ -44,14 +44,17 @@ for thresholds, timeouts, and recovery behavior.
 An admin experiences it directly on the embedding-model page. They pick a new
 embedding model and start a re-index. The picker lists only the selectable models of
 the registry (self-hosted Granite, Voyage 4 Nano and Nemotron; Cohere, OpenAI, Google
-and Voyage cloud models). Custom Hugging Face models, LiteLLM, Azure and Bifrost are in
-an Advanced section. It is collapsed by default, but the cloud section opens when the
-current or staged model is a LiteLLM, Azure or Bifrost model, and shows that model as a
-card. A search for that model's name also finds it. The admin can still close the
-section. A legacy model (for example nomic, E5, Cohere v3) shows
+and Voyage cloud models). LiteLLM, Azure, Bifrost and OpenAI-compatible endpoints are
+listed after the registry providers in the cloud tab. When the current or staged model is
+one of these cloud models, the picker shows it as a card. The OpenAI-compatible setup can
+request shorter vectors (`reduced_dimension`, sent as the OpenAI `dimensions` parameter);
+a re-index keeps the stored value. A search for that model's name also finds it. The
+self-hosted tab shows an Add Custom Model card after the registry models, for a
+Hugging Face model that is not in the list. A legacy
+model (for example nomic, E5, Cohere v3) shows
 only while it is the current model. It can re-index, but it cannot be chosen as a new
 target. Before the re-index starts, the API embeds a fixed test string with the stored
-provider settings for Bifrost and for every selectable cloud model. From that point,
+provider settings for Bifrost, OpenAI-compatible and every selectable cloud model. From that point,
 Onyx builds a second, parallel index in the background using the new model while the
 old index keeps serving live search. A progress view shows re-index status and errors.
 When indexing catches up (the exact criterion depends on the switchover type chosen),
@@ -73,7 +76,7 @@ dropped the migration tables, and #15336 removed Vespa and the retrieval toggle.
 |---|---|---|---|
 | GET | `/manage/admin/opensearch-health` | `read_resource_health` | Cached resource pressure; requires `FULL_ADMIN_PANEL_ACCESS`. |
 | POST | `/manage/admin/opensearch-health/popup` | `claim_resource_popup` | Claims a tenant-scoped, per-admin 24-hour popup allowance in Redis. |
-| POST | `/search-settings/set-new-search-settings` | `set_new_search_settings` | Creates a FUTURE `SearchSettings` row, starts a re-index. Requires `FULL_ADMIN_PANEL_ACCESS`. For Bifrost and every selectable cloud model, it first embeds a test string with the stored provider settings (`_validate_cloud_embedding_model`) and rejects a failed call or a dimension mismatch. `_check_embedding_model_target` then refuses a legacy model or an unknown OpenAI, Cohere, Google or Voyage model as a new target with `INVALID_INPUT`. A re-index with the PRESENT model is allowed. |
+| POST | `/search-settings/set-new-search-settings` | `set_new_search_settings` | Creates a FUTURE `SearchSettings` row, starts a re-index. Requires `FULL_ADMIN_PANEL_ACCESS`. For Bifrost, OpenAI-compatible and every selectable cloud model, it first embeds a test string with the stored provider settings (`_validate_cloud_embedding_model`) and rejects a failed call or a dimension mismatch. `_check_embedding_model_target` then refuses a legacy model or an unknown OpenAI, Cohere, Google or Voyage model as a new target with `INVALID_INPUT`. A re-index with the PRESENT model is allowed. |
 | POST | `/search-settings/cancel-new-embedding` | `cancel_new_embedding` | Cancels the in-flight FUTURE re-index. |
 | DELETE | `/search-settings/delete-search-settings` | | |
 | GET | `/search-settings/get-current-search-settings` | | The PRESENT row. |
@@ -86,9 +89,9 @@ dropped the migration tables, and #15336 removed Vespa and the retrieval toggle.
 | POST | `/search-settings/reindex/port/resume` | | Resumes a stalled reindex-port backfill. |
 | POST | `/search-settings/update-inference-settings` | | |
 | GET/PUT/DELETE | `/search-settings/unstructured-api-key-set`, `/upsert-unstructured-api-key`, `/delete-unstructured-api-key` | | Unrelated document-parsing key, colocated in this router. |
-| POST | `/admin/embedding/test-embedding` | `test_embedding_configuration` (`server/manage/embedding/api.py`) | Dry-run an embedding call against a candidate config. Returns the vector length as `dimension`. |
+| POST | `/admin/embedding/test-embedding` | `test_embedding_configuration` (`server/manage/embedding/api.py`) | Dry-run an embedding call against a candidate config. Returns the vector length as `dimension`. Without an `api_key`, it uses the stored key, but only with the stored `api_url`. |
 | GET | `/admin/embedding` | `list_embedding_models` | |
-| GET/PUT/DELETE | `/admin/embedding/embedding-provider[/{provider_type}]` | | Cloud embedding provider credentials. |
+| GET/PUT/DELETE | `/admin/embedding/embedding-provider[/{provider_type}]` | | Cloud embedding provider credentials. A PUT that keeps the stored key without sending it cannot change `api_url` (`INVALID_INPUT`). `vertex_config.location` must be a region name, because the Google client builds its hostname from it. |
 
 Per the frontend rule in `CLAUDE.md`, always call these through the web server
 (`http://localhost:3000/api/...`), never the backend port directly.
@@ -346,6 +349,9 @@ Two state machines exist, and they interlock at the moment of promotion.
 on `switchover_type` (`INSTANT`, `REINDEX`, `ACTIVE_ONLY`) and on `use_port_flow`. With
 `use_port_flow`, INSTANT swaps at once and the port backfills the live index
 afterward. The other types wait on `_port_swap_ready` for the required cc-pairs.
+Once every connector port is SUCCESS the reindex is *finalizing*
+(`reindex_finalizing`, `db/port_attempt.py`): the indexing scheduler queues and
+processes FUTURE index attempts before PRESENT refreshes, since the swap waits on them.
 Without `use_port_flow`, INSTANT swaps at once and deletes the cc-pairs' document
 rows, REINDEX waits until every connector has a successful attempt on the new
 settings, and ACTIVE_ONLY waits only on non-paused connectors. `_perform_index_swap` does the actual promotion:

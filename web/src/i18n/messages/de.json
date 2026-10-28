@@ -6995,11 +6995,6 @@
           "description": "{appName} verbindet sich mit diesem Modell auf Ihrem {provider}-Proxy."
         }
       },
-      "maxImageSize": {
-        "description": "Bilder über dieser Größe werden übersprungen, um den Ressourcenverbrauch zu begrenzen.",
-        "suffix": "(MB)",
-        "title": "Maximale Bildgröße für die Analyse"
-      },
       "modal": {
         "cancelButton": {
           "label": "Abbrechen"
@@ -7045,11 +7040,6 @@
         "addCustomModel": {
           "label": "Benutzerdefiniertes Modell hinzufügen"
         },
-        "bringYourOwn": {
-          "cloudDescription": "Verbinden Sie einen LiteLLM-Proxy, ein Azure-OpenAI-Deployment oder ein Bifrost-Gateway. Den Modellnamen geben Sie selbst an. Für LiteLLM und Azure geben Sie auch die Dimension an.",
-          "selfHostedDescription": "Betreiben Sie ein Hugging-Face-Embedding-Modell, das nicht in der Liste oben steht. Modellname, Dimension und Präfixe geben Sie selbst an.",
-          "title": "Erweitert: eigenes Modell oder eigenen Proxy verwenden"
-        },
         "cloudTab": {
           "label": "Cloud-basiert"
         },
@@ -7057,6 +7047,7 @@
           "title": "Richten Sie ein benutzerdefiniertes Embedding-Modell ein."
         },
         "customModels": {
+          "hint": "Verwenden Sie ein mit [SentenceTransformers](https://www.sbert.net/) kompatibles Modell, das auf [Hugging Face](https://huggingface.co/models?library=sentence-transformers&sort=trending) verfügbar ist. {appName} lädt das Modell herunter, um es für das Self-Hosting einzurichten. Die Kompatibilität ist nicht garantiert.",
           "title": "Benutzerdefinierte Modelle"
         },
         "foldModels": {
@@ -7091,6 +7082,20 @@
           "label": "vorübergehend nicht verfügbar"
         },
         "title": "Multipass-Indexierung"
+      },
+      "openaiCompatible": {
+        "apiUrl": {
+          "description": "Die Basis-URL Ihres OpenAI-kompatiblen Endpunkts, zum Beispiel http://localhost:8000/v1. {appName} hängt den Pfad /embeddings an.",
+          "title": "API-Basis-URL"
+        },
+        "modelName": {
+          "description": "{appName} verbindet sich mit diesem Modell auf Ihrem OpenAI-kompatiblen Endpunkt."
+        },
+        "reducedDimension": {
+          "description": "Kürzere Vektoren anfordern. Nur Modelle, die mit Matryoshka Representation Learning trainiert wurden, unterstützen dies. Kürzere Vektoren brauchen weniger Speicher und sind schneller durchsuchbar. Leer lassen, um die volle Größe des Modells zu verwenden.",
+          "placeholder": "z. B. 1024",
+          "title": "Embedding-Dimensionen"
+        }
       },
       "progressBanner": {
         "attentionButton": {
@@ -7218,6 +7223,7 @@
         "modelDimPositive": "Muss eine positive ganze Zahl sein",
         "modelDimRequired": "Modelldimension ist erforderlich",
         "modelNameRequired": "Modellname ist erforderlich",
+        "reducedDimensionTooLarge": "Muss kleiner als die Modelldimension sein",
         "serviceAccountJsonInvalid": "Muss eine gültige JSON-Datei für ein Google-Dienstkonto sein",
         "serviceAccountJsonRequired": "Dienstkonto-JSON ist erforderlich",
         "targetUrlRequired": "Ziel-URL ist erforderlich",
@@ -7282,11 +7288,11 @@
             "off": "Jeder Chunk im Suchindex hat seine Konnektor-IDs. Die Suche verwendet die Zugriffslisten der Dokumente. Der Zugriff auf Konnektorebene ist ausgeschaltet.",
             "shadow": "Jeder Chunk im Suchindex hat seine Konnektor-IDs. Die Suche verwendet die Zugriffslisten der Dokumente und vergleicht sie mit dem Zugriff auf Konnektorebene."
           },
-          "title": "Aktualisierung des Konnektorzugriffs abgeschlossen"
+          "title": "Aktualisierung des Konnektorzugriffs abgeschlossen."
         },
         "notStarted": {
           "description": "Ein Hintergrundjob fügt den vorhandenen Chunks im Suchindex Konnektor-IDs hinzu. Er startet in wenigen Minuten.",
-          "title": "Aktualisierung des Konnektorzugriffs noch nicht gestartet"
+          "title": "Aktualisierung des Konnektorzugriffs noch nicht gestartet."
         },
         "progress": {
           "ariaLabel": "Fortschritt der Aktualisierung des Konnektorzugriffs"
@@ -7327,7 +7333,7 @@
         },
         "loadError": {
           "description": "Laden Sie die Seite neu, um es erneut zu versuchen.",
-          "title": "Die Aktualisierung des Konnektorzugriffs konnte nicht geladen werden"
+          "title": "Die Aktualisierung des Konnektorzugriffs konnte nicht geladen werden."
         }
       },
       "embeddingRateLimit": {
@@ -7335,18 +7341,14 @@
         "description": "Begrenzt, wie viele Embedding-Anfragen die Indexierung in einem Zeitfenster sendet, über alle Indexierungs-Worker hinweg. Beim Erreichen des Limits wartet die Indexierung und versucht es erneut, statt fehlzuschlagen, sodass Worker weniger neue Arbeit annehmen. Ein Batch schlägt nur fehl, wenn er zu lange wartet. Suchanfragen sind nicht begrenzt.",
         "requests": {
           "title": "Anfragen pro Zeitfenster",
-          "description": "Leer lassen für kein Limit.",
-          "placeholder": "Kein Limit"
+          "description": "Die maximale Anzahl an Embedding-Anfragen, die die Indexierung in einem Zeitfenster senden darf. Leer lassen für kein Limit.",
+          "placeholder": "Kein Limit",
+          "suffix": "Anfragen"
         },
         "period": {
           "title": "Länge des Zeitfensters",
-          "description": "Zum Beispiel 60 für ein Limit pro Minute.",
-          "suffix": "(Sekunden)"
-        },
-        "restoreDefault": "Standard wiederherstellen",
-        "validation": {
-          "requests": "Geben Sie eine ganze Zahl von 1 bis {max, number} ein, oder lassen Sie das Feld für kein Limit leer.",
-          "period": "Geben Sie eine ganze Zahl von Sekunden von 1 bis {max, number} ein."
+          "description": "Wie lange ein Zeitfenster dauert. Verwenden Sie 60 für ein Limit pro Minute.",
+          "suffix": "Sekunden"
         },
         "toasts": {
           "failed": "Das Limit konnte nicht gespeichert werden."

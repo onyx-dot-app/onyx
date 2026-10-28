@@ -7,7 +7,7 @@ from onyx.chat.emitter import Emitter
 from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.llm_step import run_llm_step_pkt_generator
 from onyx.chat.models import ChatMessageSimple, ToolCallSimple
-from onyx.coding_agent.models import CodingAgentCallResult, CodingAgentSpecialToolCalls
+from onyx.coding_agent.models import CodingAgentSpecialToolCalls
 from onyx.coding_agent.tool_definitions import (
     BASH_TOOL_CMD_KEY,
     BASH_TOOL_NAME,
@@ -46,6 +46,7 @@ from onyx.server.query_and_chat.streaming_models import (
     StreamingType,
 )
 from onyx.tools.models import ToolCallKickoff
+from onyx.tools.results import CodingAgentCallResult
 from onyx.tools.tool_implementations.bash.bash_tool import (
     BashTool,
     BashToolOverrideKwargs,

@@ -6,14 +6,13 @@ from unittest.mock import MagicMock, patch
 
 from onyx.chat.chat_utils import (
     _build_tool_call_response_history_message,
-    _get_or_extract_plaintext,
     convert_chat_history,
     get_custom_agent_prompt,
 )
-from onyx.chat.models import ChatLoadedFile
+from onyx.chat.files import _get_or_extract_plaintext
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.db.models import ChatMessage
-from onyx.file_store.models import ChatFileType
+from onyx.file_store.models import ChatFileType, ChatLoadedFile
 from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
 
 
@@ -201,10 +200,10 @@ class TestGetOrExtractPlaintext:
 
         with (
             patch(
-                "onyx.chat.chat_utils.get_default_file_store",
+                "onyx.chat.files.get_default_file_store",
                 return_value=file_store,
             ),
-            patch("onyx.chat.chat_utils.store_plaintext") as store_plaintext,
+            patch("onyx.chat.files.store_plaintext") as store_plaintext,
         ):
             result = _get_or_extract_plaintext("file-1", extract_fn)
 
@@ -219,10 +218,10 @@ class TestGetOrExtractPlaintext:
 
         with (
             patch(
-                "onyx.chat.chat_utils.get_default_file_store",
+                "onyx.chat.files.get_default_file_store",
                 return_value=file_store,
             ),
-            patch("onyx.chat.chat_utils.store_plaintext") as store_plaintext,
+            patch("onyx.chat.files.store_plaintext") as store_plaintext,
         ):
             result = _get_or_extract_plaintext("file-2", extract_fn)
 
@@ -241,10 +240,10 @@ class TestGetOrExtractPlaintext:
 
         with (
             patch(
-                "onyx.chat.chat_utils.get_default_file_store",
+                "onyx.chat.files.get_default_file_store",
                 return_value=file_store,
             ),
-            patch("onyx.chat.chat_utils.store_plaintext") as store_plaintext,
+            patch("onyx.chat.files.store_plaintext") as store_plaintext,
         ):
             result = _get_or_extract_plaintext("file-3", extract_fn)
 

@@ -13,7 +13,6 @@ from onyx.context.search.models import SearchDoc
 from onyx.deep_research.models import (
     CombinedResearchAgentCallResult,
     ResearchAgentCallFailure,
-    ResearchAgentCallResult,
 )
 from onyx.deep_research.tool_definitions import (
     RESEARCH_AGENT_TASK_KEY,
@@ -29,6 +28,7 @@ from onyx.tools.fake_tools.research_agent import (
     run_research_agent_calls,
 )
 from onyx.tools.models import ToolCallKickoff
+from onyx.tools.results import ResearchAgentCallResult
 
 TURN = 2
 

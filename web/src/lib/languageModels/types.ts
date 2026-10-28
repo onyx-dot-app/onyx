@@ -1,4 +1,4 @@
-import type { OnboardingActions } from "@/interfaces/onboarding";
+import type { OnboardingActions } from "@/lib/onboarding/types";
 import type { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
 import type { FunctionComponent } from "react";
 import type { IconFunctionComponent, IconProps } from "@opal/types";

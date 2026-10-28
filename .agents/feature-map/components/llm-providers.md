@@ -217,21 +217,11 @@ designation and endpoints have been removed.
 
 ## 4. How it works
 
-### Shared messages and model-history replay
+### Shared messages
 
 `backend/onyx/llm/models.py:MessageRole` gives shared messages enum-based roles.
 System, user, assistant, and tool-result messages accept and serialize the existing role strings.
 Provider request conversion keeps its existing wire format.
-
-`backend/onyx/agents/execution_records.py` supplies stable input-message IDs and model-history replay.
-Its `messages_for_model` function creates model context from recorded messages.
-It retains partial text and signed thinking, but omits tool calls without adjacent results.
-Unsigned provider thinking blocks are incomplete and cannot be replayed; signed and redacted blocks remain intact.
-It also removes orphaned or duplicate tool results and copies messages by default.
-Calls with duplicate IDs in one assistant message are ambiguous; replay omits them and their results.
-This helper prepares history without deleting the recorded output.
-Production chat does not call this module yet.
-
 
 ### 4.1 Resolving which model answers a turn: `get_llm_for_persona`
 
@@ -362,6 +352,14 @@ and provider quirks (Ollama, Mistral, Vertex AI), and shapes `stream_options`,
 tool-calling params, and reasoning params accordingly. On a `BadRequestError`
 naming a rejected kwarg, a retry ladder (`_retry_attempts`) strips that kwarg
 and retries with a narrower request, up to the ladder's length.
+
+Claude thinking is sent on every request of a tool loop, so the configured
+reasoning setting holds for the whole chat and the prompt-cache prefix does not
+change. Anthropic and Bedrock accept a tool-call message without thinking
+blocks. LiteLLM would drop `thinking` there; a monkey patch
+(`_patch_anthropic_keeps_requested_thinking`) keeps it for the Anthropic API,
+Vertex, Azure and Bedrock Converse. Claude behind an OpenAI-style gateway still
+skips reasoning mid loop (`_prompt_in_tool_loop`).
 
 `LLMConfig.supports_images` records the resolved image capability. A configured
 `supports_image_input=True` overrides catalog values. Configured `False` permits

@@ -29,7 +29,7 @@ Add these two lines to your website:
 
 ```html
 <!-- Load the widget -->
-<script type="module" src="https://cdn.onyx.app/widget/1.0/dist/onyx-widget.js"></script>
+<script type="module" src="https://cdn.onyx.app/widget/1.1/dist/onyx-widget.js"></script>
 
 <!-- Configure and display -->
 <onyx-chat-widget

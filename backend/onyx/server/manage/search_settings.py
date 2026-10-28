@@ -190,7 +190,8 @@ def set_new_search_settings(
         # Before the PRESENT row lock below: the probe is a network call. Nothing
         # is written yet, so end the read transaction instead of idling in it.
         if (
-            search_settings_new.provider_type == EmbeddingProvider.BIFROST
+            search_settings_new.provider_type
+            in (EmbeddingProvider.BIFROST, EmbeddingProvider.OPENAI_COMPATIBLE)
             or selectable_spec is not None
         ):
             db_session.commit()
@@ -374,8 +375,8 @@ def _validate_cloud_embedding_model(
 
 
 # Providers whose model list Onyx owns. Only SELECTABLE registry models are valid
-# new targets for them. LiteLLM, Azure and Bifrost take free-form names, so they
-# stay open.
+# new targets for them. LiteLLM, Azure, Bifrost and OpenAI-compatible take
+# free-form names, so they stay open.
 _REGISTRY_ONLY_CLOUD_PROVIDERS = frozenset(
     {
         EmbeddingProvider.OPENAI,

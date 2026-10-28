@@ -4,8 +4,6 @@ An overview can be found in the README.md file in this directory.
 """
 
 import contextvars
-import io
-import os
 import queue
 import re
 import threading
@@ -24,12 +22,10 @@ from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_processing_checker import set_processing_status
 from onyx.chat.chat_state import ChatStateContainer, ChatTurnSetup
 from onyx.chat.chat_utils import (
-    build_file_context,
     convert_chat_history,
     create_chat_session_from_request,
     get_custom_agent_prompt,
     is_last_assistant_message_clarification,
-    load_all_chat_files,
 )
 from onyx.chat.compression import (
     calculate_total_history_tokens,
@@ -38,6 +34,15 @@ from onyx.chat.compression import (
     load_branch_summary,
 )
 from onyx.chat.emitter import Emitter
+from onyx.chat.files import (
+    collect_available_file_ids,
+    convert_loaded_files_to_chat_files,
+    determine_search_params,
+    extract_context_files,
+    load_all_chat_files,
+    load_context_user_files_for_tools,
+    resolve_context_user_files,
+)
 from onyx.chat.incognito import (
     content_free_file_descriptors,
     incognito_llm_request_policy,
@@ -51,16 +56,10 @@ from onyx.chat.llm_loop import EmptyLLMResponseError, run_llm_loop
 from onyx.chat.models import (
     AnswerStream,
     AnswerStreamPart,
-    AvailableFiles,
     ChatBasicResponse,
     ChatFullResponse,
-    ChatLoadedFile,
     ChatMessageSimple,
-    ContextFileMetadata,
     CreateChatSessionID,
-    ExtractedContextFiles,
-    FileToolMetadata,
-    SearchParams,
     StreamingError,
     ToolCallResponse,
 )
@@ -68,7 +67,7 @@ from onyx.chat.prompt_utils import calculate_reserved_tokens
 from onyx.chat.save_chat import save_chat_turn
 from onyx.chat.stop_signal_checker import clear_stop, is_stop_requested
 from onyx.chat.stream_buffer import StreamBufferWriter
-from onyx.configs.app_configs import DEV_MODE, DISABLE_VECTOR_DB
+from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.chat_configs import CHAT_HEARTBEAT_INTERVAL_S
 from onyx.configs.constants import (
     DEFAULT_PERSONA_ID,
@@ -89,18 +88,16 @@ from onyx.db.document_set import filter_document_set_names_by_user_access
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import HookPoint, record_mode_persists_content
 from onyx.db.memory import get_memories
-from onyx.db.models import ChatMessage, ChatSession, Persona, User, UserFile
-from onyx.db.projects import get_user_files_from_project
+from onyx.db.models import ChatMessage, ChatSession, Persona, User
 from onyx.db.tools import capture_persona_tool_configuration, get_tools
 from onyx.db.user_file import capture_user_file_metadata
 from onyx.deep_research.dr_loop import run_deep_research_llm_loop
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError, log_onyx_error
-from onyx.file_processing.extract_file_text import extract_file_text
-from onyx.file_store.models import ChatFileType, InMemoryChatFile, UserFileMetadata
+from onyx.file_store.models import (
+    FileToolMetadata,
+)
 from onyx.file_store.utils import (
-    get_default_file_store,
-    load_in_memory_chat_files,
     verify_user_files,
 )
 from onyx.hooks.executor import HookSkipped, HookSoftFailed, execute_hook
@@ -121,7 +118,6 @@ from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.prompts.prompt_utils import substitute_user_placeholders
 from onyx.server.features.tool.tool_visibility import is_tool_available_for_persona
-from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.server.query_and_chat.models import (
     AUTO_PLACE_AFTER_LATEST_MESSAGE,
     MessageResponseIDInfo,
@@ -142,7 +138,7 @@ from onyx.server.settings.store import load_settings
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.server.utils import get_json_line
 from onyx.tools.constants import FILE_READER_TOOL_ID, SEARCH_TOOL_ID
-from onyx.tools.models import ChatFile, SearchToolUsage
+from onyx.tools.models import SearchToolUsage
 from onyx.tools.tool_constructor import (
     CustomToolConfig,
     FileReaderToolConfig,
@@ -161,36 +157,6 @@ from shared_configs.contextvars import (
 
 logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
-APPROX_CHARS_PER_TOKEN = 4
-
-
-def _collect_available_file_ids(
-    chat_history: list[ChatMessage],
-    context_user_files: list[UserFile],
-) -> AvailableFiles:
-    """Collect all file IDs the FileReaderTool should be allowed to access.
-
-    Returns *separate* lists for chat-attached files (``file_record`` IDs) and
-    project/user files (``user_file`` IDs) so the tool can pick the right
-    loader without a try/except fallback."""
-    chat_file_ids: set[UUID] = set()
-    user_file_ids: set[UUID] = set()
-
-    for msg in chat_history:
-        if not msg.files:
-            continue
-        for fd in msg.files:
-            try:
-                chat_file_ids.add(UUID(fd["id"]))
-            except (ValueError, KeyError):
-                pass
-
-    user_file_ids.update(file.id for file in context_user_files)
-
-    return AvailableFiles(
-        user_file_ids=list(user_file_ids),
-        chat_file_ids=list(chat_file_ids),
-    )
 
 
 def _should_enable_slack_search(
@@ -206,352 +172,6 @@ def _should_enable_slack_search(
     source_types = filters.source_type if filters else None
     return (source_types is not None and DocumentSource.SLACK in source_types) or (
         persona.id == DEFAULT_PERSONA_ID and source_types is None
-    )
-
-
-def _convert_loaded_files_to_chat_files(
-    loaded_files: list[ChatLoadedFile],
-) -> list[ChatFile]:
-    """Convert ChatLoadedFile objects to ChatFile for tool usage (e.g., PythonTool).
-
-    Returns lazy ChatFile objects: ``.content`` materializes via the underlying
-    ``loaded_file.content`` only when a tool actually accesses it. Previously
-    this function gated on ``len(loaded_file.content) > 0`` to filter out
-    zero-byte files, but evaluating ``len(content)`` would force every lazy
-    file to materialize and defeat the OOM fix. The guard is dropped; tools
-    receive zero-byte content for empty files, which PythonTool handles fine
-    (sha256 of empty bytes + upload of an empty body — the LLM will see the
-    empty result and react).
-    """
-    chat_files: list[ChatFile] = []
-    for loaded_file in loaded_files:
-        filename = loaded_file.filename or f"file_{loaded_file.file_id}"
-        # Pull content via a closure so the bytes only flow through one
-        # materialization (the ChatLoadedFile's loader), then ride along.
-        chat_files.append(
-            ChatFile.lazy_from_filename(
-                filename=filename,
-                loader=lambda lf=loaded_file: lf.content,
-            )
-        )
-    return chat_files
-
-
-def _deduped_filename(filename: str, seen_filenames: set[str], file_id: str) -> str:
-    if filename not in seen_filenames:
-        seen_filenames.add(filename)
-        return filename
-
-    stem, suffix = os.path.splitext(filename)
-    deduped_filename = f"{stem}_{file_id}{suffix}"
-    seen_filenames.add(deduped_filename)
-    return deduped_filename
-
-
-def _load_context_user_files_for_tools(
-    user_files: list[UserFile],
-    existing_filenames: set[str],
-) -> list[ChatFile]:
-    """Stage tabular project/persona files for code-interpreter as lazy
-    ChatFile instances.
-
-    Raw bytes are not read here; each ChatFile carries a loader closure that
-    pulls from the file store only when PythonTool actually accesses
-    ``.content`` during staging. This avoids loading every project/persona
-    file into RAM for chats that never invoke the Python tool.
-    """
-    if not user_files:
-        return []
-
-    chat_files: list[ChatFile] = []
-    seen_file_ids: set[str] = set()
-
-    for user_file in user_files:
-        if user_file.file_id in seen_file_ids:
-            continue
-        seen_file_ids.add(user_file.file_id)
-
-        if not mime_type_to_chat_file_type(user_file.file_type).use_metadata_only():
-            continue
-
-        filename = _deduped_filename(
-            user_file.name or f"file_{user_file.id}",
-            existing_filenames,
-            str(user_file.id),
-        )
-
-        def _load(
-            file_id: str = user_file.file_id, user_file_id: UUID = user_file.id
-        ) -> bytes:
-            # Preserve the pre-lazy degraded-but-functional behavior: if the
-            # underlying file is gone or temporarily unreachable, log it and
-            # hand PythonTool an empty payload instead of letting the
-            # exception propagate out of ChatFile.__getattribute__.
-            try:
-                return get_default_file_store().read_file(file_id, mode="b").read()
-            except Exception as e:
-                logger.warning(
-                    "Failed to load context file %s for Python execution: %s",
-                    user_file_id,
-                    e,
-                )
-                return b""
-
-        chat_files.append(ChatFile.lazy_from_filename(filename=filename, loader=_load))
-
-    return chat_files
-
-
-def resolve_context_user_files(
-    persona: Persona,
-    project_id: int | None,
-    user_id: UUID | None,
-    db_session: Session,
-) -> list[UserFile]:
-    """Combine project files with a custom persona's files, without duplicates."""
-    user_files: list[UserFile] = []
-    if project_id:
-        user_files.extend(
-            get_user_files_from_project(
-                project_id=project_id,
-                user_id=user_id,
-                db_session=db_session,
-            )
-        )
-    if persona.id != DEFAULT_PERSONA_ID and persona.user_files:
-        user_files.extend(persona.user_files)
-    seen_ids: set[UUID] = set()
-    selected_files: list[UserFile] = []
-    for user_file in user_files:
-        if user_file.id not in seen_ids:
-            seen_ids.add(user_file.id)
-            selected_files.append(user_file)
-    return selected_files
-
-
-def _empty_extracted_context_files() -> ExtractedContextFiles:
-    return ExtractedContextFiles(
-        file_texts=[],
-        image_files=[],
-        use_as_search_filter=False,
-        total_token_count=0,
-        file_metadata=[],
-        uncapped_token_count=None,
-    )
-
-
-def _extract_text_from_in_memory_file(f: InMemoryChatFile) -> str | None:
-    """Extract text content from an InMemoryChatFile.
-
-    PLAIN_TEXT: the content is pre-extracted UTF-8 plaintext stored during
-    ingestion — decode directly.
-    DOC / CSV / other text types: the content is the original file bytes —
-    use extract_file_text which handles encoding detection and format parsing.
-    Embedded-image summaries are only generated at index time; chat-time
-    extraction is text-only and any image context comes through search.
-    """
-    try:
-        if f.file_type == ChatFileType.PLAIN_TEXT:
-            return f.content.decode("utf-8", errors="ignore").replace("\x00", "")
-
-        text_content = extract_file_text(
-            file=io.BytesIO(f.content),
-            file_name=f.filename or "",
-            break_on_unprocessable=False,
-        )
-        return text_content or None
-    except Exception:
-        logger.warning("Failed to extract text from file %s", f.file_id, exc_info=True)
-        return None
-
-
-def extract_context_files(
-    user_files: list[UserFileMetadata],
-    llm_max_context_window: int,
-    reserved_token_count: int,
-    # Because the tokenizer is a generic tokenizer, the token count may be incorrect.
-    # to account for this, the maximum context that is allowed for this function is
-    # 60% of the LLM's max context window. The other benefit is that for projects with
-    # more files, this makes it so that we don't throw away the history too quickly every time.
-    max_llm_context_percentage: float = 0.6,
-) -> ExtractedContextFiles:
-    """Load user files into context if they fit; otherwise flag for search.
-
-    The caller is responsible for deciding *which* user files to pass in
-    (project files, persona files, etc.).  This function only cares about
-    the all-or-nothing fit check and the actual content loading.
-
-    Args:
-        user_files: Captured metadata for authorized files
-        llm_max_context_window: Maximum tokens allowed in the LLM context window
-        reserved_token_count: Number of tokens to reserve for other content
-        max_llm_context_percentage: Maximum percentage of the LLM context window to use.
-    Returns:
-        ExtractedContextFiles containing:
-        - List of text content strings from context files (text files only)
-        - List of image files from context (ChatLoadedFile objects)
-        - Total token count of all extracted files
-        - File metadata for context files
-        - Uncapped token count of all extracted files
-        - File metadata for files that don't fit in context and vector DB is disabled
-    """
-    # TODO(yuhong): I believe this is not handling all file types correctly.
-
-    if not user_files:
-        return _empty_extracted_context_files()
-
-    # Aggregate tokens for the file content that will be added
-    # Skip tokens for those with metadata only
-    aggregate_tokens = sum(
-        uf.token_count or 0
-        for uf in user_files
-        if not mime_type_to_chat_file_type(uf.file_type).use_metadata_only()
-    )
-    max_actual_tokens = (
-        llm_max_context_window - reserved_token_count
-    ) * max_llm_context_percentage
-
-    if aggregate_tokens >= max_actual_tokens:
-        use_as_search_filter = not DISABLE_VECTOR_DB
-        if DISABLE_VECTOR_DB:
-            overflow_tool_metadata = [_build_tool_metadata(uf) for uf in user_files]
-        else:
-            overflow_tool_metadata = [
-                _build_tool_metadata(uf)
-                for uf in user_files
-                if mime_type_to_chat_file_type(uf.file_type).use_metadata_only()
-            ]
-        return ExtractedContextFiles(
-            file_texts=[],
-            image_files=[],
-            use_as_search_filter=use_as_search_filter,
-            total_token_count=0,
-            file_metadata=[],
-            uncapped_token_count=aggregate_tokens,
-            file_metadata_for_tool=overflow_tool_metadata,
-        )
-
-    # Files fit — load them into context
-    user_file_map = {uf.file_id: uf for uf in user_files}
-    in_memory_files = load_in_memory_chat_files(user_files)
-
-    file_texts: list[str] = []
-    image_files: list[ChatLoadedFile] = []
-    file_metadata: list[ContextFileMetadata] = []
-    tool_metadata: list[FileToolMetadata] = []
-    total_token_count = 0
-
-    for f in in_memory_files:
-        uf = user_file_map.get(str(f.file_id))
-        filename = f.filename or f"file_{f.file_id}"
-
-        if f.file_type.use_metadata_only():
-            # Metadata-only files are not injected as full text.
-            # Only the metadata is provided, with LLM using tools
-            if not uf:
-                logger.error(
-                    "File with id=%s in metadata-only path with no associated user file",
-                    f.file_id,
-                )
-                continue
-            tool_metadata.append(_build_tool_metadata(uf))
-        elif f.file_type.is_text_file():
-            text_content = _extract_text_from_in_memory_file(f)
-            if not text_content:
-                continue
-            if not uf:
-                logger.warning("No user file for file_id=%s", f.file_id)
-                continue
-            file_texts.append(text_content)
-            file_metadata.append(
-                ContextFileMetadata(
-                    file_id=str(uf.id),
-                    filename=filename,
-                    file_content=text_content,
-                )
-            )
-            if uf.token_count:
-                total_token_count += uf.token_count
-        elif f.file_type == ChatFileType.IMAGE:
-            token_count = uf.token_count if uf and uf.token_count else 0
-            total_token_count += token_count
-            image_files.append(
-                ChatLoadedFile(
-                    file_id=f.file_id,
-                    content=f.content,
-                    file_type=f.file_type,
-                    filename=f.filename,
-                    content_text=None,
-                    token_count=token_count,
-                )
-            )
-
-    return ExtractedContextFiles(
-        file_texts=file_texts,
-        image_files=image_files,
-        use_as_search_filter=False,
-        total_token_count=total_token_count,
-        file_metadata=file_metadata,
-        uncapped_token_count=aggregate_tokens,
-        file_metadata_for_tool=tool_metadata,
-    )
-
-
-def _build_tool_metadata(user_file: UserFileMetadata) -> FileToolMetadata:
-    """Build lightweight FileToolMetadata from captured file fields.
-
-    Delegates to ``build_file_context`` so that the file ID exposed to the
-    LLM is always consistent with what FileReaderTool expects.
-    """
-    file_type = mime_type_to_chat_file_type(user_file.file_type)
-    metadata = build_file_context(
-        tool_file_id=str(user_file.id),
-        filename=user_file.name,
-        file_type=file_type,
-        approx_char_count=(user_file.token_count or 0) * APPROX_CHARS_PER_TOKEN,
-    ).tool_metadata
-    # `_load_context_user_files_for_tools` only loads metadata-only files into
-    # `chat_files_for_tools`, so those are the only context files PythonTool
-    # ever receives. The rest are listed for the LLM but never staged — only
-    # read_file can fetch them.
-    return metadata.model_copy(
-        update={"staged_for_tools": file_type.use_metadata_only()}
-    )
-
-
-def determine_search_params(
-    persona_id: int,
-    project_id: int | None,
-    extracted_context_files: ExtractedContextFiles,
-) -> SearchParams:
-    """Search both file scopes when their combined contents exceed the prompt budget.
-
-    Custom personas keep their search-tool policy. Default personas in projects
-    enable search only when the project files need retrieval.
-    """
-    is_custom_persona = persona_id != DEFAULT_PERSONA_ID
-
-    project_id_filter: int | None = None
-    persona_id_filter: int | None = None
-    if extracted_context_files.use_as_search_filter:
-        project_id_filter = project_id
-        if is_custom_persona:
-            persona_id_filter = persona_id
-
-    search_usage = SearchToolUsage.AUTO
-    if not is_custom_persona and project_id:
-        has_context_files = bool(extracted_context_files.uncapped_token_count)
-        files_loaded_in_context = bool(extracted_context_files.file_texts)
-
-        if extracted_context_files.use_as_search_filter:
-            search_usage = SearchToolUsage.ENABLED
-        elif files_loaded_in_context or not has_context_files:
-            search_usage = SearchToolUsage.DISABLED
-
-    return SearchParams(
-        project_id_filter=project_id_filter,
-        persona_id_filter=persona_id_filter,
-        search_usage=search_usage,
     )
 
 
@@ -807,7 +427,7 @@ def build_chat_turn(
     # Collect file IDs for the file reader tool *before* summary truncation so
     # that files attached to older (summarized-away) messages are still accessible
     # via the FileReaderTool.
-    available_files = _collect_available_file_ids(
+    available_files = collect_available_file_ids(
         chat_history=chat_history,
         context_user_files=context_user_files,
     )
@@ -925,9 +545,9 @@ def build_chat_turn(
     # Load all files needed for this chat chain into memory.
     files = load_all_chat_files(chat_history, db_session)
     # Convert loaded files to ChatFile format for tools like PythonTool
-    chat_files_for_tools = _convert_loaded_files_to_chat_files(files)
+    chat_files_for_tools = convert_loaded_files_to_chat_files(files)
     chat_files_for_tools.extend(
-        _load_context_user_files_for_tools(
+        load_context_user_files_for_tools(
             context_user_files,
             {chat_file.filename for chat_file in chat_files_for_tools},
         )

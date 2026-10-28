@@ -18,10 +18,10 @@
 ```tsx
 <CardLoader />
 <CardLoader descriptionLines={2} />
-<CardLoader border="dashed" rounding={3} color="transparent" />
+<CardLoader border="dashed" rounding={3} color="background-tint-00" />
 ```
 
-Props: `descriptionLines` (default `1`), plus the plain-mode `Card` props it forwards (`padding`, `rounding`, `color`, `border`, `borderColor`, `shadow`, `disabled`, `ref`, `data-*`). `children` and `expandable` are not accepted: the loader fills the body and is never expandable. Unset, the card is solid-bordered with `rounding={4}` and `padding={4}`. The inside imitates a `ContentAction` row; it is not a `Content`.
+Props: `descriptionLines` (default `1`), plus the plain-mode `Card` props it forwards (`padding`, `rounding`, `color`, `border`, `borderColor`, `shadow`, `disabled`, `ref`, `data-*`). `children` and `expandable` are not accepted: the loader fills the body and is never expandable. Unset, the card is transparent and solid-bordered, with `rounding={4}` and `padding={4}`. The inside imitates a `ContentAction` row; it is not a `Content`.
 
 ## DropdownLoader
 

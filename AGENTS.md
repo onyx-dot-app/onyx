@@ -104,10 +104,17 @@ Claude Code and Codex also run pre-commit on the files you changed in a turn whe
 you end it (`.agents/hooks/pre_commit_on_stop.py`, wired as `UserPromptSubmit` and
 `Stop` hooks in `.claude/settings.json` and `.codex/hooks.json`). Files that were
 already dirty when the turn started are skipped unless you change them. Codex runs
-the hooks only after you trust the project `.codex/` layer. If pre-commit fails, fix
-the reported problems before you finish. When the repo has the feature map
+the hooks only after you trust the project `.codex/` layer. Committed changes come from
+local commit, amend, cherry-pick, revert, and conflict-resolution entries in the
+worktree HEAD reflog. For a merge commit, only files that differ from Git's automatic
+merge result are checked. For a rebase, the check includes every file in each commit
+resolved with `git rebase --continue`, and skips clean picks. The `--apply` rebase
+backend logs resolved conflicts as picks, so the hook skips them. Checkout, pull, clean
+merge, and clean rebase updates do not add files to the check.
+If pre-commit fails, fix the reported problems before you finish. When the repo has the feature map
 (`.agents/feature-map/stale_docs.py`), the same hook also names any feature-map
-component whose code the turn changed but whose document the branch did not. Update
+component whose code the turn changed but whose document the branch did not. These
+reminders appear as advisory messages and do not block completion. Update
 the document if your change alters what it states.
 
 NOTE: Always make sure everything is strictly typed (both in Python and Typescript).
