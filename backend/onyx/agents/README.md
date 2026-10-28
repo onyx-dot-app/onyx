@@ -207,9 +207,11 @@ The `ToolInvocation` argument provides everything the tool needs:
   The details type defines snapshot or delta semantics. Return the complete value in `ToolResult`.
 - `agents` — the subagent coordinator (next section).
 
-When a step makes several tool calls, they run in parallel, unless any called tool is marked
-`SEQUENTIAL` — then the whole batch runs one call at a time. Results are accepted in
-whatever order tools finish, but the model history keeps the original call order.
+Tool calls run in parallel by default. `SEQUENTIAL` orders calls to the same registered tool name
+within one step. The next call waits for the previous call and its completion hook to finish.
+A call waiting for input or children also holds that place in order. Other tool names can run concurrently.
+This setting does not coordinate separate runs or API requests.
+Results are accepted in whatever order tools finish, but model history keeps the original call order.
 Result enrichment and final tool events run as results become ready. A slow tool does not delay
 another tool's completion event. Callbacks still run serially on the run execution thread.
 
@@ -224,8 +226,9 @@ other's planning context. Compatible merged calls contribute one planning update
 
 Retrieval tools combine compatible query or URL lists before execution. One worker runs
 that batch; each original call retains its ID and receives the pooled result and progress.
-Other arguments must match. Sequential steps combine only adjacent calls, preserving order
-relative to other tools. Shared retrieval uses the tool's existing combined-result limits.
+Other arguments must match. Merging can skip unrelated tool names. For a sequential tool,
+merging stops at the first incompatible or blocked call to that same tool.
+Shared retrieval uses the tool's existing combined-result limits.
 
 Retrieval tools declare `merge_list_argument` using their query or URL parameter name.
 Tools with a per-call item cap also set `merge_list_limit`; larger groups execute separately.

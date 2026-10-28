@@ -248,7 +248,7 @@ def test_suspended_batch_restores_results_without_retrieval_reexecution() -> Non
     assert executions == ["a"]
 
 
-def test_sequential_batching_does_not_cross_another_tool() -> None:
+def test_sequential_batching_can_cross_another_tool() -> None:
     executions: list[str] = []
     replies = iter(
         [
@@ -265,7 +265,7 @@ def test_sequential_batching_does_not_cross_another_tool() -> None:
 
     def execute(invocation: ToolInvocation) -> ToolResult:
         executions.append(invocation.call_id)
-        return ToolResult(content="done")
+        return ToolResult(content=str(invocation.arguments))
 
     run = Agent(
         FakeModelClient(lambda *_: next(replies)),
@@ -289,7 +289,76 @@ def test_sequential_batching_does_not_cross_another_tool() -> None:
     ).start(max_steps=2)
     run.result(timeout=10)
     assert run.wait_for_idle(timeout=10)
-    assert executions == ["a", "middle", "b"]
+    assert sorted(executions) == ["a", "middle"]
+    results = [
+        message
+        for message in run.snapshot().messages
+        if isinstance(message, ToolResultMessage)
+    ]
+    assert [message.tool_call_id for message in results] == ["a", "middle", "b"]
+    assert results[0].content == results[2].content == "{'queries': ['a', 'b']}"
+
+
+@pytest.mark.parametrize("incomplete", [False, True])
+def test_sequential_merge_cannot_skip_an_incompatible_call(incomplete: bool) -> None:
+    executions: list[str] = []
+    replies = iter(
+        [
+            AssistantMessage(
+                content=[
+                    ToolCall(
+                        id="a",
+                        name="search",
+                        arguments={"queries": ["a"], "filter": "x"},
+                    ),
+                    ToolCall(
+                        id="b",
+                        name="search",
+                        arguments={
+                            "queries": ["b"],
+                            "filter": "x" if incomplete else "y",
+                        },
+                        arguments_complete=not incomplete,
+                    ),
+                    ToolCall(
+                        id="c",
+                        name="search",
+                        arguments={"queries": ["c"], "filter": "x"},
+                    ),
+                ]
+            ),
+            AssistantMessage(content=[TextContent(text="done")]),
+        ]
+    )
+
+    def execute(invocation: ToolInvocation) -> ToolResult:
+        executions.append(invocation.call_id)
+        return ToolResult(content=str(invocation.arguments))
+
+    run = Agent(
+        FakeModelClient(lambda *_: next(replies)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="search", description="", parameters={}),
+                execute=execute,
+                execution_mode=ToolExecutionMode.SEQUENTIAL,
+                merge_arguments=partial(merge_tool_arguments, field="queries"),
+            )
+        ],
+    ).start(max_steps=2)
+    run.result(timeout=10)
+    assert run.wait_for_idle(timeout=10)
+    assert executions == (["a", "c"] if incomplete else ["a", "b", "c"])
+    results = [
+        message
+        for message in run.snapshot().messages
+        if isinstance(message, ToolResultMessage)
+    ]
+    assert [message.tool_call_id for message in results] == ["a", "b", "c"]
+    assert results[0].content == "{'queries': ['a'], 'filter': 'x'}"
+    assert results[2].content == "{'queries': ['c'], 'filter': 'x'}"
+    assert results[1].is_error == incomplete
 
 
 @pytest.mark.parametrize(
