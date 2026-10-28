@@ -191,8 +191,11 @@ released Onyx yet, so the provider keeps its workaround and the limitation still
   connector endpoints still require `access_type` in the body and ignore it, so the provider
   sends a fixed value rather than offering a knob that does nothing. Set access on
   `onyx_cc_pair`.
-- **An unset `prune_freq` becomes 7 days** on a connector's first update, and the provider
-  then keeps that as the value of record.
+- **The provider does not send an unset `prune_freq` or `check_freq`.** Onyx then sets
+  `prune_freq` to 7 days on create and keeps the stored value on update. Onyx v5.0 and
+  earlier set it to null on create and to 7 days on the first update. An unset `check_freq`
+  is null on create (checks run only on request) and keeps the stored value on update.
+  Terraform cannot set either value back to null.
 - **Most `onyx_cc_pair` access settings force replacement.** Onyx has no update route for
   `access_type`, `groups`, `auto_sync_options` or `processing_mode`, so a change replaces the
   pair and re-indexes its documents. Terraform reads them back, so an admin-panel change to one

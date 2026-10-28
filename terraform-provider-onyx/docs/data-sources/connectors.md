@@ -32,6 +32,7 @@ output "connector_names" {
 
 Read-Only:
 
+- `check_freq` (Number) Seconds between scheduled connector checks. Null means on request only, or Onyx before v5.0.0.
 - `connector_specific_config` (String)
 - `credential_ids` (List of Number)
 - `id` (String)
