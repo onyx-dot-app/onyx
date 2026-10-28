@@ -128,3 +128,18 @@ def test_pin_does_not_outlive_the_transaction(
         assert row is not None
         assert row[0] == default_schema
         dbapi_connection.rollback()
+
+
+def test_pin_quotes_the_schema_name(isolated_engine: Engine) -> None:
+    tenant = f'pin "quoted"; SELECT 1; -- {uuid4().hex[:8]}'
+    with isolated_engine.begin() as conn:
+        conn.execute(CreateSchema(tenant))
+    try:
+        with isolated_engine.connect() as connection:
+            pin_search_path_per_transaction(connection, tenant)
+            current = connection.execute(text("SELECT current_schema()")).scalar_one()
+            assert current == tenant
+            connection.rollback()
+    finally:
+        with isolated_engine.begin() as conn:
+            conn.execute(DropSchema(tenant, cascade=True, if_exists=True))

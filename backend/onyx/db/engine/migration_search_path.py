@@ -15,7 +15,8 @@ from sqlalchemy.engine import Connection
 def pin_search_path_per_transaction(connection: Connection, schema_name: str) -> None:
     """Set a transaction-local search_path to ``schema_name`` in the open
     transaction, if any, and at the start of every later one on ``connection``."""
-    set_search_path = f'SET LOCAL search_path TO "{schema_name}"'
+    quoted_schema_name = connection.dialect.identifier_preparer.quote(schema_name)
+    set_search_path = f"SET LOCAL search_path TO {quoted_schema_name}"
 
     # Runs before the DBAPI begins, so the SET is the transaction's first
     # statement; SQLAlchemy does not autobegin again inside this hook.
