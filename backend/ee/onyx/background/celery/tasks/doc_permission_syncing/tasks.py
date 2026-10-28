@@ -77,6 +77,7 @@ from onyx.db.permission_sync_attempt import (
     fail_expired_doc_permission_sync_attempts,
     fail_not_started_doc_permission_sync_attempts,
     get_cc_pair_ids_with_open_doc_permission_sync_attempt,
+    get_doc_permission_sync_retry_after,
     get_not_started_doc_permission_sync_attempts_older_than,
     lock_doc_permission_sync_attempt_if_owned,
     mark_doc_permission_sync_attempt_failed,
@@ -187,7 +188,8 @@ def fail_lost_queued_doc_permission_sync_attempts(app: Celery) -> None:
     lost task (e.g. a Redis restart without persistence) does not hold the
     pair's lock until the task would have expired. A task that a worker has
     already taken also looks lost here; its claim then fails and the beat
-    dispatches the pair again, so the check errs only toward a redispatch."""
+    dispatches the pair again once the retry backoff for that failure ends,
+    so the check errs only toward a later redispatch."""
     with get_session_with_current_tenant() as db_session:
         candidates = get_not_started_doc_permission_sync_attempts_older_than(
             db_session, timedelta(seconds=PERMISSION_SYNC_LOST_TASK_GRACE)
@@ -300,12 +302,25 @@ def check_for_doc_permissions_sync(self: Task, *, tenant_id: str) -> bool | None
                 db_session
             )
 
-            cc_pair_ids_to_sync.extend(
-                cc_pair.id
-                for cc_pair in cc_pairs
-                if cc_pair.id not in running_cc_pair_ids
-                and is_external_doc_permissions_sync_due(cc_pair)
-            )
+            now = datetime.now(timezone.utc)
+            for cc_pair in cc_pairs:
+                if cc_pair.id in running_cc_pair_ids:
+                    continue
+
+                if not is_external_doc_permissions_sync_due(cc_pair):
+                    continue
+
+                retry_after = get_doc_permission_sync_retry_after(
+                    cc_pair_id=cc_pair.id, db_session=db_session
+                )
+                if retry_after is not None and now < retry_after:
+                    task_logger.debug(
+                        f"Skipping doc permission sync for cc_pair={cc_pair.id}: "
+                        f"backing off after failures until {retry_after}"
+                    )
+                    continue
+
+                cc_pair_ids_to_sync.append(cc_pair.id)
 
         # Tenant-work-gating hook: refresh this tenant's active-set membership
         # whenever doc-permission sync has any due cc_pairs to dispatch.

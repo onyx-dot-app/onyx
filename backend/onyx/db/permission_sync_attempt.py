@@ -28,10 +28,16 @@ from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 logger = setup_logger()
 
 # Enough consecutive failures to reach the longest retry delay.
-_GROUP_SYNC_BACKOFF_LOOKBACK = 8
+_SYNC_BACKOFF_LOOKBACK = 8
 
 _FAILURE_STATUSES = (PermissionSyncStatus.FAILED, PermissionSyncStatus.CANCELED)
 _OPEN_STATUSES = (PermissionSyncStatus.NOT_STARTED, PermissionSyncStatus.IN_PROGRESS)
+# The terminal statuses the retry backoff reads; see _get_sync_retry_after.
+_SYNC_OUTCOME_STATUSES = (
+    PermissionSyncStatus.SUCCESS,
+    PermissionSyncStatus.COMPLETED_WITH_ERRORS,
+    PermissionSyncStatus.FAILED,
+)
 
 _AttemptModel = (
     type[DocPermissionSyncAttempt] | type[ExternalGroupPermissionSyncAttempt]
@@ -597,63 +603,6 @@ def get_external_group_sync_attempt(
     return db_session.scalars(stmt).first()
 
 
-def get_recent_external_group_sync_attempts_for_cc_pair(
-    cc_pair_id: int | None,
-    limit: int,
-    db_session: Session,
-) -> list[ExternalGroupPermissionSyncAttempt]:
-    """Get recent external group sync attempts for a cc pair, most recent first.
-    If cc_pair_id is None, gets global group sync attempts."""
-    stmt = select(ExternalGroupPermissionSyncAttempt)
-
-    if cc_pair_id is not None:
-        stmt = stmt.where(
-            ExternalGroupPermissionSyncAttempt.connector_credential_pair_id
-            == cc_pair_id
-        )
-    else:
-        stmt = stmt.where(
-            ExternalGroupPermissionSyncAttempt.connector_credential_pair_id.is_(None)
-        )
-
-    return list(
-        db_session.execute(
-            stmt.order_by(ExternalGroupPermissionSyncAttempt.time_created.desc()).limit(
-                limit
-            )
-        ).scalars()
-    )
-
-
-def get_external_group_sync_retry_after(
-    cc_pair_id: int,
-    db_session: Session,
-) -> datetime | None:
-    """The time before which the beat must not start the pair's group sync
-    again, from its consecutive FAILED attempts. None when the latest finished
-    attempt did not fail. A manual sync ignores this, and its success clears
-    it."""
-    attempts = get_recent_external_group_sync_attempts_for_cc_pair(
-        cc_pair_id=cc_pair_id,
-        limit=_GROUP_SYNC_BACKOFF_LOOKBACK,
-        db_session=db_session,
-    )
-    failure_count = 0
-    last_failed_at: datetime | None = None
-    for attempt in attempts:
-        if not attempt.status.is_terminal():
-            continue
-        if attempt.status != PermissionSyncStatus.FAILED:
-            break
-        failure_count += 1
-        if last_failed_at is None:
-            last_failed_at = attempt.time_finished or attempt.time_created
-
-    if last_failed_at is None:
-        return None
-    return last_failed_at + request_retry_delay(failure_count)
-
-
 def source_group_sync_is_cc_pair_agnostic(source: DocumentSource) -> bool:
     """Whether the source's group sync covers all its pairs in one run."""
     is_agnostic: bool = fetch_ee_implementation_or_noop(
@@ -809,6 +758,83 @@ def complete_external_group_sync_attempt(
         db_session.rollback()
         logger.exception("complete_external_group_sync_attempt exceptioned.")
         raise
+
+
+# =============================================================================
+# RETRY BACKOFF
+# =============================================================================
+
+
+def _get_sync_retry_after(
+    model: _AttemptModel, cc_pair_id: int, db_session: Session
+) -> datetime | None:
+    """The time before which the beat must not start the pair's sync again:
+    request_retry_delay(N) after the last of its N consecutive FAILED
+    attempts. None when the newest attempt that counts did not fail. A manual
+    sync ignores this, and its success clears it.
+
+    A CANCELED attempt neither adds a failure nor ends a run of them: a
+    cancel comes from outside the sync, so it says nothing about the source.
+    A FAILED attempt counts whatever ended it, including a lost task, an
+    expired lease, or the stop signal. Attempts created before the pair began
+    to wait for its first permission sync (perm_sync_pending_since) are
+    ignored, so failures from before the access change do not delay that
+    sync."""
+    outcomes = (
+        db_session.execute(
+            select(model.status, model.time_finished, model.time_created)
+            .join(
+                ConnectorCredentialPair,
+                ConnectorCredentialPair.id == model.connector_credential_pair_id,
+            )
+            .where(
+                model.connector_credential_pair_id == cc_pair_id,
+                model.status.in_(_SYNC_OUTCOME_STATUSES),
+                or_(
+                    ConnectorCredentialPair.perm_sync_pending_since.is_(None),
+                    model.time_created
+                    >= ConnectorCredentialPair.perm_sync_pending_since,
+                ),
+            )
+            .order_by(model.time_created.desc(), model.id.desc())
+            .limit(_SYNC_BACKOFF_LOOKBACK)
+        )
+        .tuples()
+        .all()
+    )
+
+    failure_count = 0
+    last_failed_at: datetime | None = None
+    for status, time_finished, time_created in outcomes:
+        if status != PermissionSyncStatus.FAILED:
+            break
+        failure_count += 1
+        if last_failed_at is None:
+            last_failed_at = time_finished or time_created
+
+    if last_failed_at is None:
+        return None
+    return last_failed_at + request_retry_delay(failure_count)
+
+
+def get_doc_permission_sync_retry_after(
+    cc_pair_id: int,
+    db_session: Session,
+) -> datetime | None:
+    """The time before which the beat must not start the pair's doc
+    permission sync again. See _get_sync_retry_after."""
+    return _get_sync_retry_after(DocPermissionSyncAttempt, cc_pair_id, db_session)
+
+
+def get_external_group_sync_retry_after(
+    cc_pair_id: int,
+    db_session: Session,
+) -> datetime | None:
+    """The time before which the beat must not start the pair's group sync
+    again. See _get_sync_retry_after."""
+    return _get_sync_retry_after(
+        ExternalGroupPermissionSyncAttempt, cc_pair_id, db_session
+    )
 
 
 # =============================================================================
