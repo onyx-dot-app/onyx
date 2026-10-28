@@ -5,6 +5,7 @@ fails the batch once instead of retrying every document."""
 
 import uuid
 from collections.abc import Generator
+from unittest.mock import patch
 
 import pytest
 
@@ -113,17 +114,20 @@ def test_vector_db_write_fails_batch_once_with_compact_failures(
     )
     old_count = _CHUNKS_PER_DOC if indexed_before else 0
 
-    records, failures = write_chunks_to_vector_db_with_backoff(
-        document_index=document_index,
-        make_chunks=lambda: _chunks(doc_ids),
-        indexing_metadata=make_indexing_metadata(
-            doc_ids,
-            old_counts=[old_count] * 2,
-            new_counts=[_CHUNKS_PER_DOC] * 2,
-        ),
-        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
-    )
+    with patch.object(document_index, "index", wraps=document_index.index) as index_spy:
+        records, failures = write_chunks_to_vector_db_with_backoff(
+            document_index=document_index,
+            make_chunks=lambda: _chunks(doc_ids),
+            indexing_metadata=make_indexing_metadata(
+                doc_ids,
+                old_counts=[old_count] * 2,
+                new_counts=[_CHUNKS_PER_DOC] * 2,
+            ),
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        )
 
+    # One batch call; the per-document retry would add one call per document.
+    assert index_spy.call_count == 1
     assert records == []
     assert [f.failed_document.document_id for f in failures if f.failed_document] == (
         doc_ids

@@ -1238,8 +1238,11 @@ def count_unique_active_cc_pairs_with_successful_index_attempts(
 def _cap_failure_message(message: str) -> str:
     if len(message) <= MAX_INDEX_ATTEMPT_ERROR_MESSAGE_CHARS:
         return message
-    dropped = len(message) - MAX_INDEX_ATTEMPT_ERROR_MESSAGE_CHARS
-    return f"{message[:MAX_INDEX_ATTEMPT_ERROR_MESSAGE_CHARS]}... [{dropped} chars truncated]"
+    # Sized for the largest possible count, so the result never exceeds the cap.
+    keep = MAX_INDEX_ATTEMPT_ERROR_MESSAGE_CHARS - len(
+        f"... [{len(message)} chars truncated]"
+    )
+    return f"{message[:keep]}... [{len(message) - keep} chars truncated]"
 
 
 def create_index_attempt_error(
