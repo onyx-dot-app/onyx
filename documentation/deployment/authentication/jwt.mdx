@@ -1,0 +1,97 @@
+---
+title: "JWT Header Auth"
+description: "Authenticate API requests with JWTs minted by your own identity provider"
+icon: "key"
+---
+
+JWT header authentication lets a client call the Onyx API with a bearer token that your identity provider signed.
+Onyx checks the signature against your public key and signs the request in as the user named in the token.
+
+Use this when an application in front of Onyx already authenticates users and can pass their tokens through.
+It is available in all editions.
+
+Pass the token in the `Authorization` header:
+
+```
+Authorization: Bearer <jwt>
+```
+
+## Setup
+
+Set the public key URL in the admin panel or in the environment.
+
+<Tabs>
+  <Tab title="Admin panel">
+    Go to **Admin Panel → Organization → Security & Hardening**. In the **External JWT Authentication** section, set:
+
+    - **Public Key URL**: the JWKS or PEM endpoint that serves your signing key.
+    Leave it empty to turn JWT authentication off.
+    - **Expected Audience** (optional): reject tokens whose `aud` claim does not match.
+    - **Expected Issuer** (optional): reject tokens whose `iss` claim does not match.
+
+    Changes apply at once. No restart is needed.
+  </Tab>
+
+  <Tab title="Environment">
+    Set these variables on the API server:
+
+    ```bash
+    JWT_PUBLIC_KEY_URL=https://idp.example.com/.well-known/jwks.json
+    JWT_EXPECTED_AUDIENCE=onyx              # optional
+    JWT_EXPECTED_ISSUER=https://idp.example.com  # optional
+    ```
+
+    A value set in the environment is pinned.
+    The admin panel shows it as **Pinned by an environment variable** and does not let you change it.
+  </Tab>
+</Tabs>
+
+The URL can return either format:
+
+- **JWKS**: a JSON document with a `keys` array. Onyx picks the key whose `kid` matches the token header, then falls back to `x5t`. If the set has one key, Onyx uses it.
+- **PEM**: a single RSA public key in PEM format.
+
+Onyx caches the key material and fetches it again when a token arrives with an unknown key.
+You can rotate keys without a restart.
+
+## Token Requirements
+
+- Signing algorithm: `RS256`.
+- `exp` must be present and in the future.
+- One of these claims must hold the user's email. Onyx checks them in this order: `email`, `preferred_username`, `upn`.
+- `aud` and `iss` are checked only when you set **Expected Audience** or **Expected Issuer**.
+
+## User Handling
+
+- If the email matches an existing user, the request runs as that user.
+- If no user matches, Onyx creates a basic user with that email.
+  The user has no password and signs in with a token only.
+- The request does not create a session. Each request must carry a token.
+- A valid session cookie takes priority over the header. Onyx reads the `Authorization` header only when there is no session.
+
+<Warning>
+  Anyone who can get a signed token from your identity provider can call Onyx as the user in the token.
+  Set **Expected Audience** and **Expected Issuer**, and give the JWKS endpoint a stable, trusted URL.
+</Warning>
+
+## Troubleshooting
+
+A request with a bad token fails as unauthenticated. Check the API server log for the reason:
+
+| Log message                                        | Cause                                                           |
+| -------------------------------------------------- | --------------------------------------------------------------- |
+| `JWT public key URL is not configured`             | **Public Key URL** is empty.                                    |
+| `Failed to fetch JWT public key`                   | Onyx cannot reach the URL.                                      |
+| `JWKS payload did not contain any keys`            | The JWKS document has an empty `keys` array.                    |
+| `No matching JWK found for token header`           | No key matches the token's `kid` or `x5t`.                      |
+| `JWT rejected by aud/iss enforcement`              | `aud` or `iss` does not match the expected value.               |
+| `Invalid JWT signature`                            | The token was not signed by the key at the URL, or it expired.  |
+| `JWT public key URL rejected`                      | The URL points at a private or internal address.                |
+
+For admin-set URLs, Onyx blocks private and internal addresses by default.
+See **SSRF Protection** in **Security & Hardening**, or set the URL with `JWT_PUBLIC_KEY_URL` instead.
+
+## Related
+
+- [API Keys](/admins/user_management/api_keys): long-lived keys for service accounts.
+- [SSO Providers](/deployment/authentication/sso_providers): browser sign-in with Google, OIDC, or SAML.

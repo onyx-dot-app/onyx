@@ -1,0 +1,44 @@
+---
+title: "Document Sets"
+description: "Group connectors into named collections for search, Agents, and access control"
+icon: "folder-open"
+---
+
+## Overview
+
+Document Sets group logically connected documents into a single bundle.
+Users and Agents can then use a Document Set as a filter to control the scope of information Onyx searches.
+Document Sets are available in all editions.
+
+## Creating a Document Set
+
+<Steps>
+  <Step title="Create New Document Set">
+    Go to **Admin Panel → Document Sets** (`/admin/documents/sets`) and select **New Document Set**.
+
+    <img className="rounded-image" src="/assets/admins/document_sets/new_document_set.webp" alt="New Document Set"/>
+  </Step>
+
+  <Step title="Set who can use it">
+    Leave **Make this document set Public?** on so all users can use the set.
+    Turn it off to limit the set to Admins and the User Groups you assign.
+    Group access needs a Business or Enterprise plan, or Onyx Cloud.
+    Only connectors assigned to those groups are available for a group-scoped set.
+  </Step>
+
+  <Step title="Add Connectors">
+    Under **Pick your connectors**, select the connectors to include.
+    All documents indexed by the selected connectors become part of the set. If you use federated connectors,
+    such as federated Slack, add them under **Federated Connectors**.
+
+    <img className="rounded-image" src="/assets/admins/document_sets/add_connectors.webp" alt="Add Connectors to Document Set"/>
+  </Step>
+</Steps>
+
+Onyx updates the set in the background after you save. The list shows a status until the update is complete.
+
+## Use Cases
+
+- **Agent Knowledge**: Attach Document Sets to [Agents](/admins/agents/overview)
+  so they only reference relevant knowledge.
+- **Access Control**: Scope a set to User Groups so only members can use it.

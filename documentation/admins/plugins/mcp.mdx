@@ -1,0 +1,157 @@
+---
+title: "MCP"
+description: "Connect Model Context Protocol servers to Chat, custom agents, and Craft"
+icon: "server"
+---
+
+<Note>
+  In Onyx 5.0, MCP servers moved from their own admin page to **Admin Panel → Plugins**.
+  See [Where things moved](/admins/plugins/overview#where-things-moved-in-onyx-5).
+</Note>
+
+An MCP plugin connects Onyx to a server that uses the [Model Context Protocol](https://modelcontextprotocol.io/).
+Onyx is the MCP client. It discovers the tools on the server, and agents call those tools during a conversation.
+
+MCP plugins work in default Chat, in custom agents, and in Craft.
+Use an MCP plugin when a vendor publishes an MCP server, when you run your own server,
+or when no built-in [Craft App](/admins/plugins/craft_apps) exists for the application.
+
+<Info>
+  To let other MCP clients use Onyx as a server, see [Onyx MCP Server](/overview/onyx_anywhere/mcp_server).
+</Info>
+
+## Add an MCP server
+
+<Steps>
+  <Step title="Open the MCP catalog">
+    Go to **Admin Panel → Plugins**, click **Add**, then select **MCP**.
+
+    <img className="rounded-image" src="/assets/admins/plugins/add_mcp_catalog.webp" alt="The MCP catalog with Slack, HubSpot, Asana, Linear, Notion, Sentry, Atlassian, and Add custom MCP server"/>
+
+    Select a catalog entry to fill in the server name and URL for that vendor.
+    Select **Add custom MCP server** for any other server.
+  </Step>
+
+  <Step title="Enter the server details">
+    Enter a **Server Name** and the **MCP Server URL**.
+    Onyx checks the server and shows the authentication method and connection transport that it detects.
+
+    <img className="rounded-image" src="/assets/admins/plugins/mcp_custom_filled.webp" alt="The Add MCP Server dialog after Onyx detects no authentication and the Streamable HTTP transport"/>
+
+    The Onyx API server must be able to reach the URL. Onyx blocks private, loopback,
+    and link-local addresses during setup checks.
+  </Step>
+
+  <Step title="Set availability">
+    On the same page, set who can use the server and where it is available:
+
+    | Setting | Effect |
+    | --- | --- |
+    | **Access control** | **Public** lets all users use the server. **User groups** limits it to the groups you select. Group-restricted servers require a **Business** or **Enterprise** plan. A Group Manager must select at least one group they manage. |
+    | **Enable in default Chat** | Makes the tools available in chats without a custom agent. |
+    | **Enable for Craft** | Makes the tools available in Craft sessions and scheduled tasks. This switch shows only when Craft is enabled. |
+  </Step>
+
+  <Step title="Configure authentication">
+    Select an **Authentication Method**. Onyx marks the method it detected as **Recommended**.
+    See [Authentication](#authentication) for each method.
+
+    <img className="rounded-image" src="/assets/admins/plugins/mcp_auth_methods.webp" alt="The Authentication Method menu with OAuth, API Key, and No authentication"/>
+
+    Click **Connect**. Onyx lists the server's tools and opens its settings.
+  </Step>
+</Steps>
+
+## Authentication
+
+| Method | Who signs in | Use it when |
+| --- | --- | --- |
+| **No authentication** | Nobody | The server is public, or a network control protects it. |
+| **API Key**, shared | The admin, once for everyone | All users can share one service account. |
+| **API Key**, personal | Each user | Each user has a personal token, and the server must apply that user's permissions. |
+| **OAuth** | Each user | The server supports OAuth. Each user signs in with their own account. |
+| **OAuth Pass-through** | Each user, with their Onyx sign-in | Onyx sends the user's Onyx OAuth token to the server. This method shows only when Onyx sign-in uses OAuth, OIDC, or Google OAuth. |
+
+With personal API keys and OAuth,
+each user connects their own account from the [Plugins page](/overview/core_features/plugins).
+The MCP server then returns only data that the user's account can access.
+
+### OAuth
+
+OAuth is the best choice for most hosted vendor servers, such as Linear, Notion, Atlassian, and Sentry.
+
+<img className="rounded-image" src="/assets/admins/plugins/mcp_linear_oauth.webp" alt="OAuth settings with Set up automatically, Use your own OAuth client, and Use client metadata document"/>
+
+| Option | Effect |
+| --- | --- |
+| **Set up automatically** | Onyx registers an OAuth client with the server's published settings. Use this when the server supports dynamic client registration. |
+| **Use your own OAuth client** | Enter a client ID from your provider. Add a client secret only if the provider requires it. |
+| **Use client metadata document** | The provider fetches the Onyx client metadata document over the public internet. Turn this off if your Onyx instance is private. Onyx then uses automatic client registration. |
+
+If you create your own OAuth client, set its redirect URI to:
+
+```text
+https://<your-onyx-domain>/mcp/oauth/callback
+```
+
+<Warning>
+  Onyx builds OAuth callback URLs from `WEB_DOMAIN`. Set `WEB_DOMAIN` to the URL that users open in their browser.
+</Warning>
+
+### API key
+
+<img className="rounded-image" src="/assets/admins/plugins/mcp_api_key.webp" alt="API Key settings with a choice of personal or shared token and a test credential field"/>
+
+Enter a key to test the server and load its tools. A test key is saved to your account only.
+
+### Advanced settings
+
+<img className="rounded-image" src="/assets/admins/plugins/mcp_advanced.webp" alt="Advanced settings with Custom Headers and Connection transport"/>
+
+- **Custom Headers** are sent with every request. Use `{api_key}` for each user's API key and `{user_email}` for the user's email address.
+  Any other `{placeholder}` asks each user for a value when they connect.
+- **Connection transport** is **Streamable HTTP** by default. Onyx tries Streamable HTTP first and then SSE
+  during the setup check. Select **SSE (legacy)** only if the server supports SSE alone.
+
+## Manage tools
+
+<img className="rounded-image" src="/assets/admins/plugins/mcp_tab_tools.webp" alt="The Tools tab with the list of tools from an MCP server"/>
+
+- In **Available tools**, turn tools on or off for the whole workspace.
+- Click **Refresh tools** after the server adds, removes, or changes tools. Save or discard pending changes first.
+
+When Craft is enabled, the **Approval settings** tab sets the Craft policy for each tool.
+
+<img className="rounded-image" src="/assets/admins/plugins/mcp_tools_approval.webp" alt="Approval settings with Auto-approve, Ask, and Disabled for each tool"/>
+
+| Policy | Effect in Craft |
+| --- | --- |
+| **Auto-approve** | The tool runs without a prompt. |
+| **Ask** | Craft asks the user to approve each call. |
+| **Disabled** | Craft never runs the tool. |
+
+Tool availability and Craft policies are separate.
+A tool that you turn off in **Available tools** is not available anywhere.
+
+<Warning>
+  Approval policies apply only in Craft. In default Chat and custom agents,
+  agents call enabled MCP tools without a prompt.
+</Warning>
+
+## Configuration tab
+
+<img className="rounded-image" src="/assets/admins/plugins/mcp_after_connect.webp" alt="The Configuration tab for an MCP server"/>
+
+| Setting | Effect |
+| --- | --- |
+| **Enable in default Chat** | Adds or removes the server from default Chat for the workspace. Custom agents keep their tools. |
+| **Let users manage approval settings** | Lets users change Craft approval policies for tools that you did not disable. |
+
+If you change the server URL, Onyx removes the stored connections for that server. Users must connect again.
+
+To delete a server, use the trash icon on the Plugins page. The settings dialog has no delete button.
+
+## Use MCP tools in custom agents
+
+Open the agent editor and select the MCP server under **Actions**. Then select the tools the agent can use.
+See [Agents](/admins/agents/overview).

@@ -1,0 +1,238 @@
+---
+title: "Understanding Permissions"
+description: "How group-based permissions, Group Managers, and document access work in Onyx"
+icon: "shield-check"
+---
+
+Onyx permissions are based on groups.
+A user's access is the combination of the permissions from every group they belong to,
+plus any scoped access they receive as a **Group Manager**.
+
+<Info>
+  This permission system is available in Onyx **v4.7 and later**. If you are using an older version,
+  see [Users and Groups before v4.7](/admins/user_management/users_and_groups_legacy).
+</Info>
+
+Migrating from the old Curator role model? See [What's Changing in Permissions](/admins/permissions/whats_changing).
+
+The main rule is simple: **permissions expand**. If a user belongs to multiple groups,
+Onyx adds those permissions together. Being in one group does not take away access granted by another group.
+
+## The Permission Layers
+
+Think of permissions as layers. Each layer can add more access for a user.
+
+<div className="permission-pyramid" aria-label="Permission layers expand from a group-less service account to Basic access, Group Manager access, group permissions, and Admin access.">
+  <div className="permission-pyramid-layer permission-pyramid-limited">
+    <strong>Service account, no group</strong>
+    <span>Chat only &mdash; no search, no admin access</span>
+  </div>
+  <div className="permission-pyramid-layer permission-pyramid-basic">
+    <strong>Basic</strong>
+    <span>Core access for chat, search, and personal use</span>
+  </div>
+  <div className="permission-pyramid-layer permission-pyramid-scoped">
+    <strong>Group Manager</strong>
+    <span>Scoped management for one group's members and resources</span>
+  </div>
+  <div className="permission-pyramid-layer permission-pyramid-org">
+    <strong>Group permissions</strong>
+    <span>Organization-wide permissions granted to every member of a group</span>
+  </div>
+  <div className="permission-pyramid-layer permission-pyramid-admin">
+    <strong>Admin</strong>
+    <span>Full workspace access</span>
+  </div>
+</div>
+
+<Note>
+  The layers show **how far access reaches**, not a strict ranking.
+  A Group Manager and a group permission are different mechanisms:
+  a Group Manager's access always stays inside the groups they manage,
+  while a group permission applies across the whole organization. Depending on what you grant,
+  one is not automatically "more" than the other.
+</Note>
+
+## Default Groups
+
+Onyx includes two default groups:
+
+| Group | Purpose |
+|---|---|
+| Basic | Gives users core platform access, such as chat, search, and personal use. |
+| Admin | Gives full workspace administration access. |
+
+Standard users are assigned to default groups based on their access level.
+
+Custom groups let you grant specific permissions to the users in that group.
+
+<Info>
+  Custom groups and configurable group permissions require a **Business** or **Enterprise** plan, or Onyx Cloud.
+  Community Edition has the **Admin** and **Basic** groups only.
+</Info>
+
+The **Basic** group has one permission you can change: **Create User Access Token**. It is on by default.
+Turn it off on the Basic group's page to stop users from creating personal access tokens.
+
+<Warning>
+  Because all access comes from groups, a user who belongs to **no group at all** has no permissions.
+</Warning>
+
+## Service Accounts and Groups
+
+A service account gets its access the same way a user does: from the groups it belongs to.
+You choose those groups in the **Groups** selector when you create the API key.
+
+A service account that belongs to **no group** can post to chat,
+but it cannot search and it cannot reach any admin page. Only service accounts land here;
+regular users always start in a group.
+
+<Tip>
+  If an API key can chat but returns nothing from search, check whether its service account is in a group.
+</Tip>
+
+## How Onyx Calculates a User's Permissions
+
+Onyx checks every group a user belongs to and combines the permissions from those groups.
+If the same user is also made a **Group Manager** from a group detail page, Onyx adds that scoped manager access too.
+
+For example, say Priya has these assignments:
+
+| Assignment | What it grants |
+|---|---|
+| Member of **Basic** | Core platform access. |
+| Member of **Analytics Viewers** | Any organization-wide permissions granted to the Analytics Viewers group. |
+| Group Manager of **Engineering** | Scoped management access for Engineering's members and resources. |
+
+Priya receives all three sets of access. The Analytics Viewers group does not limit her Engineering manager access,
+and her Engineering manager access does not remove anything from Basic.
+
+## Group Permissions
+
+Group permissions are granted to a group and apply to every member of that group.
+
+<Warning>
+  Group permissions are organization-wide. If you grant **Manage Connectors & Document Sets** to a group,
+  every member of that group can manage connectors and document sets across the workspace.
+</Warning>
+
+Common examples:
+
+- Give an IT administrators group **Manage Connectors & Document Sets** so they can manage all connectors.
+- Give a model operations group **Manage LLMs** so they can configure language models.
+- Give an analytics group **View Query History** so they can review query activity.
+- Give a developer platform group **Manage Actions** so they can maintain MCP and OpenAPI plugins.
+
+You set these permissions on the group's detail page in the Admin Panel.
+For a tour of where the Users and Groups pages live, see [Users and Groups](/admins/user_management/users_and_groups).
+
+<img className="rounded-image" src="/assets/admins/user_management/group_permission_toggle.webp" alt="Group Permissions panel showing a toggle for each available permission"/>
+
+## Group Managers
+
+A **Group Manager** is a user who can manage one specific group from that group's detail page.
+
+Group Managers are useful when a team lead should manage their own team's users and resources,
+but should not receive organization-wide admin powers.
+
+Scoped to the group they manage, a Group Manager can:
+
+- Add and remove members from that group.
+- Manage connectors and document sets shared only with that group.
+- Manage agents shared only with that group.
+- Manage skills shared only with that group.
+- Manage plugins through the agents shared with that group.
+- Restrict an MCP plugin to the groups they manage. They must select at least one of their groups.
+
+A Group Manager cannot:
+
+- Manage resources that are not shared with a group they manage.
+- Make a resource public.
+- Share a resource with a group they do not manage.
+- Grant organization-wide permissions.
+
+You promote a member to Group Manager from the member list on that group's detail page.
+
+<img className="rounded-image" src="/assets/admins/user_management/group_manager_row.webp" alt="Edit Group member list with one member marked as Manager"/>
+
+## Group Permission vs. Group Manager
+
+| Mechanism | Who receives it? | Scope | Best for |
+|---|---|---|---|
+| Group permission | Every member of the group | Organization-wide | Teams that need the same workspace-wide capability. |
+| Group Manager | One member on one group detail page | Only that group | Team leads who should manage one group's members and resources. |
+
+## Available Group Permissions
+
+The following permissions can be assigned to custom groups:
+
+| Permission | What it allows |
+|---|---|
+| Manage LLMs | Add and update language model configurations. |
+| Manage Connectors & Document Sets | Add and update connectors and document sets across the workspace. |
+| Manage Actions | Add and update MCP and OpenAPI plugins on the **Plugins** page across the workspace. Only full admins can add Craft Apps or change what is on in default Chat. |
+| Manage Groups | Add and update user groups across the workspace. |
+| Manage Service Accounts | Add and update service accounts and their API keys. |
+| Manage Slack/Discord Bots | Add and update Onyx integrations with Slack or Discord. |
+| Create Agents | Create and edit the user's own agents. |
+| Manage Agents | View and update public and shared agents across the workspace. |
+| View Agent Analytics | View analytics for agents the user owns. Users with **Manage Agents** can view analytics for all agents. |
+| View Query History | View query history across the workspace. |
+| Create User Access Token | Create personal access tokens. This is the only permission you can toggle on the **Basic** group. |
+
+<Note>
+  **View Agent Analytics** is not scoped through Group Manager access. The permission can be granted to a group,
+  but agent-level analytics still require the user to own the agent unless the user also has **Manage Agents**.
+</Note>
+
+<Info>
+  Community Edition has no group permission configuration, so **Create Agents** is available to everyone.
+  The permissions in this table are configured per group on the **Business** and **Enterprise** plans.
+</Info>
+
+## Document Access Is Separate
+
+Permissions decide what a user can do in the Admin Panel and which resources they can manage.
+Document visibility is still controlled by connector and resource access settings.
+
+Connectors can be:
+
+- **Private**: Visible only to the creator, plus any groups explicitly granted access.
+- **Public**: Visible to all Onyx users.
+- **Auto-sync**: Restricted using permissions synced from the source system.
+- **Auto-sync, restricted**: Synced permissions apply, and only members of the selected groups can see the documents.
+  Turn on **Restrict Access to Groups** on the connector.
+  An admin must first turn on **Allow Group Restrictions on Permission-Synced Connectors** on **Security & Hardening**.
+  Requires a **Business** or **Enterprise** plan.
+
+Group-based document access needs a **Business** or **Enterprise** plan. In Community Edition,
+a document is visible to its connector's creator and to everyone when the connector is public.
+
+## Common Setups
+
+| Goal | Recommended setup |
+|---|---|
+| Give everyone normal workspace access | Keep users in **Basic**. |
+| Give a few people full administration access | Add them to **Admin**. |
+| Let IT manage all connectors | Create an IT group and grant **Manage Connectors & Document Sets**. |
+| Let a team lead manage only Engineering resources | Make the user a **Group Manager** on the Engineering group detail page. |
+| Let analysts review query history | Create an Analytics group and grant **View Query History**. |
+
+## Frequently Asked Questions
+
+<AccordionGroup>
+  <Accordion title="Do service accounts use group permissions?">
+    Yes. Service accounts receive permissions from their groups exactly like a user. Bot, anonymous,
+    and external placeholder accounts are system-managed and are not managed like regular users.
+  </Accordion>
+
+  <Accordion title="How do anonymous users fit into permissions?">
+    Anonymous users only exist when anonymous access is enabled, and they can only reach the chat surface.
+    They have no account and belong to no group,
+    so they cannot be given permissions and never appear in the permission layers as a separate level.
+  </Accordion>
+
+  <Accordion title="Can I create custom roles?">
+    Yes. Create a custom group and assign the permissions that match the role you want.
+  </Accordion>
+</AccordionGroup>
