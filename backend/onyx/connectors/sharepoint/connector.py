@@ -324,6 +324,26 @@ def _create_entity_failure(
     )
 
 
+def _build_driveitem_metadata(
+    driveitem: DriveItemData, drive: SiteDrive
+) -> dict[str, str | list[str]]:
+    """Metadata surfaced to the LLM and to search filters for a drive item.
+
+    "path" is the human-readable folder path of the item inside its document
+    library (percent-decoded, without the file name), e.g. "Engineering/API".
+    It is omitted for items at the root of the library.
+    """
+    metadata: dict[str, str | list[str]] = {"drive": drive.display_name}
+    folder_path = extract_folder_path_from_parent_reference(
+        driveitem.parent_reference_path
+    )
+    if folder_path:
+        decoded_path = unquote(folder_path).strip("/")
+        if decoded_path:
+            metadata["path"] = decoded_path
+    return metadata
+
+
 def _convert_driveitem_to_document_with_permissions(
     driveitem: DriveItemData,
     drive: SiteDrive,
@@ -380,7 +400,7 @@ def _convert_driveitem_to_document_with_permissions(
                 email=driveitem.last_modified_by_email or "",
             )
         ],
-        metadata={"drive": drive.display_name},
+        metadata=_build_driveitem_metadata(driveitem, drive),
         parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
         file_id=staged_file_id,
     )
