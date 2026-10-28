@@ -20,6 +20,9 @@ from typing_extensions import override
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.cross_connector_utils.tabular_section_utils import (
+    is_tabular_file,
+)
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.file.connector import _process_file
 from onyx.connectors.interfaces import (
@@ -479,6 +482,17 @@ class DirectoryConnector(
             )
 
         document = documents[0]
+        if is_tabular_file(file_name) and document.file_id == document_id:
+            # `_process_file` stamps `Document.file_id` with its `file_id`
+            # argument for tabular files (the "stage these bytes" signal).
+            # Here that argument is the Directory document id, which is not
+            # a file-store record -- the raw original is only staged by
+            # docprocessing callbacks, so this stamp is a dangling pointer
+            # and a reindex would also overwrite any genuine staged-file
+            # reference with it. Clear exactly the document-id stamp; a
+            # reference that differs from the document id is a real staged
+            # file and must survive.
+            document.file_id = None
         document.id = document_id
         document.source = DocumentSource.DIRECTORY
         document.title = file_name
