@@ -1,6 +1,6 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { STEP_CONFIG, STEP_NAVIGATION } from "@/lib/onboarding/constants";
 import {
@@ -8,7 +8,7 @@ import {
   OnboardingState,
   OnboardingStep,
 } from "@/lib/onboarding/types";
-import { Button, Card, Text } from "@opal/components";
+import { Button, Card, Presence, Text } from "@opal/components";
 import { SvgChevronLeft, SvgProgressCircle, SvgX } from "@opal/icons";
 import { ContentAction, Section } from "@opal/layouts";
 
@@ -36,6 +36,17 @@ function OnboardingHeader({
   const stepButtonText = isCompleteStep
     ? t("header.finishButton.label")
     : t("header.nextButton.label");
+  // While the counter fades out on the way back to Welcome, it keeps the last
+  // real step number instead of showing step 0.
+  const [counterStepIndex, setCounterStepIndex] = useState(
+    onboardingState.stepIndex
+  );
+  if (
+    onboardingState.stepIndex > 0 &&
+    onboardingState.stepIndex !== counterStepIndex
+  ) {
+    setCounterStepIndex(onboardingState.stepIndex);
+  }
   const hasPreviousStep =
     STEP_NAVIGATION[onboardingState.currentStep].prev !== undefined;
 
@@ -65,16 +76,17 @@ function OnboardingHeader({
           rightChildren={
             stepButtonText ? (
               <Section flexDirection="row">
-                {!isWelcomeStep && (
+                {/* The step counter and back button appear past Welcome. */}
+                <Presence show={!isWelcomeStep} from="end" width="fit">
                   <Text as="p" font="main-ui-body" color="text-03">
                     {t("header.progress.label", {
-                      current: onboardingState.stepIndex,
+                      current: counterStepIndex,
                       total: onboardingState.totalSteps,
                     })}
                   </Text>
-                )}
+                </Presence>
                 <Section flexDirection="row" gap={1} width="fit">
-                  {hasPreviousStep && (
+                  <Presence show={hasPreviousStep} from="end" width="fit">
                     <Button
                       prominence="secondary"
                       icon={SvgChevronLeft}
@@ -82,7 +94,7 @@ function OnboardingHeader({
                       aria-label={tCommon("backButton.label")}
                       onClick={onboardingActions.prevStep}
                     />
-                  )}
+                  </Presence>
                   <Button
                     disabled={!onboardingState.isButtonActive}
                     onClick={handleButtonClick}

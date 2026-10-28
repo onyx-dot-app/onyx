@@ -146,12 +146,12 @@ export {
 /* Fold */
 export { Fold, type FoldProps } from "@opal/components/fold/components";
 
-/* Enter */
+/* Presence */
 export {
-  Enter,
-  type EnterProps,
-  type EnterVariant,
-} from "@opal/components/enter/components";
+  Presence,
+  type PresenceProps,
+  type PresenceSide,
+} from "@opal/components/presence/components";
 
 /* Swap */
 export {

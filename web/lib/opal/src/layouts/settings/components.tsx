@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { cn } from "@opal/utils";
-import { Divider, Button, Enter, Spacer } from "@opal/components";
+import { Divider, Button, Presence, Spacer } from "@opal/components";
 import type { TagProps } from "@opal/components";
 import type {
   IconFunctionComponent,
@@ -71,7 +71,7 @@ interface SettingsRootProps extends WithoutStyles<
 > {
   width?: Extract<SizeVariants, "sm" | "md" | "lg" | "xl" | "full">;
   /**
-   * The body animates in with `Enter` when the page mounts; the header does
+   * The body animates in with `Presence` when the page mounts; the header does
    * not. `false` renders it at once. @default true
    */
   animateEnter?: boolean;
@@ -363,7 +363,11 @@ function SettingsBody({ gap = 8, children, ...props }: SettingsBodyProps) {
     </div>
   );
   // Only the content animates in; the error and loading states do not.
-  return animateEnter && !error && !loading ? <Enter>{body}</Enter> : body;
+  return animateEnter && !error && !loading ? (
+    <Presence>{body}</Presence>
+  ) : (
+    body
+  );
 }
 
 // ---------------------------------------------------------------------------

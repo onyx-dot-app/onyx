@@ -23,7 +23,7 @@ import {
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useUser } from "@/providers/UserProvider";
-import { Enter, LinkButton, MessageCard } from "@opal/components";
+import { Presence, LinkButton, MessageCard } from "@opal/components";
 
 import PlansView from "./PlansView";
 import CheckoutView from "./CheckoutView";
@@ -480,7 +480,7 @@ export default function BillingPage() {
     return (
       <>
         {showLicenseActivationInput && !isManualLicenseOnly && (
-          <Enter>
+          <Presence>
             <LicenseActivationCard
               isOpen={showLicenseActivationInput}
               onSuccess={handleLicenseActivated}
@@ -490,7 +490,7 @@ export default function BillingPage() {
                 setShowLicenseActivationInput(false);
               }}
             />
-          </Enter>
+          </Presence>
         )}
         <FooterLinks
           hasSubscription={!!hasSubscription || !!licenseData?.has_license}
