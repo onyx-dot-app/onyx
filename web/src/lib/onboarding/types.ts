@@ -1,6 +1,3 @@
-import type { Route } from "next";
-import type { IconProps } from "@opal/types";
-
 export enum OnboardingStep {
   Welcome = "welcome",
   Name = "name",
@@ -44,14 +41,6 @@ export type OnboardingAction =
   | { type: OnboardingActionType.SET_LOADING; isLoading: boolean }
   | { type: OnboardingActionType.SET_ERROR; error: string | undefined }
   | { type: OnboardingActionType.RESET };
-
-export type FinalStepItemProps = {
-  title: string;
-  description: string;
-  icon: React.FunctionComponent<IconProps>;
-  buttonText: string;
-  buttonHref: Route;
-};
 
 export type OnboardingActions = {
   nextStep: () => void;

@@ -1,53 +1,66 @@
 "use client";
 
-import React from "react";
-import Link from "next/link";
+import { memo } from "react";
+import type { Route } from "next";
+import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Button, Card } from "@opal/components";
-import { FINAL_SETUP_CONFIG } from "@/lib/onboarding/constants";
-import { FinalStepItemProps } from "@/lib/onboarding/types";
+import { Button, SelectCard } from "@opal/components";
 import { SvgExternalLink } from "@opal/icons";
-import { Section } from "@/layouts/general-layouts";
-import { ContentAction } from "@opal/layouts";
+import { ContentAction, Section } from "@opal/layouts";
+import type { IconFunctionComponent } from "@opal/types";
+import { FINAL_SETUP_CONFIG } from "@/lib/onboarding/constants";
 import { useSettings } from "@/lib/settings/hooks";
+import { noProp } from "@/lib/utils";
 
-const FinalStepItem = React.memo(
-  ({
-    title,
-    description,
-    icon: Icon,
-    buttonText,
-    buttonHref,
-  }: FinalStepItemProps) => {
-    const isExternalLink = buttonHref.startsWith("http");
-    const linkProps = isExternalLink
-      ? { target: "_blank", rel: "noopener noreferrer" }
-      : {};
+interface FinalStepItemProps {
+  icon: IconFunctionComponent;
+  title: string;
+  description: string;
+  buttonText: string;
+  buttonHref: Route;
+}
 
-    return (
-      <Card color="transparent" border="solid" padding={1} rounding={4}>
-        <Section alignItems="start" height="fit">
-          <ContentAction
-            icon={Icon}
-            title={title}
-            description={description}
-            sizePreset="main-ui"
-            variant="section"
-            padding={1}
-            rightChildren={
-              <Link href={buttonHref} {...linkProps}>
-                <Button prominence="tertiary" rightIcon={SvgExternalLink}>
-                  {buttonText}
-                </Button>
-              </Link>
-            }
-          />
-        </Section>
-      </Card>
-    );
-  }
-);
-FinalStepItem.displayName = "FinalStepItem";
+/** One optional setup: the card and its button both open the page. */
+function FinalStepItemInner({
+  icon,
+  title,
+  description,
+  buttonText,
+  buttonHref,
+}: FinalStepItemProps) {
+  const router = useRouter();
+
+  return (
+    <SelectCard
+      state="empty"
+      padding={1}
+      rounding={4}
+      onClick={() => router.push(buttonHref)}
+    >
+      <ContentAction
+        icon={icon}
+        title={title}
+        description={description}
+        sizePreset="main-ui"
+        variant="section"
+        padding={2}
+        rightChildren={
+          <Button
+            prominence="tertiary"
+            rightIcon={SvgExternalLink}
+            href={buttonHref}
+            // The link navigates itself; the card must not navigate again.
+            onClick={noProp()}
+          >
+            {buttonText}
+          </Button>
+        }
+      />
+    </SelectCard>
+  );
+}
+
+const FinalStepItem = memo(FinalStepItemInner);
 
 export default function FinalStep() {
   const t = useTranslations("onboarding");
