@@ -96,6 +96,16 @@ def _provider(credentials: dict[str, Any]) -> OnyxStaticCredentialsProvider:
     )
 
 
+def _ops(test_secrets: dict[TestSecret, str]) -> AzureDataLakeSourceOperations:
+    return AzureDataLakeSourceOperations(
+        credentials_provider=_provider(_certificate_credentials(test_secrets)),
+        connector_specific_config={
+            "account_name": ACCOUNT,
+            "container_name": CONTAINER,
+        },
+    )
+
+
 def _everyone_group(test_secrets: dict[TestSecret, str]) -> str:
     tenant = test_secrets[TestSecret.PERM_SYNC_SHAREPOINT_DIRECTORY_ID].strip().lower()
     return f"entra_tenant_everyone:{tenant}"
@@ -146,29 +156,29 @@ def test_other_is_the_tenant_everyone_group(
     assert access.external_user_group_ids == {_everyone_group(test_secrets)}
 
 
-def test_other_minus_a_group_lists_the_tenant_without_its_members(
-    synced: dict[str, ExternalAccess],
+def test_other_minus_a_group_is_the_tenant_without_its_members(
+    synced: dict[str, ExternalAccess], test_secrets: dict[TestSecret, str]
 ) -> None:
     access = synced[OTHER_MINUS_GROUP_A]
+    (exclusion_group,) = access.external_user_group_ids - {RBAC_READERS_GROUP}
 
-    assert {TEST_USER, SUBASH} <= access.external_user_emails
-    assert RAUNAK not in access.external_user_emails
-    assert access.external_user_group_ids == {RBAC_READERS_GROUP}
+    members = {
+        group.id: set(group.user_emails)
+        for group in tenant_groups(_ops(test_secrets), {exclusion_group})
+    }[exclusion_group]
+
+    assert access.external_user_emails == {TEST_USER}
+    assert SUBASH in members
+    assert RAUNAK not in members
 
 
 def test_the_group_sync_reads_the_fixture_groups(
     test_secrets: dict[TestSecret, str],
 ) -> None:
-    credentials = _certificate_credentials(test_secrets)
-    ops = AzureDataLakeSourceOperations(
-        credentials_provider=_provider(credentials),
-        connector_specific_config={
-            "account_name": ACCOUNT,
-            "container_name": CONTAINER,
-        },
-    )
-
-    groups = {group.id: set(group.user_emails) for group in tenant_groups(ops)}
+    groups = {
+        group.id: set(group.user_emails)
+        for group in tenant_groups(_ops(test_secrets), set())
+    }
 
     assert groups[RBAC_READERS_GROUP] == {SUBASH}
     assert groups[ACL_GROUP_A] == {RAUNAK}
