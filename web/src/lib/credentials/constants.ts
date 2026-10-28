@@ -126,9 +126,9 @@ interface MicrosoftAppSpecOptions {
 }
 
 /**
- * A Microsoft app registration (SharePoint, OneDrive, Outlook, Teams): a
- * client id and directory id, plus either a client secret or a PFX
- * certificate. Keys take the source's prefix, like `sp_client_id`.
+ * A Microsoft app registration (SharePoint, OneDrive, Outlook, Teams, Azure
+ * Data Lake): a client id and directory id, plus either a client secret or a
+ * PFX certificate. Keys take the source's prefix, like `sp_client_id`.
  */
 function microsoftAppSpec<const TPrefix extends string>(
   prefix: TPrefix,
@@ -179,6 +179,41 @@ function microsoftAppSpec<const TPrefix extends string>(
     ],
   };
 }
+
+const AZURE_DATALAKE_APP_SPEC = microsoftAppSpec("adls", {
+  brandName: "Azure Data Lake",
+  fileType: FileTypeCategory.SHAREPOINT_PFX_FILE,
+  privateKeyDisplayName: "privateKey",
+  certificateLabel: "certificateAuthentication",
+  descriptions: {
+    clientSecret: "azureDatalakeClientSecret",
+    certificate: "azureDatalakeCertificate",
+  },
+});
+
+/**
+ * Azure Data Lake Storage: a Microsoft app registration, or a storage account
+ * key. An account key opens one storage account only, so it names that account.
+ */
+const AZURE_DATALAKE_SPEC = defineCredentialSpec({
+  brandName: AZURE_DATALAKE_APP_SPEC.brandName,
+  fields: {
+    ...AZURE_DATALAKE_APP_SPEC.fields,
+    adls_account_name: text("storageAccountName"),
+    adls_account_key: secret("accountKey", {
+      hint: { key: "azureDatalakeAccountKey" },
+    }),
+  },
+  methods: [
+    ...AZURE_DATALAKE_APP_SPEC.methods,
+    {
+      value: "account_key",
+      label: "accountKey",
+      description: "azureDatalakeAccountKey",
+      fields: ["adls_account_name", "adls_account_key"],
+    },
+  ],
+});
 
 /**
  * A Google account (Gmail, Google Drive): a service account typed in, or an
@@ -434,6 +469,7 @@ export const CREDENTIAL_SPECS = {
       certificate: "outlookCertificate",
     },
   }),
+  azure_datalake: AZURE_DATALAKE_SPEC,
   zendesk: defineCredentialSpec({
     brandName: "Zendesk",
     fields: {

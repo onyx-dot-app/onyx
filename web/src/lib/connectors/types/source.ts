@@ -68,6 +68,7 @@ export enum ValidSources {
   Braintrust = "braintrust",
   Lumapps = "lumapps",
   YouTrack = "youtrack",
+  AzureDatalake = "azure_datalake",
   Canvas = "canvas",
   Zoom = "zoom",
 

@@ -1445,6 +1445,9 @@
         "s3": {
           "description": "Buckets de armazenamento da AWS"
         },
+        "azureDatalake": {
+          "description": "Arquivos em contêineres do Azure Data Lake Storage"
+        },
         "r2": {
           "description": "Buckets de armazenamento em nuvem"
         },
@@ -4593,6 +4596,23 @@
             }
           }
         },
+        "azure_datalake": {
+          "description": "Configurar o conector do Azure Data Lake Storage",
+          "fields": {
+            "account_name": {
+              "label": "Nome da Conta de Armazenamento",
+              "description": "O nome da conta de armazenamento, por ex. contosodata. A conta deve ter um namespace hierárquico."
+            },
+            "container_name": {
+              "label": "Nome do Contêiner",
+              "description": "O contêiner (sistema de arquivos) a indexar."
+            },
+            "path_prefix": {
+              "label": "Prefixo de Caminho",
+              "description": "Um diretório no contêiner, por ex. reports/2026. Deixe vazio para indexar todo o contêiner."
+            }
+          }
+        },
         "r2": {
           "description": "Configurar conector do R2",
           "fields": {
@@ -5195,6 +5215,8 @@
         "integrationToken": "Token de integração do {source}",
         "accessKey": "Chave de acesso do {source}",
         "accessKeySecret": "Segredo da chave de acesso do {source}",
+        "storageAccountName": "Nome da Conta de Armazenamento",
+        "accountKey": "Chave de Conta do {source}",
         "key": "Chave do {source}",
         "secret": "Segredo do {source}",
         "roleArn": "ARN da função da {source}",
@@ -5216,6 +5238,7 @@
         "jiraUserEmail": "Obrigatório para o Jira Cloud.",
         "lumappsServiceUser": "O usuário em nome do qual indexar.",
         "youtrackToken": "Um token permanente de um usuário do YouTrack que pode ler todos os projetos a indexar. Crie-o no seu perfil do YouTrack, em Segurança da conta.",
+        "azureDatalakeAccountKey": "No portal do Azure, abra a conta de armazenamento, depois Segurança + rede, depois Chaves de acesso.",
         "outlineBaseUrl": "Por exemplo, https://app.getoutline.com ou a URL da sua instância própria.",
         "pfxFile": "Envie o arquivo `.pfx` com a chave privada do registro do aplicativo. Deve ter menos de 10 KB.",
         "testrailBaseUrl": "Por exemplo, https://yourcompany.testrail.io.",
@@ -5228,6 +5251,7 @@
           "certificateAuthentication": "Autenticação por certificado",
           "certificate": "Certificado",
           "accessKeyAndSecret": "Chave de acesso e segredo",
+          "accountKey": "Chave de Conta",
           "iamRole": "Função do IAM",
           "assumeRole": "Assumir função",
           "serviceAccount": "Conta de serviço",
@@ -5240,6 +5264,9 @@
           "teamsCertificate": "O conector entra com um certificado enviado ao registro do aplicativo. Informe o ID do cliente, o ID do diretório, o pacote PFX e a senha dele. Obrigatório para Incluir anexos, que lê os arquivos dos canais e seus leitores no SharePoint.",
           "outlookClientSecret": "O conector entra com um segredo do cliente do registro do aplicativo. Informe o ID do cliente, o ID do diretório e o segredo.",
           "outlookCertificate": "O conector entra com um certificado enviado ao registro do aplicativo. Informe o ID do cliente, o ID do diretório, o pacote PFX e a senha dele.",
+          "azureDatalakeClientSecret": "O conector entra com um segredo do cliente do registro de aplicativo. Informe o ID do cliente, o ID do diretório e o segredo. Atribua ao aplicativo a função Storage Blob Data Reader no contêiner.",
+          "azureDatalakeCertificate": "O conector entra com um certificado enviado ao registro de aplicativo. Informe o ID do cliente, o ID do diretório, o pacote PFX e sua senha. Atribua ao aplicativo a função Storage Blob Data Reader no contêiner.",
+          "azureDatalakeAccountKey": "O conector assina cada solicitação com uma chave da conta de armazenamento. Informe o nome da conta e uma de suas chaves de acesso.",
           "s3AssumeRole": "Neste modo, a instância do Amazon EC2 assume a função que já tem para acessar o S3. Nenhuma outra credencial é necessária."
         }
       },

@@ -1445,6 +1445,9 @@
         "s3": {
           "description": "AWS 스토리지 버킷"
         },
+        "azureDatalake": {
+          "description": "Azure Data Lake Storage 컨테이너의 파일"
+        },
         "r2": {
           "description": "클라우드 스토리지 버킷"
         },
@@ -4593,6 +4596,23 @@
             }
           }
         },
+        "azure_datalake": {
+          "description": "Azure Data Lake Storage 커넥터 구성",
+          "fields": {
+            "account_name": {
+              "label": "스토리지 계정 이름",
+              "description": "스토리지 계정의 이름(예: contosodata). 계정에 계층 구조 네임스페이스가 있어야 합니다."
+            },
+            "container_name": {
+              "label": "컨테이너 이름",
+              "description": "인덱싱할 컨테이너(파일 시스템)입니다."
+            },
+            "path_prefix": {
+              "label": "경로 접두사",
+              "description": "컨테이너의 디렉터리(예: reports/2026). 전체 컨테이너를 인덱싱하려면 비워 두세요."
+            }
+          }
+        },
         "r2": {
           "description": "R2 커넥터 구성",
           "fields": {
@@ -5195,6 +5215,8 @@
         "integrationToken": "{source} 통합 토큰",
         "accessKey": "{source} 액세스 키",
         "accessKeySecret": "{source} 액세스 키 시크릿",
+        "storageAccountName": "스토리지 계정 이름",
+        "accountKey": "{source} 계정 키",
         "key": "{source} 키",
         "secret": "{source} 시크릿",
         "roleArn": "{source} 역할 ARN",
@@ -5216,6 +5238,7 @@
         "jiraUserEmail": "Jira Cloud에 필요합니다.",
         "lumappsServiceUser": "대신 인덱싱할 사용자입니다.",
         "youtrackToken": "인덱싱할 모든 프로젝트를 읽을 수 있는 YouTrack 사용자의 영구 토큰입니다. YouTrack 프로필의 계정 보안에서 만드세요.",
+        "azureDatalakeAccountKey": "Azure Portal에서 스토리지 계정을 열고 보안 + 네트워킹, 액세스 키를 차례로 엽니다.",
         "outlineBaseUrl": "예: https://app.getoutline.com 또는 자체 호스팅 URL.",
         "pfxFile": "앱 등록의 개인 키가 포함된 `.pfx` 파일을 업로드하세요. 10KB 미만이어야 합니다.",
         "testrailBaseUrl": "예: https://yourcompany.testrail.io.",
@@ -5228,6 +5251,7 @@
           "certificateAuthentication": "인증서 인증",
           "certificate": "인증서",
           "accessKeyAndSecret": "액세스 키 및 시크릿",
+          "accountKey": "계정 키",
           "iamRole": "IAM 역할",
           "assumeRole": "역할 수임",
           "serviceAccount": "서비스 계정",
@@ -5240,6 +5264,9 @@
           "teamsCertificate": "커넥터가 앱 등록에 업로드된 인증서로 로그인합니다. 클라이언트 ID, 디렉터리 ID, PFX 번들과 그 비밀번호를 입력하세요. 첨부 파일 포함에 필요하며, 이 기능은 SharePoint에서 채널 파일과 해당 열람자를 읽습니다.",
           "outlookClientSecret": "커넥터가 앱 등록의 클라이언트 시크릿으로 로그인합니다. 클라이언트 ID, 디렉터리 ID, 시크릿을 입력하세요.",
           "outlookCertificate": "커넥터가 앱 등록에 업로드된 인증서로 로그인합니다. 클라이언트 ID, 디렉터리 ID, PFX 번들과 그 비밀번호를 입력하세요.",
+          "azureDatalakeClientSecret": "커넥터는 앱 등록의 클라이언트 암호로 로그인합니다. 클라이언트 ID, 디렉터리 ID, 암호를 입력하세요. 컨테이너에서 앱에 Storage Blob Data Reader 역할을 부여하세요.",
+          "azureDatalakeCertificate": "커넥터는 앱 등록에 업로드된 인증서로 로그인합니다. 클라이언트 ID, 디렉터리 ID, PFX 번들과 그 암호를 입력하세요. 컨테이너에서 앱에 Storage Blob Data Reader 역할을 부여하세요.",
+          "azureDatalakeAccountKey": "커넥터는 스토리지 계정의 키로 각 요청에 서명합니다. 계정 이름과 액세스 키 중 하나를 입력하세요.",
           "s3AssumeRole": "이 모드를 선택하면 Amazon EC2 인스턴스가 기존 역할을 수임하여 S3에 액세스합니다. 추가 자격 증명은 필요하지 않습니다."
         }
       },

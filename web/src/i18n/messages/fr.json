@@ -1445,6 +1445,9 @@
         "s3": {
           "description": "Buckets de stockage AWS"
         },
+        "azureDatalake": {
+          "description": "Fichiers dans des conteneurs Azure Data Lake Storage"
+        },
         "r2": {
           "description": "Buckets de stockage cloud"
         },
@@ -4593,6 +4596,23 @@
             }
           }
         },
+        "azure_datalake": {
+          "description": "Configurer le connecteur Azure Data Lake Storage",
+          "fields": {
+            "account_name": {
+              "label": "Nom du Compte de Stockage",
+              "description": "Le nom du compte de stockage, par ex. contosodata. Le compte doit avoir un espace de noms hiérarchique."
+            },
+            "container_name": {
+              "label": "Nom du Conteneur",
+              "description": "Le conteneur (système de fichiers) à indexer."
+            },
+            "path_prefix": {
+              "label": "Préfixe de Chemin",
+              "description": "Un répertoire du conteneur, par ex. reports/2026. Laissez vide pour indexer tout le conteneur."
+            }
+          }
+        },
         "r2": {
           "description": "Configurer le connecteur R2",
           "fields": {
@@ -5195,6 +5215,8 @@
         "integrationToken": "Jeton d'intégration {source}",
         "accessKey": "Clé d'accès {source}",
         "accessKeySecret": "Secret de la clé d'accès {source}",
+        "storageAccountName": "Nom du Compte de Stockage",
+        "accountKey": "Clé de Compte {source}",
         "key": "Clé {source}",
         "secret": "Secret {source}",
         "roleArn": "ARN du rôle {source}",
@@ -5216,6 +5238,7 @@
         "jiraUserEmail": "Obligatoire pour Jira Cloud.",
         "lumappsServiceUser": "L'utilisateur au nom duquel indexer.",
         "youtrackToken": "Un jeton permanent d'un utilisateur YouTrack qui peut lire tous les projets à indexer. Créez-le dans votre profil YouTrack, sous Sécurité du compte.",
+        "azureDatalakeAccountKey": "Dans le portail Azure, ouvrez le compte de stockage, puis Sécurité + mise en réseau, puis Clés d'accès.",
         "outlineBaseUrl": "Par exemple https://app.getoutline.com, ou l'URL de votre instance auto-hébergée.",
         "pfxFile": "Importez le fichier `.pfx` contenant la clé privée de l’inscription d’application. Doit faire moins de 10 Ko.",
         "testrailBaseUrl": "Par exemple https://yourcompany.testrail.io.",
@@ -5228,6 +5251,7 @@
           "certificateAuthentication": "Authentification par certificat",
           "certificate": "Certificat",
           "accessKeyAndSecret": "Clé d'accès et secret",
+          "accountKey": "Clé de Compte",
           "iamRole": "Rôle IAM",
           "assumeRole": "Endosser un rôle",
           "serviceAccount": "Compte de service",
@@ -5240,6 +5264,9 @@
           "teamsCertificate": "Le connecteur se connecte avec un certificat téléversé dans l'inscription d'application. Fournissez l'ID client, l'ID d'annuaire, le paquet PFX et son mot de passe. Obligatoire pour Inclure les pièces jointes, qui lit les fichiers des canaux et leurs lecteurs depuis SharePoint.",
           "outlookClientSecret": "Le connecteur se connecte avec un secret client de l'inscription d'application. Fournissez l'ID client, l'ID d'annuaire et le secret.",
           "outlookCertificate": "Le connecteur se connecte avec un certificat téléversé dans l'inscription d'application. Fournissez l'ID client, l'ID d'annuaire, le paquet PFX et son mot de passe.",
+          "azureDatalakeClientSecret": "Le connecteur se connecte avec un secret client de l'inscription d'application. Indiquez l'ID client, l'ID d'annuaire et le secret. Donnez à l'application le rôle Storage Blob Data Reader sur le conteneur.",
+          "azureDatalakeCertificate": "Le connecteur se connecte avec un certificat chargé dans l'inscription d'application. Indiquez l'ID client, l'ID d'annuaire, le fichier PFX et son mot de passe. Donnez à l'application le rôle Storage Blob Data Reader sur le conteneur.",
+          "azureDatalakeAccountKey": "Le connecteur signe chaque requête avec une clé du compte de stockage. Indiquez le nom du compte et l'une de ses clés d'accès.",
           "s3AssumeRole": "Dans ce mode, l'instance Amazon EC2 endosse son rôle existant pour accéder à S3. Aucun autre identifiant n'est nécessaire."
         }
       },

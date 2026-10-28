@@ -1445,6 +1445,9 @@
         "s3": {
           "description": "AWS ストレージバケット"
         },
+        "azureDatalake": {
+          "description": "Azure Data Lake Storage コンテナー内のファイル"
+        },
         "r2": {
           "description": "クラウドストレージバケット"
         },
@@ -4593,6 +4596,23 @@
             }
           }
         },
+        "azure_datalake": {
+          "description": "Azure Data Lake Storage コネクターを構成",
+          "fields": {
+            "account_name": {
+              "label": "ストレージアカウント名",
+              "description": "ストレージアカウントの名前（例: contosodata）。アカウントには階層型名前空間が必要です。"
+            },
+            "container_name": {
+              "label": "コンテナー名",
+              "description": "インデックスを作成するコンテナー（ファイルシステム）。"
+            },
+            "path_prefix": {
+              "label": "パスプレフィックス",
+              "description": "コンテナー内のディレクトリ（例: reports/2026）。コンテナー全体をインデックスする場合は空のままにします。"
+            }
+          }
+        },
         "r2": {
           "description": "R2 コネクターを設定",
           "fields": {
@@ -5195,6 +5215,8 @@
         "integrationToken": "{source} インテグレーショントークン",
         "accessKey": "{source} アクセスキー",
         "accessKeySecret": "{source} アクセスキーシークレット",
+        "storageAccountName": "ストレージアカウント名",
+        "accountKey": "{source} アカウントキー",
         "key": "{source} キー",
         "secret": "{source} シークレット",
         "roleArn": "{source} ロール ARN",
@@ -5216,6 +5238,7 @@
         "jiraUserEmail": "Jira Cloud では必須です。",
         "lumappsServiceUser": "代理でインデックスを作成するユーザーです。",
         "youtrackToken": "インデックスするすべてのプロジェクトを読み取れる YouTrack ユーザーの永久トークン。YouTrack プロフィールの「アカウントのセキュリティ」で作成します。",
+        "azureDatalakeAccountKey": "Azure portal でストレージアカウントを開き、[セキュリティとネットワーク]、[アクセスキー] の順に開きます。",
         "outlineBaseUrl": "例: https://app.getoutline.com、またはセルフホストの URL。",
         "pfxFile": "アプリ登録の秘密キーを含む `.pfx` ファイルをアップロードしてください。10 KB 未満である必要があります。",
         "testrailBaseUrl": "例: https://yourcompany.testrail.io。",
@@ -5228,6 +5251,7 @@
           "certificateAuthentication": "証明書認証",
           "certificate": "証明書",
           "accessKeyAndSecret": "アクセスキーとシークレット",
+          "accountKey": "アカウントキー",
           "iamRole": "IAM ロール",
           "assumeRole": "ロールの引き受け",
           "serviceAccount": "サービスアカウント",
@@ -5240,6 +5264,9 @@
           "teamsCertificate": "コネクタはアプリ登録にアップロードされた証明書でサインインします。クライアント ID、ディレクトリ ID、PFX バンドルとそのパスワードを入力してください。「添付ファイルを含める」に必要です。この機能は SharePoint からチャネルのファイルとその閲覧者を読み取ります。",
           "outlookClientSecret": "コネクタはアプリ登録のクライアントシークレットでサインインします。クライアント ID、ディレクトリ ID、シークレットを入力してください。",
           "outlookCertificate": "コネクタはアプリ登録にアップロードされた証明書でサインインします。クライアント ID、ディレクトリ ID、PFX バンドルとそのパスワードを入力してください。",
+          "azureDatalakeClientSecret": "コネクターはアプリ登録のクライアントシークレットでサインインします。クライアント ID、ディレクトリ ID、シークレットを入力してください。コンテナーでアプリに Storage Blob Data Reader ロールを付与してください。",
+          "azureDatalakeCertificate": "コネクターはアプリ登録にアップロードされた証明書でサインインします。クライアント ID、ディレクトリ ID、PFX バンドルとそのパスワードを入力してください。コンテナーでアプリに Storage Blob Data Reader ロールを付与してください。",
+          "azureDatalakeAccountKey": "コネクターはストレージアカウントのキーで各リクエストに署名します。アカウント名とアクセスキーの 1 つを入力してください。",
           "s3AssumeRole": "このモードでは、Amazon EC2 インスタンスが既存のロールを引き受けて S3 にアクセスします。追加の認証情報は不要です。"
         }
       },
