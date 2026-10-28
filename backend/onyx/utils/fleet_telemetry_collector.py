@@ -26,6 +26,7 @@ from onyx.db.fleet_telemetry import (
     license_row,
     limit_statement_time,
     stage_rows,
+    user_count,
 )
 from onyx.utils.fleet_telemetry import (
     CONNECTOR_ROW_SETTINGS,
@@ -44,8 +45,8 @@ _MAX_WINDOW: timedelta = timedelta(days=1)
 # Each run reads the last minutes of the previous run again, for rows that
 # committed late. Their event IDs repeat, so the service drops the copies.
 _OVERLAP: timedelta = timedelta(minutes=5)
-# Connectors, signup domains, and the license go out when they change, and at
-# least every six hours.
+# Connectors, signup domains, the license, and the user count go out when they
+# change, and at least every six hours.
 _INVENTORY_SECONDS: int = 6 * 3600
 # Where the next run starts reading.
 _CURSOR_KEY: str = "fleet_telemetry_cursor"
@@ -440,6 +441,7 @@ def collect_snapshots(tenant_id: str) -> None:
                     },
                 )
             )
+            inventory.append(("users", {"total": user_count(db_session)}))
             attempts: list[dict[str, Any]] = attempt_rows(db_session, since)
             stages: list[dict[str, Any]] = stage_rows(
                 db_session, [row["attempt_id"] for row in attempts], since
