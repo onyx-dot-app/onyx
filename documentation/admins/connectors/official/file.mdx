@@ -1,0 +1,119 @@
+---
+title: "File"
+description: "Index files that you upload to Onyx"
+---
+
+## How it works
+
+The File connector indexes files that an admin uploads to Onyx. It supports these file types:
+
+- Text: `.txt`, `.md`, `.mdx`, `.conf`, `.log`, `.json`, `.csv`, `.tsv`, `.xml`, `.yml`, `.yaml`, `.sql`
+- Documents: `.pdf`, `.docx`, `.pptx`, `.xlsx`, `.xlsm`, `.eml`, `.epub`, `.html`
+- Images: `.png`, `.jpg`, `.jpeg`, `.webp`
+
+You can also upload a `.zip` that contains these files. Onyx skips files of other types inside the zip.
+
+You can add metadata to a file, such as a link, the document owners, and the update time.
+Onyx uses this metadata in search and in answers.
+
+Permission sync does not apply to uploaded files.
+Everyone who can see the connector's documents in Onyx can see every file.
+
+## Adding metadata
+
+Put one metadata line at the top of a text file. Use one of these formats:
+
+- `#ONYX_METADATA={"link": "<LINK>"}`
+- `<!-- ONYX_METADATA={"link": "<LINK>"} -->`
+
+`ONYX_METADATA=` is followed by a JSON object. Onyx reads these keys:
+
+- `link`
+- `title`
+- `file_display_name`
+- `primary_owners`
+- `secondary_owners`
+- `doc_updated_at`
+
+Any other key becomes a tag. Users can filter a search or a chat by tag,
+so that Onyx reads only documents with that tag.
+
+Example:
+
+```
+#ONYX_METADATA={"link": "https://github.com/onyx-dot-app/onyx/blob/main/CONTRIBUTING.md", "primary_owners": ["yuhong@onyx.app", "chris@onyx.app"], "secondary_owners": ["founders@onyx.app"], "doc_updated_at": "2023-11-30T13:06:08.589616-08:00", "file_display_name": "Desired File Name!", "tag_of_your_choice": "tag_value"}
+```
+
+Full file example:
+
+```
+#ONYX_METADATA={"link": "https://www.onyx.com/captcha", "file_display_name": "Captcha Setup"}
+How to set up captcha
+Follow the example below to set up a captcha
+like you saw when you visited this page!
+By including a captcha, this page is able to
+prevent web scrapers from reading it.
+```
+
+Use this to bring in content from pages and internal tools that Onyx cannot crawl.
+Export the content with a tool that can read it, add the metadata line, and upload the files.
+
+### Metadata for a zip file
+
+To set metadata for the files in a `.zip`, add a `.onyx_metadata.json` file to the root of the zip.
+The file holds one entry per file, matched by `filename`:
+
+```
+| file1.txt
+| file2.txt
+| .onyx_metadata.json
+```
+
+```json
+[
+  {
+    "filename": "file1.txt",
+    "link": "<LINK_TO_FILE1>",
+    "file_display_name": "<NAME_SHOWN_IN_ONYX>",
+    "primary_owners": ["<FILE1_OWNER>"],
+    "status": "<SOME_STATUS>"
+  },
+  {
+    "filename": "file2.txt",
+    "link": "<LINK_TO_FILE2>",
+    "file_display_name": "<NAME_SHOWN_IN_ONYX>",
+    "primary_owners": ["<FILE2_OWNER>"],
+    "status": "<SOME_OTHER_STATUS>"
+  }
+]
+```
+
+`status` in this example is a tag. Add any key and value you want as a tag.
+
+## Setting up
+
+### Authorization
+
+The File connector needs no external account. Any admin who can manage connectors can upload files.
+
+### Indexing
+
+<Steps>
+  <Step title="Upload files">
+    In the Onyx admin panel, go to **Connectors** and select **File**. Under **Files**,
+    drag in or select one or more files or a `.zip`.
+
+    <img className="rounded-image" src="/assets/admins/connectors/file/FileConnector.webp" alt="File connector upload form in Onyx"/>
+  </Step>
+
+  <Step title="Choose document access">
+    Under **Document Access**, select who can see the files.
+    **Specific Groups** is available on the Business and Enterprise plans and on Onyx Cloud.
+    Then click **Create Connector**.
+  </Step>
+</Steps>
+
+## Adding or removing files later
+
+Open the connector from **Connectors** and click **Edit** in the **Files** section to add or remove files.
+Onyx indexes the new files and removes the deleted ones.

@@ -1,0 +1,37 @@
+---
+title: "Coding Agent"
+description: "Investigate and answer questions about a GitHub codebase"
+icon: "code-branch"
+---
+
+<Note>
+  An admin turns the Coding Agent on or off for the workspace. It works with **public** GitHub repositories.
+  See [Configuration](#configuration) below.
+</Note>
+
+## Overview
+
+The **Coding Agent** action lets Onyx investigate a GitHub repository and answer questions about its code.
+Give it a repository and a question. It downloads a copy of the repository into an isolated sandbox,
+explores the code with shell commands, and returns a written answer.
+
+<Info>
+  The LLM decides when to use the Coding Agent based on your message. To force or block it for one chat,
+  open the actions menu in the input bar and toggle **Coding Agent**. Name the repository in your prompt,
+  as a URL or as `owner/repo`.
+</Info>
+
+## Configuration
+
+An admin can turn the Coding Agent on or off at **Admin Panel → Chat Preferences → Coding Agent**.
+The Coding Agent runs in the same sandbox as the [Code Interpreter](/overview/core_features/code_interpreter),
+so the Code Interpreter service must show **Connected** at **Admin Panel → Code Interpreter**.
+Agent builders can then add the action to their [Agents](/overview/core_features/agents).
+
+For details, see the [admin configuration guide](/admins/actions/coding_agent).
+
+## Limitations
+
+- **Public repositories only**: Private repositories fail to download.
+- **Snapshot only**: The agent sees the current files, not the commit history.
+- **Time limit**: Long investigations stop after a fixed time and return the best answer found so far.

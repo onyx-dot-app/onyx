@@ -1,0 +1,17 @@
+<Step title="Point domain to the instance">
+    <Note>
+      If you don't have a domain, buy one from a DNS provider like [GoDaddy](https://www.godaddy.com/)
+      or just skip HTTPS for now.
+    </Note>
+
+    To point our domain to the new instance, we need to add an `A` and `CNAME` record to our DNS provider.
+
+    The `A` record should be the subdomain that you would like to use for the Onyx instance like `prod`.
+
+    The `CNAME` record should be the same name with the `www.` in front resulting in `www.prod` pointing to the full
+    domain like `prod.onyx.app`.
+
+    <img className="rounded-image" src="/assets/deployment/arecord.webp" alt="DNS A Record Configuration"/>
+
+    <img className="rounded-image" src="/assets/deployment/cname.webp" alt="DNS CNAME Record Configuration"/>
+</Step>

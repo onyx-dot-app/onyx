@@ -1,0 +1,50 @@
+---
+title: "Voice"
+description: "Interact with Onyx using voice"
+icon: "microphone"
+---
+
+## Overview
+
+<img className="rounded-image" src="/assets/overview/core_features/voice_onyx_listening.webp" alt="Voice Mode listening"/>
+
+Voice Mode lets you talk to Onyx instead of typing. Speak your question and hear the answer read back.
+
+## Requirements
+
+Voice Mode is available in all editions, but an admin must set it up first.
+An admin connects a speech-to-text and a text-to-speech provider at **Admin Panel → Voice**. Onyx supports OpenAI,
+ElevenLabs, and Azure as voice providers.
+
+Until an admin finishes setup, the microphone button in the input bar shows **Voice not configured**.
+
+## Speech-to-Text
+
+To talk to Onyx, click the **microphone** button in the input bar.
+Onyx listens and transcribes your speech in real time. Click the microphone button again to stop.
+
+## Text-to-Speech
+
+<img className="rounded-image" src="/assets/overview/core_features/voice_onyx_speaking.webp" alt="Voice Mode speaking"/>
+
+After you send a message, Onyx writes the answer and can read it back as audio.
+The full text stays visible during playback.
+
+<img className="rounded-image" src="/assets/overview/core_features/voice_read_aloud.webp" alt="Read Aloud button"/>
+
+If **Auto-Playback** is off, click **Read aloud** under a response to hear it.
+
+## User Settings
+
+Set your voice preferences under **Settings → Voice**:
+
+<img className="rounded-image" src="/assets/overview/core_features/voice_user_settings.webp" alt="Voice Mode Settings"/>
+
+- **Auto-Send on Pause**: When on, Onyx sends your message when you pause speaking.
+  When off, Onyx keeps listening until you click the microphone button to stop.
+- **Auto-Playback**: When on, Onyx reads each response aloud as soon as it finishes,
+  then starts listening again for a hands-free conversation. When off,
+  Onyx shows the response as text and you play it manually.
+- **Playback Speed**: Make spoken responses slower or faster.
+
+For setup details, see the [admin configuration guide](/admins/actions/voice_mode).

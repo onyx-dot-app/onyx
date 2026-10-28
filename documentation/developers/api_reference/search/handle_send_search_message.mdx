@@ -1,0 +1,22 @@
+---
+title: "Handle Send Search Message"
+openapi: "POST /search/send-search-message"
+---
+
+<Info>
+  **Required permission:** Search &mdash; Read (`read:search`), which `basic` includes, so any signed-in user has it.
+  A limited [Personal Access Token](/developers/overview#personal-access-tokens) needs the Search &mdash; Read scope.
+</Info>
+
+<Note>
+  This is the endpoint behind the Onyx Search UI.
+  Unlike [`POST /chat/send-chat-message`](/developers/api_reference/chat/handle_send_chat_message),
+  `stream` defaults to `false` here, so the default response is the aggregated `SearchFullResponse`.
+  See [Search with the API](/developers/guides/search_api_guide) for the streaming packet format.
+</Note>
+
+<Warning>
+  Requires a vector database: deployments running with `DISABLE_VECTOR_DB` set (Onyx Lite) answer with `501`.
+  Every query from a signed-in user is recorded in that user's [search
+  history](/developers/api_reference/search/get_search_history).
+</Warning>

@@ -14,6 +14,8 @@ on:
     # workflow can race the real workflow's same-named status check under
     # branch protection.
   push:
+    paths-ignore:
+      - "documentation/**"
     tags:
       - "v*.*.*"
     branches:

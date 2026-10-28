@@ -1,0 +1,47 @@
+---
+title: "Image Generation"
+description: "Create visuals according to user prompts"
+icon: "image"
+---
+
+## Overview
+
+The **Image Generation** action creates PNG images from your prompt.
+You can also attach an image and ask Onyx to edit or extend it.
+
+<img className="rounded-image" src="/assets/overview/core_features/image_generation.webp" alt="Image Generation"/>
+
+Image Generation is available in all editions.
+It does not appear in the actions menu until an admin connects a provider.
+
+## Supported models
+
+Onyx supports image models from OpenAI, Azure OpenAI, and Google Cloud Vertex AI:
+
+| Provider | Models |
+| --- | --- |
+| **OpenAI** | GPT Image 2.5 Flare, GPT Image 2.5 Sunburst, GPT Image 2, GPT Image 1.5 |
+| **Azure OpenAI** | GPT Image 2.5 Flare, GPT Image 2.5 Sunburst, GPT Image 2, GPT Image 1.5 |
+| **Google Cloud Vertex AI** | Gemini 2.5 Flash Image, Gemini 3 Pro Image |
+
+The GPT Image 2.5 models give the best prompt control and the most reliable in-image text.
+Gemini 2.5 Flash Image is fast and good for quick creative exploration.
+Gemini 3 Pro Image gives high-fidelity output for complex, detailed visuals.
+
+<Note>
+  Older models such as GPT Image 1 stay visible only while they are still connected. New connections cannot select them.
+</Note>
+
+## Usage
+
+An admin connects a provider and selects the default model at **Admin Panel → Image Generation**.
+
+After setup, the LLM can use Image Generation in any chat or custom [Agent](/overview/core_features/agents)
+that has the action enabled. To force or block it for one chat,
+open the actions menu in the input bar and toggle **Image Generation**.
+
+<Tip>
+  Be explicit when you want an image. For example: "Generate an image of ..." or "Edit the attached image to ...".
+</Tip>
+
+For setup details, see the [admin configuration guide](/admins/actions/image_generation).

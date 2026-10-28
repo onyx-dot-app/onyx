@@ -1,0 +1,243 @@
+---
+title: "Search with the API"
+description: "Query the Onyx index programmatically and get ranked documents back"
+icon: "magnifying-glass"
+---
+
+Onyx exposes two search endpoints. Which one you want depends on what you are building.
+
+| Endpoint | Use it when |
+|----------|-------------|
+| [`POST /search`](/developers/api_reference/search/search) | You want Onyx's search results inside your own application: RAG pipelines, agents, integrations, anything that needs ranked passages rather than an answer. Runs the same retrieval pipeline as the Search action in chat. |
+| [`POST /search/send-search-message`](/developers/api_reference/search/handle_send_search_message) | You are building a search interface. This is the endpoint behind the Onyx Search UI, and it adds keyword expansion, LLM document selection, streaming, and per-user search history. |
+
+Neither endpoint generates an answer. To have a model read the results and write a response,
+use [`POST /chat/send-chat-message`](/developers/api_reference/chat/handle_send_chat_message) instead.
+
+<Note>
+  Both endpoints search only the documents the calling user is allowed to see,
+  so the same query run by two users can return different results. Both also need a vector database:
+  on deployments running with `DISABLE_VECTOR_DB` set (Onyx Lite), they answer with `501`.
+</Note>
+
+Authenticate with an API key or a Personal Access Token. A limited-access token needs the **Search &mdash; Read** scope.
+See [Authentication](/developers/overview#authentication).
+Query expansion and LLM document selection use the workspace's default LLM,
+so the same token limits that apply to chat apply to them.
+
+## POST /search
+
+The request needs nothing but a query. Everything else narrows the search or changes how the query is interpreted.
+
+| Parameter | Description |
+|-----------|-------------|
+| `query` | The query to search for. Between 1 and 2048 characters. |
+| `sources` | Restrict results to these connector source types, e.g. `["slack", "google_drive"]`. |
+| `document_sets` | Restrict results to documents in these document sets, by name. |
+| `tags` | Restrict results to documents carrying all of these metadata tags, as a list of `{"tag_key": ..., "tag_value": ...}` objects. |
+| `time_cutoff` | ISO 8601 timestamp. Only documents updated on or after this moment are returned. Timestamps without a timezone are treated as UTC. |
+| `persona_id` | Search as an Agent. The Agent's document sets, attached documents and search start date apply on top of the other filters, and its LLM is used for query expansion. |
+| `provider` / `model` | The LLM used for query expansion and section selection. Both must be sent together, and the caller must have access to the provider. Defaults to the Agent's LLM, or the deployment default. |
+| `skip_query_expansion` | Run the query as written instead of rewriting and expanding it first. Useful when the query is already precise, or when you have your own expansion step. |
+| `message_history` | Preceding conversation turns, so a query like "what about last quarter?" can be interpreted in context. Defaults to `query` on its own. |
+
+Results come back most relevant first:
+
+```json
+{
+  "results": [
+    {
+      "citation_id": 1,
+      "title": "Q3 Planning",
+      "content": "Full text of the matched section...",
+      "link": "https://...",
+      "source_type": "google_drive",
+      "updated_at": "2026-08-14T09:31:00Z"
+    }
+  ]
+}
+```
+
+`citation_id` identifies the source document, not the result:
+several results share one `citation_id` when the search returned multiple non-overlapping sections of the same document.
+
+<CodeGroup>
+  ```python Python expandable
+  import requests
+
+  API_BASE_URL = "https://cloud.onyx.app/api"  # or your own domain
+  API_KEY = "YOUR_KEY_HERE"
+
+  response = requests.post(
+      f"{API_BASE_URL}/search",
+      headers={
+          "Authorization": f"Bearer {API_KEY}",
+          "Content-Type": "application/json",
+      },
+      json={
+          "query": "What is our parental leave policy?",
+          "sources": ["confluence", "google_drive"],
+      },
+  )
+
+  for result in response.json()["results"]:
+      print(f"[{result['citation_id']}] {result['title']} - {result['link']}")
+  ```
+
+  ```bash Shell expandable
+  #!/bin/bash
+
+  API_BASE_URL="https://cloud.onyx.app/api"  # or your own domain
+  API_KEY="YOUR_KEY_HERE"
+
+  curl -s -X POST "${API_BASE_URL}/search" \
+    -H "Authorization: Bearer ${API_KEY}" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "query": "What is our parental leave policy?",
+      "sources": ["confluence", "google_drive"]
+    }' | jq '.results[] | {citation_id, title, link}'
+  ```
+</CodeGroup>
+
+## POST /search/send-search-message
+
+This endpoint takes a different set of parameters, aimed at a search interface rather than a retrieval pipeline.
+
+| Parameter | Description |
+|-----------|-------------|
+| `search_query` | The query to search for. |
+| `filters` | Restrict which documents are searched: `source_type`, `document_set`, `created_at_range` / `updated_at_range`, and `tags`. |
+| `num_hits` | Maximum number of merged sections to return. Defaults to 30. |
+| `hybrid_alpha` | Balance between vector and keyword matching, from `0.0` (pure keyword) to `1.0` (pure vector). Leave unset to use the deployment's `HYBRID_ALPHA`, which defaults to `0.5`. If the deployment sets `ONYX_SEARCH_UI_USES_OPENSEARCH_KEYWORD_SEARCH=true`, an unset value runs a pure keyword search instead. |
+| `include_content` | When true, each result carries the full text of the matched section in `content`. When false, `content` is `null` and only `blurb` is populated. |
+| `run_query_expansion` | Have an LLM generate extra keyword queries. Every query runs in parallel and the results are merged with weighted reciprocal-rank fusion, the original query counting twice as much as each expansion. |
+| `num_docs_fed_to_llm_selection` | Hand the top N sections to an LLM that picks the most relevant ones. Omit it to skip the extra LLM call. The model's reasoning comes back in `doc_selection_reasoning`. |
+| `stream` | Whether to stream packets as they are produced. **Defaults to `false`**, unlike the chat API. |
+
+Both LLM-backed options are optional and each costs an LLM call. Leave them off for a plain keyword and semantic search.
+Query expansion widens recall on short keyword queries;
+document selection narrows a long result list down to what actually answers the query,
+reporting its picks in `llm_selected_doc_ids` without dropping the other results.
+
+### Non-streaming response
+
+```json
+{
+  "all_executed_queries": ["parental leave policy"],
+  "search_docs": [
+    {
+      "document_id": "...",
+      "semantic_identifier": "Parental Leave",
+      "link": "https://...",
+      "blurb": "...",
+      "content": null,
+      "source_type": "confluence",
+      "score": 0.82
+    }
+  ],
+  "doc_selection_reasoning": null,
+  "llm_selected_doc_ids": null,
+  "error": null
+}
+```
+
+`all_executed_queries` holds more than one entry only when `run_query_expansion` was set.
+`llm_selected_doc_ids` is `null` when LLM selection was not requested or failed,
+and an empty list when it ran and chose nothing.
+`doc_selection_reasoning` holds the reasoning text the selection model produced, when the model returned any.
+If the search fails partway through, `error` is set and the other fields hold whatever was gathered before the failure.
+
+### Streaming response
+
+With `stream: true` the response is `text/event-stream`, one JSON object per line, in this order:
+
+| Packet `type` | Contents |
+|---------------|----------|
+| `search_queries` | `all_executed_queries` &mdash; the original query plus any expansions. |
+| `search_docs` | `search_docs` &mdash; the ranked results. |
+| `llm_selected_docs` | `llm_selected_doc_ids`. Sent only when `num_docs_fed_to_llm_selection` was set. |
+| `search_error` | `error`. Sent in place of the remaining packets if the search fails. |
+
+<CodeGroup>
+  ```python Python expandable
+  import json
+
+  import requests
+
+  API_BASE_URL = "https://cloud.onyx.app/api"  # or your own domain
+  API_KEY = "YOUR_KEY_HERE"
+
+  with requests.post(
+      f"{API_BASE_URL}/search/send-search-message",
+      headers={
+          "Authorization": f"Bearer {API_KEY}",
+          "Content-Type": "application/json",
+      },
+      json={
+          "search_query": "What is our parental leave policy?",
+          "num_hits": 10,
+          "include_content": True,
+          "stream": True,
+      },
+      stream=True,
+  ) as response:
+      for line in response.iter_lines():
+          if not line:
+              continue
+          packet = json.loads(line)
+          if packet["type"] == "search_docs":
+              for doc in packet["search_docs"]:
+                  print(doc["semantic_identifier"], doc["link"])
+          elif packet["type"] == "search_error":
+              print("Search failed:", packet["error"])
+  ```
+
+  ```bash Shell expandable
+  #!/bin/bash
+
+  API_BASE_URL="https://cloud.onyx.app/api"  # or your own domain
+  API_KEY="YOUR_KEY_HERE"
+
+  curl -s -N -X POST "${API_BASE_URL}/search/send-search-message" \
+    -H "Authorization: Bearer ${API_KEY}" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "search_query": "What is our parental leave policy?",
+      "num_hits": 10,
+      "include_content": true,
+      "stream": true
+    }' | jq -c 'select(.type == "search_docs") | .search_docs[] | {semantic_identifier, link}'
+  ```
+</CodeGroup>
+
+## Search history
+
+Every query sent through `POST /search/send-search-message` by a signed-in user is recorded,
+and [`GET /search/search-history`](/developers/api_reference/search/get_search_history)
+reads back that user's own queries, most recent first. Pass `limit` (1&ndash;1000, default 100)
+and `filter_days` to narrow the window. Queries sent to `POST /search` and to the chat API are not recorded there.
+
+## Search from an MCP client
+
+If the caller is an LLM client such as Claude Code, Codex, or Claude Desktop,
+you do not need to call these endpoints yourself.
+Connect the client to the [Onyx MCP server](/overview/onyx_anywhere/mcp_server).
+Its `search_indexed_documents` tool runs the same retrieval pipeline as `POST /search`,
+and the client decides when to search.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Guide: Send a Message to Onyx" icon="bolt" href="/developers/guides/chat_new_guide">
+    Have an Agent read the results and answer, instead of ranking documents
+  </Card>
+
+  <Card title="Guide: Use the Ingestion API" icon="upload" href="/developers/guides/index_files_ingestion_api">
+    Index your own documents so they show up in search
+  </Card>
+
+  <Card title="Onyx MCP server" icon="plug" href="/overview/onyx_anywhere/mcp_server">
+    Search Onyx from MCP clients
+  </Card>
+</CardGroup>
