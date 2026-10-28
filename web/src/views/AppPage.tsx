@@ -688,7 +688,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
             ? multiModel.selectedModels
             : undefined,
         });
-        if (showOnboarding || !onboardingDismissed) {
+        // An existing chat hides the onboarding steps; a message here must
+        // not end onboarding that is still in progress.
+        if (!showOnboarding && !onboardingDismissed) {
           finishOnboarding();
         }
         return;
@@ -1143,7 +1145,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         disabled={
                           (!llmManager.isLoadingProviders &&
                             llmManager.hasAnyProvider === false) ||
-                          (showOnboarding &&
+                          // Only while the onboarding steps are on screen.
+                          (onboardingVisible &&
+                            showOnboarding &&
                             !isLoadingOnboarding &&
                             onboardingState.currentStep !==
                               OnboardingStep.Complete)
