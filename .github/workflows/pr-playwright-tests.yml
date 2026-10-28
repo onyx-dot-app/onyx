@@ -153,6 +153,10 @@ jobs:
               - '.github/actions/dhi-base-images/**'
             mcp_oauth:
               - 'backend/onyx/server/features/mcp/**'
+              # A dependency bump (e.g. the mcp SDK) can change OAuth behaviour.
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - 'backend/requirements/**'
               - 'backend/tests/integration/mock_services/mcp_test_server/**'
               - 'web/tests/e2e/mcp/**'
               - 'web/tests/e2e/pages/ActionsPopover.ts'
