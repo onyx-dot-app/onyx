@@ -15811,21 +15811,21 @@
           "label": "Image Generation"
         },
         "description": "Set up models to create images in your chats.",
-        "title": "Enable image generation"
+        "title": "Enable Image Generation"
       },
       "inviteTeam": {
         "button": {
           "label": "Manage Users"
         },
         "description": "Manage users and permissions for your team",
-        "title": "Invite your team"
+        "title": "Invite Your Team"
       },
       "webSearch": {
         "button": {
           "label": "Web Search"
         },
         "description": "Enable {appName} to search the internet for information.",
-        "title": "Select web search provider"
+        "title": "Select Web Search Provider"
       }
     },
     "header": {
