@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { BaseFilters, MinimalOnyxDocument } from "@/lib/search/types";
 import SearchCard from "@/ee/sections/SearchCard";
-import { Divider, Pagination } from "@opal/components";
+import { Divider, Pagination, Text } from "@opal/components";
 import { EmptyMessageCard } from "@opal/components";
 import { IllustrationContent, toast } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
@@ -19,7 +19,6 @@ import {
 import { getTimeFilterDate, TimeFilter } from "@opal/time";
 import { useTags } from "@/lib/searchFilters/hooks";
 import { SourceIcon } from "@/components/SourceIcon";
-import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
 import { Dropdown, SelectButton, LineItemButton } from "@opal/components";
 import { SvgClock, SvgTag } from "@opal/icons";
@@ -282,7 +281,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
         {!showEmpty && (
           <div className="flex-1 flex flex-col justify-end gap-3">
             <Section alignItems="start">
-              <Text text03 mainUiMuted>
+              <Text font="main-ui-muted" color="text-03">
                 {t("results.count.label", { count: results.length })}
               </Text>
             </Section>
@@ -347,7 +346,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
                   selectVariant="select-heavy"
                   sizePreset="main-ui"
                   variant="section"
-                  rightChildren={<Text text03>{count}</Text>}
+                  rightChildren={<Text color="text-03">{String(count)}</Text>}
                 />
               ))}
             </Section>

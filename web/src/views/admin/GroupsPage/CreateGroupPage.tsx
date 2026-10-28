@@ -10,8 +10,7 @@ import { SvgUsers } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { SettingsLayouts } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
-import { InputTypeIn } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { InputTypeIn, Text } from "@opal/components";
 import useGroupMemberCandidates from "./useGroupMemberCandidates";
 import {
   createGroup,
@@ -122,7 +121,7 @@ function CreateGroupPage() {
           alignItems="stretch"
           justifyContent="start"
         >
-          <Text mainUiBody text04>
+          <Text font="main-ui-body" color="text-04">
             {t("form.name.label")}
           </Text>
           <InputTypeIn
@@ -138,7 +137,7 @@ function CreateGroupPage() {
         {isLoading && <IconLoader />}
 
         {error ? (
-          <Text as="p" secondaryBody text03>
+          <Text as="p" font="secondary-body" color="text-03">
             {t("members.loadError.text")}
           </Text>
         ) : null}

@@ -9,9 +9,8 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import { Section } from "@/layouts/general-layouts";
 import { ContentAction, toast } from "@opal/layouts";
 import { SettingsLayouts } from "@opal/layouts";
-import Text from "@/refresh-components/texts/Text";
 import { Callout } from "@/components/ui/callout";
-import { Button, MessageCard, Card } from "@opal/components";
+import { Button, MessageCard, Card, Text } from "@opal/components";
 import { SvgServer } from "@opal/icons";
 import { InputSingleSelect } from "@opal/components";
 import {
@@ -124,7 +123,7 @@ function GuildDetailContent({
           />
 
           {!isRegistered ? (
-            <Text text03 secondaryBody>
+            <Text font="secondary-body" color="text-03">
               {t("channels.awaitingRegistration.text")}
             </Text>
           ) : channelsLoading ? (

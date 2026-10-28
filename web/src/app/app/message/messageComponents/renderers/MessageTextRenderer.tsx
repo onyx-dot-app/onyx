@@ -10,7 +10,7 @@ import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 
 import { useTypewriter } from "@/hooks/useTypewriter";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import {
   ChatPacket,
   PacketType,
@@ -414,9 +414,7 @@ export const MessageTextRenderer: MessageRenderer<
         );
       },
       p: ({ children, dir }) => (
-        <MemoizedParagraph dir={dir} className="font-main-content-body">
-          {children}
-        </MemoizedParagraph>
+        <MemoizedParagraph dir={dir}>{children}</MemoizedParagraph>
       ),
       pre: ({ children }) => <>{children}</>,
       b: ({ className, children }) => (
@@ -490,9 +488,11 @@ export const MessageTextRenderer: MessageRenderer<
       status: null,
       content:
         shouldShowThinkingPlaceholder || shouldShowSpeechWarmupIndicator ? (
-          <Text as="span" secondaryBody text04 className="italic">
-            {t("text.thinkingPlaceholder.text")}
-          </Text>
+          <span className="italic">
+            <Text font="secondary-body" color="text-04">
+              {t("text.thinkingPlaceholder.text")}
+            </Text>
+          </span>
         ) : displayedContent.length > 0 ? (
           <div
             dir="auto"

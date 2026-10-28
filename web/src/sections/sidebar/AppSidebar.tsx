@@ -13,7 +13,6 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
-import Text from "@/refresh-components/texts/Text";
 import ChatButton from "@/sections/sidebar/ChatButton";
 import { AgentButton } from "@/lib/agents/components";
 import { DragEndEvent } from "@dnd-kit/core";
@@ -52,7 +51,7 @@ import type { Project } from "@/lib/projects/types";
 import { SidebarLayouts, useSidebarState } from "@opal/layouts";
 import { renderSidebarLogo } from "@/lib/sidebar/utils";
 import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
-import { Button as OpalButton } from "@opal/components";
+import { Button as OpalButton, Text } from "@opal/components";
 import { cn } from "@opal/utils";
 import { Disabled } from "@opal/core";
 import { usePlans, useTierAtLeast } from "@/lib/tiers/hooks";
@@ -184,9 +183,11 @@ function RecentsSection({
     >
       <SidebarLayouts.Section title={t("appSidebar.recents.title")}>
         {chatSessions.length === 0 ? (
-          <Text as="p" text01 className="px-3">
-            {t("appSidebar.recents.empty.text")}
-          </Text>
+          <div className="px-3">
+            <Text as="p" color="text-01">
+              {t("appSidebar.recents.empty.text")}
+            </Text>
+          </div>
         ) : (
           <>
             {chatSessions.map((chatSession) => (

@@ -10,8 +10,7 @@ import { usePlans } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
 import { Section } from "@/layouts/general-layouts";
 import { InputNumber } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
-import { Collapsible } from "@opal/components";
+import { Collapsible, Text } from "@opal/components";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -136,28 +135,34 @@ function TokenLimitSection({
               {/* Column headers */}
               <div className="flex flex-wrap items-center gap-1 pe-[40px]">
                 <div className="flex-1 flex items-center min-w-[160px]">
-                  <Text mainUiAction text04>
+                  <Text font="main-ui-action" color="text-04">
                     {t("tokenLimits.tokenLimit.header")}
                   </Text>
-                  <Text mainUiMuted text03 className="ms-0.5">
-                    {t("tokenLimits.tokenLimit.unit")}
-                  </Text>
+                  <span className="ms-0.5">
+                    <Text font="main-ui-muted" color="text-03">
+                      {t("tokenLimits.tokenLimit.unit")}
+                    </Text>
+                  </span>
                 </div>
                 <div className="flex-1 flex items-center min-w-[160px]">
-                  <Text mainUiAction text04>
+                  <Text font="main-ui-action" color="text-04">
                     {t("tokenLimits.costLimit.header")}
                   </Text>
-                  <Text mainUiMuted text03 className="ms-0.5">
-                    {t("tokenLimits.costLimit.unit")}
-                  </Text>
+                  <span className="ms-0.5">
+                    <Text font="main-ui-muted" color="text-03">
+                      {t("tokenLimits.costLimit.unit")}
+                    </Text>
+                  </span>
                 </div>
                 <div className="flex-1 flex items-center min-w-[160px]">
-                  <Text mainUiAction text04>
+                  <Text font="main-ui-action" color="text-04">
                     {t("tokenLimits.timeWindow.header")}
                   </Text>
-                  <Text mainUiMuted text03 className="ms-0.5">
-                    {t("tokenLimits.timeWindow.unit")}
-                  </Text>
+                  <span className="ms-0.5">
+                    <Text font="main-ui-muted" color="text-03">
+                      {t("tokenLimits.timeWindow.unit")}
+                    </Text>
+                  </span>
                 </div>
               </div>
 

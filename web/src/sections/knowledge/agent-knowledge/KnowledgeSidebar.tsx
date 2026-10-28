@@ -3,10 +3,9 @@
 import { useTranslations } from "next-intl";
 import { getSourceMetadata } from "@/lib/connectors/utils";
 import * as TableLayouts from "@/layouts/table-layouts";
-import Text from "@/refresh-components/texts/Text";
 import type { ConnectedSource } from "@/lib/hierarchy/types";
 import type { ValidSources } from "@/lib/connectors/types/source";
-import { Divider, LineItemButton } from "@opal/components";
+import { Text, Divider, LineItemButton } from "@opal/components";
 import { SvgFiles, SvgFolder } from "@opal/icons";
 
 import type { KnowledgeView } from "@/sections/knowledge/agent-knowledge/types";
@@ -56,8 +55,8 @@ export function KnowledgeSidebar({
         aria-label="knowledge-sidebar-files"
         rightChildren={
           selectedFileIds.length > 0 ? (
-            <Text mainUiAction className="text-action-selection-05">
-              {selectedFileIds.length}
+            <Text font="main-ui-action" color="action-selection-05">
+              {String(selectedFileIds.length)}
             </Text>
           ) : undefined
         }
@@ -81,8 +80,8 @@ export function KnowledgeSidebar({
             aria-label="knowledge-sidebar-document-sets"
             rightChildren={
               selectedDocumentSetIds.length > 0 ? (
-                <Text mainUiAction className="text-action-selection-05">
-                  {selectedDocumentSetIds.length}
+                <Text font="main-ui-action" color="action-selection-05">
+                  {String(selectedDocumentSetIds.length)}
                 </Text>
               ) : undefined
             }
@@ -116,8 +115,8 @@ export function KnowledgeSidebar({
                 aria-label={`knowledge-sidebar-source-${connectedSource.source}`}
                 rightChildren={
                   selectionCount > 0 ? (
-                    <Text mainUiAction className="text-action-selection-05">
-                      {selectionCount}
+                    <Text font="main-ui-action" color="action-selection-05">
+                      {String(selectionCount)}
                     </Text>
                   ) : undefined
                 }

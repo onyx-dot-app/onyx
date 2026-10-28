@@ -1,9 +1,9 @@
 "use client";
 
-import { Modal } from "@opal/components";
+import { Modal, Text } from "@opal/components";
+import { richNodes } from "@opal/utils";
 import { useSettings } from "@/lib/settings/hooks";
 import { Button } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
 import { FormField } from "@/refresh-components/form/FormField";
 import { InputCheckbox } from "@opal/components";
 import { useEffect, useState } from "react";
@@ -99,23 +99,35 @@ export function AppPopup() {
                     {children}
                   </a>
                 ),
-                p: ({ node, ...props }) => (
-                  <Text as="p" mainUiBody text03 {...props} />
+                p: ({ children }) => (
+                  <Text as="p" font="main-ui-body" color="text-03">
+                    {richNodes(children)}
+                  </Text>
                 ),
-                strong: ({ node, ...props }) => (
-                  <Text mainUiBody text03 {...props} />
+                strong: ({ children }) => (
+                  <Text font="main-ui-body" color="text-03">
+                    {richNodes(children)}
+                  </Text>
                 ),
-                h1: ({ node, ...props }) => (
-                  <Text as="p" headingH1 text03 {...props} />
+                h1: ({ children }) => (
+                  <Text as="p" font="heading-h1" color="text-03">
+                    {richNodes(children)}
+                  </Text>
                 ),
-                h2: ({ node, ...props }) => (
-                  <Text as="p" headingH2 text03 {...props} />
+                h2: ({ children }) => (
+                  <Text as="p" font="heading-h2" color="text-03">
+                    {richNodes(children)}
+                  </Text>
                 ),
-                h3: ({ node, ...props }) => (
-                  <Text as="p" headingH3 text03 {...props} />
+                h3: ({ children }) => (
+                  <Text as="p" font="heading-h3" color="text-03">
+                    {richNodes(children)}
+                  </Text>
                 ),
-                li: ({ node, ...props }) => (
-                  <Text as="li" mainUiBody text03 {...props} />
+                li: ({ children }) => (
+                  <Text as="li" font="main-ui-body" color="text-03">
+                    {richNodes(children)}
+                  </Text>
                 ),
               }}
               remarkPlugins={[remarkGfm]}
@@ -143,7 +155,8 @@ export function AppPopup() {
                   </FormField.Control>
                   <FormField.Label>
                     <ReactMarkdown
-                      className="prose prose-neutral dark:prose-invert max-w-full"
+                      // [&_p]:my-0! keeps the markdown aligned with the checkbox.
+                      className="prose prose-neutral dark:prose-invert max-w-full [&_p]:my-0!"
                       components={{
                         a: ({ node, children, ...props }) => (
                           <a
@@ -155,20 +168,20 @@ export function AppPopup() {
                             {children}
                           </a>
                         ),
-                        p: ({ node, ...props }) => (
-                          <Text
-                            as="p"
-                            mainUiBody
-                            text04
-                            className="my-0!" //dont remove the my-0! class, it's important for the markdown to render without any alignment issues
-                            {...props}
-                          />
+                        p: ({ children }) => (
+                          <Text as="p" font="main-ui-body" color="text-04">
+                            {richNodes(children)}
+                          </Text>
                         ),
-                        strong: ({ node, ...props }) => (
-                          <Text mainUiBody text04 {...props} />
+                        strong: ({ children }) => (
+                          <Text font="main-ui-body" color="text-04">
+                            {richNodes(children)}
+                          </Text>
                         ),
-                        li: ({ node, ...props }) => (
-                          <Text as="li" mainUiBody text04 {...props} />
+                        li: ({ children }) => (
+                          <Text as="li" font="main-ui-body" color="text-04">
+                            {richNodes(children)}
+                          </Text>
                         ),
                       }}
                       remarkPlugins={[remarkGfm]}
