@@ -346,6 +346,9 @@ Two state machines exist, and they interlock at the moment of promotion.
 on `switchover_type` (`INSTANT`, `REINDEX`, `ACTIVE_ONLY`) and on `use_port_flow`. With
 `use_port_flow`, INSTANT swaps at once and the port backfills the live index
 afterward. The other types wait on `_port_swap_ready` for the required cc-pairs.
+Once every connector port is SUCCESS the reindex is *finalizing*
+(`reindex_finalizing`, `db/port_attempt.py`): the indexing scheduler queues and
+processes FUTURE index attempts before PRESENT refreshes, since the swap waits on them.
 Without `use_port_flow`, INSTANT swaps at once and deletes the cc-pairs' document
 rows, REINDEX waits until every connector has a successful attempt on the new
 settings, and ACTIVE_ONLY waits only on non-paused connectors. `_perform_index_swap` does the actual promotion:
