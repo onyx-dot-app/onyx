@@ -1,4 +1,5 @@
 import json
+import re
 
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchCycle
@@ -19,7 +20,9 @@ from onyx.utils.text_processing import parse_bracketed_list
 logger = setup_logger()
 
 # Only the most recent user turns feed the scope decision — older turns add
-# tokens and stale directives without helping the current request.
+# tokens and stale directives without helping the current request. Older turns
+# that mention sources are kept (up to the same count) so a standing directive,
+# or its revocation, outlives the window.
 MAX_SOURCE_FILTER_USER_TURNS = 5
 
 
@@ -31,6 +34,19 @@ def strings_to_document_sources(source_strs: list[str]) -> list[DocumentSource]:
         except ValueError:
             logger.warning("Failed to translate %s to a DocumentSource", s)
     return sources
+
+
+def _mentions_sources(turn: str, connected_sources: list[DocumentSource]) -> bool:
+    """True when the turn names a connected source or says "source(s)", so both
+    a standing directive and a later revocation ("search all sources") are kept."""
+    text = turn.lower()
+    if re.search(r"\bsources?\b", text):
+        return True
+    return any(
+        re.search(rf"\b{re.escape(source.value.replace('_', ' '))}\b", text)
+        or re.search(rf"\b{re.escape(source.value)}\b", text)
+        for source in connected_sources
+    )
 
 
 def _parse_scope_decision(
@@ -78,7 +94,15 @@ def decide_search_scope(
     ]
     if not user_turns:
         return None
-    user_turns = user_turns[-MAX_SOURCE_FILTER_USER_TURNS:]
+    source_older_turns = [
+        turn
+        for turn in user_turns[:-MAX_SOURCE_FILTER_USER_TURNS]
+        if _mentions_sources(turn, connected_sources)
+    ]
+    user_turns = (
+        source_older_turns[-MAX_SOURCE_FILTER_USER_TURNS:]
+        + user_turns[-MAX_SOURCE_FILTER_USER_TURNS:]
+    )
 
     last_user_query = user_turns[-1]
     prior_turns = user_turns[:-1]

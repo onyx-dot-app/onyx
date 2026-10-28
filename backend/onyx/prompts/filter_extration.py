@@ -31,7 +31,8 @@ means named as WHERE to look.
 A source named in an earlier turn still applies to a same-topic follow-up that names no new \
 source — keep scoping to it. A standing \
 directive ("for anything I ask", "always", "from now on") applies to every later turn, on \
-any topic, until the user replaces it.
+any topic, until the user replaces or revokes it. Only the most recent directive counts: \
+after "search all sources again" or "stop limiting to X", return [].
 
 When source(s) ARE named, the phrasing decides the mode:
 
