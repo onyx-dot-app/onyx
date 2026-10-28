@@ -264,6 +264,7 @@ def search(
                 link=entry.get("url"),
                 source_type=entry["source_type"],
                 updated_at=entry.get("updated_at"),
+                metadata=entry.get("metadata"),
             )
             for entry in entries
         ],

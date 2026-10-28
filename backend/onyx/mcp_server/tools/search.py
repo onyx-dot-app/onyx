@@ -15,6 +15,7 @@ from onyx.configs.app_configs import (
     OPEN_URLS_MAX_URLS_PER_REQUEST,
 )
 from onyx.configs.constants import DocumentSource
+from onyx.context.search.models import Tag
 from onyx.mcp_server.api import mcp_server
 from onyx.mcp_server.utils import (
     AgentEntry,
@@ -81,6 +82,7 @@ def _to_mcp_dict(result: SearchResult) -> dict[str, Any]:
         "source_type": result.source_type,
         "content": result.content,
         "updated_at": result.updated_at,
+        "metadata": result.metadata,
     }
 
 
@@ -277,6 +279,7 @@ async def search_indexed_documents(
     query: str,
     source_types: list[str] | None = None,
     document_set_names: list[str] | None = None,
+    tags: list[Tag] | None = None,
     time_cutoff: str | None = None,
     skip_query_expansion: bool = False,
     agent: str | None = None,
@@ -299,6 +302,8 @@ async def search_indexed_documents(
     `time_cutoff` accepts an ISO 8601 timestamp; only documents updated on or
     after that moment are returned. Naive (timezone-less) timestamps are
     treated as UTC server-side.
+    `tags` restricts results to documents with matching `tag_key` and
+    `tag_value` pairs, such as Jira reporter or assignee metadata.
     `skip_query_expansion` bypasses the LLM query-expansion step; useful when
     you already know the exact phrase to search for (faster, no LLM call for
     expansion).
@@ -309,7 +314,7 @@ async def search_indexed_documents(
     sets replace an agent's knowledge scope rather than narrowing it, so passing
     both is rejected.
 
-    Returns ``{"results": [{title, url, source_type, content, updated_at},
+    Returns ``{"results": [{title, url, source_type, content, updated_at, metadata},
     ...]}``. Results are ordered by LLM-judged relevance. ``content`` is the
     full chunk of the document the LLM selected; in the rare case the LLM
     selection step yields no full chunk for a doc, it falls back to the
@@ -390,6 +395,7 @@ async def search_indexed_documents(
             query=query,
             sources=filters.source_types,
             document_sets=document_set_names,
+            tags=tags,
             time_cutoff=parsed_cutoff,
             skip_query_expansion=skip_query_expansion,
             persona_id=filters.persona_id,
