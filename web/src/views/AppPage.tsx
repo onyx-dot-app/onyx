@@ -84,6 +84,7 @@ import { cn } from "@opal/utils";
 import Suggestions from "@/sections/Suggestions";
 import { OnboardingFlow } from "@/lib/onboarding/components";
 import { OnboardingStep } from "@/lib/onboarding/types";
+import { STEP_CONFIG } from "@/lib/onboarding/constants";
 import { useShowOnboarding } from "@/lib/onboarding/hooks";
 import { SvgChevronDown, SvgFileText } from "@opal/icons";
 import { Button, ShadowDiv, Spacer } from "@opal/components";
@@ -1149,8 +1150,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           (onboardingVisible &&
                             showOnboarding &&
                             !isLoadingOnboarding &&
-                            onboardingState.currentStep !==
-                              OnboardingStep.Complete)
+                            onboardingState.stepIndex <
+                              STEP_CONFIG[OnboardingStep.OptionalSetup].index)
                         }
                       />
                       <div

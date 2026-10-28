@@ -15891,16 +15891,19 @@
       }
     },
     "steps": {
-      "complete": {
-        "title": "Todo listo. Revisa la configuración opcional o haz clic en Finalizar la configuración"
-      },
       "llmSetup": {
-        "title": "¡Ya casi está! Conecta tus modelos para empezar a chatear."
+        "title": "Conecta un modelo para empezar a chatear."
       },
       "name": {
-        "title": "Vamos a dedicar un momento a configurarlo todo."
+        "title": "Dinos cómo llamarte."
       },
-      "welcome": {
+      "optionalSetup": {
+        "title": "Configura algunos extras opcionales."
+      },
+      "postStep": {
+        "title": "Todo listo."
+      },
+      "preStep": {
         "title": "Vamos a dedicar un momento a configurarlo todo."
       }
     }

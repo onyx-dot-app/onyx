@@ -193,7 +193,7 @@ describe("useShowOnboarding", () => {
   it("returns onboardingState and actions", () => {
     const { result } = renderUseShowOnboarding();
     expect(result.current.onboardingState.currentStep).toBe(
-      OnboardingStep.Welcome
+      OnboardingStep.PreStep
     );
     expect(result.current.onboardingActions).toBeDefined();
   });
