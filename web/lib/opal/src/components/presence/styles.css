@@ -1,0 +1,110 @@
+/* Presence — content animates in when it appears and out when it goes */
+
+@keyframes opal-presence-in {
+  from {
+    opacity: 0;
+    transform: translate(
+      var(--opal-presence-from-x),
+      var(--opal-presence-from-y)
+    );
+  }
+  to {
+    opacity: 1;
+    transform: translate(0, 0);
+  }
+}
+
+@keyframes opal-presence-out {
+  from {
+    opacity: 1;
+    transform: translate(0, 0);
+  }
+  to {
+    opacity: 0;
+    transform: translate(var(--opal-presence-to-x), var(--opal-presence-to-y));
+  }
+}
+
+/* Offsets. Keyframes cannot read the text direction, so the inline sides
+   flip through --opal-presence-dir for right-to-left text. */
+.opal-presence-motion {
+  --opal-presence-distance: 8px;
+  --opal-presence-dir: 1;
+  --opal-presence-from-x: 0px;
+  --opal-presence-from-y: 0px;
+  --opal-presence-to-x: 0px;
+  --opal-presence-to-y: 0px;
+}
+.opal-presence-motion:dir(rtl) {
+  --opal-presence-dir: -1;
+}
+.opal-presence-motion[data-presence-from="below"] {
+  --opal-presence-from-y: var(--opal-presence-distance);
+}
+.opal-presence-motion[data-presence-from="end"] {
+  --opal-presence-from-x: calc(
+    var(--opal-presence-distance) * var(--opal-presence-dir)
+  );
+}
+.opal-presence-motion[data-presence-from="start"] {
+  --opal-presence-from-x: calc(
+    -1 * var(--opal-presence-distance) * var(--opal-presence-dir)
+  );
+}
+.opal-presence-motion[data-presence-to="below"] {
+  --opal-presence-to-y: var(--opal-presence-distance);
+}
+.opal-presence-motion[data-presence-to="end"] {
+  --opal-presence-to-x: calc(
+    var(--opal-presence-distance) * var(--opal-presence-dir)
+  );
+}
+.opal-presence-motion[data-presence-to="start"] {
+  --opal-presence-to-x: calc(
+    -1 * var(--opal-presence-distance) * var(--opal-presence-dir)
+  );
+}
+
+.opal-presence-motion[data-presence-phase="entering"] {
+  animation: opal-presence-in 0.25s ease-out;
+}
+.opal-presence-motion[data-presence-phase="leaving"],
+.opal-presence-motion[data-presence-phase="collapsing"] {
+  animation: opal-presence-out 0.2s ease-in forwards;
+}
+
+/* grow: a one-row grid opens from 0fr before the entry, and closes to 0fr
+   after the exit. The content stays invisible while the height moves. */
+.opal-presence[data-presence-grow] {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.2s ease-out;
+  /* Only the block axis clips, so sideways motion still shows in full. */
+  overflow-y: clip;
+}
+@starting-style {
+  .opal-presence[data-presence-grow] {
+    grid-template-rows: 0fr;
+  }
+}
+.opal-presence[data-presence-grow][data-presence-phase="collapsing"] {
+  grid-template-rows: 0fr;
+}
+.opal-presence[data-presence-grow] > .opal-presence-motion {
+  min-height: 0;
+}
+.opal-presence[data-presence-grow]
+  > .opal-presence-motion[data-presence-phase="entering"] {
+  animation-delay: 0.2s;
+  animation-fill-mode: backwards;
+}
+
+/* Same selectors as the rules above, so these overrides win on specificity. */
+@media (prefers-reduced-motion: reduce) {
+  .opal-presence-motion[data-presence-phase] {
+    animation: none;
+  }
+  .opal-presence[data-presence-grow] {
+    transition: none;
+  }
+}

@@ -15829,6 +15829,12 @@
       }
     },
     "header": {
+      "finishButton": {
+        "label": "完成设置"
+      },
+      "nextButton": {
+        "label": "下一步"
+      },
       "progress": {
         "label": "第 {current} 步，共 {total} 步"
       }
@@ -15882,27 +15888,15 @@
     },
     "steps": {
       "complete": {
-        "button": {
-          "label": "完成设置"
-        },
         "title": "全部设置完成，请查看可选设置或点击“完成设置”"
       },
       "llmSetup": {
-        "button": {
-          "label": "下一步"
-        },
         "title": "就快好了！连接您的模型即可开始对话。"
       },
       "name": {
-        "button": {
-          "label": "下一步"
-        },
         "title": "花点时间来完成设置吧。"
       },
       "welcome": {
-        "button": {
-          "label": "开始吧"
-        },
         "title": "花点时间来完成设置吧。"
       }
     }

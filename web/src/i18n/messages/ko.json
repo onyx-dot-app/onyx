@@ -15829,6 +15829,12 @@
       }
     },
     "header": {
+      "finishButton": {
+        "label": "설정 완료"
+      },
+      "nextButton": {
+        "label": "다음"
+      },
       "progress": {
         "label": "{total}단계 중 {current}단계"
       }
@@ -15882,27 +15888,15 @@
     },
     "steps": {
       "complete": {
-        "button": {
-          "label": "설정 완료"
-        },
         "title": "모든 준비가 끝났습니다. 선택 설정을 확인하거나 설정 완료를 클릭하세요"
       },
       "llmSetup": {
-        "button": {
-          "label": "다음"
-        },
         "title": "거의 다 됐습니다! 모델을 연결하고 채팅을 시작하세요."
       },
       "name": {
-        "button": {
-          "label": "다음"
-        },
         "title": "잠시 설정을 진행하겠습니다."
       },
       "welcome": {
-        "button": {
-          "label": "시작하기"
-        },
         "title": "잠시 설정을 진행하겠습니다."
       }
     }

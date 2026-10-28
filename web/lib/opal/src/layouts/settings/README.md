@@ -51,7 +51,7 @@ Content container with consistent padding and vertical spacing. It renders
 the state set on `Root`: the error state when `error` is set (the
 broken-plug illustration, centred, with the page title and the
 description), else the page loader while `loading`, and otherwise its
-children, animated in with [`Enter`](../../components/enter/README.md) unless
+children, animated in with [`Presence`](../../components/presence/README.md) unless
 `animateEnter` is `false`. The header stays still, and reports its title to
 `Root` for the error title.
 

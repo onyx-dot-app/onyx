@@ -6,7 +6,7 @@ import { markdown } from "@opal/utils";
 import { Section } from "@/layouts/general-layouts";
 import { Content, InputErrorText, InputVertical, toast } from "@opal/layouts";
 import Card from "@/refresh-components/cards/Card";
-import { Button, Enter, MessageCard } from "@opal/components";
+import { Button, Presence, MessageCard } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import InfoBlock from "@/refresh-components/messages/InfoBlock";
 import { InputNumber } from "@opal/components";
@@ -492,7 +492,7 @@ function SeatsCard({
 
   if (isEditing) {
     return (
-      <Enter>
+      <Presence>
         <Card padding={0} gap={0} alignItems="stretch">
           <Section
             flexDirection="row"
@@ -604,7 +604,7 @@ function SeatsCard({
             </Button>
           </Section>
         </Card>
-      </Enter>
+      </Presence>
     );
   }
 

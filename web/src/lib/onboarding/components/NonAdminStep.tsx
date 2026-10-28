@@ -1,23 +1,20 @@
 "use client";
 
-import React, { useRef, useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
-import Text from "@/refresh-components/texts/Text";
-import { InputTypeIn } from "@opal/components";
+import { IconContainer, InputTypeIn, SelectCard } from "@opal/components";
 import { updateUserPersonalization } from "@/lib/users/svc";
 import { useUser } from "@/providers/UserProvider";
 import { Button } from "@opal/components";
-import { InputAvatar } from "@opal/components";
-import { cn, clickOnKeyDown } from "@opal/utils";
+import { cn } from "@opal/utils";
 import { SvgCheckCircle, SvgEdit, SvgUser, SvgX } from "@opal/icons";
-import { ContentAction, InputHorizontal, toast } from "@opal/layouts";
+import { ContentAction, InputHorizontal, Section, toast } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
 import { useSettings } from "@/lib/settings/hooks";
 
 export default function NonAdminStep() {
   const t = useTranslations("onboarding");
   const { appName } = useSettings();
-  const inputRef = useRef<HTMLInputElement>(null);
   const { user, refreshUser } = useUser();
   const [name, setName] = useState("");
   const [showHeader, setShowHeader] = useState(false);
@@ -99,78 +96,102 @@ export default function NonAdminStep() {
           role="group"
           aria-label="non-admin-name-prompt"
         >
-          {/* Pointer convenience only — the input is already keyboard reachable. */}
-          <div
-            role="presentation"
-            className="contents"
-            onClick={() => inputRef.current?.focus()}
+          {/* Save sits outside the input's label: a label must not contain a
+              second control. */}
+          <Section
+            flexDirection="row"
+            justifyContent="start"
+            alignItems="center"
+            gap={2}
+            height="auto"
           >
             <InputHorizontal
+              withLabel
+              fillInput
               responsive
               icon={SvgUser}
               title={t("nameStep.title", { appName })}
               description={t("nameStep.description")}
             >
-              <div className="flex w-full items-center gap-2">
-                <InputTypeIn
-                  ref={inputRef}
-                  placeholder={t("nameStep.input.placeholder")}
-                  value={name || ""}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                    setName(e.target.value)
+              <InputTypeIn
+                placeholder={t("nameStep.input.placeholder")}
+                value={name || ""}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setName(e.target.value)
+                }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && name && name.trim().length > 0) {
+                    e.preventDefault();
+                    handleSave();
                   }
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && name && name.trim().length > 0) {
-                      e.preventDefault();
-                      handleSave();
-                    }
-                  }}
-                />
-                <Button disabled={name === ""} onClick={handleSave}>
-                  {t("nonAdminStep.save.label")}
-                </Button>
-              </div>
+                }}
+              />
             </InputHorizontal>
-          </div>
+            <Button disabled={name === ""} onClick={handleSave}>
+              {t("nonAdminStep.save.label")}
+            </Button>
+          </Section>
         </div>
       ) : (
         <Hoverable.Root group="nonAdminName" width="full">
-          <div
-            className={containerClasses}
-            aria-label={t("nameStep.edit.ariaLabel")}
-            role="button"
-            tabIndex={0}
+          <SelectCard
+            state="empty"
+            padding={2}
+            rounding={4}
             onClick={handleEdit}
-            onKeyDown={clickOnKeyDown(handleEdit)}
+            aria-label={t("nameStep.edit.ariaLabel")}
           >
-            <div className="flex items-center gap-1">
-              <InputAvatar
-                className={cn(
-                  "flex items-center justify-center bg-background-neutral-inverted-00",
-                  "w-5 h-5"
+            <div className="pl-1">
+              <ContentAction
+                icon={() => (
+                  <IconContainer
+                    size="secondary"
+                    avatar="user"
+                    name={savedName ?? ""}
+                  />
                 )}
-              >
-                <Text as="p" inverted secondaryBody>
-                  {savedName?.[0]?.toUpperCase()}
-                </Text>
-              </InputAvatar>
-              <Text as="p" text04 mainUiAction>
-                {savedName}
-              </Text>
+                title={savedName}
+                sizePreset="main-ui"
+                variant="section"
+                padding={0}
+                center
+                rightChildren={
+                  <Section
+                    flexDirection="row"
+                    alignItems="center"
+                    gap={1}
+                    width="fit"
+                    height="auto"
+                  >
+                    <Hoverable.Item
+                      group="nonAdminName"
+                      variant="appear-on-hover"
+                    >
+                      <Button
+                        prominence="tertiary"
+                        size="md"
+                        icon={SvgEdit}
+                        tooltip={t("nameStep.edit.tooltip")}
+                      />
+                    </Hoverable.Item>
+                    <Section padding={1} width="fit" height="auto">
+                      <IconContainer
+                        icon={({ className, ...props }) => (
+                          <SvgCheckCircle
+                            className={cn(
+                              className,
+                              "stroke-status-success-05"
+                            )}
+                            {...props}
+                          />
+                        )}
+                      />
+                    </Section>
+                  </Section>
+                }
+              />
             </div>
-            <div className="p-1 flex items-center gap-1">
-              {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-              <Hoverable.Item group="nonAdminName" variant="appear-on-hover">
-                <Button
-                  prominence="internal"
-                  size="sm"
-                  icon={SvgEdit}
-                  tooltip={t("nameStep.edit.tooltip")}
-                />
-              </Hoverable.Item>
-              <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
-            </div>
-          </div>
+          </SelectCard>
         </Hoverable.Root>
       )}
     </>
