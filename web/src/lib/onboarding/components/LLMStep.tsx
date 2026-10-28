@@ -59,10 +59,11 @@ const LLMStep = memo(
       window.location.href = ADMIN_ROUTES.LLM_MODELS.path;
     };
 
-    // A connected provider's settings open its own modal, in edit mode, as on
-    // the Language Models admin page. The modal needs the full provider (every
-    // model), which loads on demand.
-    const { llmProviders: configuredProviders } = useAdminLanguageModels();
+    // A connected provider's settings open the same modal as Connect, on this
+    // page, in edit mode. The modal needs the full provider (every model),
+    // which loads on demand.
+    const { llmProviders: configuredProviders, refetch: refetchProviders } =
+      useAdminLanguageModels();
     const [editingProviderId, setEditingProviderId] = useState<number | null>(
       null
     );
@@ -73,19 +74,22 @@ const LLMStep = memo(
     const EditModal = editingProvider
       ? getProvider(editingProvider.provider).Modal
       : null;
-    const openProviderSettings = (name: string) => {
-      const configured = configuredProviders?.find(
+    const openProviderSettings = async (name: string) => {
+      // A provider connected during onboarding is not in the cached list yet,
+      // so a miss refetches it before giving up.
+      let configuredId = configuredProviders?.find(
         (provider) => provider.provider === name
-      );
-      if (configured) setEditingProviderId(configured.id);
-      else openAdminPanel();
+      )?.id;
+      if (configuredId === undefined) {
+        const fresh = await refetchProviders();
+        configuredId = fresh?.providers.find(
+          (provider) => provider.provider === name
+        )?.id;
+      }
+      if (configuredId !== undefined) setEditingProviderId(configuredId);
     };
     useEffect(() => {
-      // When the provider cannot load, the admin page is the fallback.
-      if (editingProviderFailed) {
-        setEditingProviderId(null);
-        openAdminPanel();
-      }
+      if (editingProviderFailed) setEditingProviderId(null);
     }, [editingProviderFailed]);
 
     const [selectedProvider, setSelectedProvider] =
@@ -148,6 +152,7 @@ const LLMStep = memo(
               />
               {EditModal && editingProvider && (
                 <EditModal
+                  variant="onboarding"
                   existingLlmProvider={editingProvider}
                   onOpenChange={(open) => {
                     if (!open) setEditingProviderId(null);
@@ -185,7 +190,7 @@ const LLMStep = memo(
                               : handleProviderClick(llmDescriptor, false)
                           }
                           onSettingsClick={() =>
-                            openProviderSettings(llmDescriptor.name)
+                            void openProviderSettings(llmDescriptor.name)
                           }
                         />
                       );
