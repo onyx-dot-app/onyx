@@ -11,6 +11,8 @@ which the Helm chart grants through ``logExport.kubernetesRbac``.
 import os
 import socket
 import tempfile
+import threading
+import time
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,7 +38,6 @@ from ee.onyx.server.log_export.storage import (
     save_receipt,
 )
 from onyx import __version__
-from onyx.file_store.constants import MAX_IN_MEMORY_SIZE
 from onyx.server.features.build.sandbox.kubernetes.k8s_client import (
     build_core_v1_api,
 )
@@ -63,6 +64,10 @@ _MAX_PARALLEL_STREAMS = 8
 # Time kept after the log reads to zip and upload before the export deadline.
 _UPLOAD_MARGIN_SECONDS = 15.0
 _STREAM_READ_CHUNK_BYTES = 64 * 1024
+# Logs spool to disk past this size, so parallel reads hold little memory.
+_SPOOL_MAX_MEMORY_BYTES = 1024 * 1024
+_TRUNCATED_STREAM_CAP = "truncated at the per-log byte cap"
+_TRUNCATED_TOTAL_CAP = "truncated: total byte cap reached"
 _HTTP_FORBIDDEN = 403
 _RBAC_HINT = (
     "The Kubernetes API denied access. Grant the api-server service account "
@@ -121,11 +126,29 @@ class _FetchedStream:
         buffer: tempfile.SpooledTemporaryFile[bytes] | None,
         size_bytes: int,
         error: str | None,
+        truncated_reason: str | None = None,
     ) -> None:
         self.stream = stream
         self.buffer = buffer
         self.size_bytes = size_bytes
         self.error = error
+        self.truncated_reason = truncated_reason
+
+
+class _ByteBudget:
+    """Total bytes all parallel reads of one export may keep, reserved per
+    chunk before it is written."""
+
+    def __init__(self, total_bytes: int) -> None:
+        self._remaining = total_bytes
+        self._lock = threading.Lock()
+
+    def reserve(self, requested_bytes: int) -> int:
+        """Returns how many of the requested bytes may be kept (0 when spent)."""
+        with self._lock:
+            granted = min(requested_bytes, self._remaining)
+            self._remaining -= granted
+            return granted
 
 
 def _container_state(container_status: client.V1ContainerStatus) -> str:
@@ -203,8 +226,17 @@ def log_streams_for_pod(pod: client.V1Pod) -> list[LogStream]:
 
 
 def _fetch_stream(
-    core_api: client.CoreV1Api, namespace: str, stream: LogStream
+    core_api: client.CoreV1Api,
+    namespace: str,
+    stream: LogStream,
+    budget: _ByteBudget,
+    deadline_monotonic: float,
 ) -> _FetchedStream:
+    """Reads one log until it ends, hits a byte cap, or passes the deadline.
+
+    Checks the deadline per chunk, so a read that runs late stops and frees its
+    buffer instead of running on after the export moved on.
+    """
     try:
         response = core_api.read_namespaced_pod_log(
             name=stream.pod_name,
@@ -219,17 +251,27 @@ def _fetch_stream(
         return _FetchedStream(stream, None, 0, f"{e.status} {e.reason}")
 
     buffer: tempfile.SpooledTemporaryFile[bytes] = tempfile.SpooledTemporaryFile(
-        max_size=MAX_IN_MEMORY_SIZE
+        max_size=_SPOOL_MAX_MEMORY_BYTES
     )
     size_bytes = 0
+    truncated_reason: str | None = None
     try:
         for chunk in response.stream(_STREAM_READ_CHUNK_BYTES):
-            # The API honors limit_bytes; the bound here guards the export
-            # against an API server that does not.
-            chunk = chunk[: LOG_EXPORT_KUBERNETES_MAX_BYTES_PER_STREAM - size_bytes]
-            buffer.write(chunk)
-            size_bytes += len(chunk)
+            if time.monotonic() >= deadline_monotonic:
+                buffer.close()
+                return _FetchedStream(stream, None, 0, "timed out")
+            # The API honors limit_bytes; this bound guards against one that
+            # does not.
+            stream_room = LOG_EXPORT_KUBERNETES_MAX_BYTES_PER_STREAM - size_bytes
+            wanted = min(len(chunk), stream_room)
+            granted = budget.reserve(wanted)
+            buffer.write(chunk[:granted])
+            size_bytes += granted
+            if granted < wanted:
+                truncated_reason = _TRUNCATED_TOTAL_CAP
+                break
             if size_bytes >= LOG_EXPORT_KUBERNETES_MAX_BYTES_PER_STREAM:
+                truncated_reason = _TRUNCATED_STREAM_CAP
                 break
     except Exception as e:
         logger.warning(
@@ -239,8 +281,12 @@ def _fetch_stream(
         return _FetchedStream(stream, None, 0, str(e))
     finally:
         response.release_conn()
+
+    if size_bytes == 0 and truncated_reason == _TRUNCATED_TOTAL_CAP:
+        buffer.close()
+        return _FetchedStream(stream, None, 0, "total byte cap reached")
     buffer.seek(0)
-    return _FetchedStream(stream, buffer, size_bytes, None)
+    return _FetchedStream(stream, buffer, size_bytes, None, truncated_reason)
 
 
 def _event_time(event: client.CoreV1Event) -> datetime:
@@ -323,7 +369,8 @@ def _build_readme(
         "Included logs:",
     ]
     lines.extend(
-        f"  {fetched.stream.arcname} ({fetched.size_bytes} bytes)"
+        f"  {fetched.stream.arcname} ({fetched.size_bytes} bytes"
+        + (f", {fetched.truncated_reason})" if fetched.truncated_reason else ")")
         for fetched in written
     )
     if failures:
@@ -345,9 +392,10 @@ def build_kubernetes_log_zip(
 ) -> BuiltLogZip:
     """Reads the logs, status, and events of every Onyx pod of this release.
 
-    A stream that fails, times out, or would pass the total byte cap is listed
-    in the zip's README instead of failing the collection. Failing to select
-    or list the pods raises.
+    The reads share one total byte budget and stop at the time budget. A log
+    that fails, times out, or is cut short is listed in the zip's README
+    instead of failing the collection. Failing to select or list the pods
+    raises.
     """
     selector = _release_selector(core_api, namespace, own_pod_name)
     pods = sorted(
@@ -358,8 +406,13 @@ def build_kubernetes_log_zip(
     )
 
     streams = [stream for pod in pods for stream in log_streams_for_pod(pod)]
+    budget = _ByteBudget(LOG_EXPORT_KUBERNETES_MAX_TOTAL_BYTES)
+    deadline_monotonic = time.monotonic() + time_budget_seconds
     fetched_streams: list[_FetchedStream] = run_functions_tuples_in_parallel(
-        [(_fetch_stream, (core_api, namespace, stream)) for stream in streams],
+        [
+            (_fetch_stream, (core_api, namespace, stream, budget, deadline_monotonic))
+            for stream in streams
+        ],
         allow_failures=True,
         max_workers=_MAX_PARALLEL_STREAMS,
         timeout=time_budget_seconds,
@@ -378,27 +431,21 @@ def build_kubernetes_log_zip(
 
     written: list[_FetchedStream] = []
     failures: list[tuple[str, str]] = []
-    total_bytes = 0
     zip_buffer: tempfile.SpooledTemporaryFile[bytes] = tempfile.SpooledTemporaryFile(
-        max_size=MAX_IN_MEMORY_SIZE
+        max_size=_SPOOL_MAX_MEMORY_BYTES
     )
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
         for fetched in fetched_streams:
             if fetched.buffer is None:
                 failures.append((fetched.stream.arcname, fetched.error or "unknown"))
                 continue
-            with fetched.buffer:
-                if (
-                    total_bytes + fetched.size_bytes
-                    > LOG_EXPORT_KUBERNETES_MAX_TOTAL_BYTES
-                ):
-                    failures.append((fetched.stream.arcname, "total byte cap reached"))
-                    continue
-                with zip_file.open(fetched.stream.arcname, mode="w") as destination:
-                    while chunk := fetched.buffer.read(_STREAM_READ_CHUNK_BYTES):
-                        destination.write(chunk)
-                total_bytes += fetched.size_bytes
-                written.append(fetched)
+            with (
+                fetched.buffer,
+                zip_file.open(fetched.stream.arcname, mode="w") as destination,
+            ):
+                while chunk := fetched.buffer.read(_STREAM_READ_CHUNK_BYTES):
+                    destination.write(chunk)
+            written.append(fetched)
 
         zip_file.writestr(
             PODS_FILE_NAME,

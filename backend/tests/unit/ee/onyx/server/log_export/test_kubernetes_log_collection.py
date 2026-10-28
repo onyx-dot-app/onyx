@@ -3,6 +3,8 @@ reads, how it caps them, and how it reports failures, against a fake API."""
 
 import io
 import json
+import threading
+import time
 import zipfile
 from collections.abc import Iterator
 from datetime import datetime, timezone
@@ -91,15 +93,18 @@ def _event(object_name: str, reason: str, message: str) -> client.CoreV1Event:
 
 
 class _FakeLogResponse:
-    def __init__(self, data: bytes) -> None:
+    def __init__(self, data: bytes, chunk_delay_seconds: float) -> None:
         self._data = data
+        self._chunk_delay_seconds = chunk_delay_seconds
+        self.released = threading.Event()
 
     def stream(self, amt: int) -> Iterator[bytes]:
         for start in range(0, len(self._data), amt):
+            time.sleep(self._chunk_delay_seconds)
             yield self._data[start : start + amt]
 
     def release_conn(self) -> None:
-        pass
+        self.released.set()
 
 
 class _FakeCoreV1Api(client.CoreV1Api):
@@ -112,12 +117,15 @@ class _FakeCoreV1Api(client.CoreV1Api):
         logs: dict[tuple[str, bool], bytes],
         events: list[client.CoreV1Event],
         read_pod_error: ApiException | None = None,
+        chunk_delay_seconds: float = 0.0,
     ) -> None:
         self._pods = pods
         self._logs = logs
         self._events = events
         self._read_pod_error = read_pod_error
+        self._chunk_delay_seconds = chunk_delay_seconds
         self.label_selectors: list[str] = []
+        self.responses: list[_FakeLogResponse] = []
 
     def read_namespaced_pod(self, name: str, namespace: str, **_: Any) -> Any:
         assert namespace == _NAMESPACE
@@ -135,7 +143,9 @@ class _FakeCoreV1Api(client.CoreV1Api):
         key = (name, bool(kwargs["previous"]))
         if key not in self._logs:
             raise ApiException(status=400, reason="Bad Request")
-        return _FakeLogResponse(self._logs[key])
+        response = _FakeLogResponse(self._logs[key], self._chunk_delay_seconds)
+        self.responses.append(response)
+        return response
 
     def list_namespaced_event(self, namespace: str, **_: Any) -> Any:
         assert namespace == _NAMESPACE
@@ -201,23 +211,15 @@ def test_restarted_container_collects_previous_log_and_termination() -> None:
     assert "unrelated-db-0" not in events
 
 
-def test_stream_and_total_byte_caps(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_stream_byte_cap_truncates_a_log(monkeypatch: pytest.MonkeyPatch) -> None:
     # Precondition.
-    # Each log is larger than the per-stream cap, and two capped logs exceed
-    # the total cap.
+    # The log is larger than the per-log cap.
     monkeypatch.setattr(
         kubernetes_collection, "LOG_EXPORT_KUBERNETES_MAX_BYTES_PER_STREAM", 10
     )
-    monkeypatch.setattr(
-        kubernetes_collection, "LOG_EXPORT_KUBERNETES_MAX_TOTAL_BYTES", 15
-    )
-    pods = [
-        _pod(_API_POD, "api-server"),
-        _pod(_DOCPROCESSING_POD, "celery-worker-docprocessing"),
-    ]
     api = _FakeCoreV1Api(
-        pods=pods,
-        logs={(_API_POD, False): b"a" * 100, (_DOCPROCESSING_POD, False): b"b" * 100},
+        pods=[_pod(_API_POD, "api-server")],
+        logs={(_API_POD, False): b"a" * 100},
         events=[],
     )
 
@@ -225,17 +227,72 @@ def test_stream_and_total_byte_caps(monkeypatch: pytest.MonkeyPatch) -> None:
     built = build_kubernetes_log_zip(api, _NAMESPACE, _API_POD, 30.0)
 
     # Postcondition.
-    # The first log is cut to the stream cap; the second is left out and the
-    # README says why.
     files = _read_zip(built.zip_buffer)
     built.zip_buffer.close()
-    assert built.log_file_count == 1
     assert files[f"logs/{_API_POD}/api-server.log"] == b"a" * 10
-    readme = files["README.txt"].decode()
     assert (
-        f"logs/{_DOCPROCESSING_POD}/celery-worker-docprocessing.log: "
-        "total byte cap reached"
-    ) in readme
+        "(10 bytes, truncated at the per-log byte cap)" in files["README.txt"].decode()
+    )
+
+
+def test_total_budget_runs_out_mid_stream_across_parallel_reads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Precondition.
+    # Four logs of 100 bytes are read in parallel, 4 bytes per chunk, against a
+    # 150-byte budget for the export.
+    monkeypatch.setattr(kubernetes_collection, "_STREAM_READ_CHUNK_BYTES", 4)
+    monkeypatch.setattr(
+        kubernetes_collection, "LOG_EXPORT_KUBERNETES_MAX_TOTAL_BYTES", 150
+    )
+    pods = [_pod(f"onyx-worker-{i}-abc12-xyz{i}", f"worker-{i}") for i in range(4)]
+    api = _FakeCoreV1Api(
+        pods=pods,
+        logs={(pod.metadata.name, False): b"x" * 100 for pod in pods},
+        events=[],
+        chunk_delay_seconds=0.001,
+    )
+
+    # Under test.
+    built = build_kubernetes_log_zip(api, _NAMESPACE, pods[0].metadata.name, 30.0)
+
+    # Postcondition.
+    # The logs together hold exactly the budget, and every log the budget cut
+    # short is marked in the README.
+    files = _read_zip(built.zip_buffer)
+    built.zip_buffer.close()
+    log_sizes = [len(data) for name, data in files.items() if name.startswith("logs/")]
+    assert sum(log_sizes) == 150
+    assert all(size <= 100 for size in log_sizes)
+    readme = files["README.txt"].decode()
+    capped_lines = [
+        line for line in readme.splitlines() if "total byte cap reached" in line
+    ]
+    assert len(capped_lines) == 4 - log_sizes.count(100)
+
+
+def test_deadline_stops_reads_and_releases_them() -> None:
+    # Precondition.
+    # The log arrives slowly, so reading all of it takes far longer than the
+    # time budget.
+    api = _FakeCoreV1Api(
+        pods=[_pod(_API_POD, "api-server")],
+        logs={(_API_POD, False): b"a" * (64 * 1024 * 100)},
+        events=[],
+        chunk_delay_seconds=0.05,
+    )
+
+    # Under test.
+    built = build_kubernetes_log_zip(api, _NAMESPACE, _API_POD, 0.2)
+
+    # Postcondition.
+    # The log is reported as timed out, and the read stops on its next chunk
+    # instead of running on in the background.
+    files = _read_zip(built.zip_buffer)
+    built.zip_buffer.close()
+    assert f"logs/{_API_POD}/api-server.log: timed out" in files["README.txt"].decode()
+    [response] = api.responses
+    assert response.released.wait(timeout=1.0)
 
 
 def test_missing_rbac_writes_failed_receipt(
