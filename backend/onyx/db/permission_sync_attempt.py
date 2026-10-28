@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.connector_edit_requests import request_retry_delay
-from onyx.db.enums import PermissionSyncStatus
+from onyx.db.enums import ConnectorCredentialPairStatus, PermissionSyncStatus
 from onyx.db.models import (
     Connector,
     ConnectorCredentialPair,
@@ -220,8 +220,18 @@ def try_create_doc_permission_sync_attempt(
     db_session: Session,
 ) -> int | None:
     """Creates a NOT_STARTED attempt for a doc permission sync about to be
-    dispatched. Returns None when the cc_pair already has an open attempt: the
-    partial unique index on open attempts is the per-cc_pair sync lock."""
+    dispatched. Returns None when the cc_pair already has an open attempt (the
+    partial unique index on open attempts is the per-cc_pair sync lock) or is
+    paused. The status read waits for a pause that holds the pair's row lock,
+    so a pause either cancels this attempt or is seen here."""
+    status = db_session.scalar(
+        select(ConnectorCredentialPair.status)
+        .where(ConnectorCredentialPair.id == connector_credential_pair_id)
+        .with_for_update(read=True, key_share=True)
+    )
+    if status == ConnectorCredentialPairStatus.PAUSED:
+        db_session.commit()
+        return None
     return _try_create_attempt(
         DocPermissionSyncAttempt,
         connector_credential_pair_id,
@@ -278,6 +288,26 @@ def cancel_open_doc_permission_sync_attempt__no_commit(
         db_session,
         reason,
     )
+
+
+def lock_open_doc_permission_sync_attempt__no_commit(
+    connector_credential_pair_id: int,
+    db_session: Session,
+) -> None:
+    """Row-locks the cc_pair's open attempt, if any, until the caller commits.
+    Waits for the sync's writes in flight, which hold a share lock on it. The
+    row stays unchanged, so a dispatch that meets it still sees an open
+    attempt and creates none, without waiting."""
+    db_session.execute(
+        select(DocPermissionSyncAttempt.id)
+        .where(
+            DocPermissionSyncAttempt.connector_credential_pair_id
+            == connector_credential_pair_id
+        )
+        .where(DocPermissionSyncAttempt.status.in_(_OPEN_STATUSES))
+        # FOR NO KEY UPDATE, the lock the cancel's UPDATE takes
+        .with_for_update(key_share=True)
+    ).scalar_one_or_none()
 
 
 def get_doc_permission_sync_attempt(

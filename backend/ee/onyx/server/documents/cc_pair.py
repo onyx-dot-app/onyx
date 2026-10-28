@@ -125,7 +125,8 @@ def sync_cc_pair(
         )
     _assert_perm_synced(cc_pair)
 
-    # The sync would stop on the pause's stop signal at once and record a failure.
+    # Attempt creation refuses a paused pair. Give the reason here instead of
+    # the generic creation failure below.
     if cc_pair.status == ConnectorCredentialPairStatus.PAUSED:
         raise OnyxError(
             OnyxErrorCode.CONFLICT,

@@ -93,6 +93,7 @@ from onyx.db.permission_sync_attempt import (
     cancel_open_doc_permission_sync_attempt__no_commit,
     cancel_queued_external_group_sync_attempt__no_commit,
     get_latest_doc_permission_sync_attempt_for_cc_pair,
+    lock_open_doc_permission_sync_attempt__no_commit,
 )
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.sync_record import fetch_latest_sync_record
@@ -533,7 +534,8 @@ def _cancel_permission_syncs_for_pause__no_commit(
     A running group sync is left to finish. A run marks the pair's group
     memberships stale as it starts, and the next run deletes the ones still
     stale before it adds them back, so a stopped run would take users' access
-    away after resume."""
+    away after resume. Canceling it under the pair's row lock would also
+    deadlock with its writes (see lock_connector_credential_pair_row)."""
     doc_sync_attempt_id = cancel_open_doc_permission_sync_attempt__no_commit(
         cc_pair_id, db_session, reason=_PERMISSION_SYNC_PAUSE_REASON
     )
@@ -796,6 +798,13 @@ def update_cc_pair_status(
             OnyxErrorCode.INVALID_INPUT,
             "Connector status can only be set to ACTIVE or PAUSED.",
         )
+
+    if status_update_request.status == ConnectorCredentialPairStatus.PAUSED:
+        # Before the pair's row lock: this waits for the sync's writes in
+        # flight, and those can wait on rows whose writers need the pair's row.
+        # A lock, not the cancel: a dispatch that holds its key share lock on
+        # the pair would wait on an updated attempt row, a deadlock with ours.
+        lock_open_doc_permission_sync_attempt__no_commit(cc_pair_id, db_session)
 
     # Held through the status commit. Attempt creation takes the same lock,
     # so an attempt created before the pause is in the select below, and a
