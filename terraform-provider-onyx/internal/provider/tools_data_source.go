@@ -56,8 +56,10 @@ func (d *toolsDataSource) Metadata(_ context.Context, req datasource.MetadataReq
 
 func (d *toolsDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Every action the caller can see: built-in actions, custom actions and " +
-			"MCP tools. Use it to find the ids of built-in actions for `onyx_agent.tool_ids`, " +
+		MarkdownDescription: "The actions an agent can use now: enabled custom actions, built-in " +
+			"actions that are available on this deployment, and tools of connected MCP servers. " +
+			"Disabled actions, unavailable built-in actions and tools of disconnected MCP servers " +
+			"are left out. Use it to find the ids of built-in actions for `onyx_agent.tool_ids`, " +
 			"because Terraform cannot create those. Custom headers are not exposed.",
 		Attributes: map[string]schema.Attribute{
 			"tools": schema.ListNestedAttribute{

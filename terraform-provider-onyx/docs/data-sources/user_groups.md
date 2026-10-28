@@ -3,12 +3,12 @@
 page_title: "onyx_user_groups Data Source - terraform-provider-onyx"
 subcategory: ""
 description: |-
-  All user groups, including the seeded Admin and Basic groups that onyx_user_group cannot create. Use it to reference a group by name. Enterprise Edition only.
+  The user groups the caller can see, including the seeded Admin and Basic groups that onyx_user_group cannot create. A key with global group read access sees every group; a scoped group manager sees only the groups it manages. Use it to reference a group by name. Enterprise Edition only.
 ---
 
 # onyx_user_groups (Data Source)
 
-All user groups, including the seeded `Admin` and `Basic` groups that `onyx_user_group` cannot create. Use it to reference a group by name. Enterprise Edition only.
+The user groups the caller can see, including the seeded `Admin` and `Basic` groups that `onyx_user_group` cannot create. A key with global group read access sees every group; a scoped group manager sees only the groups it manages. Use it to reference a group by name. Enterprise Edition only.
 
 ## Example Usage
 
@@ -16,7 +16,9 @@ All user groups, including the seeded `Admin` and `Basic` groups that `onyx_user
 data "onyx_user_groups" "all" {}
 
 locals {
-  basic_group_id = one([for g in data.onyx_user_groups.all.groups : g.id if g.name == "Basic"])
+  # Indexing the map fails the plan if the group is missing.
+  group_ids      = { for g in data.onyx_user_groups.all.groups : g.name => g.id }
+  basic_group_id = local.group_ids["Basic"]
 }
 ```
 

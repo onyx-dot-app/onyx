@@ -50,9 +50,10 @@ func (d *userGroupsDataSource) Metadata(_ context.Context, req datasource.Metada
 
 func (d *userGroupsDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "All user groups, including the seeded `Admin` and `Basic` groups that " +
-			"`onyx_user_group` cannot create. Use it to reference a group by name. Enterprise " +
-			"Edition only.",
+		MarkdownDescription: "The user groups the caller can see, including the seeded `Admin` and " +
+			"`Basic` groups that `onyx_user_group` cannot create. A key with global group read " +
+			"access sees every group; a scoped group manager sees only the groups it manages. Use " +
+			"it to reference a group by name. Enterprise Edition only.",
 		Attributes: map[string]schema.Attribute{
 			"groups": schema.ListNestedAttribute{
 				Computed:            true,

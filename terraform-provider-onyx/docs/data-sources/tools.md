@@ -3,12 +3,12 @@
 page_title: "onyx_tools Data Source - terraform-provider-onyx"
 subcategory: ""
 description: |-
-  Every action the caller can see: built-in actions, custom actions and MCP tools. Use it to find the ids of built-in actions for onyx_agent.tool_ids, because Terraform cannot create those. Custom headers are not exposed.
+  The actions an agent can use now: enabled custom actions, built-in actions that are available on this deployment, and tools of connected MCP servers. Disabled actions, unavailable built-in actions and tools of disconnected MCP servers are left out. Use it to find the ids of built-in actions for onyx_agent.tool_ids, because Terraform cannot create those. Custom headers are not exposed.
 ---
 
 # onyx_tools (Data Source)
 
-Every action the caller can see: built-in actions, custom actions and MCP tools. Use it to find the ids of built-in actions for `onyx_agent.tool_ids`, because Terraform cannot create those. Custom headers are not exposed.
+The actions an agent can use now: enabled custom actions, built-in actions that are available on this deployment, and tools of connected MCP servers. Disabled actions, unavailable built-in actions and tools of disconnected MCP servers are left out. Use it to find the ids of built-in actions for `onyx_agent.tool_ids`, because Terraform cannot create those. Custom headers are not exposed.
 
 ## Example Usage
 
@@ -16,7 +16,9 @@ Every action the caller can see: built-in actions, custom actions and MCP tools.
 data "onyx_tools" "all" {}
 
 locals {
-  search_tool_id = one([for t in data.onyx_tools.all.tools : t.id if t.in_code_tool_id == "SearchTool"])
+  # Indexing the map fails the plan if the action is missing.
+  built_in_tool_ids = { for t in data.onyx_tools.all.tools : t.in_code_tool_id => t.id if t.in_code_tool_id != null }
+  search_tool_id    = local.built_in_tool_ids["SearchTool"]
 }
 
 resource "onyx_agent" "researcher" {

@@ -3,12 +3,12 @@
 page_title: "onyx_agent_label Resource - terraform-provider-onyx"
 subcategory: ""
 description: |-
-  A label that groups agents in the agent list. Reference its id from onyx_agent.label_ids. Deleting a label removes it from every agent. Import with the numeric label id.
+  A label that groups agents in the agent list. Reference its id from onyx_agent.label_ids. Deleting a label removes it from every agent. Any user can create a label, but rename and delete need full admin access, so manage labels with an admin API key. Import with the numeric label id.
 ---
 
 # onyx_agent_label (Resource)
 
-A label that groups agents in the agent list. Reference its `id` from `onyx_agent.label_ids`. Deleting a label removes it from every agent. Import with the numeric label id.
+A label that groups agents in the agent list. Reference its `id` from `onyx_agent.label_ids`. Deleting a label removes it from every agent. Any user can create a label, but rename and delete need full admin access, so manage labels with an admin API key. Import with the numeric label id.
 
 ## Example Usage
 
