@@ -104,6 +104,41 @@ def test_enabled_turns_on_the_backend_collector() -> None:
     assert _collector_env(_render([])) == []
 
 
+@pytest.mark.parametrize(
+    ("extra_args", "bound_service_accounts"),
+    [
+        ([], ["onyx"]),
+        (_ENABLED, ["onyx", _API_SERVER_SA]),
+    ],
+)
+def test_craft_bindings_follow_the_api_server_account(
+    extra_args: list[str], bound_service_accounts: list[str]
+) -> None:
+    """The api-server provisions Craft sandboxes, so it keeps the sandbox-manager
+    and proxy-resolve access when it moves to its own service account."""
+    resources = _render(
+        [
+            "--set-string",
+            "configMap.ENABLE_CRAFT=true",
+            "--set",
+            "serviceAccount.create=true",
+            *extra_args,
+        ]
+    )
+    craft_bindings = [
+        resource
+        for resource in resources
+        if resource["kind"] == "RoleBinding"
+        and resource["metadata"]["labels"].get("app.kubernetes.io/component")
+        == "sandbox-manager"
+    ]
+    assert len(craft_bindings) == 2
+    for binding in craft_bindings:
+        assert [subject["name"] for subject in binding["subjects"]] == (
+            bound_service_accounts
+        )
+
+
 def test_api_server_service_account_keeps_the_shared_annotations() -> None:
     resources = _render(
         [

@@ -1909,6 +1909,7 @@ configMap:
 # -- Craft sandbox RBAC (rendered when configMap.ENABLE_CRAFT=true).
 craft:
   # Extra SAs (release ns) to also grant sandbox RBAC, e.g. a separate worker SA.
+  # The chart's service account and the api-server's (see logExport) are always bound.
   extraBoundServiceAccounts: []
   # CIDR(s) of any non-pod cluster DNS listener the sandbox must reach for firewall-init.sh's
   # proxy-FQDN getent lookup. A NodeLocal DNS cache is a hostNetwork endpoint (its listen IP is
