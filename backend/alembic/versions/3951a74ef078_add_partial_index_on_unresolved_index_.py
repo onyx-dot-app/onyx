@@ -12,6 +12,9 @@ index_attempt_errors can be large on a pair with many failures, so the index is
 built CONCURRENTLY, as in 90dceb6cd426: commit the migration transaction, then
 run the DDL on a dedicated AUTOCOMMIT connection. That connection does not get
 the migration connection's search_path, so the statements name the schema.
+After the commit, the migration connection sets the tenant search_path again,
+because a transaction-mode pooler (PgBouncer in cloud) can move it to another
+backend.
 """
 
 from alembic import op
@@ -45,6 +48,9 @@ def _release_migration_snapshot() -> tuple[sa.engine.Connection, str]:
     bind = op.get_bind()
     schema = bind.execute(sa.text("SELECT current_schema()")).scalar_one()
     bind.commit()
+    # Behind a transaction-mode pooler the next transaction can use another
+    # backend, which lacks env.py's session search_path; pin it again.
+    bind.execute(sa.text(f'SET search_path TO "{schema}"'))
     return bind, schema
 
 
