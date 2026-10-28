@@ -166,6 +166,7 @@ test("a resumed save error survives a failed readiness check and retry", async (
       stack_trace: "save trace",
       is_retryable: true,
     };
+    yield { stream_id: 42, next_cursor: 1, replay_complete: true };
   });
   jest
     .mocked(waitForChatSessionIdle)
@@ -183,7 +184,7 @@ test("a resumed save error survives a failed readiness check and retry", async (
     errorMessage: "Response could not be saved",
     errorCode: "RESPONSE_SAVE_ERROR",
   });
-  expect(session.messageTree.get(42)?.packets.at(-1)?.obj.type).toBe("stop");
+  expect(session.messageTree.get(42)?.packets).toEqual([]);
   await act(async () => {
     await settleChatSession({
       sessionId: "session",
@@ -232,6 +233,7 @@ test("a resumed stream keeps updating its session while another chat is selected
       placement: { turn_index: 0, tab_index: 0 },
       obj: { type: "message_delta", content: "Research continues" },
     };
+    yield { stream_id: 42, next_cursor: 1, replay_complete: true };
     await finish.promise;
   });
   jest.mocked(waitForChatSessionIdle).mockResolvedValue();
@@ -393,7 +395,14 @@ test.each([false, true])(
     await act(async () => idle.resolve());
     const recovered = useChatSessionStore.getState().sessions.get("session")!;
     expect(recovered.chatState).toBe("input");
-    expect(recovered.messageTree).toBe(localMessages);
+    expect(recovered.messageTree.get(1)).toBe(question);
+    expect(recovered.messageTree.get(2)).toEqual({
+      ...answer,
+      packets: [
+        { placement: { turn_index: 0, tab_index: 0 }, obj: { type: "stop" } },
+      ],
+      packetCount: 1,
+    });
     expect(fetchSettledChatSession).toHaveBeenCalledWith("session");
   }
 );
@@ -442,6 +451,7 @@ test("recovery replay does not mutate retained local messages", async () => {
       placement: { turn_index: 0, tab_index: 0 },
       obj: { type: "stop" },
     };
+    yield { stream_id: 42, next_cursor: 1, replay_complete: true };
   });
   jest.mocked(waitForChatSessionIdle).mockResolvedValue();
   mountController();
@@ -487,6 +497,7 @@ test("Stop targets the replay response and waits for its incognito tail", async 
       placement: { turn_index: 0, tab_index: 0 },
       obj: { type: "message_delta", content: "Final research output" },
     };
+    yield { stream_id: 42, next_cursor: 1, replay_complete: true };
   });
   jest.mocked(waitForChatSessionIdle).mockResolvedValue();
   mountController();
@@ -597,6 +608,7 @@ test("an earlier Stop cannot release input while a replacement replay has unread
       placement: { turn_index: 0, tab_index: 0 },
       obj: { type: "message_delta", content: "Unread tail" },
     };
+    yield { stream_id: 42, next_cursor: 1, replay_complete: true };
   });
   jest.mocked(waitForChatSessionIdle).mockResolvedValue();
   mountController();
@@ -628,3 +640,268 @@ test("an earlier Stop cannot release input while a replacement replay has unread
     expect.objectContaining({ obj: { type: "stop" } }),
   ]);
 });
+
+test("restoration commits content with its cursor and retries only the retained prefix", async () => {
+  jest.spyOn(console, "error").mockImplementation(() => {});
+  const boundary = deferred<void>();
+  const finish = deferred<void>();
+  const reserved: Message = {
+    nodeId: 42,
+    messageId: 42,
+    type: "assistant",
+    message: "",
+    files: [],
+    packets: [],
+    toolCall: null,
+    parentNodeId: null,
+  };
+  jest
+    .mocked(processRawChatHistory)
+    .mockImplementation(() => new Map([[42, { ...reserved }]]));
+  jest.mocked(global.fetch).mockResolvedValue({
+    ok: true,
+    json: async () => ({
+      ...backendSession(true),
+      incognito: true,
+      current_stream: { stream_id: 42 },
+    }),
+  } as Response);
+  jest
+    .mocked(waitForChatSessionIdle)
+    .mockRejectedValueOnce(new Error("Offline"));
+  jest.mocked(resumeStream).mockImplementationOnce(async function* () {
+    yield {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: { type: "message_delta", content: "First" },
+    };
+    yield { stream_id: 42, next_cursor: 1, replay_complete: false };
+    await boundary.promise;
+    yield {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: { type: "message_delta", content: " second" },
+    };
+    yield { stream_id: 42, next_cursor: 2, replay_complete: true };
+    yield {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: { type: "message_delta", content: " interrupted" },
+    };
+    throw new TypeError("Connection lost before cursor");
+  });
+  const firstMount = mountController();
+  try {
+    await waitFor(() => expect(resumeStream).toHaveBeenCalled());
+    expect(
+      useChatSessionStore
+        .getState()
+        .sessions.get("session")
+        ?.messageTree.get(42)?.packets
+    ).toEqual([]);
+    await act(async () => boundary.resolve());
+    await waitFor(() =>
+      expect(
+        useChatSessionStore.getState().sessions.get("session")?.chatState
+      ).toBe("unconfirmed")
+    );
+    const retained = useChatSessionStore
+      .getState()
+      .sessions.get("session")!
+      .messageTree.get(42)!;
+    expect(retained).toMatchObject({
+      replayCursor: 2,
+      restoredPacketCount: 2,
+      packetCount: 2,
+    });
+    expect(retained.packets.map((packet) => packet.obj)).toEqual([
+      { type: "message_delta", content: "First" },
+      { type: "message_delta", content: " second" },
+    ]);
+  } finally {
+    firstMount.unmount();
+    boundary.resolve();
+  }
+  jest.mocked(waitForChatSessionIdle).mockResolvedValue();
+  jest.mocked(resumeStream).mockImplementationOnce(async function* () {
+    yield {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: { type: "message_delta", content: " interrupted" },
+    };
+    yield { stream_id: 42, next_cursor: 3, replay_complete: true };
+    await finish.promise;
+  });
+  const secondMount = mountController();
+  try {
+    await waitFor(() =>
+      expect(resumeStream).toHaveBeenLastCalledWith(
+        "session",
+        42,
+        2,
+        expect.any(AbortSignal)
+      )
+    );
+    const resumed = useChatSessionStore
+      .getState()
+      .sessions.get("session")!
+      .messageTree.get(42)!;
+    expect(resumed).toMatchObject({ replayCursor: 3, packetCount: 3 });
+    expect(resumed.packets.at(-1)?.obj).toEqual({
+      type: "message_delta",
+      content: " interrupted",
+    });
+  } finally {
+    await act(async () => finish.resolve());
+    secondMount.unmount();
+  }
+});
+
+test.each([false, true])(
+  "interrupted initial restoration retains its acknowledged prefix (network error: %s)",
+  async (networkError) => {
+    jest.spyOn(console, "error").mockImplementation(() => {});
+    const idle = deferred<void>();
+    const reserved: Message = {
+      nodeId: 42,
+      messageId: 42,
+      type: "assistant",
+      message: "",
+      files: [],
+      packets: [],
+      toolCall: null,
+      parentNodeId: null,
+    };
+    jest
+      .mocked(processRawChatHistory)
+      .mockImplementation(() => new Map([[42, { ...reserved }]]));
+    jest.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ...backendSession(true),
+        incognito: true,
+        current_stream: { stream_id: 42 },
+      }),
+    } as Response);
+    jest.mocked(waitForChatSessionIdle).mockReturnValue(idle.promise);
+    jest.mocked(resumeStream).mockImplementationOnce(async function* () {
+      yield {
+        placement: { turn_index: 0 },
+        obj: { type: "message_delta", content: "Retained answer" },
+      };
+      yield { stream_id: 42, next_cursor: 1, replay_complete: false };
+      yield {
+        placement: { turn_index: 0 },
+        obj: { type: "message_delta", content: "Unacknowledged tail" },
+      };
+      yield {
+        error: "Unacknowledged error",
+        stack_trace: "Unacknowledged trace",
+        is_retryable: true,
+      };
+      if (networkError) throw new TypeError("Connection lost");
+    });
+    const view = mountController();
+    try {
+      await waitFor(() => expect(waitForChatSessionIdle).toHaveBeenCalled());
+      const retained = useChatSessionStore
+        .getState()
+        .sessions.get("session")!
+        .messageTree.get(42)!;
+      expect(retained).toMatchObject({
+        type: "assistant",
+        replayCursor: 1,
+        restoredPacketCount: 1,
+        packetCount: 1,
+      });
+      expect(retained.errorMessage).toBeUndefined();
+      expect(retained.packets.map((packet) => packet.obj)).toEqual([
+        { type: "message_delta", content: "Retained answer" },
+      ]);
+      await act(async () => idle.resolve());
+      const settled = useChatSessionStore.getState().sessions.get("session")!;
+      expect(settled.chatState).toBe("input");
+      expect(
+        settled.messageTree.get(42)?.packets.map((packet) => packet.obj)
+      ).toEqual([
+        { type: "message_delta", content: "Retained answer" },
+        { type: "stop" },
+      ]);
+    } finally {
+      await act(async () => idle.resolve());
+      view.unmount();
+    }
+  }
+);
+
+test.each([false, true])(
+  "incognito failures close existing display content only after confirmed idle (content: %s)",
+  async (hasContent) => {
+    const idle = deferred<void>();
+    const reserved: Message = {
+      nodeId: 42,
+      messageId: 42,
+      type: "assistant",
+      message: "",
+      files: [],
+      packets: [],
+      toolCall: null,
+      parentNodeId: null,
+    };
+    jest
+      .mocked(processRawChatHistory)
+      .mockImplementation(() => new Map([[42, { ...reserved }]]));
+    jest.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ...backendSession(true),
+        incognito: true,
+        current_stream: { stream_id: 42 },
+      }),
+    } as Response);
+    jest.mocked(waitForChatSessionIdle).mockReturnValue(idle.promise);
+    jest.mocked(resumeStream).mockImplementationOnce(async function* () {
+      if (hasContent)
+        yield {
+          placement: { turn_index: 0 },
+          obj: { type: "search_tool_start", is_internet_search: false },
+        };
+      yield {
+        error: "Save failed",
+        stack_trace: "Save failure trace",
+        error_code: "RESPONSE_SAVE_ERROR",
+        is_retryable: true,
+      };
+      yield { stream_id: 42, next_cursor: 1, replay_complete: true };
+    });
+    const view = mountController();
+    try {
+      await waitFor(() => expect(waitForChatSessionIdle).toHaveBeenCalled());
+      const before = useChatSessionStore.getState().sessions.get("session")!;
+      expect(before.chatState).toBe("streaming");
+      expect(
+        before.messageTree
+          .get(42)
+          ?.packets.some((packet) => packet.obj.type === "stop")
+      ).toBe(false);
+      await act(async () => idle.resolve());
+      const after = useChatSessionStore.getState().sessions.get("session")!;
+      expect(after.chatState).toBe("input");
+      expect(after.messageTree.get(42)).toMatchObject({
+        type: "error",
+        errorMessage: "Save failed",
+        errorCode: "RESPONSE_SAVE_ERROR",
+        isRetryable: true,
+      });
+      if (hasContent) {
+        expect(
+          after.messageTree.get(42)?.packets.map((packet) => packet.obj)
+        ).toEqual([
+          { type: "search_tool_start", is_internet_search: false },
+          { type: "stop" },
+        ]);
+      } else {
+        expect(after.messageTree.get(42)?.packets).toEqual([]);
+      }
+    } finally {
+      await act(async () => idle.resolve());
+      view.unmount();
+    }
+  }
+);

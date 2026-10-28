@@ -76,6 +76,7 @@ export type MessageRenderer<
   onComplete: () => void;
   renderType: RenderType;
   animate: boolean;
+  restoredTextLength?: number;
   stopPacketSeen: boolean;
   stopReason?: StopReason;
   /** Whether this is the last step in the timeline (for connector line decisions) */

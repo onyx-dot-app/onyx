@@ -239,12 +239,22 @@ failed agent-event delivery. Completion checks unfinished
 events separately from cache cleanup, so a slow final cache write does not
 produce a false live-stream error.
 
-`resume_chat_stream` (`chat_backend.py:resume_chat_stream`) finds the stream ID in
-the processing fence (`get_processing_stream_id`), then replays from
-`cursor` via `read_stream_chunks`, yielding decompressed blocks verbatim, then
-either detects `done` or falls into a poll loop (`CHAT_RESUME_POLL_INTERVAL_S`)
-that checks `is_chat_session_processing` to tell a live writer from a dead one,
-emitting `ChatHeartbeat` packets on `CHAT_HEARTBEAT_INTERVAL_S` while waiting.
+`resume_chat_stream` (`chat_backend.py:resume_chat_stream`) reads numbered cache
+chunks from `cursor`. Clients can supply `stream_id` to prevent using a cursor
+from another response. A mismatch returns 404.
+
+Each batch ends with a transport-only `StreamCursor` record: `stream_id`,
+`next_cursor`, and `replay_complete`. The first read fixes the restore boundary.
+The endpoint drains to that boundary before tailing later chunks. These records
+are not display packets and are not stored in the cache.
+
+The browser retains a cursor only with the complete packet prefix it describes.
+An interrupted initial restore retains its last acknowledged batch, even if the
+full backlog was not read. Unacknowledged content is discarded.
+It restores the initial backlog without animation, then renders new updates live.
+A hard refresh rebuilds that prefix from the cache once. A reconnect with retained
+content starts at its saved cursor. Heartbeats still carry liveness during quiet
+periods; missing or truncated cache data falls back to saved session history.
 
 ---
 
@@ -368,8 +378,8 @@ Tests can use them to assert tool names and arguments without an environment fla
 2. Open the browser devtools Network tab, send a chat message that triggers a
    search and an answer, and inspect the `send-chat-message` response body: it
    should be newline-separated JSON objects, each with a `placement` and `obj`.
-3. Reload mid-answer; confirm the client calls `resume-stream` and the buffered
-   packets replay before the live tail resumes.
+3. Reload mid-answer; confirm buffered output appears immediately and new output
+   continues without repeating completed tool animations.
 4. Wait through a quiet stretch (or throttle the LLM) and confirm
    `chat_heartbeat` lines appear roughly every `CHAT_HEARTBEAT_INTERVAL_S`
    seconds, and that they never appear in the rendered UI.

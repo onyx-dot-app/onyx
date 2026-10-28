@@ -101,6 +101,7 @@ export const MessageTextRenderer: MessageRenderer<
   onComplete,
   renderType,
   animate,
+  restoredTextLength = 0,
   stopPacketSeen,
   stopReason,
   children,
@@ -270,7 +271,8 @@ export const MessageTextRenderer: MessageRenderer<
   const { displayed: displayedContent, isDraining } = useTypewriter(
     content,
     isStreamingAnimationEnabled,
-    isStreamFinished
+    isStreamFinished,
+    restoredTextLength
   );
 
   // One-way signal: stream done AND typewriter caught up. Do NOT derive

@@ -124,6 +124,29 @@ export async function settleChatSession({
                 ? null
                 : (messageTree.get(selectedMessageId)?.nodeId ?? null),
         });
+      } else if (session) {
+        // Content-free history cannot close a lost stream. Confirmed idle can.
+        const latest = getLatestMessageChain(session.messageTree).at(-1);
+        if (
+          (latest?.type === "assistant" ||
+            (latest?.type === "error" && latest.packets.length > 0)) &&
+          !latest.packets.some((packet) => packet.obj.type === "stop")
+        ) {
+          const packets: Message["packets"] = [
+            ...latest.packets,
+            {
+              placement: { turn_index: 0, tab_index: 0 },
+              obj: { type: "stop" },
+            },
+          ];
+          const messageTree = new Map(session.messageTree);
+          messageTree.set(latest.nodeId, {
+            ...latest,
+            packets,
+            packetCount: packets.length,
+          });
+          store.updateSessionMessageTree(sessionId, messageTree);
+        }
       }
     }
     const store = useChatSessionStore.getState();

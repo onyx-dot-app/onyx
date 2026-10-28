@@ -8,7 +8,7 @@ import {
   patchMessageToBeLatest,
   resumeStream,
 } from "@/app/app/services/lib";
-import { Packet, PacketType } from "@/app/app/services/streamingModels";
+import { Packet } from "@/app/app/services/streamingModels";
 import {
   getLatestMessageChain,
   setMessageAsLatest,
@@ -276,15 +276,19 @@ export default function useChatSessionController({
         ? newMessageMap.get(currentStream.stream_id)
         : undefined;
       if (resumedMessage?.type === "assistant") {
-        // Discard the reserved row's placeholder STOP before the renderer tracks
-        // packet positions. Replay starts a new sequence for this same message.
+        const retained = localMessages?.get(resumedMessage.nodeId);
         newMessageMap = new Map(newMessageMap);
-        newMessageMap.set(resumedMessage.nodeId, {
-          ...resumedMessage,
-          message: "",
-          packets: [],
-          packetCount: 0,
-        });
+        newMessageMap.set(
+          resumedMessage.nodeId,
+          retained?.replayCursor !== undefined
+            ? { ...retained }
+            : {
+                ...resumedMessage,
+                message: "",
+                packets: [],
+                packetCount: 0,
+              }
+        );
       }
       const newMessageHistory = getLatestMessageChain(newMessageMap);
 
@@ -328,10 +332,11 @@ export default function useChatSessionController({
         runId: number,
         messageMap: Map<number, Message>
       ) {
-        const node = messageMap.get(runId);
-        if (!node || resumingRuns.has(runId)) {
+        const retained = messageMap.get(runId);
+        if (!retained || resumingRuns.has(runId)) {
           return;
         }
+        const node = { ...retained };
         // Added and deleted in this function only, so an entry can never
         // outlive its tail.
         resumingRuns.add(runId);
@@ -343,9 +348,9 @@ export default function useChatSessionController({
           sendAcknowledged: Promise.resolve(runId),
           readerFinished,
         });
-        const accumulated: Packet[] = [];
-        let lastFlush = 0;
-        let trailingFlush: ReturnType<typeof setTimeout> | null = null;
+        const accumulated: Packet[] = [...node.packets];
+        let restoring = true;
+        let pendingRestore: Message | undefined;
         // Keep replay attached across navigation without changing the selected chat.
         const ownsStream = () => {
           const session = useChatSessionStore
@@ -357,26 +362,46 @@ export default function useChatSessionController({
             session.chatState !== "input"
           );
         };
-        const flush = () => {
+        const publishResponse = (response: Message) => {
           if (!ownsStream()) return;
-          node.packets = [...accumulated];
-          // AgentMessage's memo compares packetCount, not the packets array.
-          node.packetCount = node.packets.length;
+          messageMap.set(runId, response);
           useChatSessionStore
             .getState()
             .updateSessionMessageTree(sessionId, new Map(messageMap));
         };
-        // handleSSEStream only releases the connection via this signal —
-        // bailing out of the loop alone leaves the SSE response open.
         const abortController = new AbortController();
         try {
           for await (const rawPacket of resumeStream(
             sessionId,
-            0,
+            runId,
+            node.replayCursor ?? 0,
             abortController.signal
           )) {
             if (!ownsStream()) {
               return;
+            }
+            if ("next_cursor" in rawPacket) {
+              if (rawPacket.stream_id !== runId) {
+                throw new Error("Replay cursor belongs to another response");
+              }
+              if (restoring) {
+                node.restoredPacketCount = accumulated.length;
+                restoring = !rawPacket.replay_complete;
+              }
+              // Store content and cursor together, only after a complete batch.
+              node.replayCursor = rawPacket.next_cursor;
+              const response: Message = {
+                ...node,
+                packets: [...accumulated],
+                packetCount: accumulated.length,
+              };
+              if (restoring) {
+                pendingRestore = response;
+                continue;
+              }
+              pendingRestore = undefined;
+              publishResponse(response);
+              continue;
             }
             if ("error" in rawPacket && rawPacket.error) {
               const store = useChatSessionStore.getState();
@@ -393,55 +418,27 @@ export default function useChatSessionController({
                 node.errorDetails = rawPacket.details;
               }
               node.is_generating = false;
-              flush();
             }
-            if (!Object.hasOwn(rawPacket, "obj")) {
+            if (!("obj" in rawPacket)) {
               continue;
             }
-            const packet = rawPacket as Packet;
+            const packet = rawPacket;
             // Heartbeats are liveness ticks for the ownership check above,
             // not run state — never render them.
             if (packet.obj.type === "chat_heartbeat") {
               continue;
             }
             accumulated.push(packet);
-            const now = Date.now();
-            if (now - lastFlush >= 100) {
-              lastFlush = now;
-              flush();
-            } else if (trailingFlush === null) {
-              // A burst's last packets would otherwise wait for the NEXT
-              // packet to render — during quiet phases that's minutes.
-              trailingFlush = setTimeout(() => {
-                trailingFlush = null;
-                lastFlush = Date.now();
-                flush();
-              }, 120);
-            }
           }
         } catch (error) {
           console.error("Failed to resume in-flight run", { runId, error });
         } finally {
           abortController.abort();
-          if (trailingFlush !== null) {
-            clearTimeout(trailingFlush);
-          }
-          resumingRuns.delete(runId);
           try {
-            if (ownsStream()) {
-              if (
-                !accumulated.some(
-                  (packet) => packet.obj.type === PacketType.STOP
-                )
-              ) {
-                accumulated.push({
-                  placement: { turn_index: 0, tab_index: 0 },
-                  obj: { type: PacketType.STOP },
-                });
-              }
-              flush();
-            }
+            // A lost tail must not discard earlier acknowledged cache batches.
+            if (pendingRestore) publishResponse(pendingRestore);
           } finally {
+            resumingRuns.delete(runId);
             resolveReaderFinished();
             await settleSession(sessionId);
           }

@@ -19,6 +19,14 @@ class StreamingError(BaseModel):
     details: dict | None = None  # Additional context (tool name, model name, etc.)
 
 
+class StreamCursor(BaseModel):
+    """A complete cache prefix that the client can retain with its rendered content."""
+
+    stream_id: int
+    next_cursor: int
+    replay_complete: bool
+
+
 class StreamingType(Enum):
     """Enum defining all streaming packet types. This is the single source of truth for type strings."""
 

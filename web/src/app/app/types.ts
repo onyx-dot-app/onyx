@@ -180,6 +180,10 @@ export interface Message {
   packets: Packet[];
   packetCount?: number; // Tracks packet count for React memo comparison (avoids reading from mutated array)
 
+  // Retained only with this response's packet prefix; never persisted alone.
+  replayCursor?: number;
+  restoredPacketCount?: number;
+
   // cached values for easy access
   documents?: OnyxDocument[] | null;
   citations?: CitationMap;

@@ -208,15 +208,28 @@ nested object from such a line, and it can drop or mis-parse the line. See §9.
 
 ### 4.3 Resuming a stream
 
-`useChatSessionController.ts` calls `resumeStream(chatSessionId, cursor)`
-(`services/lib.tsx:resumeStream`) against `GET /chat/chat-session/{id}/resume-stream`,
-which replays the durable buffer from `cursor` and then tails the live stream (owned by
-[[core-chat-loop]], §4.6 of that document). A 404 means nothing to resume; the caller
-falls back to the persisted session state instead of throwing.
+`useChatSessionController.ts` calls `resumeStream(chatSessionId, streamId, cursor)`
+against `GET /chat/chat-session/{id}/resume-stream`. The stream returns display
+packets followed by cursor records. A cursor identifies a complete cache prefix
+for one response. The controller stores that cursor with its packets in the
+session store, so interrupted batches can be read again without duplication.
 
-Before publishing the loaded message tree, the controller clears the active
-assistant row's placeholder text and packets. Its saved `stop` packet must not
-advance the renderer's packet cursor before replay starts.
+On a fresh page, the controller replaces the active row's placeholder with the
+buffered output. It waits for `replay_complete` before publishing that output.
+If restoration ends early, the controller retains the last acknowledged batch
+and cursor. It discards the unacknowledged tail. The timeline reveals restored
+steps immediately; text animation starts after the restored prefix. Tool completion still comes from real section-end packets.
+Later batches update the same message. Navigation retains the stream and content
+in memory. A hard refresh reads the backlog once because that memory is gone.
+
+Live text uses elapsed time and buffered text length to set its reveal rate.
+A short animation buffer smooths packet bursts across display refresh rates.
+Completed streams drain the remaining text promptly; restored text skips animation.
+
+An ended HTTP reader does not imply a completed answer. The controller waits for
+server idle and reloads saved history. For content-free incognito sessions, it
+closes the retained display only after the server confirms idle. This also closes
+failed responses with partial content, while preserving their error details.
 
 When completion cannot be confirmed, the input stays blocked and offers **Check again**.
 `settleChatSession` waits for server idle state and reloads saved history before releasing input.

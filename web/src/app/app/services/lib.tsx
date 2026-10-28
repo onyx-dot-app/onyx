@@ -21,7 +21,7 @@ import {
 } from "@/app/app/types";
 import { ReadonlyURLSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "./searchParams";
-import { Packet } from "./streamingModels";
+import { Packet, StreamCursor } from "@/app/app/services/streamingModels";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 import { isSessionEndedResponse } from "@/lib/auth/utils";
 import { revalidateCurrentUser } from "@/lib/users/svc";
@@ -306,17 +306,15 @@ async function* withoutHeartbeats(
   }
 }
 
-// Replays an in-flight run's buffered stream from `cursor`, then tails it live.
-// 404 means there is nothing to resume — callers fall back to the persisted
-// session state. Heartbeats pass through: the consumer uses them as liveness
-// ticks to re-check session focus during quiet phases.
+// Cursors apply only to the named stream and its retained packet prefix.
 export async function* resumeStream(
   chatSessionId: string,
+  streamId: number,
   cursor: number,
   signal?: AbortSignal
-): AsyncGenerator<PacketType, void, unknown> {
+): AsyncGenerator<PacketType | StreamCursor, void, unknown> {
   const response = await fetch(
-    `/api/chat/chat-session/${chatSessionId}/resume-stream?cursor=${cursor}`,
+    `/api/chat/chat-session/${chatSessionId}/resume-stream?stream_id=${streamId}&cursor=${cursor}`,
     { signal }
   );
 
@@ -325,7 +323,7 @@ export async function* resumeStream(
     throw new Error(data.detail ?? `HTTP error! status: ${response.status}`);
   }
 
-  yield* handleSSEStream<PacketType>(response, signal);
+  yield* handleSSEStream<PacketType | StreamCursor>(response, signal);
 }
 
 export async function setPreferredResponse(

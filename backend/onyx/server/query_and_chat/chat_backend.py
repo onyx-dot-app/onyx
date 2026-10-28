@@ -150,7 +150,11 @@ from onyx.server.query_and_chat.models import (
 from onyx.server.query_and_chat.session_loading import (
     translate_assistant_message_to_packets,
 )
-from onyx.server.query_and_chat.streaming_models import Packet, heartbeat_packet
+from onyx.server.query_and_chat.streaming_models import (
+    Packet,
+    StreamCursor,
+    heartbeat_packet,
+)
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.server.usage_limits import (
     check_llm_cost_limit_for_provider,
@@ -1332,6 +1336,7 @@ def get_chat_session_processing_status(
 def resume_chat_stream(
     session_id: UUID,
     cursor: int = Query(0, ge=0),
+    expected_stream_id: int | None = Query(None, alias="stream_id", gt=0),
     user: User = Depends(
         require_permission(Permission.READ_CHAT, allow_anonymous=True)
     ),
@@ -1354,13 +1359,19 @@ def resume_chat_stream(
 
     cache = get_cache_backend()
     stream_id = get_processing_stream_id(session_id, cache)
-    if stream_id is None or not has_stream_buffer(cache, session_id, stream_id):
+    if (
+        stream_id is None
+        or (expected_stream_id is not None and expected_stream_id != stream_id)
+        or not has_stream_buffer(cache, session_id, stream_id)
+    ):
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND, "No resumable stream for this chat session"
         )
 
     def stream_buffered_run() -> Generator[str, None, None]:
         chunk_cursor = cursor
+        replay_through: int | None = None
+        writer_stopped = False
         last_emit = time.monotonic()
         while True:
             read = read_stream_chunks(
@@ -1368,37 +1379,41 @@ def resume_chat_stream(
                 session_id,
                 stream_id,
                 chunk_cursor,
-                max_chunks=_RESUME_MAX_CHUNKS_PER_READ,
+                max_chunks=(
+                    min(_RESUME_MAX_CHUNKS_PER_READ, replay_through - chunk_cursor)
+                    if replay_through is not None and chunk_cursor < replay_through
+                    else _RESUME_MAX_CHUNKS_PER_READ
+                ),
             )
             # Buffer expired/evicted or sequence broken: end the stream — the
             # client refetches the session and renders the persisted message.
-            if read is None or read.gap:
+            if read is None or read.gap or chunk_cursor > read.chunk_count:
                 return
-            if read.blocks:
+            initial_read = replay_through is None
+            if replay_through is None:
+                # Freeze the restore boundary so new writes cannot prolong replay.
+                replay_through = read.chunk_count
+            if read.blocks or initial_read:
                 yield "".join(read.blocks)
                 chunk_cursor = read.next_cursor
+                yield get_json_line(
+                    StreamCursor(
+                        stream_id=stream_id,
+                        next_cursor=chunk_cursor,
+                        replay_complete=chunk_cursor >= replay_through,
+                    ).model_dump()
+                )
+            if read.blocks:
                 last_emit = time.monotonic()
                 # Drain the backlog before sleeping; done is only trusted once
                 # a read comes back empty (a capped read can precede the tail).
                 continue
-            if read.done:
+            if read.done or writer_stopped:
                 return
-            # A dead writer never marks done; its fence lapsing is the signal.
-            # A final drain catches anything written between the read above
-            # and this check (including the done marker's last chunks).
+            # Drain once more after ownership ends to catch the writer's last flush.
             if not is_chat_session_processing(session_id, cache):
-                while True:
-                    read = read_stream_chunks(
-                        cache,
-                        session_id,
-                        stream_id,
-                        chunk_cursor,
-                        max_chunks=_RESUME_MAX_CHUNKS_PER_READ,
-                    )
-                    if read is None or read.gap or not read.blocks:
-                        return
-                    yield "".join(read.blocks)
-                    chunk_cursor = read.next_cursor
+                writer_stopped = True
+                continue
             now = time.monotonic()
             if now - last_emit >= CHAT_HEARTBEAT_INTERVAL_S:
                 yield get_json_line(heartbeat_packet().model_dump())

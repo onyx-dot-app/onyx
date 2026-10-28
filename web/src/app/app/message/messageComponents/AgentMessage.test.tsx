@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@tests/setup/test-utils";
+import { act, render, screen, waitFor, within } from "@tests/setup/test-utils";
 import { Message } from "@/app/app/types";
 import { upsertMessages } from "@/app/app/services/messageTree";
 import {
@@ -234,3 +234,160 @@ test("parallel search tabs complete independently", async () => {
     });
   }
 });
+
+test.each([undefined, 0])(
+  "restored output appears immediately and only unfinished tools remain loading (tab: %s)",
+  (tabIndex) => {
+    seedSessionAwaitingAnswer();
+    const placement = { turn_index: 0, tab_index: tabIndex };
+    const packets: Packet[] = [
+      {
+        placement,
+        obj: { type: "search_tool_start", is_internet_search: false },
+      },
+      {
+        placement,
+        obj: { type: "search_tool_queries_delta", queries: ["internal"] },
+      },
+      {
+        placement: { turn_index: 0, tab_index: 1 },
+        obj: { type: "search_tool_start", is_internet_search: true },
+      },
+      {
+        placement: { turn_index: 0, tab_index: 1 },
+        obj: { type: "search_tool_queries_delta", queries: ["web"] },
+      },
+      {
+        placement: { turn_index: 0, tab_index: 1 },
+        obj: { type: "section_end" },
+      },
+    ];
+    const view = render(
+      <AgentMessage
+        rawPackets={packets}
+        packetCount={packets.length}
+        restoredPacketCount={packets.length}
+        chatState={chatState}
+        nodeId={NEW_ANSWER_NODE_ID}
+        llmManager={null}
+        hideFooter
+        disableTTS
+      />
+    );
+    try {
+      expect(
+        within(screen.getByRole("tab", { name: /Internal Search/ })).getByRole(
+          "status",
+          { name: "Loading" }
+        )
+      ).toBeInTheDocument();
+      expect(
+        within(screen.getByRole("tab", { name: /Web Search/ })).queryByRole(
+          "status"
+        )
+      ).not.toBeInTheDocument();
+      const withAnswer: Packet[] = [
+        ...packets,
+        {
+          placement: { turn_index: 1, tab_index: tabIndex },
+          obj: {
+            type: "message_start",
+            id: "answer",
+            content: "Restored answer is already visible.",
+            final_documents: null,
+          },
+        },
+      ];
+      view.rerender(
+        <AgentMessage
+          rawPackets={withAnswer}
+          packetCount={withAnswer.length}
+          restoredPacketCount={withAnswer.length}
+          chatState={chatState}
+          nodeId={NEW_ANSWER_NODE_ID}
+          llmManager={null}
+          hideFooter
+          disableTTS
+        />
+      );
+      expect(
+        screen.getByText("Restored answer is already visible.")
+      ).toBeInTheDocument();
+      expect(screen.queryByTestId("onyx-ai-message")).not.toBeInTheDocument();
+    } finally {
+      view.unmount();
+    }
+  }
+);
+
+test.each([0, 1])(
+  "live text remains animated after a restored prefix of %s packets",
+  (restoredCount) => {
+    jest.useFakeTimers();
+    seedSessionAwaitingAnswer();
+    const packets: Packet[] = [
+      {
+        placement,
+        obj: {
+          type: "message_start",
+          id: "answer",
+          content: restoredCount ? "Saved answer. " : "",
+          final_documents: null,
+        },
+      },
+    ];
+    const props = {
+      chatState,
+      nodeId: NEW_ANSWER_NODE_ID,
+      llmManager: null,
+      hideFooter: true,
+      disableTTS: true,
+      restoredPacketCount: restoredCount,
+    };
+    const view = render(
+      <AgentMessage
+        {...props}
+        rawPackets={packets}
+        packetCount={packets.length}
+      />
+    );
+    try {
+      for (let index = 0; index < 3; index++) {
+        packets.push({
+          placement,
+          obj: {
+            type: "message_delta",
+            content: "New streaming words continue to appear smoothly. ",
+          },
+        });
+        const previous = view.container.textContent ?? "";
+        view.rerender(
+          <AgentMessage
+            {...props}
+            rawPackets={packets}
+            packetCount={packets.length}
+          />
+        );
+        act(() => {
+          jest.advanceTimersByTime(32);
+        });
+        const firstFrame = view.container.textContent ?? "";
+        expect(firstFrame.length).toBeGreaterThan(previous.length);
+        expect(firstFrame).not.toContain(
+          "New streaming words continue to appear smoothly. "
+            .repeat(index + 1)
+            .trim()
+        );
+        act(() => {
+          jest.advanceTimersByTime(32);
+        });
+        expect((view.container.textContent ?? "").length).toBeGreaterThan(
+          firstFrame.length
+        );
+      }
+    } finally {
+      view.unmount();
+      jest.useRealTimers();
+    }
+  }
+);

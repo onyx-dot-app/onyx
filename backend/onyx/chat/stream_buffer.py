@@ -50,6 +50,7 @@ class StreamChunkRead(BaseModel):
 
     blocks: list[str]
     next_cursor: int
+    chunk_count: int
     done: bool
     gap: bool
 
@@ -277,7 +278,13 @@ def read_stream_chunks(
             break
         chunk_n += 1
 
-    return StreamChunkRead(blocks=blocks, next_cursor=chunk_n, done=meta.done, gap=gap)
+    return StreamChunkRead(
+        blocks=blocks,
+        next_cursor=chunk_n,
+        chunk_count=meta.chunk_count,
+        done=meta.done,
+        gap=gap,
+    )
 
 
 class _StreamStatus(str, Enum):
