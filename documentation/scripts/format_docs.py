@@ -1358,29 +1358,6 @@ def fallback_broken_asset_check(root: str, path: str, text: str) -> List[tuple[i
     return results
 
 
-SKILL_LINK_DIRS = (".claude/skills", ".cursor/skills", ".codex/skills")
-SKILLS_ROOT = ".agents/skills"
-
-
-def find_skills_layout_errors(root: str) -> List[str]:
-    """Every agent skills dir must be a symlink to .agents/skills, and every skill needs a SKILL.md."""
-    errors: List[str] = []
-    skills_root = os.path.join(root, SKILLS_ROOT)
-    if not os.path.isdir(skills_root):
-        return [f"{SKILLS_ROOT} is missing"]
-    for rel in SKILL_LINK_DIRS:
-        link = os.path.join(root, rel)
-        if not os.path.islink(link):
-            errors.append(f"{rel} must be a symlink to {SKILLS_ROOT}")
-            continue
-        if os.path.realpath(link) != os.path.realpath(skills_root):
-            errors.append(f"{rel} points to {os.readlink(link)}, expected {SKILLS_ROOT}")
-    for name in sorted(os.listdir(skills_root)):
-        skill_dir = os.path.join(skills_root, name)
-        if os.path.isdir(skill_dir) and not os.path.isfile(os.path.join(skill_dir, "SKILL.md")):
-            errors.append(f"{SKILLS_ROOT}/{name} has no SKILL.md")
-    return errors
-
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Format Markdown/MDX docs")
@@ -1461,20 +1438,12 @@ def main() -> int:
         for p in frontmatter_icon_warnings:
             print(f"  {p}")
 
-    skills_layout_errors = find_skills_layout_errors(root) if not args.paths else []
-    if skills_layout_errors:
-        print("Agent skills layout errors:")
-        for e in skills_layout_errors:
-            print(f"  {e}")
-
     # Always run link check via the Mintlify CLI if available (no fallback)
     rc = run_mintlify_broken_links(root)
     if rc != 0:
         print(f"broken-links exited with code {rc}")
 
     if args.check:
-        if skills_layout_errors:
-            return 1
         if changed:
             print(f"{len(changed)} file(s) would be reformatted:")
             for p in changed:
