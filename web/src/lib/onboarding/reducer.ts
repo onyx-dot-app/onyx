@@ -3,7 +3,7 @@ import {
   OnboardingAction,
   OnboardingActionType,
   OnboardingStep,
-} from "@/interfaces/onboarding";
+} from "@/lib/onboarding/types";
 import { STEP_NAVIGATION, STEP_CONFIG, TOTAL_STEPS } from "./constants";
 
 export const initialState: OnboardingState = {

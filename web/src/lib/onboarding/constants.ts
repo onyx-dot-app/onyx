@@ -1,5 +1,5 @@
 import type { Route } from "next";
-import { OnboardingStep } from "@/interfaces/onboarding";
+import { OnboardingStep } from "@/lib/onboarding/types";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { SvgGlobe, SvgImage, SvgUsers } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";

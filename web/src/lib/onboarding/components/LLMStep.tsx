@@ -5,12 +5,12 @@ import { useTranslations } from "next-intl";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import Text from "@/refresh-components/texts/Text";
 import { Button, Divider } from "@opal/components";
-import LLMProviderCard from "@/sections/onboarding/components/LLMProviderCard";
+import LLMProviderCard from "@/lib/onboarding/components/LLMProviderCard";
 import {
   OnboardingActions,
   OnboardingState,
   OnboardingStep,
-} from "@/interfaces/onboarding";
+} from "@/lib/onboarding/types";
 import { WellKnownLLMProviderDescriptor } from "@/lib/languageModels/types";
 import { getProvider } from "@/lib/languageModels/utils";
 import { useProviderNames } from "@/lib/languageModels/useProviderNames";

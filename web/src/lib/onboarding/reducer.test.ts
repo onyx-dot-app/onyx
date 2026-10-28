@@ -1,9 +1,9 @@
-import { onboardingReducer, initialState } from "../reducer";
+import { onboardingReducer, initialState } from "@/lib/onboarding/reducer";
 import {
   OnboardingActionType,
   OnboardingStep,
   OnboardingState,
-} from "@/interfaces/onboarding";
+} from "@/lib/onboarding/types";
 
 describe("onboardingReducer", () => {
   describe("initial state", () => {

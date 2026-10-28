@@ -1,8 +1,8 @@
 import React from "react";
 import { renderHook, act } from "@testing-library/react";
 import "@testing-library/jest-dom";
-import { useShowOnboarding } from "@/hooks/useShowOnboarding";
-import { OnboardingStep } from "@/interfaces/onboarding";
+import { useShowOnboarding } from "@/lib/onboarding/hooks";
+import { OnboardingStep } from "@/lib/onboarding/types";
 
 // Mock underlying dependencies used by the inlined useOnboardingState
 jest.mock("@/providers/UserProvider", () => ({

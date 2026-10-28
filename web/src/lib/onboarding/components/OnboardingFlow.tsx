@@ -1,17 +1,17 @@
 "use client";
 
 import { memo } from "react";
-import OnboardingHeader from "./components/OnboardingHeader";
-import NameStep from "./steps/NameStep";
-import LLMStep from "./steps/LLMStep";
-import FinalStep from "./steps/FinalStep";
+import OnboardingHeader from "@/lib/onboarding/components/OnboardingHeader";
+import NameStep from "@/lib/onboarding/components/NameStep";
+import LLMStep from "@/lib/onboarding/components/LLMStep";
+import FinalStep from "@/lib/onboarding/components/FinalStep";
 import {
   OnboardingActions,
   OnboardingState,
   OnboardingStep,
-} from "@/interfaces/onboarding";
+} from "@/lib/onboarding/types";
 import { useUser } from "@/providers/UserProvider";
-import NonAdminStep from "./components/NonAdminStep";
+import NonAdminStep from "@/lib/onboarding/components/NonAdminStep";
 
 type OnboardingFlowProps = {
   showOnboarding: boolean;

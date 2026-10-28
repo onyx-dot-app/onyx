@@ -8,7 +8,7 @@ import {
   OnboardingState,
   OnboardingActions,
   OnboardingStep,
-} from "@/interfaces/onboarding";
+} from "@/lib/onboarding/types";
 import { InputAvatar } from "@opal/components";
 import { cn, clickOnKeyDown } from "@opal/utils";
 import { SvgCheckCircle, SvgEdit, SvgUser } from "@opal/icons";
