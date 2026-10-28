@@ -90,6 +90,8 @@ from onyx.db.models import (
     User,
 )
 from onyx.db.permission_sync_attempt import (
+    cancel_open_doc_permission_sync_attempt__no_commit,
+    cancel_queued_external_group_sync_attempt__no_commit,
     get_latest_doc_permission_sync_attempt_for_cc_pair,
 )
 from onyx.db.search_settings import get_current_search_settings
@@ -143,6 +145,8 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 router = APIRouter(prefix="/manage")
+
+_PERMISSION_SYNC_PAUSE_REASON = "Canceled: the connector was paused"
 
 
 def _get_readable_cc_pair(
@@ -518,6 +522,34 @@ def _cancel_index_attempt__no_commit(
     return attempt.celery_task_id
 
 
+def _cancel_permission_syncs_for_pause__no_commit(
+    db_session: Session, cc_pair_id: int
+) -> None:
+    """Cancels the pair's open doc permission sync and its queued group sync,
+    scheduled or manual. Commit it with the PAUSED status: a cancel committed
+    earlier frees the pair's sync lock while the beat still sees the pair
+    ACTIVE.
+
+    A running group sync is left to finish. A run marks the pair's group
+    memberships stale as it starts, and the next run deletes the ones still
+    stale before it adds them back, so a stopped run would take users' access
+    away after resume."""
+    doc_sync_attempt_id = cancel_open_doc_permission_sync_attempt__no_commit(
+        cc_pair_id, db_session, reason=_PERMISSION_SYNC_PAUSE_REASON
+    )
+    group_sync_attempt_id = cancel_queued_external_group_sync_attempt__no_commit(
+        cc_pair_id, db_session, reason=_PERMISSION_SYNC_PAUSE_REASON
+    )
+    if doc_sync_attempt_id is not None or group_sync_attempt_id is not None:
+        logger.info(
+            "Canceled permission sync attempts due to connector pause: "
+            "cc_pair=%s doc_sync_attempt=%s group_sync_attempt=%s",
+            cc_pair_id,
+            doc_sync_attempt_id,
+            group_sync_attempt_id,
+        )
+
+
 @router.post("/admin/index-attempt/{index_attempt_id}/cancel")
 def cancel_index_attempt(
     index_attempt_id: int,
@@ -773,6 +805,9 @@ def update_cc_pair_status(
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
     task_ids_to_revoke: list[str] = []
     if status_update_request.status == ConnectorCredentialPairStatus.PAUSED:
+        # Before the stop signal: a doc permission sync that sees it waits on
+        # the canceled row when it records its failure, then keeps the cancel.
+        _cancel_permission_syncs_for_pause__no_commit(db_session, cc_pair_id)
         redis_connector.stop.set_fence(True)
 
         # Request cancellation for any active indexing attempts for this cc_pair

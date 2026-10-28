@@ -42,7 +42,12 @@ from onyx.db.connector_credential_pair import (
     verify_user_has_access_to_cc_pair,
 )
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import AccessType, ConnectorManageRole, Permission
+from onyx.db.enums import (
+    AccessType,
+    ConnectorCredentialPairStatus,
+    ConnectorManageRole,
+    Permission,
+)
 from onyx.db.models import ConnectorCredentialPair, User
 from onyx.db.permission_sync_attempt import (
     get_open_doc_permission_sync_attempt,
@@ -119,6 +124,13 @@ def sync_cc_pair(
             "Connection not found for current user's permissions",
         )
     _assert_perm_synced(cc_pair)
+
+    # The sync would stop on the pause's stop signal at once and record a failure.
+    if cc_pair.status == ConnectorCredentialPairStatus.PAUSED:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "The connector is paused. Resume it to sync permissions.",
+        )
 
     if get_open_doc_permission_sync_attempt(cc_pair_id, db_session) is not None:
         raise OnyxError(
