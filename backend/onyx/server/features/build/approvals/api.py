@@ -181,30 +181,6 @@ def list_session_approval_status(
     ]
 
 
-@router.get("/sessions/{session_id}/live")
-def list_live_approvals(
-    session_id: UUID,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-    db_session: Session = Depends(get_session),
-) -> ApprovalListResponse:
-    """Pending approvals created within the proxy's wait window.
-
-    Older undecided rows are treated as orphaned (proxy gone) and excluded.
-    """
-    if get_build_session(session_id, user.id, db_session) is None:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "session not found")
-
-    cutoff = datetime.now(timezone.utc) - timedelta(
-        seconds=SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
-    )
-    pending_rows = action_approval.list_session_pending_action_approvals(
-        db_session, session_id, created_after=cutoff
-    )
-    return ApprovalListResponse(
-        items=[ApprovalView.model_validate(row) for row in pending_rows]
-    )
-
-
 @router.post("/{approval_id}/decision")
 def submit_decision(
     approval_id: UUID,

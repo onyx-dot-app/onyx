@@ -29,7 +29,6 @@ from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.build.approvals.api import (
     ApprovalChoice,
     DecisionBody,
-    list_live_approvals,
     list_session_approval_status,
     list_session_approvals,
     submit_decision,
@@ -58,16 +57,16 @@ def _stub_send_wake_noop(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# list_live_approvals
+# list_session_approvals
 # --------------------------------------------------------------------------- #
 
 
-def test_list_live_approvals_filter_logic(
+def test_list_session_approvals_live_filter_logic(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
     build_session_with_user: Callable[..., BuildSession],
 ) -> None:
-    """Only `decision IS NULL` rows within the wait window come back."""
+    """Only `decision IS NULL` rows within the wait window are live."""
     user = make_user(db_session, email_prefix="live_filter")
     session = build_session_with_user(user=user)
 
@@ -105,39 +104,18 @@ def test_list_live_approvals_filter_logic(
     )
     force_approval_created_at(db_session, stale.approval_id, stale_when)
 
-    response = list_live_approvals(
+    response = list_session_approvals(
         session_id=session.id, user=user, db_session=db_session
     )
 
-    returned_ids = {item.approval_id for item in response.items}
-    assert returned_ids == {pending.approval_id}
-    only = response.items[0]
-    assert only.decision is None
-    assert only.is_live is True
-
-
-def test_list_live_approvals_non_owner_gets_not_found(
-    db_session: Session,
-    tenant_context: None,  # noqa: ARG001
-    build_session_with_user: Callable[..., BuildSession],
-) -> None:
-    """Existence of a session owned by another user is not leaked."""
-    owner = make_user(db_session, email_prefix="live_owner_a")
-    intruder = make_user(db_session, email_prefix="live_owner_b")
-    session = build_session_with_user(user=owner)
-    insert_action_approval(
-        db_session,
-        session_id=session.id,
-        actions=_default_actions(),
-        app_name="Shell",
-        payload={"cmd": "ls"},
-    )
-    db_session.commit()
-
-    with pytest.raises(OnyxError) as exc_info:
-        list_live_approvals(session_id=session.id, user=intruder, db_session=db_session)
-
-    assert exc_info.value.error_code == OnyxErrorCode.NOT_FOUND
+    live = [item for item in response.items if item.is_live]
+    assert [item.approval_id for item in live] == [pending.approval_id]
+    assert live[0].decision is None
+    assert {item.approval_id for item in response.items} == {
+        pending.approval_id,
+        decided.approval_id,
+        stale.approval_id,
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -524,7 +502,7 @@ def test_submit_decision_swallows_transient_wake_failure(
 # --------------------------------------------------------------------------- #
 
 
-def test_list_live_approvals_returns_multi_action_view(
+def test_list_session_approvals_returns_multi_action_view(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
     build_session_with_user: Callable[..., BuildSession],
@@ -559,7 +537,7 @@ def test_list_live_approvals_returns_multi_action_view(
     )
     db_session.commit()
 
-    response = list_live_approvals(
+    response = list_session_approvals(
         session_id=session.id, user=user, db_session=db_session
     )
     assert len(response.items) == 1
@@ -693,7 +671,6 @@ def test_history_retains_expired_requests_and_checks_owner(
         db_session, approval_id=row.approval_id, decision=ApprovalDecision.EXPIRED
     )
     db_session.commit()
-    assert list_live_approvals(session.id, owner, db_session).items == []
     history = list_session_approvals(session.id, owner, db_session)
     assert [item.decision for item in history.items] == [ApprovalDecision.EXPIRED]
     assert not history.items[0].is_live

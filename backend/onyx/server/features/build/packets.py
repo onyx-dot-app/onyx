@@ -58,8 +58,8 @@ class ErrorPacket(BasePacket):
 class ApprovalRequestedPacket(BasePacket):
     """A new approval awaits the user's decision.
 
-    Carries only ids; the FE refetches card contents via the /live endpoint
-    so Postgres stays the single source of truth.
+    Carries only ids; the FE refetches card contents via the session approvals
+    endpoint so Postgres stays the single source of truth.
     """
 
     type: Literal["approval_requested"] = "approval_requested"

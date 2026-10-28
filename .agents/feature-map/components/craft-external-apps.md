@@ -78,7 +78,6 @@ Raw upstream patterns, authentication templates, and organization credentials re
 |---|---|---|---|
 | GET | `/api/build/apps/{id}/oauth/start` | `start_external_app_oauth` (`server/features/build/external_apps/oauth.py`) | Begins a user's per-user OAuth connect flow for a built-in app. |
 | POST | `/api/build/apps/oauth/callback` | `handle_external_app_oauth_callback` (`oauth.py`) | Exchanges the authorization code, stamps `expires_at`, stores per-user credentials. |
-| GET | `/api/build/approvals/sessions/{session_id}/live` | `list_live_approvals` (`server/features/build/approvals/api.py`) | Returns pending approval cards. |
 | GET | `/api/build/approvals/sessions/{session_id}/status` | `list_session_approval_status` (`approvals/api.py`) | Polls IDs, decisions, and server liveness without loading request payloads. |
 | GET | `/api/build/approvals/sessions/{session_id}` | `list_session_approvals` (`approvals/api.py`) | Owner-scoped: all live requests plus the 50 most recent outcomes, including rejected and expired requests. |
 | POST | `/api/build/approvals/{approval_id}/decision` | `submit_decision` (`approvals/api.py`) | Accepts `approve_once`, `approve_session`, or `reject`. |

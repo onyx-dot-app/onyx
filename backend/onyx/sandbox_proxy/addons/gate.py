@@ -825,7 +825,7 @@ class GateAddon:
         """Commits the row, register it for the drain, announce to the chat.
 
         Announce is best-effort: a miss degrades to the FE surfacing the card on
-        the next `/live` refetch, so we don't fail the request.
+        its next approval status poll, so we don't fail the request.
         """
         actions_payload = [a.model_dump(mode="json") for a in matched_actions.actions]
         with get_session_with_tenant(tenant_id=ctx.tenant_id) as db:
