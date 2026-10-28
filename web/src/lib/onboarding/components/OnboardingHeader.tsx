@@ -123,21 +123,14 @@ function OnboardingHeader({
         </Section>
         {stepButtonText ? (
           <Section flexDirection="row" justifyContent="end" width="fit">
-            {/* The step counter shows on the numbered steps only, and swaps
-                its number like the prompt. */}
+            {/* The step counter shows on the numbered steps only. */}
             <Presence show={currentNumber !== null} from="end" width="fit">
-              <Presence.Swap
-                swapKey={counterNumber}
-                direction={direction}
-                axis="inline"
-              >
-                <Text as="p" font="main-ui-body" color="text-03">
-                  {t("header.progress.label", {
-                    current: counterNumber,
-                    total: TOTAL_STEPS,
-                  })}
-                </Text>
-              </Presence.Swap>
+              <Text as="p" font="main-ui-body" color="text-03">
+                {t("header.progress.label", {
+                  current: counterNumber,
+                  total: TOTAL_STEPS,
+                })}
+              </Text>
             </Presence>
             <Section flexDirection="row" gap={1} width="fit">
               <Presence show={hasPreviousStep} from="end" width="fit">
