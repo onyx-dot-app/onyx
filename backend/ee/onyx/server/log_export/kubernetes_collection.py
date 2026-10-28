@@ -19,7 +19,7 @@ from pathlib import Path
 
 from kubernetes import client
 from kubernetes.client.exceptions import ApiException
-from pydantic import BaseModel, TypeAdapter
+from pydantic import TypeAdapter
 
 from ee.onyx.configs.app_configs import (
     LOG_EXPORT_KUBERNETES_MAX_BYTES_PER_STREAM,
@@ -31,7 +31,14 @@ from ee.onyx.server.log_export.collection import (
     SENSITIVE_DATA_WARNING,
     BuiltLogZip,
 )
-from ee.onyx.server.log_export.models import LogExportReceipt, LogExportReceiptStatus
+from ee.onyx.server.log_export.models import (
+    ContainerSummary,
+    KubernetesLogStream,
+    LogExportReceipt,
+    LogExportReceiptStatus,
+    PodSummary,
+    TerminationSummary,
+)
 from ee.onyx.server.log_export.storage import (
     KUBERNETES_PIECE_NAME,
     save_piece,
@@ -56,87 +63,60 @@ SERVICE_ACCOUNT_NAMESPACE_FILE = Path(
 RELEASE_SELECTOR_LABELS = ("app.kubernetes.io/name", "app.kubernetes.io/instance")
 # Per-component label set by the chart, e.g. ``celery-worker-docprocessing``.
 COMPONENT_LABEL = "app"
+# Set on ReplicaSet-owned pods; the ReplicaSet name is ``<deployment>-<hash>``.
+POD_TEMPLATE_HASH_LABEL = "pod-template-hash"
 
 PODS_FILE_NAME = "pods.json"
 EVENTS_FILE_NAME = "events.txt"
 
 _MAX_PARALLEL_STREAMS = 8
 # Time kept after the log reads to zip and upload before the export deadline.
+# It must exceed _MAX_READ_SECONDS, the longest one blocked read can run late.
 _UPLOAD_MARGIN_SECONDS = 15.0
+_CONNECT_SECONDS = 5.0
+_MAX_READ_SECONDS = 10.0
 _STREAM_READ_CHUNK_BYTES = 64 * 1024
 # Logs spool to disk past this size, so parallel reads hold little memory.
 _SPOOL_MAX_MEMORY_BYTES = 1024 * 1024
-_TRUNCATED_STREAM_CAP = "truncated at the per-log byte cap"
-_TRUNCATED_TOTAL_CAP = "truncated: total byte cap reached"
+_TIMED_OUT = "timed out"
+_STREAM_CAP_REACHED = "truncated at the per-log byte cap"
+_TOTAL_CAP_REACHED = "total byte cap reached"
 _HTTP_FORBIDDEN = 403
-# Upper bound for one metadata request, within the remaining time budget.
-_MAX_REQUEST_SECONDS = 15.0
 _RBAC_HINT = (
     "The Kubernetes API denied access. Grant the api-server service account "
     "get/list on pods, pods/log, and events (Helm value "
     "logExport.kubernetesRbac.enabled)."
 )
 _EPOCH = datetime.min.replace(tzinfo=timezone.utc)
-
-
-class LogStream(BaseModel):
-    pod_name: str
-    container_name: str
-    # Reads the container instance that ran before the last restart.
-    previous: bool
-
-    @property
-    def arcname(self) -> str:
-        suffix = ".previous.log" if self.previous else ".log"
-        return f"logs/{self.pod_name}/{self.container_name}{suffix}"
-
-
-class TerminationSummary(BaseModel):
-    reason: str | None
-    exit_code: int | None
-    started_at: datetime | None
-    finished_at: datetime | None
-
-
-class ContainerSummary(BaseModel):
-    name: str
-    # Init containers run before the main ones, e.g. the object-store wait.
-    init: bool
-    ready: bool
-    restart_count: int
-    # ``running``, ``waiting: <reason>``, or ``terminated: <reason>``.
-    state: str
-    # How the previous instance ended, e.g. ``OOMKilled`` with exit code 137.
-    last_terminated: TerminationSummary | None
-
-
-class PodSummary(BaseModel):
-    name: str
-    component: str | None
-    node: str | None
-    phase: str | None
-    # Pod-level reason and message, e.g. ``Evicted`` with the resource pressure.
-    reason: str | None
-    message: str | None
-    containers: list[ContainerSummary]
+# Workload kinds whose pods are named ``<owner name>-<suffix>``.
+_POD_OWNER_KINDS = frozenset({"ReplicaSet", "StatefulSet", "DaemonSet", "Job"})
 
 
 class _FetchedStream:
-    """One container log read into a spooled buffer, or the reason it failed."""
+    """One container log, possibly partial, or the reason none of it was kept.
+
+    Every byte charged to the byte budget stays in ``buffer``, so the budget
+    never counts bytes the zip leaves out.
+    """
 
     def __init__(
         self,
-        stream: LogStream,
+        stream: KubernetesLogStream,
         buffer: tempfile.SpooledTemporaryFile[bytes] | None,
         size_bytes: int,
         error: str | None,
-        truncated_reason: str | None = None,
+        denied: bool = False,
+        note: str | None = None,
     ) -> None:
         self.stream = stream
         self.buffer = buffer
         self.size_bytes = size_bytes
+        # Why nothing was kept; set only when ``buffer`` is None.
         self.error = error
-        self.truncated_reason = truncated_reason
+        # The API refused the read with 403.
+        self.denied = denied
+        # Why a kept log is incomplete, e.g. a byte cap or the deadline.
+        self.note = note
 
 
 class _ByteBudget:
@@ -153,6 +133,14 @@ class _ByteBudget:
             granted = min(requested_bytes, self._remaining)
             self._remaining -= granted
             return granted
+
+
+def _request_timeout(deadline_monotonic: float) -> tuple[float, float]:
+    """(connect, read) timeout for one request. The client ignores a lone float,
+    so this is always a pair. At least 1 s, so a late request still gets a
+    chance."""
+    remaining = max(1.0, deadline_monotonic - time.monotonic())
+    return min(_CONNECT_SECONDS, remaining), min(_MAX_READ_SECONDS, remaining)
 
 
 def _container_statuses(
@@ -211,10 +199,10 @@ def summarize_pod(pod: client.V1Pod) -> PodSummary:
     )
 
 
-def log_streams_for_pod(pod: client.V1Pod) -> list[LogStream]:
+def log_streams_for_pod(pod: client.V1Pod) -> list[KubernetesLogStream]:
     """A started container has a current log; a restarted one also has the
     previous instance's log, which holds the crash."""
-    streams: list[LogStream] = []
+    streams: list[KubernetesLogStream] = []
     for _init, container_status in _container_statuses(pod):
         state = container_status.state
         started = state is not None and (
@@ -222,7 +210,7 @@ def log_streams_for_pod(pod: client.V1Pod) -> list[LogStream]:
         )
         if started:
             streams.append(
-                LogStream(
+                KubernetesLogStream(
                     pod_name=pod.metadata.name,
                     container_name=container_status.name,
                     previous=False,
@@ -230,7 +218,7 @@ def log_streams_for_pod(pod: client.V1Pod) -> list[LogStream]:
             )
         if (container_status.restart_count or 0) > 0:
             streams.append(
-                LogStream(
+                KubernetesLogStream(
                     pod_name=pod.metadata.name,
                     container_name=container_status.name,
                     previous=True,
@@ -242,15 +230,15 @@ def log_streams_for_pod(pod: client.V1Pod) -> list[LogStream]:
 def _fetch_stream(
     core_api: client.CoreV1Api,
     namespace: str,
-    stream: LogStream,
+    stream: KubernetesLogStream,
     budget: _ByteBudget,
     deadline_monotonic: float,
 ) -> _FetchedStream:
-    """Reads one log until it ends, hits a byte cap, or passes the deadline.
-
-    Checks the deadline per chunk, so a read that runs late stops and frees its
-    buffer instead of running on after the export moved on.
-    """
+    """Reads one log until it ends, hits a byte cap, fails, or passes the
+    deadline. Never raises: whatever was read is kept and marked, so one bad
+    log cannot drop the others."""
+    if time.monotonic() >= deadline_monotonic:
+        return _FetchedStream(stream, None, 0, _TIMED_OUT)
     try:
         response = core_api.read_namespaced_pod_log(
             name=stream.pod_name,
@@ -263,9 +251,14 @@ def _fetch_stream(
             _request_timeout=_request_timeout(deadline_monotonic),
         )
     except ApiException as e:
-        return _FetchedStream(stream, None, 0, f"{e.status} {e.reason}")
+        return _FetchedStream(
+            stream,
+            None,
+            0,
+            f"{e.status} {e.reason}",
+            denied=e.status == _HTTP_FORBIDDEN,
+        )
     except Exception as e:
-        # A transport error on one log must not drop the logs already read.
         logger.warning(
             "Log export: opening %s failed: %s", stream.arcname, e, exc_info=True
         )
@@ -275,39 +268,39 @@ def _fetch_stream(
         max_size=_SPOOL_MAX_MEMORY_BYTES
     )
     size_bytes = 0
-    truncated_reason: str | None = None
+    note: str | None = None
     try:
         for chunk in response.stream(_STREAM_READ_CHUNK_BYTES):
             if time.monotonic() >= deadline_monotonic:
-                buffer.close()
-                return _FetchedStream(stream, None, 0, "timed out")
+                note = _TIMED_OUT
+                break
             # The API honors limit_bytes; this bound guards against one that
             # does not.
-            stream_room = LOG_EXPORT_KUBERNETES_MAX_BYTES_PER_STREAM - size_bytes
-            wanted = min(len(chunk), stream_room)
+            wanted = min(
+                len(chunk), LOG_EXPORT_KUBERNETES_MAX_BYTES_PER_STREAM - size_bytes
+            )
             granted = budget.reserve(wanted)
             buffer.write(chunk[:granted])
             size_bytes += granted
             if granted < wanted:
-                truncated_reason = _TRUNCATED_TOTAL_CAP
+                note = _TOTAL_CAP_REACHED
                 break
             if size_bytes >= LOG_EXPORT_KUBERNETES_MAX_BYTES_PER_STREAM:
-                truncated_reason = _TRUNCATED_STREAM_CAP
+                note = _STREAM_CAP_REACHED
                 break
     except Exception as e:
         logger.warning(
             "Log export: reading %s failed: %s", stream.arcname, e, exc_info=True
         )
-        buffer.close()
-        return _FetchedStream(stream, None, 0, str(e))
+        note = f"read failed: {e}"
     finally:
         response.release_conn()
 
-    if size_bytes == 0 and truncated_reason == _TRUNCATED_TOTAL_CAP:
+    if size_bytes == 0 and note is not None:
         buffer.close()
-        return _FetchedStream(stream, None, 0, "total byte cap reached")
+        return _FetchedStream(stream, None, 0, note)
     buffer.seek(0)
-    return _FetchedStream(stream, buffer, size_bytes, None, truncated_reason)
+    return _FetchedStream(stream, buffer, size_bytes, None, note=note)
 
 
 def _event_time(event: client.CoreV1Event) -> datetime:
@@ -320,24 +313,40 @@ def _event_time(event: client.CoreV1Event) -> datetime:
     )
 
 
-def _object_name_prefixes(pods: list[client.V1Pod]) -> set[str]:
-    """Pod names plus their Deployment names, so events for pods that are
-    already gone (evicted, replaced) and for the Deployments still match."""
-    prefixes: set[str] = set()
-    for pod in pods:
-        prefixes.add(pod.metadata.name)
-        for owner in pod.metadata.owner_references or []:
-            if owner.kind == "ReplicaSet":
-                prefixes.add(owner.name.rsplit("-", 1)[0])
-    return prefixes
+class _EventScope:
+    """The objects whose events belong to the collected pods: each pod, its
+    owner, the Deployment behind a ReplicaSet, and owner-named pods that are
+    already gone (evicted or replaced). Names match exactly, never by prefix."""
+
+    def __init__(self, pods: list[client.V1Pod]) -> None:
+        self._objects: set[tuple[str, str]] = set()
+        self._pod_owner_names: set[str] = set()
+        for pod in pods:
+            self._objects.add(("Pod", pod.metadata.name))
+            pod_template_hash = (pod.metadata.labels or {}).get(POD_TEMPLATE_HASH_LABEL)
+            for owner in pod.metadata.owner_references or []:
+                self._objects.add((owner.kind, owner.name))
+                if owner.kind in _POD_OWNER_KINDS:
+                    self._pod_owner_names.add(owner.name)
+                if owner.kind == "ReplicaSet" and pod_template_hash:
+                    deployment = owner.name.removesuffix(f"-{pod_template_hash}")
+                    self._objects.add(("Deployment", deployment))
+                    self._objects.add(("HorizontalPodAutoscaler", deployment))
+
+    def includes(self, kind: str, name: str) -> bool:
+        if (kind, name) in self._objects:
+            return True
+        return kind == "Pod" and name.rsplit("-", 1)[0] in self._pod_owner_names
 
 
 def format_events(events: list[client.CoreV1Event], pods: list[client.V1Pod]) -> str:
-    prefixes = tuple(_object_name_prefixes(pods))
+    scope = _EventScope(pods)
     lines: list[str] = []
     for event in sorted(events, key=_event_time):
         involved = event.involved_object
-        if not involved.name or not involved.name.startswith(prefixes):
+        if not involved.kind or not involved.name:
+            continue
+        if not scope.includes(involved.kind, involved.name):
             continue
         lines.append(
             f"{_event_time(event).isoformat()} {event.type} {event.reason} "
@@ -345,12 +354,6 @@ def format_events(events: list[client.CoreV1Event], pods: list[client.V1Pod]) ->
             f"{(event.message or '').strip()}"
         )
     return "\n".join(lines) + "\n"
-
-
-def _request_timeout(deadline_monotonic: float) -> float:
-    """Read timeout for one metadata request; at least 1 s so a request with
-    little time left still gets a chance."""
-    return max(1.0, min(_MAX_REQUEST_SECONDS, deadline_monotonic - time.monotonic()))
 
 
 def _release_selector(
@@ -398,7 +401,8 @@ def _build_readme(
         "",
         f"{PODS_FILE_NAME}: phase, restarts, and last termination (e.g. "
         "OOMKilled) of each container.",
-        f"{EVENTS_FILE_NAME}: namespace events for these pods and their Deployments.",
+        f"{EVENTS_FILE_NAME}: namespace events for these pods, their owners, and "
+        "their Deployments.",
         f"Each log holds at most the last {LOG_EXPORT_KUBERNETES_TAIL_LINES} "
         f"lines and {LOG_EXPORT_KUBERNETES_MAX_BYTES_PER_STREAM} bytes.",
         "",
@@ -406,7 +410,7 @@ def _build_readme(
     ]
     lines.extend(
         f"  {fetched.stream.arcname} ({fetched.size_bytes} bytes"
-        + (f", {fetched.truncated_reason})" if fetched.truncated_reason else ")")
+        + (f", incomplete: {fetched.note})" if fetched.note else ")")
         for fetched in written
     )
     if failures:
@@ -425,13 +429,16 @@ def build_kubernetes_log_zip(
     namespace: str,
     own_pod_name: str,
     deadline_monotonic: float,
-) -> BuiltLogZip:
+) -> tuple[BuiltLogZip, list[str]]:
     """Reads the logs, status, and events of every Onyx pod of this release.
 
-    The reads share one total byte budget and stop at the time budget. A log
-    that fails, times out, or is cut short is listed in the zip's README
-    instead of failing the collection. Failing to select or list the pods
-    raises.
+    The reads share one total byte budget and stop at the deadline. A log that
+    fails, times out, or is cut short is listed in the zip's README instead of
+    failing the collection. Failing to select or list the pods raises.
+
+    Returns:
+        The zip, and the resources the API denied (e.g. ``pods/log``), so the
+        caller can report partial access.
     """
     selector = _release_selector(core_api, namespace, own_pod_name, deadline_monotonic)
     pods = sorted(
@@ -445,18 +452,21 @@ def build_kubernetes_log_zip(
 
     streams = [stream for pod in pods for stream in log_streams_for_pod(pod)]
     budget = _ByteBudget(LOG_EXPORT_KUBERNETES_MAX_TOTAL_BYTES)
+    # No pool timeout: each read stops itself at the deadline, so every result
+    # (and its charged bytes) comes back and no buffer is left behind.
     fetched_streams: list[_FetchedStream] = run_functions_tuples_in_parallel(
         [
             (_fetch_stream, (core_api, namespace, stream, budget, deadline_monotonic))
             for stream in streams
         ],
-        allow_failures=True,
+        allow_failures=False,
         max_workers=_MAX_PARALLEL_STREAMS,
-        timeout=max(0.0, deadline_monotonic - time.monotonic()),
-        timeout_callback=lambda index, _func, _args: _FetchedStream(
-            streams[index], None, 0, "timed out"
-        ),
     )
+
+    denied: list[str] = []
+    denied_logs = sum(fetched.denied for fetched in fetched_streams)
+    if denied_logs:
+        denied.append(f"pods/log ({denied_logs} of {len(streams)} logs)")
 
     events_text = ""
     events_error: str | None = None
@@ -471,6 +481,8 @@ def build_kubernetes_log_zip(
             events_text = format_events(events, pods)
         except ApiException as e:
             events_error = f"{e.status} {e.reason}"
+            if e.status == _HTTP_FORBIDDEN:
+                denied.append("events")
         except Exception as e:
             logger.warning("Log export: listing events failed: %s", e, exc_info=True)
             events_error = str(e)
@@ -508,9 +520,10 @@ def build_kubernetes_log_zip(
     zip_buffer.seek(0, os.SEEK_END)
     size_bytes = zip_buffer.tell()
     zip_buffer.seek(0)
-    return BuiltLogZip(
+    built = BuiltLogZip(
         zip_buffer=zip_buffer, log_file_count=len(written), size_bytes=size_bytes
     )
+    return built, denied
 
 
 def collect_kubernetes_logs_into_file_store(
@@ -519,7 +532,8 @@ def collect_kubernetes_logs_into_file_store(
     """Uploads the Kubernetes API collection as a piece and writes its receipt.
 
     Runs off the request path. Any failure (including missing RBAC) becomes a
-    ``FAILED`` receipt, so the export still completes with the other pieces.
+    ``FAILED`` receipt, so the export still completes with the other pieces. A
+    piece the API partly denied is ``UPLOADED`` with the RBAC fix as its error.
     """
     hostname = socket.gethostname()
     status = LogExportReceiptStatus.FAILED
@@ -535,7 +549,7 @@ def collect_kubernetes_logs_into_file_store(
             - _UPLOAD_MARGIN_SECONDS,
         )
         namespace = SERVICE_ACCOUNT_NAMESPACE_FILE.read_text().strip()
-        built = build_kubernetes_log_zip(
+        built, denied = build_kubernetes_log_zip(
             core_api=build_core_v1_api(),
             namespace=namespace,
             own_pod_name=hostname,
@@ -548,6 +562,8 @@ def collect_kubernetes_logs_into_file_store(
         status = LogExportReceiptStatus.UPLOADED
         file_count = built.log_file_count
         size_bytes = built.size_bytes
+        if denied:
+            error = f"{_RBAC_HINT} Denied: {', '.join(denied)}."
     except ApiException as e:
         logger.exception("Log export Kubernetes collection failed: %s", export_id)
         error = (

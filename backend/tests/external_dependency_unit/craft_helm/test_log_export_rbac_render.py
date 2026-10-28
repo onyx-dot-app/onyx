@@ -40,3 +40,44 @@ def test_log_export_rbac_disabled() -> None:
     assert (
         _log_export_resources(["--set", "logExport.kubernetesRbac.enabled=false"]) == []
     )
+
+
+# Turns on the workloads values-ci.yaml leaves off.
+_ALL_WORKLOADS_ARGS = [
+    "--set",
+    ",".join(
+        [
+            "webserver.replicaCount=1",
+            "celery_worker_docfetching.replicaCount=1",
+            "celery_worker_docprocessing.replicaCount=1",
+            "celery_worker_user_file_processing.replicaCount=1",
+            "celery_worker_monitoring.replicaCount=1",
+            "slackbot.enabled=true",
+            "discordbot.enabled=true",
+            "mcpServer.enabled=true",
+            "inferenceCapability.replicaCount=1",
+            "indexCapability.replicaCount=1",
+        ]
+    ),
+]
+_RELEASE_LABELS = {
+    "app.kubernetes.io/name": "onyx",
+    "app.kubernetes.io/instance": "onyx",
+}
+_POD_WORKLOAD_KINDS = ("Deployment", "StatefulSet", "DaemonSet", "Job")
+
+
+def test_every_onyx_pod_carries_the_release_labels() -> None:
+    """The log export selects Onyx pods by these labels."""
+    result = render_chart(_ALL_WORKLOADS_ARGS)
+    assert result.returncode == 0, result.stderr
+
+    unlabeled = [
+        resource["metadata"]["name"]
+        for resource in yaml.safe_load_all(result.stdout)
+        if resource
+        and resource["kind"] in _POD_WORKLOAD_KINDS
+        and not _RELEASE_LABELS.items()
+        <= (resource["spec"]["template"]["metadata"].get("labels") or {}).items()
+    ]
+    assert unlabeled == []

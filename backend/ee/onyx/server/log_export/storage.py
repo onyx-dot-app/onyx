@@ -158,6 +158,8 @@ def _build_bundle_readme(snapshot: LogExportSnapshot) -> str:
         detail = f" ({receipt.file_count} files, {receipt.size_bytes} bytes)"
         if receipt.status is not LogExportReceiptStatus.UPLOADED:
             detail = f" ({receipt.error})" if receipt.error else ""
+        elif receipt.error:
+            detail += f" Incomplete: {receipt.error}"
         lines.append(f"  {receipt.worker_name}: {receipt.status.value}{detail}")
     lines.extend(
         f"  {worker_name}: no receipt (did not report before the deadline)"

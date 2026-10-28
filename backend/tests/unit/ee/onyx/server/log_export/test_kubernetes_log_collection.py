@@ -43,6 +43,9 @@ def _pod(
     restart_count: int = 0,
     init_container: str | None = None,
 ) -> client.V1Pod:
+    """A ReplicaSet-owned pod named ``<deployment>-<hash>-<suffix>``."""
+    replica_set, _suffix = name.rsplit("-", 1)
+    pod_template_hash = replica_set.rsplit("-", 1)[1]
     last_state = (
         client.V1ContainerState(
             terminated=client.V1ContainerStateTerminated(
@@ -55,13 +58,14 @@ def _pod(
     return client.V1Pod(
         metadata=client.V1ObjectMeta(
             name=name,
-            labels={**_RELEASE_LABELS, "app": component},
+            labels={
+                **_RELEASE_LABELS,
+                "app": component,
+                "pod-template-hash": pod_template_hash,
+            },
             owner_references=[
                 client.V1OwnerReference(
-                    api_version="apps/v1",
-                    kind="ReplicaSet",
-                    name=name.rsplit("-", 1)[0],
-                    uid="uid",
+                    api_version="apps/v1", kind="ReplicaSet", name=replica_set, uid="u"
                 )
             ],
         ),
@@ -101,10 +105,12 @@ def _pod(
     )
 
 
-def _event(object_name: str, reason: str, message: str) -> client.CoreV1Event:
+def _event(
+    object_name: str, reason: str, message: str, kind: str = "Pod"
+) -> client.CoreV1Event:
     return client.CoreV1Event(
         metadata=client.V1ObjectMeta(name=f"{object_name}.1"),
-        involved_object=client.V1ObjectReference(kind="Pod", name=object_name),
+        involved_object=client.V1ObjectReference(kind=kind, name=object_name),
         reason=reason,
         message=message,
         type="Warning",
@@ -114,15 +120,23 @@ def _event(object_name: str, reason: str, message: str) -> client.CoreV1Event:
 
 
 class _FakeLogResponse:
-    def __init__(self, data: bytes, chunk_delay_seconds: float) -> None:
+    def __init__(
+        self,
+        data: bytes,
+        chunk_delay_seconds: float,
+        error_after_first_chunk: Exception | None,
+    ) -> None:
         self._data = data
         self._chunk_delay_seconds = chunk_delay_seconds
+        self._error_after_first_chunk = error_after_first_chunk
         self.released = threading.Event()
 
     def stream(self, amt: int) -> Iterator[bytes]:
         for start in range(0, len(self._data), amt):
             time.sleep(self._chunk_delay_seconds)
             yield self._data[start : start + amt]
+            if self._error_after_first_chunk is not None:
+                raise self._error_after_first_chunk
 
     def release_conn(self) -> None:
         self.released.set()
@@ -140,6 +154,8 @@ class _FakeCoreV1Api(client.CoreV1Api):
         read_pod_error: ApiException | None = None,
         chunk_delay_seconds: float = 0.0,
         open_errors: dict[tuple[str, bool], Exception] | None = None,
+        read_errors: dict[tuple[str, bool], Exception] | None = None,
+        events_error: ApiException | None = None,
     ) -> None:
         self._pods = pods
         self._logs = logs
@@ -147,33 +163,44 @@ class _FakeCoreV1Api(client.CoreV1Api):
         self._read_pod_error = read_pod_error
         self._chunk_delay_seconds = chunk_delay_seconds
         self._open_errors = open_errors or {}
+        self._read_errors = read_errors or {}
+        self._events_error = events_error
         self.label_selectors: list[str] = []
+        self.request_timeouts: list[Any] = []
         self.responses: list[_FakeLogResponse] = []
 
-    def read_namespaced_pod(self, name: str, namespace: str, **_: Any) -> Any:
+    def read_namespaced_pod(self, name: str, namespace: str, **kwargs: Any) -> Any:
         assert namespace == _NAMESPACE
+        self.request_timeouts.append(kwargs["_request_timeout"])
         if self._read_pod_error is not None:
             raise self._read_pod_error
         return next(pod for pod in self._pods if pod.metadata.name == name)
 
     def list_namespaced_pod(self, namespace: str, **kwargs: Any) -> Any:
         assert namespace == _NAMESPACE
+        self.request_timeouts.append(kwargs["_request_timeout"])
         self.label_selectors.append(kwargs["label_selector"])
         return client.V1PodList(items=self._pods)
 
     def read_namespaced_pod_log(self, name: str, namespace: str, **kwargs: Any) -> Any:
         assert namespace == _NAMESPACE
+        self.request_timeouts.append(kwargs["_request_timeout"])
         key = (name, bool(kwargs["previous"]))
         if key in self._open_errors:
             raise self._open_errors[key]
         if key not in self._logs:
             raise ApiException(status=400, reason="Bad Request")
-        response = _FakeLogResponse(self._logs[key], self._chunk_delay_seconds)
+        response = _FakeLogResponse(
+            self._logs[key], self._chunk_delay_seconds, self._read_errors.get(key)
+        )
         self.responses.append(response)
         return response
 
-    def list_namespaced_event(self, namespace: str, **_: Any) -> Any:
+    def list_namespaced_event(self, namespace: str, **kwargs: Any) -> Any:
         assert namespace == _NAMESPACE
+        self.request_timeouts.append(kwargs["_request_timeout"])
+        if self._events_error is not None:
+            raise self._events_error
         return client.CoreV1EventList(items=self._events)
 
 
@@ -186,11 +213,26 @@ def _read_zip(built_buffer: Any) -> dict[str, bytes]:
         return {name: zip_file.read(name) for name in zip_file.namelist()}
 
 
+def _patch_collection(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, api: _FakeCoreV1Api
+) -> list[LogExportReceipt]:
+    namespace_file = tmp_path / "namespace"
+    namespace_file.write_text(_NAMESPACE)
+    monkeypatch.setattr(
+        kubernetes_collection, "SERVICE_ACCOUNT_NAMESPACE_FILE", namespace_file
+    )
+    monkeypatch.setattr(kubernetes_collection, "build_core_v1_api", lambda: api)
+    monkeypatch.setattr(kubernetes_collection.socket, "gethostname", lambda: _API_POD)
+    monkeypatch.setattr(kubernetes_collection, "save_piece", lambda *_: None)
+    saved_receipts: list[LogExportReceipt] = []
+    monkeypatch.setattr(kubernetes_collection, "save_receipt", saved_receipts.append)
+    return saved_receipts
+
+
 def test_restarted_container_collects_previous_log_and_termination() -> None:
     # Precondition.
     # The docprocessing container was OOM-killed once; its previous instance
-    # holds the crash. Events exist for it, for a replaced pod of the same
-    # Deployment, and for an unrelated workload.
+    # holds the crash.
     pods = [
         _pod(_API_POD, "api-server"),
         _pod(_DOCPROCESSING_POD, "celery-worker-docprocessing", restart_count=1),
@@ -202,21 +244,19 @@ def test_restarted_container_collects_previous_log_and_termination() -> None:
             (_DOCPROCESSING_POD, False): b"current line\n",
             (_DOCPROCESSING_POD, True): b"crash line\n",
         },
-        events=[
-            _event(_DOCPROCESSING_POD, "BackOff", "restarting failed container"),
-            _event("onyx-celery-worker-docprocessing-95f84-old11", "Evicted", "memory"),
-            _event("unrelated-db-0", "Pulled", "pulled image"),
-        ],
+        events=[],
     )
 
     # Under test.
-    built = build_kubernetes_log_zip(api, _NAMESPACE, _API_POD, _deadline(30.0))
+    built, denied = build_kubernetes_log_zip(api, _NAMESPACE, _API_POD, _deadline(30.0))
 
     # Postcondition.
     # Both instances of the restarted container are collected, the pods are
-    # selected by the release labels, and only Onyx events are kept.
+    # selected by the release labels, and every request has a (connect, read)
+    # timeout, the only form the client applies besides an int.
     files = _read_zip(built.zip_buffer)
     built.zip_buffer.close()
+    assert denied == []
     assert built.log_file_count == 3
     assert files[f"logs/{_DOCPROCESSING_POD}/celery-worker-docprocessing.log"] == (
         b"current line\n"
@@ -227,6 +267,10 @@ def test_restarted_container_collects_previous_log_and_termination() -> None:
     assert api.label_selectors == [
         "app.kubernetes.io/name=onyx,app.kubernetes.io/instance=onyx"
     ]
+    assert all(
+        isinstance(timeout, tuple) and len(timeout) == 2
+        for timeout in api.request_timeouts
+    )
     pod_summaries = json.loads(files[PODS_FILE_NAME])
     docprocessing = next(
         pod for pod in pod_summaries if pod["name"] == _DOCPROCESSING_POD
@@ -234,10 +278,50 @@ def test_restarted_container_collects_previous_log_and_termination() -> None:
     assert docprocessing["component"] == "celery-worker-docprocessing"
     assert docprocessing["containers"][0]["restart_count"] == 1
     assert docprocessing["containers"][0]["last_terminated"]["reason"] == "OOMKilled"
-    events = files[EVENTS_FILE_NAME].decode()
+
+
+def test_events_match_exact_objects_of_collected_pods() -> None:
+    # Precondition.
+    # Events exist for a collected pod, a replaced pod of the same ReplicaSet,
+    # the Deployment, and two look-alikes: a canary Deployment and its pod.
+    api = _FakeCoreV1Api(
+        pods=[_pod(_DOCPROCESSING_POD, "celery-worker-docprocessing")],
+        logs={(_DOCPROCESSING_POD, False): b"line\n"},
+        events=[
+            _event(_DOCPROCESSING_POD, "BackOff", "restarting failed container"),
+            _event("onyx-celery-worker-docprocessing-95f84-old11", "Evicted", "memory"),
+            _event(
+                "onyx-celery-worker-docprocessing",
+                "ScalingReplicaSet",
+                "scaled",
+                kind="Deployment",
+            ),
+            _event(
+                "onyx-celery-worker-docprocessing-canary",
+                "CanaryScaled",
+                "canary",
+                kind="Deployment",
+            ),
+            _event(
+                "onyx-celery-worker-docprocessing-canary-5c6d7-zz9yy",
+                "CanaryPod",
+                "canary pod",
+            ),
+        ],
+    )
+
+    # Under test.
+    built, _ = build_kubernetes_log_zip(
+        api, _NAMESPACE, _DOCPROCESSING_POD, _deadline(30.0)
+    )
+
+    # Postcondition.
+    events = _read_zip(built.zip_buffer)[EVENTS_FILE_NAME].decode()
+    built.zip_buffer.close()
     assert "BackOff" in events
     assert "Evicted" in events
-    assert "unrelated-db-0" not in events
+    assert "ScalingReplicaSet" in events
+    assert "Canary" not in events
 
 
 def test_stream_byte_cap_truncates_a_log(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -253,14 +337,15 @@ def test_stream_byte_cap_truncates_a_log(monkeypatch: pytest.MonkeyPatch) -> Non
     )
 
     # Under test.
-    built = build_kubernetes_log_zip(api, _NAMESPACE, _API_POD, _deadline(30.0))
+    built, _ = build_kubernetes_log_zip(api, _NAMESPACE, _API_POD, _deadline(30.0))
 
     # Postcondition.
     files = _read_zip(built.zip_buffer)
     built.zip_buffer.close()
     assert files[f"logs/{_API_POD}/api-server.log"] == b"a" * 10
     assert (
-        "(10 bytes, truncated at the per-log byte cap)" in files["README.txt"].decode()
+        "(10 bytes, incomplete: truncated at the per-log byte cap)"
+        in files["README.txt"].decode()
     )
 
 
@@ -283,7 +368,7 @@ def test_total_budget_runs_out_mid_stream_across_parallel_reads(
     )
 
     # Under test.
-    built = build_kubernetes_log_zip(
+    built, _ = build_kubernetes_log_zip(
         api, _NAMESPACE, pods[0].metadata.name, _deadline(30.0)
     )
 
@@ -302,7 +387,7 @@ def test_total_budget_runs_out_mid_stream_across_parallel_reads(
     assert len(capped_lines) == 4 - log_sizes.count(100)
 
 
-def test_deadline_stops_reads_and_releases_them() -> None:
+def test_deadline_stops_reads_and_keeps_what_was_read() -> None:
     # Precondition.
     # The log arrives slowly, so reading all of it takes far longer than the
     # time budget.
@@ -312,18 +397,46 @@ def test_deadline_stops_reads_and_releases_them() -> None:
         events=[],
         chunk_delay_seconds=0.05,
     )
+    started = time.monotonic()
 
     # Under test.
-    built = build_kubernetes_log_zip(api, _NAMESPACE, _API_POD, _deadline(0.2))
+    built, _ = build_kubernetes_log_zip(api, _NAMESPACE, _API_POD, _deadline(0.2))
 
     # Postcondition.
-    # The log is reported as timed out, and the read stops on its next chunk
-    # instead of running on in the background.
+    # The read stops on its next chunk and releases its connection; the bytes
+    # it read stay in the zip, marked as timed out.
+    elapsed = time.monotonic() - started
     files = _read_zip(built.zip_buffer)
     built.zip_buffer.close()
-    assert f"logs/{_API_POD}/api-server.log: timed out" in files["README.txt"].decode()
+    assert elapsed < 2.0
     [response] = api.responses
-    assert response.released.wait(timeout=1.0)
+    assert response.released.is_set()
+    readme = files["README.txt"].decode()
+    [log_line] = [line for line in readme.splitlines() if "api-server.log" in line]
+    assert "incomplete: timed out" in log_line
+    kept = files[f"logs/{_API_POD}/api-server.log"]
+    assert 0 < len(kept) < 64 * 1024 * 100
+
+
+def test_read_failure_keeps_partial_log() -> None:
+    # Precondition.
+    # The connection drops after the first chunk of one log.
+    api = _FakeCoreV1Api(
+        pods=[_pod(_API_POD, "api-server")],
+        logs={(_API_POD, False): b"a" * (64 * 1024 * 3)},
+        events=[],
+        read_errors={(_API_POD, False): ConnectionResetError("reset")},
+    )
+
+    # Under test.
+    built, _ = build_kubernetes_log_zip(api, _NAMESPACE, _API_POD, _deadline(30.0))
+
+    # Postcondition.
+    # The bytes read (and charged to the budget) stay in the zip, marked.
+    files = _read_zip(built.zip_buffer)
+    built.zip_buffer.close()
+    assert files[f"logs/{_API_POD}/api-server.log"] == b"a" * (64 * 1024)
+    assert "incomplete: read failed: reset" in files["README.txt"].decode()
 
 
 def test_transport_error_on_one_log_keeps_the_others() -> None:
@@ -341,7 +454,7 @@ def test_transport_error_on_one_log_keeps_the_others() -> None:
     )
 
     # Under test.
-    built = build_kubernetes_log_zip(api, _NAMESPACE, _API_POD, _deadline(30.0))
+    built, _ = build_kubernetes_log_zip(api, _NAMESPACE, _API_POD, _deadline(30.0))
 
     # Postcondition.
     files = _read_zip(built.zip_buffer)
@@ -360,7 +473,7 @@ def test_init_container_log_and_status_are_collected() -> None:
     api = _FakeCoreV1Api(pods=[pod], logs={(_API_POD, False): b"line\n"}, events=[])
 
     # Under test.
-    built = build_kubernetes_log_zip(api, _NAMESPACE, _API_POD, _deadline(30.0))
+    built, _ = build_kubernetes_log_zip(api, _NAMESPACE, _API_POD, _deadline(30.0))
 
     # Postcondition.
     files = _read_zip(built.zip_buffer)
@@ -373,28 +486,48 @@ def test_init_container_log_and_status_are_collected() -> None:
     ]
 
 
+def test_denied_logs_and_events_mark_the_uploaded_receipt(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Precondition.
+    # The service account may list pods but may not read pods/log or events.
+    api = _FakeCoreV1Api(
+        pods=[_pod(_API_POD, "api-server")],
+        logs={},
+        events=[],
+        open_errors={(_API_POD, False): ApiException(status=403, reason="Forbidden")},
+        events_error=ApiException(status=403, reason="Forbidden"),
+    )
+    saved_receipts = _patch_collection(monkeypatch, tmp_path, api)
+
+    # Under test.
+    receipt = collect_kubernetes_logs_into_file_store(
+        export_id="export", deadline=datetime.now(tz=timezone.utc)
+    )
+
+    # Postcondition.
+    # The partial piece (pod status) is kept, and the receipt names the
+    # denied resources and the RBAC fix.
+    assert saved_receipts == [receipt]
+    assert receipt.status is LogExportReceiptStatus.UPLOADED
+    assert receipt.error is not None
+    assert "logExport.kubernetesRbac.enabled" in receipt.error
+    assert "pods/log (1 of 1 logs)" in receipt.error
+    assert "events" in receipt.error
+
+
 def test_missing_rbac_writes_failed_receipt(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     # Precondition.
     # The service account may not read pods.
-    namespace_file = tmp_path / "namespace"
-    namespace_file.write_text(_NAMESPACE)
-    monkeypatch.setattr(
-        kubernetes_collection, "SERVICE_ACCOUNT_NAMESPACE_FILE", namespace_file
+    api = _FakeCoreV1Api(
+        pods=[],
+        logs={},
+        events=[],
+        read_pod_error=ApiException(status=403, reason="Forbidden"),
     )
-    monkeypatch.setattr(
-        kubernetes_collection,
-        "build_core_v1_api",
-        lambda: _FakeCoreV1Api(
-            pods=[],
-            logs={},
-            events=[],
-            read_pod_error=ApiException(status=403, reason="Forbidden"),
-        ),
-    )
-    saved_receipts: list[LogExportReceipt] = []
-    monkeypatch.setattr(kubernetes_collection, "save_receipt", saved_receipts.append)
+    saved_receipts = _patch_collection(monkeypatch, tmp_path, api)
 
     def _fail_save_piece(*_: object) -> None:
         raise AssertionError("no piece is uploaded when collection fails")

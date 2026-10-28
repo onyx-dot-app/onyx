@@ -24,6 +24,10 @@ annotations:
       description: Grant the api-server read access to pods, pod logs, and
         events in the release namespace, so the admin log export collects
         stdout from every pod (logExport.kubernetesRbac.enabled).
+    - kind: changed
+      description: Add the release labels to the inference model server pods
+        (pod template only), so the log export finds them. The pods restart
+        once on upgrade.
     - kind: security
       description: Bump the code-interpreter subchart to 0.4.10, which updates
         Pillow, pypdf, cryptography, fpdf2, and certifi in its images.
