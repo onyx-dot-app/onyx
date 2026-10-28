@@ -49,6 +49,8 @@ function ButtonLabel({ children, font, responsiveHide }: ButtonLabelProps) {
   });
 
   const changed = textOf(children) !== textOf(shown);
+  // The same text switching between plain and markdown changes at once.
+  const sameTextNewKind = !changed && typeof children !== typeof shown;
   if (changed && (phase === "idle" || phase === "in")) {
     // The DOM still shows the old text. No layout (hidden, or tests) or
     // reduced motion changes the text at once.
@@ -60,7 +62,10 @@ function ButtonLabel({ children, font, responsiveHide }: ButtonLabelProps) {
       setShown(children);
     }
   } else if (changed && phase === "resize") {
-    // A newer label mid-resize: resize to it instead.
+    // A newer label mid-resize: resize to it from the width on screen.
+    setFromWidth(ref.current?.getBoundingClientRect().width ?? fromWidth);
+    setShown(children);
+  } else if (sameTextNewKind && phase !== "out") {
     setShown(children);
   }
 
@@ -101,6 +106,7 @@ function ButtonLabel({ children, font, responsiveHide }: ButtonLabelProps) {
   useLayoutEffect(() => {
     advanceRef.current = advance;
   });
+  // A new target mid-resize restarts the timer.
   useEffect(() => {
     if (phase === "idle") return;
     const fallback = window.setTimeout(
@@ -108,7 +114,7 @@ function ButtonLabel({ children, font, responsiveHide }: ButtonLabelProps) {
       FALLBACK_MS
     );
     return () => window.clearTimeout(fallback);
-  }, [phase]);
+  }, [phase, shown]);
 
   return (
     <span
