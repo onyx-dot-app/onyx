@@ -288,9 +288,10 @@ function PresenceSwap({
     // Mid-exit or mid-resize, the swap goes on and lands on the newest key.
   }
 
-  // Keep the leaving snapshot current while the shown content is on screen.
+  // Keep the leaving snapshot current whenever `children` is on screen (every
+  // phase but the exit, which shows `outgoing`).
   useLayoutEffect(() => {
-    if (phase === "idle") shownChildrenRef.current = children;
+    if (phase !== "exiting") shownChildrenRef.current = children;
   });
 
   // Track the content's size on `axis`, so the box animates to every new size.
