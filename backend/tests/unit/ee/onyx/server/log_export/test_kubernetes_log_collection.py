@@ -37,7 +37,12 @@ _RELEASE_LABELS = {
 _T0 = datetime(2026, 10, 27, 10, 0, tzinfo=timezone.utc)
 
 
-def _pod(name: str, component: str, restart_count: int = 0) -> client.V1Pod:
+def _pod(
+    name: str,
+    component: str,
+    restart_count: int = 0,
+    init_container: str | None = None,
+) -> client.V1Pod:
     last_state = (
         client.V1ContainerState(
             terminated=client.V1ContainerStateTerminated(
@@ -63,6 +68,22 @@ def _pod(name: str, component: str, restart_count: int = 0) -> client.V1Pod:
         spec=client.V1PodSpec(containers=[], node_name="node-1"),
         status=client.V1PodStatus(
             phase="Running",
+            init_container_statuses=[
+                client.V1ContainerStatus(
+                    name=init_container,
+                    image="onyx",
+                    image_id="onyx",
+                    ready=False,
+                    restart_count=0,
+                    state=client.V1ContainerState(
+                        terminated=client.V1ContainerStateTerminated(
+                            exit_code=0, reason="Completed"
+                        )
+                    ),
+                )
+            ]
+            if init_container
+            else None,
             container_statuses=[
                 client.V1ContainerStatus(
                     name=component,
@@ -118,12 +139,14 @@ class _FakeCoreV1Api(client.CoreV1Api):
         events: list[client.CoreV1Event],
         read_pod_error: ApiException | None = None,
         chunk_delay_seconds: float = 0.0,
+        open_errors: dict[tuple[str, bool], Exception] | None = None,
     ) -> None:
         self._pods = pods
         self._logs = logs
         self._events = events
         self._read_pod_error = read_pod_error
         self._chunk_delay_seconds = chunk_delay_seconds
+        self._open_errors = open_errors or {}
         self.label_selectors: list[str] = []
         self.responses: list[_FakeLogResponse] = []
 
@@ -141,6 +164,8 @@ class _FakeCoreV1Api(client.CoreV1Api):
     def read_namespaced_pod_log(self, name: str, namespace: str, **kwargs: Any) -> Any:
         assert namespace == _NAMESPACE
         key = (name, bool(kwargs["previous"]))
+        if key in self._open_errors:
+            raise self._open_errors[key]
         if key not in self._logs:
             raise ApiException(status=400, reason="Bad Request")
         response = _FakeLogResponse(self._logs[key], self._chunk_delay_seconds)
@@ -150,6 +175,10 @@ class _FakeCoreV1Api(client.CoreV1Api):
     def list_namespaced_event(self, namespace: str, **_: Any) -> Any:
         assert namespace == _NAMESPACE
         return client.CoreV1EventList(items=self._events)
+
+
+def _deadline(seconds: float) -> float:
+    return time.monotonic() + seconds
 
 
 def _read_zip(built_buffer: Any) -> dict[str, bytes]:
@@ -181,7 +210,7 @@ def test_restarted_container_collects_previous_log_and_termination() -> None:
     )
 
     # Under test.
-    built = build_kubernetes_log_zip(api, _NAMESPACE, _API_POD, 30.0)
+    built = build_kubernetes_log_zip(api, _NAMESPACE, _API_POD, _deadline(30.0))
 
     # Postcondition.
     # Both instances of the restarted container are collected, the pods are
@@ -224,7 +253,7 @@ def test_stream_byte_cap_truncates_a_log(monkeypatch: pytest.MonkeyPatch) -> Non
     )
 
     # Under test.
-    built = build_kubernetes_log_zip(api, _NAMESPACE, _API_POD, 30.0)
+    built = build_kubernetes_log_zip(api, _NAMESPACE, _API_POD, _deadline(30.0))
 
     # Postcondition.
     files = _read_zip(built.zip_buffer)
@@ -254,7 +283,9 @@ def test_total_budget_runs_out_mid_stream_across_parallel_reads(
     )
 
     # Under test.
-    built = build_kubernetes_log_zip(api, _NAMESPACE, pods[0].metadata.name, 30.0)
+    built = build_kubernetes_log_zip(
+        api, _NAMESPACE, pods[0].metadata.name, _deadline(30.0)
+    )
 
     # Postcondition.
     # The logs together hold exactly the budget, and every log the budget cut
@@ -283,7 +314,7 @@ def test_deadline_stops_reads_and_releases_them() -> None:
     )
 
     # Under test.
-    built = build_kubernetes_log_zip(api, _NAMESPACE, _API_POD, 0.2)
+    built = build_kubernetes_log_zip(api, _NAMESPACE, _API_POD, _deadline(0.2))
 
     # Postcondition.
     # The log is reported as timed out, and the read stops on its next chunk
@@ -293,6 +324,53 @@ def test_deadline_stops_reads_and_releases_them() -> None:
     assert f"logs/{_API_POD}/api-server.log: timed out" in files["README.txt"].decode()
     [response] = api.responses
     assert response.released.wait(timeout=1.0)
+
+
+def test_transport_error_on_one_log_keeps_the_others() -> None:
+    # Precondition.
+    # Opening one log fails below the Kubernetes client, e.g. a reset socket.
+    pods = [
+        _pod(_API_POD, "api-server"),
+        _pod(_DOCPROCESSING_POD, "celery-worker-docprocessing"),
+    ]
+    api = _FakeCoreV1Api(
+        pods=pods,
+        logs={(_API_POD, False): b"api line\n", (_DOCPROCESSING_POD, False): b"x"},
+        events=[],
+        open_errors={(_DOCPROCESSING_POD, False): ConnectionResetError("reset")},
+    )
+
+    # Under test.
+    built = build_kubernetes_log_zip(api, _NAMESPACE, _API_POD, _deadline(30.0))
+
+    # Postcondition.
+    files = _read_zip(built.zip_buffer)
+    built.zip_buffer.close()
+    assert files[f"logs/{_API_POD}/api-server.log"] == b"api line\n"
+    assert (
+        f"logs/{_DOCPROCESSING_POD}/celery-worker-docprocessing.log: reset"
+        in files["README.txt"].decode()
+    )
+
+
+def test_init_container_log_and_status_are_collected() -> None:
+    # Precondition.
+    # The pod ran an init container before its main container.
+    pod = _pod(_API_POD, "api-server", init_container="wait-for-object-store")
+    api = _FakeCoreV1Api(pods=[pod], logs={(_API_POD, False): b"line\n"}, events=[])
+
+    # Under test.
+    built = build_kubernetes_log_zip(api, _NAMESPACE, _API_POD, _deadline(30.0))
+
+    # Postcondition.
+    files = _read_zip(built.zip_buffer)
+    built.zip_buffer.close()
+    assert f"logs/{_API_POD}/wait-for-object-store.log" in files
+    [summary] = json.loads(files[PODS_FILE_NAME])
+    assert [(c["name"], c["init"]) for c in summary["containers"]] == [
+        ("wait-for-object-store", True),
+        ("api-server", False),
+    ]
 
 
 def test_missing_rbac_writes_failed_receipt(

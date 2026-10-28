@@ -69,6 +69,8 @@ _SPOOL_MAX_MEMORY_BYTES = 1024 * 1024
 _TRUNCATED_STREAM_CAP = "truncated at the per-log byte cap"
 _TRUNCATED_TOTAL_CAP = "truncated: total byte cap reached"
 _HTTP_FORBIDDEN = 403
+# Upper bound for one metadata request, within the remaining time budget.
+_MAX_REQUEST_SECONDS = 15.0
 _RBAC_HINT = (
     "The Kubernetes API denied access. Grant the api-server service account "
     "get/list on pods, pods/log, and events (Helm value "
@@ -98,6 +100,8 @@ class TerminationSummary(BaseModel):
 
 class ContainerSummary(BaseModel):
     name: str
+    # Init containers run before the main ones, e.g. the object-store wait.
+    init: bool
     ready: bool
     restart_count: int
     # ``running``, ``waiting: <reason>``, or ``terminated: <reason>``.
@@ -151,6 +155,15 @@ class _ByteBudget:
             return granted
 
 
+def _container_statuses(
+    pod: client.V1Pod,
+) -> list[tuple[bool, client.V1ContainerStatus]]:
+    """Init container statuses first, each paired with whether it is one."""
+    return [(True, status) for status in pod.status.init_container_statuses or []] + [
+        (False, status) for status in pod.status.container_statuses or []
+    ]
+
+
 def _container_state(container_status: client.V1ContainerStatus) -> str:
     state = container_status.state
     if state is None:
@@ -166,12 +179,13 @@ def _container_state(container_status: client.V1ContainerStatus) -> str:
 
 def summarize_pod(pod: client.V1Pod) -> PodSummary:
     containers: list[ContainerSummary] = []
-    for container_status in pod.status.container_statuses or []:
+    for init, container_status in _container_statuses(pod):
         last_state = container_status.last_state
         terminated = last_state.terminated if last_state is not None else None
         containers.append(
             ContainerSummary(
                 name=container_status.name,
+                init=init,
                 ready=bool(container_status.ready),
                 restart_count=container_status.restart_count or 0,
                 state=_container_state(container_status),
@@ -201,7 +215,7 @@ def log_streams_for_pod(pod: client.V1Pod) -> list[LogStream]:
     """A started container has a current log; a restarted one also has the
     previous instance's log, which holds the crash."""
     streams: list[LogStream] = []
-    for container_status in pod.status.container_statuses or []:
+    for _init, container_status in _container_statuses(pod):
         state = container_status.state
         started = state is not None and (
             state.running is not None or state.terminated is not None
@@ -246,9 +260,16 @@ def _fetch_stream(
             tail_lines=LOG_EXPORT_KUBERNETES_TAIL_LINES,
             limit_bytes=LOG_EXPORT_KUBERNETES_MAX_BYTES_PER_STREAM,
             _preload_content=False,
+            _request_timeout=_request_timeout(deadline_monotonic),
         )
     except ApiException as e:
         return _FetchedStream(stream, None, 0, f"{e.status} {e.reason}")
+    except Exception as e:
+        # A transport error on one log must not drop the logs already read.
+        logger.warning(
+            "Log export: opening %s failed: %s", stream.arcname, e, exc_info=True
+        )
+        return _FetchedStream(stream, None, 0, str(e))
 
     buffer: tempfile.SpooledTemporaryFile[bytes] = tempfile.SpooledTemporaryFile(
         max_size=_SPOOL_MAX_MEMORY_BYTES
@@ -326,8 +347,23 @@ def format_events(events: list[client.CoreV1Event], pods: list[client.V1Pod]) ->
     return "\n".join(lines) + "\n"
 
 
-def _release_selector(core_api: client.CoreV1Api, namespace: str, pod_name: str) -> str:
-    own_pod = core_api.read_namespaced_pod(name=pod_name, namespace=namespace)
+def _request_timeout(deadline_monotonic: float) -> float:
+    """Read timeout for one metadata request; at least 1 s so a request with
+    little time left still gets a chance."""
+    return max(1.0, min(_MAX_REQUEST_SECONDS, deadline_monotonic - time.monotonic()))
+
+
+def _release_selector(
+    core_api: client.CoreV1Api,
+    namespace: str,
+    pod_name: str,
+    deadline_monotonic: float,
+) -> str:
+    own_pod = core_api.read_namespaced_pod(
+        name=pod_name,
+        namespace=namespace,
+        _request_timeout=_request_timeout(deadline_monotonic),
+    )
     labels = own_pod.metadata.labels or {}
     parts: list[str] = []
     for label in RELEASE_SELECTOR_LABELS:
@@ -388,7 +424,7 @@ def build_kubernetes_log_zip(
     core_api: client.CoreV1Api,
     namespace: str,
     own_pod_name: str,
-    time_budget_seconds: float,
+    deadline_monotonic: float,
 ) -> BuiltLogZip:
     """Reads the logs, status, and events of every Onyx pod of this release.
 
@@ -397,17 +433,18 @@ def build_kubernetes_log_zip(
     instead of failing the collection. Failing to select or list the pods
     raises.
     """
-    selector = _release_selector(core_api, namespace, own_pod_name)
+    selector = _release_selector(core_api, namespace, own_pod_name, deadline_monotonic)
     pods = sorted(
         core_api.list_namespaced_pod(
-            namespace=namespace, label_selector=selector
+            namespace=namespace,
+            label_selector=selector,
+            _request_timeout=_request_timeout(deadline_monotonic),
         ).items,
         key=lambda pod: pod.metadata.name,
     )
 
     streams = [stream for pod in pods for stream in log_streams_for_pod(pod)]
     budget = _ByteBudget(LOG_EXPORT_KUBERNETES_MAX_TOTAL_BYTES)
-    deadline_monotonic = time.monotonic() + time_budget_seconds
     fetched_streams: list[_FetchedStream] = run_functions_tuples_in_parallel(
         [
             (_fetch_stream, (core_api, namespace, stream, budget, deadline_monotonic))
@@ -415,7 +452,7 @@ def build_kubernetes_log_zip(
         ],
         allow_failures=True,
         max_workers=_MAX_PARALLEL_STREAMS,
-        timeout=time_budget_seconds,
+        timeout=max(0.0, deadline_monotonic - time.monotonic()),
         timeout_callback=lambda index, _func, _args: _FetchedStream(
             streams[index], None, 0, "timed out"
         ),
@@ -423,11 +460,20 @@ def build_kubernetes_log_zip(
 
     events_text = ""
     events_error: str | None = None
-    try:
-        events = core_api.list_namespaced_event(namespace=namespace).items
-        events_text = format_events(events, pods)
-    except ApiException as e:
-        events_error = f"{e.status} {e.reason}"
+    if time.monotonic() >= deadline_monotonic:
+        events_error = "skipped: the time budget was spent on the logs"
+    else:
+        try:
+            events = core_api.list_namespaced_event(
+                namespace=namespace,
+                _request_timeout=_request_timeout(deadline_monotonic),
+            ).items
+            events_text = format_events(events, pods)
+        except ApiException as e:
+            events_error = f"{e.status} {e.reason}"
+        except Exception as e:
+            logger.warning("Log export: listing events failed: %s", e, exc_info=True)
+            events_error = str(e)
 
     written: list[_FetchedStream] = []
     failures: list[tuple[str, str]] = []
@@ -481,17 +527,19 @@ def collect_kubernetes_logs_into_file_store(
     size_bytes = 0
     error: str | None = None
     try:
-        namespace = SERVICE_ACCOUNT_NAMESPACE_FILE.read_text().strip()
-        time_budget_seconds = max(
+        # One absolute deadline for every request, so pod discovery and events
+        # cannot push the piece past the export deadline.
+        deadline_monotonic = time.monotonic() + max(
             1.0,
             (deadline - datetime.now(tz=timezone.utc)).total_seconds()
             - _UPLOAD_MARGIN_SECONDS,
         )
+        namespace = SERVICE_ACCOUNT_NAMESPACE_FILE.read_text().strip()
         built = build_kubernetes_log_zip(
             core_api=build_core_v1_api(),
             namespace=namespace,
             own_pod_name=hostname,
-            time_budget_seconds=time_budget_seconds,
+            deadline_monotonic=deadline_monotonic,
         )
         try:
             save_piece(export_id, KUBERNETES_PIECE_NAME, built)
