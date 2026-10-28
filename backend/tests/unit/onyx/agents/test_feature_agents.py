@@ -213,20 +213,17 @@ def test_research_executes_only_allowed_tools_and_records_results() -> None:
     )
     search = MagicMock(spec=SearchTool)
     search.name = SearchTool.NAME
-    isolated_search = MagicMock(spec=SearchTool)
-    isolated_search.name = SearchTool.NAME
-    isolated_search.tool_definition.return_value = ToolDefinition(
+    search.tool_definition.return_value = ToolDefinition(
         name=SearchTool.NAME,
         description="Search documents",
         parameters={"type": "object"},
     )
-    isolated_search.bind.return_value = AgentTool(
-        definition=isolated_search.tool_definition.return_value,
+    search.bind.return_value = AgentTool(
+        definition=search.tool_definition.return_value,
         execute=MagicMock(
             side_effect=AssertionError("Internal search was not requested")
         ),
     )
-    search.for_agent.return_value = isolated_search
     feature = ResearchAgent(
         [ResearchWebSearchStub(), EchoTool(), search],
         llm,
@@ -245,8 +242,7 @@ def test_research_executes_only_allowed_tools_and_records_results() -> None:
         WebSearchTool.NAME,
         SearchTool.NAME,
     ]
-    search.for_agent.assert_called_once_with()
-    assert feature.application_tools[1] is isolated_search
+    assert feature.application_tools[1] is search
     assert result.output.text == "Report"
     snapshot = runs[-1].snapshot()
     assert snapshot is not None
@@ -667,7 +663,9 @@ def test_research_preserves_citation_identity_across_completion_and_call_order(
     ]
     assert completion_order == ["second", "first"]
     assert [message.text for message in accepted] == ["first [2]", "second [1]"]
-    assert [event.result.text for event in final_events] == ["first [2]", "second [1]"]
+    assert sorted(
+        (event.tool_call.id, event.result.text) for event in final_events
+    ) == [("first", "first [2]"), ("second", "second [1]")]
     for index, message in zip([2, 1], accepted, strict=True):
         assert isinstance(message.details, ResearchAgentCallResult)
         assert message.details.intermediate_report == message.text

@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import FileToolMetadata
 from onyx.llm.models import ReasoningEffort
-from onyx.tools.tool_implementations.search.models import SearchToolState
+from onyx.tools.tool_implementations.search.models import SearchContext
 
 
 class ResearchConfiguration(BaseModel):
@@ -59,4 +59,4 @@ class ResearchFeatureState(BaseModel):
     configuration: ResearchConfiguration
     citation_sources: dict[int, SearchDoc]
     citation_mapping: dict[int, str]
-    search_tools: dict[str, SearchToolState]
+    search_context: SearchContext

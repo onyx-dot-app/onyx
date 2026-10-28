@@ -35,15 +35,12 @@ refer to by using matching keywords to other parts of the prompt and reminders.
 """
 
 import time
-from collections.abc import Callable
-from functools import cached_property
+from collections.abc import Callable, Sequence
 from typing import Any
 
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.agents.tools import (
-    ToolExecutionMode,
     ToolInvocation,
     ToolProgress,
     ToolUpdate,
@@ -61,7 +58,6 @@ from onyx.context.search.models import (
     PersonaSearchInfo,
     SearchCycle,
     SearchDocsResponse,
-    TimeFilter,
     UserAccessFilters,
 )
 from onyx.context.search.pipeline import merge_individual_chunks, search_pipeline
@@ -95,7 +91,7 @@ from onyx.federated_connectors.federated_retrieval import (
 )
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM
-from onyx.llm.models import ToolDefinition, ToolResult
+from onyx.llm.models import ToolDefinition, ToolResult, ToolResultMessage
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.secondary_llm_flows.document_filter import (
@@ -131,8 +127,10 @@ from onyx.tools.tool_implementations.search.constants import (
     SELECTION_TOKEN_BUDGET_MULTIPLIER,
 )
 from onyx.tools.tool_implementations.search.models import (
+    QueryExpansionAndScope,
     SearchArguments,
-    SearchToolState,
+    SearchContext,
+    SearchPlanningResult,
 )
 from onyx.tools.tool_implementations.search.search_utils import (
     expand_section_with_context,
@@ -157,13 +155,46 @@ logger = setup_logger()
 QUERIES_FIELD = "queries"
 
 
-class QueryExpansionAndScope(BaseModel):
-    """Result of one search cycle's query expansion + source-scope decision."""
-
-    semantic_query: str | None
-    keyword_queries: list[str]
-    plan_scope: list[DocumentSource] | None
-    time_filter: TimeFilter | None = None
+def update_search_context(
+    context: SearchContext, results: Sequence[ToolResultMessage]
+) -> SearchContext:
+    """Fold completed searches in model-call order, counting merged retrievals once."""
+    new_cycles: list[SearchCycle] = []
+    cached_expansion = context.cached_expansion
+    scope_decision_settled = context.scope_decision_settled
+    time_filter = context.time_filter
+    time_filter_computed = context.time_filter_computed
+    seen_calls: set[str] = set()
+    for result in results:
+        planning = result.metadata
+        if result.is_error or not isinstance(planning, SearchPlanningResult):
+            continue
+        if planning.tool_call_id is not None:
+            if planning.tool_call_id in seen_calls:
+                continue
+            seen_calls.add(planning.tool_call_id)
+        new_cycles.append(
+            SearchCycle(
+                cycle_number=len(context.search_cycles) + len(new_cycles) + 1,
+                queries=list(planning.original_queries),
+                searched_sources=list(planning.searched_sources),
+            )
+        )
+        if planning.cached_expansion is not None:
+            cached_expansion = planning.cached_expansion
+        scope_decision_settled |= planning.scope_decision_settled
+        if planning.time_filter_computed and not time_filter_computed:
+            time_filter = planning.time_filter
+            time_filter_computed = True
+    if not new_cycles:
+        return context
+    return SearchContext(
+        search_cycles=context.search_cycles + tuple(new_cycles),
+        cached_expansion=cached_expansion,
+        scope_decision_settled=scope_decision_settled,
+        time_filter=time_filter,
+        time_filter_computed=time_filter_computed,
+    )
 
 
 def _build_scope_note(
@@ -329,91 +360,11 @@ class SearchTool(Tool):
         self.auto_detect_filters = auto_detect_filters
         self.include_link = include_link
 
-        self._search_cycles: list[SearchCycle] = []
-        self._cached_expansion: tuple[str | None, list[str]] | None = None
-        self._scope_decision_settled = False
-        self._time_filter: TimeFilter | None = None
-        self._time_filter_computed = False
-
         self._id = tool_id
-
-    def _check_primary_llm_cost(self) -> None:
-        if self._primary_llm_cost_checked:
-            return
-        with get_session_with_current_tenant() as usage_session:
-            check_llm_cost_limit_for_provider(
-                db_session=usage_session,
-                tenant_id=get_current_tenant_id(),
-                llm_provider_api_key=self.llm.config.api_key,
-            )
-        self._primary_llm_cost_checked = True
-
-    @cached_property
-    def selection_llm(self) -> LLM:
-        if self._selection_llm_factory is not None:
-            try:
-                selection_llm = self._selection_llm_factory()
-            except Exception:
-                logger.warning(
-                    "Search selection model unavailable, using the primary model",
-                    exc_info=True,
-                )
-            else:
-                if selection_llm is not self.llm:
-                    return selection_llm
-        self._check_primary_llm_cost()
-        return self.llm
-
-    @property
-    def enforce_selection_input_budget(self) -> bool:
-        return (
-            self._selection_llm_factory is not None
-            and self.selection_llm is not self.llm
-        )
 
     @property
     def _is_project_only_search(self) -> bool:
         return self.project_id_filter is not None and self.persona_id_filter is None
-
-    @property
-    def execution_mode(self) -> ToolExecutionMode:
-        return ToolExecutionMode.SEQUENTIAL
-
-    def capture_state(self) -> SearchToolState:
-        return SearchToolState(
-            search_cycles=self._search_cycles,
-            cached_expansion=self._cached_expansion,
-            scope_decision_settled=self._scope_decision_settled,
-            time_filter=self._time_filter,
-            time_filter_computed=self._time_filter_computed,
-        ).model_copy(deep=True)
-
-    def restore_state(self, state: SearchToolState) -> None:
-        saved = state.model_copy(deep=True)
-        self._search_cycles = saved.search_cycles
-        self._cached_expansion = saved.cached_expansion
-        self._scope_decision_settled = saved.scope_decision_settled
-        self._time_filter = saved.time_filter
-        self._time_filter_computed = saved.time_filter_computed
-
-    def for_agent(self) -> "SearchTool":
-        """Share search dependencies while keeping conversation-derived state separate."""
-        return SearchTool(
-            tool_id=self.id,
-            user=self.user,
-            persona_search_info=self.persona_search_info,
-            llm=self.llm,
-            document_index=self.document_index,
-            user_selected_filters=self.user_selected_filters,
-            project_id_filter=self.project_id_filter,
-            persona_id_filter=self.persona_id_filter,
-            slack_context=self.slack_context,
-            enable_slack_search=self.enable_slack_search,
-            auto_detect_filters=self.auto_detect_filters,
-            include_link=self.include_link,
-            selection_llm_factory=self._selection_llm_factory,
-            primary_llm_cost_checked=self._primary_llm_cost_checked,
-        )
 
     def _prefetch_slack_data(
         self, db_session: Session
@@ -685,23 +636,21 @@ class SearchTool(Tool):
     def _expand_queries_and_decide_scope(
         self,
         skip_query_expansion: bool,
+        search_context: SearchContext,
         message_history: list[ChatMinimalTextMessage],
         user_info: str | None,
         memories: list[str],
-        decide_args: tuple[Any, ...],
+        candidate_sources: list[DocumentSource],
+        llm_queries: list[str],
     ) -> QueryExpansionAndScope:
-        """Expand the query and decide the source/time scope, in parallel when each
-        applies.
-
-        Repeat calls reuse the cached expansion instead of re-expanding. Once the
-        scope decision finds no source directive it latches off for the rest of the
-        turn, since the conversation cannot introduce one mid-turn. The time-window
-        decision is computed once per turn and cached. Both auto decisions are
-        gated by ``auto_detect_filters``.
-        """
+        """Infer missing search decisions from the prior completed-step context."""
         expand_queries = not skip_query_expansion
-        decide_scope = self.auto_detect_filters and not self._scope_decision_settled
-        decide_time = self.auto_detect_filters and not self._time_filter_computed
+        decide_scope = (
+            self.auto_detect_filters and not search_context.scope_decision_settled
+        )
+        decide_time = (
+            self.auto_detect_filters and not search_context.time_filter_computed
+        )
 
         jobs: list[tuple[Callable, tuple]] = []
         scope_job_index: int | None = None
@@ -717,7 +666,18 @@ class SearchTool(Tool):
             jobs.append((keyword_query_expansion, expansion_args))
         if decide_scope:
             scope_job_index = len(jobs)
-            jobs.append((decide_search_scope, decide_args))
+            jobs.append(
+                (
+                    decide_search_scope,
+                    (
+                        message_history,
+                        self.llm,
+                        candidate_sources,
+                        list(search_context.search_cycles),
+                        llm_queries,
+                    ),
+                )
+            )
         if decide_time:
             time_job_index = len(jobs)
             jobs.append(
@@ -734,22 +694,22 @@ class SearchTool(Tool):
         if expand_queries:
             semantic_query = results[0]
             keyword_queries = results[1] or []
-            self._cached_expansion = (semantic_query, keyword_queries)
 
         plan_scope: list[DocumentSource] | None = None
         if scope_job_index is not None:
             plan_scope = results[scope_job_index]
-            self._scope_decision_settled = plan_scope is None
-
-        if time_job_index is not None:
-            self._time_filter = results[time_job_index]
-            self._time_filter_computed = True
 
         return QueryExpansionAndScope(
             semantic_query=semantic_query,
             keyword_queries=keyword_queries,
             plan_scope=plan_scope,
-            time_filter=self._time_filter,
+            scope_decision_settled=decide_scope and plan_scope is None,
+            time_filter=(
+                results[time_job_index]
+                if time_job_index is not None
+                else search_context.time_filter
+            ),
+            time_filter_computed=decide_time,
         )
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
@@ -785,6 +745,7 @@ class SearchTool(Tool):
             citation_start=context.next_citation_num
             + CITATIONS_PER_TOOL_CALL * invocation.call_index,
             update=invocation.update,
+            tool_call_id=invocation.call_id,
         )
 
     @log_function_time()
@@ -797,6 +758,7 @@ class SearchTool(Tool):
         context: ToolContext,
         citation_start: int = 1,
         update: ToolUpdate | None = None,
+        tool_call_id: str | None = None,
     ) -> ToolResult:
         """Retrieve documents using the original question and optional query variants."""
         # An explicitly empty source selection is a statement, not an absent
@@ -928,19 +890,14 @@ class SearchTool(Tool):
         else:
             candidate_sources = connected_sources
 
-        decide_args = (
-            message_history,
-            self.llm,
-            candidate_sources,
-            list(self._search_cycles),
-            llm_queries,
-        )
         expansion = self._expand_queries_and_decide_scope(
             skip_query_expansion=context.skip_search_query_expansion,
+            search_context=context.search_context,
             message_history=message_history,
             user_info=user_info,
             memories=memories,
-            decide_args=decide_args,
+            candidate_sources=candidate_sources,
+            llm_queries=llm_queries,
         )
         semantic_query = expansion.semantic_query
         keyword_queries = expansion.keyword_queries
@@ -972,7 +929,9 @@ class SearchTool(Tool):
         # On a repeat call that advanced to a not-yet-searched source, reuse the
         # cached expansion (it is source-agnostic) rather than searching raw queries.
         searched_sources = {
-            value for cycle in self._search_cycles for value in cycle.searched_sources
+            value
+            for cycle in context.search_context.search_cycles
+            for value in cycle.searched_sources
         }
         is_new_filter = bool(resolved_scope) and any(
             source.value not in searched_sources for source in resolved_scope
@@ -980,20 +939,25 @@ class SearchTool(Tool):
         if (
             context.skip_search_query_expansion
             and is_new_filter
-            and self._cached_expansion is not None
+            and context.search_context.cached_expansion is not None
         ):
-            semantic_query, keyword_queries = self._cached_expansion
+            semantic_query, cached_keywords = context.search_context.cached_expansion
+            keyword_queries = list(cached_keywords)
 
-        self._search_cycles.append(
-            SearchCycle(
-                cycle_number=len(self._search_cycles) + 1,
-                queries=list(llm_queries),
-                searched_sources=(
-                    [source.value for source in resolved_scope]
-                    if resolved_scope
-                    else []
-                ),
-            )
+        planning_result = SearchPlanningResult(
+            tool_call_id=tool_call_id,
+            original_queries=tuple(llm_queries),
+            searched_sources=tuple(source.value for source in resolved_scope or ()),
+            cached_expansion=(
+                (expansion.semantic_query, tuple(expansion.keyword_queries))
+                if not context.skip_search_query_expansion
+                else None
+            ),
+            scope_decision_settled=expansion.scope_decision_settled,
+            time_filter=(
+                expansion.time_filter if expansion.time_filter_computed else None
+            ),
+            time_filter_computed=expansion.time_filter_computed,
         )
 
         # Scoping to all connected sources is equivalent to an unscoped search.
@@ -1145,10 +1109,24 @@ class SearchTool(Tool):
         # This avoids the query multiplication problem where each index query
         # would trigger a separate Slack search.
         # Only run if pre-fetch found a valid Slack access token.
+        primary_llm_cost_checked = self._primary_llm_cost_checked
+
+        def check_primary_llm_cost() -> None:
+            nonlocal primary_llm_cost_checked
+            if primary_llm_cost_checked:
+                return
+            with get_session_with_current_tenant() as usage_session:
+                check_llm_cost_limit_for_provider(
+                    db_session=usage_session,
+                    tenant_id=get_current_tenant_id(),
+                    llm_provider_api_key=self.llm.config.api_key,
+                )
+            primary_llm_cost_checked = True
+
         run_slack_search = bool(slack_access_token and original_query)
         if run_slack_search:
             try:
-                self._check_primary_llm_cost()
+                check_primary_llm_cost()
             except Exception:
                 logger.warning(
                     "Skipping Slack search: primary model cost check failed",
@@ -1205,7 +1183,21 @@ class SearchTool(Tool):
                     displayed_docs=None,
                 ),
                 content=empty_response,
+                metadata=planning_result,
             )
+
+        selection_llm = self.llm
+        if self._selection_llm_factory is not None:
+            try:
+                selection_llm = self._selection_llm_factory()
+            except Exception:
+                logger.warning(
+                    "Search selection model unavailable, using the primary model",
+                    exc_info=True,
+                )
+        if selection_llm is self.llm:
+            check_primary_llm_cost()
+        enforce_selection_input_budget = selection_llm is not self.llm
 
         # Enrich chunks with `Document.file_id` (Postgres-only metadata not
         # stored in the document index).
@@ -1249,9 +1241,9 @@ class SearchTool(Tool):
         selected_sections, best_doc_ids = select_sections_for_expansion(
             sections=sections_for_selection,
             user_query=secondary_flows_user_query,
-            llm=self.selection_llm,
+            llm=selection_llm,
             max_chunks_per_section=MAX_CHUNKS_FOR_RELEVANCE,
-            enforce_llm_input_budget=self.enforce_selection_input_budget,
+            enforce_llm_input_budget=enforce_selection_input_budget,
         )
 
         # End timing for LLM document selection
@@ -1290,7 +1282,7 @@ class SearchTool(Tool):
                     llm=llm,
                     document_index=document_index,
                     expand_override=expand_override,
-                    enforce_llm_input_budget=self.enforce_selection_input_budget,
+                    enforce_llm_input_budget=enforce_selection_input_budget,
                 )
                 # Return expanded section if not None, otherwise original
                 return expanded_section if expanded_section is not None else section
@@ -1308,7 +1300,7 @@ class SearchTool(Tool):
                 (
                     section,
                     secondary_flows_user_query,
-                    self.selection_llm,
+                    selection_llm,
                     self.document_index,
                     section.center_chunk.document_id in best_doc_ids_set,
                 ),
@@ -1367,4 +1359,5 @@ class SearchTool(Tool):
                 displayed_docs=final_ui_docs,
             ),
             content=docs_str,
+            metadata=planning_result,
         )

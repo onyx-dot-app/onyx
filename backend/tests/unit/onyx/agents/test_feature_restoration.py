@@ -4,11 +4,11 @@ from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from io import BytesIO
 from threading import Event
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from pydantic import JsonValue, TypeAdapter
+from pydantic import JsonValue, TypeAdapter, ValidationError
 
 from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.models import (
@@ -34,7 +34,12 @@ from onyx.agents.tools import (
 )
 from onyx.chat.agent import ChatAgent
 from onyx.chat.checkpoint import CHECKPOINT_PAYLOAD_TYPES
-from onyx.chat.models import ChatFeatureState, ChatSearchResult, CheckpointBinding
+from onyx.chat.models import (
+    ChatFeatureState,
+    ChatSearchResult,
+    CheckpointBinding,
+    ResponseCheckpoint,
+)
 from onyx.chat.restoration import persist_checkpoint_files
 from onyx.coding_agent.agent import CodingAgent
 from onyx.coding_agent.tool_definitions import BASH_TOOL_NAME
@@ -56,17 +61,22 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
+from onyx.tools.interface import Tool
 from onyx.tools.models import ChatFile, ToolContext
 from onyx.tools.tool_implementations.bash.bash_tool import BashTool
 from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
     CodingAgentTool,
 )
-from onyx.tools.tool_implementations.search.models import SearchToolState
+from onyx.tools.tool_implementations.search.models import (
+    SearchContext,
+    SearchPlanningResult,
+)
 from onyx.tools.tool_implementations.search.search_tool import (
     SearchTool,
 )
+from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tracing.flows import LLMFlow
-from tests.unit.onyx.agents.checkpoint_storage import CheckpointStorage
+from tests.unit.onyx.agents.checkpoint_storage import CheckpointStorage, SavedCheckpoint
 from tests.unit.onyx.agents.fakes import EchoTool, FakeModelClient, ScriptedLLM
 from tests.unit.onyx.agents.test_feature_agents import tool_delta
 
@@ -92,10 +102,11 @@ def model() -> FakeModelClient:
     )
 
 
-def chat(tool: EchoTool | None = None) -> ChatAgent:
+def chat(*tools: Tool, agent_id: str | None = None) -> ChatAgent:
     return ChatAgent(
         messages=[],
-        tools=[tool] if tool else [],
+        tools=list(tools),
+        agent_id=agent_id,
         custom_agent_prompt=None,
         base_system_prompt="Help",
         context_files=ExtractedContextFiles(
@@ -281,6 +292,110 @@ def test_chat_suspends_and_resumes_with_fresh_feature_and_model() -> None:
     assert len(tool.contexts) == 1
 
 
+@pytest.mark.parametrize("kind", ["chat", "research"])
+def test_search_planning_survives_partial_step_checkpoint(kind: str) -> None:
+    class PlanningSearch(CaptureContextTool):
+        @property
+        def name(self) -> str:
+            return SearchTool.NAME
+
+        def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
+            self.contexts.append(context)
+            return ToolResult(
+                content="No matching documents",
+                metadata=SearchPlanningResult(
+                    tool_call_id=invocation.call_id,
+                    original_queries=("facts",),
+                    searched_sources=("web",),
+                    cached_expansion=("facts", ("facts", "evidence")),
+                    scope_decision_settled=True,
+                    time_filter_computed=True,
+                ),
+            )
+
+    class ApprovalTool(CaptureContextTool):
+        @property
+        def name(self) -> str:
+            return WebSearchTool.NAME
+
+    search = PlanningSearch()
+    gated = ApprovalTool()
+
+    def feature(llm: LLM, agent_id: str | None = None) -> ChatAgent | ResearchAgent:
+        if kind == "research":
+            return ResearchAgent(
+                [search, gated],
+                llm,
+                len,
+                None,
+                "",
+                ReasoningEffort.LOW,
+                agent_id=agent_id,
+            )
+        agent = chat(search, gated, agent_id=agent_id)
+        agent.llm = llm
+        return agent
+
+    original = feature(
+        FakeModelClient(
+            lambda _request, _signal: AssistantMessage(
+                content=[
+                    ToolCall(id="search", name=SearchTool.NAME, arguments={}),
+                    ToolCall(id="approval", name=WebSearchTool.NAME, arguments={}),
+                ]
+            )
+        )
+    )
+    original.before_tool_call = lambda context: (
+        PendingToolInput(
+            request_id="approval", prompt="Run tool?", mode=InputMode.EXECUTE
+        )
+        if context.call.name == WebSearchTool.NAME
+        else None
+    )
+    run = original.start(max_steps=2, messages=[UserMessage(content="Find facts")])
+    assert run.wait_until_settled(timeout=5).status == RunStatus.SUSPENDED
+    assert run.wait_for_idle(timeout=5)
+    assert original.search_context == SearchContext()
+    checkpoint = run.capture()
+    storage = CheckpointStorage(CHECKPOINT_PAYLOAD_TYPES)
+    encoded = storage.save(
+        checkpoint.run_state,
+        checkpoint.agent_state,
+        CheckpointBinding(tenant_id="tenant", response_id=run.id),
+    )
+    saved = SavedCheckpoint.model_validate_json(encoded)
+    assert saved.checkpoint is not None
+    with pytest.raises(ValidationError, match="version"):
+        ResponseCheckpoint.model_validate(
+            saved.checkpoint.model_dump() | {"version": 1}
+        )
+    checkpoint = storage.load(encoded)
+    completed_search = checkpoint.run_state.steps[0].tools["search"].result
+    assert completed_search is not None
+    assert isinstance(completed_search.metadata, SearchPlanningResult)
+    assert completed_search.metadata.original_queries == ("facts",)
+
+    restored = feature(model(), checkpoint.run_state.agent_id)
+    resumed = restored.resume(checkpoint.run_state)
+    resumed.submit(
+        HumanToolAnswer(request_id="approval", decision=InputDecision.APPROVE)
+    )
+    assert resumed.result(timeout=5).output.text == "done"
+    assert resumed.wait_for_idle(timeout=5)
+    assert len(search.contexts) == 1
+    assert search.contexts[0].search_context == SearchContext()
+    assert gated.contexts[0].search_context == SearchContext()
+    assert restored.search_context.cached_expansion == ("facts", ("facts", "evidence"))
+    assert len(restored.search_context.search_cycles) == 1
+    assert restored.search_context.search_cycles[0].searched_sources == ["web"]
+
+    next_run = restored.start(max_steps=1, messages=[UserMessage(content="New turn")])
+    assert next_run.result(timeout=5).output.text == "done"
+    assert next_run.wait_for_idle(timeout=5)
+    assert restored.search_context == SearchContext()
+
+
 @pytest.mark.parametrize("kind", ["research", "deep_research"])
 def test_real_feature_resumes_pending_control_call_after_json(kind: str) -> None:
 
@@ -362,43 +477,28 @@ def test_real_feature_resumes_pending_control_call_after_json(kind: str) -> None
         assert restored.citation_mapping[6].document_id == "reference"
 
 
-def test_research_restores_search_scope_cache_without_recomputing() -> None:
-
-    def search() -> SearchTool:
-        return SearchTool(
-            tool_id=1,
-            user=MagicMock(),
-            persona_search_info=MagicMock(),
-            llm=model(),
-            document_index=MagicMock(),
-            user_selected_filters=None,
-            project_id_filter=None,
-        )
-
-    original = ResearchAgent([search()], model(), len, None, "", ReasoningEffort.LOW)
-    saved_tool = original.application_tools[0]
-    assert isinstance(saved_tool, SearchTool)
-    saved_tool.restore_state(
-        SearchToolState(
-            search_cycles=[
-                SearchCycle(cycle_number=1, queries=["facts"], searched_sources=["web"])
-            ],
-            cached_expansion=("facts", ["facts", "evidence"]),
-            scope_decision_settled=True,
-            time_filter=None,
-            time_filter_computed=True,
-        )
+def test_research_restores_search_context_and_resets_it_for_new_run() -> None:
+    original = ResearchAgent([], model(), len, None, "", ReasoningEffort.LOW)
+    original.search_context = SearchContext(
+        search_cycles=(
+            SearchCycle(cycle_number=1, queries=["facts"], searched_sources=["web"]),
+        ),
+        cached_expansion=("facts", ("facts", "evidence")),
+        scope_decision_settled=True,
+        time_filter=None,
+        time_filter_computed=True,
     )
     encoded = original.capture_state().model_dump_json()
-    del original, saved_tool
-    restored = ResearchAgent([search()], model(), len, None, "", ReasoningEffort.LOW)
+    restored = ResearchAgent([], model(), len, None, "", ReasoningEffort.LOW)
     restored.restore_state(TypeAdapter(dict[str, JsonValue]).validate_json(encoded))
-    tool = restored.application_tools[0]
-    assert isinstance(tool, SearchTool)
-    state = tool.capture_state()
-    assert state.cached_expansion == ("facts", ["facts", "evidence"])
-    assert state.scope_decision_settled and state.time_filter_computed
-    assert state.search_cycles[0].cycle_number == 1
+    assert restored._tool_context().search_context == original.search_context
+    assert not restored._tool_context().skip_search_query_expansion
+
+    run = restored.start(max_steps=1, messages=[UserMessage(content="New question")])
+    assert run.result(timeout=5).output.text == "done"
+    assert run.wait_for_idle(timeout=5)
+    assert restored.search_context == SearchContext()
+    assert original.search_context.search_cycles[0].queries == ["facts"]
 
 
 def test_coding_delegation_releases_parent_worker_without_deleting_waiting_workspace(

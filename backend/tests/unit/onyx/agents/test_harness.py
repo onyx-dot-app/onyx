@@ -8,7 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from onyx.agents.agent_coordination import AgentCoordinator
-from onyx.agents.events import AgentEvent, AgentEventType
+from onyx.agents.events import AgentEvent, AgentEventType, ToolEndEvent
 from onyx.agents.models import AgentState, PreparedStep, RunState, StepInput, StepResult
 from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import (
@@ -76,6 +76,54 @@ def echo(
         if sequential
         else ToolExecutionMode.PARALLEL,
     )
+
+
+def test_parallel_tool_completes_before_an_earlier_blocked_call() -> None:
+    first_started = threading.Event()
+    release_first = threading.Event()
+    second_completed = threading.Event()
+    completions: list[str] = []
+
+    def execute(invocation: ToolInvocation) -> ToolResult:
+        if invocation.arguments["value"] == 0:
+            first_started.set()
+            assert release_first.wait(5)
+        else:
+            assert first_started.wait(5)
+        return ToolResult(content=str(invocation.arguments["value"]))
+
+    def observe(event: AgentEvent) -> None:
+        if isinstance(event, ToolEndEvent):
+            completions.append(event.tool_call.id)
+            if event.tool_call.id == "1":
+                second_completed.set()
+
+    agent = Agent(
+        scripted(calls(2), answer()),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[echo(execute)],
+    )
+    run = agent.start(max_steps=2, on_event=observe)
+    try:
+        assert second_completed.wait(3)
+        assert completions == ["1"]
+        state = run.snapshot()
+        assert state.progress is not None
+        assert state.progress.finalized_tool_call_ids == {"1"}
+        assert state.steps[0].tools["0"].result is None
+        release_first.set()
+        assert run.result(3).output.text == "done"
+        assert run.wait_for_idle(3)
+        assert completions == ["1", "0"]
+        assert [
+            message.tool_call_id
+            for message in run.snapshot().messages
+            if isinstance(message, ToolResultMessage)
+        ] == ["0", "1"]
+    finally:
+        release_first.set()
+        run.cancel()
+        assert run.wait_for_idle(3)
 
 
 def test_cancelled_turn_retains_completed_tools_for_resume() -> None:

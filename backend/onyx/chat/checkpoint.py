@@ -41,6 +41,7 @@ from onyx.tools.models import (
     ToolExecutionError,
 )
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
+from onyx.tools.tool_implementations.search.models import SearchPlanningResult
 
 _JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
 _SAVED_IMAGES = TypeAdapter(list[SavedLoadedFile])
@@ -52,6 +53,7 @@ CHECKPOINT_PAYLOAD_TYPES: dict[str, type[BaseModel]] = {
     "chat.rendering.v1": MessageRendering,
     "chat.search.v1": ChatSearchResult,
     "search.results.v1": SearchDocsResponse,
+    "search.planning.v1": SearchPlanningResult,
     "research.metadata.v1": ResearchMessageMetadata,
     "research.result.v1": ResearchAgentCallResult,
     "coding.result.v1": CodingAgentCallResult,

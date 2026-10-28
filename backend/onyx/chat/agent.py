@@ -51,11 +51,11 @@ from onyx.tools.built_in_tools import STOPPING_TOOLS_NAMES
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles
 from onyx.tools.interface import Tool
 from onyx.tools.models import ChatFile, ToolContext
-from onyx.tools.restoration import (
-    capture_search_state,
-    restore_search_state,
+from onyx.tools.tool_implementations.search.models import SearchContext
+from onyx.tools.tool_implementations.search.search_tool import (
+    SearchTool,
+    update_search_context,
 )
-from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tracing.flows import LLMFlow
 
@@ -91,11 +91,12 @@ class ChatAgent(Agent, RestorableFeature):
         self.context_files = context_files
         self.token_counter = token_counter
         self.file_metadata = all_injected_file_metadata
-        self.application_tools = [tool.for_agent() for tool in tools]
+        self.application_tools = list(tools)
         self.include_citations = include_citations
         self.reasoning_effort = reasoning_effort
         self.memory = user_memory_context
         self.inject_memories = inject_memories_in_prompt
+        self.search_context = SearchContext()
         self.started = time.monotonic()
         self.forced_tool_id = forced_tool_id
         self.chat_files = list(chat_files or [])
@@ -170,7 +171,7 @@ class ChatAgent(Agent, RestorableFeature):
             chat_files=[SavedChatFile.capture(file) for file in self.chat_files],
             has_called_search_tool=self.has_called_search_tool,
             ran_image_gen=self.ran_image_gen,
-            search_tools=capture_search_state(self.application_tools),
+            search_context=self.search_context,
         )
 
     def restore_state(self, state: Mapping[str, JsonValue]) -> None:
@@ -189,7 +190,7 @@ class ChatAgent(Agent, RestorableFeature):
             or saved.reminders_enabled != self.reminders_enabled
         ):
             raise ValueError("Chat restoration configuration does not match")
-        restore_search_state(self.application_tools, saved.search_tools)
+        self.search_context = saved.search_context
         self.started = time.monotonic() - saved.elapsed_seconds
         self.citation_processor.citation_to_doc = saved.citation_sources
         self.citation_mapping = saved.citation_mapping
@@ -231,6 +232,7 @@ class ChatAgent(Agent, RestorableFeature):
     def _tool_context(self) -> ToolContext:
         """Read feature state that advances only after a completed step."""
         return ToolContext(
+            search_context=self.search_context,
             user_memory_context=self.memory,
             citation_mapping=dict(self.citation_mapping),
             next_citation_num=self.citation_processor.get_next_citation_number(),
@@ -243,6 +245,7 @@ class ChatAgent(Agent, RestorableFeature):
     def _prepare_step(self, state: StepInput) -> PreparedStep:
         previous = state.previous
         if previous is None:
+            self.search_context = SearchContext()
             self.started = time.monotonic()
             self.gathered_documents = list(self.initial_citations.values())
             assistant = None
@@ -316,6 +319,9 @@ class ChatAgent(Agent, RestorableFeature):
         )
 
     def _after_step(self, result: StepResult) -> bool:
+        self.search_context = update_search_context(
+            self.search_context, result.tool_results
+        )
         self._update_tool_context(result.message, result.tool_results)
         if not result.message.tool_calls or result.step.is_last:
             self._validate_answer(result)

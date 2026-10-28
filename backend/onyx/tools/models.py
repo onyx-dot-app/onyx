@@ -14,6 +14,7 @@ from onyx.file_store.models import (
     maybe_materialize_lazy_content,
 )
 from onyx.tools.constants import FILE_READER_MAX_CHARS
+from onyx.tools.tool_implementations.search.models import SearchContext
 from onyx.utils.headers import HeaderItemDict
 
 
@@ -203,6 +204,7 @@ class ToolContext(BaseModel):
     # On repeat searches, defer to the model's new queries instead of repeating
     # the expansion flow that may have produced poor results on the first pass.
     skip_search_query_expansion: bool = False
+    search_context: SearchContext = Field(default_factory=SearchContext)
     chat_files: list[ChatFile] = Field(default_factory=list)
     url_snippet_map: dict[str, str] = Field(default_factory=dict)
     # When False, don't pass memory context to search tools for query expansion

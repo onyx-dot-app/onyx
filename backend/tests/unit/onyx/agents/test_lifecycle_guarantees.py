@@ -15,7 +15,7 @@ from litellm.exceptions import (
 )
 from pydantic import BaseModel
 
-from onyx.agents.events import AgentEndEvent, AgentEvent
+from onyx.agents.events import AgentEndEvent, AgentEvent, ToolEndEvent
 from onyx.agents.models import (
     PreparedStep,
     RunFailureKind,
@@ -109,6 +109,8 @@ def test_cancelled_callback_reserves_agent_until_it_returns(
 
 
 def test_tool_execution_survives_enrichment_failure() -> None:
+    events: list[AgentEvent] = []
+
     def enrich(_context: ToolCallContext, _result: ToolResult) -> ToolResult:
         raise ValueError("invalid enrichment")
 
@@ -127,7 +129,7 @@ def test_tool_execution_survives_enrichment_failure() -> None:
         ],
         after_tool_call=enrich,
     )
-    run = agent.start(max_steps=1)
+    run = agent.start(max_steps=1, on_event=events.append)
     with pytest.raises(RunFailed):
         run.result()
     assert run.wait_for_idle(2)
@@ -135,6 +137,52 @@ def test_tool_execution_survives_enrichment_failure() -> None:
     assert snapshot.status == "error"
     assert snapshot.messages[-1].text == "saved"
     assert next(iter(snapshot.steps[0].tools.values())).status == "complete"
+    assert snapshot.progress is not None
+    assert snapshot.progress.finalized_tool_call_ids == set()
+    completed = [event for event in events if isinstance(event, ToolEndEvent)]
+    assert len(completed) == 1
+    assert completed[0].result.content == "saved"
+
+
+def test_cancellation_during_tool_finalization_rejects_the_enriched_result() -> None:
+    entered = threading.Event()
+    release = threading.Event()
+    events: list[AgentEvent] = []
+
+    def enrich(_context: ToolCallContext, _result: ToolResult) -> ToolResult:
+        entered.set()
+        assert release.wait(5)
+        return ToolResult(content="enriched")
+
+    agent = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(
+                content=[ToolCall(id="call", name="write", arguments={})]
+            )
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="write", description="", parameters={}),
+                execute=lambda _: ToolResult(content="saved"),
+            )
+        ],
+        after_tool_call=enrich,
+    )
+    run = agent.start(max_steps=1, on_event=events.append)
+    try:
+        assert entered.wait(3)
+        run.cancel()
+    finally:
+        release.set()
+        assert run.wait_for_idle(3)
+    with pytest.raises(AgentCancelled):
+        run.result(3)
+    snapshot = run.snapshot()
+    assert snapshot.messages[-1].text == "saved"
+    assert snapshot.progress is not None
+    assert snapshot.progress.finalized_tool_call_ids == set()
+    assert not any(isinstance(event, ToolEndEvent) for event in events)
 
 
 def test_failed_handle_releases_agent_and_preserves_error_classification(

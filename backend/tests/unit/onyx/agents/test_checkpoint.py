@@ -120,7 +120,7 @@ def checkpoint() -> ExecutionCheckpoint:
             options=GenerationOptions(),
             previous_options=GenerationOptions(),
             feature_state={"next_citation": 2},
-            finalized_tools=1,
+            finalized_tool_call_ids={"search"},
             pending_tool_calls={
                 "send": PendingToolInput(
                     request_id="approve-send", prompt="Send?", mode=InputMode.EXECUTE
@@ -160,6 +160,29 @@ def test_json_round_trip_preserves_typed_payloads_at_every_execution_location() 
     assert isinstance(result.details, SearchDetails)
     assert result.cacheable
     assert restored.agent_state.messages[0] is not captured.agent_state.messages[0]
+
+
+@pytest.mark.parametrize("invalid", ["unknown_call", "missing_result", "missing_step"])
+def test_resume_rejects_finalized_tools_without_current_step_results(
+    invalid: str,
+) -> None:
+    state = checkpoint().run_state
+    assert state.progress is not None
+    if invalid == "unknown_call":
+        state.progress.finalized_tool_call_ids.add("unknown")
+    elif invalid == "missing_result":
+        state.steps[0].tools["search"].result = None
+    else:
+        state.progress.step_index = len(state.steps)
+    agent = _make_executable_agent({}, AgentState())
+    with pytest.raises(ValueError, match="Finalized tool"):
+        agent.resume(state)
+
+
+def test_finalized_tool_ids_serialize_in_stable_order() -> None:
+    progress = RunProgress(step_limit=1, finalized_tool_call_ids={"z", "a"})
+    assert progress.model_dump(mode="json")["finalized_tool_call_ids"] == ["a", "z"]
+    assert RunProgress.model_validate_json(progress.model_dump_json()) == progress
 
 
 @pytest.mark.parametrize(
@@ -202,7 +225,7 @@ def test_unknown_payload_types_and_versions_fail_before_execution() -> None:
     with pytest.raises(ValueError, match="Unknown checkpoint payload"):
         CheckpointStorage({}).load(serialized)
     payload = json.loads(serialized)
-    payload["checkpoint"]["version"] = 2
+    payload["checkpoint"]["version"] = 999
     with pytest.raises(ValidationError):
         codec().load(json.dumps(payload))
     with pytest.raises(ValueError, match="selected context"):
@@ -251,8 +274,8 @@ def _make_executable_agent(counts: dict[str, int], context: AgentState) -> Agent
             return AssistantMessage(content=[TextContent(text="done")])
         return AssistantMessage(
             content=[
-                ToolCall(id="search", name="search", arguments={}),
                 ToolCall(id="send", name="send", arguments={}),
+                ToolCall(id="search", name="search", arguments={}),
             ]
         )
 
@@ -360,6 +383,8 @@ def test_fresh_objects_resume_json_checkpoint_without_repeating_tools(
     assert run.wait_until_settled(timeout=3).status == RunStatus.SUSPENDED
     assert run.wait_for_idle(3)
     captured = run.capture()
+    assert captured.run_state.progress is not None
+    assert captured.run_state.progress.finalized_tool_call_ids == {"search"}
     assert captured.agent_state.messages == []
     assert len(captured.run_state.input_messages) == 1
     run_id = run.id

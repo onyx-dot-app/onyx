@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@tests/setup/test-utils";
+import { render, screen, waitFor, within } from "@tests/setup/test-utils";
 import { Message } from "@/app/app/types";
 import { upsertMessages } from "@/app/app/services/messageTree";
 import {
@@ -151,4 +151,86 @@ describe("AgentMessage queue gate", () => {
     expect(await screen.findByText("A quick answer.")).toBeInTheDocument();
     expect(renderComplete()).toBe(false);
   });
+});
+
+test("parallel search tabs complete independently", async () => {
+  seedSessionAwaitingAnswer();
+  const packets: Packet[] = [
+    {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: { type: "search_tool_start", is_internet_search: false },
+    },
+    {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: { type: "search_tool_queries_delta", queries: ["company policy"] },
+    },
+    {
+      placement: { turn_index: 0, tab_index: 1 },
+      obj: { type: "search_tool_start", is_internet_search: true },
+    },
+    {
+      placement: { turn_index: 0, tab_index: 1 },
+      obj: { type: "search_tool_queries_delta", queries: ["public policy"] },
+    },
+  ];
+  const view = render(
+    <AgentMessage
+      rawPackets={packets}
+      packetCount={packets.length}
+      chatState={chatState}
+      nodeId={NEW_ANSWER_NODE_ID}
+      llmManager={null}
+      hideFooter
+      disableTTS
+    />
+  );
+  try {
+    const internalTab = await screen.findByRole("tab", {
+      name: /Internal Search/,
+    });
+    const webTab = await screen.findByRole("tab", { name: /Web Search/ });
+    expect(
+      within(internalTab).getByRole("status", { name: "Loading" })
+    ).toBeInTheDocument();
+    expect(
+      within(webTab).getByRole("status", { name: "Loading" })
+    ).toBeInTheDocument();
+    const completedWeb: Packet[] = [
+      ...packets,
+      {
+        placement: { turn_index: 0, tab_index: 1 },
+        obj: { type: "section_end" },
+      },
+    ];
+    view.rerender(
+      <AgentMessage
+        rawPackets={completedWeb}
+        packetCount={completedWeb.length}
+        chatState={chatState}
+        nodeId={NEW_ANSWER_NODE_ID}
+        llmManager={null}
+        hideFooter
+        disableTTS
+      />
+    );
+    await waitFor(() => {
+      expect(
+        within(screen.getByRole("tab", { name: /Web Search/ })).queryByRole(
+          "status"
+        )
+      ).not.toBeInTheDocument();
+      expect(
+        within(screen.getByRole("tab", { name: /Internal Search/ })).getByRole(
+          "status",
+          { name: "Loading" }
+        )
+      ).toBeInTheDocument();
+    });
+  } finally {
+    view.unmount();
+    useChatSessionStore.setState({
+      currentSessionId: null,
+      sessions: new Map(),
+    });
+  }
 });
