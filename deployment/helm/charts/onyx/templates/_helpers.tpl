@@ -90,7 +90,8 @@ logExport.kubernetesRbac.mode: auto binds only a named service account (never
 the namespace's shared "default" one), true always binds, false never does.
 */}}
 {{- define "onyx.logExportRbacEnabled" -}}
-{{- $mode := toString .Values.logExport.kubernetesRbac.mode -}}
+{{- /* dig: a release upgraded with --reuse-values from before this setting has no logExport. */ -}}
+{{- $mode := toString (dig "kubernetesRbac" "mode" "auto" (.Values.logExport | default dict)) -}}
 {{- if not (has $mode (list "auto" "true" "false")) -}}
 {{- fail (printf "logExport.kubernetesRbac.mode must be auto, true, or false; got %q" $mode) -}}
 {{- end -}}

@@ -34,6 +34,9 @@ def _log_export_resources(extra_args: list[str]) -> list[dict[str, Any]]:
         ([], _DEFAULT_SA, None),
         ([], _CREATED_SA, "onyx"),
         ([], _NAMED_SA, "onyx-runtime"),
+        # A --reuse-values upgrade from a release without the setting.
+        (["--set", "logExport=null"], _DEFAULT_SA, None),
+        (["--set", "logExport=null"], _CREATED_SA, "onyx"),
         (["--set", "logExport.kubernetesRbac.mode=true"], _DEFAULT_SA, "default"),
         (["--set", "logExport.kubernetesRbac.mode=true"], _CREATED_SA, "onyx"),
         (
