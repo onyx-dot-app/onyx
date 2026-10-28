@@ -16,12 +16,11 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
-import re
 import sys
 from typing import List
-
 
 INDENT_SPACES = 2
 
@@ -103,7 +102,7 @@ def normalize_indent(line: str) -> str:
             indent = " " * (spaces + (INDENT_SPACES - (spaces % INDENT_SPACES)))
         # Reconstruct with normalized indent and original rest
         marker = m.group("marker")
-        rest = (prefix + suffix)[m.end():]
+        rest = (prefix + suffix)[m.end() :]
         return f"{indent}{marker} {rest}"
     return prefix + suffix
 
@@ -143,7 +142,9 @@ def ensure_blank_lines_around_blocks(lines: List[str]) -> List[str]:
                         k -= 1
                     if k >= 0:
                         prev = out[k].lstrip()
-                        if prev.startswith("<Step") or prev.startswith("<AccordionItem") or prev.startswith("<Card") or prev.startswith("<Tab"):
+                        if prev.startswith(
+                            ("<Step", "<AccordionItem", "<Card", "<Tab")
+                        ):
                             suppress_before = True
                 if len(out) > 0 and out[-1].strip() != "" and not suppress_before:
                     out.append("")
@@ -173,36 +174,40 @@ def ensure_blank_lines_around_blocks(lines: List[str]) -> List[str]:
                     i += 1
                 continue
 
-        def is_open_container(l: str) -> bool:
-            s = l.lstrip()
-            return (
-                s.startswith("<Steps")
-                or s.startswith("<Accordion")
-                or s.startswith("<AccordionGroup")
-                or s.startswith("<Columns")
-                or s.startswith("<CardGroup")
-                or s.startswith("<CodeGroup")
-                or s.startswith("<Frame")
-                or s.startswith("<Warning")
-                or s.startswith("<Info")
-                or s.startswith("<Tip")
-                or s.startswith("<Note")
+        def is_open_container(row: str) -> bool:
+            s = row.lstrip()
+            return s.startswith(
+                (
+                    "<Steps",
+                    "<Accordion",
+                    "<AccordionGroup",
+                    "<Columns",
+                    "<CardGroup",
+                    "<CodeGroup",
+                    "<Frame",
+                    "<Warning",
+                    "<Info",
+                    "<Tip",
+                    "<Note",
+                )
             )
 
-        def is_close_container(l: str) -> bool:
-            s = l.lstrip()
-            return (
-                s.startswith("</Steps")
-                or s.startswith("</Accordion")
-                or s.startswith("</AccordionGroup")
-                or s.startswith("</Columns")
-                or s.startswith("</CardGroup")
-                or s.startswith("</CodeGroup")
-                or s.startswith("</Frame")
-                or s.startswith("</Warning")
-                or s.startswith("</Info")
-                or s.startswith("</Tip")
-                or s.startswith("</Note")
+        def is_close_container(row: str) -> bool:
+            s = row.lstrip()
+            return s.startswith(
+                (
+                    "</Steps",
+                    "</Accordion",
+                    "</AccordionGroup",
+                    "</Columns",
+                    "</CardGroup",
+                    "</CodeGroup",
+                    "</Frame",
+                    "</Warning",
+                    "</Info",
+                    "</Tip",
+                    "</Note",
+                )
             )
 
         if not in_code:
@@ -223,7 +228,7 @@ def ensure_blank_lines_around_blocks(lines: List[str]) -> List[str]:
                 prev_is_parent = False
                 if prev_non_empty is not None:
                     p = prev_non_empty.lstrip()
-                    if p.startswith("<Step") or p.startswith("<Accordion") or p.startswith("<Card"):
+                    if p.startswith(("<Step", "<Accordion", "<Card")):
                         prev_is_parent = True
                 if len(out) > 0 and out[-1].strip() != "" and not prev_is_parent:
                     out.append("")
@@ -245,7 +250,7 @@ def ensure_blank_lines_around_blocks(lines: List[str]) -> List[str]:
             if False and is_open_container(line):
                 # Determine if this is an advisory tag
                 s_line = line.lstrip()
-                is_advisory = s_line.startswith("<Warning") or s_line.startswith("<Info") or s_line.startswith("<Tip") or s_line.startswith("<Note")
+                is_advisory = s_line.startswith(("<Warning", "<Info", "<Tip", "<Note"))
                 # Check previous non-empty line
                 prev_non_empty = None
                 for k in range(len(out) - 1, -1, -1):
@@ -255,13 +260,22 @@ def ensure_blank_lines_around_blocks(lines: List[str]) -> List[str]:
                 prev_is_parent = False
                 if prev_non_empty is not None:
                     p = prev_non_empty.lstrip()
-                    if p.startswith("<Step") or p.startswith("<Accordion") or p.startswith("<Card"):
+                    if p.startswith(("<Step", "<Accordion", "<Card")):
                         prev_is_parent = True
                 # Ensure a blank line before unless it's an advisory directly after Step/Accordion/Card
-                if len(out) > 0 and out[-1].strip() != "" and not (is_advisory and prev_is_parent):
+                if (
+                    len(out) > 0
+                    and out[-1].strip() != ""
+                    and not (is_advisory and prev_is_parent)
+                ):
                     out.append("")
                 # If advisory follows an opening parent, remove any pre-existing blank line
-                if is_advisory and prev_is_parent and len(out) > 0 and out[-1].strip() == "":
+                if (
+                    is_advisory
+                    and prev_is_parent
+                    and len(out) > 0
+                    and out[-1].strip() == ""
+                ):
                     out.pop()
                 out.append(line)
                 # Track which container opened
@@ -283,13 +297,12 @@ def ensure_blank_lines_around_blocks(lines: List[str]) -> List[str]:
                     closed_name = container_stack.pop()
                 # Advisory blocks should normally be followed by a blank line
                 s_line = line.lstrip()
-                is_advisory_close = (
-                    (closed_name in {"Warning", "Info", "Tip", "Note"})
-                    or s_line.startswith("</Warning")
-                    or s_line.startswith("</Info")
-                    or s_line.startswith("</Tip")
-                    or s_line.startswith("</Note")
-                )
+                is_advisory_close = closed_name in {
+                    "Warning",
+                    "Info",
+                    "Tip",
+                    "Note",
+                } or s_line.startswith(("</Warning", "</Info", "</Tip", "</Note"))
                 # Look ahead to next non-empty original line
                 j = i + 1
                 while j < n and lines[j].strip() == "":
@@ -319,8 +332,14 @@ def ensure_blank_lines_around_blocks(lines: List[str]) -> List[str]:
             # Suppress image blank-line rules inside a <Frame>
             inside_frame = bool(container_stack and container_stack[-1] == "Frame")
             is_markdown_img = is_image(line)
-            is_mdx_image = line.lstrip().startswith("<Image") or line.lstrip().startswith("<img")
-            if is_heading(line) or ((is_markdown_img or is_mdx_image) and not inside_frame) or (is_block_component(line) and not inside_frame):
+            is_mdx_image = line.lstrip().startswith(
+                "<Image"
+            ) or line.lstrip().startswith("<img")
+            if (
+                is_heading(line)
+                or ((is_markdown_img or is_mdx_image) and not inside_frame)
+                or (is_block_component(line) and not inside_frame)
+            ):
                 # Ensure blank before and after for other block-ish lines (e.g., images)
                 if len(out) > 0 and out[-1].strip() != "":
                     prev_non_empty = None
@@ -330,7 +349,9 @@ def ensure_blank_lines_around_blocks(lines: List[str]) -> List[str]:
                             break
                     suppress_before = False
                     if prev_non_empty is not None:
-                        if prev_non_empty.startswith("<Step") or prev_non_empty.startswith("<AccordionItem") or prev_non_empty.startswith("<Card"):
+                        if prev_non_empty.startswith(
+                            ("<Step", "<AccordionItem", "<Card")
+                        ):
                             suppress_before = True
                     if not suppress_before:
                         out.append("")
@@ -344,7 +365,9 @@ def ensure_blank_lines_around_blocks(lines: List[str]) -> List[str]:
                         j2 += 1
                     if j2 < n:
                         next_ne = lines[j2].lstrip()
-                        if next_ne.startswith("</Step") or next_ne.startswith("</Accordion") or next_ne.startswith("</AccordionItem"):
+                        if next_ne.startswith(
+                            ("</Step", "</Accordion", "</AccordionItem")
+                        ):
                             add_blank_after = False
                 if add_blank_after:
                     nxt = lines[i + 1] if i + 1 < n else None
@@ -438,7 +461,9 @@ def normalize_steps_indentation(lines: List[str]) -> List[str]:
                         break
                 suppress_before = False
                 if prev_non_empty is not None:
-                    if prev_non_empty.startswith("<Step") or prev_non_empty.startswith("<AccordionItem") or prev_non_empty.startswith("<Card") or prev_non_empty.startswith("<Tab"):
+                    if prev_non_empty.startswith(
+                        ("<Step", "<AccordionItem", "<Card", "<Tab")
+                    ):
                         suppress_before = True
                 if not suppress_before:
                     out.append("")
@@ -477,7 +502,11 @@ def normalize_steps_indentation(lines: List[str]) -> List[str]:
             continue
 
         # Opening child items
-        if m_open and stack and m_open.group("name") in children_for.get(stack[-1][0], set()):
+        if (
+            m_open
+            and stack
+            and m_open.group("name") in children_for.get(stack[-1][0], set())
+        ):
             parent_indent = stack[-1][1]
             child_indent = parent_indent + INDENT_SPACES
             is_self_closing_child = stripped.endswith("/>")
@@ -500,7 +529,12 @@ def normalize_steps_indentation(lines: List[str]) -> List[str]:
             continue
 
         # Closing child items
-        if m_close and m_close.group("name") in {"Step", "AccordionItem", "Card", "Tab"}:
+        if m_close and m_close.group("name") in {
+            "Step",
+            "AccordionItem",
+            "Card",
+            "Tab",
+        }:
             # Align to stored child indent
             child_indent = leading
             for name, ind, _managed in reversed(stack):
@@ -536,7 +570,14 @@ def normalize_steps_indentation(lines: List[str]) -> List[str]:
         inside_child = None
         managed_child = False
         for name, ind, managed in reversed(stack):
-            if name in {"Step", "Accordion", "AccordionGroup", "AccordionItem", "Card", "Tab"}:
+            if name in {
+                "Step",
+                "Accordion",
+                "AccordionGroup",
+                "AccordionItem",
+                "Card",
+                "Tab",
+            }:
                 inside_child = ind
                 managed_child = managed
                 break
@@ -558,7 +599,11 @@ def normalize_steps_indentation(lines: List[str]) -> List[str]:
         if m_sc and stack:
             parent_name, parent_indent, _ = stack[-1]
             # Only treat as child if parent is a known group container and this isn't a group close/open mismatch
-            if parent_name in children_for and not stripped.startswith("</") and not stripped.startswith("<" + parent_name):
+            if (
+                parent_name in children_for
+                and not stripped.startswith("</")
+                and not stripped.startswith("<" + parent_name)
+            ):
                 child_indent = parent_indent + INDENT_SPACES
                 out.append(" " * child_indent + stripped)
                 # Ensure spacing after this pseudo-child: add one blank unless next is a closing container
@@ -588,7 +633,7 @@ def wrap_line_to_width(line: str, width: int) -> List[str]:
     if m:
         indent = m.group("indent")
         marker = m.group("marker")
-        rest = line[m.end():]
+        rest = line[m.end() :]
         # Avoid wrapping risky content
         if ("`" in rest) or ("|" in rest) or ("<" in rest) or ("http" in rest):
             return [line]
@@ -652,7 +697,7 @@ def wrap_text_with_punct_preference(text: str, width: int) -> List[str]:
         # Would overflow
         if last_punct_idx and last_punct_idx < len(cur_words) + 1:
             # Break at last punctuation within current words
-            lines.append(" ".join(cur_words[: last_punct_idx]))
+            lines.append(" ".join(cur_words[:last_punct_idx]))
             # Remaining words include those after the break; current w not yet added
             remainder = cur_words[last_punct_idx:]
             cur_words = remainder or []
@@ -749,7 +794,12 @@ def wrap_long_lines(lines: List[str], width: int) -> List[str]:
 
         # Boundaries and special lines
         stripped_l = ln.lstrip()
-        if is_heading(ln) or is_hr(ln) or TABLE_RE.search(ln) or stripped_l.startswith(("<", ">")) or stripped_l.startswith("import ") or stripped_l.startswith("export "):
+        if (
+            is_heading(ln)
+            or is_hr(ln)
+            or TABLE_RE.search(ln)
+            or stripped_l.startswith(("<", ">", "import ", "export "))
+        ):
             flush_para()
             out.append(ln)
             continue
@@ -784,6 +834,7 @@ def format_content(text: str, width: int) -> str:
         out_lines: List[str] = []
         current_key = None
         current_val_parts: List[str] = []
+
         def flush_kv():
             nonlocal current_key, current_val_parts
             if current_key is None:
@@ -791,19 +842,27 @@ def format_content(text: str, width: int) -> str:
             value = " ".join(s.strip() for s in current_val_parts).strip()
             value_norm = value.replace('\\"', '"')
             # If the value became double-quoted at both ends (e.g., ""Text""), collapse to single quotes
-            if value_norm.startswith('""') and value_norm.endswith('""') and len(value_norm) >= 4:
+            if (
+                value_norm.startswith('""')
+                and value_norm.endswith('""')
+                and len(value_norm) >= 4
+            ):
                 value_norm = value_norm[1:-1]
             # Check if value is a boolean (true/false) - don't quote these
-            if value_norm.lower() in ('true', 'false'):
+            if value_norm.lower() in ("true", "false"):
                 value_quoted = value_norm.lower()
             # Keep existing quotes if already quoted; otherwise quote with double quotes
-            elif (len(value_norm) >= 2 and ((value_norm.startswith('"') and value_norm.endswith('"')) or (value_norm.startswith("'") and value_norm.endswith("'")))):
+            elif len(value_norm) >= 2 and (
+                (value_norm.startswith('"') and value_norm.endswith('"'))
+                or (value_norm.startswith("'") and value_norm.endswith("'"))
+            ):
                 value_quoted = value_norm
             else:
                 value_quoted = '"' + value_norm.replace('"', '\\"') + '"'
             out_lines.append(f"{current_key}: {value_quoted}")
             current_key = None
             current_val_parts = []
+
         for ln in lines:
             m = re.match(r"^([A-Za-z_][\w-]*):\s*(.*)$", ln)
             if m:
@@ -847,32 +906,32 @@ def format_content(text: str, width: int) -> str:
         in_front = False
         # Compute minimal leading spaces among relevant lines
         mins: List[int] = []
-        for i, l in enumerate(ls):
-            if i == 0 and l.strip() == "---":
+        for i, row in enumerate(ls):
+            if i == 0 and row.strip() == "---":
                 in_front = True
-            elif in_front and l.strip() == "---":
+            elif in_front and row.strip() == "---":
                 in_front = False
-            if is_code_fence(l):
+            if is_code_fence(row):
                 in_code_f = not in_code_f
                 continue
             if in_code_f or in_front:
                 continue
-            if l.strip() == "":
+            if row.strip() == "":
                 continue
             # count spaces only
-            lead = len(l) - len(l.lstrip(" "))
+            lead = len(row) - len(row.lstrip(" "))
             mins.append(lead)
         if not mins:
             return ls
         common = min(mins)
         if common <= 0:
             return ls
-        for l in ls:
+        for row in ls:
             # Only trim spaces, not tabs (tabs already normalized earlier)
-            if l.startswith(" " * common):
-                out_ls.append(l[common:])
+            if row.startswith(" " * common):
+                out_ls.append(row[common:])
             else:
-                out_ls.append(l)
+                out_ls.append(row)
         return out_ls
 
     lines = dedent_common_margin(lines)
@@ -884,7 +943,9 @@ def format_content(text: str, width: int) -> str:
     def expand_single_line_advisories(ls: List[str]) -> List[str]:
         out_ls: List[str] = []
         in_code_f = False
-        pat = re.compile(r"^(?P<indent>\s*)<(?P<name>Warning|Info|Tip|Note)(?P<attrs>[^>]*)>(?P<inner>.*?)</(?P=name)>\s*$")
+        pat = re.compile(
+            r"^(?P<indent>\s*)<(?P<name>Warning|Info|Tip|Note)(?P<attrs>[^>]*)>(?P<inner>.*?)</(?P=name)>\s*$"
+        )
         for ln in ls:
             if is_code_fence(ln):
                 in_code_f = not in_code_f
@@ -999,7 +1060,16 @@ def format_content(text: str, width: int) -> str:
     def remove_blank_after_group_opens(ls: List[str]) -> List[str]:
         out_ls: List[str] = []
         in_code_f = False
-        opens = ("<Steps", "<AccordionGroup", "<Accordion", "<Columns", "<CardGroup", "<CodeGroup", "<Tabs", "<Tab")
+        opens = (
+            "<Steps",
+            "<AccordionGroup",
+            "<Accordion",
+            "<Columns",
+            "<CardGroup",
+            "<CodeGroup",
+            "<Tabs",
+            "<Tab",
+        )
         i2 = 0
         n2 = len(ls)
         while i2 < n2:
@@ -1031,22 +1101,25 @@ def format_content(text: str, width: int) -> str:
         # Pattern to match complete img tag (handles multi-line by joining)
         # Match: <img ... /> or <img ... >
         img_start_pattern = re.compile(r"<img\s+", re.IGNORECASE)
+
         # Pattern to extract all attribute values: attr="value" or attr='value' or attr={value}
         # For JSX-style attributes with nested braces, we need a more sophisticated approach
         def extract_attributes(content: str) -> dict[str, str]:
             """Extract all attributes from an img tag, handling both quoted and JSX-style attributes."""
             attrs: dict[str, str] = {}
             # Pattern for quoted attributes: attr="value" or attr='value'
-            quoted_pattern = re.compile(r'(\w+)\s*=\s*(["\'])([^"\']*)\2', re.IGNORECASE)
+            quoted_pattern = re.compile(
+                r'(\w+)\s*=\s*(["\'])([^"\']*)\2', re.IGNORECASE
+            )
             for match in quoted_pattern.finditer(content):
                 attr_name = match.group(1).lower()
                 quote_char = match.group(2)
                 attr_value = match.group(3)
-                attrs[attr_name] = f'{quote_char}{attr_value}{quote_char}'
-            
+                attrs[attr_name] = f"{quote_char}{attr_value}{quote_char}"
+
             # Pattern for JSX-style attributes: attr={...}
             # We need to handle nested braces, so we'll find the opening { and match the closing }
-            jsx_pattern = re.compile(r'(\w+)\s*=\s*(\{)', re.IGNORECASE)
+            jsx_pattern = re.compile(r"(\w+)\s*=\s*(\{)", re.IGNORECASE)
             pos = 0
             while True:
                 match = jsx_pattern.search(content, pos)
@@ -1058,20 +1131,20 @@ def format_content(text: str, width: int) -> str:
                 brace_count = 0
                 brace_end = brace_start
                 for i in range(brace_start, len(content)):
-                    if content[i] == '{':
+                    if content[i] == "{":
                         brace_count += 1
-                    elif content[i] == '}':
+                    elif content[i] == "}":
                         brace_count -= 1
                         if brace_count == 0:
                             brace_end = i
                             break
                 if brace_count == 0:
-                    attr_value = content[brace_start:brace_end + 1]
+                    attr_value = content[brace_start : brace_end + 1]
                     attrs[attr_name] = attr_value
                 pos = brace_end + 1
-            
+
             return attrs
-        
+
         i = 0
         n = len(ls)
         while i < n:
@@ -1085,10 +1158,10 @@ def format_content(text: str, width: int) -> str:
                 out_ls.append(ln)
                 i += 1
                 continue
-            
+
             stripped = ln.lstrip()
             leading = len(ln) - len(stripped)
-            
+
             # Check if line starts with <img
             if img_start_pattern.match(stripped):
                 # Collect the full img tag (may span multiple lines)
@@ -1096,12 +1169,12 @@ def format_content(text: str, width: int) -> str:
                 img_parts = [stripped]
                 j = i + 1
                 tag_closed = False
-                
+
                 # Check if tag is already closed on this line (ends with /> or >)
                 stripped_rstrip = stripped.rstrip()
-                if stripped_rstrip.endswith("/>") or stripped_rstrip.endswith(">"):
+                if stripped_rstrip.endswith(("/>", ">")):
                     tag_closed = True
-                
+
                 # Collect continuation lines until tag is closed
                 # Stop immediately if we hit a blank line, code fence, or other tag
                 while j < n and not tag_closed:
@@ -1119,28 +1192,30 @@ def format_content(text: str, width: int) -> str:
                     # This line is part of the img tag, add it
                     img_parts.append(next_line)
                     next_rstrip = next_line.rstrip()
-                    if next_rstrip.endswith("/>") or next_rstrip.endswith(">"):
+                    if next_rstrip.endswith(("/>", ">")):
                         tag_closed = True
                         break
                     j += 1
-                
+
                 # Join all parts into a single string for processing
                 img_content = " ".join(img_parts)
-                
+
                 # Extract all attributes using the helper function
                 attrs = extract_attributes(img_content)
-                
+
                 # Extract values for required attributes
                 className_val = None
                 class_val = None  # fallback for "class" attribute
                 src_val = None
                 alt_val = None
-                
+
                 for attr_name, attr_value in attrs.items():
                     if attr_name == "classname":
                         # Extract value, handling both quoted and JSX-style
                         if attr_value.startswith("{") and attr_value.endswith("}"):
-                            className_val = attr_value[1:-1].strip().strip('"').strip("'")
+                            className_val = (
+                                attr_value[1:-1].strip().strip('"').strip("'")
+                            )
                         else:
                             className_val = attr_value.strip('"').strip("'")
                     elif attr_name == "class":
@@ -1158,37 +1233,39 @@ def format_content(text: str, width: int) -> str:
                             alt_val = attr_value[1:-1].strip().strip('"').strip("'")
                         else:
                             alt_val = attr_value.strip('"').strip("'")
-                
+
                 # Use className if available, otherwise fall back to class
                 if not className_val and class_val:
                     className_val = class_val
                     # Update attrs dict to use className instead of class
                     if "classname" not in attrs:
                         attrs["classname"] = attrs.pop("class", f'"{class_val}"')
-                
+
                 # Build normalized img tag if we have all required attributes
                 if className_val and src_val and alt_val:
                     # Determine closing style
                     is_self_closing = "/>" in img_content
                     closing = "/>" if is_self_closing else ">"
-                    
+
                     # Build attribute list: className first, then src, then alt, then others
                     attr_parts = []
                     # Add className first
                     if "classname" in attrs:
-                        attr_parts.append(f'className={attrs["classname"]}')
+                        attr_parts.append(f"className={attrs['classname']}")
                     # Add src second
                     if "src" in attrs:
-                        attr_parts.append(f'src={attrs["src"]}')
+                        attr_parts.append(f"src={attrs['src']}")
                     # Add alt third
                     if "alt" in attrs:
-                        attr_parts.append(f'alt={attrs["alt"]}')
+                        attr_parts.append(f"alt={attrs['alt']}")
                     # Add all other attributes (preserve original order)
                     for attr_name, attr_value in attrs.items():
                         if attr_name not in {"classname", "class", "src", "alt"}:
-                            attr_parts.append(f'{attr_name}={attr_value}')
-                    
-                    normalized = f'<img {" ".join(attr_parts)} {closing}'.replace(" />", "/>").replace(" >", ">")
+                            attr_parts.append(f"{attr_name}={attr_value}")
+
+                    normalized = f"<img {' '.join(attr_parts)} {closing}".replace(
+                        " />", "/>"
+                    ).replace(" >", ">")
                     out_ls.append(" " * leading + normalized)
                     # IMPORTANT: j points to the first line AFTER the img tag
                     # This could be a blank line, closing tag like </Step>, or another element
@@ -1205,7 +1282,7 @@ def format_content(text: str, width: int) -> str:
                 # Not an img tag line, preserve as-is
                 out_ls.append(ln)
                 i += 1
-        
+
         return out_ls
 
     lines = normalize_img_tags(lines)
@@ -1215,7 +1292,7 @@ def format_content(text: str, width: int) -> str:
 
     # 8) Remove trailing whitespace on every line
     def strip_trailing_ws(ls: List[str]) -> List[str]:
-        return [l.rstrip() for l in ls]
+        return [row.rstrip() for row in ls]
 
     lines = strip_trailing_ws(lines)
 
@@ -1320,7 +1397,9 @@ IMG_MD_RE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
 IMG_MDX_RE = re.compile(r"<(?:img|Image)[^>]*\s+src=\"([^\"]+)\"[\s\S]*?/?>")
 
 
-def fallback_broken_asset_check(root: str, path: str, text: str) -> List[tuple[int, str, str]]:
+def fallback_broken_asset_check(
+    root: str, path: str, text: str
+) -> List[tuple[int, str, str]]:
     """Simple local-asset existence check for links/images when mintlify is unavailable.
 
     Returns list of (line_number, kind, target) for missing local targets.
@@ -1346,7 +1425,7 @@ def fallback_broken_asset_check(root: str, path: str, text: str) -> List[tuple[i
         for kind, target in targets:
             t = target.strip()
             # Skip anchors and mailto and http(s)
-            if t.startswith("#") or "://" in t or t.startswith("mailto:"):
+            if t.startswith(("#", "mailto:")) or "://" in t:
                 continue
             # Normalize path
             if t.startswith("/"):
@@ -1358,12 +1437,15 @@ def fallback_broken_asset_check(root: str, path: str, text: str) -> List[tuple[i
     return results
 
 
-
 def main() -> int:
     parser = argparse.ArgumentParser(description="Format Markdown/MDX docs")
-    parser.add_argument("--check", action="store_true", help="Only report files that would change")
+    parser.add_argument(
+        "--check", action="store_true", help="Only report files that would change"
+    )
     parser.add_argument("--write", action="store_true", help="Write changes to files")
-    parser.add_argument("--width", type=int, default=120, help="Wrap width for text lines")
+    parser.add_argument(
+        "--width", type=int, default=120, help="Wrap width for text lines"
+    )
     parser.add_argument(
         "--paths",
         nargs="*",
@@ -1378,7 +1460,7 @@ def main() -> int:
         print("Specify --check or --write", file=sys.stderr)
         return 2
 
-    root = os.getcwd()
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if args.paths:
         files: List[str] = []
         for p in args.paths:
@@ -1405,13 +1487,17 @@ def main() -> int:
                 end = original.find("\n---", 4)
                 if end != -1:
                     header = original[4:end]
-                    has_icon = any(re.match(r"^icon:\s*", ln.strip()) for ln in header.splitlines())
+                    has_icon = any(
+                        re.match(r"^icon:\s*", ln.strip()) for ln in header.splitlines()
+                    )
                     rel = os.path.relpath(p, root).replace("\\", "/")
-                    is_exempt = (
-                        rel.startswith("admins/connectors/")
-                        or rel.startswith("snippets/")
-                        or rel.startswith("developers/api_reference/")
-                        or rel.startswith("deployment/cloud/aws")
+                    is_exempt = rel.startswith(
+                        (
+                            "admins/connectors/",
+                            "snippets/",
+                            "developers/api_reference/",
+                            "deployment/cloud/aws",
+                        )
                     )
                     if not has_icon and not is_exempt:
                         frontmatter_icon_warnings.append(p)
@@ -1424,7 +1510,9 @@ def main() -> int:
 
     # Emit numbered list warnings (informational, non-fatal)
     if numbered_list_found:
-        print("Numbered lists detected (consider using <Steps>/<Step> where appropriate):")
+        print(
+            "Numbered lists detected (consider using <Steps>/<Step> where appropriate):"
+        )
         for p, ln_no, ln_text in numbered_list_found:
             print(f"  {p}:{ln_no}: '{ln_text}'")
     # Emit numbered list spacing warnings (missing space after numeric marker)
@@ -1434,7 +1522,9 @@ def main() -> int:
             print(f"  {p}:{ln_no}: '{ln_text}'")
 
     if frontmatter_icon_warnings:
-        print("Frontmatter warnings: missing 'icon' field (all pages should have icons):")
+        print(
+            "Frontmatter warnings: missing 'icon' field (all pages should have icons):"
+        )
         for p in frontmatter_icon_warnings:
             print(f"  {p}")
 

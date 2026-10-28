@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Generate snippets/connector-grid.mdx from the Supported Connectors nav in docs.json.
 
-Each connector becomes one logo tile (assets/overview/core_features/connectors/<slug>.svg). A nav subgroup (Confluence, Gmail, S3, ...) becomes one
+Each connector becomes one logo tile (assets/overview/core_features/connectors/<slug>.svg, generated from opal). A nav subgroup (Confluence, Gmail, S3, ...) becomes one
 tile that links to its first page, except Microsoft 365, whose product pages are listed
 one by one. Run with --check to fail when the snippet is stale.
 """
+
 import json
 import re
 import sys
@@ -14,7 +15,14 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "snippets" / "connector-grid.mdx"
 EXPAND_GROUPS = {"Microsoft 365"}
 SKIP_PAGES = {"admins/connectors/official/microsoft-365/setup"}
-LOGO_DIR = ROOT / "assets" / "overview" / "core_features" / "connectors"
+LOGO_PREFIX = "assets/overview/core_features/connectors"
+# Logos are generated from web/lib/opal; this map lists every generated file.
+GENERATED = {
+    a["out"]
+    for a in json.loads((ROOT / "scripts" / "generated_assets.json").read_text())[
+        "assets"
+    ]
+}
 TILE_CLASS = (
     "flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 p-3 "
     "hover:border-primary dark:hover:border-primary-light"
@@ -23,7 +31,7 @@ TILE_CLASS = (
 
 def title_of(page: str) -> str:
     text = (ROOT / f"{page}.mdx").read_text()
-    m = re.search(r'^title:\s*"?([^"\n]+)"?', text, re.M)
+    m = re.search(r'^title:\s*"?([^"\n]+)"?', text, re.MULTILINE)
     return m.group(1).strip() if m else page.rsplit("/", 1)[-1]
 
 
@@ -74,8 +82,10 @@ def render():
     ]
     for title, page in entries():
         slug = logo_slug(page)
-        if not (LOGO_DIR / f"{slug}.svg").exists():
-            sys.exit(f"missing logo {LOGO_DIR / slug}.svg for {page}")
+        if f"{LOGO_PREFIX}/{slug}.svg" not in GENERATED:
+            sys.exit(
+                f"no logo mapped for {slug} ({page}): add it to scripts/generated_assets.json"
+            )
         lines.append(
             f'  <a href="/{page}" title="{title}" className="{TILE_CLASS}">'
             f'<img src="/assets/overview/core_features/connectors/{slug}.svg" alt="{title}" className="h-8 w-8" noZoom /></a>'
@@ -88,7 +98,9 @@ if __name__ == "__main__":
     content = render()
     if "--check" in sys.argv:
         if not OUT.exists() or OUT.read_text() != content:
-            print(f"{OUT.relative_to(ROOT)} is stale; run scripts/build_connector_grid.py")
+            print(
+                f"{OUT.relative_to(ROOT)} is stale; run scripts/build_connector_grid.py"
+            )
             sys.exit(1)
         sys.exit(0)
     OUT.write_text(content)
