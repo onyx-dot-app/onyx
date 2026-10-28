@@ -2,6 +2,8 @@ package provider
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -57,6 +59,9 @@ func TestCCPairValidateConfigDataAccess(t *testing.T) {
 		{"restricted with an empty set", str("sync_restricted"), []int64{}, true},
 		{"public with data access", nil, []int64{4}, true},
 		{"sync with data access", str("sync"), []int64{4}, true},
+		{"public with an empty set", nil, []int64{}, true},
+		{"sync with an empty set", str("sync"), []int64{}, true},
+		{"private with an empty set", str("private"), []int64{}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -122,5 +127,30 @@ func TestApplyRemoteCCPairKeepsValuesFromAnOlderServer(t *testing.T) {
 	if !model.Groups.Equal(groups) || model.ProcessingMode.ValueString() != "RAW_BINARY" {
 		t.Errorf("want the known values kept, got groups %v and processing_mode %s",
 			model.Groups, model.ProcessingMode)
+	}
+}
+
+// Onyx before v5.0 and Community Edition have no data-access route and drop
+// the field on create. That must fail the write, but not a plain read.
+func TestRefreshDataAccessWithoutTheRoute(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"detail": "Not Found"}`))
+	}))
+	t.Cleanup(server.Close)
+	r := &ccPairResource{client: client.NewClient(client.Config{ServerURL: server.URL, APIKey: "on_test_key"})}
+	want := types.SetValueMust(types.Int64Type, []attr.Value{types.Int64Value(4)})
+
+	for _, afterWrite := range []bool{true, false} {
+		model := ccPairResourceModel{AccessType: types.StringValue("private"), DataAccessGroupIDs: want}
+		var diags diag.Diagnostics
+		r.refreshDataAccess(context.Background(), 77, &model, afterWrite, &diags)
+		if diags.HasError() != afterWrite {
+			t.Errorf("afterWrite=%t: want error = %t, got %v", afterWrite, afterWrite, diags)
+		}
+		if !model.DataAccessGroupIDs.Equal(want) {
+			t.Errorf("afterWrite=%t: data_access_group_ids = %v, want [4]", afterWrite, model.DataAccessGroupIDs)
+		}
 	}
 }

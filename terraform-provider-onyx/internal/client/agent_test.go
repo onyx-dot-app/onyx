@@ -62,10 +62,12 @@ func TestCreateAgentSendsFullBody(t *testing.T) {
 			t.Errorf("%s must be present: the write is a full replace", field)
 		}
 	}
-	// Omitted lists keep the attachments made in the admin panel.
+	// Create sends empty lists, so a revived deleted agent drops its old
+	// attachments.
 	for _, field := range []string{"hierarchy_node_ids", "document_ids"} {
-		if _, ok := body[field]; ok {
-			t.Errorf("%s must be omitted so Onyx keeps the stored value", field)
+		list, ok := body[field].([]any)
+		if !ok || len(list) != 0 {
+			t.Errorf("%s = %v, want an empty list on create", field, body[field])
 		}
 	}
 }
@@ -77,6 +79,13 @@ func TestUpdateAgentUsesPatchWithIDInPath(t *testing.T) {
 	}
 	if captured.Method != http.MethodPatch || captured.Path != "/persona/4" {
 		t.Errorf("%s %s", captured.Method, captured.Path)
+	}
+	// Omitted lists keep the attachments made in the admin panel.
+	body := bodyAsMap(t, captured.Body)
+	for _, field := range []string{"hierarchy_node_ids", "document_ids"} {
+		if _, ok := body[field]; ok {
+			t.Errorf("%s must be omitted on update so Onyx keeps the stored value", field)
+		}
 	}
 }
 

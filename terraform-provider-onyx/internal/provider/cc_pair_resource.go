@@ -115,7 +115,9 @@ func (r *ccPairResource) Schema(ctx context.Context, _ resource.SchemaRequest, r
 					"(mirrored from the source system, and only for members of " +
 					"`data_access_group_ids`). `sync` and `sync_restricted` need a Business tier license " +
 					"and a source that supports permission sync. `sync_restricted` needs Onyx v5.0 or " +
-					"later: v4.9 knows the value but refuses to create such a pair.",
+					"later: v4.9 knows the value but refuses to create such a pair. Unset means `public`, " +
+					"also after an import: set it to match an imported pair, or the next apply replaces " +
+					"the pair.",
 				Validators: []validator.String{
 					stringvalidator.OneOf("public", "private", "sync", "sync_restricted"),
 				},
@@ -150,10 +152,11 @@ func (r *ccPairResource) Schema(ctx context.Context, _ resource.SchemaRequest, r
 				Optional:    true,
 				ElementType: types.Int64Type,
 				MarkdownDescription: "User group ids whose members may read the documents of a `private` " +
-					"or `sync_restricted` pair. Required for `sync_restricted`. Unset means the `groups` " +
-					"above. A change is applied in place. Needs Onyx v5.0 or later and Enterprise " +
-					"Edition. Terraform refreshes this attribute only while it is set, and removing " +
-					"it from the configuration leaves the groups in Onyx as they are.",
+					"or `sync_restricted` pair. Required for `sync_restricted`. Unset on create means the " +
+					"`groups` above. A change is applied in place. Needs Onyx v5.0 or later and " +
+					"Enterprise Edition; on other servers, apply fails rather than skip the setting. " +
+					"Terraform refreshes this attribute only while it is set. Removing it, or importing " +
+					"a pair, leaves the groups in Onyx as they are, and they can differ from `groups`.",
 			},
 			"processing_mode": schema.StringAttribute{
 				Optional: true,
@@ -212,13 +215,15 @@ func (r *ccPairResource) ValidateConfig(ctx context.Context, req resource.Valida
 	if config.AccessType.IsNull() {
 		accessType = "public"
 	}
-	hasDataAccess := !config.DataAccessGroupIDs.IsNull() && len(config.DataAccessGroupIDs.Elements()) > 0
+	setsDataAccess := !config.DataAccessGroupIDs.IsNull()
+	hasDataAccess := setsDataAccess && len(config.DataAccessGroupIDs.Elements()) > 0
 	if accessType == "sync_restricted" && !hasDataAccess {
 		resp.Diagnostics.AddAttributeError(path.Root("data_access_group_ids"),
 			"Missing data-access groups",
 			"access_type = \"sync_restricted\" needs at least one group in data_access_group_ids.")
 	}
-	if hasDataAccess && !ccPairDataAccessTypes[accessType] {
+	// Onyx refuses the data-access route for other types, even with an empty list.
+	if setsDataAccess && !ccPairDataAccessTypes[accessType] {
 		resp.Diagnostics.AddAttributeError(path.Root("data_access_group_ids"),
 			"Data-access groups need a private or restricted pair",
 			fmt.Sprintf("Onyx accepts data_access_group_ids only with access_type \"private\" or "+
@@ -271,14 +276,23 @@ func applyRemoteCCPair(ctx context.Context, model *ccPairResourceModel, remote *
 }
 
 // refreshDataAccess reads the data-access groups while the configuration
-// sets them. A 404 (Onyx before v5.0, or Community Edition) or 403 keeps the
-// known value.
-func (r *ccPairResource) refreshDataAccess(ctx context.Context, id int64, model *ccPairResourceModel, diags *diag.Diagnostics) {
+// sets them. A 403 keeps the known value. A 404 means Onyx before v5.0 or
+// Community Edition: a read keeps the known value, but after a write it is an
+// error, because Onyx dropped the groups.
+func (r *ccPairResource) refreshDataAccess(ctx context.Context, id int64, model *ccPairResourceModel, afterWrite bool, diags *diag.Diagnostics) {
 	if model.DataAccessGroupIDs.IsNull() || model.DataAccessGroupIDs.IsUnknown() ||
 		!ccPairDataAccessTypes[model.AccessType.ValueString()] {
 		return
 	}
 	groupIDs, err := r.client.GetCCPairDataAccess(ctx, id)
+	if client.IsNotFound(err) && afterWrite {
+		diags.AddAttributeError(path.Root("data_access_group_ids"),
+			"Onyx did not store the data-access groups",
+			"data_access_group_ids needs Onyx v5.0 or later and Enterprise Edition. This server has "+
+				"no data-access route, so readers are not restricted to these groups. Upgrade Onyx "+
+				"or remove the attribute.")
+		return
+	}
 	if client.IsNotFound(err) || client.IsForbidden(err) {
 		return
 	}
@@ -361,7 +375,7 @@ func (r *ccPairResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 	applyRemoteCCPair(ctx, &plan, remote, &resp.Diagnostics)
-	r.refreshDataAccess(ctx, id, &plan, &resp.Diagnostics)
+	r.refreshDataAccess(ctx, id, &plan, true, &resp.Diagnostics)
 	if pauseErr != nil {
 		resp.Diagnostics.AddError("Failed to pause the new Onyx connector-credential pair", pauseErr.Error())
 	}
@@ -413,7 +427,7 @@ func (r *ccPairResource) Read(ctx context.Context, req resource.ReadRequest, res
 	// never leaves that status, and dropping it here would hide a pair that
 	// still exists and still holds its (connector, credential) key.
 	applyRemoteCCPair(ctx, &state, remote, &resp.Diagnostics)
-	r.refreshDataAccess(ctx, id, &state, &resp.Diagnostics)
+	r.refreshDataAccess(ctx, id, &state, false, &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
@@ -467,7 +481,7 @@ func (r *ccPairResource) Update(ctx context.Context, req resource.UpdateRequest,
 		return
 	}
 	applyRemoteCCPair(ctx, &plan, remote, &resp.Diagnostics)
-	r.refreshDataAccess(ctx, id, &plan, &resp.Diagnostics)
+	r.refreshDataAccess(ctx, id, &plan, !plan.DataAccessGroupIDs.Equal(state.DataAccessGroupIDs), &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 

@@ -198,8 +198,12 @@ released Onyx yet, so the provider keeps its workaround and the limitation still
   pair and re-indexes its documents. Terraform reads them back, so an admin-panel change to one
   that the configuration sets also plans a replacement. Check the plan before you apply.
 - **`data_access_group_ids` needs Onyx v5.0 and Enterprise Edition.** It is required for
-  `access_type = "sync_restricted"`, which also needs v5.0. Terraform refreshes it only while
-  the configuration sets it, and removing it leaves the groups in Onyx as they are.
+  `access_type = "sync_restricted"`, which also needs v5.0. On other servers, apply fails
+  instead of leaving the readers unrestricted. Terraform refreshes it only while the
+  configuration sets it. Removing it, or importing a pair, leaves the groups in Onyx as they
+  are.
+- **An unset `access_type` means `public`, also after an import.** Set it to match an
+  imported pair, or the next apply replaces the pair.
 
 ### Agents and actions
 

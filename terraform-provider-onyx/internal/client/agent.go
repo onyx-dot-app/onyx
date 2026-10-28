@@ -135,9 +135,19 @@ func (p *Agent) UserIDs() []string {
 // Onyx matches a create by name: a name another live agent holds is rejected,
 // and a name held only by a deleted agent revives that agent, id and all. That
 // makes the call unsafe to repeat, which the POST rule already covers.
+// agentCreate clears attachments on create. A create that matches a deleted
+// agent's name revives that row, and omitted lists would keep its old folders
+// and documents.
+type agentCreate struct {
+	AgentWrite
+	HierarchyNodeIDs []int64  `json:"hierarchy_node_ids"`
+	DocumentIDs      []string `json:"document_ids"`
+}
+
 func (c *Client) CreateAgent(ctx context.Context, req AgentWrite) (*Agent, error) {
 	var agent Agent
-	if err := c.doJSON(ctx, http.MethodPost, "/persona", req, &agent); err != nil {
+	body := agentCreate{AgentWrite: req, HierarchyNodeIDs: []int64{}, DocumentIDs: []string{}}
+	if err := c.doJSON(ctx, http.MethodPost, "/persona", body, &agent); err != nil {
 		return nil, err
 	}
 	return &agent, nil
