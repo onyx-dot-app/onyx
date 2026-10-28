@@ -99,12 +99,36 @@
   animation-fill-mode: backwards;
 }
 
+/* Presence.Swap: the box follows the content's size. On the block axis only
+   the height clips, so the sideways motion shows in full. On the inline axis
+   the content keeps its own width, and nothing clips. */
+.opal-presence-swap {
+  width: 100%;
+  overflow-y: clip;
+  transition: height 0.2s ease-out;
+}
+.opal-presence-swap[data-swap-axis="inline"] {
+  width: auto;
+  overflow: visible;
+  transition: width 0.2s ease-out;
+}
+.opal-presence-swap[data-swap-axis="inline"] > .opal-presence-swap-content {
+  width: max-content;
+}
+/* The new content is measured at its size, but its entry waits at the first
+   frame until the box has resized. */
+.opal-presence-swap-content[data-swap-phase="resizing"]
+  > .opal-presence-motion {
+  animation-play-state: paused;
+}
+
 /* Same selectors as the rules above, so these overrides win on specificity. */
 @media (prefers-reduced-motion: reduce) {
   .opal-presence-motion[data-presence-phase] {
     animation: none;
   }
-  .opal-presence[data-presence-grow] {
+  .opal-presence[data-presence-grow],
+  .opal-presence-swap {
     transition: none;
   }
 }

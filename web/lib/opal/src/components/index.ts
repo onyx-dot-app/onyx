@@ -151,14 +151,10 @@ export {
   Presence,
   type PresenceProps,
   type PresenceSide,
+  type PresenceSwapProps,
+  type PresenceSwapDirection,
+  type PresenceSwapAxis,
 } from "@opal/components/presence/components";
-
-/* Swap */
-export {
-  Swap,
-  type SwapProps,
-  type SwapDirection,
-} from "@opal/components/swap/components";
 
 /* IconTooltip */
 export {
