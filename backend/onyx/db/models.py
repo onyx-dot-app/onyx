@@ -27,6 +27,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    case,
     desc,
     event,
     func,
@@ -40,6 +41,7 @@ from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.engine import Connection
 from sqlalchemy.engine.interfaces import Dialect
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import (
     DeclarativeBase,
     Mapped,
@@ -48,6 +50,7 @@ from sqlalchemy.orm import (
     relationship,
     validates,
 )
+from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.types import LargeBinary, TypeDecorator
 from typing_extensions import TypedDict  # noreorder
 
@@ -2806,7 +2809,8 @@ class IndexAttempt(Base):
         onupdate=func.now(),
     )
     # When the attempt reached a final status. Unset on attempts that finished
-    # before this column existed.
+    # before this column existed, and on attempts that a bulk update ended.
+    # `end_time` covers both.
     time_finished: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -2871,6 +2875,38 @@ class IndexAttempt(Base):
 
     def is_finished(self) -> bool:
         return self.status.is_terminal()
+
+    @hybrid_property
+    def end_time(self) -> datetime.datetime | None:
+        """When a finished attempt ended, or None while it runs. An attempt without
+        `time_finished` ends at its last heartbeat check, else its start, else its
+        creation. Never `time_updated`: checkpoint cleanup updates finished
+        attempts days later."""
+        if not self.is_finished():
+            return None
+        return (
+            self.time_finished
+            or self.last_heartbeat_time
+            or self.time_started
+            or self.time_created
+        )
+
+    @end_time.inplace.expression
+    @classmethod
+    def _end_time_expression(cls) -> ColumnElement[datetime.datetime | None]:
+        return case(
+            (
+                cls.status.in_(
+                    [status for status in IndexingStatus if status.is_terminal()]
+                ),
+                func.coalesce(
+                    cls.time_finished,
+                    cls.last_heartbeat_time,
+                    cls.time_started,
+                    cls.time_created,
+                ),
+            )
+        )
 
     def is_coordination_complete(self) -> bool:
         """Check if all batches have been processed"""
