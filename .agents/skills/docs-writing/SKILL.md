@@ -136,6 +136,8 @@ Every page must be in `docs.json` or reachable by a `redirects` entry. Removed p
   `<video className="rounded-image" src="/assets/.../name.mp4" autoPlay muted loop playsInline aria-label="..." />`.
 - Keep the existing path and filename when you replace a screenshot so the MDX does not
   change. Delete the asset file when you delete the image.
+- When a PR changes UI, recapture its screenshots in the same PR. Agents can use Playwright against
+  `http://localhost:3000` with the admin login in the root `AGENTS.md`.
 - Capture Onyx UI shots on a local stack: light theme, 1440x900 viewport at 2x device scale,
   admin user, seeded data that looks real (a connector, an agent, a chat), no personal data.
   Admin forms scroll in an inner container, so grow the viewport instead of `fullPage`.
