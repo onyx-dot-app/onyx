@@ -115,7 +115,9 @@ def test_mcp_document_search_flow(
     cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
 
     doc_text = "MCP happy path search document"
-    DocumentManager.seed_doc_with_content(cc_pair, doc_text, api_key)
+    DocumentManager.seed_doc_with_content(
+        cc_pair, doc_text, api_key, metadata={"reporter": "Ada"}
+    )
 
     headers = _auth_headers(admin_user, name="mcp-search-flow")
 
@@ -127,10 +129,18 @@ def test_mcp_document_search_flow(
             MCP_SEARCH_TOOL,
             {"query": doc_text},
         )
-        return resources, tools, search_result
+        tagged_result = await session.call_tool(
+            MCP_SEARCH_TOOL,
+            {
+                "query": doc_text,
+                "tags": [{"tag_key": "reporter", "tag_value": "Ada"}],
+                "skip_query_expansion": True,
+            },
+        )
+        return resources, tools, search_result, tagged_result
 
-    resources_result, tools_result, search_result = _run_with_mcp_session(
-        headers, _full_flow
+    resources_result, tools_result, search_result, tagged_result = (
+        _run_with_mcp_session(headers, _full_flow)
     )
 
     # Verify resources are available
@@ -146,6 +156,15 @@ def test_mcp_document_search_flow(
     assert isinstance(payload["results"], list)
     assert len(payload["results"]) > 0
     assert any(doc_text in (doc.get("content") or "") for doc in payload["results"])
+    assert any(
+        json.loads(doc["metadata"])["reporter"] == "Ada"
+        for doc in payload["results"]
+        if doc.get("metadata")
+    )
+    tagged_payload = _extract_tool_payload(tagged_result)
+    assert any(
+        doc_text in (doc.get("content") or "") for doc in tagged_payload["results"]
+    )
 
     # Verify document structure
     for doc in payload["results"]:
@@ -154,6 +173,7 @@ def test_mcp_document_search_flow(
         assert "content" in doc
         assert "title" in doc
         assert "source_type" in doc
+        assert "metadata" in doc
 
 
 @pytest.mark.skipif(
