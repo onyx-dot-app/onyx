@@ -5,6 +5,7 @@ on the file and execute on every directory above it, the container root
 included. The walk computes the traversal set of each directory once, as its
 parent's set intersected with the directory's execute set, and keeps only the
 directories on the current path. A container with anonymous access is public.
+A term with exclusions becomes an exclusion group (``exclusion_groups``).
 """
 
 import posixpath
@@ -14,7 +15,11 @@ from ee.onyx.external_permissions.azure_datalake.acl import AclBit, granted_prin
 from ee.onyx.external_permissions.azure_datalake.directory import (
     GraphDirectory,
     GroupMembersUnreadableError,
+    entra_tenant_id,
     everyone_group_id,
+)
+from ee.onyx.external_permissions.azure_datalake.exclusion_groups import (
+    exclusion_group_id,
 )
 from ee.onyx.external_permissions.azure_datalake.principals import (
     ExpansionLimitError,
@@ -31,10 +36,7 @@ from ee.onyx.external_permissions.azure_datalake.rbac import (
     rbac_readers,
 )
 from onyx.access.models import ExternalAccess
-from onyx.configs.app_configs import (
-    AZURE_DATALAKE_ACL_READ_CONCURRENCY,
-    AZURE_DATALAKE_MAX_EXPANDED_USERS_PER_DOC,
-)
+from onyx.configs.app_configs import AZURE_DATALAKE_ACL_READ_CONCURRENCY
 from onyx.connectors.azure_datalake.access import AzureDataLakeAccessWalker
 from onyx.connectors.azure_datalake.models import (
     AzureDataLakeAccessControl,
@@ -73,13 +75,14 @@ class AzureDataLakeAccessResolver(AzureDataLakeAccessWalker):
         ops: AzureDataLakeSourceOperations,
         account_name: str,
         container_name: str,
-        max_expanded_users: int = AZURE_DATALAKE_MAX_EXPANDED_USERS_PER_DOC,
+        max_users: int = ExternalAccess.MAX_NUM_ENTRIES,
     ) -> None:
         self._ops = ops
         self._account_name = account_name
         self._container_name = container_name
-        self._max_expanded_users = max_expanded_users
+        self._max_users = max_users
         self._directory = GraphDirectory(ops)
+        self._tenant_id: str | None = None
         self._everyone_group_id: str | None = None
         self._account: AzureStorageAccountResource | None = None
         self._rbac: PrincipalSet | None = None
@@ -126,6 +129,11 @@ class AzureDataLakeAccessResolver(AzureDataLakeAccessWalker):
             self._everyone_group_id = everyone_group_id(self._ops)
         return self._everyone_group_id
 
+    def _tenant(self) -> str:
+        if self._tenant_id is None:
+            self._tenant_id = entra_tenant_id(self._ops)
+        return self._tenant_id
+
     def _external_access(
         self, acl_readers: Callable[[], PrincipalSet], name: str
     ) -> ExternalAccess:
@@ -136,17 +144,15 @@ class AzureDataLakeAccessResolver(AzureDataLakeAccessWalker):
         rbac: PrincipalSet = self._rbac_readers()
         try:
             resolved: ResolvedPrincipals = resolve(
-                union(rbac, acl_readers()), self._directory, self._max_expanded_users
+                union(rbac, acl_readers()), self._directory, self._max_users
             )
+            group_ids: set[str] = resolved.group_ids | {
+                exclusion_group_id(term, self._tenant())
+                for term in resolved.exclusion_terms
+            }
         except (ExpansionLimitError, GroupMembersUnreadableError) as e:
-            logger.error(
-                "Azure Data Lake path %s stays private: %s If the user cap was "
-                "passed, raise AZURE_DATALAKE_MAX_EXPANDED_USERS_PER_DOC.",
-                name,
-                e,
-            )
+            logger.error("Azure Data Lake path %s stays private: %s", name, e)
             return ExternalAccess.empty()
-        group_ids: set[str] = set(resolved.group_ids)
         if resolved.everyone:
             group_ids.add(self._everyone())
         return ExternalAccess(

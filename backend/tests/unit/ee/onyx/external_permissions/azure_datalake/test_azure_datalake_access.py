@@ -8,6 +8,11 @@ from ee.onyx.external_permissions.azure_datalake.access import (
     AzureDataLakeAccessResolver,
 )
 from ee.onyx.external_permissions.azure_datalake.acl import AclBit, granted_principals
+from ee.onyx.external_permissions.azure_datalake.exclusion_groups import (
+    exclusion_group_id,
+    parse_exclusion_group_id,
+)
+from ee.onyx.external_permissions.azure_datalake.group_sync import tenant_groups
 from ee.onyx.external_permissions.azure_datalake.principals import (
     EVERYONE_TERM,
     PrincipalSet,
@@ -40,6 +45,12 @@ PRIVATE_FILE = "user::rw-,group::r--,other::---"
 # Every file: the owner reads it, and so does the RBAC group.
 BASE_EMAILS = {"owner@onyx.app"}
 BASE_GROUPS = {RBAC_GROUP}
+EXCLUSION_GROUP_EMAILS: list[str] = [
+    "admin@onyx.app",
+    "guest@example.com",
+    "owner@onyx.app",
+    "subash@onyx.app",
+]
 
 
 def _matrix() -> dict[str, AzureDataLakeAccessControl]:
@@ -93,10 +104,11 @@ def _matrix() -> dict[str, AzureDataLakeAccessControl]:
 
 
 def _resolver(
-    acls: dict[str, AzureDataLakeAccessControl], max_expanded_users: int = 25_000
+    acls: dict[str, AzureDataLakeAccessControl],
+    max_users: int = ExternalAccess.MAX_NUM_ENTRIES,
 ) -> AzureDataLakeAccessResolver:
     return AzureDataLakeAccessResolver(
-        fake_ops(acls), ACCOUNT, CONTAINER, max_expanded_users=max_expanded_users
+        fake_ops(acls), ACCOUNT, CONTAINER, max_users=max_users
     )
 
 
@@ -143,28 +155,28 @@ def test_other_is_the_tenant_everyone_group() -> None:
     assert result.external_user_group_ids == {EVERYONE_GROUP}
 
 
-def test_other_minus_a_group_expands_to_the_tenant_without_its_members() -> None:
-    result: ExternalAccess = _walk(_matrix())[
-        "60-other-minus-group/other-minus-group-a.txt"
-    ]
+def test_other_minus_a_group_is_an_exclusion_group_of_the_tenant() -> None:
+    acls = _matrix()
+    result: ExternalAccess = _walk(acls)["60-other-minus-group/other-minus-group-a.txt"]
 
+    assert result.external_user_emails == BASE_EMAILS
+    (exclusion_group,) = result.external_user_group_ids - BASE_GROUPS
+    synced = {
+        group.id: group.user_emails
+        for group in tenant_groups(fake_ops(acls), {exclusion_group})
+    }
     # Raunak is in group A; the disabled account cannot sign in; the guest is
     # known by their mail.
-    assert result.external_user_emails == {
-        "owner@onyx.app",
-        "subash@onyx.app",
-        "admin@onyx.app",
-        "guest@example.com",
-    }
-    assert result.external_user_group_ids == BASE_GROUPS
+    assert synced[exclusion_group] == EXCLUSION_GROUP_EMAILS
 
 
-def test_expansion_over_the_cap_fails_closed() -> None:
+def test_users_over_the_cap_fail_closed() -> None:
     acls = _matrix()
-    resolver = _resolver(acls, max_expanded_users=2)
-    name = "60-other-minus-group/other-minus-group-a.txt"
+    # The owner and Raunak.
+    resolver = _resolver(acls, max_users=1)
+    name = "10-named-user/named-user.txt"
 
-    result = resolver.page_access([directory("60-other-minus-group"), file(name)])[name]
+    result = resolver.page_access([directory("10-named-user"), file(name)])[name]
 
     assert result.external_user_emails == set()
     assert result.external_user_group_ids == set()
@@ -334,7 +346,7 @@ def test_group_shared_by_both_sides_stays_a_group() -> None:
     assert ADMIN not in result.external_user_emails
 
 
-def test_unreadable_group_used_as_an_exclusion_fails_closed() -> None:
+def test_an_exclusion_of_an_unreadable_group_syncs_empty() -> None:
     acls = _matrix()
     ops = fake_ops(acls)
     members = ops.list_transitive_group_members.side_effect
@@ -349,10 +361,13 @@ def test_unreadable_group_used_as_an_exclusion_fails_closed() -> None:
     name = "60-other-minus-group/other-minus-group-a.txt"
 
     result = resolver.page_access([directory("60-other-minus-group"), file(name)])[name]
+    (exclusion_group,) = result.external_user_group_ids - BASE_GROUPS
+    synced = {
+        group.id: group.user_emails for group in tenant_groups(ops, {exclusion_group})
+    }
 
     # Raunak is in group A, so counting A as empty would let him read.
-    assert result.external_user_emails == set()
-    assert result.external_user_group_ids == set()
+    assert synced[exclusion_group] == []
 
 
 def test_listing_a_directory_needs_execute_on_it() -> None:
@@ -371,3 +386,12 @@ def test_sticky_bit_keeps_other_execute() -> None:
     )
 
     assert granted_principals(sticky, AclBit.EXECUTE) == frozenset({EVERYONE_TERM})
+
+
+def test_an_exclusion_group_id_names_its_term_in_its_tenant_only() -> None:
+    term = everyone_term(excluded_users=[RAUNAK], excluded_groups=[GROUP_A])
+
+    group_id = exclusion_group_id(term, TENANT)
+
+    assert parse_exclusion_group_id(group_id, TENANT) == term
+    assert parse_exclusion_group_id(group_id, "other-tenant") is None

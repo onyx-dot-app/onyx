@@ -100,7 +100,7 @@ def test_slim_walk_stops_on_signal() -> None:
 
 
 def test_group_sync_yields_the_tenant_and_every_group() -> None:
-    groups = {group.id: group for group in tenant_groups(fake_ops({}))}
+    groups = {group.id: group for group in tenant_groups(fake_ops({}), set())}
 
     assert set(groups) == {EVERYONE_GROUP, GROUP_A, GROUP_B, RBAC_GROUP}
     assert groups[EVERYONE_GROUP].user_emails == sorted(

@@ -23,15 +23,18 @@ _EXTERNAL_USER_MARKER = "#EXT#"
 _EVERYONE_GROUP_PREFIX = "entra_tenant_everyone"
 
 
+def entra_tenant_id(ops: AzureDataLakeSourceOperations) -> str:
+    credentials = AzureDataLakeCredentials.model_validate(
+        ops.credentials_provider.get_credentials()
+    )
+    return (credentials.adls_directory_id or "").strip().lower()
+
+
 def everyone_group_id(ops: AzureDataLakeSourceOperations) -> str:
     """The synced group of every user in the credential's tenant: the ACL
     ``other`` class. Scoped to the tenant, since connectors of other tenants
     have their own."""
-    credentials = AzureDataLakeCredentials.model_validate(
-        ops.credentials_provider.get_credentials()
-    )
-    tenant: str = (credentials.adls_directory_id or "").strip().lower()
-    return f"{_EVERYONE_GROUP_PREFIX}:{tenant}"
+    return f"{_EVERYONE_GROUP_PREFIX}:{entra_tenant_id(ops)}"
 
 
 def user_email(user: EntraUser) -> str | None:

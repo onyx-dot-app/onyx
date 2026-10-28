@@ -7,8 +7,8 @@ named user without the bit is denied even when one of their groups grants it.
 
 Union keeps every term. Intersection keeps group level when one side holds
 the other (the same group, or the whole tenant), and expands to users only
-where two different groups meet. A term with exclusions cannot be written as
-document access, so resolution expands it to users, up to a cap.
+where two different groups meet. Document access has no exclusions, so a
+term with exclusions becomes a synced exclusion group (``exclusion_groups``).
 """
 
 from collections.abc import Iterable
@@ -66,13 +66,15 @@ class EntraDirectory(Protocol):
 
 
 class ExpansionLimitError(Exception):
-    """Exact access needs more users than the per-document cap."""
+    """Exact access needs more entries than one document can hold."""
 
 
 class ResolvedPrincipals(BaseModel):
     user_emails: set[str]
     group_ids: set[str]
     everyone: bool
+    # Group and tenant terms with exclusions.
+    exclusion_terms: set[PrincipalTerm]
 
 
 def user_term(user_id: str) -> PrincipalTerm:
@@ -255,36 +257,25 @@ def intersect(
 
 
 def resolve(
-    principals: PrincipalSet, directory: EntraDirectory, max_expanded_users: int
+    principals: PrincipalSet, directory: EntraDirectory, max_users: int
 ) -> ResolvedPrincipals:
-    """The principals as emails, group ids and the whole tenant. A term with
-    exclusions becomes its users. Raises when the users, named or expanded,
-    pass the cap."""
+    """The principals as emails, plain group ids, the whole tenant, and the
+    terms with exclusions. Raises when the users pass the cap."""
     user_ids: set[str] = set()
     group_ids: set[str] = set()
+    exclusion_terms: set[PrincipalTerm] = set()
     everyone: bool = False
     for term in principals:
         if term.kind is PrincipalKind.USER:
             user_ids.add(term.principal_id)
-        elif term.is_plain:
-            if term.kind is PrincipalKind.EVERYONE:
-                everyone = True
-            else:
-                group_ids.add(term.principal_id)
+        elif not term.is_plain:
+            exclusion_terms.add(term)
+        elif term.kind is PrincipalKind.EVERYONE:
+            everyone = True
         else:
-            members: frozenset[str] = (
-                directory.all_users()
-                if term.kind is PrincipalKind.EVERYONE
-                else directory.group_members(term.principal_id)
-            )
-            excluded: set[str] = set(term.excluded_users)
-            for group_id in term.excluded_groups:
-                excluded |= directory.group_members(group_id)
-            user_ids |= members - excluded
-        if len(user_ids) > max_expanded_users:
-            raise ExpansionLimitError(
-                f"Exact access needs more than {max_expanded_users} users."
-            )
+            group_ids.add(term.principal_id)
+    if len(user_ids) > max_users:
+        raise ExpansionLimitError(f"Exact access needs more than {max_users} users.")
     return ResolvedPrincipals(
         user_emails={
             email
@@ -293,4 +284,5 @@ def resolve(
         },
         group_ids=group_ids,
         everyone=everyone,
+        exclusion_terms=exclusion_terms,
     )
