@@ -93,10 +93,14 @@ Tools return `ToolResult`. Ordinary tool exceptions become error results that th
 model can inspect. Cancellation propagates. Errors in coordination or tool hooks
 can fail the run.
 
-Tools run in parallel unless a called tool declares `SEQUENTIAL`; then the entire
-step runs sequentially. Model history retains tool-call order. Final callbacks run as results become ready,
+Tools run in parallel by default. `SEQUENTIAL` orders calls to the same registered tool name within one step.
+The next call waits for the previous call and its completion hook, including waits for input or children.
+Other tool names can run concurrently. This setting does not coordinate separate runs or API requests.
+Model history retains tool-call order. Final callbacks run as results become ready,
 serially on the execution thread. A slow tool does not delay another tool's completion event. A tool can provide `merge_arguments` to
-combine compatible calls. Each original call retains its identity and result.
+combine compatible calls. Merging can skip unrelated tool names. For a sequential tool,
+merging stops at the first incompatible or blocked call to that tool.
+Each original call retains its identity and result.
 
 | Callback | Responsibility |
 | --- | --- |

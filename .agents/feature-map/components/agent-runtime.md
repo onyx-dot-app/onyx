@@ -34,6 +34,10 @@ models; this package adds no database writes or schema changes.
 model requests, accepts streaming output, executes tools, and decides whether to
 continue. `ToolBatch` preserves model-call order while tools complete concurrently.
 
+`ToolExecutionMode.SEQUENTIAL` orders calls to the same registered tool name within a step.
+An earlier call holds that place until finalization, including waits for input or children.
+Unrelated tools can run concurrently. This mode does not coordinate separate runs.
+
 `AgentCoordinator` controls children and application storage callbacks. Foreground
 children delay parent completion. A parent can suspend while waiting for input or
 child results, then resume with its original identity and budget.
