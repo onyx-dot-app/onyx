@@ -96,7 +96,6 @@ from onyx.llm.models import (
     GenerationLifecycleEvent,
     GenerationOptions,
     GenerationRequest,
-    LLMErrorInfo,
     Message,
     SystemMessage,
     ToolCall,
@@ -141,19 +140,12 @@ class RunFailed(RuntimeError):
 def _failure(error: Exception, llm: LLM) -> RunFailure:
     if isinstance(error, RunFailed):
         return error.failure.model_copy(deep=True)
-    if isinstance(error, ClassifiedLLMError):
-        info = LLMErrorInfo(
-            message=llm.redact_error(error.client_error_msg),
-            error_code=error.error_code,
-            is_retryable=error.is_retryable,
-        )
-        return RunFailure(kind=RunFailureKind.LLM, message=info.message, llm_error=info)
     info = litellm_exception_to_safe_error(error, llm, fallback_to_error_msg=False)
     if isinstance(error, LLMTimeoutError):
         kind = RunFailureKind.LLM_TIMEOUT
     elif isinstance(error, LLMRateLimitError):
         kind = RunFailureKind.LLM_RATE_LIMIT
-    elif isinstance(error, LLMContextLimitError):
+    elif isinstance(error, (LLMContextLimitError, ClassifiedLLMError)):
         kind = RunFailureKind.LLM
     else:
         kind = RunFailureKind.EXECUTION
