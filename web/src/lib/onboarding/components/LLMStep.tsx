@@ -3,7 +3,8 @@
 import { memo, useState, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { Button, Divider } from "@opal/components";
+import { Button, SelectCard } from "@opal/components";
+import { noProp } from "@/lib/utils";
 import LLMProviderCard from "@/lib/onboarding/components/LLMProviderCard";
 import { OnboardingActions, OnboardingState } from "@/lib/onboarding/types";
 import { WellKnownLLMProviderDescriptor } from "@/lib/languageModels/types";
@@ -58,6 +59,8 @@ const LLMStep = memo(
     const [selectedProvider, setSelectedProvider] =
       useState<SelectedProvider | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    // The provider list starts open; the header opens and closes it.
+    const [providersOpen, setProvidersOpen] = useState(true);
 
     const handleProviderClick = useCallback(
       (
@@ -83,8 +86,90 @@ const LLMStep = memo(
 
     return (
       <Disabled disabled={disabled} allowClick>
-        <div
-          className="flex flex-col items-center justify-between w-full p-1 rounded-16 border border-border-01 bg-background-tint-00"
+        <SelectCard
+          expandable
+          expanded={providersOpen}
+          expandableContentHeight="full"
+          state="filled"
+          onClick={() => setProvidersOpen((open) => !open)}
+          expandedContent={
+            <div className="@container/llmcards flex flex-wrap gap-1 w-full p-1 [&>*:last-child:nth-child(odd)]:basis-full">
+              {isLoading ? (
+                Array.from({ length: 8 }).map((_, idx) => (
+                  <div
+                    key={idx}
+                    className="basis-full @xl/llmcards:basis-[calc(50%-(--spacing(1))/2)] grow"
+                  >
+                    <LLMProviderSkeleton />
+                  </div>
+                ))
+              ) : (
+                <>
+                  {/* Render the selected provider form */}
+                  <ProviderSetupModal
+                    providerKey={
+                      selectedProvider && isModalOpen ? providerName : null
+                    }
+                    shouldMarkAsDefault={
+                      (onboardingState?.data.llmProviders ?? []).length === 0
+                    }
+                    onboardingActions={onboardingActions}
+                    onOpenChange={handleModalClose}
+                    onSuccess={() => {
+                      onboardingActions.updateData({
+                        llmProviders: [
+                          ...(onboardingState?.data.llmProviders ?? []),
+                          providerName,
+                        ],
+                      });
+                      onboardingActions.setButtonActive(true);
+                    }}
+                  />
+
+                  {/* Render provider cards */}
+                  {llmDescriptors.map((llmDescriptor) => {
+                    const { productName, companyName } = providerNames(
+                      getProvider(llmDescriptor.name)
+                    );
+                    return (
+                      <div
+                        key={llmDescriptor.name}
+                        className="basis-full @xl/llmcards:basis-[calc(50%-(--spacing(1))/2)] grow"
+                      >
+                        <LLMProviderCard
+                          title={productName}
+                          subtitle={companyName}
+                          providerName={llmDescriptor.name}
+                          disabled={disabled}
+                          isConnected={onboardingState.data.llmProviders?.some(
+                            (provider) => provider === llmDescriptor.name
+                          )}
+                          onClick={() =>
+                            handleProviderClick(llmDescriptor, false)
+                          }
+                        />
+                      </div>
+                    );
+                  })}
+
+                  {/* Custom provider card */}
+                  <div className="basis-full @xl/llmcards:basis-[calc(50%-(--spacing(1))/2)] grow">
+                    <LLMProviderCard
+                      title={t("llmStep.customProvider.title")}
+                      subtitle={t("llmStep.customProvider.subtitle")}
+                      disabled={disabled}
+                      isConnected={onboardingState.data.llmProviders?.some(
+                        (provider) => provider === "custom"
+                      )}
+                      onClick={() => handleProviderClick(undefined, true)}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          }
+          rounding={4}
+          padding={1}
           aria-label="onboarding-llm-step"
         >
           <ContentAction
@@ -97,90 +182,17 @@ const LLMStep = memo(
             rightChildren={
               <Button
                 disabled={disabled}
-                prominence="tertiary"
+                prominence="internal"
                 rightIcon={SvgExternalLink}
                 href={ADMIN_ROUTES.LLM_MODELS.path}
+                // The link opens the admin page, not the card's provider list.
+                onClick={noProp()}
               >
                 {t("llmStep.adminPanel.label")}
               </Button>
             }
           />
-          <Divider />
-          <div className="@container/llmcards flex flex-wrap gap-1 w-full [&>*:last-child:nth-child(odd)]:basis-full">
-            {isLoading ? (
-              Array.from({ length: 8 }).map((_, idx) => (
-                <div
-                  key={idx}
-                  className="basis-full @xl/llmcards:basis-[calc(50%-(--spacing(1))/2)] grow"
-                >
-                  <LLMProviderSkeleton />
-                </div>
-              ))
-            ) : (
-              <>
-                {/* Render the selected provider form */}
-                <ProviderSetupModal
-                  providerKey={
-                    selectedProvider && isModalOpen ? providerName : null
-                  }
-                  shouldMarkAsDefault={
-                    (onboardingState?.data.llmProviders ?? []).length === 0
-                  }
-                  onboardingActions={onboardingActions}
-                  onOpenChange={handleModalClose}
-                  onSuccess={() => {
-                    onboardingActions.updateData({
-                      llmProviders: [
-                        ...(onboardingState?.data.llmProviders ?? []),
-                        providerName,
-                      ],
-                    });
-                    onboardingActions.setButtonActive(true);
-                  }}
-                />
-
-                {/* Render provider cards */}
-                {llmDescriptors.map((llmDescriptor) => {
-                  const { productName, companyName } = providerNames(
-                    getProvider(llmDescriptor.name)
-                  );
-                  return (
-                    <div
-                      key={llmDescriptor.name}
-                      className="basis-full @xl/llmcards:basis-[calc(50%-(--spacing(1))/2)] grow"
-                    >
-                      <LLMProviderCard
-                        title={productName}
-                        subtitle={companyName}
-                        providerName={llmDescriptor.name}
-                        disabled={disabled}
-                        isConnected={onboardingState.data.llmProviders?.some(
-                          (provider) => provider === llmDescriptor.name
-                        )}
-                        onClick={() =>
-                          handleProviderClick(llmDescriptor, false)
-                        }
-                      />
-                    </div>
-                  );
-                })}
-
-                {/* Custom provider card */}
-                <div className="basis-full @xl/llmcards:basis-[calc(50%-(--spacing(1))/2)] grow">
-                  <LLMProviderCard
-                    title={t("llmStep.customProvider.title")}
-                    subtitle={t("llmStep.customProvider.subtitle")}
-                    disabled={disabled}
-                    isConnected={onboardingState.data.llmProviders?.some(
-                      (provider) => provider === "custom"
-                    )}
-                    onClick={() => handleProviderClick(undefined, true)}
-                  />
-                </div>
-              </>
-            )}
-          </div>
-        </div>
+        </SelectCard>
       </Disabled>
     );
   }
