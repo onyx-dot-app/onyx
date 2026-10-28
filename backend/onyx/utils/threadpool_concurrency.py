@@ -478,7 +478,9 @@ def start_thread_with_context(
     return thread
 
 
-def start_thread_future[T](operation: Callable[[], T], *, name: str) -> Future[T]:
+def start_thread_future[T](
+    operation: Callable[[], T], *, name: str, daemon: bool = True
+) -> Future[T]:
     """Start independent work with the caller's context and an observable result."""
     result: Future[T] = Future()
     result.set_running_or_notify_cancel()
@@ -491,7 +493,7 @@ def start_thread_future[T](operation: Callable[[], T], *, name: str) -> Future[T
         else:
             result.set_result(value)
 
-    start_thread_with_context(run, name=name, daemon=True)
+    start_thread_with_context(run, name=name, daemon=daemon)
     return result
 
 
