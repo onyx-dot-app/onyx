@@ -179,7 +179,6 @@ class TestExtractToolCallsFromResponseText:
                 "type": "function",
                 "function": {
                     "name": "internal_search",
-                    "description": "",
                     "parameters": {
                         "type": "object",
                         "properties": {

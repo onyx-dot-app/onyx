@@ -31,7 +31,6 @@ _TOOLS: list[SerializedToolDefinition] = [
         "type": "function",
         "function": {
             "name": "get_weather",
-            "description": "",
             "parameters": {"type": "object", "properties": {}},
         },
     }

@@ -960,11 +960,9 @@ def _anthropic_tools(
                 f"Tool {identifier!r} is not supported by the Onyx gateway; "
                 "only client tools with an input_schema are accepted.",
             )
-        function: SerializedToolFunction = {
-            "name": name,
-            "description": tool.get("description", ""),
-            "parameters": input_schema,
-        }
+        function: SerializedToolFunction = {"name": name, "parameters": input_schema}
+        if "description" in tool:
+            function["description"] = tool["description"]
         tools.append({"type": "function", "function": function})
     return tools
 

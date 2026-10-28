@@ -26,7 +26,6 @@ _TOOLS: list[SerializedToolDefinition] = [
         "type": "function",
         "function": {
             "name": "search",
-            "description": "",
             "parameters": {"type": "object", "properties": {}},
         },
     }

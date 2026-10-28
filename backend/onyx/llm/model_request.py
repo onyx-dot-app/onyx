@@ -2,7 +2,7 @@
 
 import json
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Literal, TypedDict
+from typing import TYPE_CHECKING, Literal, NotRequired, TypedDict
 
 from pydantic import BaseModel, JsonValue
 
@@ -151,8 +151,8 @@ def format_provider_message(message: app.Message) -> ChatCompletionMessage:
 
 class SerializedToolFunction(TypedDict):
     name: str
-    description: str
-    parameters: dict[str, JsonValue]
+    description: NotRequired[str]
+    parameters: NotRequired[dict[str, JsonValue]]
 
 
 class SerializedToolDefinition(TypedDict):
