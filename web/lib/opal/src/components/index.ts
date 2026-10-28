@@ -153,6 +153,13 @@ export {
   type EnterVariant,
 } from "@opal/components/enter/components";
 
+/* Swap */
+export {
+  Swap,
+  type SwapProps,
+  type SwapDirection,
+} from "@opal/components/swap/components";
+
 /* IconTooltip */
 export {
   IconTooltip,

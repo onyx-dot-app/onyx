@@ -2,6 +2,7 @@
 
 import { useReducer, useCallback, useEffect, useRef, useState } from "react";
 import { onboardingReducer, initialState } from "@/lib/onboarding/reducer";
+import { STEP_NAVIGATION } from "@/lib/onboarding/constants";
 import {
   OnboardingActions,
   OnboardingActionType,
@@ -145,8 +146,22 @@ function useOnboardingState(activeAgent?: MinimalAgent): {
   }, [state, refreshProviderInfo, refreshPersonaProviders, activeAgent]);
 
   const prevStep = useCallback(() => {
+    // The step landed on decides whether Next can be pressed there.
+    const target = STEP_NAVIGATION[state.currentStep].prev;
+    if (target !== undefined) {
+      const isActive =
+        target === OnboardingStep.Name
+          ? !!state.data.userName?.trim()
+          : target === OnboardingStep.LlmSetup
+            ? (state.data.llmProviders?.length ?? 0) > 0
+            : true;
+      dispatch({
+        type: OnboardingActionType.SET_BUTTON_ACTIVE,
+        isButtonActive: isActive,
+      });
+    }
     dispatch({ type: OnboardingActionType.PREV_STEP });
-  }, []);
+  }, [state]);
 
   const goToStep = useCallback(
     (step: OnboardingStep) => {

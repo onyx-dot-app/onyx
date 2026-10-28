@@ -2,14 +2,14 @@
 
 import { memo } from "react";
 import { useTranslations } from "next-intl";
-import { STEP_CONFIG } from "@/lib/onboarding/constants";
+import { STEP_CONFIG, STEP_NAVIGATION } from "@/lib/onboarding/constants";
 import {
   OnboardingActions,
   OnboardingState,
   OnboardingStep,
 } from "@/lib/onboarding/types";
 import { Button, Card, Text } from "@opal/components";
-import { SvgProgressCircle, SvgX } from "@opal/icons";
+import { SvgChevronLeft, SvgProgressCircle, SvgX } from "@opal/icons";
 import { ContentAction, Section } from "@opal/layouts";
 
 interface OnboardingHeaderProps {
@@ -26,6 +26,7 @@ function OnboardingHeader({
   handleFinishOnboarding,
 }: OnboardingHeaderProps) {
   const t = useTranslations("onboarding");
+  const tCommon = useTranslations("common");
   const iconPercentage =
     STEP_CONFIG[onboardingState.currentStep].iconPercentage;
   const stepButtonText = t(
@@ -34,6 +35,8 @@ function OnboardingHeader({
   const isWelcomeStep = onboardingState.currentStep === OnboardingStep.Welcome;
   const isCompleteStep =
     onboardingState.currentStep === OnboardingStep.Complete;
+  const hasPreviousStep =
+    STEP_NAVIGATION[onboardingState.currentStep].prev !== undefined;
 
   function handleButtonClick() {
     if (isCompleteStep) handleFinishOnboarding();
@@ -69,12 +72,23 @@ function OnboardingHeader({
                     })}
                   </Text>
                 )}
-                <Button
-                  disabled={!onboardingState.isButtonActive}
-                  onClick={handleButtonClick}
-                >
-                  {stepButtonText}
-                </Button>
+                <Section flexDirection="row" gap={1} width="fit">
+                  {hasPreviousStep && (
+                    <Button
+                      prominence="secondary"
+                      icon={SvgChevronLeft}
+                      tooltip={tCommon("backButton.label")}
+                      aria-label={tCommon("backButton.label")}
+                      onClick={onboardingActions.prevStep}
+                    />
+                  )}
+                  <Button
+                    disabled={!onboardingState.isButtonActive}
+                    onClick={handleButtonClick}
+                  >
+                    {stepButtonText}
+                  </Button>
+                </Section>
               </Section>
             ) : (
               <Button

@@ -9,7 +9,14 @@ import {
 import { SourceMetadata, ValidSources } from "@/lib/connectors/types/source";
 import { loginPath } from "@/lib/auth/paths";
 import { endIncognitoSession } from "@/app/app/services/lib";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { Section } from "@/layouts/general-layouts";
 import { useLlmManager } from "@/lib/hooks";
@@ -755,15 +762,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     };
   }, [currentChatSessionId, currentProjectId, currentProjectDetails?.files]);
 
-  // Handle error case where no agents are available.
-  // Only show this after agents have loaded to prevent flash during initial load.
-  if (!activeAgent && !isLoadingAgents) {
-    return <NoAgentModal />;
-  }
-
-  const hasAgentStarterMessages =
-    (activeAgent?.starter_messages?.length ?? 0) > 0;
-
   const isWelcomeFocus =
     (appPosition.isNewSession() || appPosition.isAgent()) &&
     (state.phase === "idle" || state.phase === "classifying");
@@ -772,6 +770,32 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     isWelcomeFocus &&
     (showOnboarding || !user?.personalization?.name) &&
     !onboardingDismissed;
+
+  // While onboarding is open, the bottom row keeps the height it had when
+  // onboarding appeared. New onboarding steps then grow upward instead of
+  // moving the input down.
+  const bottomRowRef = useRef<HTMLDivElement>(null);
+  const [onboardingBottomRowPx, setOnboardingBottomRowPx] = useState<
+    number | null
+  >(null);
+  useLayoutEffect(() => {
+    if (!onboardingVisible) {
+      setOnboardingBottomRowPx(null);
+      return;
+    }
+    if (onboardingBottomRowPx === null && bottomRowRef.current) {
+      setOnboardingBottomRowPx(bottomRowRef.current.offsetHeight);
+    }
+  }, [onboardingVisible, onboardingBottomRowPx]);
+
+  // Handle error case where no agents are available.
+  // Only show this after agents have loaded to prevent flash during initial load.
+  if (!activeAgent && !isLoadingAgents) {
+    return <NoAgentModal />;
+  }
+
+  const hasAgentStarterMessages =
+    (activeAgent?.starter_messages?.length ?? 0) > 0;
 
   const gridStyle = {
     // minmax(0, 1fr) (instead of "1fr") lets the single column shrink to the
@@ -782,7 +806,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     // Onboarding: welcome floored at content height, form row compressible
     // (scrolls), bottom row absorbs slack. Centered when short, pinned when tall.
     gridTemplateRows: onboardingVisible
-      ? "minmax(min-content, 1fr) minmax(0, max-content) minmax(0, 1fr)"
+      ? `minmax(min-content, 1fr) minmax(0, max-content) ${
+          onboardingBottomRowPx === null
+            ? "minmax(0, 1fr)"
+            : `minmax(0, ${onboardingBottomRowPx}px)`
+        }`
       : isSearch
         ? "0fr auto 1fr"
         : appPosition.isChat()
@@ -1037,7 +1065,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
                     {/* OnboardingUI */}
                     {onboardingVisible && (
-                      <ShadowDiv variant="mask" className="overscroll-contain">
+                      <ShadowDiv
+                        variant="mask"
+                        // 8px of side room: onboarding steps slide in from the
+                        // end side without being clipped or scrolling sideways.
+                        className="overscroll-contain -mx-2 px-2 overflow-x-hidden"
+                      >
                         <OnboardingFlow
                           showOnboarding={showOnboarding}
                           handleHideOnboarding={hideOnboarding}
@@ -1127,7 +1160,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 </div>
 
                 {/* ── Bottom: SearchResults + SourceFilter / Suggestions / ProjectChatList ── */}
-                <div className="row-start-3 min-h-0 overflow-hidden flex flex-col items-center w-full px-2 sm:px-4">
+                <div
+                  ref={bottomRowRef}
+                  className="row-start-3 min-h-0 overflow-hidden flex flex-col items-center w-full px-2 sm:px-4"
+                >
                   {/* Agent description below input */}
                   {(appPosition.isNewSession() || appPosition.isAgent()) &&
                     !isPlainChat && (
