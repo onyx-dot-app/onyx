@@ -32,8 +32,9 @@ function prefersReducedMotion(): boolean {
 
 /**
  * The button's label. When its text changes, the old text fades out, the
- * width adjusts to the new text, then the new text fades in. Labels that never
- * change cost nothing: no observer, no measuring.
+ * width adjusts to the new text, then the new text fades in. Clicks are ignored
+ * until the new text starts to fade in. Labels that never change cost
+ * nothing: no observer, no measuring.
  */
 function ButtonLabel({ children, font, responsiveHide }: ButtonLabelProps) {
   const ref = useRef<HTMLSpanElement>(null);
@@ -68,6 +69,21 @@ function ButtonLabel({ children, font, responsiveHide }: ButtonLabelProps) {
   } else if (sameTextNewKind && phase !== "out") {
     setShown(children);
   }
+
+  // While the label is stale (fading out, or hidden during the resize), the
+  // button must not run an action its label does not show yet. A capture
+  // listener on the button stops the click before React's handler sees it.
+  useLayoutEffect(() => {
+    if (phase !== "out" && phase !== "resize") return;
+    const control = ref.current?.closest("button, a");
+    if (!control) return;
+    const block = (event: Event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    control.addEventListener("click", block, true);
+    return () => control.removeEventListener("click", block, true);
+  }, [phase]);
 
   // Resize: hold the old width, then transition to the new text's width.
   useLayoutEffect(() => {
