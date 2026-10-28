@@ -1,5 +1,6 @@
 """The packet view cannot drive model requests or tool execution."""
 
+import threading
 from collections.abc import Mapping
 
 import pytest
@@ -1343,3 +1344,75 @@ def test_completed_agent_tool_output_matches_replay(coding: bool) -> None:
                 for packet in packets
                 if isinstance(packet.obj, IntermediateReportDelta)
             ] == ["Final report"]
+
+
+def test_parallel_search_packets_complete_without_waiting_for_an_earlier_call() -> None:
+    release_internal = threading.Event()
+    internal_started = threading.Event()
+    web_completed = threading.Event()
+    packets: list[Packet] = []
+    replies = iter(
+        [
+            AssistantMessage(
+                content=[
+                    ToolCall(
+                        id="internal",
+                        name="internal_search",
+                        arguments={"queries": ["policy"]},
+                    ),
+                    ToolCall(
+                        id="web", name="web_search", arguments={"queries": ["policy"]}
+                    ),
+                ]
+            ),
+            AssistantMessage(content=[TextContent(text="Answer")]),
+        ]
+    )
+
+    def internal(_invocation: ToolInvocation) -> ToolResult:
+        internal_started.set()
+        assert release_internal.wait(10)
+        return ToolResult(content="Internal result")
+
+    def publish(packet: Packet) -> None:
+        packets.append(packet)
+        if isinstance(packet.obj, SectionEnd) and packet.placement.tab_index == 1:
+            web_completed.set()
+
+    presenter = ResponsePresenter(Emitter(publish))
+    run = Agent(
+        FakeModelClient(lambda *_: next(replies)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name="internal_search", description="", parameters={}
+                ),
+                execute=internal,
+            ),
+            AgentTool(
+                definition=ToolDefinition(
+                    name="web_search", description="", parameters={}
+                ),
+                execute=lambda _: ToolResult(content="Web result"),
+            ),
+        ],
+    ).start(max_steps=2, on_event=presenter.consume)
+    try:
+        assert internal_started.wait(10)
+        assert web_completed.wait(10)
+        starts = [
+            packet for packet in packets if isinstance(packet.obj, SearchToolStart)
+        ]
+        assert {packet.placement.tab_index for packet in starts} == {0, 1}
+        assert len({packet.placement.turn_index for packet in starts}) == 1
+        assert not any(
+            isinstance(packet.obj, SectionEnd) and packet.placement.tab_index == 0
+            for packet in packets
+        )
+        release_internal.set()
+        assert run.result(10).output.text == "Answer"
+    finally:
+        release_internal.set()
+        run.cancel()
+        assert run.wait_for_idle(10)

@@ -143,14 +143,15 @@ Slack (optional) ─► _run_slack_search ────────────�
 
 Runs, in one parallel batch, whichever of these apply:
 - `semantic_query_rephrase` and `keyword_query_expansion` (`secondary_llm_flows/query_expansion.py`),
-  unless `override_kwargs.skip_query_expansion` is set (a repeat search within the
+  unless `ToolContext.skip_search_query_expansion` is set (a repeat search within the
   same turn defers entirely to the LLM's own query).
 - `decide_search_scope` (`secondary_llm_flows/source_filter.py`), gated by
-  `auto_detect_filters` and skipped once `_scope_decision_settled` latches to
+  `auto_detect_filters` and skipped once `SearchContext.scope_decision_settled` latches to
   `True` for the rest of the turn (a "no source directive" result cannot flip
   back mid-turn).
-- `decide_time_filter` (`secondary_llm_flows/time_filter.py`), computed once per
-  turn and cached in `_time_filter`/`_time_filter_computed`.
+- `decide_time_filter` (`secondary_llm_flows/time_filter.py`), computed while the
+  prior context lacks a time decision. The completed step retains the first decision
+  in `SearchContext.time_filter`/`time_filter_computed`, including a decision with no filter.
 
 `decide_search_scope` returns a `list[DocumentSource] | None`, restricted to
 `connected_sources` (`db/connector.py:fetch_unique_document_sources`) intersected
@@ -162,11 +163,17 @@ rather than applied.
 
 When the scope narrows to a subset of sources, `run` appends a note to the
 response (`_build_scope_note`) that names the sources covered and the queries run, so a repeat
-call can vary its terms. Each call also records a `SearchCycle`, which
-`decide_search_scope` reads on later calls in the same turn. It also passes the
+call can vary its terms. Each completed retrieval returns planning metadata. Chat and research fold that metadata into
+`SearchContext` after the step. `decide_search_scope` reads its `SearchCycle` records on later steps. It also passes the
 deduplicated `searched_sources` of those cycles as a separate prompt field, so a
 BACKOFF directive ("check A first, then B") advances to the next unsearched source
 while the subject stays the same.
+
+Chat and research own this context. A fresh run resets it; a resumed run restores it from the checkpoint.
+Sibling searches read the same prior-step context. Their completion order does not change later planning.
+The first new time decision and last new expansion in model-call order are retained.
+A completed retrieval with no hits still records a cycle. Errors and explicit empty source selections do not.
+The selection client resolves only when results need selection. Each invocation tracks its own primary-model cost check, shared by Slack retrieval and selection fallback.
 
 ### 4.3 Parallel retrieval lanes
 
@@ -449,8 +456,8 @@ than launching Playwright ad hoc.
   replace `tool_call.tool_args`, so history shows what the model wrote. See also
   [[core-chat-loop]] §9.
 - **The time decision is cached per turn. The scope decision is cached only when
-  it finds no source directive.** `_time_filter_computed` latches after the first
-  `decide_time_filter` call. `_scope_decision_settled` latches only when
+  it finds no source directive.** `SearchContext.time_filter_computed` latches after the first
+  completed step with a time decision. `scope_decision_settled` latches only when
   `decide_search_scope` returns `None`. If it returns a source list, the next
   `internal_search` call in the same turn runs the decision again.
 - **`hybrid_alpha == 0.0` short-circuits to pure keyword retrieval**

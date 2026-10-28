@@ -3,7 +3,14 @@ from datetime import datetime
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, SerializeAsAny
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    SerializeAsAny,
+    field_serializer,
+)
 
 from onyx.agents.execution_records import messages_for_model
 from onyx.agents.tools import AgentTool, ChildRunWait, HumanToolAnswer, PendingToolInput
@@ -223,7 +230,7 @@ class RunProgress(BaseModel):
     options: GenerationOptions | None = None
     tools: list[ToolDefinition] = Field(default_factory=list)
     previous_options: GenerationOptions | None = None
-    finalized_tools: int = 0
+    finalized_tool_call_ids: set[str] = Field(default_factory=set)
     feature_state: dict[str, JsonValue] | None = None
     pending_tool_calls: dict[str, PendingToolInput | ChildRunWait] = Field(
         default_factory=dict
@@ -232,6 +239,10 @@ class RunProgress(BaseModel):
     child_run_ids: list[str] = Field(default_factory=list)
     observed_child_run_ids: list[str] = Field(default_factory=list)
     outcome: RunStatus | None = None
+
+    @field_serializer("finalized_tool_call_ids", when_used="json")
+    def serialize_finalized_tool_call_ids(self, value: set[str]) -> list[str]:
+        return sorted(value)
 
 
 class RunState(BaseModel):

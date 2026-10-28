@@ -60,13 +60,11 @@ from onyx.prompts.prompt_utils import get_current_llm_day_time
 from onyx.prompts.tool_prompts import INTERNAL_SEARCH_GUIDANCE
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolContext
-from onyx.tools.restoration import (
-    capture_search_state,
-    restore_search_state,
-)
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
+from onyx.tools.tool_implementations.search.models import SearchContext
 from onyx.tools.tool_implementations.search.search_tool import (
     SearchTool,
+    update_search_context,
 )
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
@@ -97,9 +95,8 @@ class ResearchAgent(Agent, RestorableFeature):
         agent_id: str | None = None,
     ) -> None:
         allowed_tools = {SearchTool.NAME, WebSearchTool.NAME, OpenURLTool.NAME}
-        self.application_tools = [
-            tool.for_agent() for tool in tools if tool.name in allowed_tools
-        ]
+        self.application_tools = [tool for tool in tools if tool.name in allowed_tools]
+        self.search_context = SearchContext()
         self.started = time.monotonic()
         self.is_reasoning_model = model_is_reasoning_model(
             llm.config.model_name, llm.config.model_provider
@@ -157,7 +154,7 @@ class ResearchAgent(Agent, RestorableFeature):
             ),
             citation_sources=self.citation_processor.citation_to_doc,
             citation_mapping=self.citation_mapping,
-            search_tools=capture_search_state(self.application_tools),
+            search_context=self.search_context,
         )
 
     def restore_state(self, state: Mapping[str, JsonValue]) -> None:
@@ -168,13 +165,14 @@ class ResearchAgent(Agent, RestorableFeature):
         ):
             raise ValueError("Research restoration configuration does not match")
         self.started = time.monotonic() - saved.elapsed_seconds
-        restore_search_state(self.application_tools, saved.search_tools)
+        self.search_context = saved.search_context
         self.citation_processor.citation_to_doc = saved.citation_sources
         self.citation_mapping = saved.citation_mapping
 
     def _tool_context(self) -> ToolContext:
         """Read feature state that advances only after a completed step."""
         return ToolContext(
+            search_context=self.search_context,
             citation_mapping=dict(self.citation_mapping),
             next_citation_num=self.citation_processor.get_next_citation_number(),
             url_snippet_map=extract_url_snippet_map(
@@ -186,6 +184,7 @@ class ResearchAgent(Agent, RestorableFeature):
         previous = state.previous
         results = previous.tool_results if previous else []
         if previous is None:
+            self.search_context = SearchContext()
             self.started = time.monotonic()
             for message in state.history:
                 if isinstance(message, ToolResultMessage):
@@ -286,6 +285,9 @@ class ResearchAgent(Agent, RestorableFeature):
         )
 
     def _after_step(self, result: StepResult) -> bool:
+        self.search_context = update_search_context(
+            self.search_context, result.tool_results
+        )
         for tool_result in result.tool_results:
             self._update_sources(tool_result)
         if result.options.tool_choice != ToolChoiceOptions.NONE:

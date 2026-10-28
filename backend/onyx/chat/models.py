@@ -65,7 +65,7 @@ from onyx.tools.models import (
     ToolCallInfo,
 )
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
-from onyx.tools.tool_implementations.search.models import SearchToolState
+from onyx.tools.tool_implementations.search.models import SearchContext
 
 MAX_DISCOVERED_AGENTS = 128
 _MESSAGE_ADAPTER = TypeAdapter(Message)
@@ -593,7 +593,7 @@ class ChatFeatureState(BaseModel):
     chat_files: list[SavedChatFile]
     has_called_search_tool: bool
     ran_image_gen: bool
-    search_tools: dict[str, SearchToolState]
+    search_context: SearchContext
 
 
 class ReservedChatResponse(BaseModel):
@@ -683,7 +683,7 @@ class MessagePayload(BaseModel):
 
 class ResponseCheckpoint(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    version: Literal[1] = 1
+    version: Literal[2] = 2
     history_digest: str
     response_digest: str
     binding: CheckpointBinding

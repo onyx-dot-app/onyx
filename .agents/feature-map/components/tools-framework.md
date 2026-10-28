@@ -128,7 +128,7 @@ without repeating initial invocation telemetry.
 
 `AgentTool` supplies the SDK with a schema, execution callback, execution mode, and
 optional merge or child-result callbacks. It does not require a database tool row.
-`ToolBatch` owns parallel execution, waits, and ordered result acceptance.
+`ToolBatch` owns parallel execution, waits, and result finalization. It finalizes ready results independently; model history retains call order.
 
 `is_available(cls, db_session)` defaults to `True`. Implementations can check whether
 required services or credentials exist. `merge_list_argument` opts compatible calls
@@ -243,7 +243,11 @@ with another tool's name across MCP servers.
   Cancellation remains a control signal.
 - Search tools derive their citation range from `ToolContext.next_citation_num` plus
   `CITATIONS_PER_TOOL_CALL * invocation.call_index`. The constant is 100.
-- `backend/onyx/chat/agent.py:ChatAgent` updates prompt context from completed tool results.
+- Chat and research update search planning context after the step, in model-call order.
+  Searches receive the prior context through `ToolContext` and return decisions in result metadata.
+  Compatible merged searches contribute one update. Unmerged searches can run in parallel.
+- Each ready result runs its finalizer and emits completion without waiting for earlier calls.
+  Finalizers run serially. Model history retains the assistant's tool-call order.
 - `backend/onyx/chat/renderer.py:ToolRenderer` turns tool events into browser packets,
   including start, debug, progress, errors, and section completion.
 

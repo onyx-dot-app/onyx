@@ -134,7 +134,10 @@ Application enums define response, generation, and tool statuses; historical res
 Its `ownership_version` changes when a checkpoint is published or claimed, preventing stale owners from saving.
 The runtime revision inside `state` tracks execution changes and serves a separate purpose.
 Checkpoint bindings identify the tenant and response. Saved progress uses the runtime’s field names, including
-`pending_tool_calls` and `human_tool_answers`.
+`pending_tool_calls`, `human_tool_answers`, and `finalized_tool_call_ids`.
+Finalized IDs let a resumed step skip completed finalizers even when an earlier call still awaits input.
+Checkpoint format version 2 retains feature-owned search context and typed search-planning metadata.
+Restoration rejects other format versions.
 Feature state is a JSON object validated by its owning feature during restoration.
 Chat's `kind` discriminator selects the feature schema; message metadata and tool details retain their tagged codec.
 Prompt image metadata saves file IDs and token counts; restoration loads image bytes only when needed.

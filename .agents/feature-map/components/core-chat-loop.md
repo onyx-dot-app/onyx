@@ -257,6 +257,8 @@ content-free incognito saves retain replay data in Redis instead.
 
 Compaction checkpoints are part of SDK execution state. Saving the response
 preserves the checkpoint needed to continue the selected message branch.
+Feature state also retains search planning decisions across suspension and compaction.
+Chat and research fold those decisions after each step, independently of tool completion order.
 
 ### 4.6 Stop, resume, heartbeat
 

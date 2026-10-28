@@ -684,7 +684,7 @@ def test_suspended_search_result_restores_after_database_round_trip(
             action=RunAction.TOOLS,
             options=GenerationOptions(),
             previous_options=GenerationOptions(),
-            finalized_tools=1,
+            finalized_tool_call_ids={"search"},
             pending_tool_calls={
                 "ask": PendingToolInput(
                     request_id="ask-user", prompt="Continue?", mode=InputMode.EXECUTE

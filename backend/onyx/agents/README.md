@@ -11,7 +11,7 @@ streaming events, cancellation, and record-keeping.
 | `models.py` | Conversation context, step decisions, and run records. |
 | `concurrency.py` | Tracked threads, update acceptance, and event delivery. |
 | `agent_coordination.py` | Optional child discovery, execution control, and archive access. |
-| `tool_execution.py` | Parallel tool execution, pending input, and ordered result completion. |
+| `tool_execution.py` | Parallel tool execution, pending input, and result finalization. |
 | `tools.py` | `AgentTool`, `ToolInvocation`, and the `AgentControl` interface. |
 | `events.py` | Typed execution events. |
 | `compaction.py` | Token budgets, checkpoints, and history summarization. |
@@ -38,7 +38,7 @@ It can also suspend (`SUSPENDED`) while awaiting input, then continue with the s
 The agent and coordinator retain references to that execution. `RunState` holds its current data.
 `run.snapshot()` returns an independent `RunState` copy for inspection and storage.
 Execution functions prepare model calls, compact history, and advance steps using the run's state.
-`ToolBatch` schedules one step's tools and finalizes their results in call order.
+`ToolBatch` schedules one step's tools and finalizes each result when it becomes ready.
 It reads and updates the run's recorded step; the run tracks workers until they finish.
 Execution returns when it reaches a suspension or completion boundary.
 `Agent` combines preceding history with its latest run when starting another execution.
@@ -210,15 +210,17 @@ The `ToolInvocation` argument provides everything the tool needs:
 When a step makes several tool calls, they run in parallel, unless any called tool is marked
 `SEQUENTIAL` — then the whole batch runs one call at a time. Results are accepted in
 whatever order tools finish, but the model history keeps the original call order.
-Result enrichment and final tool events follow model-call order.
+Result enrichment and final tool events run as results become ready. A slow tool does not delay
+another tool's completion event. Callbacks still run serially on the run execution thread.
 
 Application tools implement `_run(invocation, context)`. Public `run()` adds tracing,
 cancellation checks, and expected-error handling.
 `Tool.bind(get_context)` creates an SDK tool.
 The binding resolves context during execution and calls public `run()`.
-Harnesses use `Tool.for_agent()` to isolate application tools for a conversation. Stateful tools must
-return an isolated instance. SearchTool does this and declares sequential execution; its
-internal retrieval work still runs in parallel.
+Chat and research retain search planning decisions in their feature state. Each search receives
+that context and returns its new decisions as result metadata. After the step, the feature folds
+those decisions in model-call order. Sibling searches can run in parallel without changing each
+other's planning context. Compatible merged calls contribute one planning update.
 
 Retrieval tools combine compatible query or URL lists before execution. One worker runs
 that batch; each original call retains its ID and receives the pooled result and progress.

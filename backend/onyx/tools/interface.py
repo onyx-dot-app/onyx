@@ -133,10 +133,6 @@ class Tool(abc.ABC):
     merge_list_argument: str | None = None
     merge_list_limit: int | None = None
 
-    def for_agent(self) -> "Tool":
-        """Return an instance safe to bind to one agent's conversation."""
-        return self
-
     @property
     def execution_mode(self) -> ToolExecutionMode:
         return ToolExecutionMode.PARALLEL
