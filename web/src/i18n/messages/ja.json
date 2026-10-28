@@ -15846,13 +15846,16 @@
       "connectedCount": {
         "label": "{count, plural, one {# 個のモデルを接続済み} other {# 個のモデルを接続済み}}"
       },
-      "customProvider": {
-        "subtitle": "LiteLLM 互換 API",
-        "title": "カスタム LLM プロバイダー"
-      },
       "description": "{appName} はセルフホストのモデルと主要なプロバイダーの両方に対応しています。",
       "edit": {
         "ariaLabel": "LLM プロバイダーを編集"
+      },
+      "moreProviders": {
+        "button": {
+          "label": "表示"
+        },
+        "description": "管理パネルで設定",
+        "title": "その他のプロバイダー"
       },
       "providerCard": {
         "connect": {

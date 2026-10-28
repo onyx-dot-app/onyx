@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useState, useCallback } from "react";
+import { memo, useState, useCallback, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Button, SelectCard } from "@opal/components";
@@ -9,34 +9,28 @@ import LLMProviderCard from "@/lib/onboarding/components/LLMProviderCard";
 import { OnboardingActions, OnboardingState } from "@/lib/onboarding/types";
 import { WellKnownLLMProviderDescriptor } from "@/lib/languageModels/types";
 import { getProvider } from "@/lib/languageModels/utils";
+import {
+  useAdminLanguageModel,
+  useAdminLanguageModels,
+} from "@/lib/languageModels/hooks";
 import { useProviderNames } from "@/lib/languageModels/useProviderNames";
 import ProviderSetupModal from "@/sections/modals/languageModels/ProviderSetupModal";
 import { Disabled } from "@opal/core";
-import { SvgCpu, SvgExternalLink } from "@opal/icons";
-import { ContentAction } from "@opal/layouts";
+import {
+  SvgArrowExchange,
+  SvgCpu,
+  SvgExternalLink,
+  SvgMoreHorizontal,
+} from "@opal/icons";
+import { CardGrid, ContentAction } from "@opal/layouts";
+import { CardLoader } from "@opal/loaders";
+import { ONBOARDING_LLM_PROVIDERS } from "@/lib/onboarding/constants";
 import { useLLMProviderOptions } from "@/lib/hooks/useLLMProviderOptions";
 import { useSettings } from "@/lib/settings/hooks";
 
 interface SelectedProvider {
   llmDescriptor?: WellKnownLLMProviderDescriptor;
   isCustomProvider: boolean;
-}
-
-function LLMProviderSkeleton() {
-  return (
-    <div className="flex justify-between h-full w-full p-1 rounded-12 border border-border-01 bg-background-neutral-01 animate-pulse">
-      <div className="flex gap-1 p-1 flex-1 min-w-0">
-        <div className="h-full p-0.5">
-          <div className="w-4 h-4 rounded-full bg-neutral-200" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="h-3 w-1/2 bg-neutral-200 rounded-sm" />
-          <div className="mt-2 h-2 w-3/4 bg-neutral-200 rounded-sm" />
-        </div>
-      </div>
-      <div className="h-6 w-16 bg-neutral-200 rounded-sm" />
-    </div>
-  );
 }
 
 interface LLMStepProps {
@@ -54,7 +48,45 @@ const LLMStep = memo(
     const providerNames = useProviderNames();
     const { appName } = useSettings();
     const { llmProviderOptions, isLoading } = useLLMProviderOptions();
-    const llmDescriptors = llmProviderOptions ?? [];
+    // The onboarding subset, in its order; the rest are in the admin panel.
+    const onboardingProviders = ONBOARDING_LLM_PROVIDERS.flatMap((name) => {
+      const descriptor = llmProviderOptions?.find(
+        (option) => option.name === name
+      );
+      return descriptor ? [descriptor] : [];
+    });
+    const openAdminPanel = () => {
+      window.location.href = ADMIN_ROUTES.LLM_MODELS.path;
+    };
+
+    // A connected provider's settings open its own modal, in edit mode, as on
+    // the Language Models admin page. The modal needs the full provider (every
+    // model), which loads on demand.
+    const { llmProviders: configuredProviders } = useAdminLanguageModels();
+    const [editingProviderId, setEditingProviderId] = useState<number | null>(
+      null
+    );
+    const editingProviderQuery = useAdminLanguageModel(editingProviderId);
+    const editingProvider = editingProviderQuery.llmProvider;
+    // SWR types its error as any; only whether it failed matters here.
+    const editingProviderFailed = Boolean(editingProviderQuery.error);
+    const EditModal = editingProvider
+      ? getProvider(editingProvider.provider).Modal
+      : null;
+    const openProviderSettings = (name: string) => {
+      const configured = configuredProviders?.find(
+        (provider) => provider.provider === name
+      );
+      if (configured) setEditingProviderId(configured.id);
+      else openAdminPanel();
+    };
+    useEffect(() => {
+      // When the provider cannot load, the admin page is the fallback.
+      if (editingProviderFailed) {
+        setEditingProviderId(null);
+        openAdminPanel();
+      }
+    }, [editingProviderFailed]);
 
     const [selectedProvider, setSelectedProvider] =
       useState<SelectedProvider | null>(null);
@@ -93,79 +125,85 @@ const LLMStep = memo(
           state="filled"
           onClick={() => setProvidersOpen((open) => !open)}
           expandedContent={
-            <div className="@container/llmcards flex flex-wrap gap-1 w-full p-1 [&>*:last-child:nth-child(odd)]:basis-full">
-              {isLoading ? (
-                Array.from({ length: 8 }).map((_, idx) => (
-                  <div
-                    key={idx}
-                    className="basis-full @xl/llmcards:basis-[calc(50%-(--spacing(1))/2)] grow"
-                  >
-                    <LLMProviderSkeleton />
-                  </div>
-                ))
-              ) : (
-                <>
-                  {/* Render the selected provider form */}
-                  <ProviderSetupModal
-                    providerKey={
-                      selectedProvider && isModalOpen ? providerName : null
-                    }
-                    shouldMarkAsDefault={
-                      (onboardingState?.data.llmProviders ?? []).length === 0
-                    }
-                    onboardingActions={onboardingActions}
-                    onOpenChange={handleModalClose}
-                    onSuccess={() => {
-                      onboardingActions.updateData({
-                        llmProviders: [
-                          ...(onboardingState?.data.llmProviders ?? []),
-                          providerName,
-                        ],
-                      });
-                      onboardingActions.setButtonActive(true);
-                    }}
-                  />
-
-                  {/* Render provider cards */}
-                  {llmDescriptors.map((llmDescriptor) => {
-                    const { productName, companyName } = providerNames(
-                      getProvider(llmDescriptor.name)
-                    );
-                    return (
-                      <div
-                        key={llmDescriptor.name}
-                        className="basis-full @xl/llmcards:basis-[calc(50%-(--spacing(1))/2)] grow"
-                      >
+            <div className="p-1">
+              {/* Render the selected provider form */}
+              <ProviderSetupModal
+                providerKey={
+                  selectedProvider && isModalOpen ? providerName : null
+                }
+                shouldMarkAsDefault={
+                  (onboardingState?.data.llmProviders ?? []).length === 0
+                }
+                onboardingActions={onboardingActions}
+                onOpenChange={handleModalClose}
+                onSuccess={() => {
+                  onboardingActions.updateData({
+                    llmProviders: [
+                      ...(onboardingState?.data.llmProviders ?? []),
+                      providerName,
+                    ],
+                  });
+                  onboardingActions.setButtonActive(true);
+                }}
+              />
+              {EditModal && editingProvider && (
+                <EditModal
+                  existingLlmProvider={editingProvider}
+                  onOpenChange={(open) => {
+                    if (!open) setEditingProviderId(null);
+                  }}
+                />
+              )}
+              <CardGrid gap={1}>
+                {isLoading
+                  ? Array.from(
+                      { length: ONBOARDING_LLM_PROVIDERS.length + 1 },
+                      (_, idx) => (
+                        <CardLoader key={idx} padding={2} rounding={3} />
+                      )
+                    )
+                  : onboardingProviders.map((llmDescriptor) => {
+                      const provider = getProvider(llmDescriptor.name);
+                      const { productName, companyName } =
+                        providerNames(provider);
+                      const isConnected =
+                        onboardingState.data.llmProviders?.includes(
+                          llmDescriptor.name
+                        ) ?? false;
+                      return (
                         <LLMProviderCard
+                          key={llmDescriptor.name}
+                          icon={provider.icon}
                           title={productName}
-                          subtitle={companyName}
-                          providerName={llmDescriptor.name}
-                          disabled={disabled}
-                          isConnected={onboardingState.data.llmProviders?.some(
-                            (provider) => provider === llmDescriptor.name
-                          )}
+                          description={companyName}
+                          actionLabel={t("llmStep.providerCard.connect.label")}
+                          actionIcon={SvgArrowExchange}
+                          isConnected={isConnected}
                           onClick={() =>
-                            handleProviderClick(llmDescriptor, false)
+                            isConnected
+                              ? openAdminPanel()
+                              : handleProviderClick(llmDescriptor, false)
+                          }
+                          onSettingsClick={() =>
+                            openProviderSettings(llmDescriptor.name)
                           }
                         />
-                      </div>
-                    );
-                  })}
-
-                  {/* Custom provider card */}
-                  <div className="basis-full @xl/llmcards:basis-[calc(50%-(--spacing(1))/2)] grow">
+                      );
+                    })}
+                {!isLoading && (
+                  // Spans both columns, closing the grid as one wide row.
+                  <div className="col-span-full">
                     <LLMProviderCard
-                      title={t("llmStep.customProvider.title")}
-                      subtitle={t("llmStep.customProvider.subtitle")}
-                      disabled={disabled}
-                      isConnected={onboardingState.data.llmProviders?.some(
-                        (provider) => provider === "custom"
-                      )}
-                      onClick={() => handleProviderClick(undefined, true)}
+                      icon={SvgMoreHorizontal}
+                      title={t("llmStep.moreProviders.title")}
+                      description={t("llmStep.moreProviders.description")}
+                      actionLabel={t("llmStep.moreProviders.button.label")}
+                      actionIcon={SvgExternalLink}
+                      onClick={openAdminPanel}
                     />
                   </div>
-                </>
-              )}
+                )}
+              </CardGrid>
             </div>
           }
           rounding={4}

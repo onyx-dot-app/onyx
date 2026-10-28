@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useTranslations } from "next-intl";
-import { SvgCpu } from "@opal/icons";
+import { SvgArrowExchange, SvgCpu } from "@opal/icons";
 import { Divider } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
 import { LLMProviderCard } from "@/lib/onboarding/components";
@@ -26,6 +26,7 @@ const craftKeys: string[] = CRAFT_PROVIDERS;
 
 export default function CraftLlmSetup() {
   const t = useTranslations("craft.onboarding.llmSetup");
+  const tOnboarding = useTranslations("onboarding");
   const providerNames = useProviderNames();
   const { openProviderModal } = useOnboarding();
   const { llmProviderOptions } = useLLMProviderOptions();
@@ -53,13 +54,16 @@ export default function CraftLlmSetup() {
       <Divider />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 w-full max-h-56 overflow-y-auto [&>*:last-child:nth-child(odd)]:col-span-full">
         {providerKeys.map((key) => {
-          const { productName, companyName } = providerNames(getProvider(key));
+          const provider = getProvider(key);
+          const { productName, companyName } = providerNames(provider);
           return (
             <LLMProviderCard
               key={key}
+              icon={provider.icon}
               title={productName}
-              subtitle={companyName}
-              providerName={key}
+              description={companyName}
+              actionLabel={tOnboarding("llmStep.providerCard.connect.label")}
+              actionIcon={SvgArrowExchange}
               onClick={() => openProviderModal(key)}
             />
           );

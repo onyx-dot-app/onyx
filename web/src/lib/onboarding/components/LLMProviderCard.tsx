@@ -1,134 +1,104 @@
 "use client";
 
-import { memo, useCallback } from "react";
+import { memo } from "react";
 import { useTranslations } from "next-intl";
-import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import Text from "@/refresh-components/texts/Text";
-import { noProp } from "@/lib/utils";
+import { Button, IconContainer, SelectCard } from "@opal/components";
+import { SvgCheckCircle, SvgSettings } from "@opal/icons";
+import { ContentAction, Section } from "@opal/layouts";
+import type { IconFunctionComponent } from "@opal/types";
 import { cn } from "@opal/utils";
-import { Disabled, Hoverable } from "@opal/core";
-import {
-  SvgArrowExchange,
-  SvgCheckCircle,
-  SvgServer,
-  SvgSettings,
-} from "@opal/icons";
-import { ModelIcon } from "@/lib/languageModels/components";
-import { Button, OverflowText } from "@opal/components";
+import { noProp } from "@/lib/utils";
 
 export interface LLMProviderCardProps {
+  icon: IconFunctionComponent;
   title: string;
-  subtitle: string;
-  providerName?: string;
-  disabled?: boolean;
+  description: string;
+  /** The top-right button's label, e.g. "Connect". */
+  actionLabel: string;
+  /** The top-right button's icon, after the label. */
+  actionIcon: IconFunctionComponent;
+  /** A connected card shows a check in place of the button. */
   isConnected?: boolean;
   onClick: () => void;
+  /** The connected card's settings button. Without it, the button acts as a card click. */
+  onSettingsClick?: () => void;
 }
 
+/**
+ * A provider to set up, laid out like the new-provider cards on the Language
+ * Models admin page: icon, name and company, and a tertiary action top right.
+ */
 function LLMProviderCardInner({
+  icon,
   title,
-  subtitle,
-  providerName,
-  disabled,
+  description,
+  actionLabel,
+  actionIcon,
   isConnected,
   onClick,
+  onSettingsClick,
 }: LLMProviderCardProps) {
   const t = useTranslations("onboarding");
-  const handleCardClick = useCallback(() => {
-    if (disabled) {
-      return;
-    }
-
-    if (isConnected) {
-      // If connected, redirect to admin page
-      window.location.href = ADMIN_ROUTES.LLM_MODELS.path;
-      return;
-    }
-
-    // If not connected, call onClick to open the form
-    onClick();
-  }, [disabled, isConnected, onClick]);
-
-  const handleSettingsClick = useCallback(
-    noProp(() => (window.location.href = ADMIN_ROUTES.LLM_MODELS.path)),
-    []
-  );
-
   return (
-    <Hoverable.Root group="llm-provider-card" height="full">
-      <Disabled disabled={disabled} allowClick>
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={handleCardClick}
-          onKeyDown={(e) => {
-            if (!disabled && (e.key === "Enter" || e.key === " ")) {
-              e.preventDefault();
-              handleCardClick();
-            }
-          }}
-          className={cn(
-            "flex justify-between h-full w-full p-1 rounded-12 border border-border-01 bg-background-neutral-01 transition-colors text-start",
-            !disabled && "hover:bg-background-neutral-02 cursor-pointer"
-          )}
-        >
-          <div className="flex gap-1 p-1 flex-1 min-w-0">
-            <div className="flex items-start h-full pt-0.5">
-              {providerName ? (
-                <ModelIcon provider={providerName} size={16} className="" />
-              ) : (
-                <SvgServer className="w-4 h-4 stroke-text-04" />
-              )}
-            </div>
-            <div className="min-w-0 flex flex-col justify-center">
-              <Text as="p" text04 mainUiAction>
-                {title}
-              </Text>
-              <OverflowText
-                as="p"
-                textPosition="text-start"
-                font="secondary-body"
-                color="text-03"
-              >
-                {subtitle}
-              </OverflowText>
-            </div>
-          </div>
-          {isConnected ? (
-            <div className="flex items-start gap-1 p-1">
-              <Hoverable.Item
-                group="llm-provider-card"
-                variant="appear-on-hover"
-              >
-                <Button
-                  prominence="tertiary"
-                  icon={SvgSettings}
-                  disabled={disabled}
-                  onClick={handleSettingsClick}
-                  aria-label={t(
-                    "llmStep.providerCard.settingsButton.ariaLabel"
+    <SelectCard
+      state={isConnected ? "filled" : "empty"}
+      padding={1}
+      // 12px: concentric inside the step card's 16px corners and 4px inset.
+      rounding={3}
+      onClick={onClick}
+    >
+      <ContentAction
+        icon={icon}
+        title={title}
+        description={description}
+        titleMaxLines={1}
+        descriptionMaxLines={1}
+        sizePreset="main-ui"
+        variant="section"
+        padding={1}
+        rightChildren={
+          isConnected ? (
+            // 28px tall: the md button, and the check boxed to match it.
+            <Section
+              flexDirection="row"
+              justifyContent="start"
+              alignItems="start"
+              gap={0}
+              width="fit"
+              height="auto"
+            >
+              <Button
+                prominence="tertiary"
+                size="md"
+                icon={SvgSettings}
+                tooltip={t("llmStep.providerCard.settingsButton.ariaLabel")}
+                aria-label={t("llmStep.providerCard.settingsButton.ariaLabel")}
+                onClick={noProp(onSettingsClick ?? onClick)}
+              />
+              <Section padding={1} width="fit" height="auto">
+                <IconContainer
+                  icon={({ className, ...props }) => (
+                    <SvgCheckCircle
+                      className={cn(className, "stroke-status-success-05")}
+                      {...props}
+                    />
                   )}
                 />
-              </Hoverable.Item>
-              <div className="p-1">
-                <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
-              </div>
-            </div>
+              </Section>
+            </Section>
           ) : (
-            <div className="flex items-start p-1">
-              <div className="flex items-center gap-0.5">
-                <Text as="p" text03 secondaryAction>
-                  {t("llmStep.providerCard.connect.label")}
-                </Text>
-                <div className="p-0.5">
-                  <SvgArrowExchange className="w-4 h-4 stroke-text-03" />
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </Disabled>
-    </Hoverable.Root>
+            <Button
+              rightIcon={actionIcon}
+              prominence="tertiary"
+              size="md"
+              onClick={noProp(onClick)}
+            >
+              {actionLabel}
+            </Button>
+          )
+        }
+      />
+    </SelectCard>
   );
 }
 

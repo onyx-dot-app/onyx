@@ -3,6 +3,7 @@ import { OnboardingStep } from "@/lib/onboarding/types";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { SvgGlobe, SvgImage, SvgUsers } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
+import { LLMProviderName } from "@/lib/languageModels/types";
 
 // Modules cannot call hooks, so the configs below hold message keys (inside the
 // `onboarding` namespace) and the consuming components resolve them with `t`.
@@ -84,3 +85,13 @@ export const FINAL_SETUP_CONFIG = [
     buttonHref: ADMIN_ROUTES.USERS.path,
   },
 ] as const satisfies readonly FinalSetupItemConfig[];
+
+/** The providers the LLM step offers, in order. The rest are in the admin panel. */
+export const ONBOARDING_LLM_PROVIDERS: readonly LLMProviderName[] = [
+  LLMProviderName.OPENAI,
+  LLMProviderName.ANTHROPIC,
+  LLMProviderName.VERTEX_AI,
+  LLMProviderName.LITELLM_PROXY,
+  LLMProviderName.OLLAMA_CHAT,
+  LLMProviderName.LM_STUDIO,
+];

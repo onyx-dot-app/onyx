@@ -15846,13 +15846,16 @@
       "connectedCount": {
         "label": "{count, plural, one {# model connected} other {# models connected}}"
       },
-      "customProvider": {
-        "subtitle": "LiteLLM Compatible APIs",
-        "title": "Custom LLM Provider"
-      },
       "description": "{appName} supports both self-hosted models and popular providers.",
       "edit": {
         "ariaLabel": "Edit LLM providers"
+      },
+      "moreProviders": {
+        "button": {
+          "label": "View"
+        },
+        "description": "Set up in Admin Panel",
+        "title": "More Providers"
       },
       "providerCard": {
         "connect": {

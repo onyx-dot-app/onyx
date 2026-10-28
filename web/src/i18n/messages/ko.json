@@ -15846,13 +15846,16 @@
       "connectedCount": {
         "label": "{count, plural, one {모델 #개 연결됨} other {모델 #개 연결됨}}"
       },
-      "customProvider": {
-        "subtitle": "LiteLLM 호환 API",
-        "title": "사용자 지정 LLM 제공자"
-      },
       "description": "{appName}는 자체 호스팅 모델과 널리 쓰이는 제공자를 모두 지원합니다.",
       "edit": {
         "ariaLabel": "LLM 제공자 편집"
+      },
+      "moreProviders": {
+        "button": {
+          "label": "보기"
+        },
+        "description": "관리자 패널에서 설정",
+        "title": "더 많은 제공업체"
       },
       "providerCard": {
         "connect": {
