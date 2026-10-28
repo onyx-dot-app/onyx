@@ -9,7 +9,14 @@ from pydantic import ValidationError
 
 from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent, AgentEventType, ToolEndEvent
-from onyx.agents.models import AgentState, PreparedStep, RunState, StepInput, StepResult
+from onyx.agents.models import (
+    AgentState,
+    PreparedStep,
+    RunState,
+    StepInput,
+    StepResult,
+    ToolCallContext,
+)
 from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import (
     AgentTool,
@@ -120,6 +127,80 @@ def test_parallel_tool_completes_before_an_earlier_blocked_call() -> None:
             for message in run.snapshot().messages
             if isinstance(message, ToolResultMessage)
         ] == ["0", "1"]
+    finally:
+        release_first.set()
+        run.cancel()
+        assert run.wait_for_idle(3)
+
+
+def test_sequential_calls_wait_for_their_tool_without_blocking_other_tools() -> None:
+    first_started = threading.Event()
+    release_first = threading.Event()
+    first_finalized = threading.Event()
+    second_started = threading.Event()
+    other_completed = threading.Event()
+    completions: list[str] = []
+
+    def execute(invocation: ToolInvocation) -> ToolResult:
+        if invocation.call_id == "0":
+            first_started.set()
+            assert release_first.wait(5)
+        else:
+            second_started.set()
+            assert first_finalized.is_set()
+        return ToolResult(content=invocation.call_id)
+
+    def execute_other(_invocation: ToolInvocation) -> ToolResult:
+        assert first_started.wait(5)
+        return ToolResult(content="independent")
+
+    def finalize(context: ToolCallContext, result: ToolResult) -> ToolResult:
+        if context.call.id == "0":
+            first_finalized.set()
+            return ToolResult(content="first finalized")
+        return result
+
+    def observe(event: AgentEvent) -> None:
+        if isinstance(event, ToolEndEvent):
+            completions.append(event.tool_call.id)
+            if event.tool_call.id == "other":
+                other_completed.set()
+
+    message = calls(2)
+    message.content.append(ToolCall(id="other", name="other", arguments={}))
+    run = Agent(
+        scripted(message, answer()),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        after_tool_call=finalize,
+        tools=[
+            echo(execute, sequential=True),
+            AgentTool(
+                definition=ToolDefinition(name="other", description="", parameters={}),
+                execute=execute_other,
+            ),
+        ],
+    ).start(max_steps=2, on_event=observe)
+    try:
+        assert other_completed.wait(3)
+        assert completions == ["other"]
+        assert not second_started.is_set()
+        assert not first_finalized.is_set()
+        release_first.set()
+        assert run.result(3).output.text == "done"
+        assert run.wait_for_idle(3)
+        assert second_started.is_set()
+        assert completions == ["other", "0", "1"]
+        results = [
+            message
+            for message in run.snapshot().messages
+            if isinstance(message, ToolResultMessage)
+        ]
+        assert [(result.tool_call_id, result.text) for result in results] == [
+            ("0", "first finalized"),
+            ("1", "1"),
+            ("other", "independent"),
+        ]
+        assert all(not result.is_error for result in results)
     finally:
         release_first.set()
         run.cancel()

@@ -74,13 +74,6 @@ class ToolBatch:
                 f"A step requires unique tool call IDs and at most {MAX_TOOL_CALLS_PER_STEP} calls"
             )
         self.tools = {tool.name: tool for tool in prepared.tools}
-        self.sequential = any(
-            (
-                tool.execution_mode == ToolExecutionMode.SEQUENTIAL
-                for call in self.calls
-                if (tool := self.tools.get(call.name)) is not None
-            )
-        )
         self.call_indices = {call.id: index for index, call in enumerate(self.calls)}
         self.futures: dict[str, Future[ToolOutcome]] = {}
 
@@ -171,16 +164,18 @@ class ToolBatch:
                     results = self._raw_results()
                     if len(self.progress.finalized_tool_call_ids) == len(self.calls):
                         return True
-                    next_call_id = next(
-                        call.id
-                        for call in self.calls
-                        if call.id not in self.progress.finalized_tool_call_ids
-                    )
+                    blocked_tool_names: set[str] = set()
                     for index, call in enumerate(self.calls):
+                        if call.id in self.progress.finalized_tool_call_ids:
+                            continue
+                        tool = self.tools.get(call.name)
+                        if tool and tool.execution_mode == ToolExecutionMode.SEQUENTIAL:
+                            if call.name in blocked_tool_names:
+                                continue
+                            # Pending input and child waits retain their place in order.
+                            blocked_tool_names.add(call.name)
                         if call.id in results or call.id in self.futures:
                             continue
-                        if self.sequential and call.id != next_call_id:
-                            break
                         with self.run.execution_lock:
                             pending = self.progress.pending_tool_calls.get(call.id)
                             suspend = self.run.suspension_requested
@@ -247,23 +242,24 @@ class ToolBatch:
         group = [call]
         arguments = call.model_copy(deep=True).arguments
         for candidate in self.calls[index + 1 :]:
+            if candidate.name != call.name:
+                continue
             eligible = (
-                candidate.name == call.name
-                and candidate.id not in results
+                candidate.id not in results
                 and candidate.id not in self.futures
                 and candidate.id not in self.progress.pending_tool_calls
                 and candidate.arguments_complete
                 and not candidate.argument_error
             )
             if not eligible:
-                if self.sequential:
+                if tool.execution_mode == ToolExecutionMode.SEQUENTIAL:
                     break
                 continue
             merged = tool.merge_arguments(
                 arguments, candidate.model_copy(deep=True).arguments
             )
             if merged is None:
-                if self.sequential:
+                if tool.execution_mode == ToolExecutionMode.SEQUENTIAL:
                     break
                 continue
             arguments = merged
