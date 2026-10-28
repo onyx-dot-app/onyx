@@ -15891,16 +15891,19 @@
       }
     },
     "steps": {
-      "complete": {
-        "title": "You're all set, review the optional settings or click Finish Setup"
-      },
       "llmSetup": {
-        "title": "Almost there! Connect your models to start chatting."
+        "title": "Connect a model to start chatting."
       },
       "name": {
-        "title": "Let's take a moment to get you set up."
+        "title": "Tell us what to call you."
       },
-      "welcome": {
+      "optionalSetup": {
+        "title": "Set up a few optional extras."
+      },
+      "postStep": {
+        "title": "You're all set."
+      },
+      "preStep": {
         "title": "Let's take a moment to get you set up."
       }
     }

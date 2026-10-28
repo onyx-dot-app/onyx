@@ -122,7 +122,7 @@ function useOnboardingState(activeAgent?: MinimalAgent): {
       ? OnboardingStep.Name
       : !hasLlmProviders
         ? OnboardingStep.LlmSetup
-        : OnboardingStep.Complete;
+        : OnboardingStep.PostStep;
     if (
       savedStep !== null &&
       STEP_CONFIG[savedStep].index <= STEP_CONFIG[furthestReachable].index
@@ -143,7 +143,7 @@ function useOnboardingState(activeAgent?: MinimalAgent): {
     // Determine the earliest incomplete step
     // Name step is incomplete if userName is not set
     if (!userName) {
-      // Stay at Welcome/Name step (no dispatch needed, this is the initial state)
+      // Stay at the pre-step (no dispatch needed, this is the initial state)
       return;
     }
 
@@ -160,14 +160,14 @@ function useOnboardingState(activeAgent?: MinimalAgent): {
       return;
     }
 
-    // All steps complete - go to Complete step
+    // The required steps are done - go to the optional setup step
     dispatch({
       type: OnboardingActionType.SET_BUTTON_ACTIVE,
       isButtonActive: true,
     });
     dispatch({
       type: OnboardingActionType.GO_TO_STEP,
-      step: OnboardingStep.Complete,
+      step: OnboardingStep.OptionalSetup,
     });
   }, [llmProviders, isLoadingProviders, userName, hasLlmProviders, user]);
 
@@ -179,7 +179,7 @@ function useOnboardingState(activeAgent?: MinimalAgent): {
 
     // A name already filled in (saved earlier or typed before) lets the
     // Name step continue without another keystroke.
-    if (state.currentStep === OnboardingStep.Welcome) {
+    if (state.currentStep === OnboardingStep.PreStep) {
       dispatch({
         type: OnboardingActionType.SET_BUTTON_ACTIVE,
         isButtonActive: !!state.data.userName?.trim(),
@@ -434,7 +434,7 @@ export function useShowOnboarding({
   ]);
 
   // Save the step while onboarding is showing, so a return resumes it. Users
-  // who never see onboarding get nothing saved, and neither does Welcome:
+  // who never see onboarding get nothing saved, and neither does the pre-step:
   // only a started onboarding has progress to resume. Only admins see the
   // full flow, so only their progress is saved.
   // On a user switch, the first run still holds the previous user's step, so
@@ -449,7 +449,7 @@ export function useShowOnboarding({
       !showOnboarding ||
       !isAdmin ||
       userId === undefined ||
-      onboardingState.currentStep === OnboardingStep.Welcome
+      onboardingState.currentStep === OnboardingStep.PreStep
     ) {
       return;
     }

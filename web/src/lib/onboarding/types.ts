@@ -1,8 +1,14 @@
+/**
+ * The onboarding sequence: a pre-step (an introduction), the numbered steps
+ * 1 to n, then a post-step (the conclusion). Only the numbered steps count
+ * toward progress and the "Step x of n" counter.
+ */
 export enum OnboardingStep {
-  Welcome = "welcome",
+  PreStep = "pre-step",
   Name = "name",
   LlmSetup = "llm-setup",
-  Complete = "complete",
+  OptionalSetup = "optional-setup",
+  PostStep = "post-step",
 }
 
 export interface OnboardingData {

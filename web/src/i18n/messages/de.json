@@ -15891,16 +15891,19 @@
       }
     },
     "steps": {
-      "complete": {
-        "title": "Alles bereit. Prüfen Sie die optionalen Einstellungen oder klicken Sie auf „Einrichtung abschließen“"
-      },
       "llmSetup": {
-        "title": "Fast geschafft! Verbinden Sie Ihre Modelle, um mit dem Chatten zu beginnen."
+        "title": "Verbinden Sie ein Modell, um zu chatten."
       },
       "name": {
-        "title": "Nehmen wir uns einen Moment Zeit für die Einrichtung."
+        "title": "Sagen Sie uns, wie wir Sie nennen sollen."
       },
-      "welcome": {
+      "optionalSetup": {
+        "title": "Richten Sie einige optionale Extras ein."
+      },
+      "postStep": {
+        "title": "Alles ist bereit."
+      },
+      "preStep": {
         "title": "Nehmen wir uns einen Moment Zeit für die Einrichtung."
       }
     }

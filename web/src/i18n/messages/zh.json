@@ -15891,16 +15891,19 @@
       }
     },
     "steps": {
-      "complete": {
-        "title": "全部设置完成，请查看可选设置或点击“完成设置”"
-      },
       "llmSetup": {
-        "title": "就快好了！连接您的模型即可开始对话。"
+        "title": "连接一个模型即可开始聊天。"
       },
       "name": {
-        "title": "花点时间来完成设置吧。"
+        "title": "告诉我们该如何称呼您。"
       },
-      "welcome": {
+      "optionalSetup": {
+        "title": "设置一些可选功能。"
+      },
+      "postStep": {
+        "title": "一切就绪。"
+      },
+      "preStep": {
         "title": "花点时间来完成设置吧。"
       }
     }

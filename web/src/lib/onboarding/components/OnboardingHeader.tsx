@@ -2,7 +2,13 @@
 
 import { memo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { STEP_CONFIG, STEP_NAVIGATION } from "@/lib/onboarding/constants";
+import {
+  STEP_CONFIG,
+  STEP_NAVIGATION,
+  TOTAL_STEPS,
+  stepNumber,
+  stepProgress,
+} from "@/lib/onboarding/constants";
 import {
   OnboardingActions,
   OnboardingState,
@@ -27,31 +33,24 @@ function OnboardingHeader({
 }: OnboardingHeaderProps) {
   const t = useTranslations("onboarding");
   const tCommon = useTranslations("common");
-  const iconPercentage =
-    STEP_CONFIG[onboardingState.currentStep].iconPercentage;
-  const isWelcomeStep = onboardingState.currentStep === OnboardingStep.Welcome;
-  const isCompleteStep =
-    onboardingState.currentStep === OnboardingStep.Complete;
-  // The main button reads Next on every step but the last.
-  const stepButtonText = isCompleteStep
+  const progress = stepProgress(onboardingState.currentStep);
+  const currentNumber = stepNumber(onboardingState.currentStep);
+  const isPostStep = onboardingState.currentStep === OnboardingStep.PostStep;
+  // The main button reads Next on every step but the post-step.
+  const stepButtonText = isPostStep
     ? t("header.finishButton.label")
     : t("header.nextButton.label");
-  // While the counter fades out on the way back to Welcome, it keeps the last
-  // real step number instead of showing step 0.
-  const [counterStepIndex, setCounterStepIndex] = useState(
-    onboardingState.stepIndex
-  );
-  if (
-    onboardingState.stepIndex > 0 &&
-    onboardingState.stepIndex !== counterStepIndex
-  ) {
-    setCounterStepIndex(onboardingState.stepIndex);
+  // The counter shows on the numbered steps only. While it fades out on the
+  // pre-step or post-step, it keeps the last number it showed.
+  const [counterNumber, setCounterNumber] = useState(currentNumber ?? 1);
+  if (currentNumber !== null && currentNumber !== counterNumber) {
+    setCounterNumber(currentNumber);
   }
   const hasPreviousStep =
     STEP_NAVIGATION[onboardingState.currentStep].prev !== undefined;
 
   function handleButtonClick() {
-    if (isCompleteStep) handleFinishOnboarding();
+    if (isPostStep) handleFinishOnboarding();
     else onboardingActions.nextStep();
   }
 
@@ -64,10 +63,10 @@ function OnboardingHeader({
     >
       <Section alignItems="start" height="fit">
         <ContentAction
-          icon={(props) => (
-            <SvgProgressCircle value={iconPercentage} {...props} />
-          )}
+          icon={(props) => <SvgProgressCircle value={progress} {...props} />}
           title={t(STEP_CONFIG[onboardingState.currentStep].titleKey)}
+          // A new prompt fades in on each step.
+          titleKey={onboardingState.currentStep}
           sizePreset="main-ui"
           variant="body"
           color="muted"
@@ -76,12 +75,12 @@ function OnboardingHeader({
           rightChildren={
             stepButtonText ? (
               <Section flexDirection="row">
-                {/* The step counter and back button appear past Welcome. */}
-                <Presence show={!isWelcomeStep} from="end" width="fit">
+                {/* The step counter shows on the numbered steps only. */}
+                <Presence show={currentNumber !== null} from="end" width="fit">
                   <Text as="p" font="main-ui-body" color="text-03">
                     {t("header.progress.label", {
-                      current: counterStepIndex,
-                      total: onboardingState.totalSteps,
+                      current: counterNumber,
+                      total: TOTAL_STEPS,
                     })}
                   </Text>
                 </Presence>

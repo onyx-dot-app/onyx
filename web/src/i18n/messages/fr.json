@@ -15891,16 +15891,19 @@
       }
     },
     "steps": {
-      "complete": {
-        "title": "Tout est prêt. Consultez les paramètres facultatifs ou cliquez sur Terminer la configuration"
-      },
       "llmSetup": {
-        "title": "Presque terminé ! Connectez vos modèles pour commencer à discuter."
+        "title": "Connectez un modèle pour commencer à discuter."
       },
       "name": {
-        "title": "Prenons un moment pour vous configurer."
+        "title": "Dites-nous comment vous appeler."
       },
-      "welcome": {
+      "optionalSetup": {
+        "title": "Configurez quelques options supplémentaires."
+      },
+      "postStep": {
+        "title": "Tout est prêt."
+      },
+      "preStep": {
         "title": "Prenons un moment pour vous configurer."
       }
     }

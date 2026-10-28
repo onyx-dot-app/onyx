@@ -173,6 +173,8 @@ type SmContentProps = Omit<
   orientation?: ContentSmOrientation;
   /** ARIA role forwarded to the title text element. */
   role?: string;
+  /** Identity of the title; a change fades the new title in. See ContentSm. */
+  titleKey?: React.Key;
 };
 
 type ContentProps =

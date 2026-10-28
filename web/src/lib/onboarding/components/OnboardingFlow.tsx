@@ -29,14 +29,15 @@ interface StepContentProps {
   actions: OnboardingActions;
 }
 
-/** The card for one step. Welcome has no card of its own. */
+/** The card for one step. The pre-step and post-step have none, so moving to
+ *  the post-step animates the last card out and leaves nothing behind. */
 function StepContent({ step, state, actions }: StepContentProps) {
   switch (step) {
     case OnboardingStep.Name:
       return <NameStep state={state} actions={actions} />;
     case OnboardingStep.LlmSetup:
       return <LLMStep state={state} actions={actions} />;
-    case OnboardingStep.Complete:
+    case OnboardingStep.OptionalSetup:
       return <FinalStep />;
     default:
       return null;
