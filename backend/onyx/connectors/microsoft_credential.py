@@ -1,5 +1,5 @@
 """The Microsoft credential family: one Entra app registration shared by
-SharePoint, OneDrive, Outlook, and Teams.
+SharePoint, OneDrive, Outlook, Teams, and Azure Data Lake Storage.
 
 Each source prefixes the same credential keys (``sp_client_id``,
 ``teams_client_id``, ...), so a codec maps its prefix to the family fields. The
@@ -50,12 +50,17 @@ SHAREPOINT_KEY_PREFIX = "sp"
 ONEDRIVE_KEY_PREFIX = "onedrive"
 OUTLOOK_KEY_PREFIX = "outlook"
 TEAMS_KEY_PREFIX = "teams"
+AZURE_DATALAKE_KEY_PREFIX = "adls"
 _KEY_PREFIXES = (
     SHAREPOINT_KEY_PREFIX,
     ONEDRIVE_KEY_PREFIX,
     OUTLOOK_KEY_PREFIX,
     TEAMS_KEY_PREFIX,
+    AZURE_DATALAKE_KEY_PREFIX,
 )
+# Azure Data Lake's storage-account key: not an app registration, so a
+# credential that uses it stays in the Azure Data Lake shape.
+ACCOUNT_KEY_AUTHENTICATION_METHOD = "account_key"
 
 
 class MicrosoftCredentialCodec(FamilyCredentialCodec[MicrosoftCredential]):
@@ -117,3 +122,11 @@ class MicrosoftCredentialCodec(FamilyCredentialCodec[MicrosoftCredential]):
             if self._key_prefix == ONEDRIVE_KEY_PREFIX:
                 source_json[_ONEDRIVE_AUTHENTICATION_METHOD_KEY] = authentication_method
         return source_json
+
+
+class AzureDataLakeCredentialCodec(MicrosoftCredentialCodec):
+    def stores_in_family(self, source_json: dict[str, Any]) -> bool:
+        return (
+            source_json.get(_AUTHENTICATION_METHOD_KEY)
+            != ACCOUNT_KEY_AUTHENTICATION_METHOD
+        )

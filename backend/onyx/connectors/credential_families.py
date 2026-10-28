@@ -25,10 +25,12 @@ from onyx.connectors.credential_family_base import (
 )
 from onyx.connectors.google_credential import GoogleCredentialCodec
 from onyx.connectors.microsoft_credential import (
+    AZURE_DATALAKE_KEY_PREFIX,
     ONEDRIVE_KEY_PREFIX,
     OUTLOOK_KEY_PREFIX,
     SHAREPOINT_KEY_PREFIX,
     TEAMS_KEY_PREFIX,
+    AzureDataLakeCredentialCodec,
     MicrosoftCredentialCodec,
 )
 
@@ -41,6 +43,9 @@ FAMILY_CREDENTIAL_CODECS: dict[DocumentSource, FamilyCredentialCodec[Any]] = {
     DocumentSource.ONEDRIVE: MicrosoftCredentialCodec(ONEDRIVE_KEY_PREFIX),
     DocumentSource.OUTLOOK: MicrosoftCredentialCodec(OUTLOOK_KEY_PREFIX),
     DocumentSource.TEAMS: MicrosoftCredentialCodec(TEAMS_KEY_PREFIX),
+    DocumentSource.AZURE_DATALAKE: AzureDataLakeCredentialCodec(
+        AZURE_DATALAKE_KEY_PREFIX
+    ),
 }
 
 
@@ -115,8 +120,8 @@ def to_stored_credential_json(
     """The JSON to store when ``source`` writes ``source_json``.
 
     ``current_stored_json`` is ``None`` for a new credential. A new credential of
-    a family source is stored in the family's shape. An existing credential keeps
-    the shape it has.
+    a family source is stored in the family's shape, unless its codec keeps it in
+    the source's own shape. An existing credential keeps the shape it has.
     """
     if CREDENTIAL_FAMILY_KEY in source_json:
         raise ValueError(f"'{CREDENTIAL_FAMILY_KEY}' is a reserved credential key.")
@@ -137,7 +142,11 @@ def to_stored_credential_json(
                 f"The {source.value} source cannot write this "
                 f"{current_family.value} credential."
             )
-    elif codec is None or current_stored_json is not None:
+    elif (
+        codec is None
+        or current_stored_json is not None
+        or not codec.stores_in_family(source_json)
+    ):
         return source_json
     try:
         family_credential = codec.to_family(source_json)
