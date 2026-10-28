@@ -1,7 +1,8 @@
 /**
- * The onboarding sequence: a pre-step (an introduction), the numbered steps
- * 1 to n, then a post-step (the conclusion). Only the numbered steps count
- * toward progress and the "Step x of n" counter.
+ * The onboarding sequence, steps 0 to n: step 0 (`PreStep`, the
+ * introduction), the numbered steps 1 to n-1, then the final step n
+ * (`PostStep`). The counter reads "Step i of n-1" on the numbered steps.
+ * Progress is i/n, so the final step is n/n.
  */
 export enum OnboardingStep {
   PreStep = "pre-step",

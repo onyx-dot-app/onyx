@@ -20,7 +20,7 @@ import {
   IconContainer,
   Presence,
   Text,
-  type PresenceSide,
+  type PresenceSwapDirection,
 } from "@opal/components";
 import { SvgChevronLeft, SvgProgressCircle, SvgX } from "@opal/icons";
 import { Section } from "@opal/layouts";
@@ -63,18 +63,17 @@ function OnboardingHeader({
   if (currentNumber !== null && currentNumber !== counterNumber) {
     setCounterNumber(currentNumber);
   }
-  // The prompt comes in from the end going forward, and from the start going
-  // back.
-  const [promptStep, setPromptStep] = useState(onboardingState.currentStep);
-  const [promptFrom, setPromptFrom] = useState<PresenceSide>("end");
-  if (onboardingState.currentStep !== promptStep) {
-    setPromptFrom(
+  // The prompt and the main button swap in the direction of the step change.
+  const [lastStep, setLastStep] = useState(onboardingState.currentStep);
+  const [direction, setDirection] = useState<PresenceSwapDirection>("forward");
+  if (onboardingState.currentStep !== lastStep) {
+    setDirection(
       STEP_CONFIG[onboardingState.currentStep].index >
-        STEP_CONFIG[promptStep].index
-        ? "end"
-        : "start"
+        STEP_CONFIG[lastStep].index
+        ? "forward"
+        : "back"
     );
-    setPromptStep(onboardingState.currentStep);
+    setLastStep(onboardingState.currentStep);
   }
   const hasPreviousStep =
     STEP_NAVIGATION[onboardingState.currentStep].prev !== undefined;
@@ -111,15 +110,15 @@ function OnboardingHeader({
           <ProgressContext value={progress}>
             <IconContainer icon={ProgressIcon} />
           </ProgressContext>
-          <Presence
-            key={onboardingState.currentStep}
-            from={promptFrom}
-            width="fit"
+          <Presence.Swap
+            swapKey={onboardingState.currentStep}
+            direction={direction}
+            axis="inline"
           >
             <Text font="main-ui-body" color="text-03">
               {t(STEP_CONFIG[onboardingState.currentStep].titleKey)}
             </Text>
-          </Presence>
+          </Presence.Swap>
         </Section>
         {stepButtonText ? (
           <Section flexDirection="row" justifyContent="end" width="fit">
@@ -142,12 +141,21 @@ function OnboardingHeader({
                   onClick={onboardingActions.prevStep}
                 />
               </Presence>
-              <Button
-                disabled={!onboardingState.isButtonActive}
-                onClick={handleButtonClick}
+              {/* Next turns into Finish Setup on the final step. The swap
+                  animates the width, so the wider label does not push the
+                  buttons beside it. */}
+              <Presence.Swap
+                swapKey={isPostStep ? "finish" : "next"}
+                direction={direction}
+                axis="inline"
               >
-                {stepButtonText}
-              </Button>
+                <Button
+                  disabled={!onboardingState.isButtonActive}
+                  onClick={handleButtonClick}
+                >
+                  {stepButtonText}
+                </Button>
+              </Presence.Swap>
             </Section>
           </Section>
         ) : (
