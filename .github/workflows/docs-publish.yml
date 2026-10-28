@@ -103,15 +103,22 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           REPO: ${{ github.repository }}
         run: |
-          git config user.name "onyx-docs-publish[bot]"
-          git config user.email "onyx-docs-publish[bot]@users.noreply.github.com"
-          git add -A documentation
-          # Generated files are gitignored on branches; docs/live must contain them.
-          git add -f documentation/assets/overview/core_features/connectors documentation/assets/logo \
-            documentation/assets/icons documentation/developers/api_reference/openapi.json
-          git commit -q -m "docs: publish $TAG (documentation/ from $DOCS_REF)"
+          # docs/live holds only documentation/ (with the gitignored generated files), so the
+          # push never touches workflow files and needs only contents: write.
+          export GIT_INDEX_FILE="$RUNNER_TEMP/docs-live.index"
+          git read-tree --empty
+          git add -f documentation
+          tree="$(git write-tree)"
+          unset GIT_INDEX_FILE
+          parent=()
+          if git rev-parse -q --verify origin/docs/live >/dev/null; then
+            parent=(-p origin/docs/live)
+          fi
+          commit="$(git -c user.name="onyx-docs-publish[bot]" \
+            -c user.email="onyx-docs-publish[bot]@users.noreply.github.com" \
+            commit-tree "$tree" "${parent[@]}" -m "docs: publish $TAG (documentation/ from $DOCS_REF)")"
           gh auth setup-git
-          git push --force "https://github.com/${REPO}.git" HEAD:refs/heads/docs/live
+          git push "https://github.com/${REPO}.git" "$commit:refs/heads/docs/live"
 
       - name: Deploy on Mintlify
         env:
