@@ -8,14 +8,14 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import ColumnElement, delete, func, or_, select, update
+from sqlalchemy import ColumnElement, delete, func, or_, select, true, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine.cursor import CursorResult
 from sqlalchemy.orm import Session, joinedload
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.connector_edit_requests import request_retry_delay
-from onyx.db.enums import PermissionSyncStatus
+from onyx.db.enums import ConnectorCredentialPairStatus, PermissionSyncStatus
 from onyx.db.models import (
     Connector,
     ConnectorCredentialPair,
@@ -187,16 +187,18 @@ def _open_cc_pair_ids(model: _AttemptModel, db_session: Session) -> set[int]:
     }
 
 
-def _cancel_open_attempt(
+def _cancel_open_attempt_where__no_commit(
     model: _AttemptModel,
     connector_credential_pair_id: int,
     db_session: Session,
+    condition: ColumnElement[bool],
     reason: str,
 ) -> int | None:
-    attempt_id = db_session.execute(
+    return db_session.execute(
         update(model)
         .where(model.connector_credential_pair_id == connector_credential_pair_id)
         .where(model.status.in_(_OPEN_STATUSES))
+        .where(condition)
         .values(
             status=PermissionSyncStatus.CANCELED,
             time_finished=func.now(),
@@ -204,6 +206,17 @@ def _cancel_open_attempt(
         )
         .returning(model.id)
     ).scalar_one_or_none()
+
+
+def _cancel_open_attempt(
+    model: _AttemptModel,
+    connector_credential_pair_id: int,
+    db_session: Session,
+    reason: str,
+) -> int | None:
+    attempt_id = _cancel_open_attempt_where__no_commit(
+        model, connector_credential_pair_id, db_session, true(), reason
+    )
     db_session.commit()
     return attempt_id
 
@@ -214,8 +227,18 @@ def try_create_doc_permission_sync_attempt(
     db_session: Session,
 ) -> int | None:
     """Creates a NOT_STARTED attempt for a doc permission sync about to be
-    dispatched. Returns None when the cc_pair already has an open attempt: the
-    partial unique index on open attempts is the per-cc_pair sync lock."""
+    dispatched. Returns None when the cc_pair already has an open attempt (the
+    partial unique index on open attempts is the per-cc_pair sync lock) or is
+    paused. The status read waits for a pause that holds the pair's row lock,
+    so a pause either cancels this attempt or is seen here."""
+    status = db_session.scalar(
+        select(ConnectorCredentialPair.status)
+        .where(ConnectorCredentialPair.id == connector_credential_pair_id)
+        .with_for_update(read=True, key_share=True)
+    )
+    if status == ConnectorCredentialPairStatus.PAUSED:
+        db_session.commit()
+        return None
     return _try_create_attempt(
         DocPermissionSyncAttempt,
         connector_credential_pair_id,
@@ -254,6 +277,50 @@ def cancel_open_doc_permission_sync_attempt(
     A worker still running it loses its lease and stops. Returns its ID."""
     return _cancel_open_attempt(
         DocPermissionSyncAttempt, connector_credential_pair_id, db_session, reason
+    )
+
+
+def lock_open_doc_permission_sync_attempt__no_commit(
+    connector_credential_pair_id: int,
+    db_session: Session,
+) -> int | None:
+    """Row-locks the cc_pair's open attempt, if any, until the caller commits,
+    and returns its ID. Waits for the sync's writes in flight, which hold a
+    share lock on it. The row stays unchanged, so a dispatch that meets it
+    still sees an open attempt and creates none, without waiting."""
+    return db_session.execute(
+        select(DocPermissionSyncAttempt.id)
+        .where(
+            DocPermissionSyncAttempt.connector_credential_pair_id
+            == connector_credential_pair_id
+        )
+        .where(DocPermissionSyncAttempt.status.in_(_OPEN_STATUSES))
+        # FOR NO KEY UPDATE, the lock the cancel's UPDATE takes
+        .with_for_update(key_share=True)
+    ).scalar_one_or_none()
+
+
+def cancel_locked_or_queued_doc_permission_sync_attempt__no_commit(
+    connector_credential_pair_id: int,
+    locked_attempt_id: int | None,
+    db_session: Session,
+    reason: str,
+) -> int | None:
+    """Marks CANCELED the attempt the caller locked with
+    lock_open_doc_permission_sync_attempt__no_commit, or the cc_pair's queued
+    attempt. A running attempt the caller did not lock is left alone, so this
+    never waits on a sync's writes. Until the caller commits the row stays
+    locked, so a worker that writes a failure waits and then keeps the cancel.
+    Returns its ID."""
+    target = DocPermissionSyncAttempt.status == PermissionSyncStatus.NOT_STARTED
+    if locked_attempt_id is not None:
+        target = or_(target, DocPermissionSyncAttempt.id == locked_attempt_id)
+    return _cancel_open_attempt_where__no_commit(
+        DocPermissionSyncAttempt,
+        connector_credential_pair_id,
+        db_session,
+        target,
+        reason,
     )
 
 
@@ -438,10 +505,11 @@ def is_doc_permission_sync_attempt_resumable(
     attempt_id: int,
     current_attempt_id: int,
 ) -> bool:
-    """Whether the checkpoint a failed attempt left may continue: the attempt
-    started after any requested full refresh (perm_sync_pending_since), and
-    only failures came after it. An attempt that dies before its first save
-    leaves the older checkpoint resumable."""
+    """Whether the checkpoint a stopped attempt left may continue: the attempt
+    failed or was canceled (both stop mid-crawl), it started after any
+    requested full refresh (perm_sync_pending_since), and only failed or
+    canceled attempts came after it. An attempt that dies before its first
+    save leaves the older checkpoint resumable."""
     holder = db_session.execute(
         select(DocPermissionSyncAttempt)
         .join(
@@ -452,7 +520,7 @@ def is_doc_permission_sync_attempt_resumable(
         .where(
             DocPermissionSyncAttempt.id == attempt_id,
             DocPermissionSyncAttempt.connector_credential_pair_id == cc_pair_id,
-            DocPermissionSyncAttempt.status == PermissionSyncStatus.FAILED,
+            DocPermissionSyncAttempt.status.in_(_FAILURE_STATUSES),
             or_(
                 ConnectorCredentialPair.perm_sync_pending_since.is_(None),
                 DocPermissionSyncAttempt.time_created
@@ -469,7 +537,7 @@ def is_doc_permission_sync_attempt_resumable(
             DocPermissionSyncAttempt.connector_credential_pair_id == cc_pair_id,
             DocPermissionSyncAttempt.id != current_attempt_id,
             DocPermissionSyncAttempt.time_created > holder.time_created,
-            DocPermissionSyncAttempt.status != PermissionSyncStatus.FAILED,
+            DocPermissionSyncAttempt.status.not_in(_FAILURE_STATUSES),
         )
         .limit(1)
     ).scalar_one_or_none()
@@ -570,6 +638,22 @@ def cancel_open_external_group_sync_attempt(
         ExternalGroupPermissionSyncAttempt,
         connector_credential_pair_id,
         db_session,
+        reason,
+    )
+
+
+def cancel_queued_external_group_sync_attempt__no_commit(
+    connector_credential_pair_id: int,
+    db_session: Session,
+    reason: str,
+) -> int | None:
+    """Marks the cc_pair's NOT_STARTED attempt CANCELED, so its task skips it,
+    and leaves a running one alone. The caller commits. Returns its ID."""
+    return _cancel_open_attempt_where__no_commit(
+        ExternalGroupPermissionSyncAttempt,
+        connector_credential_pair_id,
+        db_session,
+        ExternalGroupPermissionSyncAttempt.status == PermissionSyncStatus.NOT_STARTED,
         reason,
     )
 

@@ -90,7 +90,10 @@ from onyx.db.models import (
     User,
 )
 from onyx.db.permission_sync_attempt import (
+    cancel_locked_or_queued_doc_permission_sync_attempt__no_commit,
+    cancel_queued_external_group_sync_attempt__no_commit,
     get_latest_doc_permission_sync_attempt_for_cc_pair,
+    lock_open_doc_permission_sync_attempt__no_commit,
 )
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.sync_record import fetch_latest_sync_record
@@ -143,6 +146,8 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 router = APIRouter(prefix="/manage")
+
+_PERMISSION_SYNC_PAUSE_REASON = "Canceled: the connector was paused"
 
 
 def _get_readable_cc_pair(
@@ -518,6 +523,41 @@ def _cancel_index_attempt__no_commit(
     return attempt.celery_task_id
 
 
+def _cancel_permission_syncs_for_pause__no_commit(
+    db_session: Session, cc_pair_id: int, locked_doc_sync_attempt_id: int | None
+) -> None:
+    """Cancels the doc permission sync the pause locked before the pair's row
+    lock, a queued doc sync, and a queued group sync, scheduled or manual.
+    Commit it with the PAUSED status: a cancel committed earlier frees the
+    pair's sync lock while the beat still sees the pair ACTIVE.
+
+    Nothing here waits for a running sync's writes, which can need the pair's
+    row (see lock_connector_credential_pair_row). A doc sync that started
+    between the two locks is left to stop on the stop signal. A running group
+    sync is left to finish: a run marks the pair's group memberships stale as
+    it starts, and the next run deletes the ones still stale before it adds
+    them back, so a stopped run would take users' access away after resume."""
+    doc_sync_attempt_id = (
+        cancel_locked_or_queued_doc_permission_sync_attempt__no_commit(
+            cc_pair_id,
+            locked_doc_sync_attempt_id,
+            db_session,
+            reason=_PERMISSION_SYNC_PAUSE_REASON,
+        )
+    )
+    group_sync_attempt_id = cancel_queued_external_group_sync_attempt__no_commit(
+        cc_pair_id, db_session, reason=_PERMISSION_SYNC_PAUSE_REASON
+    )
+    if doc_sync_attempt_id is not None or group_sync_attempt_id is not None:
+        logger.info(
+            "Canceled permission sync attempts due to connector pause: "
+            "cc_pair=%s doc_sync_attempt=%s group_sync_attempt=%s",
+            cc_pair_id,
+            doc_sync_attempt_id,
+            group_sync_attempt_id,
+        )
+
+
 @router.post("/admin/index-attempt/{index_attempt_id}/cancel")
 def cancel_index_attempt(
     index_attempt_id: int,
@@ -765,6 +805,16 @@ def update_cc_pair_status(
             "Connector status can only be set to ACTIVE or PAUSED.",
         )
 
+    # Before the pair's row lock: this waits for the sync's writes in flight,
+    # and those can wait on rows whose writers need the pair's row. A lock,
+    # not yet the cancel: a dispatch that holds its key share lock on the pair
+    # waits on an updated attempt row, while this request waits on that lock.
+    locked_doc_sync_attempt_id = (
+        lock_open_doc_permission_sync_attempt__no_commit(cc_pair_id, db_session)
+        if status_update_request.status == ConnectorCredentialPairStatus.PAUSED
+        else None
+    )
+
     # Held through the status commit. Attempt creation takes the same lock,
     # so an attempt created before the pause is in the select below, and a
     # creation after it sees PAUSED.
@@ -773,6 +823,11 @@ def update_cc_pair_status(
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
     task_ids_to_revoke: list[str] = []
     if status_update_request.status == ConnectorCredentialPairStatus.PAUSED:
+        # Before the stop signal: a doc permission sync that sees it waits on
+        # the canceled row when it records its failure, then keeps the cancel.
+        _cancel_permission_syncs_for_pause__no_commit(
+            db_session, cc_pair_id, locked_doc_sync_attempt_id
+        )
         redis_connector.stop.set_fence(True)
 
         # Request cancellation for any active indexing attempts for this cc_pair

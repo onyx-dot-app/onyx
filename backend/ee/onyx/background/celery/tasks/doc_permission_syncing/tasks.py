@@ -398,7 +398,7 @@ def try_creating_permissions_sync_task(
 ) -> int | None:
     """Creates a NOT_STARTED attempt and dispatches the task that runs it.
     Returns the attempt ID, or None when nothing was dispatched: the cc_pair
-    already has an open attempt, or it is being deleted or pruned."""
+    already has an open attempt, or it is paused, being deleted or pruned."""
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
     if redis_connector.delete.fenced or redis_connector.prune.fenced:
         return None
