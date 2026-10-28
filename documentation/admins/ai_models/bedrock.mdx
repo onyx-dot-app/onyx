@@ -1,0 +1,103 @@
+---
+title: "Amazon Bedrock"
+description: "Configure Amazon Bedrock models for use with Onyx"
+icon: "aws"
+---
+
+import NavigateToAiModels from "/snippets/navigate-to-ai-models.mdx";
+import StandardAiModelConfigs from "/snippets/standard-ai-model-configs.mdx";
+
+## Authentication Methods
+
+Onyx supports three authentication methods for Amazon Bedrock.
+You select one in the **Authentication Method** field when you connect the provider.
+
+<AccordionGroup>
+  <Accordion title="Environment IAM Role (recommended for AWS environments)">
+    - Onyx uses the IAM role attached to the environment it runs in
+    - Use this when Onyx runs on AWS infrastructure (EC2, EKS)
+
+    Create an IAM role with the `AmazonBedrockLimitedAccess` policy. Optionally,
+    attach the `AmazonBedrockFullAccess` and `AmazonBedrockMarketplaceAccess` policies.
+
+    Attach the role to the environment that Onyx runs in. For example,
+    attach it to your Onyx EC2 instance or EKS service account.
+  </Accordion>
+
+  <Accordion title="Access Key (for non-AWS environments)">
+    - You enter an Access Key ID and Secret Access Key in Onyx
+    - Use this when Onyx runs outside AWS
+
+    Create an IAM user with the `AmazonBedrockLimitedAccess` policy. Optionally,
+    attach the `AmazonBedrockFullAccess` and `AmazonBedrockMarketplaceAccess` policies.
+
+    Open the IAM user's **Security Credentials** tab.
+    Create a new **Access Key** and copy the **Access Key ID** and **Secret Access Key**.
+  </Accordion>
+
+  <Accordion title="Long-term API Key (for non-AWS environments)">
+    - A Bedrock API key created in the Amazon Bedrock console
+    - Use this when Onyx runs outside AWS and you do not want to manage IAM access keys
+
+    In the Bedrock console, open **API keys** and create a **Long-term API key**.
+    AWS creates an IAM user with the `AmazonBedrockLimitedAccess` policy for you.
+
+    Copy the key. You paste it into Onyx.
+  </Accordion>
+</AccordionGroup>
+
+### Cross-Account Access
+
+With the **Environment IAM Role** or **Access Key** method, Onyx can call Bedrock in a different AWS account.
+Enter the **Role ARN to assume** and, if the role's trust policy requires one, the **External ID**.
+Onyx assumes the role with the credentials above before each call.
+
+<Note>
+  A Long-term API Key is bound to one account and cannot assume a role.
+  Cross-account access is not available on Onyx Cloud.
+</Note>
+
+## Guide
+
+<Steps>
+  <Step title="Enable the Models You Want">
+    In the Bedrock console, open the **Model catalog** and decide which models you want to use with Onyx.
+
+    If you do not have access to a model yet, request access in the Bedrock console.
+
+    <Note>
+      Onyx can only list models that are enabled in your account and region.
+    </Note>
+  </Step>
+
+  <NavigateToAiModels />
+
+  <Step title="Connect Amazon Bedrock">
+    Under **Add Provider**, click **Connect** on the **Amazon Bedrock** card.
+
+    Select your **Authentication Method**.
+
+    Select the **AWS Region** where your Bedrock models are hosted.
+
+    <Tip>
+      Some models are only available in specific regions or through cross-region inference profiles.
+      Onyx lists what is available in the region you select.
+    </Tip>
+
+    Depending on the method, enter the **AWS Access Key ID** and **AWS Secret Access Key**,
+    or the **Long-term API Key**. Optionally, enter a **Role ARN to assume** and **External ID**.
+
+    <img className="rounded-image" src="/assets/admins/ai_models/bedrock_config.webp" alt="Amazon Bedrock provider setup dialog"/>
+  </Step>
+
+  <Step title="Load Your Models">
+    After you set the region and credentials, click **Refresh models** in the **Models** section.
+    Onyx lists the models and inference profiles available to your account in that region.
+  </Step>
+
+  <StandardAiModelConfigs />
+
+  <Step title="Connect">
+    Click **Connect**. Onyx tests the credentials with one of the selected models before it saves the provider.
+  </Step>
+</Steps>

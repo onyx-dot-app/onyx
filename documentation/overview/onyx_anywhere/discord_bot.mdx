@@ -1,0 +1,43 @@
+---
+title: "Discord Bot"
+description: "Access Onyx within Discord"
+icon: "discord"
+---
+
+## Overview
+
+The Onyx Discord bot lets you use Onyx chat directly in a Discord server.
+
+<img className="rounded-image" src="/assets/overview/onyx_anywhere/discordbot.webp" alt="Discord Bot"/>
+
+## Features
+
+- Install on any server you manage
+- Set a default Agent for the server, and a different Agent for each channel
+- Answer every message in a channel, or only messages that mention the bot
+- Reply in the channel or in thread-only mode
+- Works in channels, threads, and forums
+- Answers include citations that link to the sources
+
+## How it works
+
+Your admin connects a server in **Admin Panel > Integrations > Discord Integration**.
+Onyx gives your admin a registration key. Run `!register <key>` in your Discord server to link it to Onyx.
+Run `!sync-channels` to make your channels visible in Onyx.
+
+Channels are turned off until your admin enables them in Onyx. The bot answers as a shared Onyx service identity.
+The documents it can use depend on the Agent set for the server or channel, not on the Discord user who asked.
+
+<Note>
+  The Discord bot is available on all editions. On Onyx Cloud, use the official OnyxBot.
+  Self-hosted deployments can run their own bot with their own Discord bot token.
+</Note>
+
+## Try it out
+
+Follow the [installation guide](/admins/miscellaneous/discord_bot)
+to install OnyxBot on your Discord server ([installation
+link](https://discord.com/oauth2/authorize?client_id=1460722463431327804)).
+
+To test it out, join the [Onyx community Discord](https://discord.gg/rkCS5RY4)
+and tag **@OnyxBot** from the #support channel!

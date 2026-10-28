@@ -1,0 +1,86 @@
+---
+title: "Image Generation"
+description: "Enable image generation for your AI Agents in Onyx"
+icon: "image"
+---
+
+The Image Generation action lets your Agents create images from text prompts.
+The model can also edit an image the user attached, or one it generated earlier in the conversation,
+instead of generating a new one from scratch. Once an admin connects an image model and sets it as the default,
+any chat model in Onyx can invoke the action.
+
+## Supported Models
+
+| Model | Provider |
+| ----- | -------- |
+| GPT Image 2.5 Flare | OpenAI / Azure OpenAI |
+| GPT Image 2.5 Sunburst | OpenAI / Azure OpenAI |
+| GPT Image 2 | OpenAI / Azure OpenAI |
+| GPT Image 1.5 | OpenAI / Azure OpenAI |
+| GPT Image 1 | Azure OpenAI |
+| Gemini 2.5 Flash Image (Nano Banana) | Google Cloud Vertex AI |
+| Gemini 3 Pro Image (Nano Banana Pro) | Google Cloud Vertex AI |
+
+<Note>
+  OpenAI retired GPT Image 1 and Google retired Gemini 3 Pro Image Preview.
+  Onyx hides these models unless they are already connected. If one of them is still connected,
+  the page shows a warning. Connect another model, set it as the default, then disconnect the retired model.
+</Note>
+
+## Configuration
+
+<Steps>
+  <Step title="Connect a Model">
+    Open **Admin Panel → Image Generation** and click **Connect** on a model. Enter the provider credentials:
+
+    <img className="rounded-image" src="/assets/admins/actions/image_generation_overview.webp" alt="Image Generation page in the Onyx Admin Panel"/>
+
+    <Tabs>
+      <Tab title="OpenAI">
+        - **API Key**: Your OpenAI API key.
+      </Tab>
+
+      <Tab title="Azure OpenAI">
+        - **API Key**: Your Azure OpenAI API key.
+        - **Target URI**: The endpoint target URI from Azure OpenAI. It must include the endpoint base, the
+        deployment name, and the `api-version` query parameter.
+      </Tab>
+
+      <Tab title="Google Cloud Vertex AI">
+        - **Authentication Method**: Choose **Service Account JSON** or **Workload Identity (GKE)**.
+        - **Credentials File** (Service Account JSON): Upload or paste the service account key JSON file.
+        - **GCP Project ID** (Workload Identity): The project where Vertex AI is enabled. Onyx authenticates with the
+        service account bound to its pod.
+        - **Location**: The Google Cloud region for your Vertex AI models.
+      </Tab>
+    </Tabs>
+
+    Onyx tests the credentials before it saves them.
+  </Step>
+
+  <Step title="Set the Default Model">
+    Click **Set as Default** on the model you want to use. Only one model can be the default.
+
+    - To clear the default, click the **Current Default** badge. Image generation is turned off until you set
+    another default.
+    - If you disconnect the current default model, the dialog asks you to choose a replacement default or
+    **No Default**, which turns image generation off.
+  </Step>
+</Steps>
+
+## Enable Image Generation for Agents
+
+Image generation does not appear in chat until a default model is set, even if an Agent has the action turned on.
+
+- **Default Chat**: Go to **Admin Panel > Chat Preferences > Actions & Tools** and turn on **Image Generation**.
+- **Custom Agents**: In the [Agent editor](/admins/agents/overview), open **Actions** and turn on
+  **Image Generation**. The toggle stays disabled until an admin connects a model.
+
+## Using Image Generation
+
+When a user asks for an image, the Agent calls the default image model with a prompt it writes from the request.
+Generated images belong to the chat session that created them.
+
+To edit an image, the user attaches it to the message (or refers to an image generated earlier in the chat)
+and describes the change. The OpenAI and Azure OpenAI models accept up to 16 reference images;
+the Vertex AI models accept up to 14.

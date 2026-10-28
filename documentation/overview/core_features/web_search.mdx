@@ -1,0 +1,55 @@
+---
+title: "Web Search"
+description: "AI-powered web search"
+icon: "globe"
+---
+
+## Overview
+
+<img className="rounded-image" src="/assets/overview/core_features/web_search.webp" alt="Web Search"/>
+
+Onyx can search the internet for questions that need current information, or for niche topics the LLM is not sure about.
+
+The LLM decides when to search the web. To force or block it for one chat,
+open the actions menu in the input bar and toggle **Web Search**.
+When a research step also uses [Internal Search](/overview/core_features/internal_search),
+Onyx combines web sources and internal documents in the answer and in the sources sidebar.
+
+Web Search is available in all editions.
+It does not appear in the actions menu until an admin connects a search engine at **Admin Panel → Web Search**.
+
+<Note>
+  The separate **Open URL** action reads a web page that you link in your message. It does not need a search engine.
+</Note>
+
+## Requirements
+
+Web Search needs two parts: a **search engine** that returns result links and snippets,
+and a **web crawler** that reads the full page content for a complete answer.
+
+### Search Engines
+
+Connect one search engine. Pricing is set by each provider.
+
+| Name | Provider | Benefit |
+| --- | --- | --- |
+| Exa | Exa.ai | AI-optimized with strong semantic search. |
+| Serper | Serper.dev | Fast and cost-effective Google results. |
+| Brave | Brave Search API | Independent search index with simple API-key setup. |
+| Google PSE | Google | Official Google results. Needs an API key and a Programmable Search Engine ID. |
+| SearXNG | SearXNG | Self-hosted metasearch. Point Onyx at your SearXNG base URL to keep searches private. |
+| Tavily | Tavily AI | Search API built for LLM agents. |
+| Firecrawl | [Firecrawl.dev](https://www.firecrawl.dev/search?utm_source=onyx&utm_medium=integration) | One API key also powers the Firecrawl web crawler. The API base URL can point to a self-hosted Firecrawl. |
+
+### Web Crawlers
+
+Search engines return only short snippets. A crawler fetches the full page so answers are complete and reliable.
+
+| Name | Requires Config | Benefits |
+| --- | --- | --- |
+| Onyx Web Crawler | No | Built-in crawler. Works for most pages, keeps requests in your deployment, and is free. |
+| Firecrawl | Yes, API key and base URL | Better performance and edge-case handling. |
+| Exa | Yes, API key | Fetches page content through Exa. Good for teams already using Exa as their search engine. |
+| Tavily | Yes, API key | Fetches page content through Tavily. |
+
+For setup details, see the [admin configuration guide](/admins/actions/web_search).

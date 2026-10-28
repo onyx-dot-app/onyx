@@ -1,0 +1,114 @@
+---
+title: "YouTrack"
+description: "Access issues and comments from YouTrack"
+---
+
+## How it works
+
+The YouTrack connector indexes issues and their comments. Each issue carries its project,
+its public custom fields (state, priority, assignee and so on) and, once resolved, its resolution time as metadata.
+The reporter is recorded as the issue's owner.
+
+Onyx checks YouTrack for new and changed issues every **30** minutes.
+
+| Content     | Notes                                                                                                      |
+| ----------- | ---------------------------------------------------------------------------------------------------------- |
+| Issues      | Summary and description, with the issue's comments. Deleted comments and comments with their own visibility restriction are skipped. Archived projects are skipped. |
+| Scope       | Optional. Limit the index to specific projects by short name.                                              |
+| Permissions | Optional. **Sync with YouTrack** mirrors who can see each issue in YouTrack. It is a paid feature: the Business and Enterprise tiers on Onyx Cloud, and the Enterprise Edition when self-hosted. |
+
+The connector supports YouTrack Cloud and YouTrack Server. **Sync with YouTrack** needs YouTrack 2026.1 or later.
+
+## Setting up
+
+### Authorization
+
+The connector signs in with a permanent token. Onyx sees exactly what the token's user sees,
+so give that user **Read Issue** and **Read Issue Comment** in every project you want to index.
+For **Sync with YouTrack**, see [Sync with YouTrack](#sync-with-youtrack)
+for the extra permissions the token's user needs.
+
+<Steps>
+  <Step title="Open your YouTrack profile">
+    In YouTrack, select your avatar and open your profile, then open the **Account Security** tab.
+  </Step>
+
+  <Step title="Create a permanent token">
+    Under **Tokens**, select **New token...**. Give the token a name, keep the **YouTrack** scope selected,
+    and select **Create**.
+  </Step>
+
+  <Step title="Copy the token">
+    Copy the token now. YouTrack shows it only once.
+  </Step>
+</Steps>
+
+### Indexing
+
+<Steps>
+  <Step title="Enter the YouTrack URL">
+    In the Admin Panel, go to **Connectors** and select **YouTrack**. Enter your YouTrack address,
+    for example `https://example.youtrack.cloud`. For YouTrack Server, include the context path,
+    for example `https://example.com/youtrack`.
+  </Step>
+
+  <Step title="Connect a YouTrack account">
+    Select **New YouTrack Account** and paste the permanent token. The token is saved with the connector.
+  </Step>
+
+  <Step title="Choose what to index">
+    Leave **Projects** empty to index every project the token's user can read. To narrow the index,
+    enter project short names, for example `ABC`.
+
+    Onyx checks every entry before you create the connector and names any project YouTrack does not answer for.
+    That means the short name is wrong, or the token's user has no access to the project.
+  </Step>
+
+  <Step title="Choose who can see the issues">
+    Under **Document Access**, **Sync with YouTrack** mirrors YouTrack's own access.
+    **Specific Groups** and **Sync with YouTrack** are paid features: the Business and Enterprise tiers on Onyx Cloud,
+    and the Enterprise Edition when self-hosted.
+  </Step>
+
+  <Step title="Review the connection checks">
+    Once an account is selected, Onyx runs its checks against YouTrack and lists each one in the form.
+    **Create Connector** is enabled once the required checks pass. A failed check names what to fix.
+  </Step>
+</Steps>
+
+### Connection checks
+
+Each check reads from YouTrack with the token, so a failure points at the token user's access.
+
+| Check                                                   | Passes when                                                              | Fails when                                                                                           |
+| ------------------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| YouTrack accepts the URL and token                      | YouTrack answers for the token's user                                    | The URL is wrong, a YouTrack Server URL lacks its context path, or the token is invalid or revoked   |
+| Configured projects are readable                        | Every short name you entered exists for the token's user                 | A short name is misspelled, or the token's user has no access to the project                         |
+| Issues and comments are readable                        | One issue in scope returns with its comments                             | The token's user lacks Read Issue or Read Issue Comment                                              |
+| The token's user reads every issue, restricted ones too | The token's user holds Override Visibility Restrictions in every project | The token's user lacks Override Visibility Restrictions in a project in scope, or cannot read role assignments |
+| Issue visibility settings are readable                  | One issue in scope returns with its **Visible to** settings              | The token's user lacks Read Issue in a project in scope                                              |
+| Users' emails are readable                              | YouTrack lists users with their emails                                   | YouTrack hides emails from the token's user, so no YouTrack user could be matched to an Onyx user    |
+
+The token and issues checks run for every connector, and the projects check whenever short names are entered.
+The rest run only with **Sync with YouTrack**, and run again before each scheduled permission sync,
+so a token that loses access stops the sync instead of hiding issues.
+
+If no issue in scope exists yet, the issues check passes with a note that comment access was not checked.
+
+## Sync with YouTrack
+
+With **Sync with YouTrack**, an Onyx user finds an issue only if their YouTrack account, matched by email, can see it:
+
+- An issue is visible to everyone who holds both **Read Issue** and **Read Issue Comment** in its project,
+  whether through a project, organization or global role, a group, or the project team.
+- An issue with a **Visible to** restriction is visible only to the listed users and groups who also hold those
+  permissions in the project, plus the reporter and the holders of **Override Visibility Restrictions** among them.
+- In a helpdesk project, a ticket is visible to the users and groups its visibility names and to its reporter,
+  with no project role required. Customer accounts never see tickets through project roles.
+- Banned users see nothing. Issues are never made visible to every Onyx user, since YouTrack issues are never
+  readable without signing in.
+
+The token's user has to read every issue in scope, restricted ones included, and read role assignments and groups,
+which YouTrack shows only to administrators. Use a permanent token of a **System Admin**,
+or of a user with **Low-level Admin Read** plus **Read Issue**,
+**Read Issue Comment** and **Override Visibility Restrictions** in every project to sync.

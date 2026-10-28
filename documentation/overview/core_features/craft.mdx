@@ -1,0 +1,188 @@
+---
+title: "Overview"
+description: "Turn a goal into finished work with an AI coworker in a secure sandbox"
+icon: "hammer"
+---
+
+Craft is an AI coworker that can take a goal from prompt to finished deliverable. It plans the work, gathers context,
+writes and runs code, creates files, and iterates on the result in a secure sandbox.
+
+| Ask Craft to                      | Example result                                                        |
+| --------------------------------- | --------------------------------------------------------------------- |
+| **Research and synthesize**       | A customer brief grounded in company knowledge and current App data.  |
+| **Create a polished deliverable** | A presentation, report, spreadsheet, document, image, or export file. |
+| **Build an interactive tool**     | A dashboard, data explorer, calculator, or other shareable web app.   |
+| **Complete work in another tool** | A drafted email, updated project issue, saved file, or pull request.  |
+
+<img className="rounded-image" src="/assets/overview/core_features/craft_overview.webp" alt="A Craft session with a generated dashboard open in the Output panel"/>
+
+<Tip>
+  Looking to enable Craft for your Onyx deployment? See the [deployment](/deployment/local/craft)
+  and [admin](/admins/managing_features/craft) guides.
+</Tip>
+
+Craft runs generated code in a sandbox isolated from your computer and Onyx infrastructure.
+Your organization controls the information Craft can access and the actions it can take.
+See [Craft Architecture](/security/architecture/craft) for the full trust and network model.
+
+## Start a Craft session
+
+Each new session gets a separate workspace where Craft can create files, run code, and preview web apps.
+It can also use company knowledge, Library files, available Skills, connected Apps,
+and MCP plugins enabled for Craft to complete your request.
+
+<img className="rounded-image" src="/assets/overview/core_features/craft_workspace_clean.webp" alt="A Craft session with the agent loop on the left and a live dashboard preview on the right"/>
+
+<Note>
+  Craft is available in all editions. If you don't see **Craft** in your Onyx sidebar, it is not enabled for you.
+  Ask an admin to turn on Craft at **Admin Panel → Craft → Access** and confirm that a supported model provider is
+  available.
+</Note>
+
+### Write a strong first prompt
+
+Pick a model, describe the result you want, and provide the context Craft should use.
+
+<img className="rounded-image" src="/assets/overview/core_features/craft_start.webp" alt="The Craft home screen with the prompt box, model selector, and links to connect data sources"/>
+
+You can't change models after sending the first message, so choose one before you send.
+
+| Include                    | What to tell Craft                                                              |
+| -------------------------- | ------------------------------------------------------------------------------- |
+| **End product**            | Whether you need a web app, report, deck, brief, data explorer, or export file. |
+| **Audience and purpose**   | Who will use the result and what they need from it.                             |
+| **Source material**        | Company sources, connected Apps, examples, or files Craft should reference.     |
+| **Important requirements** | The sections, tone, charts, filters, file names, or output format that matter.  |
+
+<Tip>
+  Craft is designed to keep moving and often makes reasonable assumptions.
+  Put important constraints in the first prompt, then refine the result as it works.
+</Tip>
+
+### Example: build an all-hands deck
+
+> Build an all-hands slide deck for Q2. Pull the wins from Slack, reference
+> prospects and customers from HubSpot, cite figures from our sales sync doc,
+> and use our all-hands template.
+
+Craft can gather the requested context, follow the presentation Skill and your company template,
+delegate slides to subagents, and assemble the final deck.
+
+<img className="rounded-image" src="/assets/overview/core_features/craft_agent_loop.webp" alt="A Craft session building a pitch deck and delegating individual slides to parallel subagents"/>
+
+## Follow the work
+
+The chat panel streams Craft's progress while it works:
+
+| Activity      | What it shows                                                                                              |
+| ------------- | ---------------------------------------------------------------------------------------------------------- |
+| **Tasks**     | The plan Craft is working through, checked off as it progresses.                                           |
+| **Thinking**  | How Craft is approaching the next step.                                                                    |
+| **Working**   | Tool calls, such as searching company knowledge or reading a file from an App.                             |
+| **Running**   | Commands in the sandbox, such as writing code, installing packages, or starting a development server.      |
+| **Subagents** | Focused agents working in parallel on parts of a larger job, such as individual slides or report sections. |
+
+Open a subagent from the header menu to read its transcript. Your messages still go to the main session.
+
+You can guide the run at any time:
+
+| Control               | What it does                                                                                         |
+| --------------------- | ---------------------------------------------------------------------------------------------------- |
+| **Approve an action** | Lets you review an App action when your organization's policy requires approval.                     |
+| **Queue a follow-up** | Gives Craft another instruction to pick up after its current turn.                                   |
+| **Interrupt**         | Stops the current run when you press **Esc**. Your messages and files remain so you can redirect it. |
+
+## Give Craft context
+
+Craft can start with only a prompt,
+but concrete references help it find the right information and match the result you have in mind.
+
+| Source                  | Best for                                                                 |
+| ----------------------- | ------------------------------------------------------------------------ |
+| **Onyx knowledge**      | Company content you already have permission to access.                   |
+| **Public web**           | Current public information and websites Craft needs to navigate.         |
+| **Session attachments** | Files needed only for this session, such as a CSV, PDF, notes, or image. |
+| **User Library**        | Reusable files you want available across sessions, such as templates.    |
+| **Skills**              | Reusable instructions, examples, and files that teach Craft a method.    |
+| **Apps**                | Live information and approved actions in connected external services.    |
+
+When the Browser Skill is available, Craft can open public websites, follow links, interact with pages,
+and take screenshots. It uses its own browser in the sandbox, not your browser session or saved logins.
+
+<Accordion title="File and storage limits">
+  These are the default limits. Your admin can adjust them for self-hosted deployments.
+
+  **Session attachments**
+
+  | Limit                          | Default |
+  | ------------------------------ | ------- |
+  | Maximum file size              | 50 MB   |
+  | Maximum files per session      | 20      |
+  | Maximum total size per session | 200 MB  |
+
+  **User Library**
+
+  | Limit                    | Default |
+  | ------------------------ | ------- |
+  | Maximum file size        | 500 MB  |
+  | Maximum files per upload | 100     |
+  | Maximum total storage    | 10 GB   |
+
+  The User Library accepts regular files and ZIP uploads.
+  ZIP files are extracted so Craft can work with the files inside.
+</Accordion>
+
+<Warning>
+  Don't upload secrets, private tokens, or production credentials as files.
+  Connect an [App](/overview/core_features/craft_apps) when Craft needs authenticated access to an external service.
+  Raw App credentials never enter the sandbox workspace.
+</Warning>
+
+## Review the result
+
+Open the Output panel to inspect what Craft created.
+
+| Tab           | What it shows                                                                     |
+| ------------- | --------------------------------------------------------------------------------- |
+| **Outputs**   | Finished outputs intended for download or sharing, usually written to `outputs/`. |
+| **All Files** | The full session workspace, including source code, data, and intermediate work.   |
+| **Apps**      | A live web app that updates as Craft changes its files.                           |
+
+<img className="rounded-image" src="/assets/overview/core_features/craft_files.webp" alt="The Output panel showing the Outputs, All Files, and Apps tabs with the session workspace files"/>
+
+You can download individual files, download a folder or web app as a ZIP file,
+export Markdown as a .docx file, and preview images, PDFs, presentations, and text files.
+
+### Share a web app
+
+Web apps run in the sandbox and are shared through Onyx rather than exposed directly.
+Select **Share** in the **Apps** tab, then choose who can open the app:
+
+| Scope            | Access                                     |
+| ---------------- | ------------------------------------------ |
+| **Private**      | Only you can open the shared app.          |
+| **Organization** | Anyone signed in to your Onyx can open it. |
+
+Sharing includes the generated web app only. It does not share the conversation or other session files.
+
+## Go further with Craft
+
+<CardGroup cols={2}>
+  <Card title="Skills" icon="wand-magic-sparkles" href="/overview/core_features/craft_skills">
+    Give Craft reusable instructions, examples, templates, and helper files.
+  </Card>
+
+  <Card title="Apps and Plugins" icon="plug" href="/overview/core_features/craft_apps">
+    Connect external services for live information and approved actions.
+  </Card>
+
+<Card
+  title="Scheduled Tasks" icon="calendar-clock" href="/overview/core_features/craft_scheduled_tasks"
+>
+  Run a tested Craft prompt automatically on a recurring schedule.
+</Card>
+
+  <Card title="For admins" icon="user-shield" href="/admins/managing_features/craft">
+    Enable Craft and configure models, Skills, Apps, and governance controls.
+  </Card>
+</CardGroup>

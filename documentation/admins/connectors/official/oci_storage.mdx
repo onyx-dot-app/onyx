@@ -1,0 +1,84 @@
+---
+title: "Oracle Cloud Storage"
+description: "Access files from Oracle Cloud Storage buckets"
+---
+
+## How it works
+
+The **Oracle Storage** connector indexes the files in one Oracle Cloud Infrastructure (OCI) Object Storage bucket,
+or in one prefix of that bucket. It reads common document formats such as PDF, DOCX, PPTX, XLSX, TXT, Markdown,
+and HTML. Onyx skips files in formats it cannot read and files larger than 20 MB.
+
+Onyx checks the bucket for new and changed files on the connector's **Refresh Every** schedule.
+The default for this connector is **1 day**.
+
+## Setting up
+
+### Authorization
+
+<Steps>
+  <Step title="Open User Settings">
+    In the Oracle Cloud Console, select the user icon in the top-right corner and select **User Settings**.
+
+    <img className="rounded-image" src="/assets/admins/connectors/blob/oci/topbar.webp" alt="OCI user settings"/>
+  </Step>
+
+  <Step title="Generate a secret key">
+    Under **Resources**, select **Customer Secret Keys**, then **Generate Secret Key**.
+
+    <img className="rounded-image" src="/assets/admins/connectors/blob/oci/apikeys.webp" alt="OCI customer secret keys"/>
+
+    Enter a name for the key, such as `OnyxOCIConnector`, and select **Generate Secret Key** again.
+    Copy the secret key at once. You cannot view it again later.
+  </Step>
+
+  <Step title="Copy the access key">
+    The **Customer Secret Keys** page now lists the new key. Hover over the key to view and copy its access key.
+
+    <img className="rounded-image" src="/assets/admins/connectors/blob/oci/secretkeys.webp" alt="OCI secret keys list"/>
+
+    <img className="rounded-image" src="/assets/admins/connectors/blob/oci/hoverkey.webp" alt="Hover key to view access key"/>
+  </Step>
+
+  <Step title="Find the Object Storage namespace and region">
+    Select the user icon in the top-right corner and select **Tenancy: [your tenancy name]**.
+    The tenancy details show the **Object Storage namespace**. Note the region of the bucket as well,
+    such as `us-ashburn-1`.
+  </Step>
+</Steps>
+
+### Indexing
+
+<Steps>
+  <Step title="Create an authentication account">
+    In Onyx, go to **Admin Panel → Connectors** and select **Oracle Storage**. Under **Authentication Account**,
+    select **Create New**. Enter a **Display Name** and fill in:
+
+    - **OCI Namespace**: the Object Storage namespace of your tenancy
+    - **OCI Region**: the region of the bucket
+    - **OCI Access Key ID**: the access key you copied
+    - **OCI Secret Access Key**: the secret key you copied
+
+    Select **Create**.
+
+    <img className="rounded-image" src="/assets/admins/connectors/blob/oci/Onyx1.webp" alt="OCI credentials input"/>
+  </Step>
+
+  <Step title="Choose the bucket">
+    Under **Connector Settings**, give the connector a **Display Name**. In **Bucket Name**, enter the bucket to index.
+    In **Prefix**, enter a folder path to index only part of the bucket, or leave it empty to index the whole bucket.
+
+    <img className="rounded-image" src="/assets/admins/connectors/blob/oci/Onyx2.webp" alt="OCI bucket selection"/>
+
+    Under **Document Access**, choose who can see the indexed files.
+    **Everyone in Your Organization** shows them to all Onyx users.
+    **Specific Groups** limits them to the Onyx user groups you pick. **Specific Groups** is a paid feature:
+    the Business and Enterprise tiers on Onyx Cloud, and the Enterprise Edition when self-hosted.
+    The connector does not sync bucket permissions.
+  </Step>
+
+  <Step title="Start indexing">
+    Select **Create Connector** to save the connector and start indexing.
+    Open **Admin Panel → Indexing Status** and select the connector to follow the first indexing run.
+  </Step>
+</Steps>

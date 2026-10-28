@@ -1,0 +1,205 @@
+---
+title: "Security & Hardening"
+description: "Runtime security settings for authentication, passwords, admin controls, and outbound network safety"
+icon: "shield"
+---
+
+## Overview
+
+The **Security & Hardening** page lives under **Admin Panel → Organization** and requires full admin panel access.
+It collects the security settings you can change at runtime without editing environment variables or restarting Onyx.
+
+Every control saves as soon as you change it. The JWT text fields save when you leave the field.
+Each setting starts at the value of its environment variable, and a value you set here overrides that default.
+Clearing a JWT field or a password length box returns it to the environment default.
+Changes are written to the audit log with the acting admin and the old and new values.
+Restrict Open Sign-Up is a workspace setting and is not audited.
+
+<Note>
+  Settings are cached per API server for up to 10 seconds. On deployments with several API servers,
+  a change can take that long to apply everywhere.
+</Note>
+
+Onyx Cloud shows a subset of the page.
+Settings marked **self-hosted only** below are controlled by the operator and do not appear on Cloud workspaces.
+
+## Authentication
+
+### Sync Session Expiry with Identity Provider
+
+Rejects a user's session once the expiry your OAuth or OIDC provider, or JWT issuer, put on the token has passed,
+instead of keeping them signed in for the Onyx session length. Off by default,
+because most providers issue short-lived tokens and users would have to sign in again often.
+
+Environment default: `TRACK_EXTERNAL_IDP_EXPIRY`.
+
+### Relink Accounts After an OIDC Client Change
+
+Onyx recognizes a returning SSO user by the subject ID (`sub`) the provider sends, not by email.
+Some providers issue a different subject per client. Microsoft Entra does this per app registration,
+so after you move Onyx to a new app registration every existing user comes back with a subject Onyx has never seen and
+is refused with the "already exists under a different sign-in method" error.
+
+While this setting is on,
+a login whose subject is unknown but whose email matches an account already linked to the same provider replaces the
+stored subject on that account and signs the user in.
+Each relink is written to the API server log with the user ID and the old and new subject. It is not an audit event.
+
+To migrate:
+
+<Steps>
+  <Step title="Turn the setting on">
+    Do this after the new client or app registration is live.
+  </Step>
+
+  <Step title="Have users sign in once">
+    Each login rewrites that user's stored subject.
+  </Step>
+
+  <Step title="Turn the setting off">
+    Close the window as soon as your users are through.
+  </Step>
+</Steps>
+
+Users who did not sign in while the setting was on keep the old subject and are refused again once it is off.
+Turn it back on for them, or clear their SSO link by hand.
+
+The setting is off by default and has no environment variable.
+An email match alone cannot tell a client migration apart from a provider assigning a departed user's email to a new
+person, so leave it off outside a migration. Accounts linked to a different provider,
+and accounts whose email has changed since sign-up (through SCIM or the provider), are refused either way.
+A deactivated account is never relinked.
+
+### Claim Renamed Accounts After a Provider Delete
+
+Lets a user whose email was renamed sign in through another provider to the account that holds their current email,
+when that account has no provider link left. Turn it on only while you move users off a deleted SSO provider,
+and turn it off when they are through. It is off by default and has no environment variable.
+
+### Restrict Open Sign-Up
+
+Self-hosted only. Requires an invitation to join the workspace. This is the same workspace setting as on the Users page;
+see [Restricting Who Can Join](/admins/user_management/users_and_groups#restricting-who-can-join).
+
+### Restrict Email Domains
+
+Self-hosted only. Limits registration, SSO login,
+and JWT login to email addresses in the **Allowed Email Domains** list.
+Existing users outside the list are refused at their next SSO login.
+The restriction is active while the list has at least one domain. Turning the toggle off saves an empty list,
+which also overrides any `VALID_EMAIL_DOMAINS` value from the environment.
+
+Environment default: `VALID_EMAIL_DOMAINS`, comma-separated. The older singular `VALID_EMAIL_DOMAIN` is still read.
+
+### Disable Password Login & Signup
+
+Self-hosted only. Refuses password login and public registration so everyone signs in through SSO.
+Admins can still create password users from the Users page. Onyx refuses to save this while no SSO provider is enabled,
+so you cannot lock yourself out. There is no environment variable.
+
+## Password Policy
+
+Self-hosted only. Requirements checked when a user sets a new password with basic auth.
+Existing passwords are not re-checked.
+
+| Setting                    | Environment default                     | Default   |
+| -------------------------- | --------------------------------------- | --------- |
+| Minimum Password Length    | `PASSWORD_MIN_LENGTH`                   | 8         |
+| Maximum Password Length    | `PASSWORD_MAX_LENGTH`                   | 64        |
+| Require Uppercase Letter   | `PASSWORD_REQUIRE_UPPERCASE`            | off       |
+| Require Lowercase Letter   | `PASSWORD_REQUIRE_LOWERCASE`            | off       |
+| Require Number             | `PASSWORD_REQUIRE_DIGIT`                | off       |
+| Require Special Characters | `PASSWORD_REQUIRE_SPECIAL_CHAR`         | off       |
+
+Maximum length must be between 4 and 256, and minimum length cannot exceed it.
+Values outside that range are rejected on save. Special characters are drawn from `!@#$%^&*()_+-=[]{}|;:,.<>?`.
+
+## External JWT Authentication
+
+Self-hosted only. Accepts RS256 bearer tokens signed by your identity provider on API requests.
+The three fields are **Public Key URL**, **Expected Audience**, and **Expected Issuer**.
+A field whose environment variable is set is pinned: it displays read-only and the environment value wins.
+A Public Key URL saved here must use `https` and is checked against the SSRF Protection level when you save it.
+A URL pinned by the environment variable is trusted without these checks.
+
+Setup, key rotation, and user handling are covered in [JWT Authentication](/deployment/authentication/jwt).
+
+## Admin Controls
+
+### Full User Directory Visibility
+
+Controls who can list every user in the workspace, which the sharing dialogs use to suggest people.
+
+- **Visible to All Users** (default): anyone signed in can see the full user list.
+- **Visible to Admins Only**: only users with the read-users permission can list users.
+  Other users cannot share with individual people from the sharing dialogs. Sharing with groups still works.
+
+Environment default: `USER_DIRECTORY_ADMIN_ONLY`.
+
+### Allow Group Restrictions on Permission-Synced Connectors
+
+Business plan and higher. When on, a permission-synced connector can also require membership in specific groups.
+A user must have access in the source **and** be in one of the groups to see the documents. When off,
+access in the source is enough. There is no environment variable.
+
+### Incognito Chats
+
+Who can start incognito chats. Incognito chats never appear in their owner's chat history and never write to memory.
+
+- **Off** (default): no one can start incognito chats.
+- **Everyone**: anyone signed in.
+- **Designated Groups**: only members of groups with incognito access enabled.
+  The per-group toggle appears on each group's page under **Groups** once this option is selected.
+
+There is no environment variable. Incognito stays off until an admin turns it on.
+
+### Incognito Chat Records
+
+What the workspace keeps from incognito chats. A chat pins the mode that was active when it started,
+so changing this affects new chats only. There is no environment variable.
+
+- **Usage Only** (default): no message content is stored. Token usage is still metered, so rate limits apply, and
+  the chat does not appear in query history.
+- **Full History**: recorded like any other chat, including query history, usage, and tracing. Hidden only from
+  the owner's own history.
+
+### Mask Stored Credentials
+
+Self-hosted only. How saved API keys and connector credentials display to admins.
+
+- **Partially Masked** (default): shows the first four and last four characters, for example `abcd...wxyz`.
+  Values shorter than 14 characters are fully masked.
+- **Fully Visible**: shows the full value.
+
+Environment default: `MASK_CREDENTIAL_PREFIX`.
+
+## Network Safety
+
+### LLM Environment Variable Injection
+
+Lets a custom LLM provider configuration set process environment variables for the duration of a call,
+for provider options that have no LiteLLM parameter.
+Turn it off to require every provider setting to have a LiteLLM equivalent. There is no environment variable.
+The default is on for self-hosted deployments. On Onyx Cloud this is always off,
+because one process serves many workspaces.
+
+### SSRF Protection
+
+Self-hosted only. How strictly Onyx validates outbound HTTP requests against private and internal IP ranges,
+to block server-side request forgery.
+
+- **Validate All Requests** (default): every outbound path, including the Web and GitHub connectors,
+  refuses private and internal IPs.
+- **Validate LLM Requests**: URL fetches started by the LLM (`open_url`, MCP, OAuth) are validated.
+  Connectors an admin configured can still reach private IPs.
+- **Allow Private Network**: like Validate LLM Requests, and admin-configured MCP and OAuth endpoints may also
+  reach private LAN hosts. Loopback and cloud metadata addresses stay blocked.
+- **Disabled**: connectors are not validated, and MCP, OAuth, and JWT key fetches may reach private and loopback
+  hosts. Cloud metadata addresses stay blocked, and `open_url` still refuses loopback. Use only on a trusted network,
+  for example to reach a local LLM backend.
+
+This one control replaces the older per-path environment variables.
+They now only seed the default level when nothing has been saved here:
+`OPEN_URL_VALIDATE_SSRF=false` or `MCP_SERVER_ALLOW_LOOPBACK=true` seeds **Disabled**,
+`MCP_SERVER_ALLOW_PRIVATE_NETWORK=true` seeds **Allow Private Network**,
+and otherwise the default is **Validate All Requests**. **Validate LLM Requests** can only be chosen here.

@@ -1,0 +1,238 @@
+---
+title: "Kubernetes"
+description: "Deploy Craft sandboxes with the Onyx Helm chart"
+icon: "dharmachakra"
+---
+
+Use the Onyx Helm chart to deploy Craft with Kubernetes sandboxes. The chart creates the sandbox namespace, PodTemplate,
+RBAC, egress proxy, NetworkPolicies, and Scheduled Task worker used by Craft.
+
+## Requirements
+
+- A Business or Enterprise license
+- Kubernetes 1.33 or later
+- A full Onyx Helm deployment with the vector database enabled
+- Nodes with enough CPU, memory, and ephemeral storage for active sandboxes
+
+The chart fails the install or upgrade when Craft is enabled on an older Kubernetes version,
+when the sandbox backend is not `kubernetes`, or when sandbox push authentication is not configured.
+
+<Tip>
+  On AWS, the [Terraform modules](/deployment/local/terraform)
+  create a labeled and tainted sandbox node group when you set `enable_craft = true`.
+</Tip>
+
+## Prepare sandbox nodes
+
+By default, sandbox pods select nodes with this label:
+
+```text
+onyx.app/workload=sandbox
+```
+
+Label each node that can run sandboxes:
+
+```bash
+kubectl label node <node-name> onyx.app/workload=sandbox
+```
+
+The default sandbox toleration also supports nodes dedicated with this taint:
+
+```bash
+kubectl taint node <node-name> workload=sandbox:NoSchedule
+```
+
+The taint is optional.
+The node label is required unless you replace `sandboxPod.nodeSelector` with a selector that matches your cluster.
+
+## Create the sandbox push Secret
+
+Craft uses an Ed25519 key to authenticate file and history pushes into sandbox pods.
+Generate a key and store it in the Onyx namespace:
+
+```bash
+SANDBOX_PUSH_PRIVATE_KEY="$(python3 -c 'import base64; from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey; from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat; key = Ed25519PrivateKey.generate(); print(base64.b64encode(key.private_bytes(Encoding.Raw, PrivateFormat.Raw, NoEncryption())).decode())')"
+
+kubectl create namespace onyx --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n onyx create secret generic onyx-sandbox-push-secret \
+  --from-literal=private_key="$SANDBOX_PUSH_PRIVATE_KEY"
+unset SANDBOX_PUSH_PRIVATE_KEY
+```
+
+Keep this Secret stable across upgrades.
+Replacing the key while sandboxes are running interrupts authenticated pushes until the affected components and
+sandboxes are recreated.
+
+## Configure Helm
+
+Add the following settings to the values file used by your existing Onyx deployment.
+If `configMap` or `auth` is already present,
+merge these entries under the existing keys rather than adding a second block.
+
+```yaml values.yaml
+configMap:
+  ENABLE_CRAFT: "true"
+  SANDBOX_BACKEND: "kubernetes"
+
+auth:
+  sandboxPushSecret:
+    enabled: true
+    existingSecret: "onyx-sandbox-push-secret"
+```
+
+`ONYX_SERVER_URL` is the full API base URL that sandboxes use to call Onyx, path prefix included. When unset,
+the chart uses the cluster-internal API Service (`http://<release>-api-service.<namespace>.svc.cluster.local:8080`,
+no prefix). To route sandbox calls through your public endpoint instead, set the public URL with its `/api` prefix:
+
+```yaml
+configMap:
+  ONYX_SERVER_URL: "https://onyx.example.com/api"
+```
+
+Use a scheme and hostname that resolve from the sandbox proxy and route to the Onyx API.
+A public URL without its `/api` prefix fails at sandbox provisioning. The error names the corrected value.
+
+<Note>
+  Before `v4.5.0` this setting was named `SANDBOX_API_SERVER_URL`. Rename it in your values file when upgrading.
+</Note>
+
+Install or upgrade Onyx with your complete deployment values:
+
+```bash
+helm upgrade --install onyx onyx/onyx \
+  --namespace onyx \
+  --create-namespace \
+  --values onyx-values.yaml
+```
+
+Alternatively, save only the Craft settings in a separate `craft-values.yaml` overlay.
+Pass your existing deployment values first and the Craft overlay second so Helm combines them:
+
+```bash
+helm upgrade --install onyx onyx/onyx \
+  --namespace onyx \
+  --create-namespace \
+  --values onyx-values.yaml \
+  --values craft-values.yaml
+```
+
+## Plan sandbox capacity
+
+Each active user receives a sandbox pod. The main sandbox container has these defaults:
+
+| Resource | Request | Limit |
+| --- | --- | --- |
+| CPU | `1000m` | `2000m` |
+| Memory | `2Gi` | `10Gi` |
+| Ephemeral storage | `5Gi` | `20Gi` |
+
+The pod also includes initialization and sidecar containers for network setup, file transfer, snapshots, and restore.
+To change the main container resources, merge these `configMap` entries into your deployment values or Craft overlay:
+
+```yaml
+configMap:
+  SANDBOX_POD_CPU_REQUEST: "1000m"
+  SANDBOX_POD_CPU_LIMIT: "2000m"
+  SANDBOX_POD_MEMORY_REQUEST: "2Gi"
+  SANDBOX_POD_MEMORY_LIMIT: "10Gi"
+  SANDBOX_POD_EPHEMERAL_STORAGE_REQUEST: "5Gi"
+  SANDBOX_POD_EPHEMERAL_STORAGE_LIMIT: "20Gi"
+```
+
+Use `sandboxPod.nodeSelector`, `sandboxPod.tolerations`, and `sandboxPod.affinity` to control placement.
+The proxy and Scheduled Task worker have separate resource settings under `sandboxProxy.resources` and
+`celery_worker_scheduled_tasks.resources`.
+
+### Pre-pull the sandbox image
+
+When Craft is enabled, the chart runs a DaemonSet (`sandboxImagePrepull`)
+that pulls the sandbox image onto every sandbox node ahead of time,
+so the first sandbox on a node does not wait for the image pull.
+It is on by default and uses about 3.3 GB of disk per sandbox node.
+
+```yaml
+sandboxImagePrepull:
+  enabled: true
+  priorityClassName: ""
+  updateMaxUnavailable: "25%"
+```
+
+Set `enabled: false` on nodes without that disk headroom. Pin `global.version` to an immutable tag when pre-pulling;
+a mutable tag such as `latest` stays at whichever digest the node pulled first.
+
+## Verify the deployment
+
+Confirm the proxy, sandbox template, and Scheduled Task worker exist:
+
+```bash
+kubectl -n onyx get deployment -l app.kubernetes.io/component=sandbox-proxy
+kubectl -n onyx-sandboxes get podtemplate sandbox-pod
+kubectl -n onyx get deployment -l app=celery-worker-scheduled-tasks
+```
+
+After configuring a model and user access, send a prompt in Craft. A sandbox pod should appear:
+
+```bash
+kubectl -n onyx-sandboxes get pods -l app.kubernetes.io/component=sandbox
+```
+
+## Network configuration
+
+Sandbox pods can send traffic only to DNS and the sandbox proxy. The proxy handles external requests, App policies,
+and credential injection.
+
+Most clusters work with the chart defaults. Two cluster layouts require additional values:
+
+| Cluster layout | Configuration |
+| --- | --- |
+| NodeLocal DNS or another non-pod DNS listener | Add its CIDR to `craft.dnsExtraCIDRs`. |
+| An external or unlabeled sandbox proxy | Add the proxy CIDR to `craft.proxyExtraCIDRs`. |
+| Dual-stack networking | Set `sandboxProxy.egressAllowIPv6: true`. |
+
+<Warning>
+  Keep the sandbox egress NetworkPolicies enabled. They restrict sandbox pods to the proxy and DNS,
+  and block link-local cloud metadata access from the proxy path.
+</Warning>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Helm rejects the Craft configuration">
+    Read the render error first. Confirm Kubernetes 1.33 or later, `SANDBOX_BACKEND: "kubernetes"`,
+    and `auth.sandboxPushSecret.enabled: true` with a populated Secret.
+  </Accordion>
+
+  <Accordion title="Sandbox pods remain Pending">
+    Run `kubectl -n onyx-sandboxes describe pod <pod-name>`.
+    Confirm at least one node matches `sandboxPod.nodeSelector`, accepts the configured taints and tolerations,
+    and has enough CPU, memory, and ephemeral storage.
+  </Accordion>
+
+  <Accordion title="A sandbox fails during initialization">
+    Inspect the `sandbox-init` container logs and the proxy pods.
+    DNS must resolve the proxy before the sandbox firewall is installed.
+    Clusters using NodeLocal DNS usually need its listener CIDR under `craft.dnsExtraCIDRs`.
+  </Accordion>
+
+  <Accordion title="Craft cannot reach the Onyx API">
+    Verify `ONYX_SERVER_URL` (including the `/api` prefix on public URLs), DNS, TLS trust, and routing from the proxy.
+    Do not point it at a Service name from another cluster or an address the proxy cannot resolve.
+    Remove the key to fall back to the in-cluster API Service.
+  </Accordion>
+
+  <Accordion title="The sandbox proxy is not Ready">
+    Run `kubectl -n onyx logs -l app.kubernetes.io/component=sandbox-proxy --tail=200` and check its access to
+    PostgreSQL, Redis, the Onyx API, and external destinations. On dual-stack clusters,
+    enable `sandboxProxy.egressAllowIPv6`.
+  </Accordion>
+</AccordionGroup>
+
+<CardGroup cols={2}>
+  <Card title="Craft deployment overview" icon="hammer" href="/deployment/local/craft">
+    Compare the Kubernetes and Docker Compose paths.
+  </Card>
+
+  <Card title="Managing Craft" icon="sliders" href="/admins/managing_features/craft">
+    Configure models and user access after deployment.
+  </Card>
+</CardGroup>
