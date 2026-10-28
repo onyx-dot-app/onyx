@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from ee.onyx.server.gateway import api as gateway_api
 from ee.onyx.server.gateway import stream_bridge
 from ee.onyx.server.gateway.api import _MESSAGES_ADAPTER
+from onyx.auth.permissions import resolve_effective_permissions
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -69,12 +70,25 @@ from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationVie
 from onyx.server.settings.models import Settings
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import get_current_trace
+from shared_configs.contextvars import UsageCredentialIdentity
+from shared_configs.enums import UsageCredentialType
 
 
 def _pat_request(token_scopes: list[Permission] | None) -> Request:
     request = Request({"type": "http", "headers": []})
     if token_scopes is not None:
         request.state.token_scopes = token_scopes
+        request.state.token_permission_cap = frozenset(
+            Permission(value)
+            for value in resolve_effective_permissions(
+                {scope.value for scope in token_scopes}
+            )
+        )
+        request.state.usage_credential = UsageCredentialIdentity(
+            UsageCredentialType.CRAFT_PAT
+            if Permission.CRAFT_SANDBOX in token_scopes
+            else UsageCredentialType.PAT
+        )
     return request
 
 

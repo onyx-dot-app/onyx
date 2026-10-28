@@ -9,7 +9,30 @@ from fastapi import Request
 
 from onyx.auth.constants import PAT_LENGTH, PAT_PREFIX
 from onyx.auth.utils import get_hashed_bearer_token_from_request
+from onyx.db.enums import Permission
 from shared_configs.configs import MULTI_TENANT
+from shared_configs.contextvars import UsageCredentialIdentity
+from shared_configs.enums import UsageCredentialType
+
+
+def get_token_permission_cap(request: Request) -> frozenset[Permission] | None:
+    state = request.scope.get("state", {})
+    cap: frozenset[Permission] | None = state.get("token_permission_cap")
+    if cap is not None:
+        return cap
+    credential: UsageCredentialIdentity | None = state.get("usage_credential")
+    scopes: list[Permission] | None = state.get("token_scopes")
+    if scopes is not None or (
+        credential is not None
+        and credential.credential_type
+        in {
+            UsageCredentialType.PAT,
+            UsageCredentialType.CRAFT_PAT,
+            UsageCredentialType.OAUTH_PROVIDER,
+        }
+    ):
+        return frozenset()
+    return None
 
 
 def generate_pat(tenant_id: str | None = None) -> str:

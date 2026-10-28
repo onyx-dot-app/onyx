@@ -682,12 +682,16 @@ class PersonalAccessToken(Base):
         server_default=PatType.USER.value,
     )
 
-    # Permission values this token may exercise; NULL = no restriction (full
-    # user access). An empty list grants nothing (fail-closed).
+    # Original selections. NULL selects the user's permissions at creation.
     scopes: Mapped[list[str] | None] = mapped_column(
         postgresql.JSONB(),
         nullable=True,
         default=None,
+    )
+
+    # Finite authorization ceiling, never expanded through current permission rules.
+    permission_cap: Mapped[list[str]] = mapped_column(
+        postgresql.JSONB(), nullable=False
     )
 
     user: Mapped["User"] = relationship("User", foreign_keys=[user_id])

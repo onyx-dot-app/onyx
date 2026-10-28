@@ -51,6 +51,11 @@ contracts that do not have an HTTP API. Direct task/stub checks belong in
 uv run --env-file .vscode/.env pytest backend/tests/integration
 ```
 
+To test a running deployment, set `ONYX_TEST_EXTERNAL_API=true` and configure
+`API_SERVER_HOST` and `API_SERVER_PORT` for its frontend proxy. For example,
+`API_SERVER_HOST=localhost API_SERVER_PORT=3002/api` uses `http://localhost:3002/api`.
+This mode reuses deployed workers instead of starting test workers.
+
 ### Playwright / E2E Tests (`web/tests/e2e/`)
 
 Full stack including web server. Use for frontend-backend coordination.

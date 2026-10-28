@@ -3,7 +3,6 @@ Unit tests for onyx.auth.permissions — pure logic and FastAPI dependency.
 """
 
 from types import SimpleNamespace
-from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -36,7 +35,13 @@ def _request(token_scopes: list[Permission] | None = None) -> Request:
     state = SimpleNamespace()
     if token_scopes is not None:
         state.token_scopes = token_scopes
-    return cast(Request, SimpleNamespace(state=state))
+        state.token_permission_cap = frozenset(
+            Permission(value)
+            for value in resolve_effective_permissions(
+                {scope.value for scope in token_scopes}
+            )
+        )
+    return Request({"type": "http", "state": vars(state)})
 
 
 # ---------------------------------------------------------------------------

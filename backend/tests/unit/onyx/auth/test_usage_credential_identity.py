@@ -4,7 +4,7 @@ import pytest
 from fastapi import Request
 
 from onyx.auth import users
-from onyx.db.enums import PatType
+from onyx.db.enums import PatType, Permission
 from onyx.db.models import User
 from onyx.db.pat import PatAuthResult
 from onyx.server.security.store import _build_env_defaults
@@ -84,6 +84,7 @@ async def test_pat_type_selects_credential_type(
         pat_name="my-token",
         pat_display="onyx_pat_...abcd",
         pat_type=pat_type,
+        permission_cap=frozenset({Permission.BASIC_ACCESS}),
     )
 
     async def fake_resolve_pat(*_: Any, **__: Any) -> PatAuthResult:

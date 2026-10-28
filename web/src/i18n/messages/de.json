@@ -16128,7 +16128,7 @@
           "title": "Token-Name"
         },
         "permissions": {
-          "fullAccessNote": "Übernimmt alle Ihre Berechtigungen.",
+          "fullAccessNote": "Enthält Ihre Berechtigungen zum Erstellungszeitpunkt, außer LLM Gateway. Neue Berechtigungen erfordern ein neues Token.",
           "fullAccessOption": "Vollzugriff",
           "limitedAccessNote": "Beschränken Sie dieses Token auf bestimmte Funktionen.",
           "limitedAccessOption": "Eingeschränkter Zugriff",

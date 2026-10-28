@@ -87,8 +87,7 @@ by `Permission.BASIC_ACCESS` and by `Permission.CRAFT_SANDBOX`
 (`backend/onyx/auth/permissions.py`, `IMPLIED_PERMISSIONS`). GATE 1 therefore
 accepts users whose permissions include `BASIC_ACCESS`, and Craft PATs with the
 explicit `CRAFT_SANDBOX` scope. GATE 2 rejects an unscoped PAT, because
-`token_scopes` is `None`. A user needs a PAT with an explicit scope that implies
-`USE_LLM_GATEWAY`. See §4.2 and [[auth-and-identity]] for what `PAT scope`
+`token_scopes` is `None`. A user needs a USER PAT with the literal `USE_LLM_GATEWAY` selection and that permission in its stored cap. See §4.2 and [[auth-and-identity]] for what `PAT scope`
 means mechanically.
 
 ### Configuration (`backend/onyx/server/gateway/configs.py`)
@@ -125,9 +124,8 @@ The gateway introduces no new tables. It reads the same rows
   `db/llm.py:fetch_accessible_llm_provider_by_id` /
   `fetch_all_accessible_llm_providers`.
 - `PersonalAccessToken` (`db/models.py`, via `db/pat.py`), whose `scopes`
-  column is a nullable list of `Permission` strings; `None` means
-  unrestricted (capped only by the owning user's own effective
-  permissions).
+  column preserves the original nullable selections. Its non-null
+  `permission_cap` stores the finite permissions granted at creation.
 
 It writes the same usage ledger [[llm-providers]] and
 [[rate-and-usage-limits]] already document: `UserUsage`
@@ -184,38 +182,18 @@ per-Craft-sandbox enablement GATE 2 already checks; a Craft sandbox's
 `CRAFT_SANDBOX`-scoped PAT is never subject to it.
 
 **GATE 1** (`require_permission(Permission.USE_LLM_GATEWAY)`, every endpoint
-in `api.py`) is the ordinary PAT-scope cap described in
-[[auth-and-identity]]: a token's own `scopes` (or the owning user's full
-`effective_permissions`, if unscoped) must imply `USE_LLM_GATEWAY`. Because
-`USE_LLM_GATEWAY` is implied by both `BASIC_ACCESS` and `CRAFT_SANDBOX`
-(`auth/permissions.py`), GATE 1 alone passes for almost any logged-in
-user's PAT and for every Craft sandbox PAT.
+in `api.py`) requires live user authority and literal membership in the PAT's
+stored `permission_cap`. Issuance expands permissions once. USER caps omit
+Gateway unless the original selections contain `use:llm_gateway` literally.
+New implication rules cannot expand an existing token.
 
-**GATE 2** (`craft_gateway.py:gateway_request_flow`) is what actually decides
-*which policy* the request is attributed to, and it treats the two cases
-asymmetrically:
-
-- If `request.state.token_scopes` is `None` (no scopes attached to this
-  request), it returns `None` and the request is rejected with
-  `OnyxErrorCode.INSUFFICIENT_PERMISSIONS`
-  (`api.py:_authorize_gateway_request`). The module's own docstring is
-  explicit about why this branch exists: **"Session/API-key auth carries no
-  token scopes and must never match"**
-  (`craft_gateway.py:is_craft_gateway_request`). A cookie session or a plain
-  API key can satisfy GATE 1 through the owning user's `effective_permissions`
-  but carries no `token_scopes` object at all, so it can never reach a
-  gateway response. `request.state.token_scopes` is only ever set from a PAT
-  resolution (`onyx/auth/users.py`).
-- If the token's raw scopes include `Permission.CRAFT_SANDBOX`, the request
-  **must** also pass `is_craft_gateway_request`, which requires both that the
-  scope set implies `USE_LLM_GATEWAY` (true by the implication above) *and*
-  `is_craft_enabled_for_user(user)`
-  (`onyx/server/features/build/utils.py`). Only then does it return
-  `LLMFlow.CRAFT_LLM_GENERATION`; otherwise it returns `None` and the call is
-  rejected, even though GATE 1 already passed.
-- If `CRAFT_SANDBOX` is absent but the scopes imply `USE_LLM_GATEWAY`
-  directly, it returns `LLMFlow.LLM_GATEWAY` with no Craft-enablement check
-  at all.
+**GATE 2** (`craft_gateway.py:gateway_request_flow`) selects the credential policy.
+Session and service API-key requests have no raw PAT selections and are rejected.
+A CRAFT_PAT credential must carry the `craft_sandbox` marker, hold Gateway in its
+stored cap, and pass `is_craft_enabled_for_user`. It uses `CRAFT_LLM_GENERATION`.
+A USER PAT must literally select `use:llm_gateway` and hold it in its stored cap.
+It uses `LLM_GATEWAY`. Basic and admin bundles never select external Gateway
+implicitly. A USER token cannot impersonate Craft through a raw scope marker.
 
 This asymmetry matters because a Craft sandbox's PAT is minted with exactly
 `scopes=[Permission.CRAFT_SANDBOX]`
@@ -571,13 +549,10 @@ See `backend/AGENTS.md` for required env and secrets.
 
 ## 9. Footguns
 
-- **`Permission.USE_LLM_GATEWAY` is implied by `BASIC_ACCESS`.** GATE 1
-  (`require_permission`) alone passes for nearly any logged-in user's
-  unscoped PAT or session-derived permission set. GATE 2
-  (`gateway_request_flow`) is the only thing standing between "any user" and
-  "an actual gateway response", specifically because it also refuses to
-  match session/API-key auth at all (§4.2). Do not reason about gateway
-  access from GATE 1 in isolation.
+- **User authority and token scope are separate.** Basic still implies Gateway
+  for live user permission resolution. USER PAT issuance and Gateway flow
+  selection require the literal Gateway scope. Preserve the stored cap and
+  credential type checks when adding a Gateway endpoint.
 - **The cost cap needs the resolved provider, so it runs after model
   resolution.** A new generating endpoint must resolve through
   `_resolve_metered_gateway_model`, not `resolve_gateway_model`, or it skips

@@ -1,9 +1,10 @@
 """API endpoints for Personal Access Tokens."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
-from onyx.auth.permissions import require_permission
+from onyx.auth.pat import get_token_permission_cap
+from onyx.auth.permissions import materialize_pat_permission_cap, require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import PatType, Permission
 from onyx.db.models import User
@@ -92,11 +93,33 @@ def list_tokens(
 @router.post("")
 def create_token(
     request: CreateTokenRequest,
+    http_request: Request,
     user: User = Depends(require_permission(Permission.CREATE_USER_API_KEYS)),
     db_session: Session = Depends(get_session),
 ) -> CreatedTokenResponse:
     """Create new personal access token for current user."""
     _validate_assignable_scopes(request.scopes)
+    parent_cap = get_token_permission_cap(http_request)
+    if (
+        parent_cap is not None
+        and http_request.scope.get("state", {}).get("token_scopes") is not None
+        and request.scopes is None
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "A scoped token must select explicit scopes for its child token.",
+        )
+    if (
+        parent_cap is not None
+        and request.scopes is not None
+        and not materialize_pat_permission_cap(user, request.scopes).issubset(
+            parent_cap
+        )
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "A token cannot create a token with broader permissions.",
+        )
 
     try:
         pat, raw_token = create_pat(
@@ -105,6 +128,7 @@ def create_token(
             name=request.name,
             expiration_days=request.expiration_days,
             scopes=request.scopes,
+            parent_cap=parent_cap,
         )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))

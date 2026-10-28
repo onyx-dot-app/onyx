@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
+from onyx.auth.users import uncapped_credential_user
 from onyx.configs.app_configs import DISCORD_BOT_TOKEN
 from onyx.db.discord_bot import (
     create_discord_bot_config,
@@ -163,7 +164,11 @@ def list_guild_configs(
     return [DiscordGuildConfigResponse.model_validate(c) for c in configs]
 
 
-@router.post("/guilds", response_model=DiscordGuildConfigCreateResponse)
+@router.post(
+    "/guilds",
+    response_model=DiscordGuildConfigCreateResponse,
+    dependencies=[Depends(uncapped_credential_user)],
+)
 def create_guild_request(
     _: User = Depends(require_permission(Permission.MANAGE_BOTS)),
     db_session: Session = Depends(get_session),

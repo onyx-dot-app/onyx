@@ -16128,7 +16128,7 @@
           "title": "Nom du jeton"
         },
         "permissions": {
-          "fullAccessNote": "Hérite de toutes vos autorisations.",
+          "fullAccessNote": "Inclut vos autorisations à la création, sauf LLM Gateway. Les nouvelles autorisations nécessitent un nouveau jeton.",
           "fullAccessOption": "Accès complet",
           "limitedAccessNote": "Limitez ce jeton à des fonctionnalités spécifiques.",
           "limitedAccessOption": "Accès limité",

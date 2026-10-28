@@ -103,6 +103,37 @@ class TestEnsureSandboxPat:
         )
         assert len(craft_pats) == 1
 
+    def test_changed_cap_triggers_remint(
+        self,
+        db_session: Session,
+        test_user: User,
+        sandbox: Sandbox,
+    ) -> None:
+        original_token = ensure_sandbox_pat(db_session, sandbox, test_user)
+        original = (
+            db_session.query(PersonalAccessToken)
+            .filter_by(hashed_token=hash_pat(original_token))
+            .one()
+        )
+        original.permission_cap = [Permission.READ_SEARCH.value]
+        db_session.flush()
+
+        replacement = ensure_sandbox_pat(db_session, sandbox, test_user)
+
+        assert hash_pat(replacement) != original.hashed_token
+        assert original.is_revoked is True
+        current = (
+            db_session.query(PersonalAccessToken)
+            .filter_by(hashed_token=hash_pat(replacement))
+            .one()
+        )
+        assert set(current.permission_cap) == {
+            Permission.CRAFT_SANDBOX.value,
+            Permission.READ_SEARCH.value,
+            Permission.GENERATE_IMAGE.value,
+            Permission.USE_LLM_GATEWAY.value,
+        }
+
     def test_expired_token_triggers_remint(
         self,
         db_session: Session,

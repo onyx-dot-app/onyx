@@ -19,6 +19,7 @@ export default defineConfig({
     "auth/signup.spec.ts",
     "chat/welcome_page.spec.ts",
     "chat/dev_stack.spec.ts",
+    "settings/access_token_permissions.spec.ts",
   ],
   timeout: 120_000,
   expect: { timeout: 30_000 },

@@ -7,6 +7,7 @@ the name could forge lines in the shared log stream. It now logs the name with
 
 from unittest.mock import patch
 
+from fastapi import Request
 from sqlalchemy.orm import Session
 
 from onyx.server.pat.api import create_token
@@ -19,7 +20,12 @@ def test_create_token_escapes_name_in_logs(db_session: Session) -> None:
     request = CreateTokenRequest(name="legit\nINJECTED admin deleted tenant")
 
     with patch("onyx.server.pat.api.logger") as mock_logger:
-        create_token(request=request, user=user, db_session=db_session)
+        create_token(
+            request=request,
+            http_request=Request({"type": "http"}),
+            user=user,
+            db_session=db_session,
+        )
 
     mock_logger.info.assert_called_once()
     fmt, *args = mock_logger.info.call_args.args

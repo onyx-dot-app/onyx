@@ -16128,7 +16128,7 @@
           "title": "اسم الرمز"
         },
         "permissions": {
-          "fullAccessNote": "يرث جميع أذوناتك.",
+          "fullAccessNote": "يتضمن أذوناتك عند الإنشاء، باستثناء بوابة LLM. تتطلب الأذونات الجديدة رمزًا جديدًا.",
           "fullAccessOption": "وصول كامل",
           "limitedAccessNote": "قصر هذا الرمز على قدرات محددة.",
           "limitedAccessOption": "وصول محدود",

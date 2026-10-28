@@ -7,6 +7,7 @@ from typing import Any
 from unittest.mock import patch
 from uuid import uuid4
 
+import httpx
 import pytest
 
 # Enables test-only server behavior, e.g. ToolCallDebug packets.
@@ -201,7 +202,10 @@ def _start_celery_workers(
     # every wait_for_indexing_completion / pruning / export test times out.
     # Onyx-lite has no vector DB / indexing pipeline, so spawning the fleet
     # there is pure overhead.
-    if os.getenv("DISABLE_VECTOR_DB", "false").lower() == "true":
+    if (
+        os.getenv("DISABLE_VECTOR_DB", "false").lower() == "true"
+        or os.getenv("ONYX_TEST_EXTERNAL_API") == "true"
+    ):
         yield None
         return
 
@@ -304,7 +308,17 @@ def _start_celery_workers(
 def _test_client(
     initialize_db: None,  # noqa: ARG001
     _start_celery_workers: None,  # noqa: ARG001
-) -> Generator[TestClient, None, None]:
+) -> Generator[httpx.Client, None, None]:
+    if os.getenv("ONYX_TEST_EXTERNAL_API") == "true":
+        with httpx.Client(
+            transport=http_client.RetryingTransport(), timeout=60
+        ) as deployed_client:
+            http_client.set_test_client(deployed_client)
+            try:
+                yield deployed_client
+            finally:
+                http_client.set_test_client(None)
+        return
     # In-process api_server. Use the versioned dispatcher so MT / EE
     # builds get ee.onyx.main.get_application — that's the one that
     # registers tenant_id_middleware (required to populate

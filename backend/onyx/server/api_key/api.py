@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
+from onyx.auth.users import uncapped_credential_user
 from onyx.db.api_key import (
     ApiKeyDescriptor,
     fetch_api_key,
@@ -49,7 +50,7 @@ def get_api_key(
     return api_key
 
 
-@router.post("")
+@router.post("", dependencies=[Depends(uncapped_credential_user)])
 def create_api_key(
     api_key_args: APIKeyArgs,
     user: User = Depends(
@@ -71,7 +72,9 @@ def create_api_key(
     return api_key
 
 
-@router.post("/{api_key_id}/regenerate")
+@router.post(
+    "/{api_key_id}/regenerate", dependencies=[Depends(uncapped_credential_user)]
+)
 def regenerate_existing_api_key(
     api_key_id: int,
     user: User = Depends(

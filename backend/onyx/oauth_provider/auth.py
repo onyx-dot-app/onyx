@@ -128,6 +128,7 @@ async def authenticate_oauth_provider_request(
     ):
         raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)
     request.state.token_scopes = [Permission.READ_SEARCH]
+    request.state.token_permission_cap = frozenset({Permission.READ_SEARCH})
     request.state.usage_credential = UsageCredentialIdentity(
         UsageCredentialType.OAUTH_PROVIDER,
         str(info.grant.id),

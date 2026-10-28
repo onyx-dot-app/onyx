@@ -100,6 +100,7 @@ _AUTH_DEPENDENCY_NAMES: frozenset[str] = frozenset(
     {
         "bind_craft_session",
         "control_plane_dep",
+        "uncapped_credential_user",
         "current_chat_accessible_user",
         "current_cloud_superuser",
         "current_limited_user",

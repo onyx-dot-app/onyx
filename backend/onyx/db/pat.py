@@ -15,6 +15,7 @@ from onyx.auth.pat import (
     generate_pat,
     hash_pat,
 )
+from onyx.auth.permissions import materialize_pat_permission_cap
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.enums import PatType, Permission
 from onyx.db.models import PersonalAccessToken, User
@@ -26,7 +27,7 @@ logger = setup_logger()
 
 
 class PatAuthResult(NamedTuple):
-    """A PAT resolved to its user and scopes (scopes None = unrestricted)."""
+    """A PAT's owner, original selections, and fixed authorization ceiling."""
 
     user: User
     scopes: list[Permission] | None
@@ -34,6 +35,7 @@ class PatAuthResult(NamedTuple):
     pat_name: str
     pat_display: str
     pat_type: PatType
+    permission_cap: frozenset[Permission]
 
 
 async def resolve_pat(
@@ -72,7 +74,6 @@ async def resolve_pat(
         return None
 
     _schedule_pat_last_used_update(hashed_token, now)
-    # None (no scopes) = unrestricted; a stored list is parsed to Permissions.
     scopes = parse_permission_values(pat.scopes) if pat.scopes is not None else None
     return PatAuthResult(
         user=pat.user,
@@ -81,6 +82,7 @@ async def resolve_pat(
         pat_name=pat.name,
         pat_display=pat.token_display,
         pat_type=pat.pat_type,
+        permission_cap=frozenset(parse_permission_values(pat.permission_cap)),
     )
 
 
@@ -122,11 +124,13 @@ def create_pat(
     expiration_days: int | None,
     pat_type: PatType = PatType.USER,
     scopes: list[Permission] | None = None,
+    *,
+    parent_cap: frozenset[Permission] | None = None,
 ) -> tuple[PersonalAccessToken, str]:
     """Create new PAT. Returns (db_record, raw_token).
 
-    scopes defaults to None (no restriction — full user access); pass a list to
-    scope the token to specific permissions.
+    None snapshots the owner's current permissions, excluding external Gateway.
+    An authenticating parent can only reduce the stored authorization ceiling.
 
     Raises ValueError if user is inactive or not found.
     """
@@ -139,6 +143,10 @@ def create_pat(
     tenant_id = get_current_tenant_id()
     raw_token = generate_pat(tenant_id)
 
+    cap = materialize_pat_permission_cap(user, scopes, pat_type)
+    if parent_cap is not None:
+        cap &= parent_cap
+
     pat = PersonalAccessToken(
         name=name,
         hashed_token=hash_pat(raw_token),
@@ -147,6 +155,7 @@ def create_pat(
         expires_at=calculate_expiration(expiration_days),
         pat_type=pat_type,
         scopes=[s.value for s in scopes] if scopes is not None else None,
+        permission_cap=sorted(permission.value for permission in cap),
     )
     db_session.add(pat)
     db_session.flush()

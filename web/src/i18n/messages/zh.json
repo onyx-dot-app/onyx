@@ -16128,7 +16128,7 @@
           "title": "Token 名称"
         },
         "permissions": {
-          "fullAccessNote": "继承您的全部权限。",
+          "fullAccessNote": "包含创建时的权限，但不包含 LLM Gateway。新增权限需要新建令牌。",
           "fullAccessOption": "完全访问",
           "limitedAccessNote": "将此 token 限制为特定能力。",
           "limitedAccessOption": "受限访问",

@@ -8,6 +8,7 @@ from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
 from onyx.auth.pat import hash_pat
+from onyx.auth.permissions import materialize_pat_permission_cap
 from onyx.db.enums import BuildSessionStatus, PatType, Permission, SandboxStatus
 from onyx.db.models import BuildSession, PersonalAccessToken, Sandbox, Snapshot, User
 from onyx.db.pat import create_pat, revoke_pat
@@ -39,9 +40,17 @@ def ensure_sandbox_pat(db_session: Session, sandbox: Sandbox, user: User) -> str
         raw_token = sandbox.encrypted_pat.get_value(apply_mask=False)
         existing = existing_craft_pats[0]
         # Re-mint if the stored PAT's scopes drifted from the current role scope
-        if hash_pat(raw_token) == existing.hashed_token and existing.scopes == [
-            Permission.CRAFT_SANDBOX.value
-        ]:
+        if (
+            hash_pat(raw_token) == existing.hashed_token
+            and existing.scopes == [Permission.CRAFT_SANDBOX.value]
+            and set(existing.permission_cap)
+            == {
+                permission.value
+                for permission in materialize_pat_permission_cap(
+                    user, [Permission.CRAFT_SANDBOX], PatType.CRAFT
+                )
+            }
+        ):
             return raw_token
 
     for pat in existing_craft_pats:

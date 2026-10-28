@@ -16128,7 +16128,7 @@
           "title": "Token Name"
         },
         "permissions": {
-          "fullAccessNote": "Inherits all of your permissions.",
+          "fullAccessNote": "Includes your permissions at creation, except LLM Gateway. New permissions require a new token.",
           "fullAccessOption": "Full access",
           "limitedAccessNote": "Limit this token to specific capabilities.",
           "limitedAccessOption": "Limited access",

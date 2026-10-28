@@ -11,8 +11,7 @@ from onyx.server.gateway.configs import LLM_GATEWAY_MIN_TIER
 from onyx.server.settings.models import Tier
 
 # Assignable token scopes, grouped by `group_label`. `implies` is derived from the
-# permission closure and only drives the UI; require_permission re-derives it at
-# request time, which is the real grant.
+# permission closure at creation. Authorization uses the token's stored cap.
 
 
 class PatScopeOption(BaseModel):
@@ -27,6 +26,8 @@ class PatScopeOption(BaseModel):
     @property
     def implies(self) -> list[Permission]:
         covered = resolve_effective_permissions({self.scope.value})
+        if self.scope is not Permission.USE_LLM_GATEWAY:
+            covered.discard(Permission.USE_LLM_GATEWAY.value)
         return sorted(Permission(v) for v in covered if v != self.scope.value)
 
 
@@ -74,7 +75,7 @@ class CreateTokenRequest(BaseModel):
     )
     scopes: list[Permission] | None = Field(
         None,
-        description="API-surface scopes to limit this token to. null = full user access.",
+        description="API-surface scopes to select. null snapshots current user permissions, excluding the LLM gateway.",
     )
 
 

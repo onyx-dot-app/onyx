@@ -12,7 +12,8 @@ from typing import Any
 from fastapi import Depends, Request
 from pydantic import BaseModel, computed_field, field_validator
 
-from onyx.db.enums import AccountType, Permission, PermissionAuthority
+from onyx.auth.pat import get_token_permission_cap
+from onyx.db.enums import AccountType, PatType, Permission, PermissionAuthority
 from onyx.db.models import User
 from onyx.db.permissions import parse_permission_values
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -333,6 +334,30 @@ def has_global_permission(user: User, permission: Permission) -> bool:
     return has_permission(user, permission) is PermissionAuthority.GLOBAL
 
 
+def materialize_pat_permission_cap(
+    user: User, scopes: list[Permission] | None, pat_type: PatType = PatType.USER
+) -> frozenset[Permission]:
+    if pat_type is PatType.CRAFT:
+        return frozenset(
+            Permission(value)
+            for value in resolve_effective_permissions({Permission.CRAFT_SANDBOX.value})
+        )
+    permissions = get_effective_permissions(user)
+    if user.is_group_manager:
+        permissions |= {
+            Permission(value) for value in SCOPED_MANAGER_PERMISSIONS_EXPANDED
+        }
+    if scopes is not None:
+        covered = resolve_effective_permissions({scope.value for scope in scopes})
+        permissions = {
+            permission for permission in permissions if permission.value in covered
+        }
+    permissions.discard(Permission.CRAFT_SANDBOX)
+    if scopes is None or Permission.USE_LLM_GATEWAY not in scopes:
+        permissions.discard(Permission.USE_LLM_GATEWAY)
+    return frozenset(permissions)
+
+
 def require_permission(
     required: Permission,
     *,
@@ -340,7 +365,9 @@ def require_permission(
     allow_scope: bool = False,
 ) -> Callable[..., Coroutine[Any, Any, User]]:
     """FastAPI dependency factory: require ``required`` of the caller, capped by the
-    authenticating token's scopes (unrestricted PAT / session / API key = no cap).
+    authenticating token's stored cap. Sessions and service API keys have no cap.
+    Re-gating a route to a new permission requires token reissue. Never reuse a
+    removed permission string for a different capability.
     allow_anonymous admits the anonymous user on the chat surface.
 
     allow_scope (GATE 1) also lets a SCOPED group manager *reach* the handler — reach
@@ -354,19 +381,14 @@ def require_permission(
     base_user = current_chat_accessible_user if allow_anonymous else current_user
 
     async def dependency(request: Request, user: User = Depends(base_user)) -> User:
-        token_scopes: list[Permission] | None = getattr(  # ods: ignore[getattr]
-            request.state, "token_scopes", None
-        )
+        token_cap = get_token_permission_cap(request)
         authority = has_permission(user, required)
         # allow_scope: GATE 1 lets a SCOPED manager reach the route; default GLOBAL-only.
         if allow_scope:
             permitted_by_user = authority is not PermissionAuthority.NONE
         else:
             permitted_by_user = authority is PermissionAuthority.GLOBAL
-        token_implies = token_scopes is not None and required.value in (
-            resolve_effective_permissions({s.value for s in token_scopes})
-        )
-        permitted_by_token = token_scopes is None or token_implies
+        permitted_by_token = token_cap is None or required in token_cap
         permitted = permitted_by_user and permitted_by_token
         if not permitted:
             raise OnyxError(

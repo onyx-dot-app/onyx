@@ -78,7 +78,7 @@ from onyx.auth.mobile_sso.sso_completion import (
     is_mobile_sso,
 )
 from onyx.auth.oidc_client import log_token_exchange_failure
-from onyx.auth.pat import get_hashed_pat_from_request
+from onyx.auth.pat import get_hashed_pat_from_request, get_token_permission_cap
 from onyx.auth.permissions import get_effective_permissions, has_global_permission
 from onyx.auth.pkce import generate_pkce_pair
 from onyx.auth.schemas import AuthBackend, UserCreate
@@ -2449,9 +2449,8 @@ async def _resolve_optional_user(
             pat = await resolve_pat(hashed_pat, async_db_session)
             if pat is not None:
                 user = pat.user
-                # Expose the token's scopes so require_permission can cap the
-                # request to them.
                 request.state.token_scopes = pat.scopes
+                request.state.token_permission_cap = pat.permission_cap
                 request.state.usage_credential = UsageCredentialIdentity(
                     (
                         UsageCredentialType.CRAFT_PAT
@@ -2628,6 +2627,17 @@ async def current_user(
     if is_limited_user(user):
         raise BasicAuthenticationError(
             detail="Access denied. User has limited permissions.",
+        )
+    return user
+
+
+async def uncapped_credential_user(
+    request: Request, user: User = Depends(current_user)
+) -> User:
+    if get_token_permission_cap(request) is not None:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "A capped token cannot create an uncapped credential.",
         )
     return user
 

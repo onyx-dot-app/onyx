@@ -16128,7 +16128,7 @@
           "title": "トークン名"
         },
         "permissions": {
-          "fullAccessNote": "あなたのすべての権限を継承します。",
+          "fullAccessNote": "作成時の権限が含まれます。LLM Gateway は含まれません。新しい権限には新しいトークンが必要です。",
           "fullAccessOption": "フルアクセス",
           "limitedAccessNote": "このトークンを特定の機能に制限します。",
           "limitedAccessOption": "制限付きアクセス",
