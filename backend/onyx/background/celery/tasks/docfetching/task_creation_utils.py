@@ -16,7 +16,7 @@ from onyx.db.connector_credential_pair import lock_connector_credential_pair_row
 from onyx.db.connector_edit_requests import (
     create_pending_backfill_attempt__no_commit,
 )
-from onyx.db.document import count_secondary_only_sync_pending_documents_for_cc_pairs
+from onyx.db.document import has_secondary_only_sync_pending_documents
 from onyx.db.enums import ConnectorCredentialPairStatus, IndexModelStatus
 from onyx.db.index_attempt import (
     claim_waiting_index_attempt,
@@ -79,12 +79,7 @@ def docfetching_priority(
     if search_settings.status == IndexModelStatus.FUTURE:
         if not reindex_finalizing(db_session, search_settings):
             return OnyxCeleryPriority.MEDIUM
-        if (
-            count_secondary_only_sync_pending_documents_for_cc_pairs(
-                db_session, [cc_pair.id]
-            )
-            > 0
-        ):
+        if has_secondary_only_sync_pending_documents(db_session, cc_pair.id):
             return OnyxCeleryPriority.HIGH
         return OnyxCeleryPriority.MEDIUM
     if reindex_finalizing(db_session, get_secondary_search_settings(db_session)):
