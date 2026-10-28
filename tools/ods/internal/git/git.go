@@ -118,6 +118,25 @@ func PushNewBranch(commitSHA, branch string, verify bool) error {
 	return HintAfter(PushHookHintDelay, hint, func() error { return RunCommand(args...) })
 }
 
+// PushNewTag pushes commitSHA to origin as a tag that must not exist there
+// yet, without creating or moving a local tag. The empty --force-with-lease
+// expectation makes origin reject the push when the tag appeared meanwhile.
+// Pre-push hooks are skipped unless verify is true, as in PushNewBranch.
+func PushNewTag(commitSHA, tag string, verify bool) error {
+	args := []string{"push"}
+	if !verify {
+		args = append(args, "--no-verify")
+	}
+	args = append(args,
+		fmt.Sprintf("--force-with-lease=refs/tags/%s:", tag),
+		"origin", fmt.Sprintf("%s:refs/tags/%s", commitSHA, tag))
+	if !verify {
+		return RunCommand(args...)
+	}
+	hint := "Push is slow because --verify runs the pre-push hooks over every commit on the branch. Re-run without --verify to skip them."
+	return HintAfter(PushHookHintDelay, hint, func() error { return RunCommand(args...) })
+}
+
 // GetCommitMessage gets the first line of a commit message
 func GetCommitMessage(commitSHA string) (string, error) {
 	cmd := exec.Command("git", "log", "-1", "--format=%s", commitSHA)

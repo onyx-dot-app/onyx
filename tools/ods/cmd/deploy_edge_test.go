@@ -230,6 +230,9 @@ func TestValidateDevBuildTag(t *testing.T) {
 		{tag: "dev-build-cloud-fix", wantErr: "must not contain \"cloud\""},
 		{tag: "dev-build-Cloud-fix", wantErr: "must not contain \"cloud\""},
 		{tag: "dev-build-a/b", wantErr: "valid Docker tag"},
+		{tag: "dev-build-a..b", wantErr: "valid git tag name"},
+		{tag: "dev-build-foo.", wantErr: "valid git tag name"},
+		{tag: "dev-build-foo.lock", wantErr: "valid git tag name"},
 		{tag: "dev-build-" + strings.Repeat("a", 115), wantErr: "valid Docker tag"},
 	}
 	for _, c := range cases {
@@ -273,12 +276,6 @@ func TestDeployEdge_branch(t *testing.T) {
 	buildSucceeded := deployRun(t, workflowRun{DatabaseID: 101, Status: "completed", Conclusion: "success"})
 	deploySucceeded := deployRun(t, workflowRun{DatabaseID: 8, Status: "completed", Conclusion: "success"})
 	failed := deployRun(t, workflowRun{Status: "completed", Conclusion: "failure"})
-	runLists := []deployGHReply{
-		deployRuns(t, workflowRun{DatabaseID: 100}),
-		deployRuns(t, workflowRun{DatabaseID: 100}, workflowRun{DatabaseID: 101}),
-		deployRuns(t, workflowRun{DatabaseID: 7}),
-		deployRuns(t, workflowRun{DatabaseID: 8}, workflowRun{DatabaseID: 7}),
-	}
 
 	cases := []struct {
 		name         string
@@ -322,6 +319,12 @@ func TestDeployEdge_branch(t *testing.T) {
 			repo := setupEdgeBranchRepo(t)
 			if c.rejectPushes {
 				gittest.RejectPushes(t, repo.origin)
+			}
+			runLists := []deployGHReply{
+				deployRuns(t, workflowRun{DatabaseID: 100, HeadSHA: "0ld"}),
+				deployRuns(t, workflowRun{DatabaseID: 100, HeadSHA: "0ld"}, workflowRun{DatabaseID: 101, HeadSHA: repo.sha}),
+				deployRuns(t, workflowRun{DatabaseID: 7}),
+				deployRuns(t, workflowRun{DatabaseID: 8}, workflowRun{DatabaseID: 7}),
 			}
 			replies := map[string][]deployGHReply{
 				"run-list":     runLists,
@@ -376,6 +379,9 @@ func TestDeployEdge_branch(t *testing.T) {
 			if gittest.TagExists(repo.origin, edgeTagName) {
 				t.Fatal("a branch deploy must not move the edge tag")
 			}
+			if local := gittest.Git(t, repo.work, "tag", "--list", tag); local != "" {
+				t.Fatalf("a branch deploy must not create local tag %s", local)
+			}
 		})
 	}
 }
@@ -385,13 +391,16 @@ func TestDeployEdge_branchReusesATagAlreadyAtTheCommit(t *testing.T) {
 	repo := setupEdgeBranchRepo(t)
 	gittest.Git(t, repo.work, "tag", repo.tag, repo.sha)
 	gittest.Git(t, repo.work, "push", "--quiet", "origin", repo.tag)
+	// The newest run of the tag built another commit, and the run for this
+	// commit is not listed yet on the first poll.
 	gh := deployNewFakeGH(t, map[string][]deployGHReply{
 		"run-list": {
-			deployRuns(t, workflowRun{DatabaseID: 101}),
+			deployRuns(t, workflowRun{DatabaseID: 101, HeadSHA: "0ld"}),
+			deployRuns(t, workflowRun{DatabaseID: 102, HeadSHA: repo.sha}, workflowRun{DatabaseID: 101, HeadSHA: "0ld"}),
 			deployRuns(t, workflowRun{DatabaseID: 7}),
 			deployRuns(t, workflowRun{DatabaseID: 8}),
 		},
-		"run-view":     {deployRun(t, workflowRun{DatabaseID: 101, Status: "completed", Conclusion: "success"})},
+		"run-view":     {deployRun(t, workflowRun{DatabaseID: 102, Status: "completed", Conclusion: "success"})},
 		"workflow-run": {{}},
 	})
 	deployCaptureOutput(t)
@@ -400,9 +409,9 @@ func TestDeployEdge_branchReusesATagAlreadyAtTheCommit(t *testing.T) {
 	if err := deployEdge(opts, deployFastPolling()); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	want := "run list -R onyx-dot-app/onyx --workflow deployment.yml --limit 1 " + deployRunJSONFields + " --event push --branch " + repo.tag
-	if calls := gh.calls(); len(calls) < 2 || calls[1] != want {
-		t.Fatalf("expected the existing build run lookup %q, got %q", want, calls)
+	want := "run view 102 -R onyx-dot-app/onyx " + deployRunJSONFields
+	if calls := gh.calls(); !slices.Contains(calls, want) {
+		t.Fatalf("expected the build run at the tag's commit (%q), got %q", want, calls)
 	}
 }
 

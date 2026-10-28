@@ -271,36 +271,25 @@ func deployBranchToEdge(opts *DeployEdgeOptions, polling runPolling, deployRepo,
 		}
 	}
 
-	var buildRun *workflowRun
+	// A reused tag accepts any earlier run of this commit; a new tag accepts
+	// only the run its push starts.
+	var priorBuildRunID int64
 	if reuseTag {
 		log.Infof("Tag '%s' is already on origin at %s; looking up its build run...", tag, shortSHA(sha))
-		runs, err := listWorkflowRuns(onyxRepo, deploymentWorkflowFile, "push", tag, 1)
-		if err != nil {
-			return fatalErrorf("Failed to query existing deployment runs: %w", err)
-		}
-		if len(runs) == 0 {
-			return fatalErrorf("Tag %s is on origin but has no build run; delete the tag or pass a different --tag", tag)
-		}
-		buildRun = &runs[0]
 	} else {
-		priorBuildRunID, err := latestWorkflowRunID(onyxRepo, deploymentWorkflowFile, "push", tag)
+		priorBuildRunID, err = latestWorkflowRunID(onyxRepo, deploymentWorkflowFile, "push", tag)
 		if err != nil {
 			return fatalErrorf("Failed to query existing deployment runs: %w", err)
 		}
-
 		log.Infof("Pushing tag '%s' at %s...", tag, shortSHA(sha))
-		if err := git.RunCommand("tag", "-f", tag, sha); err != nil {
-			return fatalErrorf("Failed to create local tag: %w", err)
-		}
-		if err := git.PushTag(tag, false, opts.Verify); err != nil {
+		if err := git.PushNewTag(sha, tag, opts.Verify); err != nil {
 			return fatalErrorf("Failed to push tag %s: %w", tag, err)
 		}
-
 		log.Info("Waiting for build workflow to start...")
-		buildRun, err = waitForNewRun(polling, onyxRepo, deploymentWorkflowFile, "push", tag, priorBuildRunID)
-		if err != nil {
-			return fatalErrorf("Failed to find triggered build run: %w", err)
-		}
+	}
+	buildRun, err := waitForRunAtCommit(polling, onyxRepo, deploymentWorkflowFile, "push", tag, sha, priorBuildRunID)
+	if err != nil {
+		return fatalErrorf("Failed to find the build run for %s at %s: %w", tag, shortSHA(sha), err)
 	}
 	log.Infof("Build run: %s", buildRun.URL)
 
@@ -398,6 +387,9 @@ func validateDevBuildTag(tag string) error {
 	}
 	if !dockerTagRe.MatchString(tag) {
 		return fmt.Errorf("must be a valid Docker tag of at most 124 characters (letters, digits, '_', '.', '-')")
+	}
+	if err := exec.Command("git", "check-ref-format", "refs/tags/"+tag).Run(); err != nil {
+		return fmt.Errorf("must be a valid git tag name (see git check-ref-format)")
 	}
 	return nil
 }
