@@ -55,7 +55,9 @@ type ContentActionProps = ContentProps & {
    * When true, the `rightChildren` column grows to fill the row (capped at
    * `--block-width-form-input-column-max`) instead of hugging its content.
    * Intended for full-width form inputs; leave off for compact controls like
-   * toggles/buttons. Ignored in the `responsive` branch.
+   * toggles/buttons. In the `responsive` branch it applies on desktop, where
+   * the control sits beside the title; stacked on narrow viewports, the
+   * control always spans the full width.
    *
    * @default false
    */
@@ -123,7 +125,11 @@ function ContentAction({
     // Section) a wrapper without w-full shrinks to content width, so the input
     // wouldn't fill the row.
     return (
-      <div className="w-full min-w-0" style={paddingStyle}>
+      <div
+        className="opal-content-action-responsive w-full min-w-0"
+        data-fill={fillRight || undefined}
+        style={paddingStyle}
+      >
         <Content {...({ ...contentProps, rightChildren } as ContentProps)} />
       </div>
     );
