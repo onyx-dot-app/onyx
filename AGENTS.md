@@ -64,10 +64,17 @@ there:
 - `web/` — Next.js frontend. Standards (also cover `desktop/`, the Tauri shell): `web/AGENTS.md`.
 - `mobile/` — React Native + Expo app. Standards: `mobile/AGENTS.md`. Mobile differs from web on
   several points (no DOM, NativeWind, expo-router), so do **not** assume the web rules apply there.
-- `documentation/` — customer docs (Mintlify, docs.onyx.app). Standards: `documentation/AGENTS.md`. Update docs in
-  the same PR as the change they describe. Production docs follow the latest stable release, not `main`.
+- `documentation/` — customer docs (Mintlify, docs.onyx.app). Standards: `documentation/AGENTS.md`. Production docs
+  follow the latest stable release, not `main`.
 
 Explore the tree with `ls` rather than relying on docs for the full package list.
+
+### Docs
+
+When you change something a customer sees or configures (UI, admin settings, connectors, environment variables, the
+public API, deployment), update the matching page in `documentation/` in the same PR. Recapture screenshots of UI you
+changed: follow `.agents/skills/docs-writing/SKILL.md` and use the local app and admin login above. Skip docs for
+internal refactors, tests, CI, and multi-tenant cloud operations, which customers cannot use.
 
 ### Feature Map
 

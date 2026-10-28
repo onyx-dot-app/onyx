@@ -11,3 +11,5 @@
   pre-commit hook runs the `--check` form.
 - Production docs follow the latest stable release, not `main`. A docs fix for the current release must also land
   on its `release/vX.Y` branch.
+- Write for customers who self-host or use Onyx Cloud. Do not document multi-tenant operations (tenant provisioning,
+  the control plane, `MULTI_TENANT`-only code). Customers cannot use them.
