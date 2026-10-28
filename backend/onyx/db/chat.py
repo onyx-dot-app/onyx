@@ -25,6 +25,7 @@ from sqlalchemy.sql.expression import ColumnElement
 from sqlalchemy.sql.selectable import CTE
 
 from onyx.agents.models import CompactionCheckpoint, RunStatus
+from onyx.chat.errors import chat_error
 from onyx.chat.models import (
     HistoryLink,
     MessageRendering,
@@ -63,6 +64,7 @@ from onyx.server.query_and_chat.models import (
     AUTO_PLACE_AFTER_LATEST_MESSAGE,
     ChatMessageDetail,
 )
+from onyx.server.query_and_chat.streaming_models import StreamingError
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
 
@@ -1150,6 +1152,26 @@ def translate_db_message_to_chat_message_detail(
     top_documents = sorted(
         top_documents, key=lambda doc: doc.score or 0.0, reverse=True
     )
+    request_params = (
+        GenerationRequestParams.model_validate(
+            chat_message.request_params, extra="ignore"
+        )
+        if chat_message.request_params is not None
+        else None
+    )
+    error_info = (
+        chat_error(chat_message.response_failure)
+        if chat_message.response_failure is not None
+        else StreamingError(error=chat_message.error)
+        if chat_message.error is not None
+        else None
+    )
+    if error_info is not None and request_params is not None:
+        error_info.details = {
+            **(error_info.details or {}),
+            "model": request_params.model_name,
+            "provider": request_params.model_provider,
+        }
     chat_msg_detail = ChatMessageDetail(
         chat_session_id=chat_message.chat_session_id,
         message_id=chat_message.id,
@@ -1157,17 +1179,14 @@ def translate_db_message_to_chat_message_detail(
         latest_child_message=chat_message.latest_child_message_id,
         message=chat_message.message,
         reasoning_tokens=get_chat_message_reasoning(chat_message),
-        request_params=GenerationRequestParams.model_validate(
-            chat_message.request_params, extra="ignore"
-        )
-        if chat_message.request_params is not None
-        else None,
+        request_params=request_params,
         message_type=chat_message.message_type,
         context_docs=top_documents,
         citations=converted_citations,
         time_sent=chat_message.time_sent,
         files=chat_message.files or [],
-        error=chat_message.error,
+        error=error_info.error if error_info is not None else None,
+        error_info=error_info,
         current_feedback=current_feedback,
         processing_duration_seconds=chat_message.processing_duration_seconds,
         preferred_response_id=chat_message.preferred_response_id,

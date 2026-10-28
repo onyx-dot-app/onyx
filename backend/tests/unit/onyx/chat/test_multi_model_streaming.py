@@ -42,7 +42,6 @@ from onyx.chat.models import (
     CreateChatSessionID,
     PersistenceStatus,
     ReservedChatResponse,
-    StreamingError,
 )
 from onyx.chat.persistence import ChatResponsePersistence
 from onyx.chat.prepare import create_chat_agent
@@ -88,6 +87,7 @@ from onyx.server.query_and_chat.streaming_models import (
     OverallStop,
     Packet,
     ReasoningStart,
+    StreamingError,
 )
 from onyx.server.utils import get_json_line
 from onyx.tracing.flows import LLMFlow

@@ -24,11 +24,11 @@ from onyx.chat.models import (
     ChatResponseOutcome,
     ChatResponseSnapshot,
     PersistenceStatus,
-    StreamingError,
 )
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat import chat_backend
 from onyx.server.query_and_chat.models import MessageResponseIDInfo, SendMessageRequest
+from onyx.server.query_and_chat.streaming_models import StreamingError
 from onyx.utils import fleet_query_telemetry
 
 _USER_ID = "3f1c9a7e-0f38-4c3d-9a55-2d9e8a1b4c6d"

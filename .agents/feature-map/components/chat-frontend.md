@@ -608,10 +608,18 @@ Settlement belongs to both the request controller and its reader. Replacing the 
 with replay prevents an earlier settlement from releasing input or replacing history.
 Recovery preserves the latest unsaved failed turn during both initial history loading and settlement.
 Saved answers replace local errors when history contains successful final text or files.
-Saved failures and empty response placeholders retain local retry details; packets alone do not confirm a successful save.
+Saved failures restore their error text, code, and retryability. Empty response placeholders retain local errors and partial packets; packets alone do not confirm a successful save.
 Manual completion checks belong to their sessions; switching chats does not disable another chat's controls.
 Chat, search, and voice submission preserve drafts while readiness is unconfirmed.
 
 A failed Stop request leaves an acknowledged stream stoppable. The client keeps the draft and pauses queued sends.
 Pending readiness checks do not disable Stop when streaming resumes.
 History refresh preserves the selected source panel by its saved message ID.
+
+
+Response errors belong to their message, with `errorMessage` separate from answer text.
+Single-model chat and shared history render partial output followed by the error banner.
+Multi-model panels own their response errors. A model display name alone does not select panel rendering.
+Global banners show session and request failures that do not belong to a response.
+History loading converts API `error_info` or the legacy `error` string into `errorMessage`.
+Renderers use `errorMessage` for failures and `message` for answer text.

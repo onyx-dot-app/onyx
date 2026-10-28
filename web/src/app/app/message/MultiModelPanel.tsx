@@ -291,7 +291,16 @@ export default function MultiModelPanel({
       <div className="sticky top-0 z-10 bg-background-neutral-00 rounded-12">
         {headerWithNav}
       </div>
-      {errorMessage ? (
+      {(!errorMessage || agentMessageProps.rawPackets.length > 0) && (
+        <div className={cn(isNonPreferredInSelection && "pointer-events-none")}>
+          <AgentMessage
+            {...agentMessageProps}
+            hideFooter={isNonPreferredInSelection || Boolean(errorMessage)}
+            disableTTS
+          />
+        </div>
+      )}
+      {errorMessage && (
         <div className="p-4">
           <ErrorBanner
             error={errorMessage}
@@ -299,14 +308,6 @@ export default function MultiModelPanel({
             isRetryable={isRetryable ?? true}
             details={errorDetails || undefined}
             stackTrace={errorStackTrace}
-          />
-        </div>
-      ) : (
-        <div className={cn(isNonPreferredInSelection && "pointer-events-none")}>
-          <AgentMessage
-            {...agentMessageProps}
-            hideFooter={isNonPreferredInSelection}
-            disableTTS
           />
         </div>
       )}

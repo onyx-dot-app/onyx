@@ -13,11 +13,7 @@ from onyx.chat.chat_processing_checker import (
 from onyx.chat.emitter import Emitter
 from onyx.chat.errors import chat_error
 from onyx.chat.history_store import get_chat_history_store
-from onyx.chat.models import (
-    ChatResponseOutcome,
-    ChatTurnSetup,
-    StreamingError,
-)
+from onyx.chat.models import ChatResponseOutcome, ChatTurnSetup
 from onyx.chat.persistence import ChatResponsePersistence
 from onyx.chat.prepare import create_chat_agent
 from onyx.chat.presentation import ResponsePresenter
@@ -35,7 +31,11 @@ from onyx.deep_research.tool_definitions import RESEARCH_AGENT_TOOL_NAME
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.cancellation import CancellationSignal
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
+from onyx.server.query_and_chat.streaming_models import (
+    OverallStop,
+    Packet,
+    StreamingError,
+)
 from onyx.server.settings.store import load_settings
 from onyx.tracing.framework.create import ChatTraceMetadata, trace
 from onyx.utils.fleet_query_telemetry import CURRENT_QUERY_OBSERVATION, QueryObservation

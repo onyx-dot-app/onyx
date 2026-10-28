@@ -1,6 +1,7 @@
 from onyx.chat import process_message
-from onyx.chat.models import AnswerStream, StreamingError
+from onyx.chat.models import AnswerStream
 from onyx.server.query_and_chat.models import MessageResponseIDInfo
+from onyx.server.query_and_chat.streaming_models import StreamingError
 
 
 def test_gather_stream_returns_empty_answer_when_streaming_error_only() -> None:

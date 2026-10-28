@@ -75,7 +75,8 @@ settings, such as citation display and research phase.
 The detached response record is an in-memory aggregate. Database codecs restore
 concrete tool-result types before replay. It is not a standalone JSON storage schema.
 The response owner classifies execution failures and reports them separately.
-Session reload carries the saved message error alongside rendered packets.
+Session reload carries `error_info` alongside rendered packets. It uses the same
+`StreamingError` payload and failure projection as live errors; history omits stack traces.
 `OverallStop` ends rendering; it does not assert that execution succeeded.
 Only tool failures explicitly marked for public display produce error packets.
 Other tool errors remain available to the model for recovery.
@@ -296,7 +297,7 @@ emitting `ChatHeartbeat` packets on `CHAT_HEARTBEAT_INTERVAL_S` while waiting.
 9. **`PacketException.exception` never serializes.** It is `Field(exclude=True)`;
    the field exists for in-process error propagation, not for the wire. A
    client-visible error goes out as `StreamingError`
-   (`backend/onyx/chat/models.py:StreamingError`), a sibling of `Packet` in the
+   (`backend/onyx/server/query_and_chat/streaming_models.py:StreamingError`), a sibling of `Packet` in the
    `AnswerStreamPart` union, not as a `PacketObj`.
 10. **The stream buffer can develop a gap.** `read_stream_chunks` returning
     `gap=True` means the sequence is unrecoverable; `resume_chat_stream` ends

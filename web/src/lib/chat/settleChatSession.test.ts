@@ -142,7 +142,8 @@ test("a rejected send without a reserved row keeps its submitted text and error"
     latestChildNodeId: -2,
   };
   const error = {
-    ...message(-2, "error", "Too many requests"),
+    ...message(-2, "error", ""),
+    errorMessage: "Too many requests",
     parentNodeId: -1,
   };
   const tree = new Map<number, Message>([
@@ -163,7 +164,8 @@ test("stopping waits for saved history and preserves error retry details", async
   jest.mocked(waitForChatSessionIdle).mockReturnValue(idle.promise);
   jest.mocked(fetchSettledChatSession).mockReturnValue(history.promise);
   const failed = {
-    ...message(-2, "error", "Save failed"),
+    ...message(-2, "error", "Partial answer"),
+    errorMessage: "Save failed",
     messageId: 42,
     isRetryable: true,
     errorCode: "RESPONSE_SAVE_ERROR",
@@ -204,7 +206,8 @@ test("stopping waits for saved history and preserves error retry details", async
   expect(session.chatState).toBe("input");
   expect(session.messageTree.get(42)).toMatchObject({
     type: "error",
-    message: "Save failed",
+    message: "Partial answer",
+    errorMessage: "Save failed",
     isRetryable: true,
     errorCode: "RESPONSE_SAVE_ERROR",
   });
@@ -219,7 +222,7 @@ test.each([
     recover: true,
   },
   { code: null, savedType: "assistant", text: "", recover: false },
-  { code: null, savedType: "error", text: "Partial answer", recover: false },
+  { code: null, savedType: "error", text: "Partial answer", recover: true },
   {
     code: "RESPONSE_SAVE_ERROR",
     savedType: "assistant",
@@ -236,7 +239,8 @@ test.each([
   "recovery prefers successful saved answers and retains unresolved errors ($code, $savedType, '$text')",
   async ({ code, savedType, text, recover }) => {
     const failed: Message = {
-      ...message(-2, "error", "Could not finish this response"),
+      ...message(-2, "error", ""),
+      errorMessage: "Could not finish this response",
       messageId: 42,
       errorCode: code,
       isRetryable: true,
@@ -244,6 +248,7 @@ test.each([
     const saved: Message = {
       ...message(42, savedType, text),
       messageId: 42,
+      errorMessage: savedType === "error" ? "Saved refusal" : undefined,
       packets: [
         ...(code === "RESPONSE_SAVE_ERROR"
           ? [
@@ -261,7 +266,7 @@ test.each([
     };
     useChatSessionStore.getState().updateSessionData("session", {
       chatState: "unconfirmed",
-      uncaughtError: failed.message,
+      uncaughtError: failed.errorMessage,
       messageTree: new Map([[-2, failed]]),
     });
     jest.mocked(processRawChatHistory).mockReturnValue(new Map([[42, saved]]));
@@ -275,7 +280,7 @@ test.each([
     } else {
       expect(restored).toMatchObject({
         type: "error",
-        message: failed.message,
+        errorMessage: failed.errorMessage,
         errorCode: code,
         isRetryable: true,
         packets: [],
@@ -283,7 +288,7 @@ test.each([
     }
     expect(
       useChatSessionStore.getState().sessions.get("session")?.uncaughtError
-    ).toBe(recover ? null : failed.message);
+    ).toBeNull();
   }
 );
 
@@ -404,7 +409,8 @@ test("an old rejected attempt does not hide the latest saved answer", async () =
     latestChildNodeId: 42,
   };
   const rejected = {
-    ...message(-2, "error", "Rejected attempt"),
+    ...message(-2, "error", ""),
+    errorMessage: "Rejected attempt",
     parentNodeId: 1,
   };
   const partial = {

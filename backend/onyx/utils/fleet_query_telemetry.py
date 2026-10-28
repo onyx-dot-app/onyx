@@ -15,8 +15,8 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.fleet_telemetry import emit_telemetry, error_category
 
 if TYPE_CHECKING:
-    from onyx.chat.models import AnswerStreamPart, StreamingError
-    from onyx.server.query_and_chat.streaming_models import Packet
+    from onyx.chat.models import AnswerStreamPart
+    from onyx.server.query_and_chat.streaming_models import Packet, StreamingError
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -148,8 +148,11 @@ class QueryObservation:
         )
 
     def observe_packet(self, packet: "AnswerStreamPart") -> None:
-        from onyx.chat.models import StreamingError
-        from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
+        from onyx.server.query_and_chat.streaming_models import (
+            OverallStop,
+            Packet,
+            StreamingError,
+        )
 
         if isinstance(packet, Packet):
             if _is_answer_text(packet):

@@ -1,7 +1,7 @@
 import traceback
 
+from onyx.agents.models import RunFailure
 from onyx.agents.runtime import RunFailed
-from onyx.chat.models import StreamingError
 from onyx.configs.app_configs import DEV_MODE
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import LlmProviderNames
@@ -9,6 +9,7 @@ from onyx.llm.exceptions import ClassifiedLLMError, litellm_exception_to_safe_er
 from onyx.llm.interfaces import LLM
 from onyx.llm.model_capabilities import is_true_openai_model
 from onyx.llm.models import AssistantMessage, ToolChoiceOptions
+from onyx.server.query_and_chat.streaming_models import StreamingError
 
 
 class EmptyLLMResponseError(ClassifiedLLMError):
@@ -129,11 +130,11 @@ def build_empty_llm_response_error(
 
 
 def chat_error(
-    error: Exception,
+    error: Exception | RunFailure,
     llm: LLM | None = None,
     model_index: int | None = None,
 ) -> StreamingError:
-    """Apply the same classification and credential redaction to every chat error."""
+    """Project stored failures or classify exceptions for the public chat error payload."""
     details: dict[str, str | int | None] = {}
     if llm is not None:
         details.update(model=llm.config.model_name, provider=llm.config.model_provider)
@@ -141,10 +142,12 @@ def chat_error(
         details["model_index"] = model_index
     stack = None
     if isinstance(error, RunFailed):
-        info = error.failure.llm_error
+        error = error.failure
+    if isinstance(error, RunFailure):
+        info = error.llm_error
         if info is None:
             return StreamingError(
-                error=error.failure.message,
+                error=error.message,
                 error_code="AGENT_EXECUTION_FAILED",
                 is_retryable=False,
                 details=details,

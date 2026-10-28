@@ -6,7 +6,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.chat.models import AnswerStreamPart, StreamingError
+from onyx.chat.models import AnswerStreamPart
 from onyx.chat.process_message import handle_stream_message_objects
 from onyx.db.chat import create_chat_session
 from onyx.db.enums import LLMModelFlowType
@@ -22,6 +22,7 @@ from onyx.server.manage.llm.models import (
     ModelConfigurationUpsertRequest,
 )
 from onyx.server.query_and_chat.models import MessageResponseIDInfo, SendMessageRequest
+from onyx.server.query_and_chat.streaming_models import StreamingError
 from tests.external_dependency_unit.answer.stream_test_utils import final_answer
 from tests.external_dependency_unit.conftest import create_test_user
 from tests.utils.secret_names import TestSecret

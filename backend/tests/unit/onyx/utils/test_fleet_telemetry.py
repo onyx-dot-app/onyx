@@ -509,7 +509,7 @@ def test_a_chat_error_packet_reports_only_its_category(
     details: dict[str, str] | None,
     category: str | None,
 ) -> None:
-    from onyx.chat.models import StreamingError
+    from onyx.server.query_and_chat.streaming_models import StreamingError
 
     packets = [
         StreamingError(
