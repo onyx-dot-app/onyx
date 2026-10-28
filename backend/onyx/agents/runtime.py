@@ -416,6 +416,23 @@ class Agent:
             raise ValueError("Only a suspended execution snapshot can resume")
         if snapshot.agent_id != self.id:
             raise ValueError("Snapshot belongs to another agent")
+        progress = snapshot.progress
+        if progress.finalized_tool_call_ids:
+            if not 0 <= progress.step_index < len(snapshot.steps):
+                raise ValueError("Finalized tools require a recorded current step")
+            step = snapshot.steps[progress.step_index]
+            call_ids = {call.id for call in step.message.tool_calls}
+            for call_id in progress.finalized_tool_call_ids:
+                execution = step.tools.get(call_id)
+                if (
+                    call_id not in call_ids
+                    or execution is None
+                    or execution.result is None
+                    or execution.result.tool_call_id != call_id
+                ):
+                    raise ValueError(
+                        "Finalized tool must have a call and result in the current step"
+                    )
         return self.start(
             max_steps=snapshot.progress.step_limit,
             coordinator=coordinator,
@@ -763,6 +780,7 @@ class Run:
     def finish_tool(
         self, result: ToolResult, call: ToolCall, context: ToolCallContext | None
     ) -> None:
+        finalized = False
         try:
             if self.after_tool_call is not None:
                 if context is None:
@@ -770,6 +788,7 @@ class Run:
                 self.cancellation_signal.check()
                 result = self.after_tool_call(context, result.model_copy(deep=True))
                 self.cancellation_signal.check()
+            finalized = True
         finally:
             with self.execution_lock:
                 if self.is_accepting and not self.cancellation_signal.cancelled:
@@ -782,7 +801,7 @@ class Run:
                     message_id = record.message.id
                     if message_id is None:
                         raise RuntimeError("Tool execution requires a message ID")
-                    if self.after_tool_call is not None:
+                    if finalized and self.after_tool_call is not None:
                         execution.result = _tool_result_message(
                             result, call, message_id
                         )
@@ -791,6 +810,9 @@ class Run:
                             if result.is_error
                             else ExecutionStatus.COMPLETE
                         )
+                    if finalized:
+                        self._progress.finalized_tool_call_ids.add(call.id)
+                        self._state.revision += 1
                     self.publish_event(
                         ToolEndEvent(
                             **self.event_context,
@@ -802,9 +824,6 @@ class Run:
                     )
                 else:
                     logger.debug("Ignoring late tool finalization: %s", call.id)
-        with self.execution_lock:
-            self._progress.finalized_tools += 1
-            self._state.revision += 1
 
     @property
     def is_accepting(self) -> bool:
@@ -1649,7 +1668,7 @@ def _complete_step(run: Run) -> None:
         else:
             progress.step_index += 1
             progress.action = RunAction.PREPARE
-            progress.finalized_tools = 0
+            progress.finalized_tool_call_ids.clear()
             progress.pending_tool_calls = {}
             progress.options = None
             progress.tools = []

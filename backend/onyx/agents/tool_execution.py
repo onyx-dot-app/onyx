@@ -1,4 +1,4 @@
-"""Advance parallel tools and ordered finalizers without parking completed workers."""
+"""Advance parallel tools and finalize completed results on the execution thread."""
 
 import threading
 from concurrent.futures import Future
@@ -140,11 +140,12 @@ class ToolBatch:
 
     def _finalize_ready(self) -> None:
         results = self._raw_results()
-        while self.progress.finalized_tools < len(self.calls):
-            call = self.calls[self.progress.finalized_tools]
+        for call in self.calls:
+            if call.id in self.progress.finalized_tool_call_ids:
+                continue
             result_message = results.get(call.id)
             if result_message is None:
-                break
+                continue
             result = ToolResult(
                 content=result_message.content,
                 metadata=result_message.metadata,
@@ -168,12 +169,17 @@ class ToolBatch:
                     self._collect_results()
                     self._finalize_ready()
                     results = self._raw_results()
-                    if self.progress.finalized_tools == len(self.calls):
+                    if len(self.progress.finalized_tool_call_ids) == len(self.calls):
                         return True
+                    next_call_id = next(
+                        call.id
+                        for call in self.calls
+                        if call.id not in self.progress.finalized_tool_call_ids
+                    )
                     for index, call in enumerate(self.calls):
                         if call.id in results or call.id in self.futures:
                             continue
-                        if self.sequential and index != self.progress.finalized_tools:
+                        if self.sequential and call.id != next_call_id:
                             break
                         with self.run.execution_lock:
                             pending = self.progress.pending_tool_calls.get(call.id)
