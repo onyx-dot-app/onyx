@@ -1302,7 +1302,7 @@ filename, and saves them in the ods config file.
 | Flag                | Default | Description                                                         |
 | ------------------- | ------- | ------------------------------------------------------------------- |
 | `--ref`             | `main`  | Branch name or full commit SHA on origin to build                   |
-| `--tag`             |         | Tag for `--ref` instead of the derived tag; must start `dev-build-` |
+| `--tag`             |         | Tag for `--ref` instead of the derived tag; must start `dev-build-`, and must not contain `cloud` or end in `-dev` |
 | `--dry-run`         | `false` | Resolve the ref and tag only; push and dispatch nothing             |
 | `--yes`             | `false` | Skip the confirmation prompt                                        |
 | `--no-wait-deploy`  | `false` | Do not wait for the deploy workflow to finish                       |

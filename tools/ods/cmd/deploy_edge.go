@@ -66,7 +66,8 @@ Without --ref, or with --ref main, this command will:
 With --ref <branch or commit>, this command will:
   1. Resolve the ref to a commit on origin (push it first)
   2. Push the tag dev-build-<branch>-<short-sha> on that commit, triggering the build
-     (pass --tag to choose the name; it must start with dev-build-)
+     (pass --tag to choose the name; it must start with dev-build- and must
+     not contain "cloud" or end in -dev)
   3. Wait for the build workflow to finish
   4. Dispatch the configured deploy workflow with version_tag=<tag>
   5. Wait for the deploy workflow to finish
@@ -384,6 +385,11 @@ func validateDevBuildTag(tag string) error {
 	}
 	if strings.Contains(strings.ToLower(tag), "cloud") {
 		return fmt.Errorf("must not contain \"cloud\", because tag names with \"cloud\" are kept for cloud releases")
+	}
+	// deployment.yml publishes every tag both as <tag> and <tag>-dev, so a tag
+	// that ends in -dev would share images with the tag without the suffix.
+	if strings.HasSuffix(strings.ToLower(tag), "-dev") {
+		return fmt.Errorf("must not end in \"-dev\", because the build also publishes every tag with a -dev suffix")
 	}
 	if !dockerTagRe.MatchString(tag) {
 		return fmt.Errorf("must be a valid Docker tag of at most 124 characters (letters, digits, '_', '.', '-')")
