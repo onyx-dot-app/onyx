@@ -6619,6 +6619,9 @@
       "toasts": {
         "settingsUpdated": "Configurações atualizadas",
         "settingsUpdateFailed": "Falha ao atualizar as configurações"
+      },
+      "settingsLoadError": {
+        "description": "Falha ao carregar as configurações. Tente atualizar a página."
       }
     }
   },
