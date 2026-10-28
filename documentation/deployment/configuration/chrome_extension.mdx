@@ -1,0 +1,170 @@
+---
+title: "Chrome Extension"
+description: "Use Onyx in Chrome from any page"
+icon: "chrome"
+---
+
+The Onyx Chrome Extension lets users access Onyx from anywhere in their browser.
+It embeds the Onyx web app and uses your normal Onyx login.
+It works with Onyx Cloud and with self-hosted Onyx in every edition.
+
+Features include:
+
+- An Onyx new tab page (**Use Onyx as new tab page** toggle)
+- An Onyx side panel. Open it with `Alt+O` on Windows, or `Ctrl+O` on macOS and Linux
+- Search Onyx from the address bar: type `onyx`, press `Tab`, then type your question
+- Contextual search on selected text
+
+<img className="rounded-image" src="/assets/overview/onyx_anywhere/onyx_chrome_extension.webp" alt="Onyx Chrome Extension Home Page"/>
+
+## Installation Options
+
+**Onyx Cloud users**: Install directly from the Chrome Web Store (extension ID `dacfbnglakogghooelgjflkhjcdbemia`).
+
+**Self-hosted users**: Install from the Chrome Web Store and set the **Root Domain** to your Onyx URL.
+
+## Manual Installation (Self-Hosted)
+
+<Steps>
+  <Step title="Get the extension files">
+    Clone the [Onyx repository](https://github.com/onyx-dot-app/onyx) from GitHub.
+    The extension source is in the `extensions/chrome` directory.
+  </Step>
+
+  <Step title="Enable Developer Mode">
+    - Visit `chrome://extensions/` in your Chrome browser
+    - In the upper right corner, click **Developer mode** to enable it
+
+    <img className="rounded-image" src="/assets/deployment/chrome_extension.webp" alt="Chrome Extension Developer Mode"/>
+  </Step>
+
+  <Step title="Load the extension">
+    - Click **Load unpacked**
+    - Select the `extensions/chrome` folder
+    - Click **Load**
+  </Step>
+
+  <Step title="Configure connection settings">
+    - Open the extension's **Options**
+    - Set the **Root Domain** to your self-hosted Onyx instance's URL (for example `https://onyx.yourcompany.com`)
+    - Optional: turn on **Use Onyx as new tab page** and **Use Onyx in Address Bar**
+
+    <img className="rounded-image" src="/assets/deployment/extension_settings.webp" alt="Extension Settings Menu"/>
+
+    <img className="rounded-image" src="/assets/deployment/root_domain.webp" alt="Root Domain Configuration"/>
+  </Step>
+</Steps>
+
+<Note>
+  Sign in to Onyx in the side panel or new tab page the same way you sign in on the web.
+</Note>
+
+## Enterprise Deployment
+
+For organizations deploying the extension at scale, use Google Admin Console for centralized management.
+
+<Steps>
+  <Step title="Add the extension">
+    - In the Google Admin console, go to **Devices → Chrome → Apps and extensions**
+    - Click the yellow plus icon to add the extension
+    - Enter the Chrome extension ID `dacfbnglakogghooelgjflkhjcdbemia` and click **Add**
+  </Step>
+
+  <Step title="Configure deployment">
+    Set the installation policy (allowed, forced, or blocked) for each organizational unit.
+  </Step>
+</Steps>
+
+### Pre-set the Onyx URL with a managed policy
+
+Extension version 1.2 and later reads settings from Chrome managed storage.
+Use it to set the Onyx URL and the new tab behavior for all users.
+Settings set by policy are read-only in the extension UI and show a "managed by your organization" notice.
+
+The Chrome Web Store extension ID is `dacfbnglakogghooelgjflkhjcdbemia`. The examples below use this ID.
+If you self-host the extension, replace it with your own ID from `chrome://extensions`.
+
+| Key                          | Type    | Description                                           |
+| ---------------------------- | ------- | ----------------------------------------------------- |
+| `onyxExtensionDomain`        | string  | Root URL of your Onyx instance (trailing `/` removed) |
+| `onyxExtensionDefaultNewTab` | boolean | Force the "Use Onyx as new tab page" toggle on or off |
+
+<Tabs>
+  <Tab title="Google Admin Console">
+    - Navigate to **Devices → Chrome → Apps and extensions**
+    - Select the Onyx extension
+    - Under **Policy for extensions**, paste the JSON below
+
+    ```json
+    {
+      "onyxExtensionDomain": {
+        "Value": "https://onyx.example.com"
+      },
+      "onyxExtensionDefaultNewTab": {
+        "Value": false
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Windows / macOS / Linux policy">
+    Set the `3rdparty.extensions.<extension-id>` policy.
+
+    **Linux** – save as `/etc/opt/chrome/policies/managed/onyx.json`:
+
+    ```json
+    {
+      "3rdparty": {
+        "extensions": {
+          "dacfbnglakogghooelgjflkhjcdbemia": {
+            "onyxExtensionDomain": "https://onyx.example.com",
+            "onyxExtensionDefaultNewTab": false
+          }
+        }
+      }
+    }
+    ```
+
+    **Windows** – add string values via Group Policy, Intune, or a `.reg` file:
+
+    ```text
+    HKLM\Software\Policies\Google\Chrome\3rdparty\extensions\dacfbnglakogghooelgjflkhjcdbemia\policy
+      onyxExtensionDomain        = "https://onyx.example.com"
+      onyxExtensionDefaultNewTab = "false"
+    ```
+
+    **macOS** – deploy a configuration profile (MDM or MCX)
+    for the preference domain `com.google.Chrome.extensions.dacfbnglakogghooelgjflkhjcdbemia` with the same keys.
+    Chrome reads extension policy only from managed preferences; `defaults write` is not enough.
+  </Tab>
+</Tabs>
+
+Omit a key to let users set that value themselves.
+Check `chrome://policy` on a client to confirm the policy was applied.
+
+### Self-Hosting the Extension
+
+For private distribution without the Chrome Web Store:
+
+<Steps>
+  <Step title="Package the extension">
+    Use Chrome's developer tools to create a CRX file
+  </Step>
+
+  <Step title="Host the files">
+    Place the CRX and update manifest on your server
+  </Step>
+
+  <Step title="Configure clients">
+    Use Admin console or Group Policy to point to your hosted files
+  </Step>
+</Steps>
+
+## Extension Management
+
+### Update Policies
+
+- **Enterprise deployments**: Chrome handles automatic updates every 5 hours
+- **Version pinning**: Available for force-installed extensions, but avoid extended use due to
+  security updates
+- **Self-hosted updates**: Increment version in manifest.json and replace hosted files

@@ -71,3 +71,7 @@ All tests under `web/tests/e2e/` must drive the UI through Page Object classes (
 ## Playwright E2E — Auto-Retrying Matchers Only
 
 Never use `locator.getAttribute()`, `locator.textContent()`, `locator.count()`, or `page.evaluate()` snapshots as the basis of an assertion on state that may update asynchronously (React state, effects, microtasks, deferred DOM mutations). One-shot reads flake. Use Playwright's auto-retrying matchers: `expect(locator).toHaveAttribute(...)`, `toHaveClass(...)`, `toHaveText(...)` / `toContainText(...)`, `toHaveCount(...)`, `toHaveValue(...)`, `toBeVisible()` / `toBeHidden()`. Snapshot reads are still fine when the value drives control flow inside the spec — not for assertions. See `web/tests/e2e/README.md`.
+
+## Docs Updates
+
+Customer docs live in `documentation/` (see `documentation/AGENTS.md`). When a PR adds or changes something a customer sees or configures (a UI flow, an admin setting, a connector, an environment variable, a public API, or a deployment step), the same PR should update the matching page in `documentation/`, including screenshots of changed UI. If it does not, leave one comment that names the page to update, or ask the author to state that no docs change is needed. Do not ask for docs on internal refactors, tests, CI, or changes that only affect multi-tenant cloud operations (for example `backend/ee/onyx/server/tenants/`, `backend/alembic_tenants/`, or code that runs only when `MULTI_TENANT` is set). Customers cannot use those.

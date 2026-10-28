@@ -1,0 +1,268 @@
+---
+title: "RDS"
+description: "Set up AWS RDS for Onyx"
+---
+
+import DeploymentNextSteps from "/snippets/deployment-next-steps.mdx"
+
+AWS RDS provides a managed PostgreSQL database for Onyx. This guide covers password authentication, TLS,
+and IAM authentication.
+
+<Note>
+  Onyx supports PostgreSQL 15 and later. Use the latest minor of a supported major version.
+</Note>
+
+## Guide
+
+<Steps>
+  <Step title="Create an RDS PostgreSQL instance">
+    In the Amazon RDS console, click **Create database**.
+
+    - Select **PostgreSQL** as the engine type
+    - Choose **Standard create** for the creation method
+  </Step>
+
+  <Step title="Configure database settings">
+    **Settings:**
+    - Set a **Master username** (for example, `postgres`)
+    - Set a strong **Master password**
+
+    **Instance configuration:**
+    - Choose an **Instance class**. `db.t4g.medium` suits small deployments; `db.m7g.large` suits production
+    - Configure **Storage** size and enable autoscaling if needed
+  </Step>
+
+  <Step title="Configure connectivity and security">
+    - Select your **VPC** and **Subnet group**
+    - Configure the **VPC security group** to allow port `5432` from your Onyx instance or EKS nodes
+    - Set **Public access** to **No** for production (recommended)
+  </Step>
+
+  <Step title="Configure Onyx">
+    Get the **Endpoint** from the RDS instance details. The database name is `postgres` unless you set one.
+
+    **For Docker Compose deployments**, set these variables in your `.env` file:
+
+    ```bash
+    POSTGRES_HOST=<your-rds-endpoint>
+    POSTGRES_PORT=5432
+    POSTGRES_DB=<your-database-name>
+    POSTGRES_USER=<your-master-username>
+    POSTGRES_PASSWORD=<your-master-password>
+    ```
+
+    The bundled `relational_db` container keeps running but Onyx no longer uses it.
+
+    **For Kubernetes deployments**, disable the bundled PostgreSQL and point the chart at RDS in `values.yaml`:
+
+    ```yaml values.yaml
+    postgresql:
+      enabled: false
+
+    configMap:
+      POSTGRES_HOST: "<your-rds-endpoint>"
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: "<your-database-name>"
+
+    auth:
+      postgresql:
+        values:
+          username: "<your-master-username>"
+          password: "<your-master-password>"
+    ```
+
+    To keep the password out of `values.yaml`,
+    create a Kubernetes Secret with keys `username` and `password` and set `auth.postgresql.existingSecret` to its name
+    instead of `values`.
+
+    Onyx runs its database migrations on the next start.
+  </Step>
+</Steps>
+
+## Optional: Verify the RDS certificate
+
+RDS encrypts connections by default, but Onyx does not verify the server certificate unless you tell it to.
+To verify it, download the RDS CA bundle and set the TLS mode.
+
+```bash
+curl -o bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+```
+
+**For Docker Compose**, mount the bundle and set the mode in `.env`:
+
+```yaml docker-compose.prod.yml
+services:
+  api_server:
+    volumes:
+      - ./bundle.pem:/app/bundle.pem:ro
+  background:
+    volumes:
+      - ./bundle.pem:/app/bundle.pem:ro
+```
+
+```bash .env
+POSTGRES_SSLMODE=verify-full
+POSTGRES_SSLROOTCERT=/app/bundle.pem
+```
+
+**For Kubernetes**, store the bundle in a Secret and enable `postgresTls`.
+The chart mounts the CA and sets the variables for you:
+
+```bash
+kubectl -n onyx create secret generic onyx-postgres-ca --from-file=ca.crt=bundle.pem
+```
+
+```yaml values.yaml
+postgresTls:
+  enabled: true
+  sslMode: verify-full
+  caSecretName: onyx-postgres-ca
+  caKey: ca.crt
+```
+
+`POSTGRES_SSLMODE` accepts the libpq values `disable`, `allow`, `prefer`, `require`, `verify-ca`, and `verify-full`.
+Only `verify-ca` and `verify-full` check the server certificate, and both require `POSTGRES_SSLROOTCERT`.
+
+## Optional: Enable IAM authentication
+
+IAM database authentication replaces the static password with short-lived IAM tokens.
+Onyx fetches a new token for each connection and always verifies the RDS certificate.
+
+<Steps>
+  <Step title="Enable IAM authentication on RDS">
+    - Open your RDS PostgreSQL instance and click **Modify**
+    - Under **Database authentication**, enable **IAM database authentication**
+    - Click **Continue**, then **Apply immediately**
+  </Step>
+
+  <Step title="Create the IAM database user">
+    Connect to your database with the master credentials and run:
+
+    ```sql
+    CREATE ROLE onyxuser LOGIN;
+    GRANT rds_iam TO onyxuser;
+    ALTER ROLE onyxuser WITH NOINHERIT;
+    GRANT CREATE ON DATABASE <your-db-name> TO onyxuser;
+    GRANT USAGE ON SCHEMA public TO onyxuser;
+    GRANT CREATE ON SCHEMA public TO onyxuser;
+    ```
+  </Step>
+
+  <Step title="Configure the IAM policy">
+    Get your `DbiResourceId` (or `DbClusterResourceId` for Aurora):
+
+    ```bash
+    aws rds describe-db-instances \
+      --db-instance-identifier <your-db-instance-name> \
+      --region <your-region>
+    ```
+
+    Create this IAM policy. Fill in the `region`, `account-id`, and `resource-id`,
+    then attach the policy to the role Onyx runs as: the EC2 instance role, or the EKS node role or pod identity.
+
+    ```json
+    {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Allow",
+          "Action": "rds-db:connect",
+          "Resource": "arn:aws:rds-db:<region>:<account-id>:dbuser:<resource-id>/onyxuser"
+        }
+      ]
+    }
+    ```
+  </Step>
+
+  <Step title="Download the RDS CA bundle">
+    IAM authentication requires TLS. Onyx reads the CA bundle from `/app/bundle.pem` inside each container.
+
+    ```bash
+    curl -o bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+    ```
+  </Step>
+
+  <Step title="Configure Onyx for IAM authentication">
+    **For Docker Compose deployments**, set these variables in your `.env` file. Leave `POSTGRES_PASSWORD` unset:
+
+    ```bash
+    USE_IAM_AUTH=true
+    AWS_REGION_NAME=<your-region>
+    POSTGRES_HOST=<your-rds-endpoint>
+    POSTGRES_PORT=5432
+    POSTGRES_DB=<your-database-name>
+    POSTGRES_USER=onyxuser
+    ```
+
+    Then uncomment the `bundle.pem` volume mounts for the `api_server` and `background` services in
+    `docker-compose.prod.yml`:
+
+    ```yaml docker-compose.prod.yml
+    services:
+      api_server:
+        volumes:
+          - ./bundle.pem:/app/bundle.pem:ro
+      background:
+        volumes:
+          - ./bundle.pem:/app/bundle.pem:ro
+    ```
+
+    **For Kubernetes deployments**, set the variables in `values.yaml` and disable the bundled PostgreSQL:
+
+    ```yaml values.yaml
+    postgresql:
+      enabled: false
+
+    configMap:
+      USE_IAM_AUTH: "true"
+      AWS_REGION_NAME: "<your-region>"
+      POSTGRES_HOST: "<your-rds-endpoint>"
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: "<your-database-name>"
+      POSTGRES_USER: "onyxuser"
+    ```
+
+    Store the CA bundle in a Secret:
+
+    ```bash
+    kubectl -n onyx create secret generic bundle-pem-secret --from-file=bundle.pem
+    ```
+
+    Then mount it at `/app/bundle.pem` in the API server and every worker.
+    Add this to the `volumes` and `volumeMounts` of each of those deployments in `values.yaml`:
+
+    ```yaml values.yaml
+    volumes:
+      - name: rds-ca
+        secret:
+          secretName: bundle-pem-secret
+
+    volumeMounts:
+      - name: rds-ca
+        mountPath: "/app/bundle.pem"
+        subPath: bundle.pem
+        readOnly: true
+    ```
+
+    <Note>
+      `USE_IAM_AUTH` overrides `POSTGRES_SSLMODE` and the other `POSTGRES_SSL*` variables.
+      Onyx ignores them while IAM authentication is on.
+    </Note>
+  </Step>
+
+  <Step title="Restart Onyx">
+    ```bash Docker Compose
+    docker compose -f docker-compose.yml -f docker-compose.prod.yml -p onyx-stack up -d --force-recreate
+    ```
+
+    ```bash Kubernetes
+    helm upgrade onyx onyx/onyx -n onyx -f values.yaml
+    ```
+  </Step>
+</Steps>
+
+For more details,
+see the [AWS RDS IAM authentication
+documentation](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.IAMDBAuth.html).
+
+<DeploymentNextSteps />

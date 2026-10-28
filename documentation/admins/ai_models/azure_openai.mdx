@@ -1,0 +1,85 @@
+---
+title: "Azure OpenAI"
+description: "Configure Azure OpenAI for enterprise-grade GPT models"
+icon: "microsoft"
+---
+
+import NavigateToAiModels from "/snippets/navigate-to-ai-models.mdx";
+
+## Guide
+
+<Steps>
+  <Step title="Create an Azure OpenAI Resource">
+    In the [Azure Portal](https://portal.azure.com/), open the Azure OpenAI Service and click **Create**.
+    Fill in the required fields in each section. The default values are usually sufficient.
+
+    The deployment can take a few minutes to complete.
+
+    <img className="rounded-image" src="/assets/admins/ai_models/azure_oai_deployment.webp" alt="Azure OpenAI Deployment"/>
+  </Step>
+
+  <Step title="Deploy a Model">
+    Go to the [Azure OpenAI Service](https://oai.azure.com/) and select your new resource.
+
+    Open the **Model Catalog** tab and select the model you want to use with Onyx.
+    Click **Use this model** → **Deploy to selected resource**.
+
+    <img className="rounded-image" src="/assets/admins/ai_models/azure_oai_deployed_home.webp" alt="Azure OpenAI Service Landing Page"/>
+
+    <img className="rounded-image" src="/assets/admins/ai_models/azure_oai_deploy_model.webp" alt="Azure OpenAI Model Deployment"/>
+  </Step>
+
+  <Step title="Copy the Target URI and API Key">
+    On the deployed model page, copy the **Target URI** and the **API Key**. The Target URI contains the API base,
+    the deployment name, and the API version that Onyx needs.
+
+    <img className="rounded-image" src="/assets/admins/ai_models/azure_oai_deployed_model_details.webp" alt="Azure OpenAI Deployed Model Details"/>
+
+    <Warning>
+      If Onyx chat responses say `I'm sorry, but I cannot assist with that request`,
+      change the deployment's **Content filter** to **Default** instead of **DefaultV2**.
+
+      <img className="rounded-image" src="/assets/admins/ai_models/azure_oai_content_filter.webp" alt="Azure OpenAI content filter configuration"/>
+    </Warning>
+  </Step>
+
+  <NavigateToAiModels />
+
+  <Step title="Connect Azure OpenAI">
+    Under **Add Provider**, click **Connect** on the **Azure OpenAI** card.
+
+    Paste the full **Target URI**. Onyx reads the API base, deployment name, and API version from it.
+
+    Example:
+    `https://onyxazureai.openai.azure.com/openai/deployments/gpt-4.1/chat/completions?api-version=2025-01-01-preview`
+
+    The URI must include the `api-version` query parameter and either a deployment name in the path or the
+    `/openai/responses` path.
+
+    Paste your **API Key**.
+
+    <img className="rounded-image" src="/assets/admins/ai_models/azure_oai_provider_config.webp" alt="Azure OpenAI provider setup dialog"/>
+  </Step>
+
+  <Step title="Add Your Models">
+    Azure does not expose a model list to Onyx. In the **Models** section,
+    type the name of the model behind your deployment (for example, `gpt-4.1`) and click **Add Model**.
+
+    Repeat for each deployment that shares this resource and API key.
+  </Step>
+
+  <Step title="Set Models Access">
+    Under **Models Access**, choose **All Users & Agents** or **Named Groups & Agents**.
+
+    With **Named Groups & Agents**, only the groups and agents you add can use this provider. Admins can always use it.
+    See [Language Model Access Controls](/admins/advanced_configs/llm_access_controls).
+
+    <Note>
+      Group-based access requires the Business tier or higher.
+    </Note>
+  </Step>
+
+  <Step title="Connect">
+    Click **Connect**. Onyx tests the deployment with one of the added models before it saves the provider.
+  </Step>
+</Steps>

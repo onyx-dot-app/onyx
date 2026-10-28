@@ -31,10 +31,9 @@ on:
   schedule:
     - cron: "0 8 * * *" # 08:00 UTC nightly
   pull_request:
-    # NOTE: Intentionally no `paths:` filter. We always trigger and let the
-    # `changes` job below decide whether the real test job runs. This avoids
-    # the dual-workflow skip pattern where a `paths-ignore`'d skip workflow can
-    # race the real workflow's same-named status check under branch protection.
+    paths-ignore:
+      - "documentation/**"
+    # Not a required check, so docs-only PRs skip it entirely.
   push:
     tags:
       - "v*.*.*"

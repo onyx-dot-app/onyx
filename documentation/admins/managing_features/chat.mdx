@@ -1,0 +1,153 @@
+---
+title: "Chat Preferences"
+description: "Set organization-wide chat defaults, models, tools, and limits"
+icon: "comment"
+---
+
+The **Chat Preferences** page in the Admin Panel sets the default chat behavior, models,
+and capabilities for your organization. Open **Admin Panel → Chat Preferences** (`/admin/chat-preferences`).
+These defaults apply to all users unless a user overrides them in their personal settings.
+The page is available in all editions.
+
+<img className="rounded-image" src="/assets/admins/chat_preferences/chat_preferences.webp" alt="Chat Preferences in the Admin Panel"/>
+
+## Chat Settings
+
+- **Default Language**: UI language for users who have not set one in their own settings.
+- **Chat Naming Model**: The model that generates chat session titles. A fast, low-cost model works well.
+  Choose **Chat Default** to use the default chat model.
+- **Multi-Model Generation**: Lets users run several models in parallel on the same message.
+- **Deep Research**: Agentic research across the web and connected sources.
+  It uses many more tokens per query than normal chat.
+- **Chat Auto-Scroll**: Scrolls the chat view to new content while the model generates a response.
+  Users can override this in their personal settings.
+
+<img className="rounded-image" src="/assets/admins/chat_preferences/chat_preferences_features.webp" alt="Chat Preferences switches for Multi-Model Generation, Deep Research, and Chat Auto-Scroll"/>
+
+## Search Settings
+
+- **Search Selection Model**: The model that selects and checks retrieved documents.
+  A fast, low-cost model reduces search cost but can affect answer quality.
+- **Search Mode**: A quick document search view across your organization.
+  It is available on Business and higher plans and on Onyx Cloud.
+  The switch is disabled until you add at least one [connector](/admins/connectors/overview).
+- **Auto-Detect Search Filters**: Applies source and time filters that Onyx infers from the query,
+  for example "in Slack" or "last quarter".
+
+## Team Information
+
+- **Team Name**: Added to every chat as extra context, for example your team or company name.
+- **Team Context**: A short description of your team or company. Onyx adds it next to the team name.
+
+<Info>
+  Users can add their own context in personal settings on top of these organization-level fields.
+</Info>
+
+<img className="rounded-image" src="/assets/admins/chat_preferences/chat_preferences_team_context.webp" alt="Team Name and Team Context fields on Chat Preferences"/>
+
+## System Prompt
+
+The system prompt is the base instruction set for chats, [Agents](/admins/agents/overview), and projects.
+
+<Warning>
+  Changes to this prompt affect answer quality and behavior across your workspace.
+</Warning>
+
+The full default system prompt:
+
+```text
+You are an expert assistant who is truthful, nuanced, insightful, and efficient. Your goal is to deeply understand the user's intent, think step-by-step through complex problems, provide clear and accurate answers, and proactively anticipate helpful follow-up information. Whenever there is any ambiguity around the user's query (or more information would be helpful), you use available tools (if any) to get more context.
+
+The current date is {{CURRENT_DATETIME}}.{{CITATION_GUIDANCE}}
+
+# Response Style
+You use different text styles, bolding, emojis (sparingly), block quotes, and other formatting to make your responses more readable and engaging.
+You use proper Markdown and LaTeX to format your responses for math, scientific, and chemical formulas, symbols, etc.: '$$\n[expression]\n$$' for standalone cases and '\( [expression] \)' when inline.
+For code you prefer to use Markdown and specify the language.
+You can use horizontal rules (---) to separate sections of your responses.
+You can use Markdown tables to format your responses for data, lists, and other structured information.
+
+{{REMINDER_TAG_DESCRIPTION}}
+```
+
+<Info>
+  Onyx expands these placeholders at run time:
+
+  - `{{CURRENT_DATETIME}}` inserts the current date and day of the week.
+  - `{{CITATION_GUIDANCE}}` adds citation instructions when a search tool retrieved facts. It is empty otherwise.
+  - `{{REMINDER_TAG_DESCRIPTION}}` explains how to read system reminders in user messages.
+</Info>
+
+## Connectors
+
+This section lists the sources that Internal Search uses in the default chat.
+See [Connectors](/admins/connectors/overview) for setup details.
+
+## Actions & Tools
+
+Turn on the tools that the default chat can use:
+
+- **Internal Search**: Searches your connected sources.
+- **Image Generation**: Needs an image model. Configure it on the [Image Generation](/admins/actions/image_generation)
+  page first.
+- **Web Search**: Searches the web. Configure a provider on the [Web Search](/admins/actions/web_search) page.
+- **Open URL**: Reads the content of a URL that a user pastes.
+- **Code Interpreter**: Writes and runs code. See [Code Interpreter](/admins/actions/code_interpreter).
+- **Coding Agent**: Delegates coding tasks to a coding agent.
+
+To add MCP servers and OpenAPI actions to the default chat, configure them in **Admin Panel → Plugins**.
+See [Plugins](/admins/plugins/overview).
+
+<Note>
+  These settings do not apply to [Agents](/admins/agents/overview).
+  Configure knowledge and tools for each Agent on its own page.
+</Note>
+
+<img className="rounded-image" src="/assets/admins/chat_preferences/chat_preferences_connectors_actions_tools.webp" alt="Connectors and Actions & Tools on Chat Preferences"/>
+
+## Advanced Options
+
+<img className="rounded-image" src="/assets/admins/chat_preferences/chat_preferences_advanced_options.webp" alt="Advanced Options on Chat Preferences"/>
+
+### Keep Chat History
+
+Set how long Onyx keeps chats for your organization. Choose **Forever**, a preset period, or **Custom**.
+This setting needs an Enterprise plan or Onyx Cloud.
+
+<Warning>
+  If you **shorten** retention, Onyx permanently deletes chats with no activity for longer than the new period.
+</Warning>
+
+### Query History Visibility
+
+Set what admins see on the [Query History](/admins/analytics/query_history) page: **Show with User Info**,
+**Anonymized**, or **Hidden**.
+
+### File Attachment Size Limit
+
+Files attached in chats and projects must fit within **both** limits:
+
+- **File Size Limit (MB)**: Maximum size per file. The default is 100 MB. The page shows the upper bound,
+  250 MB by default. Self-hosted operators can change it with `MAX_ALLOWED_UPLOAD_SIZE_MB`.
+- **File Token Limit (thousand tokens)**: Maximum tokens per file. The default is 200. Leave it empty for no limit.
+
+<Info>
+  Larger files increase latency, memory use, and token cost.
+  Large text files such as CSVs can stay under the size limit but exceed the token limit.
+</Info>
+
+### Allow Anonymous Users
+
+When on, visitors can start chats **without signing in**. Anonymous users see only their own chats.
+They cannot create Agents or change settings. Their chats use your models and count toward usage and cost.
+
+### Always Start with an Agent
+
+When on, Onyx removes the default chat. Users always start in an Agent, and new chats open in their last active Agent.
+
+<Note>
+  This mode disables the **Connectors** and **Actions & Tools** sections on this page.
+  Configure knowledge and tools on each [Agent](/admins/agents/overview) instead.
+</Note>
+
+Set [featured Agents](/admins/agents/overview) so new users have a clear starting point.

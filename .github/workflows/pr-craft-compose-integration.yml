@@ -22,8 +22,9 @@ on:
   schedule:
     - cron: "0 7 * * *"   # 07:00 UTC nightly
   pull_request:
-    # NOTE: Intentionally no `paths:` filter. We always trigger and let the
-    # `changes` job below decide whether the real test job runs.
+    paths-ignore:
+      - "documentation/**"
+    # Not a required check, so docs-only PRs skip it entirely.
   push:
     tags:
       - "v*.*.*"
