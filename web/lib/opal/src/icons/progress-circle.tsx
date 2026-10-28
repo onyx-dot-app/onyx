@@ -16,7 +16,7 @@ const CIRCUMFERENCE = 2 * Math.PI * STROKE_RADIUS;
 /**
  * A ring that fills like a pie as `value` rises. The pie animates between
  * values in `currentColor`, like every other Opal icon. At 100 the pie fills,
- * then fades out as a green check fades in and the ring turns green.
+ * then the ring and pie fade out as a larger green check grows in.
  */
 const SvgProgressCircle = ({
   value = 100,
@@ -45,9 +45,9 @@ const SvgProgressCircle = ({
         r={RING_RADIUS}
         strokeWidth={1.5}
         className={cn(
-          "transition-colors duration-150 ease-out motion-reduce:transition-none",
-          // The green waits for the pie to fill. Leaving 100, it goes at once.
-          complete && "text-status-success-05 delay-300"
+          "transition-opacity duration-150 ease-out motion-reduce:transition-none",
+          // The fade waits for the pie to fill. Leaving 100, it comes back at once.
+          complete && "opacity-0 delay-300"
         )}
       />
       {/* The pie: the share done, clockwise from the top. The offset is a
@@ -69,15 +69,16 @@ const SvgProgressCircle = ({
             : "[transition:stroke-dashoffset_300ms_ease-out]"
         )}
       />
-      {/* The check: fades in once the pie is full. */}
+      {/* The check: grows in once the pie is full, as the ring and pie fade
+          out. */}
       <path
-        d="M5.333 8.333L7.167 10L10.667 6"
+        d="M2.667 8.667L6 12L13.333 4"
         strokeWidth={1.5}
         strokeLinecap="round"
         strokeLinejoin="round"
         className={cn(
-          "text-status-success-05 transition-opacity duration-150 ease-out motion-reduce:transition-none",
-          complete ? "opacity-100 delay-300" : "opacity-0"
+          "text-status-success-05 origin-center [transform-box:fill-box] transition-[opacity,scale] duration-150 ease-out motion-reduce:transition-none",
+          complete ? "opacity-100 scale-100 delay-300" : "opacity-0 scale-50"
         )}
       />
     </svg>
