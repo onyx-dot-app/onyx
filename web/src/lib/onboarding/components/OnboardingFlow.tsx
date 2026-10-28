@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useState } from "react";
-import { Swap, type SwapDirection } from "@opal/components";
+import { Presence, type PresenceSwapDirection } from "@opal/components";
 import OnboardingHeader from "@/lib/onboarding/components/OnboardingHeader";
 import NameStep from "@/lib/onboarding/components/NameStep";
 import LLMStep from "@/lib/onboarding/components/LLMStep";
@@ -54,7 +54,7 @@ const OnboardingFlowInner = ({
 
   // One step shows at a time. The swap direction follows the step order.
   const [lastStep, setLastStep] = useState(onboardingState.currentStep);
-  const [direction, setDirection] = useState<SwapDirection>("forward");
+  const [direction, setDirection] = useState<PresenceSwapDirection>("forward");
   if (onboardingState.currentStep !== lastStep) {
     setDirection(
       STEP_CONFIG[onboardingState.currentStep].index >
@@ -81,13 +81,16 @@ const OnboardingFlowInner = ({
         />
         {/* Mounted from Welcome on (with no content), so the first step
             also opens its height and fades in. */}
-        <Swap swapKey={onboardingState.currentStep} direction={direction}>
+        <Presence.Swap
+          swapKey={onboardingState.currentStep}
+          direction={direction}
+        >
           <StepContent
             step={onboardingState.currentStep}
             state={onboardingState}
             actions={onboardingActions}
           />
-        </Swap>
+        </Presence.Swap>
       </div>
     ) : (
       // When showOnboarding is false, the parent only renders this component
