@@ -1,7 +1,7 @@
 "use client";
 
 import type { IconFunctionComponent, RichStr } from "@opal/types";
-import { Presence, Text } from "@opal/components";
+import { Text } from "@opal/components";
 import type { TextFont } from "@opal/components";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 
@@ -28,12 +28,6 @@ interface ContentSmProps {
 
   /** Main title text (read-only — editing is not supported). */
   title: string | RichStr;
-
-  /**
-   * Identity of the title. A change fades the new title in from the inline
-   * end (through `Presence`), e.g. a prompt that changes with each step.
-   */
-  titleKey?: React.Key;
 
   /** Size preset. Default: `"main-ui"`. */
   sizePreset?: ContentSmSizePreset;
@@ -83,7 +77,6 @@ const CONTENT_SM_PRESETS: Record<ContentSmSizePreset, ContentSmPresetConfig> = {
 function ContentSm({
   icon: Icon,
   title,
-  titleKey,
   sizePreset = "main-ui",
   orientation = "inline",
   titleMaxLines,
@@ -92,18 +85,6 @@ function ContentSm({
   ref,
 }: ContentSmProps) {
   const config = CONTENT_SM_PRESETS[sizePreset];
-  const titleText = (
-    <Text
-      font={config.titleFont}
-      color="inherit"
-      maxLines={titleMaxLines}
-      strikethrough={strikethrough}
-      title={toPlainString(title)}
-      role={role}
-    >
-      {title}
-    </Text>
-  );
 
   return (
     <div
@@ -124,13 +105,16 @@ function ContentSm({
         </div>
       )}
 
-      {titleKey === undefined ? (
-        titleText
-      ) : (
-        <Presence key={titleKey} from="end" width="fit">
-          {titleText}
-        </Presence>
-      )}
+      <Text
+        font={config.titleFont}
+        color="inherit"
+        maxLines={titleMaxLines}
+        strikethrough={strikethrough}
+        title={toPlainString(title)}
+        role={role}
+      >
+        {title}
+      </Text>
     </div>
   );
 }
