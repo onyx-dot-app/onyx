@@ -428,3 +428,7 @@ Tool-card ownership includes the run ID, so child completion does not close a
 parent's cards. Completed coding tools emit final-answer packets without repeating
 the answer as thinking. Research reports emit once, whether supplied through
 progress or directly at completion.
+
+A failed stream metadata write does not permanently hide truncation. Later flushes retry
+the truncation marker at bounded intervals, so readers can fall back to saved history.
+Chunk reads expose the total published chunk count alongside the next cursor.
