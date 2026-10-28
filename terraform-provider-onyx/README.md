@@ -165,8 +165,10 @@ released Onyx yet, so the provider keeps its workaround and the limitation still
   in the configuration or an update clears the stored key. The active embedding provider
   cannot be deleted.
 - **`model_configurations` is the list of record.** Omitted models are removed server-side,
-  and removing a model that holds any default (chat, vision, naming, search or decision) fails
-  — repoint `onyx_llm_provider_default` first, which references order correctly.
+  and removing a model that holds any default fails. For a default that
+  `onyx_llm_provider_default` manages, repoint it there first; references order the change
+  correctly. An admin must change any other default, such as the decision model, in the admin
+  panel.
 - **`force_delete` does not cover the decision model.** A provider that holds the decision
   model cannot be destroyed until an admin clears it.
 - **The model list read is the API's display view.** It hides obsolete and dated-duplicate

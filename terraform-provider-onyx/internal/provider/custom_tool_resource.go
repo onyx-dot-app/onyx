@@ -137,7 +137,8 @@ func (r *customToolResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				MarkdownDescription: "Whether the action is available in default Chat (without a custom agent). " +
 					"Defaults to true. Custom agents keep their own tool settings. This does not disable " +
 					"the action globally. Changing this setting requires a workspace admin. `false` needs " +
-					"Onyx v5.0 or later.",
+					"Onyx v5.0 or later. Before v5.0, Onyx has no default Chat selection, so Terraform " +
+					"reads `true` for an action that is turned on.",
 			},
 			"display_name": schema.StringAttribute{
 				Computed:            true,
