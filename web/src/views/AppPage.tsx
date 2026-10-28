@@ -1143,7 +1143,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         disabled={
                           (!llmManager.isLoadingProviders &&
                             llmManager.hasAnyProvider === false) ||
-                          (showOnboarding &&
+                          // Only while the onboarding steps are on screen.
+                          (onboardingVisible &&
+                            showOnboarding &&
                             !isLoadingOnboarding &&
                             onboardingState.currentStep !==
                               OnboardingStep.Complete)

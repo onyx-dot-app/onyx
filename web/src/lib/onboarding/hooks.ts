@@ -93,6 +93,9 @@ function useOnboardingState(activeAgent?: MinimalAgent): {
   useEffect(() => {
     if (
       isLoadingProviders ||
+      // A failed provider request leaves no list; resuming then would treat
+      // a connected provider as missing.
+      llmProviders === undefined ||
       !user ||
       hasInitializedForUserRef.current === user.id
     ) {
@@ -349,6 +352,7 @@ export function useShowOnboarding({
 }: UseShowOnboardingParams) {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingDismissed, setOnboardingDismissed] = useState(false);
+  const { isAdmin } = useUser();
 
   // Read localStorage once userId is available to check if onboarding was dismissed
   useEffect(() => {
@@ -431,24 +435,39 @@ export function useShowOnboarding({
 
   // Save the step while onboarding is showing, so a return resumes it. Users
   // who never see onboarding get nothing saved, and neither does Welcome:
-  // only a started onboarding has progress to resume.
+  // only a started onboarding has progress to resume. Only admins see the
+  // full flow, so only their progress is saved.
+  // On a user switch, the first run still holds the previous user's step, so
+  // it saves nothing.
+  const progressUserIdRef = useRef(userId);
   useEffect(() => {
+    if (progressUserIdRef.current !== userId) {
+      progressUserIdRef.current = userId;
+      return;
+    }
     if (
       !showOnboarding ||
+      !isAdmin ||
       userId === undefined ||
       onboardingState.currentStep === OnboardingStep.Welcome
     ) {
       return;
     }
     writeOnboardingProgress(userId, onboardingState.currentStep);
-  }, [showOnboarding, userId, onboardingState.currentStep]);
+  }, [showOnboarding, isAdmin, userId, onboardingState.currentStep]);
 
   const dismissOnboarding = useCallback(() => {
     if (userId === undefined) return;
     setShowOnboarding(false);
     setOnboardingDismissed(true);
-    localStorage.setItem(getOnboardingCompletedKey(userId), "true");
+    // Clear first: a failed write below must not leave progress that brings
+    // onboarding back.
     clearOnboardingProgress(userId);
+    try {
+      localStorage.setItem(getOnboardingCompletedKey(userId), "true");
+    } catch {
+      // Storage can be unavailable; onboarding stays dismissed for this visit.
+    }
   }, [userId]);
 
   const hideOnboarding = dismissOnboarding;
