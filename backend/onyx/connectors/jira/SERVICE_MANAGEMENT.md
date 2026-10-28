@@ -42,10 +42,11 @@ summary, description, returned comments, owners, status, priority and issue type
 Cloud rich text uses Atlassian Document Format; Data Center text uses strings.
 Checkpointing, incremental updates and slim listing use the existing Jira paths.
 
-The connector includes every comment Jira returns, including internal agent
-notes. It does not filter comments by JSM public/internal visibility. The author
-email blacklist applies to both. Check the account's returned content before
-sharing a connector with a wider audience.
+The connector can include public replies and internal agent notes returned by
+Jira. It excludes comments from blacklisted author email addresses and skips
+comments that fail processing. It does not filter by JSM public/internal
+visibility. Check the account's returned content before sharing a connector
+with a wider audience.
 
 Jira permission sync does not implement JSM customer-portal or comment-level
 access. Do not use it as a substitute for those access rules. Use restricted
