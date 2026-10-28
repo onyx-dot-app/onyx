@@ -42,6 +42,9 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+# Bounds stored failure text; a raw upstream error body can run to megabytes.
+MAX_INDEX_ATTEMPT_ERROR_MESSAGE_CHARS = 10_000
+
 
 def get_last_attempt_for_cc_pair(
     cc_pair_id: int,
@@ -1232,6 +1235,16 @@ def count_unique_active_cc_pairs_with_successful_index_attempts(
     return query.distinct().count()
 
 
+def _cap_failure_message(message: str) -> str:
+    if len(message) <= MAX_INDEX_ATTEMPT_ERROR_MESSAGE_CHARS:
+        return message
+    # Sized for the largest possible count, so the result never exceeds the cap.
+    keep = MAX_INDEX_ATTEMPT_ERROR_MESSAGE_CHARS - len(
+        f"... [{len(message)} chars truncated]"
+    )
+    return f"{message[:keep]}... [{len(message) - keep} chars truncated]"
+
+
 def create_index_attempt_error(
     index_attempt_id: int | None,
     connector_credential_pair_id: int,
@@ -1259,7 +1272,7 @@ def create_index_attempt_error(
             if failure.failed_entity and failure.failed_entity.missed_time_range
             else None
         ),
-        failure_message=failure.failure_message,
+        failure_message=_cap_failure_message(failure.failure_message),
         is_resolved=False,
         error_type=type(exc).__name__ if exc else None,
     )

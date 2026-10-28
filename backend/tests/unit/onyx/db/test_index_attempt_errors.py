@@ -1,9 +1,15 @@
-"""Tests for get_index_attempt_errors_across_connectors."""
+"""Tests for get_index_attempt_errors_across_connectors and the stored
+failure-message cap in create_index_attempt_error."""
 
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
-from onyx.db.index_attempt import get_index_attempt_errors_across_connectors
+from onyx.connectors.models import ConnectorFailure, DocumentFailure
+from onyx.db.index_attempt import (
+    MAX_INDEX_ATTEMPT_ERROR_MESSAGE_CHARS,
+    create_index_attempt_error,
+    get_index_attempt_errors_across_connectors,
+)
 from onyx.db.models import IndexAttemptError
 
 
@@ -83,3 +89,23 @@ class TestGetIndexAttemptErrorsAcrossConnectors:
         # The function should have called scalar (for count) and scalars (for results)
         assert mock_session.scalar.called
         assert mock_session.scalars.called
+
+
+def test_create_index_attempt_error_caps_message_with_suffix() -> None:
+    message = "x" * (MAX_INDEX_ATTEMPT_ERROR_MESSAGE_CHARS * 3)
+    mock_session = MagicMock()
+
+    create_index_attempt_error(
+        index_attempt_id=1,
+        connector_credential_pair_id=1,
+        failure=ConnectorFailure(
+            failed_document=DocumentFailure(document_id="doc"),
+            failure_message=message,
+        ),
+        db_session=mock_session,
+    )
+
+    stored: str = mock_session.add.call_args.args[0].failure_message
+    assert len(stored) <= MAX_INDEX_ATTEMPT_ERROR_MESSAGE_CHARS
+    kept = stored.index("...")
+    assert stored.endswith(f"... [{len(message) - kept} chars truncated]")

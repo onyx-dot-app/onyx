@@ -112,7 +112,8 @@ seed, not a real connector run).
 ### `IndexAttemptError` (`onyx/db/index_attempt.py:create_index_attempt_error`)
 
 One row per failed document or entity within an attempt. Carries `document_id` or
-`entity_id`, the failure message, and `is_resolved` (flipped when a later
+`entity_id`, the failure message (capped at `MAX_INDEX_ATTEMPT_ERROR_MESSAGE_CHARS`),
+and `is_resolved` (flipped when a later
 successful index of the same document clears the error;
 `_resolve_indexing_document_errors` and `_resolve_indexing_entity_errors`).
 
@@ -430,7 +431,10 @@ writes only to the index of the attempt's own `SearchSettings`: PRESENT or FUTUR
 It does not write to both generations. The port backfill (`port/tasks.py`) fills a
 FUTURE index (see [[document-index]] §4.4). The write tries the whole
 batch in one call to `DocumentIndex.index()`; on any exception it falls back to a
-per-document retry loop so one bad document doesn't fail the batch. Before writing,
+per-document retry loop so one bad document doesn't fail the batch. The exception
+is `OpenSearchIndexWriteBlockedError` (the index carries a write block): every
+document would fail the same way, so the batch fails at once with one failure per
+document and one log line. Before writing,
 `adapter.lock_context` (`document.py:prepare_to_modify_documents` ->
 `acquire_document_locks`) takes a Postgres row lock on every document in the batch,
 so no other process can concurrently modify the same document's index entry during
