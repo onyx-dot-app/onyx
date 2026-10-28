@@ -1,8 +1,9 @@
 """A pause ends the pair's doc permission sync and queued group sync as
 CANCELED, not FAILED. A doc permission sync that sees the pause's stop signal
 keeps the cancel, a dispatch that races the pause creates no attempt, the pause
-waits for the sync's writes before it locks the pair, a running group sync
-stays open, and a manual permission sync of a paused pair is refused."""
+waits for the sync's writes before it locks the pair and never makes a
+dispatch wait on the attempt, a running group sync stays open, and a manual
+permission sync of a paused pair is refused."""
 
 import threading
 import time
@@ -320,6 +321,44 @@ def test_the_pause_waits_for_sync_writes_before_it_locks_the_pair(
     finally:
         write_may_commit.set()
         write.result()
+
+    db_session.expire_all()
+    attempt = get_doc_permission_sync_attempt(db_session, attempt_id)
+    assert attempt is not None
+    assert attempt.status == PermissionSyncStatus.CANCELED
+
+
+def test_a_dispatch_holding_the_pair_does_not_wait_on_the_pauses_attempt_lock(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    admin: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cc_pair_id, admin_id = cc_pair.id, admin.id
+    attempt_id = _running_doc_permission_sync(db_session, cc_pair_id)
+    monkeypatch.setattr(cc_pair_api, "client_app", MagicMock())
+
+    with get_session_with_current_tenant() as dispatch_session:
+        # A dispatch holds its key share lock on the pair, so the pause holds
+        # the open attempt and waits for the pair.
+        dispatch_session.execute(text("SET LOCAL lock_timeout = '2s'"))
+        _take_key_share_lock_on_pair(cc_pair_id)(dispatch_session)
+        pause = _CallOnItsOwnSession(
+            lambda session: _pause_as(session, cc_pair_id, admin_id)
+        )
+        try:
+            pause.wait_until_blocked()
+            # Only locked, not yet canceled: the insert sees an open attempt
+            # and returns. On an updated row it would wait, a deadlock.
+            assert (
+                try_create_doc_permission_sync_attempt(
+                    cc_pair_id, f"task-{uuid4().hex[:8]}", dispatch_session
+                )
+                is None
+            )
+        finally:
+            dispatch_session.rollback()
+            pause.result()
 
     db_session.expire_all()
     attempt = get_doc_permission_sync_attempt(db_session, attempt_id)

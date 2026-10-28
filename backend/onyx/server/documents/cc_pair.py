@@ -802,8 +802,9 @@ def update_cc_pair_status(
     if status_update_request.status == ConnectorCredentialPairStatus.PAUSED:
         # Before the pair's row lock: this waits for the sync's writes in
         # flight, and those can wait on rows whose writers need the pair's row.
-        # A lock, not the cancel: a dispatch that holds its key share lock on
-        # the pair would wait on an updated attempt row, a deadlock with ours.
+        # A lock, not yet the cancel: a dispatch that holds its key share lock
+        # on the pair waits on an updated attempt row, while this request
+        # waits on that key share lock.
         lock_open_doc_permission_sync_attempt__no_commit(cc_pair_id, db_session)
 
     # Held through the status commit. Attempt creation takes the same lock,

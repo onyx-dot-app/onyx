@@ -808,10 +808,13 @@ def lock_connector_credential_pair_row(
     creation and status changes that stop indexing (pause, delete) take this
     lock, so they run one after the other. A doc permission sync attempt is
     created under a key share lock on this row, so it waits for them too.
+    Deletion's final cleanup deletes the pair's attempt rows before this row,
+    without this lock.
 
-    Never wait under this lock for a running sync's attempt row: the sync's
-    writes hold that row, and a group sync write's foreign key to this row, or
-    another writer a doc sync write waits on, needs this row."""
+    Never wait under this lock for a running sync's attempt row. The sync's
+    writes hold that row while they wait for this one: a group sync write
+    through its foreign key to this row, a doc sync write through another
+    writer that needs this row."""
     return db_session.execute(
         select(ConnectorCredentialPair)
         .where(ConnectorCredentialPair.id == cc_pair_id)
