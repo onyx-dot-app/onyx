@@ -16,20 +16,15 @@ from onyx.chat.citation_utils import (
 from onyx.chat.emitter import Emitter
 from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.llm_step import run_llm_step, run_llm_step_pkt_generator
-from onyx.chat.models import (
-    ChatMessageSimple,
-    CitationMode,
-    LlmStepResult,
-    ToolCallSimple,
-)
+from onyx.chat.models import ChatMessageSimple, LlmStepResult, ToolCallSimple
 from onyx.chat.prompt_utils import build_language_section, with_language_section
+from onyx.chat.response_models import CitationMode
 from onyx.configs.chat_configs import DR_REPORT_LLM_TIMEOUT_S
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDocsResponse
 from onyx.deep_research.models import (
     CombinedResearchAgentCallResult,
     ResearchAgentCallFailure,
-    ResearchAgentCallResult,
 )
 from onyx.deep_research.tool_definitions import (
     RESEARCH_AGENT_TASK_KEY,
@@ -73,7 +68,9 @@ from onyx.server.query_and_chat.streaming_models import (
     StreamingType,
 )
 from onyx.tools.interface import Tool
-from onyx.tools.models import ToolCallInfo, ToolCallKickoff, ToolResponse
+from onyx.tools.models import ToolCallKickoff, ToolResponse
+from onyx.tools.records import ToolCallInfo
+from onyx.tools.results import ResearchAgentCallResult
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )

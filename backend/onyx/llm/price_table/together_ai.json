@@ -34,7 +34,8 @@
       "name": "LFM2-24B-A2B",
       "open_weights": true,
       "reasoning": false,
-      "release_date": "2026-02-25",
+      "release_date": "2026-02-24",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": false
     },
@@ -91,6 +92,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-03-18",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -105,12 +107,13 @@
       "family": "minimax",
       "limit": {
         "context": 524288,
-        "output": 250000
+        "output": 524288
       },
       "modalities": {
         "input": [
           "text",
-          "image"
+          "image",
+          "video"
         ],
         "output": [
           "text"
@@ -120,7 +123,7 @@
       "name": "MiniMax-M3",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-06-12",
+      "release_date": "2026-06-01",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -149,6 +152,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-09-19",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -175,7 +179,7 @@
       "name": "Qwen3 235B A22B Instruct 2507 FP8",
       "open_weights": true,
       "reasoning": false,
-      "release_date": "2025-07-25",
+      "release_date": "2025-07-21",
       "status": "deprecated",
       "temperature": true,
       "tool_call": true
@@ -203,7 +207,7 @@
       "name": "Qwen3 Coder 480B A35B Instruct",
       "open_weights": true,
       "reasoning": false,
-      "release_date": "2025-07-23",
+      "release_date": "2025-07-22",
       "status": "deprecated",
       "temperature": true,
       "tool_call": true
@@ -237,7 +241,7 @@
       "tool_call": true
     },
     "Qwen/Qwen3.5-397B-A17B": {
-      "attachment": false,
+      "attachment": true,
       "cost": {
         "cache_read": 0.35,
         "input": 0.6,
@@ -261,7 +265,7 @@
       "name": "Qwen3.5 397B A17B",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-02-16",
+      "release_date": "2026-02-15",
       "status": "deprecated",
       "temperature": true,
       "tool_call": true
@@ -280,7 +284,8 @@
       "modalities": {
         "input": [
           "text",
-          "image"
+          "image",
+          "video"
         ],
         "output": [
           "text"
@@ -290,7 +295,7 @@
       "name": "Qwen3.5 9B",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-03-03",
+      "release_date": "2026-02-23",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -304,7 +309,7 @@
       "family": "qwen",
       "limit": {
         "context": 1000000,
-        "output": 500000
+        "output": 65536
       },
       "modalities": {
         "input": [
@@ -316,23 +321,24 @@
       },
       "mode": "chat",
       "name": "Qwen3.6 Plus",
-      "open_weights": true,
+      "open_weights": false,
       "reasoning": true,
-      "release_date": "2026-04-30",
+      "release_date": "2026-04-02",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
     "Qwen/Qwen3.7-Max": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.125,
-        "input": 1.25,
-        "output": 3.75
+        "cache_read": 0.5,
+        "input": 2.5,
+        "output": 7.5
       },
       "family": "qwen",
       "limit": {
         "context": 1000000,
-        "output": 500000
+        "output": 131072
       },
       "modalities": {
         "input": [
@@ -345,8 +351,9 @@
       "mode": "chat",
       "name": "Qwen3.7 Max",
       "open_weights": false,
-      "reasoning": false,
+      "reasoning": true,
       "release_date": "2026-05-21",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -468,6 +475,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-07-31",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -496,7 +504,7 @@
       "name": "DeepSeek V4 Pro 0813",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-08-12",
+      "release_date": "2026-08-13",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -553,7 +561,7 @@
       "name": "Rnj-1 Instruct",
       "open_weights": true,
       "reasoning": false,
-      "release_date": "2025-12-05",
+      "release_date": "2025-12-04",
       "status": "deprecated",
       "temperature": true,
       "tool_call": true
@@ -582,6 +590,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-12-06",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -631,8 +640,7 @@
       "modalities": {
         "input": [
           "text",
-          "image",
-          "video"
+          "image"
         ],
         "output": [
           "text"
@@ -703,6 +711,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-06-04",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -731,6 +740,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2025-08-05",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -833,7 +843,7 @@
       "name": "GLM-5",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-02-11",
+      "release_date": "2026-02-12",
       "status": "deprecated",
       "structured_output": true,
       "temperature": true,
@@ -893,7 +903,7 @@
       "name": "GLM-5.2",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-06-16",
+      "release_date": "2026-06-13",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -907,7 +917,7 @@
       },
       "family": "glm",
       "limit": {
-        "context": 1048576,
+        "context": 1048575,
         "output": 262144
       },
       "modalities": {

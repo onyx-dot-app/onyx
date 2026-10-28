@@ -860,9 +860,11 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
               // fields and the checks hold back Create, not the form, so a
               // check run never locks the field that started it.
               const formUnlocked: boolean = canCreate;
-              const formLockReason: string | undefined = formUnlocked
-                ? undefined
-                : (selectAccountMessage ?? undefined);
+              // The same reason whether or not the form is locked: Disabled
+              // only shows it while locked, and a steady tooltip keeps the
+              // form mounted across a lock toggle.
+              const formLockReason: string | undefined =
+                selectAccountMessage ?? undefined;
               // Non-required checks never block Create.
               const createReady: boolean =
                 configUnlocked && (noCredentials || checks.createReady);
@@ -891,7 +893,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                 !createReady ||
                 busy;
               return (
-                <SettingsLayouts.Root width="sm">
+                <SettingsLayouts.Root loading={credentialsLoading} width="sm">
                   <SettingsLayouts.Header
                     icon={sourceMetadata.icon}
                     moreIcon1={SvgArrowExchange}
@@ -986,9 +988,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                   </SettingsLayouts.Header>
 
                   <SettingsLayouts.Body>
-                    {credentialsLoading ? (
-                      <PageLoader />
-                    ) : credentialsFailed ? (
+                    {credentialsFailed ? (
                       // The same frame as PageLoader, so loading and failure sit
                       // in one place.
                       <PageCenter>

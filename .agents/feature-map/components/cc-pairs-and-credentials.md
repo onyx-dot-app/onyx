@@ -373,6 +373,11 @@ used only when a pairing has no indexed documents; see §2). The real flow:
    running for it (raises `TaskDependencyError`, which the beat task turns into
    a one-time revoke-and-wait), then enqueues one
    `DOCUMENT_BY_CC_PAIR_CLEANUP_TASK` per document the pair indexed.
+   The wait is keyed on the stop deadline (`RedisConnector.stop.timeout_set`),
+   not the stop fence: a pause sets the fence too. After `TIMEOUT_TTL` the beat
+   resets the blocking fences. Resume clears the fence and the deadline, and a
+   new deletion (not a retry of one) clears any deadline left over, so each
+   deletion revokes and waits on its own.
 6. Each cleanup task
    (`background/celery/tasks/shared/tasks.py:document_by_cc_pair_cleanup_task`)
    calls `get_document_connector_count` for that document. Count `== 1` means

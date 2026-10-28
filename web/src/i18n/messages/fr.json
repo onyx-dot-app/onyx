@@ -1257,7 +1257,6 @@
         "description": "Sélectionnez un modèle pour les futures fonctions de classification et de révision. Onyx n’utilise pas encore ce modèle.",
         "clear": "Effacer",
         "notConfigured": "Non configuré",
-        "saved": "Modèle de décision mis à jour",
         "saveFailed": "Impossible de mettre à jour le modèle de décision"
       },
       "header": {
@@ -2846,18 +2845,14 @@
         "indexingStartUnexpectedError": "Une erreur inattendue est survenue lors du démarrage de l'indexation",
         "indexingUpdateStarted": "Mise à jour de l'indexation démarrée avec succès",
         "nameUpdateFailed": "Échec de la mise à jour du nom du connecteur",
-        "nameUpdated": "Nom du connecteur mis à jour avec succès",
         "noUnresolvedErrors": "Aucune erreur non résolue à réessayer.",
         "pruningFrequencyUpdateFailed": "Échec de la mise à jour de la fréquence d'élagage du connecteur",
-        "pruningFrequencyUpdated": "Fréquence d'élagage du connecteur mise à jour avec succès",
         "refreshFrequencyUpdateFailed": "Échec de la mise à jour de la fréquence d'actualisation du connecteur",
-        "refreshFrequencyUpdated": "Fréquence d'actualisation du connecteur mise à jour avec succès",
         "targetedReindexFailed": "Échec de la réindexation ciblée : {message}",
         "targetedReindexRunning": "Nouvelle tentative pour {count, plural, one {# erreur} other {# erreurs}}…",
         "targetedReindexDone": "Nouvelle tentative terminée. {resolved, plural, one {# erreur résolue} other {# erreurs résolues}}.",
         "targetedReindexPartial": "Nouvelle tentative terminée. {resolved, plural, one {# erreur résolue} other {# erreurs résolues}}, {failing, plural, one {# document toujours en échec} other {# documents toujours en échec}}.",
         "targetedReindexIncomplete": "La nouvelle tentative n’a pas abouti. Les erreurs non résolues restent dans la liste.",
-        "checkFrequencyUpdated": "Fréquence de vérification du connecteur mise à jour",
         "checkFrequencyUpdateFailed": "Échec de la mise à jour de la fréquence de vérification du connecteur",
         "runResolved": "Marqué comme résolu.",
         "runResolveFailed": "Impossible de résoudre : {message}",
@@ -3441,9 +3436,6 @@
           },
           "shareFailed": {
             "toast": "Impossible de modifier qui peut utiliser ce compte. Réessayez."
-          },
-          "renameSaved": {
-            "toast": "Compte renommé."
           },
           "renameFailed": {
             "toast": "Impossible de renommer ce compte. Réessayez."
@@ -4865,9 +4857,6 @@
       }
     },
     "costOverrides": {
-      "allProviders": {
-        "label": "Tous les fournisseurs"
-      },
       "deleteModal": {
         "description": "L'utilisation de **{model}** ({provider}) sera de nouveau facturée au prix intégré.",
         "submit": {
@@ -4941,12 +4930,6 @@
     },
     "craft": {
       "accessCell": {
-        "disabledSuccess": {
-          "message": "Craft désactivé pour l'utilisateur"
-        },
-        "enabledSuccess": {
-          "message": "Craft activé pour l'utilisateur"
-        },
         "error": {
           "message": "Échec de la mise à jour de l'accès à Craft"
         }
@@ -5061,14 +5044,8 @@
         "resetError": {
           "message": "Échec de l'effacement du modèle par défaut"
         },
-        "resetSuccess": {
-          "message": "Modèle par défaut de Craft effacé"
-        },
         "saveError": {
           "message": "Échec de l'enregistrement du modèle par défaut"
-        },
-        "saveSuccess": {
-          "message": "Modèle par défaut de Craft enregistré"
         }
       },
       "header": {
@@ -5447,9 +5424,6 @@
         }
       },
       "defaultAgent": {
-        "cleared": {
-          "toast": "Agent par défaut effacé"
-        },
         "section": {
           "description": "L'agent utilisé par le bot dans tous les canaux, sauf remplacement.",
           "title": "Agent par défaut"
@@ -5462,9 +5436,6 @@
         },
         "updateError": {
           "toast": "Échec de la mise à jour de l'agent"
-        },
-        "updated": {
-          "toast": "Agent par défaut mis à jour"
         }
       },
       "error": {
@@ -5517,15 +5488,9 @@
         "deleted": {
           "toast": "Configuration du serveur supprimée"
         },
-        "disabled": {
-          "toast": "Serveur désactivé"
-        },
         "empty": {
           "description": "Créez une configuration de serveur pour commencer.",
           "title": "Aucun serveur Discord configuré pour l'instant"
-        },
-        "enabled": {
-          "toast": "Serveur activé"
         },
         "fallbackName": "Serveur #{id}",
         "notRegistered": {
@@ -5649,9 +5614,6 @@
       "score": {
         "notANumber": {
           "toast": "Le score doit être un nombre"
-        },
-        "updated": {
-          "toast": "Score mis à jour !"
         }
       },
       "sets": {
@@ -6076,8 +6038,7 @@
           "label": "(Par défaut)"
         },
         "toasts": {
-          "renameFailed": "Échec du renommage du groupe",
-          "renamed": "Groupe renommé en \"{name}\""
+          "renameFailed": "Échec du renommage du groupe"
         },
         "viewGroup": {
           "label": "Voir le groupe"
@@ -6156,8 +6117,6 @@
         "toasts": {
           "deleteFailed": "Échec de la suppression du groupe",
           "deleted": "Groupe \"{name}\" supprimé",
-          "managerAssigned": "Gestionnaire attribué",
-          "managerRevoked": "Gestionnaire révoqué",
           "managerUpdateFailed": "Échec de la mise à jour du gestionnaire",
           "membersStranded": "Certains de ces membres se retrouveraient sans groupe. Ajoutez-les d'abord à un autre groupe.",
           "syncing": "Ce groupe est en cours de synchronisation. Patientez un instant et réessayez.",
@@ -6179,8 +6138,7 @@
           "text": "Créez des groupes pour organiser les utilisateurs et gérer les accès."
         },
         "loadError": {
-          "description": "Consultez la console pour plus de détails.",
-          "title": "Échec du chargement des groupes."
+          "description": "Consultez la console pour plus de détails."
         },
         "newGroup": {
           "label": "Nouveau groupe"
@@ -6635,9 +6593,6 @@
       "deselectError": {
         "message": "Échec de la désélection"
       },
-      "deselectSuccess": {
-        "message": "{title} désélectionné"
-      },
       "disconnectError": {
         "message": "Échec de la déconnexion"
       },
@@ -6808,9 +6763,6 @@
       },
       "setDefaultError": {
         "message": "Échec de la définition du modèle par défaut"
-      },
-      "setDefaultSuccess": {
-        "message": "{title} défini par défaut"
       }
     },
     "indexSettings": {
@@ -7043,11 +6995,6 @@
           "description": "{appName} se connectera à ce modèle sur votre proxy {provider}."
         }
       },
-      "maxImageSize": {
-        "description": "Les images dépassant cette taille seront ignorées pour limiter l’utilisation des ressources.",
-        "suffix": "(Mo)",
-        "title": "Taille maximale des images à analyser"
-      },
       "modal": {
         "cancelButton": {
           "label": "Annuler"
@@ -7093,11 +7040,6 @@
         "addCustomModel": {
           "label": "Ajouter un modèle personnalisé"
         },
-        "bringYourOwn": {
-          "cloudDescription": "Connectez un proxy LiteLLM, un déploiement Azure OpenAI ou une passerelle Bifrost. Vous indiquez vous-même le nom du modèle. Pour LiteLLM et Azure, vous indiquez aussi la dimension.",
-          "selfHostedDescription": "Exécutez un modèle d'embedding Hugging Face absent de la liste ci-dessus. Vous indiquez vous-même le nom, la dimension et les préfixes du modèle.",
-          "title": "Avancé : utiliser votre propre modèle ou proxy"
-        },
         "cloudTab": {
           "label": "Dans le cloud"
         },
@@ -7105,6 +7047,7 @@
           "title": "Configurez un modèle d'embedding personnalisé."
         },
         "customModels": {
+          "hint": "Utilisez un modèle compatible avec [SentenceTransformers](https://www.sbert.net/) disponible sur [Hugging Face](https://huggingface.co/models?library=sentence-transformers&sort=trending). {appName} téléchargera le modèle pour le configurer en auto-hébergement. La compatibilité n’est pas garantie.",
           "title": "Modèles personnalisés"
         },
         "foldModels": {
@@ -7139,6 +7082,20 @@
           "label": "temporairement indisponible"
         },
         "title": "Indexation multi-passes"
+      },
+      "openaiCompatible": {
+        "apiUrl": {
+          "description": "L'URL de base de votre point de terminaison compatible OpenAI, par exemple http://localhost:8000/v1. {appName} ajoute le chemin /embeddings.",
+          "title": "URL de base de l'API"
+        },
+        "modelName": {
+          "description": "{appName} se connectera à ce modèle sur votre point de terminaison compatible OpenAI."
+        },
+        "reducedDimension": {
+          "description": "Demander des vecteurs plus courts. Seuls les modèles entraînés avec Matryoshka Representation Learning le permettent. Les vecteurs plus courts occupent moins d'espace et accélèrent la recherche. Laissez vide pour utiliser la taille complète du modèle.",
+          "placeholder": "ex. : 1024",
+          "title": "Dimensions d'embedding"
+        }
       },
       "progressBanner": {
         "attentionButton": {
@@ -7266,6 +7223,7 @@
         "modelDimPositive": "Doit être un entier positif",
         "modelDimRequired": "La dimension du modèle est obligatoire",
         "modelNameRequired": "Le nom du modèle est obligatoire",
+        "reducedDimensionTooLarge": "Doit être inférieur à la dimension du modèle",
         "serviceAccountJsonInvalid": "Doit être un fichier JSON de compte de service Google valide",
         "serviceAccountJsonRequired": "Le JSON du compte de service est obligatoire",
         "targetUrlRequired": "L'URL cible est obligatoire",
@@ -7330,11 +7288,11 @@
             "off": "Chaque fragment de l’index de recherche a ses ID de connecteur. La recherche utilise les listes d’accès des documents. L’accès par connecteur est désactivé.",
             "shadow": "Chaque fragment de l’index de recherche a ses ID de connecteur. La recherche utilise les listes d’accès des documents et les compare à l’accès par connecteur."
           },
-          "title": "Mise à jour de l’accès par connecteur terminée"
+          "title": "Mise à jour de l’accès par connecteur terminée."
         },
         "notStarted": {
           "description": "Une tâche en arrière-plan ajoutera les ID de connecteur aux fragments existants de l’index de recherche. Elle démarre dans quelques minutes.",
-          "title": "La mise à jour de l’accès par connecteur n’a pas commencé"
+          "title": "La mise à jour de l’accès par connecteur n’a pas commencé."
         },
         "progress": {
           "ariaLabel": "Progression de la mise à jour de l’accès par connecteur"
@@ -7370,13 +7328,12 @@
           },
           "placeholder": "Sélectionner un mode",
           "toasts": {
-            "error": "Impossible de mettre à jour le mode d’accès à la recherche.",
-            "success": "Mode d’accès à la recherche défini sur {mode}."
+            "error": "Impossible de mettre à jour le mode d’accès à la recherche."
           }
         },
         "loadError": {
           "description": "Rechargez la page pour réessayer.",
-          "title": "Impossible de charger la mise à jour de l’accès par connecteur"
+          "title": "Impossible de charger la mise à jour de l’accès par connecteur."
         }
       },
       "embeddingRateLimit": {
@@ -7384,21 +7341,16 @@
         "description": "Limite le nombre de requêtes d'embedding envoyées par l'indexation dans une fenêtre de temps, pour tous les workers d'indexation. À la limite, l'indexation attend puis réessaie au lieu d'échouer, et les workers prennent moins de nouveau travail. Un lot échoue seulement s'il attend trop longtemps. Les requêtes de recherche ne sont pas limitées.",
         "requests": {
           "title": "Requêtes par fenêtre",
-          "description": "Laissez vide pour ne pas fixer de limite.",
-          "placeholder": "Aucune limite"
+          "description": "Le nombre maximal de requêtes d'embedding que l'indexation peut envoyer dans une fenêtre. Laissez vide pour ne pas fixer de limite.",
+          "placeholder": "Aucune limite",
+          "suffix": "requêtes"
         },
         "period": {
           "title": "Durée de la fenêtre",
-          "description": "Par exemple, 60 pour une limite par minute.",
-          "suffix": "(secondes)"
-        },
-        "restoreDefault": "Restaurer la valeur par défaut",
-        "validation": {
-          "requests": "Saisissez un nombre entier de 1 à {max, number}, ou laissez le champ vide pour ne pas fixer de limite.",
-          "period": "Saisissez un nombre entier de secondes de 1 à {max, number}."
+          "description": "La durée d'une fenêtre. Utilisez 60 pour une limite par minute.",
+          "suffix": "secondes"
         },
         "toasts": {
-          "saved": "Limite enregistrée.",
           "failed": "Impossible d'enregistrer la limite."
         }
       },
@@ -8452,9 +8404,6 @@
         "error": "Échec du chargement de l'état du jeton SCIM."
       },
       "modal": {
-        "copied": {
-          "message": "Jeton copié dans le presse-papiers"
-        },
         "copyFailed": {
           "error": "Échec de la copie du jeton"
         },
@@ -8715,9 +8664,7 @@
       },
       "toasts": {
         "securitySettingsUpdateFailed": "Échec de la mise à jour des paramètres de sécurité",
-        "securitySettingsUpdated": "Paramètres de sécurité mis à jour",
-        "settingsUpdateFailed": "Échec de la mise à jour des paramètres",
-        "settingsUpdated": "Paramètres mis à jour"
+        "settingsUpdateFailed": "Échec de la mise à jour des paramètres"
       },
       "placeholders": {
         "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
@@ -8839,8 +8786,7 @@
       "page": {
         "description": "Utilisez des comptes de service pour accéder à l'API {appName} par programmation.",
         "error": {
-          "description": "Consultez la console pour plus de détails.",
-          "title": "Échec du chargement des comptes de service."
+          "description": "Consultez la console pour plus de détails."
         }
       },
       "regenerateModal": {
@@ -8891,7 +8837,6 @@
       "toasts": {
         "deleteFailed": "Échec de la suppression de la clé d'API.",
         "deleteFailedWithDetail": "Échec de la suppression de la clé d'API : {detail}",
-        "keyCopied": "Clé d'API copiée dans le presse-papiers.",
         "regenerateFailed": "Échec de la régénération de la clé d'API.",
         "regenerateFailedWithDetail": "Échec de la régénération de la clé d'API : {detail}"
       },
@@ -9298,9 +9243,6 @@
         "fieldUpdateFailed": {
           "toast": "Échec de la mise à jour du champ {field} du connecteur"
         },
-        "fieldUpdated": {
-          "toast": "Champ {field} du connecteur mis à jour avec succès"
-        },
         "updateTokensButton": {
           "label": "Mettre à jour les jetons"
         }
@@ -9325,9 +9267,7 @@
         "gatedTooltip": "L'activation de plusieurs fournisseurs SSO est disponible avec le forfait Business ou Enterprise."
       },
       "copyRedirectUri": {
-        "tooltip": "Copier l'URI de redirection",
-        "successToast": "URI de redirection copiée",
-        "errorToast": "Copie impossible"
+        "tooltip": "Copier l'URI de redirection"
       },
       "deleteProvider": {
         "tooltip": "Supprimer"
@@ -10046,8 +9986,7 @@
         }
       },
       "loadError": {
-        "description": "Impossible de charger la configuration du traçage.",
-        "title": "Échec du chargement des paramètres de traçage"
+        "description": "Impossible de charger la configuration du traçage."
       },
       "page": {
         "description": "Connectez des plateformes d'observabilité pour surveiller et évaluer les appels LLM."
@@ -10815,7 +10754,6 @@
         "title": "Chaque utilisateur configure son propre jeton et les détails de connexion sous Paramètres → LLM Gateway."
       },
       "toasts": {
-        "settingsUpdated": "Paramètres mis à jour",
         "settingsUpdateFailed": "Échec de la mise à jour des paramètres"
       }
     },
@@ -11498,14 +11436,18 @@
         },
         "toasts": {
           "accessRemoved": "Accès retiré.",
-          "copyLinkFailed": "Échec de la copie du lien.",
-          "linkCopied": "Lien copié.",
           "ownershipTransferred": "Propriété transférée.",
           "sharingUpdated": "Partage mis à jour."
         },
         "transfer": {
           "label": "Transférer",
           "title": "Transférer *{name}*"
+        },
+        "people": {
+          "label": "Personnes ayant accès"
+        },
+        "ownerOption": {
+          "disabledTooltip": "Impossible de retirer le partage au propriétaire."
         }
       },
       "viewer": {
@@ -16085,6 +16027,12 @@
     "settingsHeader": {
       "cancel": "Annuler"
     },
+    "settingsBody": {
+      "error": {
+        "title": "Impossible de charger {page}",
+        "description": "Un problème est survenu. Réessayez dans un instant."
+      }
+    },
     "table": {
       "alwaysShown": "Toujours affichée",
       "ascending": "Croissant",
@@ -16739,8 +16687,7 @@
         "title": "Agents"
       },
       "craft": {
-        "label": "Craft",
-        "businessTag": "Business"
+        "label": "Craft"
       },
       "exploreAgents": {
         "label": "Explorer les agents"

@@ -23,7 +23,6 @@ type Settings struct {
 	AutoScroll                        *bool    `json:"auto_scroll"`
 	QueryHistoryType                  *string  `json:"query_history_type"`
 	ImageExtractionAndAnalysisEnabled *bool    `json:"image_extraction_and_analysis_enabled"`
-	ImageAnalysisMaxSizeMB            *int64   `json:"image_analysis_max_size_mb"`
 	UserKnowledgeEnabled              *bool    `json:"user_knowledge_enabled"`
 	UserFileMaxUploadSizeMB           *int64   `json:"user_file_max_upload_size_mb"`
 	FileTokenCountThresholdK          *int64   `json:"file_token_count_threshold_k"`

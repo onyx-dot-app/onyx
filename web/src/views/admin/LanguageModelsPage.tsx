@@ -10,7 +10,7 @@ import {
   useAdminLanguageModels,
 } from "@/lib/languageModels/hooks";
 import { useProviderNames } from "@/lib/languageModels/useProviderNames";
-import { DropdownLoader, PageLoader } from "@opal/loaders";
+import { DropdownLoader } from "@opal/loaders";
 import {
   CardGrid,
   Content,
@@ -508,11 +508,7 @@ export default function LanguageModelsPage() {
     [t, settings.appName]
   );
 
-  if (!existingLlmProviders) {
-    return <PageLoader />;
-  }
-
-  const chatProviders = existingLlmProviders.filter(
+  const chatProviders = (existingLlmProviders ?? []).filter(
     (provider) => !getProvider(provider.provider).decisionOnly
   );
   const hasProviders = chatProviders.length > 0;
@@ -646,7 +642,7 @@ export default function LanguageModelsPage() {
   }
 
   return (
-    <SettingsLayouts.Root>
+    <SettingsLayouts.Root loading={!existingLlmProviders}>
       <SettingsLayouts.Header
         icon={route.icon}
         title={adminRouteTitle(route)}

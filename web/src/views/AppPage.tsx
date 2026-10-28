@@ -75,9 +75,9 @@ import { useActiveProject, useProjects } from "@/lib/projects/hooks";
 import { getProjectTokenCount } from "@/lib/projects/svc";
 import { cn } from "@opal/utils";
 import Suggestions from "@/sections/Suggestions";
-import OnboardingFlow from "@/sections/onboarding/OnboardingFlow";
-import { OnboardingStep } from "@/interfaces/onboarding";
-import { useShowOnboarding } from "@/hooks/useShowOnboarding";
+import { OnboardingFlow } from "@/lib/onboarding/components";
+import { OnboardingStep } from "@/lib/onboarding/types";
+import { useShowOnboarding } from "@/lib/onboarding/hooks";
 import { SvgChevronDown, SvgFileText } from "@opal/icons";
 import { Button, ShadowDiv, Spacer } from "@opal/components";
 import {
@@ -93,7 +93,7 @@ import useScreenSize from "@/hooks/useScreenSize";
 import { useSidebarState } from "@opal/layouts";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
-import ChatUI from "@/sections/chat/ChatUI";
+import ChatUI, { FULL_WIDTH_TRANSITION } from "@/sections/chat/ChatUI";
 import { useFullWidthChat } from "@/providers/FullWidthChatProvider";
 import { paidTierGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
@@ -975,8 +975,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       justifyContent="between"
                       alignItems="end"
                       className={cn(
-                        !fullWidthActive &&
-                          "max-w-(--app-page-main-content-width)"
+                        fullWidthActive
+                          ? "max-w-full"
+                          : "max-w-(--app-page-main-content-width)",
+                        FULL_WIDTH_TRANSITION
                       )}
                     >
                       <WelcomeMessage
@@ -1015,8 +1017,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     className={cn(
                       "relative w-full flex flex-col",
                       onboardingVisible && "min-h-0",
-                      !fullWidthActive &&
-                        "md:max-w-(--app-page-main-content-width)"
+                      fullWidthActive
+                        ? "md:max-w-full"
+                        : "md:max-w-(--app-page-main-content-width)",
+                      FULL_WIDTH_TRANSITION
                     )}
                   >
                     {/* Scroll to bottom button - positioned absolutely above AppInputBar */}

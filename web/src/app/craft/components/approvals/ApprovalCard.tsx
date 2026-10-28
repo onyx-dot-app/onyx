@@ -29,15 +29,12 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 interface ApprovalCardProps {
   approval: ApprovalView;
   defaultOpen?: boolean;
-  /** Seed a decided state for Storybook (real approvals start pending). */
-  defaultDecision?: Exclude<ApprovalDecision, "EXPIRED"> | null;
 }
 
 /** Pending requests show decision controls; outcomes collapse into neutral tool rows. */
 export default function ApprovalCard({
   approval,
   defaultOpen = false,
-  defaultDecision = null,
 }: ApprovalCardProps) {
   const t = useTranslations("craft.approvals");
   const { mutate } = useSWRConfig();
@@ -48,7 +45,7 @@ export default function ApprovalCard({
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const [outcomeOpen, setOutcomeOpen] = useState(false);
   const [decision, setDecision] = useState<ApprovalDecision | null>(
-    defaultDecision ?? approval.decision
+    approval.decision
   );
 
   // Guards setState after the post-decision SWR revalidation drops

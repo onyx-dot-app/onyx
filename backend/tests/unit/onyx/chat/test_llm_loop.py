@@ -16,19 +16,17 @@ from onyx.chat.llm_loop import (
     run_llm_loop,
     select_reminder_text,
 )
-from onyx.chat.models import (
+from onyx.chat.models import ChatMessageSimple, LlmStepResult, ToolCallSimple
+from onyx.configs.constants import DocumentSource, MessageType
+from onyx.context.models import UserInfo, UserMemoryContext
+from onyx.context.search.models import SearchDoc, SearchDocsResponse
+from onyx.file_store.models import (
+    ChatFileType,
     ChatLoadedFile,
-    ChatMessageSimple,
     ContextFileMetadata,
     ExtractedContextFiles,
     FileToolMetadata,
-    LlmStepResult,
-    ToolCallSimple,
 )
-from onyx.configs.constants import DocumentSource, MessageType
-from onyx.context.search.models import SearchDoc, SearchDocsResponse
-from onyx.db.memory import UserInfo, UserMemoryContext
-from onyx.file_store.models import ChatFileType
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.models import ToolChoiceOptions
 from onyx.prompts.chat_prompts import (

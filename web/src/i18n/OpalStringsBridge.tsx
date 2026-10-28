@@ -23,6 +23,8 @@ export default function OpalStringsBridge({
       close: t("common.close"),
       loading: t("common.loading"),
       settingsHeaderCancel: t("settingsHeader.cancel"),
+      settingsBodyErrorTitle: (page) => t("settingsBody.error.title", { page }),
+      settingsBodyErrorDescription: t("settingsBody.error.description"),
       loadingPage: t("common.loadingPage"),
       copy: t("common.copy"),
       copied: t("common.copied"),

@@ -5,8 +5,8 @@ from typing import Any
 import onyx.tracing.framework._error_tracing as _error_tracing
 from onyx.chat.models import ChatMessageSimple
 from onyx.configs.constants import MessageType
+from onyx.context.models import UserMemoryContext
 from onyx.context.search.models import SearchDocsResponse
-from onyx.db.memory import UserMemoryContext
 from onyx.server.query_and_chat.streaming_models import (
     Packet,
     PacketException,

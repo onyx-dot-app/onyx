@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { cn } from "@opal/utils";
-import { Divider, Button, Spacer } from "@opal/components";
+import { Divider, Button, Enter, Spacer } from "@opal/components";
 import type { TagProps } from "@opal/components";
 import type {
   IconFunctionComponent,
@@ -12,9 +12,23 @@ import type {
   WithoutStyles,
 } from "@opal/types";
 import { spacingToRem } from "@opal/shared";
-import { HtmlHTMLAttributes, useEffect, useRef, useState } from "react";
+import {
+  HtmlHTMLAttributes,
+  createContext,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { Content } from "@opal/layouts";
 import { useOpalStrings } from "@opal/strings";
+// Imported from their own files: these indexes pull in @opal/layouts.
+import { PageLoader } from "@opal/loaders/page-loader/components";
+import { PageCenter } from "@opal/layouts/page-center/components";
+import { IllustrationContent } from "@opal/layouts/illustration-content/components";
+import { toPlainString } from "@opal/components/text/InlineMarkdown";
+import SvgPlugBroken from "@opal/illustrations/plug-broken";
 
 // ---------------------------------------------------------------------------
 // Root
@@ -31,10 +45,49 @@ const widthClasses: Record<
   full: "w-(--app-container-full)",
 };
 
+/** The page failed to load: `true`, or a description of what went wrong. */
+type SettingsPageError = boolean | string | RichStr;
+
+/** The page's state, set on `Root` and read by `Body`. */
+interface SettingsPageState {
+  animateEnter: boolean;
+  loading: boolean;
+  error: SettingsPageError;
+  /** The header's title as text, for the error title. */
+  pageTitle: string;
+  setPageTitle: (title: string) => void;
+}
+
+const SettingsPageContext = createContext<SettingsPageState>({
+  animateEnter: true,
+  loading: false,
+  error: false,
+  pageTitle: "",
+  setPageTitle: () => {},
+});
+
 interface SettingsRootProps extends WithoutStyles<
   React.HtmlHTMLAttributes<HTMLDivElement>
 > {
   width?: Extract<SizeVariants, "sm" | "md" | "lg" | "xl" | "full">;
+  /**
+   * The body animates in with `Enter` when the page mounts; the header does
+   * not. `false` renders it at once. @default true
+   */
+  animateEnter?: boolean;
+  /**
+   * The body shows the page loader in place of its children. When it turns
+   * false, the children mount and animate in, so the animation plays when
+   * the content is ready. @default false
+   */
+  loading?: boolean;
+  /**
+   * The page failed to load. The body shows the standard error state in place
+   * of its children, titled "{header title} failed to load". A string or
+   * `markdown()` is its description; `true` uses a generic one. It wins over
+   * `loading`. @default false
+   */
+  error?: SettingsPageError;
 }
 
 /**
@@ -42,16 +95,29 @@ interface SettingsRootProps extends WithoutStyles<
  * The `id="page-wrapper-scroll-container"` is referenced by `Header` for
  * scroll-shadow detection — do not remove it.
  */
-function SettingsRoot({ width = "md", ...props }: SettingsRootProps) {
+function SettingsRoot({
+  width = "md",
+  animateEnter = true,
+  loading = false,
+  error = false,
+  ...props
+}: SettingsRootProps) {
+  // The header reports its title here, so the body's error state can name
+  // the page.
+  const [pageTitle, setPageTitle] = useState("");
   return (
-    <div
-      id="page-wrapper-scroll-container"
-      className="w-full h-full flex flex-col items-center overflow-y-auto"
+    <SettingsPageContext.Provider
+      value={{ animateEnter, loading, error, pageTitle, setPageTitle }}
     >
-      <div className={cn("h-full", widthClasses[width])}>
-        <div {...props} />
+      <div
+        id="page-wrapper-scroll-container"
+        className="w-full h-full flex flex-col items-center overflow-y-auto"
+      >
+        <div className={cn("h-full", widthClasses[width])}>
+          <div {...props} />
+        </div>
       </div>
-    </div>
+    </SettingsPageContext.Provider>
   );
 }
 
@@ -114,6 +180,12 @@ function SettingsHeader({
   const router = useRouter();
   const strings = useOpalStrings();
   const [showShadow, setShowShadow] = useState(false);
+  const { setPageTitle } = useContext(SettingsPageContext);
+  const titleText = toPlainString(title);
+  // Before paint, so an error state on mount already has the page name.
+  useLayoutEffect(() => {
+    setPageTitle(titleText);
+  }, [setPageTitle, titleText]);
   const headerRef = useRef<HTMLDivElement>(null);
 
   const onCancel =
@@ -261,14 +333,37 @@ type SettingsBodyProps = WithoutStyles<HtmlHTMLAttributes<HTMLDivElement>> & {
   gap?: Spacing;
 };
 
-function SettingsBody({ gap = 8, ...props }: SettingsBodyProps) {
-  return (
+/** The page body. It renders the loading state and animation set on `Root`. */
+function SettingsBody({ gap = 8, children, ...props }: SettingsBodyProps) {
+  const { animateEnter, loading, error, pageTitle } =
+    useContext(SettingsPageContext);
+  const strings = useOpalStrings();
+  const content = error ? (
+    <PageCenter>
+      <IllustrationContent
+        illustration={SvgPlugBroken}
+        title={strings.settingsBodyErrorTitle(pageTitle)}
+        description={
+          error === true ? strings.settingsBodyErrorDescription : error
+        }
+      />
+    </PageCenter>
+  ) : loading ? (
+    <PageLoader />
+  ) : (
+    children
+  );
+  const body = (
     <div
       className="pt-6 pb-18 px-4 flex flex-col w-full"
       style={{ gap: spacingToRem(gap) }}
       {...props}
-    />
+    >
+      {content}
+    </div>
   );
+  // Only the content animates in; the error and loading states do not.
+  return animateEnter && !error && !loading ? <Enter>{body}</Enter> : body;
 }
 
 // ---------------------------------------------------------------------------

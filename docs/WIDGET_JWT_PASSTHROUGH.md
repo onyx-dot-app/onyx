@@ -110,7 +110,7 @@ A function cannot ride an HTML attribute, so the host page assigns
 `tokenProvider` as a JavaScript property. Drop the `api-key` attribute.
 
 ```html
-<script type="module" src="https://cdn.onyx.app/widget/1.0/dist/onyx-widget.js"></script>
+<script type="module" src="https://cdn.onyx.app/widget/1.1/dist/onyx-widget.js"></script>
 
 <onyx-chat-widget
   id="onyx-widget"

@@ -1,6 +1,5 @@
 "use client";
 
-import { IconLoader } from "@opal/loaders";
 import { use } from "react";
 import { useTranslations } from "next-intl";
 import { SlackChannelConfigCreationForm } from "@/app/admin/bots/[bot-id]/channels/SlackChannelConfigCreationForm";
@@ -59,12 +58,10 @@ function EditSlackChannelConfigContent({ id }: { id: string }) {
     : t("editChannel.channel.header.title");
 
   return (
-    <SettingsLayouts.Root>
+    <SettingsLayouts.Root loading={isLoading}>
       <SettingsLayouts.Header icon={SvgSlack} title={title} divider cancel />
       <SettingsLayouts.Body>
-        {isLoading ? (
-          <IconLoader />
-        ) : channelsError || !slackChannelConfigs ? (
+        {channelsError || !slackChannelConfigs ? (
           <ErrorCallout
             errorTitle={t("error.generic.title")}
             errorMsg={t("error.fetchChannels.message", {

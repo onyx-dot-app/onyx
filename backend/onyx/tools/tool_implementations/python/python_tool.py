@@ -36,13 +36,12 @@ from onyx.server.query_and_chat.streaming_models import (
 from onyx.tools.interface import Tool
 from onyx.tools.models import (
     ChatFile,
-    LlmPythonExecutionResult,
-    PythonExecutionFile,
     PythonToolOverrideKwargs,
     PythonToolRichResponse,
     ToolCallException,
     ToolResponse,
 )
+from onyx.tools.results import LlmPythonExecutionResult, PythonExecutionFile
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
     FileInput,

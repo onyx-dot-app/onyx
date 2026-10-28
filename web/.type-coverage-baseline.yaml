@@ -21,7 +21,7 @@ packages:
   src/app/components: 100
   src/app/config: 100
   src/app/connector: 100
-  src/app/craft: 99.4
+  src/app/craft: 99.5
   src/app/ee: 95.6
   src/app/federated: 97
   src/app/mcp: 99.5
@@ -51,18 +51,17 @@ packages:
   src/ee/providers: 99.3
   src/ee/sections: 100
   src/ee/views: 99.7
-  src/hooks: 98.5
-  src/i18n: 99.1
+  src/hooks: 98.4
+  src/i18n: 99.2
   src/i18n/messages: 100
-  src/interfaces: 100
   src/layouts: 100
   src/layouts/chromes: 99.7
   src/layouts/craft: 96.1
-  src/lib: 99.1
-  src/lib/agents: 99.2
+  src/lib: 99.2
+  src/lib/agents: 99.3
   src/lib/analytics: 99.4
   src/lib/app: 100
-  src/lib/auth: 98.2
+  src/lib/auth: 98.3
   src/lib/banner: 99.3
   src/lib/billing: 100
   src/lib/build: 100
@@ -70,6 +69,7 @@ packages:
   src/lib/connectors: 99.1
   src/lib/constants: 100
   src/lib/credentials: 98.9
+  src/lib/docx: 100
   src/lib/extension: 100
   src/lib/externalApps: 100
   src/lib/hierarchy: 100
@@ -80,18 +80,19 @@ packages:
   src/lib/notifications: 99.3
   src/lib/oauth: 100
   src/lib/oauth-provider: 100
+  src/lib/onboarding: 99.8
   src/lib/opensearch-health: 100
   src/lib/permissions: 100
-  src/lib/plugins: 99.6
+  src/lib/plugins: 99.7
   src/lib/position: 100
   src/lib/projects: 99.7
   src/lib/search: 99.2
   src/lib/searchFilters: 98.1
-  src/lib/searchSettings: 99.5
+  src/lib/searchSettings: 99.6
   src/lib/settings: 96.7
   src/lib/sidebar: 100
-  src/lib/skills: 97.4
-  src/lib/sso: 99.3
+  src/lib/skills: 97.5
+  src/lib/sso: 99.2
   src/lib/tiers: 100
   src/lib/tools: 99.1
   src/lib/tracing: 96.9
@@ -100,21 +101,21 @@ packages:
   src/lib/voice: 99.3
   src/lib/webSearch: 97.4
   src/providers: 99.5
-  src/refresh-components: 99.7
-  src/refresh-components/avatars: 99.7
+  src/refresh-components: 99.5
+  src/refresh-components/avatars: 99.6
   src/refresh-components/buttons: 99.6
-  src/refresh-components/cards: 98.4
-  src/refresh-components/commandmenu: 99.7
-  src/refresh-components/form: 98.8
+  src/refresh-components/cards: 93.3
+  src/refresh-components/commandmenu: 99.6
+  src/refresh-components/form: 98.5
   src/refresh-components/inputs: 100
   src/refresh-components/messages: 100
   src/refresh-components/modals: 100
   src/refresh-components/popovers: 99.5
   src/refresh-components/skeletons: 100
-  src/refresh-components/texts: 99.4
+  src/refresh-components/texts: 99.3
   src/refresh-components/tiles: 100
   src/sections: 100
-  src/sections/actions: 99.3
+  src/sections/actions: 99.7
   src/sections/admin: 100
   src/sections/agents: 99.8
   src/sections/banners: 99.1
@@ -126,7 +127,6 @@ packages:
   src/sections/modals: 99.5
   src/sections/model-selector: 99.6
   src/sections/oauth-provider: 100
-  src/sections/onboarding: 99.8
   src/sections/plugins: 99.8
   src/sections/settings: 100
   src/sections/sidebar: 99.3

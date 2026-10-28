@@ -251,7 +251,7 @@ describe("SimpleModelSelector", () => {
     const modelPaging: ModelPaging = {
       hasMore: true,
       isLoading: false,
-      loadMore: jest.fn().mockResolvedValue(undefined),
+      loadMore: jest.fn().mockResolvedValue(true),
       search: jest.fn().mockResolvedValue(true),
       searchHasMore: false,
       loadMoreSearch: jest.fn().mockResolvedValue(undefined),

@@ -37,7 +37,6 @@ function GroupCard({ group }: GroupCardProps) {
     try {
       await renameGroup(group.id, newName);
       await refreshGroupLists(mutate);
-      toast.success(t("card.toasts.renamed", { name: newName }));
     } catch (e) {
       console.error("Failed to rename group:", e);
       toast.error(

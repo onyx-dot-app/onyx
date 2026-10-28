@@ -6,7 +6,7 @@ import { markdown } from "@opal/utils";
 import { Section } from "@/layouts/general-layouts";
 import { Content, InputErrorText, InputVertical, toast } from "@opal/layouts";
 import Card from "@/refresh-components/cards/Card";
-import { Button, MessageCard } from "@opal/components";
+import { Button, Enter, MessageCard } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import InfoBlock from "@/refresh-components/messages/InfoBlock";
 import { InputNumber } from "@opal/components";
@@ -492,122 +492,119 @@ function SeatsCard({
 
   if (isEditing) {
     return (
-      <Card
-        padding={0}
-        gap={0}
-        alignItems="stretch"
-        className="billing-card-enter"
-      >
-        <Section
-          flexDirection="row"
-          justifyContent="between"
-          alignItems="start"
-          padding={4}
-          height="auto"
-        >
-          <Content
-            title={t("seats.updateSeats.title")}
-            description={t("seats.updateSeats.description")}
-            sizePreset="main-content"
-            variant="section"
-          />
-          <Button
-            disabled={isSubmitting}
-            prominence="secondary"
-            onClick={handleCancel}
-          >
-            {t("seats.cancel.label")}
-          </Button>
-        </Section>
-
-        <div className="billing-content-area">
+      <Enter>
+        <Card padding={0} gap={0} alignItems="stretch">
           <Section
-            flexDirection="column"
-            alignItems="stretch"
-            gap={1}
+            flexDirection="row"
+            justifyContent="between"
+            alignItems="start"
             padding={4}
             height="auto"
           >
-            <InputVertical title={t("seats.seatsField.title")} withLabel>
-              <InputNumber
-                value={newSeatCount}
-                onChange={(v) => setNewSeatCount(v ?? 1)}
-                min={1}
-                defaultValue={totalSeats}
-                showReset
-                variant={isBelowMinimum ? "error" : "primary"}
-              />
-            </InputVertical>
+            <Content
+              title={t("seats.updateSeats.title")}
+              description={t("seats.updateSeats.description")}
+              sizePreset="main-content"
+              variant="section"
+            />
+            <Button
+              disabled={isSubmitting}
+              prominence="secondary"
+              onClick={handleCancel}
+            >
+              {t("seats.cancel.label")}
+            </Button>
+          </Section>
 
-            {isBelowMinimum ? (
-              <InputErrorText type="error">
-                {markdown(
-                  t("seats.belowMinimum.error", { minimum: minRequiredSeats })
-                )}
-              </InputErrorText>
-            ) : seatDifference !== 0 ? (
+          <div className="billing-content-area">
+            <Section
+              flexDirection="column"
+              alignItems="stretch"
+              gap={1}
+              padding={4}
+              height="auto"
+            >
+              <InputVertical title={t("seats.seatsField.title")} withLabel>
+                <InputNumber
+                  value={newSeatCount}
+                  onChange={(v) => setNewSeatCount(v ?? 1)}
+                  min={1}
+                  defaultValue={totalSeats}
+                  showReset
+                  variant={isBelowMinimum ? "error" : "primary"}
+                />
+              </InputVertical>
+
+              {isBelowMinimum ? (
+                <InputErrorText type="error">
+                  {markdown(
+                    t("seats.belowMinimum.error", { minimum: minRequiredSeats })
+                  )}
+                </InputErrorText>
+              ) : seatDifference !== 0 ? (
+                <Text secondaryBody text03>
+                  {isAdding
+                    ? t("seats.delta.added", { count: seatCount })
+                    : t("seats.delta.removed", { count: seatCount })}
+                </Text>
+              ) : null}
+
+              {error && (
+                <Text secondaryBody className="billing-error-text">
+                  {error}
+                </Text>
+              )}
+            </Section>
+          </div>
+
+          <Section
+            flexDirection="row"
+            alignItems="center"
+            justifyContent="between"
+            padding={4}
+            height="auto"
+          >
+            {isAdding ? (
               <Text secondaryBody text03>
-                {isAdding
-                  ? t("seats.delta.added", { count: seatCount })
-                  : t("seats.delta.removed", { count: seatCount })}
+                {t.rich("seats.billing.added", {
+                  count: seatCount,
+                  value: (chunks) => (
+                    <Text secondaryBody text04>
+                      {chunks}
+                    </Text>
+                  ),
+                })}
               </Text>
-            ) : null}
-
-            {error && (
-              <Text secondaryBody className="billing-error-text">
-                {error}
+            ) : isRemoving ? (
+              <Text secondaryBody text03>
+                {t.rich("seats.billing.removed", {
+                  count: seatCount,
+                  date: nextBillingDate,
+                  value: (chunks) => (
+                    <Text secondaryBody text04>
+                      {chunks}
+                    </Text>
+                  ),
+                })}
+              </Text>
+            ) : (
+              <Text secondaryBody text03>
+                {t("seats.billing.unchanged")}
               </Text>
             )}
+            <Button
+              disabled={
+                isSubmitting || newSeatCount === totalSeats || isBelowMinimum
+              }
+              onClick={handleConfirm}
+            >
+              {isSubmitting
+                ? t("seats.saving.label")
+                : t("seats.confirmChange.label")}
+            </Button>
           </Section>
-        </div>
-
-        <Section
-          flexDirection="row"
-          alignItems="center"
-          justifyContent="between"
-          padding={4}
-          height="auto"
-        >
-          {isAdding ? (
-            <Text secondaryBody text03>
-              {t.rich("seats.billing.added", {
-                count: seatCount,
-                value: (chunks) => (
-                  <Text secondaryBody text04>
-                    {chunks}
-                  </Text>
-                ),
-              })}
-            </Text>
-          ) : isRemoving ? (
-            <Text secondaryBody text03>
-              {t.rich("seats.billing.removed", {
-                count: seatCount,
-                date: nextBillingDate,
-                value: (chunks) => (
-                  <Text secondaryBody text04>
-                    {chunks}
-                  </Text>
-                ),
-              })}
-            </Text>
-          ) : (
-            <Text secondaryBody text03>
-              {t("seats.billing.unchanged")}
-            </Text>
-          )}
-          <Button
-            disabled={
-              isSubmitting || newSeatCount === totalSeats || isBelowMinimum
-            }
-            onClick={handleConfirm}
-          >
-            {isSubmitting
-              ? t("seats.saving.label")
-              : t("seats.confirmChange.label")}
-          </Button>
-        </Section>
-      </Card>
+        </Card>
+      </Enter>
     );
   }
 

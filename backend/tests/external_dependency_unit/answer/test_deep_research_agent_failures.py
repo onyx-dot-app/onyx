@@ -13,7 +13,6 @@ from onyx.chat.process_message import handle_stream_message_objects
 from onyx.configs.chat_configs import LLM_INVOKE_TIMEOUT_S, LLM_SOCKET_READ_TIMEOUT
 from onyx.db.chat import get_chat_messages_by_session
 from onyx.db.tools import get_tool_by_name
-from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.deep_research.tool_definitions import (
     GENERATE_REPORT_TOOL_NAME,
     RESEARCH_AGENT_TASK_KEY,
@@ -35,6 +34,7 @@ from onyx.server.query_and_chat.models import MessageResponseIDInfo, SendMessage
 from onyx.tools.fake_tools import research_agent
 from onyx.tools.fake_tools.research_agent import RESEARCH_AGENT_TIMEOUT_MESSAGE
 from onyx.tools.models import ToolCallKickoff
+from onyx.tools.results import ResearchAgentCallResult
 from tests.common.models import CI_OPENAI_MODEL
 from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider
 from tests.external_dependency_unit.answer.stream_test_utils import (

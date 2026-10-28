@@ -126,6 +126,15 @@ describe("comparing one selection to another", () => {
     expect(isSameModelSelection(saved, respecced)).toBe(false);
   });
 
+  it("spots a reduced dimension change that keeps the rest of the spec", () => {
+    const reduced = {
+      ...saved,
+      model_spec: { ...deployment("my-deployment"), reducedDimension: 512 },
+    };
+
+    expect(isSameModelSelection(saved, reduced)).toBe(false);
+  });
+
   it("spots a prefix change that keeps the same name and dimension", () => {
     const respecced = {
       ...saved,

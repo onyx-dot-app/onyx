@@ -15,6 +15,9 @@ export type OpalStrings = {
   loadingPage: string;
   /** The Cancel action `SettingsLayouts.Header` renders when `cancel` is set. */
   settingsHeaderCancel: string;
+  /** `SettingsLayouts.Body`'s error state: a title from the page name, and the description used when the page gives none. */
+  settingsBodyErrorTitle: (page: string) => string;
+  settingsBodyErrorDescription: string;
   copy: string;
   copied: string;
   copyCode: string;
@@ -154,6 +157,8 @@ export const defaultOpalStrings: OpalStrings = {
   loading: "Loading",
   loadingPage: "Loading …",
   settingsHeaderCancel: "Cancel",
+  settingsBodyErrorTitle: (page: string) => `${page} failed to load`,
+  settingsBodyErrorDescription: "Something went wrong. Try again in a moment.",
   copy: "Copy",
   copied: "Copied!",
   copyCode: "Copy code",
