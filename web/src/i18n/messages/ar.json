@@ -15846,13 +15846,16 @@
       "connectedCount": {
         "label": "{count, plural, one {# نموذج متصل} other {# نماذج متصلة}}"
       },
-      "customProvider": {
-        "subtitle": "واجهات برمجة متوافقة مع LiteLLM",
-        "title": "موفر LLM مخصص"
-      },
       "description": "يدعم {appName} النماذج المستضافة ذاتيًا والموفرين الشائعين.",
       "edit": {
         "ariaLabel": "تعديل موفري LLM"
+      },
+      "moreProviders": {
+        "button": {
+          "label": "عرض"
+        },
+        "description": "الإعداد في لوحة الإدارة",
+        "title": "مزوّدون آخرون"
       },
       "providerCard": {
         "connect": {
@@ -15860,7 +15863,8 @@
         },
         "settingsButton": {
           "ariaLabel": "إعدادات المزوّد"
-        }
+        },
+        "settingsLoadError": "تعذّر تحميل إعدادات هذا المزوّد. حاول مرة أخرى."
       },
       "title": "اربط نماذج LLM الخاصة بك"
     },

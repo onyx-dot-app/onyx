@@ -15846,13 +15846,16 @@
       "connectedCount": {
         "label": "{count, plural, one {已连接 # 个模型} other {已连接 # 个模型}}"
       },
-      "customProvider": {
-        "subtitle": "兼容 LiteLLM 的 API",
-        "title": "自定义 LLM 提供商"
-      },
       "description": "{appName} 同时支持自托管模型和主流提供商。",
       "edit": {
         "ariaLabel": "编辑 LLM 提供商"
+      },
+      "moreProviders": {
+        "button": {
+          "label": "查看"
+        },
+        "description": "在管理面板中设置",
+        "title": "更多提供商"
       },
       "providerCard": {
         "connect": {
@@ -15860,7 +15863,8 @@
         },
         "settingsButton": {
           "ariaLabel": "提供商设置"
-        }
+        },
+        "settingsLoadError": "无法加载此提供商的设置。请重试。"
       },
       "title": "连接您的 LLM 模型"
     },

@@ -15846,13 +15846,16 @@
       "connectedCount": {
         "label": "{count, plural, one {# modelo conectado} other {# modelos conectados}}"
       },
-      "customProvider": {
-        "subtitle": "APIs compatibles con LiteLLM",
-        "title": "Proveedor de LLM personalizado"
-      },
       "description": "{appName} admite tanto modelos autoalojados como los proveedores más conocidos.",
       "edit": {
         "ariaLabel": "Editar los proveedores de LLM"
+      },
+      "moreProviders": {
+        "button": {
+          "label": "Ver"
+        },
+        "description": "Configurar en el panel de administración",
+        "title": "Más proveedores"
       },
       "providerCard": {
         "connect": {
@@ -15860,7 +15863,8 @@
         },
         "settingsButton": {
           "ariaLabel": "Configuración del proveedor"
-        }
+        },
+        "settingsLoadError": "No se pudo cargar la configuración de este proveedor. Inténtalo de nuevo."
       },
       "title": "Conecta tus modelos de LLM"
     },

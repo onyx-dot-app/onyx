@@ -574,7 +574,6 @@
         "src/sections/model-selector/ModelSelectorContent.tsx",
         "src/sections/model-selector/MultiModelSelector.tsx",
         "src/lib/onboarding/components/OnboardingFlow.tsx",
-        "src/lib/onboarding/components/LLMProviderCard.tsx",
         "src/lib/onboarding/components/NonAdminStep.tsx",
         "src/lib/onboarding/components/LLMStep.tsx",
         "src/sections/plugins/ChatPluginsPopover.tsx",

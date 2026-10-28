@@ -15846,13 +15846,16 @@
       "connectedCount": {
         "label": "{count, plural, one {# Modell verbunden} other {# Modelle verbunden}}"
       },
-      "customProvider": {
-        "subtitle": "LiteLLM-kompatible APIs",
-        "title": "Benutzerdefinierter LLM-Anbieter"
-      },
       "description": "{appName} unterstützt sowohl selbst gehostete Modelle als auch gängige Anbieter.",
       "edit": {
         "ariaLabel": "LLM-Anbieter bearbeiten"
+      },
+      "moreProviders": {
+        "button": {
+          "label": "Anzeigen"
+        },
+        "description": "Im Admin-Bereich einrichten",
+        "title": "Weitere Anbieter"
       },
       "providerCard": {
         "connect": {
@@ -15860,7 +15863,8 @@
         },
         "settingsButton": {
           "ariaLabel": "Anbieter-Einstellungen"
-        }
+        },
+        "settingsLoadError": "Die Einstellungen dieses Anbieters konnten nicht geladen werden. Versuche es erneut."
       },
       "title": "Verbinden Sie Ihre LLM-Modelle"
     },
