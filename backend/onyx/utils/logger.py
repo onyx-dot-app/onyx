@@ -385,7 +385,29 @@ def get_standard_formatter() -> logging.Formatter:
     )
 
 
-def _add_file_handlers(logger: logging.Logger, formatter: logging.Formatter) -> None:
+# Set on a record once a setup_logger file handler wrote it, so the root logger's
+# file handlers skip it when the record propagates up.
+_FILE_LOGGED_RECORD_ATTR = "onyx_file_logged"
+
+
+class _MarkFileLoggedFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.__dict__[_FILE_LOGGED_RECORD_ATTR] = True
+        return True
+
+
+class SkipFileLoggedFilter(logging.Filter):
+    """Drops records an onyx logger already wrote to the log files."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return not record.__dict__.get(_FILE_LOGGED_RECORD_ATTR, False)
+
+
+def add_file_handlers(
+    logger: logging.Logger,
+    formatter: logging.Formatter,
+    log_filter: logging.Filter | None = None,
+) -> None:
     # Opt-out via LOG_TO_FILE: pods that can't write log files (e.g. read-only-root
     # containers) set it false and rely on the stdout handler.
     if not LOG_TO_FILE:
@@ -431,6 +453,8 @@ def _add_file_handlers(logger: logging.Logger, formatter: logging.Formatter) -> 
 
         file_handler.setLevel(get_log_level_from_str(level))
         file_handler.setFormatter(formatter)
+        if log_filter is not None:
+            file_handler.addFilter(log_filter)
         logger.addHandler(file_handler)
 
 
@@ -459,7 +483,7 @@ def setup_logger(
 
     logger.addHandler(handler)
 
-    _add_file_handlers(logger, formatter)
+    add_file_handlers(logger, formatter, log_filter=_MarkFileLoggedFilter())
 
     logger.notice = (  # ty: ignore[unresolved-attribute]
         lambda msg, *args, **kwargs: logger.log(
