@@ -9,9 +9,9 @@ fails rather than publishing empty notes.
 
 BREAKING CHANGES:
 
-* provider: Onyx v4.8.0 or later is required. Reads now use get-by-id routes and agent
-  updates no longer resend attachments, which is unsafe on older Onyx. Stay on 0.3.x for
-  Onyx v4.7 and earlier.
+* provider: this release supports Onyx v4.8.0 and later. On Onyx v4.7 and earlier, pin the
+  provider to `~> 0.3`. This release reads by id and no longer resends agent attachments, so
+  on older Onyx, resources can look deleted and agent attachments can be cleared.
 * resource/onyx_custom_tool: `enabled` now controls whether the action is available in
   default Chat (`default_chat_enabled`). It no longer disables the action globally, and
   custom agents keep their own settings. `enabled = false` needs Onyx v5.0 or later. On
