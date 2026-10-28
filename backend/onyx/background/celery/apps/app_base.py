@@ -56,6 +56,8 @@ from onyx.utils.logger import (
     ColoredFormatter,
     LoggerContextVars,
     PlainFormatter,
+    SkipFileLoggedFilter,
+    add_file_handlers,
     cap_third_party_log_levels,
     get_json_formatter,
     get_log_level_from_str,
@@ -558,6 +560,11 @@ def on_setup_logging(
     root_handler.setFormatter(root_formatter)
     root_logger.addHandler(root_handler)
 
+    root_file_formatter: logging.Formatter = (
+        get_json_formatter()
+        if JSON_LOGGING
+        else PlainFormatter(log_format, datefmt="%m/%d/%Y %I:%M:%S %p")
+    )
     if logfile:
         # Truncate log file if DEV_LOGGING_ENABLED (for clean dev experience)
         if DEV_LOGGING_ENABLED and os.path.exists(logfile):
@@ -567,13 +574,14 @@ def on_setup_logging(
                 pass  # Ignore errors, just proceed with normal logging
 
         root_file_handler = logging.FileHandler(logfile)
-        root_file_formatter: logging.Formatter = (
-            get_json_formatter()
-            if JSON_LOGGING
-            else PlainFormatter(log_format, datefmt="%m/%d/%Y %I:%M:%S %p")
-        )
         root_file_handler.setFormatter(root_file_formatter)
         root_logger.addHandler(root_file_handler)
+
+    # Also write to the onyx log files, which the admin log export collects; on
+    # Kubernetes nothing keeps stdout. setup_logger records are already there.
+    add_file_handlers(
+        root_logger, root_file_formatter, log_filter=SkipFileLoggedFilter()
+    )
 
     root_logger.setLevel(effective_loglevel)
 
@@ -605,17 +613,21 @@ def on_setup_logging(
     task_handler.setFormatter(task_formatter)
     task_logger.addHandler(task_handler)
 
+    task_file_formatter: logging.Formatter = (
+        CeleryTaskJsonFormatter()
+        if JSON_LOGGING
+        else CeleryTaskPlainFormatter(log_format, datefmt="%m/%d/%Y %I:%M:%S %p")
+    )
     if logfile:
         # No need to truncate again, already done above for root logger
         task_file_handler = logging.FileHandler(logfile)
         task_file_handler.addFilter(TenantContextFilter())
-        task_file_formatter: logging.Formatter = (
-            CeleryTaskJsonFormatter()
-            if JSON_LOGGING
-            else CeleryTaskPlainFormatter(log_format, datefmt="%m/%d/%Y %I:%M:%S %p")
-        )
         task_file_handler.setFormatter(task_file_formatter)
         task_logger.addHandler(task_file_handler)
+
+    add_file_handlers(
+        task_logger, task_file_formatter, log_filter=TenantContextFilter()
+    )
 
     task_logger.setLevel(effective_loglevel)
     task_logger.propagate = False
