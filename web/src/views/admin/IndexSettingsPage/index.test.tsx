@@ -86,7 +86,6 @@ const mockAppSettings: AppSettings = {
   temperature_override_enabled: true,
   query_history_type: QueryHistoryType.NORMAL,
   image_extraction_and_analysis_enabled: false,
-  image_analysis_max_size_mb: 20,
   hide_provider_grouping: false,
   enterprise: null,
   appName: "Onyx",

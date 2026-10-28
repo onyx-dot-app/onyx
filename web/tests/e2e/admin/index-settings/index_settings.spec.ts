@@ -50,7 +50,6 @@ interface TestSearchSettings {
 
 interface TestSettings {
   image_extraction_and_analysis_enabled?: boolean | null;
-  image_analysis_max_size_mb?: number | null;
   [key: string]: unknown;
 }
 
@@ -690,7 +689,6 @@ async function mockImageProcessing(
   let servedSettings: TestSettings = {
     ...settings,
     image_extraction_and_analysis_enabled: options.imageOn,
-    image_analysis_max_size_mb: 20,
   };
   let servedSearchSettings: TestSearchSettings =
     options.contextualModelId === undefined
@@ -788,12 +786,11 @@ test.describe("Index Settings: image processing @exclusive", () => {
 
     await indexSettings.applyWithoutReindexButton.click();
     await expect.poll(() => mocks!.calls.length).toBe(2);
-    // The model lands first, then the toggle and size.
+    // The model lands first, then the toggle.
     expect(mocks!.calls).toEqual(["vision", "settings"]);
     expect(mocks!.visionBodies[0]?.model_name).toBe(mocks!.visionModel.name);
     expect(mocks!.settingsBodies[0]).toMatchObject({
       image_extraction_and_analysis_enabled: true,
-      image_analysis_max_size_mb: 20,
     });
 
     // The form rebased onto the saved settings: clean banner, switch still on.

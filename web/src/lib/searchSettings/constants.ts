@@ -401,12 +401,8 @@ export const CUSTOM_PROVIDER: EmbeddingProvider = {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Image processing
+// Embedding rate limit
 // ═══════════════════════════════════════════════════════════════════════════
-
-/** Mirror the `*IMAGE_ANALYSIS_MAX_SIZE_MB` constants on the backend. */
-export const DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB = 20;
-export const MAX_IMAGE_ANALYSIS_MAX_SIZE_MB = 100;
 
 /** Mirror the `*EMBEDDING_RATE_LIMIT*` constants on the backend. */
 export const DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS = 60;

@@ -1,4 +1,3 @@
-from onyx.configs.app_configs import DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB
 from onyx.server.settings.store import load_settings
 
 
@@ -19,13 +18,3 @@ def get_image_extraction_and_analysis_enabled() -> bool:
         pass
 
     return False
-
-
-def get_image_analysis_max_size_mb() -> int:
-    """The workspace image analysis max size in MB, or the default if settings cannot load."""
-    try:
-        return load_settings().image_analysis_max_size_mb
-    except Exception:
-        pass
-
-    return DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB

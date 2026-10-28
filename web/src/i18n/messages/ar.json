@@ -6995,11 +6995,6 @@
           "description": "سيتصل {appName} بهذا النموذج على وكيل {provider} الخاص بك."
         }
       },
-      "maxImageSize": {
-        "description": "يتم تصغير الصور التي يتجاوز حجمها هذا الحد قبل التحليل.",
-        "suffix": "ميغابايت",
-        "title": "الحد الأقصى لحجم الصورة للتحليل"
-      },
       "modal": {
         "cancelButton": {
           "label": "إلغاء"

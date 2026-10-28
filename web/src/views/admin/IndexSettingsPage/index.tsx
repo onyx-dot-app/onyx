@@ -27,7 +27,6 @@ import {
   MessageCard,
   SelectCard,
   Spacer,
-  InputNumber,
   InputSwitch,
   Tabs,
   Text,
@@ -72,8 +71,6 @@ import {
 import {
   CLOUD_BASED_PROVIDERS,
   CUSTOM_PROVIDER,
-  DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB,
-  MAX_IMAGE_ANALYSIS_MAX_SIZE_MB,
   SELF_HOSTED_PROVIDERS,
 } from "@/lib/searchSettings/constants";
 import {
@@ -700,7 +697,6 @@ interface IndexSettingsFormValues extends EmbeddingModelSelection {
   vector_quantization: VectorQuantization;
   image_processing_enabled: boolean;
   image_processing_model_configuration_id: number | null;
-  image_processing_max_size_mb: number;
 }
 
 /**
@@ -745,17 +741,15 @@ function classifyChanges(
   values: IndexSettingsFormValues,
   initialValues: IndexSettingsFormValues
 ): IndexSettingsChanges {
-  // The model and the size only matter while the feature is on, so switching
-  // on, picking a model and switching back off stages nothing, and the pick
-  // survives in the form for a later re-enable.
+  // The model only matters while the feature is on, so switching on, picking
+  // a model and switching back off stages nothing, and the pick survives in
+  // the form for a later re-enable.
   const imageChanged =
     values.image_processing_enabled !==
       initialValues.image_processing_enabled ||
     (values.image_processing_enabled &&
-      (values.image_processing_model_configuration_id !==
-        initialValues.image_processing_model_configuration_id ||
-        values.image_processing_max_size_mb !==
-          initialValues.image_processing_max_size_mb));
+      values.image_processing_model_configuration_id !==
+        initialValues.image_processing_model_configuration_id);
   const embeddingChanged = !isSameModelSelection(values, initialValues);
   const contextualToggleChanged =
     values.enable_contextual_rag !== initialValues.enable_contextual_rag;
@@ -1096,23 +1090,19 @@ export default function IndexSettingsPage() {
       image_processing_enabled:
         settings.image_extraction_and_analysis_enabled ?? false,
       image_processing_model_configuration_id: captioningModelConfigId,
-      image_processing_max_size_mb:
-        settings.image_analysis_max_size_mb ??
-        DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB,
     }),
     [
       savedSelection,
       searchSettings,
       settings.image_extraction_and_analysis_enabled,
-      settings.image_analysis_max_size_mb,
       captioningModelConfigId,
     ]
   );
 
   /**
    * Save the staged image processing settings, if any changed. The model
-   * goes first, through the vision default, then the toggle and the size
-   * through the admin settings: a failed settings write then leaves the
+   * goes first, through the vision default, then the toggle through the
+   * admin settings: a failed settings write then leaves the
    * feature as it was, never on with a stale model. Leaves every cache
    * alone; the caller commits once the whole apply has succeeded, so
    * `enableReinitialize` sees the final form once instead of a mix.
@@ -1153,17 +1143,14 @@ export default function IndexSettingsPage() {
             return "failed";
           }
         }
-        const toggleOrSizeChanged =
+        if (
           values.image_processing_enabled !==
-            initialFormValues.image_processing_enabled ||
-          values.image_processing_max_size_mb !==
-            initialFormValues.image_processing_max_size_mb;
-        if (toggleOrSizeChanged) {
+          initialFormValues.image_processing_enabled
+        ) {
           await saveAdminSettings({
             ...toSettings(settings),
             image_extraction_and_analysis_enabled:
               values.image_processing_enabled,
-            image_analysis_max_size_mb: values.image_processing_max_size_mb,
           });
         }
         return "saved";
@@ -2448,44 +2435,6 @@ export default function IndexSettingsPage() {
                                       modelConfigurationId
                                     )
                                   }
-                                />
-                              </InputHorizontal>
-                            </Disabled>
-
-                            <Disabled
-                              disabled={
-                                !values.image_processing_enabled &&
-                                !isReindexing
-                              }
-                              tooltip={t("imageProcessing.enableFirstTooltip")}
-                            >
-                              <InputHorizontal
-                                title={t("maxImageSize.title")}
-                                description={t("maxImageSize.description")}
-                                disabled={!values.image_processing_enabled}
-                                withLabel
-                                fillInput
-                              >
-                                <InputNumber
-                                  value={values.image_processing_max_size_mb}
-                                  onChange={(value) =>
-                                    void setFieldValue(
-                                      "image_processing_max_size_mb",
-                                      value ??
-                                        DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB
-                                    )
-                                  }
-                                  min={1}
-                                  max={MAX_IMAGE_ANALYSIS_MAX_SIZE_MB}
-                                  defaultValue={
-                                    DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB
-                                  }
-                                  allowEmpty={false}
-                                  suffix={t("maxImageSize.suffix")}
-                                  placeholder={String(
-                                    DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB
-                                  )}
-                                  disabled={!values.image_processing_enabled}
                                 />
                               </InputHorizontal>
                             </Disabled>

@@ -6995,11 +6995,6 @@
           "description": "{appName}가 {provider} 프록시에서 이 모델에 연결합니다."
         }
       },
-      "maxImageSize": {
-        "description": "이 크기를 초과하는 이미지는 분석 전에 크기가 조정됩니다.",
-        "suffix": "MB",
-        "title": "분석할 최대 이미지 크기"
-      },
       "modal": {
         "cancelButton": {
           "label": "취소"

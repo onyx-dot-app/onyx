@@ -6995,11 +6995,6 @@
           "description": "{appName} will connect to this model on your {provider} proxy."
         }
       },
-      "maxImageSize": {
-        "description": "Images above this size are resized before analysis.",
-        "suffix": "MB",
-        "title": "Max Image Size for Analysis"
-      },
       "modal": {
         "cancelButton": {
           "label": "Cancel"
