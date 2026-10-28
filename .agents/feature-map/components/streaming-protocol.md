@@ -432,3 +432,7 @@ progress or directly at completion.
 A failed stream metadata write does not permanently hide truncation. Later flushes retry
 the truncation marker at bounded intervals, so readers can fall back to saved history.
 Chunk reads expose the total published chunk count alongside the next cursor.
+
+`ChatDelivery` accepts every `AnswerStreamPart`, including initial session and response IDs.
+Those IDs use the same ordered live and replay delivery path as response packets.
+The response owner starts the delivery event worker directly.
