@@ -323,6 +323,11 @@ def get_running_sandboxes(
     return list(db_session.execute(stmt).scalars().all())
 
 
+def any_sandbox_exists(db_session: Session) -> bool:
+    """Whether this tenant has a sandbox row in any status."""
+    return db_session.scalar(select(Sandbox.id).limit(1)) is not None
+
+
 def get_stale_provisioning_sandboxes(
     db_session: Session,
     cutoff: datetime.datetime,

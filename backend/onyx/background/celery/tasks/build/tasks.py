@@ -11,10 +11,16 @@ from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheLock, CacheLockLostError
 from onyx.configs.constants import OnyxCeleryTask, OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.feature_flags.factory import get_default_feature_flag_provider
+from onyx.feature_flags.interface import NoOpFeatureFlagProvider
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
-from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
+from onyx.server.features.build.configs import (
+    ENABLE_CRAFT,
+    SANDBOX_IDLE_TIMEOUT_SECONDS,
+)
 from onyx.server.features.build.db.sandbox import (
+    any_sandbox_exists,
     get_latest_snapshot_for_session,
     get_running_sandboxes,
     user_has_stale_active_session,
@@ -42,6 +48,20 @@ def _check_cleanup_lease(lock: CacheLock, deadline: float) -> None:
     if not lock.owned():
         raise CacheLockLostError("Sandbox cleanup lease lost")
     lock.extend(SESSION_FLOW_LOCK_LEASE_SECONDS)
+
+
+def _craft_unused() -> bool:
+    """Craft cannot be on (no flag provider, ENABLE_CRAFT off) and no sandbox exists.
+
+    Building the sandbox manager on such a deployment loads the default
+    Kubernetes backend and fails on every tick without a kube-config (#16580).
+    """
+    if ENABLE_CRAFT or not isinstance(
+        get_default_feature_flag_provider(), NoOpFeatureFlagProvider
+    ):
+        return False
+    with get_session_with_current_tenant() as db_session:
+        return not any_sandbox_exists(db_session)
 
 
 @shared_task(  # ty: ignore[invalid-argument-type]
@@ -79,9 +99,12 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
         timeout=SESSION_FLOW_LOCK_LEASE_SECONDS,
     )
 
-    # Prevent overlapping runs of this task
-    if not lock.acquire(blocking=False):
-        task_logger.info("cleanup_idle_sandboxes_task - lock not acquired, skipping")
+    # Prevent overlapping runs of this task. A deployment that never used Craft
+    # has nothing to sweep, so it skips before building the sandbox manager.
+    if _craft_unused() or not lock.acquire(blocking=False):
+        task_logger.info(
+            "cleanup_idle_sandboxes_task - Craft unused or lock not acquired, skipping"
+        )
         return
 
     try:
