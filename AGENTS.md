@@ -106,9 +106,10 @@ you end it (`.agents/hooks/pre_commit_on_stop.py`, wired as `UserPromptSubmit` a
 already dirty when the turn started are skipped unless you change them. Codex runs
 the hooks only after you trust the project `.codex/` layer. Committed changes come from
 local commit, amend, cherry-pick, revert, and conflict-resolution entries in the
-worktree HEAD reflog. For a merge commit or a rebase step, only files that differ from
-Git's automatic result are checked. Checkout, pull, clean merge, and clean rebase updates do not
-add files to the check.
+worktree HEAD reflog. For a merge commit, only files that differ from Git's automatic
+merge result are checked. For a rebase, the check includes every file in each commit
+resolved with `git rebase --continue`, and skips clean picks. Checkout, pull, clean
+merge, and clean rebase updates do not add files to the check.
 If pre-commit fails, fix the reported problems before you finish. When the repo has the feature map
 (`.agents/feature-map/stale_docs.py`), the same hook also names any feature-map
 component whose code the turn changed but whose document the branch did not. These

@@ -111,142 +111,30 @@ def _merge_resolution_files(repo: Path, merge: str) -> set[str]:
     return _git_paths(repo, "diff", "--name-only", combined, merge) if others else set()
 
 
-_Original = tuple[str, list[str]]  # (commit, [author name, email, date, subject])
-_IDENTITY = "%an%x00%ae%x00%ad%x00%s"
-
-
-def _identity_rank(replayed: list[str], original: list[str]) -> int | None:
-    """How well a step's identity names an original; lower is closer.
-
-    `rebase --continue` keeps the author date and subject. A manual
-    `git commit` during a rebase keeps the subject but not the date.
-    """
-    same_date, same_subject = replayed[2] == original[2], replayed[3] == original[3]
-    if replayed[:2] != original[:2] or not (same_date or same_subject):
-        return None
-    return (not same_date) + (not same_subject)
-
-
-def _replay_files(
-    repo: Path, before: str, after: str, originals: list[_Original]
-) -> tuple[set[str], int | None]:
-    """Files a rebase step changed beyond an automatic replay of its original.
-
-    A step that matches the automatic replay of any original is clean. Otherwise
-    its original is the next one with the closest author identity, and only the
-    files that differ from that replay count. A step without an original, such
-    as a commit at an edit stop, keeps its whole diff. Also returns the index of
-    the original used.
-    """
-    plain = _git_paths(repo, "diff", "--name-only", before, after)
-    if not plain:
-        return plain, None
-    replayed = (
-        _git(repo, "show", "-s", "--date=raw", f"--format={_IDENTITY}", after)
-        .strip()
-        .split("\0")
-    )
-    named: tuple[int, set[str], int] | None = None
-    for index, (original, identity) in enumerate(originals):
-        automatic = _automatic_merge(
-            repo, "--merge-base", f"{original}^", before, original
-        )
-        if automatic is None:
-            continue
-        files = _git_paths(repo, "diff", "--name-only", automatic, after)
-        if not files:
-            return files, index
-        rank = _identity_rank(replayed, identity)
-        if rank is not None and (named is None or rank < named[0]):
-            named = rank, files, index
-    if named is not None:
-        return named[1], named[2]
-    return plain, None
-
-
-def _rebase_originals(repo: Path, original_tip: str, onto: str) -> list[_Original]:
-    log = _git(
-        repo,
-        "log",
-        "--reverse",
-        "--no-merges",
-        "--date=raw",
-        f"--format=%H%x00{_IDENTITY}",
-        f"{onto}..{original_tip}",
-    )
-    return [
-        (commit, identity.split("\0"))
-        for commit, _, identity in (line.partition("\0") for line in log.splitlines())
-    ]
-
-
-def _rebase_in_progress(repo: Path) -> tuple[str, str] | None:
-    """(original tip, onto) from Git's state for a rebase in progress."""
-    for name in ("rebase-merge", "rebase-apply"):
-        state = Path(_git(repo, "rev-parse", "--git-path", name).strip())
-        try:
-            return (
-                (repo / state / "orig-head").read_text().strip(),
-                (repo / state / "onto").read_text().strip(),
-            )
-        except OSError:
-            continue
-    return None
-
-
-_Entry = tuple[str, str, str]  # (before, after, action)
-
-# `git pull --rebase` names its start entry after the pull command.
-_REBASE_STEP = re.compile(r"(?:rebase|pull .*?)(?: -i)? \((?P<step>[a-z]+)\):")
-_COMMIT_ACTIONS = (
-    "commit:",
-    "commit (amend):",
-    "commit (cherry-pick):",
-    "cherry-pick:",
-    "revert:",
-    "rebase (continue):",
-)
-
-
-def _reflog_entries(chunk: bytes) -> list[_Entry]:
-    entries: list[_Entry] = []
-    for line in chunk.decode("utf-8", errors="replace").splitlines():
-        refs, separator, action = line.partition("\t")
-        if separator:
-            before, after = refs.split()[:2]
-            entries.append((before, after, action))
-    return entries
-
-
-def _committed_files(
-    repo: Path, offset: int, digest: str, rebase: tuple[str, str] | None
-) -> set[str]:
+def _committed_files(repo: Path, offset: int, digest: str) -> set[str]:
     """Read local commits and conflict resolutions, not imported branch updates."""
     log = _head_reflog(repo)
     if hashlib.sha256(log[:offset]).hexdigest() != digest:
         return set()  # The reflog was expired or rewritten during the turn.
-    originals = _rebase_originals(repo, *rebase) if rebase else None
     files: set[str] = set()
-    for before, after, action in _reflog_entries(log[offset:]):
-        match = _REBASE_STEP.match(action)
-        step = match["step"] if match else None
-        if step == "start":
-            originals = _rebase_originals(repo, before, after)
-        elif step in ("finish", "abort"):
-            originals = None
-        elif step == "reset":
+    for entry in log[offset:].decode("utf-8", errors="replace").splitlines():
+        refs, separator, action = entry.partition("\t")
+        if not separator:
             continue
-        elif step == "merge":
+        before, after = refs.split()[:2]
+        if action.startswith("commit (merge):"):
             files |= _merge_resolution_files(repo, after)
-        elif originals is not None and (step or action.startswith(_COMMIT_ACTIONS)):
-            replayed, index = _replay_files(repo, before, after, originals)
-            files |= replayed
-            if index is not None:
-                # Replays keep their order, so the next one likely follows this one.
-                originals = originals[index + 1 :] + originals[: index + 1]
-        elif action.startswith("commit (merge):"):
-            files |= _merge_resolution_files(repo, after)
-        elif action.startswith(_COMMIT_ACTIONS):
+        elif action.startswith(
+            (
+                "commit:",
+                "commit (amend):",
+                "commit (cherry-pick):",
+                "cherry-pick:",
+                "revert:",
+                # A conflict resolved during a rebase; clean picks are skipped.
+                "rebase (continue):",
+            )
+        ):
             files |= _git_paths(repo, "diff", "--name-only", before, after)
     return files
 
@@ -260,7 +148,6 @@ def _record_turn_start(repo: Path, session: str) -> None:
             {
                 "reflog_offset": len(reflog),
                 "reflog_digest": hashlib.sha256(reflog).hexdigest(),
-                "rebase": _rebase_in_progress(repo),
                 "files": _digests(repo, sorted(_dirty_files(repo))),
             }
         )
@@ -282,11 +169,8 @@ def _turn_changes(repo: Path, session: str) -> set[str] | None:
     try:
         offset = start.get("reflog_offset")
         digest = start.get("reflog_digest")
-        rebase = start.get("rebase")
         if isinstance(offset, int) and offset >= 0 and isinstance(digest, str):
-            changed |= _committed_files(
-                repo, offset, digest, (rebase[0], rebase[1]) if rebase else None
-            )
+            changed |= _committed_files(repo, offset, digest)
     except (subprocess.CalledProcessError, KeyError):
         pass
     return changed

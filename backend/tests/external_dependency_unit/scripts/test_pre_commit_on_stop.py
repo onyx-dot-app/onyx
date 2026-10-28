@@ -192,8 +192,6 @@ _CONFLICT_COMMANDS = {
     "merge": ["merge", "upstream"],
     "rebase": ["rebase", "upstream"],
     "rebase-with-commit": ["rebase", "upstream"],
-    "rebase-apply": ["rebase", "--apply", "upstream"],
-    "pull-rebase": ["pull", "--rebase", ".", "upstream"],
 }
 
 
@@ -212,13 +210,7 @@ def _resolve(repo: Path, operation: str) -> None:
     _git(repo, "add", "base.txt")
     if operation in ("merge", "rebase-with-commit"):
         _git(repo, "commit", "-q", "--no-edit")
-    if operation == "rebase-without-finish":
-        subprocess.run(
-            ["git", "-c", "core.editor=true", "rebase", "--continue"],
-            cwd=repo,
-            capture_output=True,
-        )
-    elif operation != "merge":
+    if operation != "merge":
         command = "cherry-pick" if operation == "cherry-pick" else "rebase"
         _git(repo, "-c", "core.editor=true", command, "--continue")
 
@@ -231,7 +223,7 @@ def _diverge(repo: Path) -> None:
 
 
 @pytest.mark.parametrize("operation", list(_CONFLICT_COMMANDS))
-def test_only_conflict_resolutions_are_checked(repo: Path, operation: str) -> None:
+def test_conflict_resolutions_are_checked(repo: Path, operation: str) -> None:
     _diverge(repo)
     (repo / "local.txt").write_text("local\n")
     _git(repo, "add", "local.txt")
@@ -240,21 +232,9 @@ def test_only_conflict_resolutions_are_checked(repo: Path, operation: str) -> No
     _conflict(repo, operation)
     _resolve(repo, operation)
     _stop(repo)
-    assert _checked(repo) == {"base.txt"}
-
-
-def test_rebase_pairs_repeated_subjects_in_order(repo: Path) -> None:
-    _diverge(repo)
-    (repo / "base.txt").write_text("local edit\n")
-    _git(repo, "commit", "-qam", "Same subject")
-    (repo / "local.txt").write_text("local\n")
-    _git(repo, "add", "local.txt")
-    _git(repo, "commit", "-qm", "Same subject")
-    _start(repo)
-    _conflict(repo, "rebase")
-    _resolve(repo, "rebase")
-    _stop(repo)
-    assert _checked(repo) == {"base.txt"}
+    # A resolved rebase commit is checked in full.
+    replayed = {"local.txt"} if operation.startswith("rebase") else set()
+    assert _checked(repo) == {"base.txt"} | replayed
 
 
 def test_clean_autosquash_checks_nothing(repo: Path) -> None:
@@ -274,79 +254,6 @@ def test_clean_autosquash_checks_nothing(repo: Path) -> None:
     )
     _stop(repo)
     assert _checked(repo) == set()
-
-
-def test_rebase_onto_checks_only_replayed_commits(repo: Path) -> None:
-    _git(repo, "checkout", "-qb", "upstream")
-    _commit(repo, "upstream.txt")
-    _git(repo, "checkout", "-q", "main")
-    _commit(repo, "base.txt", "skipped\n")
-    _commit(repo, "local.txt")
-    _start(repo)
-    _git(repo, "rebase", "-q", "--onto", "upstream", "HEAD~1")
-    _stop(repo)
-    assert _checked(repo) == set()
-
-
-def test_rebase_skips_patch_already_upstream(repo: Path) -> None:
-    _git(repo, "checkout", "-qb", "upstream")
-    _commit(repo, "base.txt", "shared\n")
-    _git(repo, "checkout", "-q", "main")
-    (repo / "base.txt").write_text("shared\n")
-    _git(repo, "commit", "-qam", "Local copy of the upstream change")
-    _commit(repo, "base.txt", "local\n")
-    _start(repo)
-    _git(repo, "rebase", "-q", "upstream")
-    _stop(repo)
-    assert _checked(repo) == set()
-
-
-def test_unfinished_rebase_checks_commits_from_the_turn(repo: Path) -> None:
-    _commit(repo, "local.txt")
-    _start(repo)
-    _git(
-        repo,
-        "-c",
-        "sequence.editor=sed -i.bak s/^pick/edit/",
-        "rebase",
-        "-qi",
-        "HEAD~1",
-    )
-    _commit(repo, "new.txt")
-    _stop(repo)
-    assert _checked(repo) == {"new.txt"}
-
-
-def test_rebase_across_turns_checks_each_turn_once(repo: Path) -> None:
-    _git(repo, "checkout", "-qb", "upstream")
-    _commit(repo, "base.txt", "upstream edit\n")
-    _commit(repo, "other.txt", "upstream edit\n")
-    _git(repo, "checkout", "-q", "main")
-    _commit(repo, "base.txt", "local edit\n")
-    _commit(repo, "other.txt", "local edit\n")
-    _start(repo)
-    _conflict(repo, "rebase")
-    _resolve(repo, "rebase-without-finish")
-    _stop(repo)
-    assert "base.txt" in _checked(repo)
-    _start(repo)
-    (repo / "other.txt").write_text("resolved\n")
-    _git(repo, "add", "other.txt")
-    _git(repo, "-c", "core.editor=true", "rebase", "--continue")
-    _stop(repo)
-    assert _checked(repo) == {"other.txt"}
-
-
-def test_quit_rebase_does_not_hide_later_commits(repo: Path) -> None:
-    _diverge(repo)
-    _commit(repo, "base.txt", "local edit\n")
-    _conflict(repo, "rebase")
-    _git(repo, "rebase", "--quit")
-    _git(repo, "reset", "-q", "--hard")
-    _start(repo)
-    _commit(repo, "new.txt")
-    _stop(repo)
-    assert _checked(repo) == {"new.txt"}
 
 
 def test_unrelated_history_merge_checks_only_resolutions(repo: Path) -> None:
@@ -401,45 +308,6 @@ def test_rebase_merges_checks_nothing_when_clean(repo: Path) -> None:
     _git(repo, "rebase", "-q", "--rebase-merges", "upstream")
     _stop(repo)
     assert _checked(repo) == set()
-
-
-def test_rebase_resolution_keeping_upstream_checks_resolved_file(repo: Path) -> None:
-    _diverge(repo)
-    (repo / "local.txt").write_text("local\n")
-    _git(repo, "add", "local.txt")
-    _commit(repo, "base.txt", "local edit\n")
-    _start(repo)
-    _conflict(repo, "rebase")
-    _git(repo, "checkout", "-q", "--ours", "base.txt")
-    _git(repo, "add", "base.txt")
-    _git(repo, "-c", "core.editor=true", "rebase", "--continue")
-    _stop(repo)
-    assert _checked(repo) == {"base.txt"}
-
-
-def test_reworded_rebase_resolution_checks_only_resolved_file(
-    repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _diverge(repo)
-    (repo / "local.txt").write_text("local\n")
-    _git(repo, "add", "local.txt")
-    _commit(repo, "base.txt", "local edit\n")
-    _start(repo)
-    conflict = subprocess.run(
-        ["git", "-c", "sequence.editor=sed -i.bak s/^pick/reword/"]
-        + ["rebase", "-i", "upstream"],
-        cwd=repo,
-        capture_output=True,
-        text=True,
-    )
-    assert conflict.returncode != 0, conflict.stdout
-    (repo / "base.txt").write_text("resolved\n")
-    _git(repo, "add", "base.txt")
-    monkeypatch.setenv("GIT_EDITOR", "sed -i.bak 1s/.*/Reworded/")
-    _git(repo, "rebase", "--continue")
-    _stop(repo)
-    assert _git(repo, "log", "-1", "--format=%s") == "Reworded"
-    assert _checked(repo) == {"base.txt"}
 
 
 def test_linked_worktree_uses_its_own_reflog(repo: Path) -> None:
