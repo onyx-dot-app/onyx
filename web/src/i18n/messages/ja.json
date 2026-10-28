@@ -6995,11 +6995,6 @@
           "description": "{appName} は {provider} プロキシ上にあるこのモデルに接続します。"
         }
       },
-      "maxImageSize": {
-        "description": "このサイズを超える画像はリソース使用を抑えるためスキップされます。",
-        "suffix": "(MB)",
-        "title": "解析する画像の最大サイズ"
-      },
       "modal": {
         "cancelButton": {
           "label": "キャンセル"
@@ -7045,11 +7040,6 @@
         "addCustomModel": {
           "label": "カスタムモデルを追加"
         },
-        "bringYourOwn": {
-          "cloudDescription": "LiteLLM プロキシ、Azure OpenAI デプロイメント、または Bifrost ゲートウェイを接続します。モデル名はご自身で指定します。LiteLLM と Azure では次元も指定します。",
-          "selfHostedDescription": "上の一覧にない Hugging Face の埋め込みモデルを実行します。モデル名、次元、プレフィックスはご自身で指定します。",
-          "title": "詳細設定: 独自のモデルまたはプロキシを使用"
-        },
         "cloudTab": {
           "label": "クラウド型"
         },
@@ -7057,6 +7047,7 @@
           "title": "カスタム embedding モデルを設定します。"
         },
         "customModels": {
+          "hint": "[Hugging Face](https://huggingface.co/models?library=sentence-transformers&sort=trending) で公開されている [SentenceTransformers](https://www.sbert.net/) 互換のモデルを使用してください。{appName} はセルフホスティング用にモデルをダウンロードします。互換性は保証されません。",
           "title": "カスタムモデル"
         },
         "foldModels": {
@@ -7091,6 +7082,20 @@
           "label": "一時的に利用不可"
         },
         "title": "マルチパスインデックス"
+      },
+      "openaiCompatible": {
+        "apiUrl": {
+          "description": "OpenAI 互換エンドポイントのベース URL(例: http://localhost:8000/v1)。{appName} が /embeddings パスを追加します。",
+          "title": "API ベース URL"
+        },
+        "modelName": {
+          "description": "{appName} は OpenAI 互換エンドポイント上のこのモデルに接続します。"
+        },
+        "reducedDimension": {
+          "description": "より短いベクトルをリクエストします。Matryoshka Representation Learning で学習したモデルのみが対応しています。短いベクトルはストレージが少なく、検索も高速です。モデルの最大サイズを使う場合は空欄のままにしてください。",
+          "placeholder": "例: 1024",
+          "title": "埋め込み次元数"
+        }
       },
       "progressBanner": {
         "attentionButton": {
@@ -7218,6 +7223,7 @@
         "modelDimPositive": "正の整数を入力してください",
         "modelDimRequired": "モデルの次元数は必須です",
         "modelNameRequired": "モデル名は必須です",
+        "reducedDimensionTooLarge": "モデルの次元数より小さくする必要があります",
         "serviceAccountJsonInvalid": "有効な Google サービスアカウントの JSON ファイルを指定してください",
         "serviceAccountJsonRequired": "サービスアカウント JSON は必須です",
         "targetUrlRequired": "ターゲット URL は必須です",
@@ -7282,11 +7288,11 @@
             "off": "検索インデックスのすべてのチャンクにコネクタIDがあります。検索はドキュメントのアクセスリストを使用します。コネクタ単位のアクセスはオフです。",
             "shadow": "検索インデックスのすべてのチャンクにコネクタIDがあります。検索はドキュメントのアクセスリストを使用し、コネクタ単位のアクセスと比較します。"
           },
-          "title": "コネクタアクセスの更新が完了しました"
+          "title": "コネクタアクセスの更新が完了しました。"
         },
         "notStarted": {
           "description": "バックグラウンドジョブが検索インデックス内の既存チャンクにコネクタIDを追加します。数分以内に開始されます。",
-          "title": "コネクタアクセスの更新はまだ開始されていません"
+          "title": "コネクタアクセスの更新はまだ開始されていません。"
         },
         "progress": {
           "ariaLabel": "コネクタアクセス更新の進行状況"
@@ -7327,7 +7333,7 @@
         },
         "loadError": {
           "description": "ページを再読み込みして、もう一度お試しください。",
-          "title": "コネクタアクセスの更新を読み込めませんでした"
+          "title": "コネクタアクセスの更新を読み込めませんでした。"
         }
       },
       "embeddingRateLimit": {
@@ -7335,18 +7341,14 @@
         "description": "インデックス作成が一定時間内に送信する埋め込みリクエストの数を、すべてのインデックス作成ワーカーを通して制限します。上限に達すると、インデックス作成は失敗せずに待機してから再試行するため、ワーカーは新しい作業を取りにくくなります。バッチが失敗するのは、待機が長すぎる場合だけです。検索クエリは制限されません。",
         "requests": {
           "title": "時間枠あたりのリクエスト数",
-          "description": "空欄にすると制限なしになります。",
-          "placeholder": "制限なし"
+          "description": "インデックス作成が 1 つの時間枠で送信できる埋め込みリクエストの最大数です。空欄にすると制限なしになります。",
+          "placeholder": "制限なし",
+          "suffix": "リクエスト"
         },
         "period": {
           "title": "時間枠の長さ",
-          "description": "例: 1 分あたりの制限なら 60。",
-          "suffix": "（秒）"
-        },
-        "restoreDefault": "デフォルトに戻す",
-        "validation": {
-          "requests": "1 から {max, number} までの整数を入力するか、制限なしにする場合は空欄にしてください。",
-          "period": "1 から {max, number} までの整数の秒数を入力してください。"
+          "description": "1 つの時間枠の長さです。1 分あたりの制限にするには 60 を指定します。",
+          "suffix": "秒"
         },
         "toasts": {
           "failed": "レート制限を保存できませんでした。"

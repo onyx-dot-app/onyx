@@ -76,7 +76,6 @@ func (d *settingsDataSource) Schema(_ context.Context, _ datasource.SchemaReques
 		"query_history_type":                    schema.StringAttribute{Computed: true},
 		"hide_query_history_from_admin_panel":   schema.BoolAttribute{Computed: true},
 		"image_extraction_and_analysis_enabled": schema.BoolAttribute{Computed: true},
-		"image_analysis_max_size_mb":            schema.Int64Attribute{Computed: true},
 		"user_knowledge_enabled":                schema.BoolAttribute{Computed: true},
 		"user_file_max_upload_size_mb":          schema.Int64Attribute{Computed: true},
 		"file_token_count_threshold_k":          schema.Int64Attribute{Computed: true},
@@ -91,6 +90,11 @@ func (d *settingsDataSource) Schema(_ context.Context, _ datasource.SchemaReques
 		"gpu_enabled":                           schema.BoolAttribute{Computed: true},
 		"seat_count":                            schema.Int64Attribute{Computed: true},
 		"used_seats":                            schema.Int64Attribute{Computed: true},
+		"image_analysis_max_size_mb": schema.Int64Attribute{
+			Computed:            true,
+			DeprecationMessage:  "Onyx no longer has this setting. The value is always null.",
+			MarkdownDescription: "Deprecated: Onyx no longer has this setting. Always null.",
+		},
 	}
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "The current Onyx workspace settings, read-only. Useful for referencing " +
@@ -125,7 +129,7 @@ func (d *settingsDataSource) Read(ctx context.Context, _ datasource.ReadRequest,
 		QueryHistoryType:                  types.StringPointerValue(server.QueryHistoryType),
 		HideQueryHistoryFromAdminPanel:    types.BoolValue(server.HideQueryHistoryFromAdminPanel),
 		ImageExtractionAndAnalysisEnabled: types.BoolPointerValue(server.ImageExtractionAndAnalysisEnabled),
-		ImageAnalysisMaxSizeMB:            types.Int64PointerValue(server.ImageAnalysisMaxSizeMB),
+		ImageAnalysisMaxSizeMB:            types.Int64Null(),
 		UserKnowledgeEnabled:              types.BoolPointerValue(server.UserKnowledgeEnabled),
 		UserFileMaxUploadSizeMB:           types.Int64PointerValue(server.UserFileMaxUploadSizeMB),
 		FileTokenCountThresholdK:          types.Int64PointerValue(server.FileTokenCountThresholdK),

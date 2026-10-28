@@ -46,14 +46,20 @@ def is_incognito_teardown_target(
     Ownership then rests on the per-user scope of the file marking.
     """
     row = db_session.execute(
-        select(ChatSession.user_id, ChatSession.incognito_record_mode).where(
-            ChatSession.id == chat_session_id
-        )
+        select(
+            ChatSession.user_id,
+            ChatSession.incognito_record_mode,
+            ChatSession.spawned_by_message_id,
+        ).where(ChatSession.id == chat_session_id)
     ).one_or_none()
     if row is None:
         return True
-    owner_id, record_mode = row
-    return owner_id in (user_id, None) and record_mode is not None
+    owner_id, record_mode, spawned_by_message_id = row
+    return (
+        spawned_by_message_id is None
+        and owner_id in (user_id, None)
+        and record_mode is not None
+    )
 
 
 def mark_user_files_deleting(db_session: Session, file_ids: Sequence[UUID]) -> None:

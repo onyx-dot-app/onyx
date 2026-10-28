@@ -6995,11 +6995,6 @@
           "description": "{appName} 将在您的 {provider} 代理上连接此模型。"
         }
       },
-      "maxImageSize": {
-        "description": "超过此大小的图片将被跳过，以限制资源使用。",
-        "suffix": "(MB)",
-        "title": "分析的最大图像大小"
-      },
       "modal": {
         "cancelButton": {
           "label": "取消"
@@ -7045,11 +7040,6 @@
         "addCustomModel": {
           "label": "添加自定义模型"
         },
-        "bringYourOwn": {
-          "cloudDescription": "连接 LiteLLM 代理、Azure OpenAI 部署或 Bifrost 网关。模型名称由您自行填写。对于 LiteLLM 和 Azure，还需填写维度。",
-          "selfHostedDescription": "运行上方列表中没有的 Hugging Face 嵌入模型。模型名称、维度和前缀由您自行填写。",
-          "title": "高级：使用自己的模型或代理"
-        },
         "cloudTab": {
           "label": "云端"
         },
@@ -7057,6 +7047,7 @@
           "title": "设置自定义 embedding 模型。"
         },
         "customModels": {
+          "hint": "使用 [Hugging Face](https://huggingface.co/models?library=sentence-transformers&sort=trending) 上提供的兼容 [SentenceTransformers](https://www.sbert.net/) 的模型。{appName} 会下载该模型以进行自托管设置。不保证兼容性。",
           "title": "自定义模型"
         },
         "foldModels": {
@@ -7091,6 +7082,20 @@
           "label": "暂时不可用"
         },
         "title": "多轮索引"
+      },
+      "openaiCompatible": {
+        "apiUrl": {
+          "description": "OpenAI 兼容端点的基础 URL,例如 http://localhost:8000/v1。{appName} 会添加 /embeddings 路径。",
+          "title": "API 基础 URL"
+        },
+        "modelName": {
+          "description": "{appName} 将连接到你的 OpenAI 兼容端点上的此模型。"
+        },
+        "reducedDimension": {
+          "description": "请求更短的向量。仅使用 Matryoshka Representation Learning 训练的模型支持此功能。更短的向量占用更少存储并且搜索更快。留空则使用模型的完整维度。",
+          "placeholder": "例如 1024",
+          "title": "嵌入维度"
+        }
       },
       "progressBanner": {
         "attentionButton": {
@@ -7218,6 +7223,7 @@
         "modelDimPositive": "必须是正整数",
         "modelDimRequired": "模型维度为必填项",
         "modelNameRequired": "模型名称为必填项",
+        "reducedDimensionTooLarge": "必须小于模型维度",
         "serviceAccountJsonInvalid": "必须是有效的 Google 服务账号 JSON 文件",
         "serviceAccountJsonRequired": "服务账号 JSON 为必填项",
         "targetUrlRequired": "目标 URL 为必填项",
@@ -7282,11 +7288,11 @@
             "off": "搜索索引中的每个分块都有其连接器 ID。搜索使用文档访问列表。连接器级访问已关闭。",
             "shadow": "搜索索引中的每个分块都有其连接器 ID。搜索使用文档访问列表，并将其与连接器级访问进行比较。"
           },
-          "title": "连接器访问更新已完成"
+          "title": "连接器访问更新已完成。"
         },
         "notStarted": {
           "description": "后台任务将为搜索索引中的现有分块添加连接器 ID。它会在几分钟内开始。",
-          "title": "连接器访问更新尚未开始"
+          "title": "连接器访问更新尚未开始。"
         },
         "progress": {
           "ariaLabel": "连接器访问更新进度"
@@ -7327,7 +7333,7 @@
         },
         "loadError": {
           "description": "请重新加载页面后重试。",
-          "title": "无法加载连接器访问更新"
+          "title": "无法加载连接器访问更新。"
         }
       },
       "embeddingRateLimit": {
@@ -7335,18 +7341,14 @@
         "description": "限制索引在一个时间窗口内发送的嵌入请求数量，覆盖所有索引工作进程。达到限制时，索引会等待后重试而不是失败，因此工作进程会少接新任务。只有等待时间过长时，批次才会失败。搜索查询不受限制。",
         "requests": {
           "title": "每个窗口的请求数",
-          "description": "留空表示不限制。",
-          "placeholder": "不限制"
+          "description": "索引在一个窗口内最多可发送的嵌入请求数。留空表示不限制。",
+          "placeholder": "不限制",
+          "suffix": "个请求"
         },
         "period": {
           "title": "窗口长度",
-          "description": "例如，每分钟限制填 60。",
-          "suffix": "（秒）"
-        },
-        "restoreDefault": "恢复默认值",
-        "validation": {
-          "requests": "请输入 1 到 {max, number} 之间的整数，或留空表示不限制。",
-          "period": "请输入 1 到 {max, number} 之间的整数秒数。"
+          "description": "一个窗口的时长。设为 60 即为每分钟的限制。",
+          "suffix": "秒"
         },
         "toasts": {
           "failed": "无法保存速率限制。"

@@ -12,12 +12,7 @@ from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcess
 from onyx.chat.emitter import Emitter
 from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.llm_step import run_llm_step, run_llm_step_pkt_generator
-from onyx.chat.models import (
-    ChatMessageSimple,
-    FileToolMetadata,
-    LlmStepResult,
-    ToolCallSimple,
-)
+from onyx.chat.models import ChatMessageSimple, LlmStepResult, ToolCallSimple
 from onyx.chat.prompt_utils import build_language_section, with_language_section
 from onyx.configs.chat_configs import (
     DR_REPORT_LLM_TIMEOUT_S,
@@ -39,6 +34,7 @@ from onyx.deep_research.utils import (
     check_special_tool_calls,
     create_think_tool_token_processor,
 )
+from onyx.file_store.models import FileToolMetadata
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.model_capabilities import model_is_reasoning_model
 from onyx.llm.model_request import serialize_tools
@@ -69,7 +65,8 @@ from onyx.server.query_and_chat.streaming_models import (
 )
 from onyx.tools.fake_tools.research_agent import run_research_agent_calls
 from onyx.tools.interface import Tool
-from onyx.tools.models import ToolCallInfo, ToolCallKickoff
+from onyx.tools.models import ToolCallKickoff
+from onyx.tools.records import ToolCallInfo
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool

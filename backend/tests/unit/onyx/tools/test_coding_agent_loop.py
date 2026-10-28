@@ -8,7 +8,6 @@ from typing import Any
 from unittest.mock import patch
 
 from onyx.chat.emitter import Emitter
-from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.coding_agent.tool_definitions import (
     BASH_TOOL_NAME,
     CODING_AGENT_QUERY_KEY,
@@ -40,6 +39,7 @@ from onyx.server.query_and_chat.streaming_models import (
 )
 from onyx.tools.fake_tools import coding_agent
 from onyx.tools.models import ToolCallKickoff, ToolResponse
+from onyx.tools.results import CodingAgentCallResult
 
 MODULE = "onyx.tools.fake_tools.coding_agent"
 TURN_INDEX = 3

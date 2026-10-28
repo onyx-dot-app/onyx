@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Turn hooks for coding agents (Claude Code and Codex).
 
-On `UserPromptSubmit` the hook records HEAD and the contents of every dirty file.
+On `UserPromptSubmit` the hook records the HEAD reflog and every dirty file.
 On `Stop` it compares against that record, so it only looks at the files this turn
 changed (edited, created or committed), never scratch files or older edits. For
 those files it:
@@ -10,8 +10,8 @@ those files it:
 - when the feature map has `stale_docs.py`, names the feature-map components whose
   code the turn changed but whose documents the branch did not.
 
-When either has something to say, the hook exits with code 2 and prints it to
-stderr. Both agents treat that as "keep going". A second stop in the same turn
+Only pre-commit failures exit with code 2 and print to stderr. Documentation
+reminders use a non-blocking UI message. A second stop in the same turn
 (`stop_hook_active`) is let through, so a check the agent cannot fix never loops.
 Without a record for the session, the stop does nothing.
 """
@@ -70,13 +70,84 @@ def _snapshot_path(repo: Path, session: str) -> Path:
     return git_dir / "agent-turns" / f"{re.sub(r'[^A-Za-z0-9_-]', '_', session)}.json"
 
 
+def _head_reflog(repo: Path) -> bytes:
+    path = Path(_git(repo, "rev-parse", "--git-path", "logs/HEAD").strip())
+    try:
+        return (repo / path).read_bytes()
+    except FileNotFoundError:
+        return b""
+
+
+def _automatic_merge(repo: Path, *merge_args: str) -> str | None:
+    """Tree of Git's automatic merge, with conflict markers where it conflicts."""
+    result = subprocess.run(
+        ["git", "merge-tree", "--write-tree", *merge_args],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    )
+    # Exit code 1 means the automatic merge had conflicts; the tree still exists.
+    if result.returncode not in (0, 1) or not result.stdout:
+        return None
+    return result.stdout.split()[0]
+
+
+def _merge_resolution_files(repo: Path, merge: str) -> set[str]:
+    """Files a merge commit changed beyond Git's automatic merge of its parents."""
+    first, *others = _git(repo, "rev-list", "--parents", "-n", "1", merge).split()[1:]
+    combined = first
+    for index, parent in enumerate(others, start=1):
+        tree = _automatic_merge(repo, "--allow-unrelated-histories", combined, parent)
+        if tree is None:
+            return _git_paths(repo, "diff", "--name-only", first, merge)
+        # An octopus merge folds each parent into the result of the ones before.
+        combined = (
+            tree
+            if index == len(others)
+            else _git(
+                repo, "commit-tree", tree, "-p", combined, "-p", parent, "-m", "merge"
+            ).strip()
+        )
+    return _git_paths(repo, "diff", "--name-only", combined, merge) if others else set()
+
+
+def _committed_files(repo: Path, offset: int, digest: str) -> set[str]:
+    """Read local commits and conflict resolutions, not imported branch updates."""
+    log = _head_reflog(repo)
+    if hashlib.sha256(log[:offset]).hexdigest() != digest:
+        return set()  # The reflog was expired or rewritten during the turn.
+    files: set[str] = set()
+    for entry in log[offset:].decode("utf-8", errors="replace").splitlines():
+        refs, separator, action = entry.partition("\t")
+        if not separator:
+            continue
+        before, after = refs.split()[:2]
+        if action.startswith("commit (merge):"):
+            files |= _merge_resolution_files(repo, after)
+        elif action.startswith(
+            (
+                "commit:",
+                "commit (amend):",
+                "commit (cherry-pick):",
+                "cherry-pick:",
+                "revert:",
+                # A conflict resolved during a rebase; clean picks are skipped.
+                "rebase (continue):",
+            )
+        ):
+            files |= _git_paths(repo, "diff", "--name-only", before, after)
+    return files
+
+
 def _record_turn_start(repo: Path, session: str) -> None:
     snapshot = _snapshot_path(repo, session)
     snapshot.parent.mkdir(exist_ok=True)
+    reflog = _head_reflog(repo)
     snapshot.write_text(
         json.dumps(
             {
-                "head": _git(repo, "rev-parse", "HEAD").strip(),
+                "reflog_offset": len(reflog),
+                "reflog_digest": hashlib.sha256(reflog).hexdigest(),
                 "files": _digests(repo, sorted(_dirty_files(repo))),
             }
         )
@@ -96,7 +167,10 @@ def _turn_changes(repo: Path, session: str) -> set[str] | None:
         if start_files.get(path) != digest
     }
     try:
-        changed |= _git_paths(repo, "diff", "--name-only", start["head"], "HEAD")
+        offset = start.get("reflog_offset")
+        digest = start.get("reflog_digest")
+        if isinstance(offset, int) and offset >= 0 and isinstance(digest, str):
+            changed |= _committed_files(repo, offset, digest)
     except (subprocess.CalledProcessError, KeyError):
         pass
     return changed
@@ -222,13 +296,16 @@ def main() -> int:
     except (subprocess.CalledProcessError, OSError):
         reminder = None
     files = sorted(path for path in turn if (repo / path).is_file())
-    messages = [
-        message for message in (_pre_commit_failures(repo, files), reminder) if message
-    ]
-    if not messages:
-        return 0
-    print("\n\n".join(messages), file=sys.stderr)
-    return _BLOCK
+    failure = _pre_commit_failures(repo, files)
+    if failure:
+        print(
+            "\n\n".join(message for message in (failure, reminder) if message),
+            file=sys.stderr,
+        )
+        return _BLOCK
+    if reminder:
+        print(json.dumps({"systemMessage": reminder}))
+    return 0
 
 
 if __name__ == "__main__":

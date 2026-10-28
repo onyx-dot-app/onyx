@@ -23,6 +23,7 @@ from onyx.db.index_attempt import (
 )
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.db.models import ConnectorCredentialPair, SearchSettings
+from onyx.db.port_attempt import reindex_finalizing
 from onyx.redis.tenant_redis_client import TenantRedisClient
 
 _LOCK_TIMEOUT = 30
@@ -61,6 +62,24 @@ def _skips_indexing(
     return False
 
 
+def docfetching_priority(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    search_settings: SearchSettings,
+) -> OnyxCeleryPriority:
+    """First-time indexing goes before refreshes of indexed connectors. While a
+    port-flow reindex finalizes, its FUTURE attempts go first too: the swap waits
+    on them. Priority only orders the queue, it does not interrupt a running
+    attempt."""
+    if cc_pair.last_successful_index_time is None:
+        return OnyxCeleryPriority.HIGH
+    if search_settings.status == IndexModelStatus.FUTURE and reindex_finalizing(
+        db_session, search_settings
+    ):
+        return OnyxCeleryPriority.HIGH
+    return OnyxCeleryPriority.MEDIUM
+
+
 def _send_docfetching_task(
     celery_app: Celery,
     *,
@@ -69,14 +88,8 @@ def _send_docfetching_task(
     index_attempt_id: int,
     custom_task_id: str,
     tenant_id: str,
+    priority: OnyxCeleryPriority,
 ) -> None:
-    # Use higher priority for first-time indexing to ensure new connectors
-    # get processed before re-indexing of existing connectors
-    has_successful_attempt = cc_pair.last_successful_index_time is not None
-    priority = (
-        OnyxCeleryPriority.MEDIUM if has_successful_attempt else OnyxCeleryPriority.HIGH
-    )
-
     # No expires=: a docfetching task can wait in the queue for hours under
     # load, and the NOT_STARTED scan in the indexing watchdog fails an attempt
     # whose task is lost.
@@ -188,6 +201,7 @@ def try_creating_pending_backfill_attempt(
             index_attempt_id=index_attempt_id,
             custom_task_id=custom_task_id,
             tenant_id=tenant_id,
+            priority=docfetching_priority(db_session, cc_pair, search_settings),
         )
         return index_attempt_id
     except Exception:
@@ -272,6 +286,7 @@ def _try_creating_attempt(
             index_attempt_id=index_attempt_id,
             custom_task_id=custom_task_id,
             tenant_id=tenant_id,
+            priority=docfetching_priority(db_session, cc_pair, search_settings),
         )
         return index_attempt_id
 
@@ -336,6 +351,7 @@ def try_dispatching_waiting_attempt(
             index_attempt_id=index_attempt_id,
             custom_task_id=custom_task_id,
             tenant_id=tenant_id,
+            priority=docfetching_priority(db_session, cc_pair, search_settings),
         )
         return True
     except Exception:

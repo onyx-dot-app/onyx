@@ -1,12 +1,16 @@
+from __future__ import annotations
+
 from collections.abc import Sequence
 from datetime import datetime, timezone
-from enum import Enum
-from typing import Any
+from enum import Enum, StrEnum
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from onyx.configs.constants import DocumentSource
-from onyx.db.models import SearchSettings
+
+if TYPE_CHECKING:
+    from onyx.db.models import SearchSettings
 from onyx.indexing.models import BaseChunk, IndexingSetting
 from onyx.tools.tool_implementations.web_search.models import WEB_SEARCH_PREFIX
 
@@ -443,6 +447,11 @@ class SearchDoc(BaseModel):
 
 
 class SearchDocsResponse(BaseModel):
+    type: Literal["search_result"] = "search_result"
+    queries: list[str] = Field(default_factory=list)
+    sources: list[str] = Field(default_factory=list)
+    time_filter_start: datetime | None = None
+    time_filter_end: datetime | None = None
     search_docs: list[SearchDoc]
     # Maps the citation number to the document id
     # Since these are no longer just links on the frontend but instead document cards, mapping it to the
@@ -528,3 +537,42 @@ class PersonaSearchInfo(BaseModel):
     search_start_date: datetime | None
     attached_document_ids: list[str]
     hierarchy_node_ids: list[int]
+
+
+class SearchCycle(BaseModel):
+    """One internal_search cycle this turn, as context for the next decision."""
+
+    cycle_number: int
+    queries: list[str]
+    searched_sources: list[str]
+
+
+class DocumentTimeField(StrEnum):
+    CREATED_AT = "created_at"
+    UPDATED_AT = "updated_at"
+
+
+class TimeFilter(BaseModel):
+    """The document date the conversation scopes on (created vs updated) and
+    the inclusive (start, end) window; either bound may be None (open)."""
+
+    field: DocumentTimeField
+    start: datetime | None = None
+    end: datetime | None = None
+
+    def apply_to(self, filters: BaseFilters) -> BaseFilters:
+        """Return a copy of `filters` with this window intersected onto the
+        matching range field, so the inferred window can narrow but never widen
+        a caller-selected restriction. A disjoint inferred window is dropped —
+        the explicit range wins over silently matching nothing."""
+        filters = filters.model_copy()
+        window = TimeRange(start=self.start, end=self.end)
+        if self.field is DocumentTimeField.CREATED_AT:
+            merged = window.intersect(filters.created_at_range)
+            if not merged.is_empty():
+                filters.created_at_range = merged
+        else:
+            merged = window.intersect(filters.updated_at_range)
+            if not merged.is_empty():
+                filters.updated_at_range = merged
+        return filters

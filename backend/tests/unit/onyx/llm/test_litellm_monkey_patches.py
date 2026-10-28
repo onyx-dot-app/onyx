@@ -10,7 +10,7 @@ from litellm.completion_extras.litellm_responses_transformation.transformation i
 from litellm.litellm_core_utils.litellm_logging import Logging
 from litellm.llms.ollama.chat.transformation import OllamaChatCompletionResponseIterator
 from litellm.types.llms.openai import ResponseAPIUsage, ResponsesAPIResponse
-from litellm.types.utils import ModelResponse
+from litellm.types.utils import ChatCompletionDeltaToolCall, ModelResponse
 from openai.types.responses.response import IncompleteDetails
 from openai.types.responses.response_output_message import ResponseOutputMessage
 from openai.types.responses.response_output_text import ResponseOutputText
@@ -224,9 +224,9 @@ def test_responses_transform_response_preserves_reasoning_summary_sections() -> 
 
 def test_responses_transform_response_maps_incomplete_reply_to_empty_message() -> None:
     """A reasoning model that spends max_output_tokens on reasoning returns an
-    incomplete reply with no message item. Upstream raises; the patch returns
-    an empty message with the truncation as finish_reason, as streaming does,
-    and keeps the reasoning summary."""
+    incomplete reply with no message item. Upstream maps it to an empty message
+    with the truncation as finish_reason; the patch keeps the reasoning summary
+    readable with newlines between its parts."""
     result = _invoke_transform_response(
         _build_responses_response(
             output=[_reasoning_item("thinking about lighthouses", "ran out of budget")],
@@ -315,7 +315,10 @@ def test_responses_chunk_parser_ignores_empty_tool_argument_delta() -> None:
     )
     tool_calls = real.choices[0].delta.tool_calls
     assert tool_calls is not None
-    assert tool_calls[0].function.arguments == '{"query": "onboarding"}'
+    assert isinstance(tool_calls[0], ChatCompletionDeltaToolCall)
+    tool_call = tool_calls[0]
+    assert isinstance(tool_call, ChatCompletionDeltaToolCall)
+    assert tool_call.function.arguments == '{"query": "onboarding"}'
 
 
 def test_assembled_streaming_response_handles_dict_response() -> None:
@@ -444,12 +447,18 @@ def test_azure_should_fake_stream_inherits_registry_aware_patch() -> None:
         )
 
 
-def _anthropic_body(thinking: dict[str, str], messages: list[Any]) -> dict[str, Any]:
+def _anthropic_body(
+    thinking: dict[str, str], messages: list[Any], vertex: bool = False
+) -> dict[str, Any]:
     apply_monkey_patches()
     from litellm.llms.anthropic.chat.transformation import AnthropicConfig
+    from litellm.llms.vertex_ai.vertex_ai_partner_models.anthropic.transformation import (
+        VertexAIAnthropicConfig,
+    )
 
+    config = VertexAIAnthropicConfig() if vertex else AnthropicConfig()
     with mock.patch("litellm.modify_params", True):
-        return AnthropicConfig().transform_request(
+        return config.transform_request(
             model="claude-sonnet-5",
             messages=messages,
             optional_params={"thinking": dict(thinking), "max_tokens": 1024},
@@ -484,10 +493,16 @@ def test_disabled_thinking_survives_tool_call_history(off_type: str) -> None:
     assert body["thinking"] == {"type": off_type}
 
 
-def test_enabled_thinking_still_dropped_after_tool_calls() -> None:
-    """The guard itself must stay: we keep no signed blocks to replay."""
+def test_anthropic_api_keeps_enabled_thinking_after_tool_calls() -> None:
+    """Onyx sends thinking after a tool step with no blocks only when the model
+    chose not to think, and the Anthropic API accepts it."""
     body = _anthropic_body({"type": "adaptive"}, list(_TOOL_HISTORY))
-    assert "thinking" not in body
+    assert body["thinking"] == {"type": "adaptive"}
+
+
+def test_vertex_keeps_enabled_thinking_after_tool_calls() -> None:
+    body = _anthropic_body({"type": "adaptive"}, list(_TOOL_HISTORY), vertex=True)
+    assert body["thinking"] == {"type": "adaptive"}
 
 
 def _converse_fields(thinking: dict[str, str], messages: list[Any]) -> Any:
@@ -513,9 +528,9 @@ def test_converse_keeps_disabled_thinking_after_tool_calls(off_type: str) -> Non
     assert fields == {"thinking": {"type": off_type}}
 
 
-def test_converse_still_drops_enabled_thinking_after_tool_calls() -> None:
+def test_converse_keeps_enabled_thinking_after_tool_calls() -> None:
     fields = _converse_fields({"type": "adaptive"}, list(_TOOL_HISTORY))
-    assert not (fields or {}).get("thinking")
+    assert fields == {"thinking": {"type": "adaptive"}}
 
 
 def test_openrouter_chunk_parser_keeps_served_model() -> None:

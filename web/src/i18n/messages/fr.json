@@ -6995,11 +6995,6 @@
           "description": "{appName} se connectera à ce modèle sur votre proxy {provider}."
         }
       },
-      "maxImageSize": {
-        "description": "Les images dépassant cette taille seront ignorées pour limiter l’utilisation des ressources.",
-        "suffix": "(Mo)",
-        "title": "Taille maximale des images à analyser"
-      },
       "modal": {
         "cancelButton": {
           "label": "Annuler"
@@ -7045,11 +7040,6 @@
         "addCustomModel": {
           "label": "Ajouter un modèle personnalisé"
         },
-        "bringYourOwn": {
-          "cloudDescription": "Connectez un proxy LiteLLM, un déploiement Azure OpenAI ou une passerelle Bifrost. Vous indiquez vous-même le nom du modèle. Pour LiteLLM et Azure, vous indiquez aussi la dimension.",
-          "selfHostedDescription": "Exécutez un modèle d'embedding Hugging Face absent de la liste ci-dessus. Vous indiquez vous-même le nom, la dimension et les préfixes du modèle.",
-          "title": "Avancé : utiliser votre propre modèle ou proxy"
-        },
         "cloudTab": {
           "label": "Dans le cloud"
         },
@@ -7057,6 +7047,7 @@
           "title": "Configurez un modèle d'embedding personnalisé."
         },
         "customModels": {
+          "hint": "Utilisez un modèle compatible avec [SentenceTransformers](https://www.sbert.net/) disponible sur [Hugging Face](https://huggingface.co/models?library=sentence-transformers&sort=trending). {appName} téléchargera le modèle pour le configurer en auto-hébergement. La compatibilité n’est pas garantie.",
           "title": "Modèles personnalisés"
         },
         "foldModels": {
@@ -7091,6 +7082,20 @@
           "label": "temporairement indisponible"
         },
         "title": "Indexation multi-passes"
+      },
+      "openaiCompatible": {
+        "apiUrl": {
+          "description": "L'URL de base de votre point de terminaison compatible OpenAI, par exemple http://localhost:8000/v1. {appName} ajoute le chemin /embeddings.",
+          "title": "URL de base de l'API"
+        },
+        "modelName": {
+          "description": "{appName} se connectera à ce modèle sur votre point de terminaison compatible OpenAI."
+        },
+        "reducedDimension": {
+          "description": "Demander des vecteurs plus courts. Seuls les modèles entraînés avec Matryoshka Representation Learning le permettent. Les vecteurs plus courts occupent moins d'espace et accélèrent la recherche. Laissez vide pour utiliser la taille complète du modèle.",
+          "placeholder": "ex. : 1024",
+          "title": "Dimensions d'embedding"
+        }
       },
       "progressBanner": {
         "attentionButton": {
@@ -7218,6 +7223,7 @@
         "modelDimPositive": "Doit être un entier positif",
         "modelDimRequired": "La dimension du modèle est obligatoire",
         "modelNameRequired": "Le nom du modèle est obligatoire",
+        "reducedDimensionTooLarge": "Doit être inférieur à la dimension du modèle",
         "serviceAccountJsonInvalid": "Doit être un fichier JSON de compte de service Google valide",
         "serviceAccountJsonRequired": "Le JSON du compte de service est obligatoire",
         "targetUrlRequired": "L'URL cible est obligatoire",
@@ -7282,11 +7288,11 @@
             "off": "Chaque fragment de l’index de recherche a ses ID de connecteur. La recherche utilise les listes d’accès des documents. L’accès par connecteur est désactivé.",
             "shadow": "Chaque fragment de l’index de recherche a ses ID de connecteur. La recherche utilise les listes d’accès des documents et les compare à l’accès par connecteur."
           },
-          "title": "Mise à jour de l’accès par connecteur terminée"
+          "title": "Mise à jour de l’accès par connecteur terminée."
         },
         "notStarted": {
           "description": "Une tâche en arrière-plan ajoutera les ID de connecteur aux fragments existants de l’index de recherche. Elle démarre dans quelques minutes.",
-          "title": "La mise à jour de l’accès par connecteur n’a pas commencé"
+          "title": "La mise à jour de l’accès par connecteur n’a pas commencé."
         },
         "progress": {
           "ariaLabel": "Progression de la mise à jour de l’accès par connecteur"
@@ -7327,7 +7333,7 @@
         },
         "loadError": {
           "description": "Rechargez la page pour réessayer.",
-          "title": "Impossible de charger la mise à jour de l’accès par connecteur"
+          "title": "Impossible de charger la mise à jour de l’accès par connecteur."
         }
       },
       "embeddingRateLimit": {
@@ -7335,18 +7341,14 @@
         "description": "Limite le nombre de requêtes d'embedding envoyées par l'indexation dans une fenêtre de temps, pour tous les workers d'indexation. À la limite, l'indexation attend puis réessaie au lieu d'échouer, et les workers prennent moins de nouveau travail. Un lot échoue seulement s'il attend trop longtemps. Les requêtes de recherche ne sont pas limitées.",
         "requests": {
           "title": "Requêtes par fenêtre",
-          "description": "Laissez vide pour ne pas fixer de limite.",
-          "placeholder": "Aucune limite"
+          "description": "Le nombre maximal de requêtes d'embedding que l'indexation peut envoyer dans une fenêtre. Laissez vide pour ne pas fixer de limite.",
+          "placeholder": "Aucune limite",
+          "suffix": "requêtes"
         },
         "period": {
           "title": "Durée de la fenêtre",
-          "description": "Par exemple, 60 pour une limite par minute.",
-          "suffix": "(secondes)"
-        },
-        "restoreDefault": "Restaurer la valeur par défaut",
-        "validation": {
-          "requests": "Saisissez un nombre entier de 1 à {max, number}, ou laissez le champ vide pour ne pas fixer de limite.",
-          "period": "Saisissez un nombre entier de secondes de 1 à {max, number}."
+          "description": "La durée d'une fenêtre. Utilisez 60 pour une limite par minute.",
+          "suffix": "secondes"
         },
         "toasts": {
           "failed": "Impossible d'enregistrer la limite."

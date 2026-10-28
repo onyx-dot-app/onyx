@@ -1,57 +1,58 @@
 import re
 
 from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
-from onyx.chat.models import ContextFileMetadata
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
+from onyx.file_store.models import ContextFileMetadata
+from onyx.llm.models import ToolResultMessage
 from onyx.tools.constants import CITEABLE_TOOLS_NAMES
 from onyx.tools.models import ToolResponse
+from onyx.tools.results import ResearchAgentCallResult
 
 
 def update_citation_processor_from_tool_response(
     tool_response: ToolResponse,
     citation_processor: DynamicCitationProcessor,
 ) -> None:
-    """Update citation processor if this was a citeable tool with a SearchDocsResponse.
+    if tool_response.tool_call is not None:
+        _update_search_citations(
+            tool_response.tool_call.tool_name,
+            tool_response.rich_response,
+            citation_processor,
+        )
 
-    Checks if the tool call is citeable and if the response contains a SearchDocsResponse,
-    then creates a mapping from citation numbers to SearchDoc objects and updates the
-    citation processor.
 
-    Args:
-        tool_response: The response from the tool execution (must have tool_call set)
-        citation_processor: The DynamicCitationProcessor to update
-    """
-    # Early return if tool_call is not set
-    if tool_response.tool_call is None:
+def update_citation_processor_from_tool_result(
+    tool_response: ToolResultMessage,
+    citation_processor: DynamicCitationProcessor,
+) -> None:
+    if isinstance(tool_response.details, ResearchAgentCallResult):
+        citation_processor.update_citation_mapping(
+            tool_response.details.citation_mapping
+        )
         return
+    _update_search_citations(
+        tool_response.tool_name, tool_response.details, citation_processor
+    )
 
-    # Update citation processor if this was a search tool
-    if tool_response.tool_call.tool_name in CITEABLE_TOOLS_NAMES:
-        # Check if the rich_response is a SearchDocsResponse
-        if isinstance(tool_response.rich_response, SearchDocsResponse):
-            search_response = tool_response.rich_response
 
-            # Create mapping from citation number to SearchDoc
-            citation_to_doc: CitationMapping = {}
-            for (
-                citation_num,
-                doc_id,
-            ) in search_response.citation_mapping.items():
-                # Find the SearchDoc with this doc_id
-                matching_doc = next(
-                    (
-                        doc
-                        for doc in search_response.search_docs
-                        if doc.document_id == doc_id
-                    ),
-                    None,
-                )
-                if matching_doc:
-                    citation_to_doc[citation_num] = matching_doc
-
-            # Update the citation processor
-            citation_processor.update_citation_mapping(citation_to_doc)
+def _update_search_citations(
+    tool_name: str, data: object, citation_processor: DynamicCitationProcessor
+) -> None:
+    if tool_name not in CITEABLE_TOOLS_NAMES or not isinstance(
+        data, SearchDocsResponse
+    ):
+        return
+    documents: dict[str, SearchDoc] = {}
+    for document in data.search_docs:
+        documents.setdefault(document.document_id, document)
+    citation_processor.update_citation_mapping(
+        {
+            number: documents[document_id]
+            for number, document_id in data.citation_mapping.items()
+            if document_id in documents
+        }
+    )
 
 
 def extract_citation_order_from_text(text: str) -> list[int]:

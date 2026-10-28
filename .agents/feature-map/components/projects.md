@@ -147,8 +147,8 @@ counting, is [[file-store-and-user-files]] §4.1-4.5.
 ### 4.2 Where the inline-vs-retrieval decision is made, and the threshold
 
 The decision is made once per turn, in
-`process_message.py:extract_context_files`, for whichever files
-`process_message.py:resolve_context_user_files` resolved for this turn (§4.5
+`files.py:extract_context_files`, for whichever files
+`files.py:resolve_context_user_files` resolved for this turn (§4.5
 covers precedence). It compares the aggregate token count of those files
 against:
 
@@ -181,7 +181,7 @@ not a needle-in-a-haystack fact worth risking a silent drop to save space.
 ### 4.4 Path B: retrieved
 
 At or above the ceiling, the combined files are flagged `use_as_search_filter=True`
-(`process_message.py:extract_context_files`). `determine_search_params` sets
+(`files.py:extract_context_files`). `determine_search_params` sets
 `project_id_filter` for the project and `persona_id_filter` for a custom agent.
 The index combines these scopes with OR, alongside the agent's configured
 knowledge, and retains access checks. A default agent in a project enables
@@ -214,7 +214,7 @@ its instructions stay in the system message and project instructions remain
 in a separate context message. Empty agent instructions do not discard project
 instructions.
 
-`process_message.py:resolve_context_user_files` combines project files and
+`files.py:resolve_context_user_files` combines project files and
 custom-agent files, removing duplicates by `UserFile.id`. This selection feeds
 prompt context, `read_file`, and Python file staging. Historical chat
 attachments remain available separately. The combined token count decides

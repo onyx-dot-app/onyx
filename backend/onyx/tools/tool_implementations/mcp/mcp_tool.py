@@ -38,7 +38,8 @@ from onyx.server.query_and_chat.streaming_models import (
     Packet,
 )
 from onyx.tools.interface import Tool
-from onyx.tools.models import CustomToolCallSummary, ToolResponse
+from onyx.tools.models import ToolResponse
+from onyx.tools.results import CustomToolCallSummary
 from onyx.tools.tool_name import sanitize_tool_name
 from onyx.utils.logger import setup_logger
 

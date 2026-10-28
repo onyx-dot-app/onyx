@@ -30,13 +30,10 @@ MIN_ALL_TIME_SPAN = timedelta(days=1)
 
 
 def run_ended_at(attempt: IndexAttempt, started: datetime) -> datetime | None:
-    """When a finished run ended, or None while it still runs. A run from
-    before time_finished existed ends at its last heartbeat check, and is
-    instant when it never reached one."""
-    if not attempt.is_finished():
-        return None
-    ended = attempt.time_finished or attempt.last_heartbeat_time
-    return started if ended is None else max(ended, started)
+    """When a finished run ended, never before ``started``, or None while it
+    still runs."""
+    ended = attempt.end_time
+    return None if ended is None else max(ended, started)
 
 
 def docs_indexed_per_slice(

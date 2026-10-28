@@ -6995,11 +6995,6 @@
           "description": "O {appName} vai se conectar a este modelo no seu proxy {provider}."
         }
       },
-      "maxImageSize": {
-        "description": "Imagens acima deste tamanho serão ignoradas para limitar o uso de recursos.",
-        "suffix": "(MB)",
-        "title": "Tamanho máximo de imagem para análise"
-      },
       "modal": {
         "cancelButton": {
           "label": "Cancelar"
@@ -7045,11 +7040,6 @@
         "addCustomModel": {
           "label": "Adicionar modelo personalizado"
         },
-        "bringYourOwn": {
-          "cloudDescription": "Conecte um proxy LiteLLM, uma implantação do Azure OpenAI ou um gateway Bifrost. Você informa o nome do modelo. Para LiteLLM e Azure, você também informa a dimensão.",
-          "selfHostedDescription": "Execute um modelo de embeddings do Hugging Face que não está na lista acima. Você informa o nome, a dimensão e os prefixos do modelo.",
-          "title": "Avançado: use seu próprio modelo ou proxy"
-        },
         "cloudTab": {
           "label": "Na nuvem"
         },
@@ -7057,6 +7047,7 @@
           "title": "Configure um modelo de embedding personalizado."
         },
         "customModels": {
+          "hint": "Use um modelo compatível com [SentenceTransformers](https://www.sbert.net/) disponível no [Hugging Face](https://huggingface.co/models?library=sentence-transformers&sort=trending). O {appName} vai baixar o modelo para configurá-lo em auto-hospedagem. A compatibilidade não é garantida.",
           "title": "Modelos personalizados"
         },
         "foldModels": {
@@ -7091,6 +7082,20 @@
           "label": "temporariamente indisponível"
         },
         "title": "Indexação multipass"
+      },
+      "openaiCompatible": {
+        "apiUrl": {
+          "description": "A URL base do seu endpoint compatível com OpenAI, por exemplo http://localhost:8000/v1. O {appName} adiciona o caminho /embeddings.",
+          "title": "URL base da API"
+        },
+        "modelName": {
+          "description": "O {appName} se conectará a este modelo no seu endpoint compatível com OpenAI."
+        },
+        "reducedDimension": {
+          "description": "Solicite vetores mais curtos. Apenas modelos treinados com Matryoshka Representation Learning oferecem suporte a isso. Vetores mais curtos usam menos armazenamento e buscam mais rápido. Deixe vazio para usar o tamanho completo do modelo.",
+          "placeholder": "ex.: 1024",
+          "title": "Dimensões do embedding"
+        }
       },
       "progressBanner": {
         "attentionButton": {
@@ -7218,6 +7223,7 @@
         "modelDimPositive": "Deve ser um número inteiro positivo",
         "modelDimRequired": "A dimensão do modelo é obrigatória",
         "modelNameRequired": "O nome do modelo é obrigatório",
+        "reducedDimensionTooLarge": "Deve ser menor que a dimensão do modelo",
         "serviceAccountJsonInvalid": "Deve ser um arquivo JSON de conta de serviço do Google válido",
         "serviceAccountJsonRequired": "O JSON da conta de serviço é obrigatório",
         "targetUrlRequired": "A URL de destino é obrigatória",
@@ -7282,11 +7288,11 @@
             "off": "Todos os fragmentos do índice de pesquisa têm seus IDs de conector. A pesquisa usa as listas de acesso dos documentos. O acesso por conector está desativado.",
             "shadow": "Todos os fragmentos do índice de pesquisa têm seus IDs de conector. A pesquisa usa as listas de acesso dos documentos e as compara com o acesso por conector."
           },
-          "title": "Atualização do acesso por conector concluída"
+          "title": "Atualização do acesso por conector concluída."
         },
         "notStarted": {
           "description": "Um trabalho em segundo plano adicionará os IDs de conector aos fragmentos existentes do índice de pesquisa. Ele começa em alguns minutos.",
-          "title": "A atualização do acesso por conector ainda não começou"
+          "title": "A atualização do acesso por conector ainda não começou."
         },
         "progress": {
           "ariaLabel": "Progresso da atualização do acesso por conector"
@@ -7327,7 +7333,7 @@
         },
         "loadError": {
           "description": "Recarregue a página para tentar novamente.",
-          "title": "Não foi possível carregar a atualização do acesso por conector"
+          "title": "Não foi possível carregar a atualização do acesso por conector."
         }
       },
       "embeddingRateLimit": {
@@ -7335,18 +7341,14 @@
         "description": "Limita quantas requisições de embedding a indexação envia em uma janela de tempo, entre todos os workers de indexação. No limite, a indexação espera e tenta novamente em vez de falhar, então os workers pegam menos trabalho novo. Um lote só falha se esperar demais. Consultas de pesquisa não têm limite.",
         "requests": {
           "title": "Requisições por janela",
-          "description": "Deixe vazio para não ter limite.",
-          "placeholder": "Sem limite"
+          "description": "O máximo de requisições de embedding que a indexação pode enviar em uma janela. Deixe vazio para não ter limite.",
+          "placeholder": "Sem limite",
+          "suffix": "requisições"
         },
         "period": {
           "title": "Duração da janela",
-          "description": "Por exemplo, 60 para um limite por minuto.",
-          "suffix": "(segundos)"
-        },
-        "restoreDefault": "Restaurar padrão",
-        "validation": {
-          "requests": "Insira um número inteiro de 1 a {max, number}, ou deixe o campo vazio para não ter limite.",
-          "period": "Insira um número inteiro de segundos de 1 a {max, number}."
+          "description": "Quanto tempo dura uma janela. Use 60 para um limite por minuto.",
+          "suffix": "segundos"
         },
         "toasts": {
           "failed": "Não foi possível salvar o limite."
