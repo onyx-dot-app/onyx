@@ -242,3 +242,20 @@ GATED_TENANTS_KEY = "gated_tenants"
 CLOUD_DATA_PLANE_URL = os.environ.get(
     "CLOUD_DATA_PLANE_URL", "https://cloud.onyx.app/api"
 )
+
+# Log export collects pod stdout, pod state, and events through the Kubernetes API
+# when the api_server runs in Kubernetes. Set to false to skip it.
+LOG_EXPORT_KUBERNETES_ENABLED = (
+    os.environ.get("LOG_EXPORT_KUBERNETES_ENABLED") or "true"
+).lower() == "true"
+# Most recent lines read from each container log stream.
+LOG_EXPORT_KUBERNETES_TAIL_LINES = int(
+    os.environ.get("LOG_EXPORT_KUBERNETES_TAIL_LINES") or 100_000
+)
+# Byte cap per container log stream, and for all streams in one export.
+LOG_EXPORT_KUBERNETES_MAX_BYTES_PER_STREAM = int(
+    os.environ.get("LOG_EXPORT_KUBERNETES_MAX_BYTES_PER_STREAM") or 25 * 1024 * 1024
+)
+LOG_EXPORT_KUBERNETES_MAX_TOTAL_BYTES = int(
+    os.environ.get("LOG_EXPORT_KUBERNETES_MAX_TOTAL_BYTES") or 500 * 1024 * 1024
+)

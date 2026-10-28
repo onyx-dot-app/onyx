@@ -127,6 +127,21 @@ Every route in this router carries `Depends(_reject_if_multi_tenant)`
 `ee/onyx/server/log_export/api.py`: `POST /admin/log-export`,
 `GET /admin/log-export/{export_id}`, `GET /admin/log-export/{export_id}/download`.
 
+The start fans out one collect task per worker queue, so file logs come from one
+replica per worker type, and a worker with no free thread misses the 90 s
+deadline. On Kubernetes the api_server also starts
+`ee/onyx/server/log_export/kubernetes_collection.py` in a background thread. It
+reads, through the Kubernetes API, the stdout of every pod of the Helm release
+(selected by `app.kubernetes.io/name` and `app.kubernetes.io/instance`), the
+previous container's log after a restart, a pod status summary with the last
+termination reason (for example `OOMKilled`), and the namespace events for
+those pods. The result is `piece_kubernetes_api.zip` with a `kubernetes`
+receipt. It needs the Role in
+`deployment/helm/charts/onyx/templates/log-export-rbac.yaml`
+(`logExport.kubernetesRbac.enabled`, default on). Without that access the
+receipt is `failed` with the fix in its error, and the rest of the bundle is
+unchanged.
+
 ### Fleet telemetry
 
 | Surface | Code | Notes |
@@ -150,6 +165,9 @@ Every route in this router carries `Depends(_reject_if_multi_tenant)`
 | `MULTI_TENANT` | | Forces tracing config to env-only and blocks `/admin/tracing/*`. |
 | `DISABLE_TELEMETRY` | `false` | `true` stops fleet enrollment, sending, and collection (`utils/fleet_telemetry.py:start_telemetry`, the `collect-fleet-telemetry` beat entry, the Lite poller entry). Set it on every service. Prometheus metrics, tracing, and the other `monitoring` tasks do not change. |
 | `ONYX_TELEMETRY_ENDPOINT` | `https://telemetry.onyx.app` | Fleet service base URL (`utils/fleet_telemetry.py:_ENDPOINT`). For tests only. |
+| `LOG_EXPORT_KUBERNETES_ENABLED` | `true` | `false` skips the log export's Kubernetes API collection. |
+| `LOG_EXPORT_KUBERNETES_TAIL_LINES` | `100000` | Last lines read from each container log. |
+| `LOG_EXPORT_KUBERNETES_MAX_BYTES_PER_STREAM`, `LOG_EXPORT_KUBERNETES_MAX_TOTAL_BYTES` | 25 MiB, 500 MiB | Byte caps per container log and per export. |
 
 ---
 

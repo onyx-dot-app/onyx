@@ -135,6 +135,7 @@ here. Read the component that documents the setting in its env table.
 | `backend/onyx/db/llm_usage.py`, `db/usage.py`, `db/user_usage.py`, `db/system_usage.py`, `server/features/usage/`, `docs/usage/` | observability |
 | `backend/onyx/utils/fleet_telemetry.py`, `fleet_query_telemetry.py`, `fleet_telemetry_collector.py`, `fleet_telemetry_resources.py`, `telemetry.py`, `timing.py`, `backend/onyx/db/fleet_enrollment.py` | observability |
 | `backend/onyx/db/fleet_telemetry.py` | observability, indexing-pipeline |
+| `backend/ee/onyx/server/log_export/`, `backend/ee/onyx/background/celery/tasks/log_export/`, `deployment/helm/charts/onyx/templates/log-export-rbac.yaml` | observability |
 | `backend/onyx/db/token_limit.py`, `server/token_rate_limits/`, `server/usage_limits.py`, `server/tenant_usage_limits.py` | rate-and-usage-limits |
 | `backend/ee/onyx/server/billing/`, `backend/ee/onyx/server/license/`, `backend/ee/onyx/utils/tier.py` | billing, editions-and-gating |
 | `backend/ee/onyx/db/community_downgrade.py` | billing, access-control |

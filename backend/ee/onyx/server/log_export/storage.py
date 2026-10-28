@@ -1,9 +1,10 @@
 """File-store layout and lifecycle for admin log exports.
 
 All state for one export lives under ``log_export/{export_id}/`` in the default
-file store: one ``piece_{hostname}.zip`` per container plus one
-``receipt_{worker_name}.json`` per fanned-out worker. Shared by the collector
-celery tasks and the log-export API endpoints.
+file store: one ``piece_{hostname}.zip`` per container (plus
+``piece_kubernetes_api.zip`` on Kubernetes) and one
+``receipt_{worker_name}.json`` per collector. Shared by the collector celery
+tasks and the log-export API endpoints.
 """
 
 import os
@@ -52,6 +53,10 @@ JSON_FILE_TYPE = "application/json"
 
 BUNDLE_README_FILE_NAME = "README.txt"
 BUNDLE_MANIFEST_FILE_NAME = "manifest.json"
+
+# Piece name of the Kubernetes API collection; no real hostname uses an
+# underscore, so it cannot collide with a host's piece.
+KUBERNETES_PIECE_NAME = "kubernetes_api"
 
 
 def export_file_id_prefix(export_id: str) -> str:
@@ -139,10 +144,12 @@ def _build_bundle_readme(snapshot: LogExportSnapshot) -> str:
         f"Requested by: {manifest.requester_email}",
         f"Created at (UTC): {manifest.created_at.isoformat()}",
         "",
-        "Contents: one piece_<hostname>.zip per host that uploaded logs, plus",
+        "Contents: one piece_<hostname>.zip per host that uploaded log files, plus",
         f"{BUNDLE_MANIFEST_FILE_NAME} with per-worker receipt outcomes.",
-        "On Kubernetes, each piece samples a single replica per worker type;",
-        "logs from other replicas and from stdout-only pods are not included as of now.",
+        "Log files come from one replica per worker type.",
+        f"On Kubernetes, piece_{KUBERNETES_PIECE_NAME}.zip also holds the stdout",
+        "of every Onyx pod (and of the previous container after a restart), a",
+        "pod status summary, and the namespace events for those pods.",
         "",
         "Worker outcomes:",
     ]
@@ -274,13 +281,7 @@ def collect_logs_into_file_store(
                 else:
                     file_count = built.log_file_count
                     size_bytes = built.size_bytes
-                    file_store.save_file(
-                        content=built.zip_buffer,
-                        display_name=f"piece_{hostname}.zip",
-                        file_origin=FileOrigin.LOG_EXPORT,
-                        file_type=ZIP_FILE_TYPE,
-                        file_id=piece_id,
-                    )
+                    save_piece(export_id, hostname, built)
                     status = LogExportReceiptStatus.UPLOADED
             finally:
                 built.zip_buffer.close()
@@ -305,14 +306,31 @@ def collect_logs_into_file_store(
         collected_at=datetime.now(tz=timezone.utc),
         error=error,
     )
-    file_store.save_file(
+    save_receipt(receipt)
+    return receipt
+
+
+def save_piece(export_id: str, piece_name: str, built: BuiltLogZip) -> None:
+    """Uploads a built zip as ``piece_{piece_name}.zip``; the caller still owns
+    and closes the buffer."""
+    get_default_file_store().save_file(
+        content=built.zip_buffer,
+        display_name=f"piece_{piece_name}.zip",
+        file_origin=FileOrigin.LOG_EXPORT,
+        file_type=ZIP_FILE_TYPE,
+        file_id=piece_file_id(export_id, piece_name),
+    )
+
+
+def save_receipt(receipt: LogExportReceipt) -> None:
+    """Writes a collector's receipt, which marks its worker as reported."""
+    get_default_file_store().save_file(
         content=BytesIO(receipt.model_dump_json(indent=2).encode("utf-8")),
-        display_name=f"receipt_{worker_name}.json",
+        display_name=f"receipt_{receipt.worker_name}.json",
         file_origin=FileOrigin.LOG_EXPORT,
         file_type=JSON_FILE_TYPE,
-        file_id=receipt_file_id(export_id, worker_name),
+        file_id=receipt_file_id(receipt.export_id, receipt.worker_name),
     )
-    return receipt
 
 
 def delete_expired_log_exports() -> int:

@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.9.25
+version: 0.9.26
 appVersion: latest
 annotations:
   category: Productivity
@@ -20,6 +20,10 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
+    - kind: added
+      description: Grant the api-server read access to pods, pod logs, and
+        events in the release namespace, so the admin log export collects
+        stdout from every pod (logExport.kubernetesRbac.enabled).
     - kind: security
       description: Bump the code-interpreter subchart to 0.4.10, which updates
         Pillow, pypdf, cryptography, fpdf2, and certifi in its images.

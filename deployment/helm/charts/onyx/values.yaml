@@ -408,6 +408,16 @@ serviceAccount:
   # If not set and create is true, a name is generated using the fullname template
   name: ""
 
+logExport:
+  kubernetesRbac:
+    # Grants the service account above get/list on pods, pods/log, and events in
+    # the release namespace. The admin log export uses it to collect stdout from
+    # every Onyx pod, the logs of crashed containers, pod status, and events.
+    # Every pod that runs as this service account gets the same read access.
+    # When false, the export still collects log files from one replica per
+    # worker type.
+    enabled: true
+
 nginx:
   enabled: true
   # Nginx proxy timeout settings (in seconds)
@@ -1857,6 +1867,13 @@ configMap:
   # Logging
   # Optional Telemetry, please keep it on (nothing sensitive is collected)? <3
   DISABLE_TELEMETRY: ""
+  # Admin log export through the Kubernetes API (needs logExport.kubernetesRbac).
+  # "false" skips it. Empty uses the defaults: last 100000 lines per container
+  # log, 25 MiB per container log, 500 MiB per export.
+  LOG_EXPORT_KUBERNETES_ENABLED: ""
+  LOG_EXPORT_KUBERNETES_TAIL_LINES: ""
+  LOG_EXPORT_KUBERNETES_MAX_BYTES_PER_STREAM: ""
+  LOG_EXPORT_KUBERNETES_MAX_TOTAL_BYTES: ""
   # LOG_LEVEL is the global knob for log verbosity across every Onyx process —
   # api_server, model_server, slack/discord bots, AND all Celery workers. Empty
   # (default) -> Python falls back to "info" for the api/model/etc processes;
