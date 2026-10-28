@@ -20,7 +20,7 @@ export default function LLMGatewayPage() {
   const hasAccessibleGatewayModel = hasVisibleLLMModel(llmProviders);
   const hasAccess = gatewayTier && hasAccessibleGatewayModel;
   const isLoadingAccess = settings.isLoading || isLoading;
-  const gatewayDisabled =
+  const gatewayDisabled: boolean =
     !settings.isLoading && settings.llm_gateway_enabled === false;
 
   useEffect(() => {
