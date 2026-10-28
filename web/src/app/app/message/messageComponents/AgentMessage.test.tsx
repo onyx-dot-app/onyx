@@ -1,21 +1,19 @@
 import { render, screen, waitFor } from "@tests/setup/test-utils";
-import { Message } from "@/app/app/interfaces";
+import { Message } from "@/app/app/types";
 import { upsertMessages } from "@/app/app/services/messageTree";
 import {
-  ChatPacket,
   Packet,
   PacketType,
+  StopReason,
 } from "@/app/app/services/streamingModels";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
-import { MessageTextRenderer } from "@/app/app/message/messageComponents/renderers/MessageTextRenderer";
-import {
-  FullChatState,
-  RenderType,
-} from "@/app/app/message/messageComponents/types";
+import AgentMessage from "@/app/app/message/messageComponents/AgentMessage";
+import { FullChatState } from "@/app/app/message/messageComponents/types";
 import type { MinimalAgent } from "@/lib/agents/types";
 
 jest.mock("@/providers/VoiceModeProvider", () => ({
   useVoiceMode: () => ({
+    resetTTS: jest.fn(),
     revealedCharCount: 0,
     autoPlayback: false,
     isAudioSyncActive: false,
@@ -64,8 +62,10 @@ const answerPackets: Packet[] = [
     placement,
     obj: { type: PacketType.MESSAGE_DELTA, content: "A quick answer." },
   },
-  // The packet processor adds SECTION_END when the stop packet arrives.
-  { placement, obj: { type: PacketType.SECTION_END } },
+  {
+    placement,
+    obj: { type: PacketType.STOP, stop_reason: StopReason.FINISHED },
+  },
 ];
 
 function message(
@@ -106,28 +106,17 @@ function seedSessionAwaitingAnswer() {
   store.setCurrentSession(SESSION_ID);
 }
 
-function renderAnswer(messageNodeId: number): jest.Mock {
-  const onComplete = jest.fn();
+function renderAnswer(messageNodeId: number): void {
   render(
-    <MessageTextRenderer
-      packets={answerPackets as ChatPacket[]}
-      state={chatState}
-      messageNodeId={messageNodeId}
-      onComplete={onComplete}
-      renderType={RenderType.FULL}
-      animate={false}
-      stopPacketSeen
-    >
-      {(results) => (
-        <div>
-          {results.map((result, index) => (
-            <div key={index}>{result.content}</div>
-          ))}
-        </div>
-      )}
-    </MessageTextRenderer>
+    <AgentMessage
+      rawPackets={answerPackets}
+      chatState={chatState}
+      nodeId={messageNodeId}
+      llmManager={null}
+      hideFooter
+      disableTTS
+    />
   );
-  return onComplete;
 }
 
 function renderComplete(): boolean | undefined {
@@ -135,7 +124,7 @@ function renderComplete(): boolean | undefined {
     ?.latestMessageRenderComplete;
 }
 
-describe("MessageTextRenderer queue gate", () => {
+describe("AgentMessage queue gate", () => {
   beforeEach(() => {
     seedSessionAwaitingAnswer();
   });
@@ -150,18 +139,16 @@ describe("MessageTextRenderer queue gate", () => {
   test("releases the gate when the latest answer arrives complete", async () => {
     // The whole stream, stop packet included, landed before the first
     // render, so the renderer mounts with animate=false.
-    const onComplete = renderAnswer(NEW_ANSWER_NODE_ID);
+    renderAnswer(NEW_ANSWER_NODE_ID);
 
     expect(await screen.findByText("A quick answer.")).toBeInTheDocument();
-    await waitFor(() => expect(onComplete).toHaveBeenCalled());
     await waitFor(() => expect(renderComplete()).toBe(true));
   });
 
   test("keeps the gate closed when an older answer mounts", async () => {
-    const onComplete = renderAnswer(OLD_ANSWER_NODE_ID);
+    renderAnswer(OLD_ANSWER_NODE_ID);
 
     expect(await screen.findByText("A quick answer.")).toBeInTheDocument();
-    await waitFor(() => expect(onComplete).toHaveBeenCalled());
     expect(renderComplete()).toBe(false);
   });
 });
