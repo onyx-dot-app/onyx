@@ -129,6 +129,9 @@ without repeating initial invocation telemetry.
 `AgentTool` supplies the SDK with a schema, execution callback, execution mode, and
 optional merge or child-result callbacks. It does not require a database tool row.
 `ToolBatch` owns parallel execution, waits, and result finalization. It finalizes ready results independently; model history retains call order.
+`SEQUENTIAL` orders calls to the same registered tool name within a step, including finalization and pending waits.
+Other tool names remain independent. Memory writes and coding bash commands use this mode; coding control tools use the parallel default.
+Compatible calls can merge across unrelated tool names. Sequential merging cannot skip an incompatible or blocked call to the same tool.
 
 `is_available(cls, db_session)` defaults to `True`. Implementations can check whether
 required services or credentials exist. `merge_list_argument` opts compatible calls

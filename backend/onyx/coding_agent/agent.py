@@ -33,7 +33,6 @@ from onyx.llm.models import (
     ReasoningEffort,
     SystemMessage,
     ToolChoiceOptions,
-    ToolDefinition,
     ToolResult,
     UserMessage,
 )
@@ -150,11 +149,23 @@ class CodingAgent(Agent):
             llm.config.model_name, llm.config.model_provider
         )
         tools = [
-            self._tool(BASH_TOOL_DESCRIPTION, self._bash),
-            self._tool(GENERATE_ANSWER_TOOL_DESCRIPTION, self._request_answer),
+            AgentTool(
+                definition=BASH_TOOL_DESCRIPTION,
+                execute=self._bash,
+                execution_mode=ToolExecutionMode.SEQUENTIAL,
+            ),
+            AgentTool(
+                definition=GENERATE_ANSWER_TOOL_DESCRIPTION,
+                execute=self._request_answer,
+            ),
         ]
         if not self.is_reasoning_model:
-            tools.append(self._tool(CODING_AGENT_THINK_TOOL_DESCRIPTION, self._think))
+            tools.append(
+                AgentTool(
+                    definition=CODING_AGENT_THINK_TOOL_DESCRIPTION,
+                    execute=self._think,
+                )
+            )
         super().__init__(
             llm,
             tools=tools,
@@ -242,17 +253,6 @@ class CodingAgent(Agent):
         if not result.message.text:
             raise ValueError("Coding agent produced no final answer")
         return False
-
-    def _tool(
-        self,
-        definition: ToolDefinition,
-        execute: Callable[[ToolInvocation], ToolResult],
-    ) -> AgentTool:
-        return AgentTool(
-            definition=definition,
-            execute=execute,
-            execution_mode=ToolExecutionMode.SEQUENTIAL,
-        )
 
     def _bash(self, invocation: ToolInvocation) -> ToolResult:
         result = self.bash_tool.run(invocation, ToolContext())
