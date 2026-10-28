@@ -102,3 +102,29 @@ def test_pin_applies_inside_an_open_transaction(
             tenant
         )
         connection.rollback()
+
+
+def test_pin_does_not_outlive_the_transaction(
+    isolated_engine: Engine, schemas: tuple[str, str]
+) -> None:
+    """The pin must not leave a session search_path for the next client of a
+    pooled server connection."""
+    tenant, _ = schemas
+    with isolated_engine.connect() as connection:
+        default_schema = connection.execute(
+            text("SELECT current_schema()")
+        ).scalar_one()
+        connection.rollback()
+        pin_search_path_per_transaction(connection, tenant)
+        connection.execute(text("SELECT 1"))
+        connection.commit()
+
+        # Raw DBAPI read: SQLAlchemy's begin event (and so the pin) does not fire.
+        dbapi_connection = connection.connection.dbapi_connection
+        assert dbapi_connection is not None
+        cursor = dbapi_connection.cursor()
+        cursor.execute("SELECT current_schema()")
+        row = cursor.fetchone()
+        assert row is not None
+        assert row[0] == default_schema
+        dbapi_connection.rollback()

@@ -330,10 +330,11 @@ The risk is a new call site that crosses a raw thread boundary without copying.
    mid-run, the next transaction can run on another server connection.
    `alembic/env.py` therefore calls
    `onyx/db/engine/migration_search_path.py:pin_search_path_per_transaction`,
-   which starts every transaction with `SET search_path`. Do not replace it with
-   a one-time `SET`: later unqualified DDL would go to whatever schema that
-   server connection has, while `alembic_version` (schema-qualified) still
-   records the tenant as migrated.
+   which starts every transaction with `SET LOCAL search_path`. Do not replace
+   it with a one-time `SET`: later unqualified DDL would go to whatever schema
+   that server connection has, while `alembic_version` (schema-qualified) still
+   records the tenant as migrated. `SET LOCAL` also keeps the tenant schema off
+   the pooled server connection after the migration ends.
 
 ---
 
