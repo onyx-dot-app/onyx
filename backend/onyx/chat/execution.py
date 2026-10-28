@@ -2,34 +2,49 @@
 
 import threading
 import time
-from concurrent.futures import Future, wait
+from concurrent.futures import Future
 from contextlib import ExitStack
+from functools import partial
 
+from onyx.agents.concurrency import WorkTracker
+from onyx.agents.models import RunState
 from onyx.agents.runtime import Run
 from onyx.cache.interface import CacheLockLostError
+from onyx.chat.agent import ChatAgent
 from onyx.chat.chat_processing_checker import (
     PROCESSING_REFRESH_INTERVAL_S,
 )
 from onyx.chat.emitter import Emitter
 from onyx.chat.errors import chat_error
 from onyx.chat.history_store import get_chat_history_store
-from onyx.chat.models import ChatResponseOutcome, ChatTurnSetup
+from onyx.chat.incognito import incognito_llm_request_policy
+from onyx.chat.incognito_context import incognito_session_ended
+from onyx.chat.models import ChatResponseOutcome, ChatTurnSetup, CreateChatSessionID
 from onyx.chat.persistence import ChatResponsePersistence
-from onyx.chat.prepare import create_chat_agent
 from onyx.chat.presentation import ResponsePresenter
+from onyx.chat.prompt_utils import build_language_section
 from onyx.chat.run_store import ChatRunStore
 from onyx.chat.stop_signal_checker import clear_stop, is_stop_requested
 from onyx.chat.stream_buffer import ChatDelivery, ChatStream, StreamBufferWriter
 from onyx.chat.subagents import create_chat_agent_coordinator
 from onyx.configs.chat_configs import (
     CHAT_EXECUTION_TIMEOUT_S,
+    SKIP_DEEP_RESEARCH_CLARIFICATION,
 )
+from onyx.configs.constants import DEFAULT_PERSONA_ID, DocumentSource
 from onyx.db.enums import record_mode_persists_content
 from onyx.db.models import User
-from onyx.deep_research.agent import DeepResearchAgent
+from onyx.deep_research.agent import MIN_RESEARCH_CONTEXT_TOKENS, DeepResearchAgent
 from onyx.deep_research.tool_definitions import RESEARCH_AGENT_TOOL_NAME
+from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.llm.cancellation import CancellationSignal
+from onyx.llm.cancellation import CancellationSignal, cancellation_scope
+from onyx.llm.factory import get_llm_token_counter, get_search_selection_llm
+from onyx.server.query_and_chat.models import (
+    MessageResponseIDInfo,
+    ModelResponseSlot,
+    MultiModelMessageResponseIDInfo,
+)
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     OverallStop,
@@ -37,75 +52,57 @@ from onyx.server.query_and_chat.streaming_models import (
     StreamingError,
 )
 from onyx.server.settings.store import load_settings
+from onyx.tools.tool_constructor import (
+    CustomToolConfig,
+    FileReaderToolConfig,
+    SearchToolConfig,
+    construct_tools,
+)
 from onyx.tracing.framework.create import ChatTraceMetadata, trace
 from onyx.utils.fleet_query_telemetry import CURRENT_QUERY_OBSERVATION, QueryObservation
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import start_thread_future
+from shared_configs.contextvars import (
+    CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR,
+    CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR,
+)
 
 logger = setup_logger()
 _CANCEL_POLL_INTERVAL_S = 0.25
-_CHAT_SHUTDOWN_WAIT_SECONDS = 30.0
-
-
-class ActiveChatTurns:
-    """Retain active turns until execution, storage, and delivery finish."""
-
-    def __init__(self) -> None:
-        self._lock = threading.Lock()
-        self._pending: dict[Future[None], ChatTurnExecution] = {}
-        self._closing = False
-
-    def start(
-        self, turn: "ChatTurnExecution", *, startup_error: Exception | None = None
-    ) -> None:
-        with self._lock:
-            closing = self._closing
-            if not closing:
-                self._pending[turn.finished] = turn
-        if closing:
-            error = RuntimeError("The API server is shutting down")
-            turn.reject(error)
-            raise error
-        turn.finished.add_done_callback(self._finished)
-        try:
-            start_thread_future(
-                lambda: turn.run(startup_error=startup_error), name="chat-control"
-            )
-        except Exception as error:
-            turn.reject(error)
-            raise
-
-    def _finished(self, future: Future[None]) -> None:
-        with self._lock:
-            del self._pending[future]
-
-    def close(self) -> bool:
-        """Reject new turns and wait for active work to finish."""
-        with self._lock:
-            self._closing = True
-            pending = dict(self._pending)
-        for turn in pending.values():
-            turn.cancellation.cancel()
-        if not pending:
-            return True
-        _, unfinished = wait(pending, timeout=_CHAT_SHUTDOWN_WAIT_SECONDS)
-        if unfinished:
-            logger.error(
-                "API shutdown has %d chat turns still draining", len(unfinished)
-            )
-        return not unfinished
+# Count work across tenants without retaining their turns or request data.
+chat_turn_work = WorkTracker()
 
 
 def start_chat_turn(
     setup: ChatTurnSetup,
     user: User,
     response_future: Future[ChatResponseOutcome] | None = None,
-    stream_buffer: StreamBufferWriter | None = None,
     *,
-    active_chat_turns: ActiveChatTurns | None = None,
     query_observation: QueryObservation | None = None,
 ) -> ChatStream:
+    """Publish response identity and launch work that outlives its stream reader."""
+    mode = setup.incognito_record_mode
+    content_free = not record_mode_persists_content(mode)
+    mode_token = CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR.set(
+        mode.value if mode else None
+    )
+    session_token = CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR.set(
+        str(setup.chat_session_id) if content_free else None
+    )
+    turn: ChatTurnExecution | None = None
+    chat_turn_work.started()
     try:
+        stream_buffer = StreamBufferWriter(
+            cache=setup.cache,
+            chat_session_id=setup.chat_session_id,
+            stream_id=setup.stream_id,
+            delete_on_done=content_free,
+            session_ended=(
+                partial(incognito_session_ended, setup.chat_session_id)
+                if content_free
+                else None
+            ),
+        )
         turn = ChatTurnExecution(
             setup,
             user,
@@ -113,25 +110,60 @@ def start_chat_turn(
             stream_buffer,
             query_observation=query_observation,
         )
-    except BaseException:
-        setup.admission.release()
-        raise
-    startup_error: Exception | None = None
-    try:
-        turn.begin()
-    except Exception as error:
-        startup_error = error
-    if query_observation is not None:
-        query_observation.writer_owned = True
-    try:
-        (active_chat_turns or ActiveChatTurns()).start(
-            turn, startup_error=startup_error
+        startup_error: Exception | None = None
+        try:
+            turn._auto_filters = load_settings().auto_detect_search_filters is not False
+            clear_stop(setup.chat_session_id, setup.cache, stream_id=setup.stream_id)
+            # Stop must identify this response before the client receives its IDs.
+            setup.admission.publish(setup.stream_id)
+        except Exception as error:
+            startup_error = error
+        if setup.new_msg_req.chat_session_id is None:
+            turn.delivery.publish(
+                CreateChatSessionID(
+                    chat_session_id=setup.chat_session_id,
+                    incognito=mode is not None,
+                )
+            )
+        turn.delivery.publish(
+            MultiModelMessageResponseIDInfo(
+                user_message_id=setup.user_message_id,
+                responses=[
+                    ModelResponseSlot(
+                        message_id=response.message_id, model_name=response.display_name
+                    )
+                    for response in setup.responses
+                ],
+            )
+            if len(setup.responses) > 1
+            else MessageResponseIDInfo(
+                user_message_id=setup.user_message_id,
+                reserved_assistant_message_id=setup.responses[0].message_id,
+            )
         )
-    except BaseException:
+        if query_observation is not None:
+            query_observation.writer_owned = True
+        control = start_thread_future(
+            lambda: turn.run(startup_error=startup_error),
+            name="chat-control",
+            daemon=False,
+        )
+        control.add_done_callback(lambda _future: chat_turn_work.finished())
+        return turn.delivery.reader
+    except BaseException as error:
         if query_observation is not None:
             query_observation.writer_owned = False
+        if turn is None:
+            try:
+                setup.admission.release()
+            finally:
+                chat_turn_work.finished()
+        else:
+            turn.reject(error)
         raise
-    return turn.delivery.reader
+    finally:
+        CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR.reset(session_token)
+        CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR.reset(mode_token)
 
 
 class ChatTurnExecution:
@@ -152,7 +184,6 @@ class ChatTurnExecution:
         self._query_observation = query_observation
         self._stores: list[ChatRunStore] = []
         self.cancellation = CancellationSignal()
-        self.finished: Future[None] = Future()
         self._response_future = response_future
         self._response_workers: dict[Future[Run | None], ChatResponsePersistence] = {}
         self._lock = threading.Lock()
@@ -164,17 +195,7 @@ class ChatTurnExecution:
         self._stopped_by_user = False
         self._last_refresh = self._last_stop_check = time.monotonic()
 
-    def begin(self) -> None:
-        """Publish the processing key before the caller can expose response IDs."""
-        self._auto_filters = load_settings().auto_detect_search_filters is not False
-        clear_stop(
-            self.setup.chat_session_id,
-            self.setup.cache,
-            stream_id=self.setup.stream_id,
-        )
-        self.setup.admission.publish(self.setup.stream_id)
-
-    def reject(self, error: Exception) -> None:
+    def reject(self, error: BaseException) -> None:
         if self._query_observation is not None:
             self._query_observation.failed(error)
         self.cancellation.cancel()
@@ -185,11 +206,13 @@ class ChatTurnExecution:
             try:
                 self._clear_processing_status()
             finally:
-                self.finished.set_result(None)
+                chat_turn_work.finished()
 
         def delivery_finished(_future: Future[None]) -> None:
             try:
-                start_thread_future(clear_status, name="chat-status-cleanup")
+                start_thread_future(
+                    clear_status, name="chat-status-cleanup", daemon=False
+                )
             except Exception:
                 logger.exception(
                     "Rejected chat processing status cleanup could not start"
@@ -208,7 +231,7 @@ class ChatTurnExecution:
 
     def run(self, *, startup_error: BaseException | None = None) -> None:
         try:
-            self.delivery.start()
+            self.delivery.events.start()
         except Exception as error:
             startup_error = error
         if startup_error is not None:
@@ -257,9 +280,7 @@ class ChatTurnExecution:
                 )
             self._response_workers[worker] = persistence
             worker.add_done_callback(lambda _future: self._completion_changed.set())
-        self._wait_for_completion()
 
-    def _wait_for_completion(self) -> None:
         deadline = time.monotonic() + CHAT_EXECUTION_TIMEOUT_S
         timed_out = False
         while True:
@@ -294,7 +315,6 @@ class ChatTurnExecution:
                         )
                     self.delivery.finish()
                 if self.delivery.finished.done() and self._clear_processing_status():
-                    self.finished.set_result(None)
                     return
             self._completion_changed.wait(_CANCEL_POLL_INTERVAL_S)
 
@@ -318,23 +338,7 @@ class ChatTurnExecution:
                     persistence.expire_save()
                 if not worker_done:
                     continue
-                failed = (
-                    persistence.outcome.done()
-                    and persistence.outcome.exception() is not None
-                )
                 if run is not None:
-                    if not failed:
-                        coordinator = persistence.coordinator
-                        if coordinator is None:
-                            raise RuntimeError("Chat response run has no coordinator")
-                        completion = coordinator.completion(run.id)
-                        if not completion.done():
-                            continue
-                        if (
-                            completion.exception() is not None
-                            and not persistence.outcome.done()
-                        ):
-                            persistence.report_save_failure(run)
                     if not run.status.is_terminal:
                         continue
                     try:
@@ -441,12 +445,18 @@ class ChatTurnExecution:
                     ).consume,
                 )
 
-            coordinator.completion(run.id).add_done_callback(
-                lambda _future: links.close()
-            )
-            coordinator.completion(run.id).add_done_callback(
-                lambda _future: self._completion_changed.set()
-            )
+            def response_saved(completion: Future[RunState]) -> None:
+                try:
+                    if (
+                        completion.exception() is not None
+                        and not persistence.outcome.done()
+                    ):
+                        persistence.report_save_failure(run)
+                finally:
+                    links.close()
+                    self._completion_changed.set()
+
+            coordinator.completion(run.id).add_done_callback(response_saved)
             run.add_idle_callback(self._completion_changed.set)
             return run
         except BaseException as failure:
@@ -471,9 +481,7 @@ class ChatTurnExecution:
             except Exception:
                 self.cancellation.cancel()
                 logger.exception("Chat ownership control failed; will retry")
-        self._poll_stream_status()
 
-    def _poll_stream_status(self) -> None:
         now = time.monotonic()
         if (
             not self.cancellation.cancelled
@@ -501,3 +509,117 @@ class ChatTurnExecution:
                 )
             except Exception:
                 logger.exception("Failed to refresh chat processing status; will retry")
+
+
+def create_chat_agent(
+    setup: ChatTurnSetup,
+    user: User,
+    response_index: int,
+    cancellation: CancellationSignal,
+    auto_detect_search_filters: bool,
+) -> ChatAgent | DeepResearchAgent:
+    llm = setup.responses[response_index].llm
+    with cancellation_scope(cancellation):
+        cancellation.check()
+        filters = setup.new_msg_req.internal_search_filters
+        source_types = filters.source_type if filters else None
+        # Tools open DB sessions on demand, so model I/O cannot retain a connection.
+        tools_by_type = construct_tools(
+            configuration=setup.tool_configuration,
+            user=user,
+            llm=llm,
+            selection_llm_factory=partial(
+                get_search_selection_llm,
+                fallback=llm,
+                additional_headers=setup.litellm_additional_headers,
+                policy_fn=partial(
+                    incognito_llm_request_policy, setup.incognito_record_mode
+                ),
+            ),
+            search_tool_config=SearchToolConfig(
+                user_selected_filters=setup.new_msg_req.internal_search_filters,
+                project_id_filter=setup.search_params.project_id_filter,
+                persona_id_filter=setup.search_params.persona_id_filter,
+                slack_context=setup.slack_context,
+                enable_slack_search=(
+                    source_types is not None and DocumentSource.SLACK in source_types
+                )
+                or (setup.persona_id == DEFAULT_PERSONA_ID and source_types is None),
+                auto_detect_filters=auto_detect_search_filters,
+            ),
+            custom_tool_config=CustomToolConfig(
+                chat_session_id=setup.chat_session_id,
+                message_id=setup.user_message_id,
+                additional_headers=setup.custom_tool_additional_headers,
+                mcp_headers=setup.mcp_headers,
+            ),
+            file_reader_tool_config=FileReaderToolConfig(
+                user_file_ids=setup.available_files.user_file_ids,
+                chat_file_ids=setup.available_files.chat_file_ids,
+            ),
+            allowed_tool_ids=setup.new_msg_req.allowed_tool_ids,
+            search_usage_forcing_setting=setup.search_params.search_usage,
+        )
+        tools = [tool for tool_list in tools_by_type.values() for tool in tool_list]
+
+        if setup.forced_tool_id and setup.forced_tool_id not in {
+            tool.id for tool in tools
+        }:
+            raise OnyxError(
+                OnyxErrorCode.BAD_REQUEST,
+                f"Forced tool {setup.forced_tool_id} not found in tools",
+            )
+
+        agent_id = str(setup.chat_session_id)
+
+        if len(setup.responses) == 1 and setup.new_msg_req.deep_research:
+            if setup.chat_session_project_id:
+                raise OnyxError(
+                    OnyxErrorCode.BAD_REQUEST,
+                    "Deep research is not supported for projects",
+                )
+            if setup.research_tool_id is None:
+                raise ValueError("Deep research tool configuration is missing")
+            if llm.config.max_input_tokens < MIN_RESEARCH_CONTEXT_TOKENS:
+                raise OnyxError(
+                    OnyxErrorCode.BAD_REQUEST,
+                    "Deep research requires a model with at least 50,000 input tokens",
+                )
+            return DeepResearchAgent(
+                agent_id=agent_id,
+                messages=list(setup.messages),
+                allowed_tools=tools,
+                llm=llm,
+                token_counter=get_llm_token_counter(llm),
+                user_identity=setup.user_identity,
+                language_section=build_language_section(
+                    setup.user_memory_context.user_info.language
+                ),
+                reasoning_effort=setup.reasoning_effort,
+                all_injected_file_metadata=setup.all_injected_file_metadata,
+                skip_clarification=SKIP_DEEP_RESEARCH_CLARIFICATION
+                or setup.skip_clarification,
+                checkpoint=setup.checkpoint,
+                previous_run_id=setup.previous_run_id,
+            )
+        return ChatAgent(
+            agent_id=agent_id,
+            messages=list(setup.messages),
+            tools=tools,
+            custom_agent_prompt=setup.custom_agent_prompt,
+            context_files=setup.extracted_context_files,
+            persona=setup.persona,
+            base_system_prompt=setup.base_system_prompt,
+            checkpoint=setup.checkpoint,
+            previous_run_id=setup.previous_run_id,
+            user_memory_context=setup.user_memory_context,
+            llm=llm,
+            token_counter=get_llm_token_counter(llm),
+            forced_tool_id=setup.forced_tool_id,
+            user_identity=setup.user_identity,
+            chat_files=setup.chat_files_for_tools,
+            reasoning_effort=setup.reasoning_effort,
+            include_citations=setup.new_msg_req.include_citations,
+            all_injected_file_metadata=setup.all_injected_file_metadata,
+            inject_memories_in_prompt=user.use_memories,
+        )

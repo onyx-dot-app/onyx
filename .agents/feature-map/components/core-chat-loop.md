@@ -108,10 +108,13 @@ Both are tenant-scoped through `CacheBackend`.
 ```text
 handle_send_chat_message                     server/query_and_chat/chat_backend.py
   -> _stream_chat_turn                      chat/process_message.py
-  -> prepare_chat_turn                      chat/prepare.py
-  -> ChatTurnExecution                      chat/execution.py
-       -> ChatAgent                         chat/agent.py
-            -> SDK model/tool steps         agents/runtime.py, agents/tool_execution.py
+  -> prepare_chat_turn                      chat/process_message.py
+  -> start_chat_turn                        chat/execution.py
+       -> ChatTurnExecution.run             control thread
+            -> _run_response                response thread
+                 -> create_chat_agent       ChatAgent or DeepResearchAgent
+                 -> Agent.start             same response thread
+                      -> model/tool steps   agents/runtime.py, agents/tool_execution.py
        -> ResponsePresenter                 chat/presentation.py
             -> browser packets              chat/renderer.py
        -> ChatResponsePersistence           chat/persistence.py
@@ -122,9 +125,13 @@ handle_send_chat_message                     server/query_and_chat/chat_backend.
 
 The application and SDK divide the work as follows:
 
-1. `backend/onyx/chat/prepare.py:prepare_chat_turn` validates requests and resolves
-   history, tools, files, and models. `backend/onyx/chat/execution.py:ChatTurnExecution`
-   coordinates workers, ownership checks, and stream publication.
+1. `backend/onyx/chat/process_message.py:prepare_chat_turn` validates requests and resolves
+   history, tool configuration, files, and models. `start_chat_turn` owns processing
+   publication, delivery setup, initial IDs, and worker launch. `ChatTurnExecution`
+   monitors response workers, ownership, saves, and delivery on a non-daemon thread.
+   A process-wide work counter lets API shutdown wait before closing database and
+   tracing services. Shutdown does not cancel responses; the pod grace period
+   limits how long the process can remain alive.
 2. `backend/onyx/agents/runtime.py` runs model and tool steps. `ChatAgent` supplies
    chat prompts and tool context. Its final step disables further tool calls.
 3. `backend/onyx/llm/multi_llm.py` converts provider streams into generation events.
@@ -139,7 +146,7 @@ the DB session on purpose: worker threads must not hold ORM objects.
 
 Preparation resolves:
 - the session, the persona, and the LLM(s) via `get_llm_for_persona`
-- combined project and agent instructions via `get_custom_agent_prompt(persona, chat_session)`;
+- combined project and agent instructions;
   agent instructions take precedence on conflicts ([[projects]] §4.5)
 - user memories via `get_memories`
 - the combined project and agent file selection via `resolve_context_user_files`,
@@ -323,6 +330,10 @@ whenever you touch this component.
     Its content goes to `append_incognito_message`. Any new field written during a
     turn needs a decision for each mode.
 
+Launch sets the recording context before copying it into workers, then restores
+the caller's context before returning. Initial session and response IDs enter
+`ChatDelivery` before any response worker starts, preserving live and replay order.
+
 ---
 
 ## 6. Relationships
@@ -382,7 +393,7 @@ completion. Its timed wait still polls stop requests and ownership. Completion
 tests must hold a save open, verify admission remains held, then finish without
 waiting for that poll interval.
 
-`backend/onyx/chat/prepare.py` skips redundant history-store calls for content
+`backend/onyx/chat/process_message.py` skips redundant history-store calls for content
 already loaded and saved in PostgreSQL. Ownership checks remain before writes
 and around slow file loading. An expired lease must prevent the next message write.
 

@@ -256,7 +256,7 @@ listener's sender.
 
 It passes
 `slack_context=message_info.slack_context` (drives federated Slack search,
-[[internal-search]], `_should_enable_slack_search`,
+[[internal-search]], `execution.py:create_chat_agent`,
 `context/search/federated/slack_search.py`) and
 `additional_context=slack_context_str` (prior thread messages, formatted by
 `build_slack_context_str`, injected as extra LLM context, never persisted to the
@@ -380,7 +380,7 @@ The copied messages use the legacy display format, with no execution records or 
 **Distinct from (do not conflate)**
 - Slack as a **search source**: `backend/onyx/context/search/federated/slack_search.py`
   lets the chat loop's search tool query live Slack messages/channels as a
-  retrieval source, gated by `_should_enable_slack_search` and
+  retrieval source, gated by `execution.py:create_chat_agent` and
   `SearchTool`'s `slack_context`. This runs for *any* chat turn (web, API, or Slack bot) whose
   persona/filters select the Slack source, and requires a **federated Slack
   connector**, a separate config from `SlackBot`/`SlackChannelConfig`. The Slack

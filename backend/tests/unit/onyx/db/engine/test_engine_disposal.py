@@ -15,12 +15,14 @@ the cached engine references are released.
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import ExitStack
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 import onyx.db.engine.async_sql_engine as async_sql_engine
+from onyx.agents.concurrency import WorkTracker
 from onyx.db.engine.async_sql_engine import reset_sqlalchemy_async_engine
 from onyx.db.engine.sql_engine import SqlEngine
 
@@ -184,9 +186,31 @@ async def test_lifespan_shutdown_disposes_all_three_engines(
         shutdown_tracing = stack.enter_context(
             patch("onyx.tracing.setup.shutdown_tracing")
         )
-        stack.enter_context(
-            patch.object(onyx_main.ActiveChatTurns, "close", return_value=drained)
+        chat_work = WorkTracker()
+        chat_work.started()
+        stack.enter_context(patch.object(onyx_main, "chat_turn_work", chat_work))
+        wait_started = asyncio.Event()
+        loop = asyncio.get_running_loop()
+        wait_idle = chat_work.wait_idle
+
+        def wait_for_chat(timeout: float) -> bool:
+            loop.call_soon_threadsafe(wait_started.set)
+            return wait_idle(timeout if drained else 0)
+
+        wait_chat = stack.enter_context(
+            patch.object(chat_work, "wait_idle", side_effect=wait_for_chat)
         )
+
+        async def finish_chat() -> None:
+            await asyncio.wait_for(wait_started.wait(), timeout=5)
+            try:
+                shutdown_tracing.assert_not_called()
+                reset_sync.assert_not_called()
+                reset_ro.assert_not_called()
+                reset_async.assert_not_called()
+            finally:
+                chat_work.finished()
+
         stack.enter_context(patch.object(onyx_main, "OAUTH_CLIENT_ID", ""))
         stack.enter_context(patch.object(onyx_main, "OAUTH_CLIENT_SECRET", ""))
         stack.enter_context(patch.object(onyx_main, "SYSTEM_RECURSION_LIMIT", None))
@@ -197,8 +221,11 @@ async def test_lifespan_shutdown_disposes_all_three_engines(
             reset_sync.side_effect = RuntimeError("Sync disposal failed")
             close_limiter.side_effect = RuntimeError("Rate limiter close failed")
 
+        completion: asyncio.Task[None] | None = None
         try:
             async with onyx_main.lifespan(MagicMock()):
+                if drained:
+                    completion = asyncio.create_task(finish_chat())
                 reset_sync.assert_not_called()
                 reset_ro.assert_not_called()
                 reset_async.assert_not_called()
@@ -209,6 +236,13 @@ async def test_lifespan_shutdown_disposes_all_three_engines(
             assert str(error) == "Lifespan body failed"
         else:
             assert not body_fails
+        finally:
+            if completion is not None:
+                await completion
+            else:
+                chat_work.finished()
+        wait_chat.assert_called_once_with(onyx_main.CHAT_EXECUTION_TIMEOUT_S)
+        assert wait_idle(0)
         shutdown_tracing.assert_called_once_with()
         stop_poller.assert_called_once_with()
         close_limiter.assert_awaited_once_with()

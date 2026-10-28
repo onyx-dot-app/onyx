@@ -71,7 +71,7 @@ def test_stream_chat_with_answer(
     llm = ScriptedLLM(
         [Delta(content="The capital of France is Paris.")], max_input_tokens=128000
     )
-    with patch("onyx.chat.prepare.get_llm_for_persona", return_value=llm):
+    with patch("onyx.chat.process_message.get_llm_for_persona", return_value=llm):
         parts = list(submit_query("What is the capital of France?", session_id, user))
     assert final_answer(parts) == "The capital of France is Paris."
     assert (
@@ -108,7 +108,7 @@ def test_stream_chat_with_search_and_openurl_tools(db_session: Session) -> None:
         max_input_tokens=128000,
     )
     with (
-        patch("onyx.chat.prepare.get_llm_for_persona", return_value=llm),
+        patch("onyx.chat.process_message.get_llm_for_persona", return_value=llm),
         use_mock_web_provider(db_session) as web,
         use_mock_content_provider() as content,
     ):
@@ -164,7 +164,7 @@ def test_image_generation_tool(db_session: Session) -> None:
         max_input_tokens=128000,
     )
     with (
-        patch("onyx.chat.prepare.get_llm_for_persona", return_value=llm),
+        patch("onyx.chat.process_message.get_llm_for_persona", return_value=llm),
         use_mock_image_generation_provider() as provider,
     ):
         provider.add_image(
@@ -202,7 +202,7 @@ def test_parallel_internal_and_web_search_tool_calls(db_session: Session) -> Non
         max_input_tokens=128000,
     )
     with (
-        patch("onyx.chat.prepare.get_llm_for_persona", return_value=llm),
+        patch("onyx.chat.process_message.get_llm_for_persona", return_value=llm),
         use_mock_web_provider(db_session) as web,
         use_mock_search_pipeline([DocumentSource.GOOGLE_DRIVE]) as internal,
     ):

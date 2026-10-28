@@ -90,7 +90,7 @@ tables under [[chat-persistence]] store the *result* of a turn (`ChatMessage`,
 `ToolCall`, `SearchDoc`), not the packet stream that produced it.
 
 The stream ID is the reserved assistant message ID, or the user message ID in a multi-model turn
-(`prepare.py:prepare_chat_turn`, `processing_stream_id`). The only durable storage here is the **stream buffer**, a transient,
+(`process_message.py:prepare_chat_turn`, `processing_stream_id`). The only durable storage here is the **stream buffer**, a transient,
 cross-pod cache structure (`backend/onyx/chat/stream_buffer.py`), used so any
 api-server pod can replay and tail an in-flight run:
 
@@ -223,7 +223,8 @@ chat generator still runs through Starlette's thread pool for each yielded packe
 ### 4.5 Buffering and resume
 
 `ChatDelivery` sends packets to the live reader and stages serialized lines for
-`StreamBufferWriter`. The event worker flushes a batch when it reaches 32 KiB,
+`StreamBufferWriter`. Session and response IDs use this same path before response workers start.
+The event worker flushes a batch when it reaches 32 KiB,
 including when one event produces many packets. It also flushes smaller batches
 every 50 ms. Cache I/O runs outside the publication lock, so control and
 persistence threads can keep publishing while a cache write blocks.

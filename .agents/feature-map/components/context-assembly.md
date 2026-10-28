@@ -53,7 +53,7 @@ project's highest review bar for tone-deaf edits (see §9).
 
 This component has no HTTP endpoints of its own. It is consumed entirely from
 inside [[core-chat-loop]]'s `backend/onyx/chat/agent.py:ChatAgent` and
-`prepare_chat_turn` (`backend/onyx/chat/prepare.py`). Two endpoints expose
+`prepare_chat_turn` (`backend/onyx/chat/process_message.py`). Two endpoints expose
 its token math to the frontend:
 
 | Method | Path | Notes |
@@ -87,7 +87,7 @@ This component reads persona and project rows but does not own them
   `Persona.datetime_aware`: drive §4.1 and §4.2.
 - `Project.instructions`: the fallback source for the custom agent prompt when
   the default persona is used inside a project
-  (`prepare.py:get_custom_agent_prompt`).
+  (`process_message.py:prepare_chat_turn`).
 - `Memory` rows, surfaced through `db/memory.py:get_memories` into a
   `UserMemoryContext`, feed the per-user "User Information" message that follows
   the system prompt (`prompt_utils.py:build_user_information_prompt`).
@@ -174,8 +174,7 @@ custom agent prompt (if any) is promoted to `MessageType.SYSTEM` instead of
 
 ### 4.2 Custom agent prompt
 
-Resolved once per turn by `prepare.py:get_custom_agent_prompt(persona, chat_session)`,
-during `prepare.py:prepare_chat_turn`, before workers start. The agent uses
+`process_message.py:prepare_chat_turn` combines the instructions before workers start. The agent uses
 captured instructions without reading the database mid-turn. Project and custom-agent instructions
 are combined; agent instructions take precedence on conflicts. A default agent
 uses project instructions alone. When `replace_base_system_prompt` is set, the
@@ -336,7 +335,7 @@ from catalog context/output limits. When that allowance is available, the runtim
 caps `max_tokens`; otherwise it keeps the request's existing output setting.
 
 Before any of this runs, `prompt_utils.py:calculate_reserved_tokens` is called
-once per turn (`prepare.py:prepare_chat_turn`) to reserve space for the
+once per turn (`process_message.py:prepare_chat_turn`) to reserve space for the
 system prompt (worst case, via `include_all_guidance=True`) plus the custom
 agent prompt plus attached-file tokens, computed against the
 placeholder-substituted final text so a long directory-profile value cannot

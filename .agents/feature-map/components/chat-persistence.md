@@ -308,7 +308,7 @@ both pointers unchanged. The endpoint checks ownership of the user message first
 ### 4.1 Writing a turn
 
 ```text
-prepare_chat_turn                        chat/prepare.py
+prepare_chat_turn                        chat/process_message.py
   -> create_new_chat_message             db/chat.py: accepted user input
   -> reserve_chat_response_ids           db/chat.py: assistant rows
 

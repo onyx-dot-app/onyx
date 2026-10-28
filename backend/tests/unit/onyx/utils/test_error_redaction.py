@@ -159,7 +159,6 @@ def test_chat_provider_tracebacks_only_reach_development_clients(
     llm.config.model_provider = "test-provider"
     llm.redact_error.side_effect = lambda text: text
     monkeypatch.setattr(process_message, "prepare_chat_turn", Mock(return_value=setup))
-    monkeypatch.setattr(process_message, "StreamBufferWriter", MagicMock())
     failure = (
         EmptyLLMResponseError(
             provider="test-provider",

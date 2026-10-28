@@ -17,7 +17,6 @@ from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
 
 from onyx.chat import process_message
-from onyx.chat.execution import ActiveChatTurns
 from onyx.chat.models import (
     AnswerStream,
     ChatFullResponse,
@@ -49,7 +48,6 @@ def _request() -> Request:
     # A bare request with no Authorization header, so the endpoint treats the
     # caller as a web UI user rather than an API key or PAT client.
     app = FastAPI()
-    app.state.active_chat_turns = ActiveChatTurns()
     return Request(
         scope={
             "app": app,

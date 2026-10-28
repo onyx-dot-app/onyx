@@ -21,12 +21,18 @@ from onyx.chat.chat_processing_checker import (
     get_processing_stream_id,
     is_chat_session_processing,
 )
+from onyx.chat.models import AnswerStreamPart, CreateChatSessionID
 from onyx.chat.stream_buffer import (
     ChatDelivery,
     StreamBufferMeta,
     StreamBufferWriter,
     _StreamStatus,
     read_stream_chunks,
+)
+from onyx.server.query_and_chat.models import (
+    MessageResponseIDInfo,
+    ModelResponseSlot,
+    MultiModelMessageResponseIDInfo,
 )
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
@@ -367,7 +373,7 @@ def test_concurrent_delivery_keeps_reader_and_cache_order(
         delivery.publish(second)
 
     monkeypatch.setattr(delivery.reader, "publish", hold_first)
-    delivery.start()
+    delivery.events.start()
     with ThreadPoolExecutor(max_workers=2) as executor:
         first_write = executor.submit(
             contextvars.copy_context().run, lambda: delivery.publish(first)
@@ -394,6 +400,41 @@ def test_concurrent_delivery_keeps_reader_and_cache_order(
     assert saved.done
     assert "".join(saved.blocks) == "".join(
         get_json_line(packet.model_dump()) for packet in (first, second)
+    )
+
+
+@pytest.mark.parametrize("multi_model", [False, True])
+def test_initial_ids_precede_response_in_live_and_replayed_output(
+    multi_model: bool,
+) -> None:
+    cache = FakeCache()
+    session_id = uuid4()
+    output = ChatDelivery(_make_writer(cache, session_id))
+    packets: list[AnswerStreamPart] = [
+        CreateChatSessionID(chat_session_id=session_id),
+        MultiModelMessageResponseIDInfo(
+            user_message_id=1,
+            responses=[
+                ModelResponseSlot(message_id=2, model_name="first"),
+                ModelResponseSlot(message_id=3, model_name="second"),
+            ],
+        )
+        if multi_model
+        else MessageResponseIDInfo(user_message_id=1, reserved_assistant_message_id=2),
+        Packet(placement=Placement(turn_index=0), obj=OverallStop()),
+    ]
+    for packet in packets[:-1]:
+        output.publish(packet)
+    output.events.start()
+    output.publish(packets[-1])
+    output.finish()
+    output.finished.result(timeout=3)
+
+    assert list(output.reader) == packets
+    saved = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
+    assert saved is not None and saved.done and not saved.gap
+    assert "".join(saved.blocks) == "".join(
+        get_json_line(packet.model_dump()) for packet in packets
     )
 
 
@@ -487,7 +528,7 @@ def test_event_delivery_and_cache_writes_share_worker(
 
     monkeypatch.setattr(cache, "set", write)
     channel.subscribe(receive)
-    output.start()
+    output.events.start()
     try:
         channel.publish(AgentStartEvent(run_id="first"))
         assert writing.wait(2)
@@ -802,7 +843,7 @@ def test_live_completion_does_not_wait_for_replay_storage(
     output.publish(packet)
     try:
         if periodic_flush:
-            output.start()
+            output.events.start()
             assert writing.wait(2)
         output.finish()
         assert writing.wait(2)

@@ -56,7 +56,7 @@ def test_stream_chat_message_objects_without_web_search(
         user=test_user,
     )
     llm = ScriptedLLM([Delta(content="Web search is unavailable for this assistant.")])
-    with patch("onyx.chat.prepare.get_llm_for_persona", return_value=llm):
+    with patch("onyx.chat.process_message.get_llm_for_persona", return_value=llm):
         raw = list(response_generator)
     assert "web_search" not in {
         tool["function"]["name"] for tool in llm.requests[0]["tools"]

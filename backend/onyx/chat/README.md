@@ -182,8 +182,16 @@ are:
 - Validates the request
 - Builds the chat history for the session
 - Fetches any additional context such as files and images
-- Prepares all of the tools for the LLM
-- Creates the state container objects for use in the loop
+- Captures tool configuration for each response worker
+- Reserves assistant response IDs
+
+### Launch (`start_chat_turn`)
+
+`process_message.py` prepares chat data, launches the turn, and reads its stream.
+`prepare_chat_turn` and its request preparation helpers live beside the streaming entrypoints.
+Launch publishes processing status, creates delivery, queues response IDs, and starts the control thread.
+Initial IDs and response packets use the same live and replay delivery path.
+The recording context is copied into workers and restored on the caller before launch returns.
 
 ### Execution (`ChatTurnExecution`)
 
@@ -193,6 +201,7 @@ Storage jobs also use independent threads, so a slow save cannot block Stop chec
 Thread startup copies tenant and tracing context. There is no process-wide response admission limit or fixed worker pool.
 
 The shared agent SDK executes each response. `ResponsePresenter` translates accepted run events into chat packets.
+Each response worker constructs its tools and feature agent through `create_chat_agent` in `execution.py`.
 Each `Emitter` adds response identity and model routing. `ChatDelivery` sends packets to the current reader and resumable stream buffer.
 A failed model reports its own error while other comparison responses continue.
 
@@ -203,14 +212,16 @@ After execution ends, chat projects that snapshot into a response and starts per
 Save failures and saves that exceed their wait bound produce distinct persistence outcomes.
 Late save completion remains tracked after delivery ends.
 
-Closing a browser reader does not cancel execution. `ActiveChatTurns` retains each turn until execution, storage, and delivery finish.
-API shutdown requests cancellation and waits for retained work within its shutdown bound.
+Closing a browser reader does not cancel execution. The non-daemon control thread stays alive until execution, storage, and delivery finish.
+API shutdown waits for active chat work before closing database and tracing services. It does not cancel responses.
+A process-wide work counter tracks completion without retaining turns or tenant data.
+Kubernetes can force termination when the pod's shutdown grace period expires.
 
 ### Stopping generation
 
 The control thread polls every 250 milliseconds between control passes. Slow cache calls delay the next pass.
 Stop cancels each active response, saves accepted partial content, and emits `OverallStop(stop_reason="user_cancelled")`.
-Run completion and resource cleanup are separate: the turn remains tracked while provider, tool, or save work drains.
+Run completion and resource cleanup are separate: the control thread waits while provider, tool, or save work drains.
 
 For the execution loop, tool calls, and cancellation contracts, see the [agent SDK](../agents/README.md).
 

@@ -4,7 +4,6 @@ import time
 from collections.abc import Generator
 from concurrent.futures import Future
 from datetime import timedelta
-from typing import cast
 from uuid import UUID
 
 from fastapi import (
@@ -36,7 +35,6 @@ from onyx.chat.chat_utils import (
     convert_chat_history_basic,
     create_chat_session_from_request,
 )
-from onyx.chat.execution import ActiveChatTurns
 from onyx.chat.incognito import (
     delete_incognito_generated_files,
     incognito_allowed_for_user,
@@ -833,8 +831,6 @@ def handle_send_chat_message(
     Returns:
         StreamingResponse | ChatFullResponse: Either streams or returns complete response.
     """
-    # Starlette's application state has no typed attribute interface.
-    active_chat_turns = cast(ActiveChatTurns, request.app.state.active_chat_turns)
     # Session id only: the session's incognito mode isn't loaded yet, and a
     # verbatim prompt in the debug log would be exactly the durable message
     # log incognito must never leave behind.
@@ -866,7 +862,6 @@ def handle_send_chat_message(
         def multi_model_stream_generator() -> Generator[str, None, None]:
             try:
                 for obj in handle_multi_model_stream(
-                    active_chat_turns=active_chat_turns,
                     new_msg_req=chat_message_req,
                     user=user,
                     llm_overrides=llm_overrides,
@@ -912,7 +907,6 @@ def handle_send_chat_message(
 
         response_future = Future[ChatResponseOutcome]()
         packets = handle_stream_message_objects(
-            active_chat_turns=active_chat_turns,
             new_msg_req=chat_message_req,
             user=user,
             litellm_additional_headers=get_relevant_headers(
@@ -942,7 +936,6 @@ def handle_send_chat_message(
         response_future = Future[ChatResponseOutcome]()
         try:
             for obj in handle_stream_message_objects(
-                active_chat_turns=active_chat_turns,
                 new_msg_req=chat_message_req,
                 user=user,
                 litellm_additional_headers=get_relevant_headers(

@@ -21,16 +21,16 @@ from onyx.chat.models import (
     ChatHistoryResult,
     IncognitoContext,
 )
-from onyx.chat.prepare import (
-    _resolve_query_processing_hook_result,
-    get_custom_agent_prompt,
+from onyx.chat.process_message import (
+    _process_query,
     prepare_chat_turn,
 )
+from onyx.chat.prompt_utils import build_chat_prompt, prepare_prompt
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.context.models import UserInfo, UserMemoryContext
 from onyx.context.search.models import PersonaSearchInfo
 from onyx.db.enums import IncognitoRecordMode
-from onyx.db.models import ChatMessage, ChatSession, Persona, User
+from onyx.db.models import ChatMessage, ChatSession, Persona, User, UserProject
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.models import (
@@ -41,85 +41,68 @@ from onyx.file_store.models import (
 )
 from onyx.hooks.executor import HookSkipped, HookSoftFailed
 from onyx.hooks.points.query_processing import QueryProcessingResponse
-from onyx.llm.models import ReasoningEffort, UserMessage
+from onyx.llm.models import ReasoningEffort, SystemMessage, UserMessage
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.tools.models import PersonaToolConfiguration
 from tests.unit.fakes import FakeCache
 from tests.unit.onyx.agents.fakes import ScriptedLLM
 
-# ---------------------------------------------------------------------------
-# Query Processing hook response handling (_resolve_query_processing_hook_result)
-# ---------------------------------------------------------------------------
 
-
-def test_hook_skipped_leaves_message_text_unchanged() -> None:
-    result = _resolve_query_processing_hook_result(HookSkipped(), "original query")
-    assert result == "original query"
-
-
-def test_hook_soft_failed_leaves_message_text_unchanged() -> None:
-    result = _resolve_query_processing_hook_result(HookSoftFailed(), "original query")
-    assert result == "original query"
-
-
-def test_null_query_raises_query_rejected() -> None:
-    with pytest.raises(OnyxError) as exc_info:
-        _resolve_query_processing_hook_result(
-            QueryProcessingResponse(query=None), "original query"
+@pytest.mark.parametrize(
+    "hook_result, expected",
+    [
+        (HookSkipped(), "original query"),
+        (HookSoftFailed(), "original query"),
+        (QueryProcessingResponse(query="  rewritten query  "), "rewritten query"),
+    ],
+)
+def test_process_query_applies_hook_result(
+    chat_session: ChatSession,
+    hook_result: QueryProcessingResponse | HookSkipped | HookSoftFailed,
+    expected: str,
+) -> None:
+    with patch("onyx.chat.process_message.execute_hook", return_value=hook_result):
+        result = _process_query(
+            "original query",
+            chat_session,
+            User(id=uuid4(), email="reader@example.com"),
+            MagicMock(spec=Session),
         )
-    assert exc_info.value.error_code is OnyxErrorCode.QUERY_REJECTED
+    assert result == expected
 
 
-def test_empty_string_query_raises_query_rejected() -> None:
-    """Empty string is falsy — must be treated as rejection, same as None."""
-    with pytest.raises(OnyxError) as exc_info:
-        _resolve_query_processing_hook_result(
-            QueryProcessingResponse(query=""), "original query"
-        )
-    assert exc_info.value.error_code is OnyxErrorCode.QUERY_REJECTED
-
-
-def test_whitespace_only_query_raises_query_rejected() -> None:
-    """Whitespace-only string is truthy but meaningless — must be treated as rejection."""
-    with pytest.raises(OnyxError) as exc_info:
-        _resolve_query_processing_hook_result(
-            QueryProcessingResponse(query="   "), "original query"
-        )
-    assert exc_info.value.error_code is OnyxErrorCode.QUERY_REJECTED
-
-
-def test_rejection_message_surfaced_in_error_when_provided() -> None:
-    with pytest.raises(OnyxError) as exc_info:
-        _resolve_query_processing_hook_result(
-            QueryProcessingResponse(
-                query=None, rejection_message="Queries about X are not allowed."
+@pytest.mark.parametrize("query", [None, "", "   "])
+@pytest.mark.parametrize(
+    "rejection_message", [None, "Queries about X are not allowed."]
+)
+def test_process_query_rejects_empty_hook_query(
+    chat_session: ChatSession, query: str | None, rejection_message: str | None
+) -> None:
+    with (
+        patch(
+            "onyx.chat.process_message.execute_hook",
+            return_value=QueryProcessingResponse(
+                query=query, rejection_message=rejection_message
             ),
+        ),
+        pytest.raises(OnyxError) as exc_info,
+    ):
+        _process_query(
             "original query",
+            chat_session,
+            User(id=uuid4(), email="reader@example.com"),
+            MagicMock(spec=Session),
         )
-    assert "Queries about X are not allowed." in str(exc_info.value)
-
-
-def test_fallback_rejection_message_when_none() -> None:
-    """No rejection_message → generic fallback used in OnyxError detail."""
-    with pytest.raises(OnyxError) as exc_info:
-        _resolve_query_processing_hook_result(
-            QueryProcessingResponse(query=None, rejection_message=None),
-            "original query",
-        )
-    assert "No rejection reason was provided." in str(exc_info.value)
-
-
-def test_nonempty_query_rewrites_message_text() -> None:
-    result = _resolve_query_processing_hook_result(
-        QueryProcessingResponse(query="rewritten query"), "original query"
+    assert exc_info.value.error_code is OnyxErrorCode.QUERY_REJECTED
+    assert (rejection_message or "No rejection reason was provided.") in str(
+        exc_info.value
     )
-    assert result == "rewritten query"
 
 
 def test_document_set_denial_precedes_session_and_model_creation() -> None:
     from unittest.mock import MagicMock
 
-    from onyx.chat.prepare import prepare_chat_turn
+    from onyx.chat.process_message import prepare_chat_turn
     from onyx.context.search.models import BaseFilters
     from onyx.server.query_and_chat.models import SendMessageRequest
 
@@ -128,13 +111,15 @@ def test_document_set_denial_precedes_session_and_model_creation() -> None:
     )
     user = MagicMock(is_anonymous=False)
     with (
-        patch("onyx.chat.prepare.get_session_with_current_tenant"),
+        patch("onyx.chat.process_message.get_session_with_current_tenant"),
         patch(
-            "onyx.chat.prepare.filter_document_set_names_by_user_access",
+            "onyx.chat.process_message.filter_document_set_names_by_user_access",
             return_value=[],
         ),
-        patch("onyx.chat.prepare.create_chat_session_from_request") as create_session,
-        patch("onyx.chat.prepare.get_llm_for_persona") as create_model,
+        patch(
+            "onyx.chat.process_message.create_chat_session_from_request"
+        ) as create_session,
+        patch("onyx.chat.process_message.get_llm_for_persona") as create_model,
         pytest.raises(OnyxError) as error,
     ):
         prepare_chat_turn(request, user, llm_overrides=None)
@@ -143,160 +128,56 @@ def test_document_set_denial_precedes_session_and_model_creation() -> None:
     create_model.assert_not_called()
 
 
-class TestGetCustomAgentPrompt:
-    """Tests for the get_custom_agent_prompt function."""
-
-    def _create_mock_persona(
-        self,
-        persona_id: int = 1,
-        system_prompt: str | None = None,
-        replace_base_system_prompt: bool = False,
-    ) -> MagicMock:
-        """Create a mock Persona with the specified attributes."""
-        persona = MagicMock()
-        persona.id = persona_id
-        persona.system_prompt = system_prompt
-        persona.replace_base_system_prompt = replace_base_system_prompt
-        return persona
-
-    def _create_mock_chat_session(
-        self,
-        project: MagicMock | None = None,
-    ) -> MagicMock:
-        """Create a mock ChatSession with the specified attributes."""
-        chat_session = MagicMock()
-        chat_session.project = project
-        return chat_session
-
-    def _create_mock_project(
-        self,
-        instructions: str = "",
-    ) -> MagicMock:
-        """Create a mock UserProject with the specified attributes."""
-        project = MagicMock()
-        project.instructions = instructions
-        return project
-
-    def test_default_persona_no_project(self) -> None:
-        """Test that default persona without a project returns None."""
-        persona = self._create_mock_persona(persona_id=DEFAULT_PERSONA_ID)
-        chat_session = self._create_mock_chat_session(project=None)
-
-        result = get_custom_agent_prompt(persona, chat_session)
-
-        assert result is None
-
-    def test_default_persona_with_project_instructions(self) -> None:
-        """Test that default persona in a project returns project instructions."""
-        persona = self._create_mock_persona(persona_id=DEFAULT_PERSONA_ID)
-        project = self._create_mock_project(instructions="Do X and Y")
-        chat_session = self._create_mock_chat_session(project=project)
-
-        result = get_custom_agent_prompt(persona, chat_session)
-
-        assert result == "Do X and Y"
-
-    def test_default_persona_with_empty_project_instructions(self) -> None:
-        """Test that default persona in a project with empty instructions returns None."""
-        persona = self._create_mock_persona(persona_id=DEFAULT_PERSONA_ID)
-        project = self._create_mock_project(instructions="")
-        chat_session = self._create_mock_chat_session(project=project)
-
-        result = get_custom_agent_prompt(persona, chat_session)
-
-        assert result is None
-
-    def test_custom_persona_replace_base_prompt_true(self) -> None:
-        """Test that custom persona with replace_base_system_prompt=True returns None."""
-        persona = self._create_mock_persona(
-            persona_id=1,
-            system_prompt="Custom system prompt",
-            replace_base_system_prompt=True,
-        )
-        chat_session = self._create_mock_chat_session(project=None)
-
-        result = get_custom_agent_prompt(persona, chat_session)
-
-        assert result is None
-
-    def test_custom_persona_with_system_prompt(self) -> None:
-        """Test that custom persona with system_prompt returns the system_prompt."""
-        persona = self._create_mock_persona(
-            persona_id=1,
-            system_prompt="Custom system prompt",
-            replace_base_system_prompt=False,
-        )
-        chat_session = self._create_mock_chat_session(project=None)
-
-        result = get_custom_agent_prompt(persona, chat_session)
-
-        assert result == "Custom system prompt"
-
-    def test_custom_persona_empty_string_system_prompt(self) -> None:
-        """Test that custom persona with empty string system_prompt returns None."""
-        persona = self._create_mock_persona(
-            persona_id=1,
-            system_prompt="",
-            replace_base_system_prompt=False,
-        )
-        chat_session = self._create_mock_chat_session(project=None)
-
-        result = get_custom_agent_prompt(persona, chat_session)
-
-        assert result is None
-
-    def test_custom_persona_none_system_prompt(self) -> None:
-        """Test that custom persona with None system_prompt returns None."""
-        persona = self._create_mock_persona(
-            persona_id=1,
-            system_prompt=None,
-            replace_base_system_prompt=False,
-        )
-        chat_session = self._create_mock_chat_session(project=None)
-
-        result = get_custom_agent_prompt(persona, chat_session)
-
-        assert result is None
-
-    def test_custom_persona_in_project_uses_persona_prompt(self) -> None:
-        """Project and agent instructions both reach the model."""
-        persona = self._create_mock_persona(
-            persona_id=1,
-            system_prompt="Custom system prompt",
-            replace_base_system_prompt=False,
-        )
-        project = self._create_mock_project(instructions="Project instructions")
-        chat_session = self._create_mock_chat_session(project=project)
-
-        result = get_custom_agent_prompt(persona, chat_session)
-
-        assert result == (
+@pytest.mark.parametrize(
+    "persona_id, agent_prompt, project_prompt, replace_base, expected",
+    [
+        (DEFAULT_PERSONA_ID, None, None, False, None),
+        (DEFAULT_PERSONA_ID, None, "Do X and Y", False, "Do X and Y"),
+        (DEFAULT_PERSONA_ID, None, "", False, None),
+        (1, "Custom system prompt", None, True, None),
+        (1, "Custom system prompt", None, False, "Custom system prompt"),
+        (1, "", None, False, None),
+        (1, None, None, False, None),
+        (
+            1,
+            "Custom system prompt",
+            "Project instructions",
+            False,
             "Project instructions:\nProject instructions\n\n"
             "Agent instructions:\nCustom system prompt\n\n"
-            "If these instructions conflict, follow the agent instructions."
-        )
-
-    def test_custom_persona_replace_base_in_project(self) -> None:
-        """Project instructions supplement the replacement system prompt."""
-        persona = self._create_mock_persona(
-            persona_id=1,
-            system_prompt="Custom system prompt",
-            replace_base_system_prompt=True,
-        )
-        project = self._create_mock_project(instructions="Project instructions")
-        chat_session = self._create_mock_chat_session(project=project)
-
-        result = get_custom_agent_prompt(persona, chat_session)
-
-        assert result == "Project instructions"
-
-    def test_custom_persona_without_prompt_keeps_project_instructions(self) -> None:
-        persona: MagicMock = self._create_mock_persona(system_prompt="")
-        project: MagicMock = self._create_mock_project(
-            instructions="Project instructions"
-        )
-        session: MagicMock = self._create_mock_chat_session(project=project)
-        assert get_custom_agent_prompt(persona, session) == "Project instructions"
+            "If these instructions conflict, follow the agent instructions.",
+        ),
+        (
+            1,
+            "Custom system prompt",
+            "Project instructions",
+            True,
+            "Project instructions",
+        ),
+        (1, "", "Project instructions", False, "Project instructions"),
+    ],
+)
+def test_preparation_combines_project_and_agent_instructions(
+    chat_session: ChatSession,
+    _mock_chat_preparation: None,
+    persona_id: int,
+    agent_prompt: str | None,
+    project_prompt: str | None,
+    replace_base: bool,
+    expected: str | None,
+) -> None:
+    chat_session.persona.id = persona_id
+    chat_session.persona.system_prompt = agent_prompt
+    chat_session.persona.replace_base_system_prompt = replace_base
+    if project_prompt is not None:
+        chat_session.project = UserProject(instructions=project_prompt)
+    setup = prepare_chat_turn(
+        SendMessageRequest(message="Question", chat_session_id=chat_session.id),
+        User(id=uuid4(), email="reader@example.com"),
+        llm_overrides=None,
+    )
+    assert setup.custom_agent_prompt == expected
+    setup.admission.release()
 
 
 @pytest.fixture
@@ -322,53 +203,65 @@ def _mock_chat_preparation(
     parent = ChatMessage(
         id=1, message_type=MessageType.ASSISTANT, is_clarification=False
     )
-    monkeypatch.setattr("onyx.chat.prepare.incognito_session_ended", lambda _id: False)
     monkeypatch.setattr(
-        "onyx.chat.prepare.get_cache_backend", lambda **_kwargs: FakeCache()
+        "onyx.chat.process_message.incognito_session_ended", lambda _id: False
     )
-    monkeypatch.setattr("onyx.chat.prepare.get_session_with_current_tenant", Session)
     monkeypatch.setattr(
-        "onyx.chat.prepare._load_session",
+        "onyx.chat.process_message.get_cache_backend", lambda **_kwargs: FakeCache()
+    )
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_session_with_current_tenant", Session
+    )
+    monkeypatch.setattr(
+        "onyx.chat.process_message._load_session",
         lambda *_args: chat_session,
     )
     monkeypatch.setattr(
-        "onyx.chat.prepare._select_models", lambda *_args: [(ScriptedLLM([]), "Test")]
+        "onyx.chat.process_message._select_models",
+        lambda *_args: [(ScriptedLLM([]), "Test")],
     )
     monkeypatch.setattr(
-        "onyx.chat.prepare.load_message_branch", lambda *_args: ([parent], parent)
+        "onyx.chat.process_message.load_message_branch",
+        lambda *_args: ([parent], parent),
     )
     monkeypatch.setattr(
-        "onyx.chat.prepare.execute_hook",
+        "onyx.chat.process_message.execute_hook",
         lambda **_kwargs: QueryProcessingResponse(query="Accepted"),
     )
     tokenizer = MagicMock()
     tokenizer.encode.return_value = [1]
-    monkeypatch.setattr("onyx.chat.prepare.get_tokenizer", lambda *_args: tokenizer)
     monkeypatch.setattr(
-        "onyx.chat.prepare.create_new_chat_message",
+        "onyx.chat.process_message.get_tokenizer", lambda *_args: tokenizer
+    )
+    monkeypatch.setattr(
+        "onyx.chat.process_message.create_new_chat_message",
         lambda **_kwargs: ChatMessage(id=2, message_type=MessageType.USER),
     )
 
     monkeypatch.setattr(
-        "onyx.chat.prepare.resolve_context_user_files", lambda *_args: []
+        "onyx.chat.process_message.resolve_context_user_files", lambda *_args: []
     )
     monkeypatch.setattr(
-        "onyx.chat.prepare.get_memories",
+        "onyx.chat.process_message.get_memories",
         lambda *_args: UserMemoryContext(user_info=UserInfo()),
     )
     monkeypatch.setattr(
-        "onyx.chat.prepare.get_default_base_system_prompt", lambda *_args: "System"
+        "onyx.chat.process_message.get_default_base_system_prompt",
+        lambda *_args: "System",
     )
     monkeypatch.setattr(
-        "onyx.chat.prepare.calculate_reserved_tokens", lambda **_kwargs: 100
+        "onyx.chat.process_message.calculate_reserved_tokens", lambda **_kwargs: 100
     )
-    monkeypatch.setattr("onyx.chat.prepare.get_tools", lambda *_args: [])
+    monkeypatch.setattr("onyx.chat.process_message.get_tools", lambda *_args: [])
     monkeypatch.setattr(
-        "onyx.chat.prepare.find_summary_for_branch", lambda *_args, **_kwargs: None
+        "onyx.chat.process_message.find_summary_for_branch",
+        lambda *_args, **_kwargs: None,
     )
-    monkeypatch.setattr("onyx.chat.prepare.prepare_chat_file_inputs", lambda *_args: [])
     monkeypatch.setattr(
-        "onyx.chat.prepare.capture_persona_tool_configuration",
+        "onyx.chat.process_message.prepare_chat_file_inputs", lambda *_args: []
+    )
+    monkeypatch.setattr(
+        "onyx.chat.process_message.capture_persona_tool_configuration",
         lambda _persona: PersonaToolConfiguration(
             persona_id=1,
             persona_name="Assistant",
@@ -382,7 +275,7 @@ def _mock_chat_preparation(
         ),
     )
     monkeypatch.setattr(
-        "onyx.chat.prepare.capture_chat_history",
+        "onyx.chat.process_message.capture_chat_history",
         lambda _messages, _tools, _tokens, checkpoint: [
             ChatHistoryMessage(
                 id=2,
@@ -397,7 +290,7 @@ def _mock_chat_preparation(
         ],
     )
     monkeypatch.setattr(
-        "onyx.chat.prepare.extract_context_files",
+        "onyx.chat.process_message.extract_context_files",
         lambda **_kwargs: ExtractedContextFiles(
             file_texts=[],
             image_files=[],
@@ -407,9 +300,9 @@ def _mock_chat_preparation(
             uncapped_token_count=0,
         ),
     )
-    monkeypatch.setattr("onyx.chat.prepare.load_chat_files", lambda _inputs: [])
+    monkeypatch.setattr("onyx.chat.process_message.load_chat_files", lambda _inputs: [])
     monkeypatch.setattr(
-        "onyx.chat.prepare.reserve_chat_response_ids", lambda **_kwargs: [3]
+        "onyx.chat.process_message.reserve_chat_response_ids", lambda **_kwargs: [3]
     )
 
 
@@ -422,7 +315,9 @@ def test_attachment_loading_releases_preparation_session_before_reservation_fail
 ) -> None:
     cache = FakeCache()
     admission = ChatTurnAdmission(cache)
-    monkeypatch.setattr("onyx.chat.prepare.ChatTurnAdmission", lambda _cache: admission)
+    monkeypatch.setattr(
+        "onyx.chat.process_message.ChatTurnAdmission", lambda _cache: admission
+    )
     started = Event()
     release = Event()
     active_sessions = 0
@@ -472,11 +367,13 @@ def test_attachment_loading_releases_preparation_session_before_reservation_fail
         raise RuntimeError("Response reservation failed")
 
     monkeypatch.setattr(
-        "onyx.chat.prepare.get_session_with_current_tenant", session_scope
+        "onyx.chat.process_message.get_session_with_current_tenant", session_scope
     )
 
-    monkeypatch.setattr("onyx.chat.prepare.extract_context_files", load_files)
-    monkeypatch.setattr("onyx.chat.prepare.reserve_chat_response_ids", fail_reservation)
+    monkeypatch.setattr("onyx.chat.process_message.extract_context_files", load_files)
+    monkeypatch.setattr(
+        "onyx.chat.process_message.reserve_chat_response_ids", fail_reservation
+    )
     request = SendMessageRequest(message="Accepted", chat_session_id=session_id)
     user = User(id=uuid4(), email="reader@example.com")
     with ThreadPoolExecutor(max_workers=1) as executor:
@@ -518,13 +415,13 @@ def test_admission_precedes_model_setup_and_releases_after_setup_failure() -> No
         raise RuntimeError("model setup failed")
 
     with (
-        patch("onyx.chat.prepare.get_cache_backend", return_value=cache),
-        patch("onyx.chat.prepare.get_session_with_current_tenant"),
+        patch("onyx.chat.process_message.get_cache_backend", return_value=cache),
+        patch("onyx.chat.process_message.get_session_with_current_tenant"),
         patch(
-            "onyx.chat.prepare._load_session",
+            "onyx.chat.process_message._load_session",
             return_value=SimpleNamespace(id=session_id, persona=None),
         ),
-        patch("onyx.chat.prepare._select_models", side_effect=fail_model_setup),
+        patch("onyx.chat.process_message._select_models", side_effect=fail_model_setup),
         pytest.raises(RuntimeError, match="model setup failed"),
     ):
         prepare_chat_turn(request, MagicMock(), llm_overrides=None)
@@ -549,14 +446,14 @@ def test_busy_session_rejects_before_model_or_history_setup() -> None:
     admitted.claim(session_id)
     request = SendMessageRequest(message="hello", chat_session_id=session_id)
     with (
-        patch("onyx.chat.prepare.get_cache_backend", return_value=cache),
-        patch("onyx.chat.prepare.get_session_with_current_tenant"),
+        patch("onyx.chat.process_message.get_cache_backend", return_value=cache),
+        patch("onyx.chat.process_message.get_session_with_current_tenant"),
         patch(
-            "onyx.chat.prepare._load_session",
+            "onyx.chat.process_message._load_session",
             return_value=SimpleNamespace(id=session_id, persona=None),
         ),
-        patch("onyx.chat.prepare._select_models") as select_models,
-        patch("onyx.chat.prepare.load_message_branch") as load_branch,
+        patch("onyx.chat.process_message._select_models") as select_models,
+        patch("onyx.chat.process_message.load_message_branch") as load_branch,
         pytest.raises(OnyxError) as error,
     ):
         prepare_chat_turn(request, MagicMock(), llm_overrides=None)
@@ -586,13 +483,13 @@ def test_expired_preparation_does_not_save_user_message(
         return [1]
 
     with (
-        patch("onyx.chat.prepare.ChatTurnAdmission", return_value=admission),
+        patch("onyx.chat.process_message.ChatTurnAdmission", return_value=admission),
         patch(
-            "onyx.chat.prepare.execute_hook",
+            "onyx.chat.process_message.execute_hook",
             side_effect=lambda **_kwargs: process_query(),
         ),
-        patch("onyx.chat.prepare.get_tokenizer") as tokenizer,
-        patch("onyx.chat.prepare.create_new_chat_message") as create_message,
+        patch("onyx.chat.process_message.get_tokenizer") as tokenizer,
+        patch("onyx.chat.process_message.create_new_chat_message") as create_message,
     ):
         tokenizer.return_value.encode.side_effect = tokenize
         with pytest.raises(CacheLockLostError, match="renewal expired"):
@@ -610,10 +507,13 @@ def test_regeneration_reuses_user_message_without_writing(
 ) -> None:
     parent = ChatMessage(id=2, message_type=MessageType.USER)
     with (
-        patch("onyx.chat.prepare.load_message_branch", return_value=([parent], parent)),
-        patch("onyx.chat.prepare.execute_hook") as query_hook,
-        patch("onyx.chat.prepare.get_tokenizer") as tokenizer,
-        patch("onyx.chat.prepare.create_new_chat_message") as create_message,
+        patch(
+            "onyx.chat.process_message.load_message_branch",
+            return_value=([parent], parent),
+        ),
+        patch("onyx.chat.process_message.execute_hook") as query_hook,
+        patch("onyx.chat.process_message.get_tokenizer") as tokenizer,
+        patch("onyx.chat.process_message.create_new_chat_message") as create_message,
     ):
         setup = prepare_chat_turn(
             SendMessageRequest(message="Question", chat_session_id=chat_session.id),
@@ -649,9 +549,9 @@ def test_expired_history_preparation_cannot_append_after_new_owner_claims(
         messages=[UserMessage(content="Accepted")], all_injected_file_metadata={}
     )
     with (
-        patch("onyx.chat.prepare.ChatTurnAdmission", return_value=admission),
-        patch("onyx.chat.prepare.load_chat_files") as load_files,
-        patch("onyx.chat.prepare.convert_chat_history") as convert_history,
+        patch("onyx.chat.process_message.ChatTurnAdmission", return_value=admission),
+        patch("onyx.chat.process_message.load_chat_files") as load_files,
+        patch("onyx.chat.process_message.convert_chat_history") as convert_history,
         patch("onyx.chat.history_store.append_incognito_message") as append_message,
         patch("onyx.chat.history_store.load_incognito_context") as load_history,
     ):
@@ -709,7 +609,7 @@ def test_incognito_history_retains_summary_checkpoint(
     )
     with (
         patch(
-            "onyx.chat.prepare.find_summary_for_branch",
+            "onyx.chat.process_message.find_summary_for_branch",
             return_value=ChatMessage(
                 id=3,
                 message="Summary",
@@ -717,9 +617,12 @@ def test_incognito_history_retains_summary_checkpoint(
                 last_summarized_message_id="chat:1",
             ),
         ),
-        patch("onyx.chat.prepare.load_message_branch", return_value=([parent], parent)),
         patch(
-            "onyx.chat.prepare.execute_hook",
+            "onyx.chat.process_message.load_message_branch",
+            return_value=([parent], parent),
+        ),
+        patch(
+            "onyx.chat.process_message.execute_hook",
             return_value=QueryProcessingResponse(query="Accepted"),
         ) as query_hook,
         patch("onyx.chat.history_store.load_incognito_context", return_value=stored),
@@ -770,8 +673,8 @@ def test_storage_saves_only_new_input_in_its_resolved_format(
     store = MagicMock()
     store.prepare_messages.return_value = ([stored_user], "prior-run")
     with (
-        patch("onyx.chat.prepare.convert_chat_history", return_value=source),
-        patch("onyx.chat.prepare.get_chat_history_store", return_value=store),
+        patch("onyx.chat.process_message.convert_chat_history", return_value=source),
+        patch("onyx.chat.process_message.get_chat_history_store", return_value=store),
     ):
         setup = prepare_chat_turn(
             SendMessageRequest(message="Question", chat_session_id=chat_session.id),
@@ -787,14 +690,14 @@ def test_storage_saves_only_new_input_in_its_resolved_format(
     setup.admission.release()
 
 
-@pytest.mark.parametrize("stage", ["_select_models", "_prepare_history"])
+@pytest.mark.parametrize("stage", ["_select_models", "convert_chat_history"])
 def test_expired_preparation_cannot_write_next_message(
     monkeypatch: pytest.MonkeyPatch,
     chat_session: ChatSession,
     _mock_chat_preparation: None,
     stage: str,
 ) -> None:
-    import onyx.chat.prepare as preparation
+    import onyx.chat.process_message as preparation
 
     admission = ChatTurnAdmission(FakeCache())
     monkeypatch.setattr(preparation, "ChatTurnAdmission", lambda _cache: admission)
@@ -802,7 +705,7 @@ def test_expired_preparation_cannot_write_next_message(
         Callable[..., object],
         preparation._select_models
         if stage == "_select_models"
-        else preparation._prepare_history,
+        else preparation.convert_chat_history,
     )
 
     def expire(*args: object, **kwargs: object) -> object:
@@ -842,7 +745,7 @@ def test_preparation_uses_selected_recorded_response_as_predecessor(
         id=8, message_type=MessageType.ASSISTANT, is_clarification=False
     )
     with patch(
-        "onyx.chat.prepare.load_message_branch",
+        "onyx.chat.process_message.load_message_branch",
         return_value=([recorded, legacy], legacy),
     ):
         setup = prepare_chat_turn(
@@ -860,13 +763,15 @@ def test_incognito_preparation_rejects_ended_context_before_reserving_response(
 ) -> None:
     chat_session.incognito_record_mode = IncognitoRecordMode.USAGE_ONLY
     with (
-        patch("onyx.chat.prepare.incognito_session_ended", return_value=True),
+        patch("onyx.chat.process_message.incognito_session_ended", return_value=True),
         patch(
             "onyx.chat.history_store.load_incognito_context",
             return_value=IncognitoContext(version=0, messages=[]),
         ),
         patch("onyx.chat.history_store.append_incognito_message"),
-        patch("onyx.chat.prepare.reserve_chat_response_ids") as reserve_response,
+        patch(
+            "onyx.chat.process_message.reserve_chat_response_ids"
+        ) as reserve_response,
     ):
         with pytest.raises(RuntimeError, match="Incognito session ended"):
             prepare_chat_turn(
@@ -875,3 +780,58 @@ def test_incognito_preparation_rejects_ended_context_before_reserving_response(
                 llm_overrides=None,
             )
     reserve_response.assert_not_called()
+
+
+@pytest.mark.parametrize("replace_base", [False, True])
+@pytest.mark.parametrize("base_prompt", ["Base prompt", ""])
+def test_project_instructions_supplement_agent_prompt(
+    chat_session: ChatSession,
+    _mock_chat_preparation: None,
+    replace_base: bool,
+    base_prompt: str,
+) -> None:
+    chat_session.persona.system_prompt = "Answer tersely."
+    chat_session.persona.replace_base_system_prompt = replace_base
+    chat_session.project = UserProject(instructions="Use the project glossary.")
+    setup = prepare_chat_turn(
+        SendMessageRequest(message="Question", chat_session_id=chat_session.id),
+        User(id=uuid4(), email="reader@example.com"),
+        llm_overrides=None,
+    )
+    setup.admission.release()
+    prompt = build_chat_prompt(
+        tools=[],
+        persona=setup.persona,
+        custom_prompt=setup.custom_agent_prompt,
+        base_prompt=base_prompt,
+        files=setup.extracted_context_files,
+        memory=None,
+        inject_memories=False,
+        reminders_enabled=False,
+        results=[],
+        previous_results=[],
+        is_last_step=False,
+        ran_image_gen=False,
+    )
+    history = prepare_prompt(
+        [UserMessage(content="Question")],
+        system_prompt=prompt.system_prompt,
+        custom_agent_prompt=prompt.custom_prompt,
+        reminder_message=None,
+        context_files=setup.extracted_context_files,
+        token_counter=len,
+    )
+    text = "\n".join(message.text for message in history)
+    assert text.count("Answer tersely.") == 1
+    assert text.count("Use the project glossary.") == 1
+    assert history[-1].text == "Question"
+    if replace_base:
+        assert isinstance(history[0], SystemMessage)
+        assert history[0].text == "Answer tersely."
+        assert isinstance(history[1], UserMessage)
+        assert history[1].text == "Use the project glossary."
+        assert "Base prompt" not in text
+    elif base_prompt:
+        assert isinstance(history[1], UserMessage)
+    else:
+        assert isinstance(history[0], SystemMessage)

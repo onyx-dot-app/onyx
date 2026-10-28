@@ -423,11 +423,6 @@ class ChatHistoryResult(BaseModel):
     all_injected_file_metadata: dict[str, FileToolMetadata]
 
 
-class PreparedHistory(BaseModel):
-    history: ChatHistoryResult
-    files: list[ChatFile]
-
-
 class SearchParams(BaseModel):
     """Resolved search filter IDs and search-tool usage for a chat turn."""
 

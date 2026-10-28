@@ -45,7 +45,7 @@ def test_compacted_chat_reloads_continues_and_regenerates_selected_branch(
     )
     try:
         with (
-            patch("onyx.chat.prepare.get_llm_for_persona", return_value=model),
+            patch("onyx.chat.process_message.get_llm_for_persona", return_value=model),
             patch.object(
                 model,
                 "invoke",

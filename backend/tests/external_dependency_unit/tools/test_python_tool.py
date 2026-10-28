@@ -274,7 +274,7 @@ def test_code_interpreter_receives_chat_files(
     original_defaults = ci_mod.CodeInterpreterClient.__init__.__defaults__
     with (
         patch(
-            "onyx.chat.prepare.get_llm_for_persona",
+            "onyx.chat.process_message.get_llm_for_persona",
             return_value=ScriptedLLM(
                 [
                     Delta(
@@ -352,7 +352,7 @@ def test_code_interpreter_replay_packets_include_code_and_output(
     original_defaults = ci_mod.CodeInterpreterClient.__init__.__defaults__
     with (
         patch(
-            "onyx.chat.prepare.get_llm_for_persona",
+            "onyx.chat.process_message.get_llm_for_persona",
             return_value=ScriptedLLM(
                 [
                     Delta(
@@ -444,7 +444,7 @@ def test_code_interpreter_streaming_fallback_to_batch(
     original_defaults = ci_mod.CodeInterpreterClient.__init__.__defaults__
     with (
         patch(
-            "onyx.chat.prepare.get_llm_for_persona",
+            "onyx.chat.process_message.get_llm_for_persona",
             return_value=ScriptedLLM(
                 [
                     Delta(

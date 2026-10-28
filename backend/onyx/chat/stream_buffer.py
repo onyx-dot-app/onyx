@@ -16,6 +16,7 @@ from pydantic import BaseModel, ValidationError
 
 from onyx.agents.concurrency import EventDispatcher
 from onyx.cache.interface import CacheBackend
+from onyx.chat.models import AnswerStreamPart
 from onyx.configs.chat_configs import (
     CHAT_HEARTBEAT_INTERVAL_S,
     CHAT_STREAM_BUFFER_DONE_TTL_S,
@@ -23,7 +24,6 @@ from onyx.configs.chat_configs import (
     CHAT_STREAM_BUFFER_TTL_S,
 )
 from onyx.server.query_and_chat.streaming_models import (
-    Packet,
     StreamingError,
     heartbeat_packet,
 )
@@ -307,23 +307,21 @@ class _StreamStatus(str, Enum):
     DONE = "done"
 
 
-class ChatStream(Iterator[Packet | StreamingError]):
+class ChatStream(Iterator[AnswerStreamPart]):
     """Buffer live packets until consumed; closing detaches only the reader."""
 
     def __init__(self) -> None:
-        self._queue: queue.Queue[Packet | StreamingError | _StreamStatus] = (
-            queue.Queue()
-        )
+        self._queue: queue.Queue[AnswerStreamPart | _StreamStatus] = queue.Queue()
         self._lock = threading.Lock()
         self._closed = False
 
-    def publish(self, item: Packet | StreamingError | _StreamStatus) -> None:
+    def publish(self, item: AnswerStreamPart | _StreamStatus) -> None:
         with self._lock:
             if self._closed:
                 return
             self._queue.put_nowait(item)
 
-    def __next__(self) -> Packet | StreamingError:
+    def __next__(self) -> AnswerStreamPart:
         try:
             item = self._queue.get(timeout=CHAT_HEARTBEAT_INTERVAL_S)
         except queue.Empty:
@@ -375,10 +373,7 @@ class ChatDelivery:
         with self._publish_lock:
             return self._closing
 
-    def start(self) -> None:
-        self.events.start()
-
-    def publish(self, item: Packet | StreamingError) -> None:
+    def publish(self, item: AnswerStreamPart) -> None:
         line = (
             get_json_line(item.model_dump())
             if self._buffer is not None and not self._replay_unavailable.is_set()

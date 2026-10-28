@@ -143,8 +143,8 @@ def test_timed_out_research_agent_is_a_failed_call(
     )
 
     with (
-        patch("onyx.chat.prepare.get_llm_for_persona", return_value=llm),
-        patch("onyx.chat.prepare.SKIP_DEEP_RESEARCH_CLARIFICATION", True),
+        patch("onyx.chat.process_message.get_llm_for_persona", return_value=llm),
+        patch("onyx.chat.execution.SKIP_DEEP_RESEARCH_CLARIFICATION", True),
         patch(
             "onyx.deep_research.agent.RESEARCH_AGENT_TIMEOUT_SECONDS",
             TEST_TIMEOUT_SECONDS,
