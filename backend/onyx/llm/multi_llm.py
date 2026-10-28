@@ -443,6 +443,15 @@ def _strip_thinking_blocks_from_messages(
     ]
 
 
+def _strip_reasoning_content_from_messages(
+    messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    return [
+        {key: value for key, value in msg.items() if key != "reasoning_content"}
+        for msg in messages
+    ]
+
+
 def _strip_tool_content_from_messages(
     messages: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
@@ -1278,6 +1287,16 @@ class LitellmLLM(LLM):
                 )
             ):
                 messages = _strip_thinking_blocks_from_messages(messages)
+
+            # `reasoning_content` is only meaningful to OpenAI-compatible
+            # providers (reasoning models behind vLLM/SGLang or an
+            # OpenAI-compatible endpoint); providers that reject the key
+            # (Anthropic, Bedrock, Vertex) must never receive it.
+            if (
+                self._model_provider in _THINKING_BLOCK_PROVIDERS
+                or self._api_surface is LlmApiSurface.ANTHROPIC_MESSAGES
+            ):
+                messages = _strip_reasoning_content_from_messages(messages)
 
             # Bedrock's Converse API requires toolConfig when messages
             # contain toolUse/toolResult content blocks. When no tools are

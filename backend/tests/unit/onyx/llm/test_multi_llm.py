@@ -2998,6 +2998,60 @@ def test_bedrock_claude_keeps_thinking_when_no_tool_history() -> None:
         assert kwargs["thinking"]["type"] == "enabled"
 
 
+def _reasoning_prompt() -> list[ChatCompletionMessage]:
+    return [
+        UserMessage(content="hi"),
+        AssistantMessage(content="answer", reasoning_content="thinking..."),
+        UserMessage(content="follow-up"),
+    ]
+
+
+def _sent_messages(llm: LitellmLLM) -> list[dict[str, Any]]:
+    with patch("onyx.llm.litellm_singleton.litellm.completion") as mock_completion:
+        llm._completion(
+            prompt=_reasoning_prompt(),
+            tools=None,
+            tool_choice=None,
+            stream=False,
+            parallel_tool_calls=False,
+        )
+    return list(mock_completion.call_args.kwargs["messages"])
+
+
+def test_reasoning_content_forwarded_to_openai_compatible() -> None:
+    llm = LitellmLLM(
+        api_key="test",
+        model_provider=LlmProviderNames.OPENAI_COMPATIBLE,
+        model_name="moonshot-ai/kimi-k3",
+        max_input_tokens=100000,
+        api_base="https://gateway.example/v1",
+    )
+    sent = _sent_messages(llm)
+    assert sent[1]["reasoning_content"] == "thinking..."
+
+
+def test_strip_reasoning_content_helper() -> None:
+    from onyx.llm.multi_llm import _strip_reasoning_content_from_messages
+
+    messages = [
+        {"role": "assistant", "content": "answer", "reasoning_content": "thinking..."}
+    ]
+    assert _strip_reasoning_content_from_messages(messages) == [
+        {"role": "assistant", "content": "answer"}
+    ]
+
+
+def test_reasoning_content_stripped_for_anthropic() -> None:
+    llm = LitellmLLM(
+        api_key="test",
+        model_provider=LlmProviderNames.ANTHROPIC,
+        model_name="claude-sonnet-4-20250514",
+        max_input_tokens=200000,
+    )
+    sent = _sent_messages(llm)
+    assert "reasoning_content" not in sent[1]
+
+
 def test_bifrost_claude_includes_allowed_openai_params() -> None:
     llm = LitellmLLM(
         api_key="test_key",

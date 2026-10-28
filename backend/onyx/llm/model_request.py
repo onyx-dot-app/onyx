@@ -55,6 +55,7 @@ class AssistantMessage(CacheableMessage):
     content: str | None = None
     tool_calls: list[ToolCall] | None = None
     thinking_blocks: list[AnyThinkingBlock] | None = None
+    reasoning_content: str | None = None
 
 
 class ToolMessage(CacheableMessage):
