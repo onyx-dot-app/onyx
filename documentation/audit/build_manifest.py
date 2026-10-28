@@ -5,6 +5,7 @@ Usage: python audit/build_manifest.py > audit/manifest.json
 For every MDX page: nav tab, title, word count, images (with a coarse
 classification), feature-map components, last git change, and orphan flag.
 """
+
 import json
 import os
 import re
@@ -16,31 +17,92 @@ os.chdir(ROOT)
 
 # docs path prefix -> feature-map components (.agents/feature-map/components/*.md in onyx)
 COMPONENT_MAP = [
-    ("admins/connectors", ["connectors", "cc-pairs-and-credentials", "indexing-pipeline", "permission-sync"]),
+    (
+        "admins/connectors",
+        [
+            "connectors",
+            "cc-pairs-and-credentials",
+            "indexing-pipeline",
+            "permission-sync",
+        ],
+    ),
     ("admins/ai_models", ["llm-providers", "llm-gateway", "document-index"]),
-    ("admins/actions", ["tools-framework", "web-search", "image-generation", "code-execution", "voice", "mcp-and-custom-tools"]),
+    (
+        "admins/actions",
+        [
+            "tools-framework",
+            "web-search",
+            "image-generation",
+            "code-execution",
+            "voice",
+            "mcp-and-custom-tools",
+        ],
+    ),
     ("admins/agents", ["agents-personas", "chat-preferences"]),
     ("admins/plugins", ["mcp-and-custom-tools", "craft-external-apps", "craft-admin"]),
     ("admins/user_management", ["access-control", "auth-and-identity"]),
     ("admins/permissions", ["access-control"]),
-    ("admins/managing_features", ["editions-and-gating", "whitelabelling-and-theme", "notifications", "chat-preferences"]),
+    (
+        "admins/managing_features",
+        [
+            "editions-and-gating",
+            "whitelabelling-and-theme",
+            "notifications",
+            "chat-preferences",
+        ],
+    ),
     ("admins/analytics", ["observability"]),
     ("admins/auditing", ["observability"]),
     ("admins/billing", ["billing", "rate-and-usage-limits"]),
-    ("admins/advanced_configs", ["editions-and-gating", "rate-and-usage-limits", "background-jobs"]),
+    (
+        "admins/advanced_configs",
+        ["editions-and-gating", "rate-and-usage-limits", "background-jobs"],
+    ),
     ("admins/getting_started", ["auth-and-identity", "llm-providers", "connectors"]),
-    ("overview/core_features", ["core-chat-loop", "chat-frontend", "internal-search", "projects", "citations", "file-store-and-user-files", "agents-personas"]),
-    ("overview/onyx_anywhere", ["slack-bot", "discord-bot", "desktop-widget-extensions", "mobile-app", "mcp-server", "onyx-api"]),
+    (
+        "overview/core_features",
+        [
+            "core-chat-loop",
+            "chat-frontend",
+            "internal-search",
+            "projects",
+            "citations",
+            "file-store-and-user-files",
+            "agents-personas",
+        ],
+    ),
+    (
+        "overview/onyx_anywhere",
+        [
+            "slack-bot",
+            "discord-bot",
+            "desktop-widget-extensions",
+            "mobile-app",
+            "mcp-server",
+            "onyx-api",
+        ],
+    ),
     ("overview/getting_started", ["chat-frontend", "core-chat-loop"]),
     ("developers/api_reference", ["onyx-api"]),
     ("developers", ["onyx-api", "mcp-server"]),
     ("deployment/authentication", ["auth-and-identity"]),
     ("deployment", ["editions-and-gating", "multi-tenancy", "background-jobs"]),
     ("security", ["auth-and-identity", "access-control", "observability"]),
-    ("agent-wiki", ["craft-admin", "craft-sessions", "craft-sandboxes", "craft-scheduled-tasks", "skills"]),
+    (
+        "agent-wiki",
+        [
+            "craft-admin",
+            "craft-sessions",
+            "craft-sandboxes",
+            "craft-scheduled-tasks",
+            "skills",
+        ],
+    ),
 ]
 
-IMG_RE = re.compile(r'(?:!\[[^\]]*\]\(([^)\s]+)|<(?:img|Frame|Image|video)[^>]*src=["\']([^"\']+))')
+IMG_RE = re.compile(
+    r'(?:!\[[^\]]*\]\(([^)\s]+)|<(?:img|Frame|Image|video)[^>]*src=["\']([^"\']+))'
+)
 
 
 def classify_image(path: str) -> str:
@@ -52,7 +114,9 @@ def classify_image(path: str) -> str:
     if p.startswith("assets/deployment/setup_guides/"):
         return "cloud-console"
     if re.match(r"assets/admins/connectors/[^/]+/", p):
-        return "connector-mixed"  # vendor console or Onyx connector form; reviewer decides
+        return (
+            "connector-mixed"  # vendor console or Onyx connector form; reviewer decides
+        )
     if p.endswith(".svg"):
         return "diagram"
     return "onyx-ui"
@@ -90,10 +154,16 @@ def main() -> None:
             path = os.path.join(root, f)[2:]
             slug = path[:-4]
             text = open(path).read()
-            m = re.search(r'^title:\s*["\']?(.*?)["\']?\s*$', text, re.M)
+            m = re.search(r'^title:\s*["\']?(.*?)["\']?\s*$', text, re.MULTILINE)
             imgs = [a or b for a, b in IMG_RE.findall(text)]
-            components = next((c for prefix, c in COMPONENT_MAP if slug.startswith(prefix)), [])
-            date = subprocess.run(["git", "log", "-1", "--format=%cs", "--", path], capture_output=True, text=True).stdout.strip()
+            components = next(
+                (c for prefix, c in COMPONENT_MAP if slug.startswith(prefix)), []
+            )
+            date = subprocess.run(
+                ["git", "log", "-1", "--format=%cs", "--", path],
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
             pages.append(
                 {
                     "page": path,
