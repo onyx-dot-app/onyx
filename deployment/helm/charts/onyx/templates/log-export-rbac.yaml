@@ -1,7 +1,22 @@
-{{- if eq (include "onyx.logExportRbacEnabled" .) "true" }}
+{{- if eq (include "onyx.logExportKubernetesEnabled" .) "true" }}
 {{- $name := include "onyx.resourceName" (list . "log-export") }}
-# Lets the api-server read pod logs, pod status, and events in this namespace
-# for the admin log export (ee/onyx/server/log_export/kubernetes_collection.py).
+{{- $serviceAccountName := include "onyx.apiServerServiceAccountName" . }}
+# The api-server's own identity, so only it can read pod logs, pod status, and
+# events for the admin log export (ee/onyx/server/log_export/kubernetes_collection.py).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $serviceAccountName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api-server
+  {{- with merge (dict) (dig "kubernetes" "serviceAccount" "annotations" (dict) .Values.logExport) (.Values.serviceAccount.annotations | default dict) }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+automountServiceAccountToken: true
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -29,6 +44,6 @@ roleRef:
   name: {{ $name }}
 subjects:
   - kind: ServiceAccount
-    name: {{ include "onyx.serviceAccountName" . }}
+    name: {{ $serviceAccountName }}
     namespace: {{ .Release.Namespace }}
 {{- end }}

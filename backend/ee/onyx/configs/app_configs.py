@@ -244,9 +244,11 @@ CLOUD_DATA_PLANE_URL = os.environ.get(
 )
 
 # Log export collects pod stdout, pod state, and events through the Kubernetes API
-# when the api_server runs in Kubernetes. Set to false to skip it.
+# when the api_server runs in Kubernetes. Off by default: it needs a service
+# account with read access to pods, which the Helm chart grants only to the
+# api-server when logExport.kubernetes.enabled is set.
 LOG_EXPORT_KUBERNETES_ENABLED = (
-    os.environ.get("LOG_EXPORT_KUBERNETES_ENABLED") or "true"
+    os.environ.get("LOG_EXPORT_KUBERNETES_ENABLED") or "false"
 ).lower() == "true"
 # Most recent lines read from each container log stream.
 LOG_EXPORT_KUBERNETES_TAIL_LINES = int(

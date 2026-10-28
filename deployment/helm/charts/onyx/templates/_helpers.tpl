@@ -85,17 +85,24 @@ Create the name of the service account to use
 {{- end }}
 
 {{/*
-"true" when the log-export Role and RoleBinding render, empty otherwise.
-logExport.kubernetesRbac.mode: auto binds only a named service account (never
-the namespace's shared "default" one), true always binds, false never does.
+"true" when the api-server runs as its own service account with read access to
+pods, pod logs, and events for the admin log export. dig: a --reuse-values
+upgrade from a release without logExport.kubernetes keeps it off.
 */}}
-{{- define "onyx.logExportRbacEnabled" -}}
-{{- /* dig: a release upgraded with --reuse-values from before this setting has no logExport. */ -}}
-{{- $mode := toString (dig "kubernetesRbac" "mode" "auto" (.Values.logExport | default dict)) -}}
-{{- if not (has $mode (list "auto" "true" "false")) -}}
-{{- fail (printf "logExport.kubernetesRbac.mode must be auto, true, or false; got %q" $mode) -}}
+{{- define "onyx.logExportKubernetesEnabled" -}}
+{{- if eq (toString (dig "kubernetes" "enabled" false (.Values.logExport | default dict))) "true" -}}true{{- end -}}
+{{- end }}
+
+{{/*
+The api-server's service account: a dedicated one when the log export reads the
+Kubernetes API, so no other Onyx pod gets that access.
+*/}}
+{{- define "onyx.apiServerServiceAccountName" -}}
+{{- if eq (include "onyx.logExportKubernetesEnabled" .) "true" -}}
+{{- include "onyx.resourceName" (list . "api-server") -}}
+{{- else -}}
+{{- include "onyx.serviceAccountName" . -}}
 {{- end -}}
-{{- if or (eq $mode "true") (and (eq $mode "auto") (ne (include "onyx.serviceAccountName" .) "default")) -}}true{{- end -}}
 {{- end }}
 
 {{/*

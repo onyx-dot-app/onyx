@@ -1,6 +1,6 @@
-"""The chart grants the log export read access to pods, pod logs, and events:
-``logExport.kubernetesRbac.mode`` auto binds only a named service account,
-true always binds (also to "default"), and false never binds."""
+"""The log export's Kubernetes access is off by default. When on, only the
+api-server gets it, through its own service account; the other Onyx pods keep
+the shared one."""
 
 from typing import Any
 
@@ -9,76 +9,117 @@ import yaml
 
 from tests.external_dependency_unit.craft_helm.rendering import render_chart
 
-# Service account setups: the namespace default, one the chart creates, and one
-# the operator names.
-_DEFAULT_SA: list[str] = []
-_CREATED_SA = ["--set", "serviceAccount.create=true"]
-_NAMED_SA = ["--set", "serviceAccount.name=onyx-runtime"]
+_ENABLED = ["--set", "logExport.kubernetes.enabled=true"]
+_API_SERVER_SA = "onyx-api-server"
+_LOG_EXPORT_KINDS = ("ServiceAccount", "Role", "RoleBinding")
 
 
-def _log_export_resources(extra_args: list[str]) -> list[dict[str, Any]]:
+def _render(extra_args: list[str]) -> list[dict[str, Any]]:
     result = render_chart(extra_args)
     assert result.returncode == 0, result.stderr
-    return [
+    return [resource for resource in yaml.safe_load_all(result.stdout) if resource]
+
+
+def _log_export_resources(resources: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    return {
+        resource["kind"]: resource
+        for resource in resources
+        if resource["kind"] in _LOG_EXPORT_KINDS
+        and resource["metadata"]["name"] in (_API_SERVER_SA, "onyx-log-export")
+    }
+
+
+def _service_account_of(resources: list[dict[str, Any]], deployment: str) -> str:
+    [workload] = [
         resource
-        for resource in yaml.safe_load_all(result.stdout)
-        if resource
-        and resource["kind"] in ("Role", "RoleBinding")
-        and resource["metadata"]["name"].endswith("log-export")
+        for resource in resources
+        if resource["kind"] == "Deployment"
+        and resource["metadata"]["name"] == deployment
     ]
+    return workload["spec"]["template"]["spec"]["serviceAccountName"]
 
 
 @pytest.mark.parametrize(
-    ("mode_args", "service_account_args", "bound_service_account"),
+    "extra_args",
     [
-        ([], _DEFAULT_SA, None),
-        ([], _CREATED_SA, "onyx"),
-        ([], _NAMED_SA, "onyx-runtime"),
+        [],
+        ["--set", "serviceAccount.create=true"],
         # A --reuse-values upgrade from a release without the setting.
-        (["--set", "logExport=null"], _DEFAULT_SA, None),
-        (["--set", "logExport=null"], _CREATED_SA, "onyx"),
-        (["--set", "logExport.kubernetesRbac.mode=true"], _DEFAULT_SA, "default"),
-        (["--set", "logExport.kubernetesRbac.mode=true"], _CREATED_SA, "onyx"),
-        (
-            ["--set-string", "logExport.kubernetesRbac.mode=true"],
-            _NAMED_SA,
-            "onyx-runtime",
-        ),
-        (["--set", "logExport.kubernetesRbac.mode=false"], _DEFAULT_SA, None),
-        (["--set", "logExport.kubernetesRbac.mode=false"], _CREATED_SA, None),
-        (["--set", "logExport.kubernetesRbac.mode=false"], _NAMED_SA, None),
+        ["--set", "logExport=null"],
     ],
 )
-def test_log_export_rbac_modes(
-    mode_args: list[str],
-    service_account_args: list[str],
-    bound_service_account: str | None,
+def test_log_export_kubernetes_access_is_off_by_default(
+    extra_args: list[str],
 ) -> None:
-    resources = _log_export_resources([*mode_args, *service_account_args])
+    resources = _render(extra_args)
+    assert _log_export_resources(resources) == {}
+    assert _service_account_of(resources, "onyx-api-server") != _API_SERVER_SA
 
-    if bound_service_account is None:
-        assert resources == []
-        return
 
-    role = next(r for r in resources if r["kind"] == "Role")
-    [rule] = role["rules"]
+def test_enabled_binds_only_the_api_server() -> None:
+    resources = _render(
+        [*_ENABLED, "--set", "serviceAccount.create=true", *_ALL_WORKLOADS_ARGS]
+    )
+    log_export = _log_export_resources(resources)
+
+    [rule] = log_export["Role"]["rules"]
     assert set(rule["resources"]) == {"pods", "pods/log", "events"}
     assert set(rule["verbs"]) == {"get", "list"}
-    assert role["metadata"]["namespace"] == "onyx"
-
-    binding = next(r for r in resources if r["kind"] == "RoleBinding")
-    assert binding["roleRef"]["name"] == role["metadata"]["name"]
-    assert binding["subjects"] == [
-        {"kind": "ServiceAccount", "name": bound_service_account, "namespace": "onyx"}
+    assert log_export["RoleBinding"]["subjects"] == [
+        {"kind": "ServiceAccount", "name": _API_SERVER_SA, "namespace": "onyx"}
     ]
+    assert log_export["ServiceAccount"]["automountServiceAccountToken"] is True
+
+    assert _service_account_of(resources, "onyx-api-server") == _API_SERVER_SA
+    other_pods_on_api_server_account = [
+        resource["metadata"]["name"]
+        for resource in resources
+        if resource["kind"] in ("Deployment", "StatefulSet")
+        and resource["metadata"]["name"] != "onyx-api-server"
+        and resource["spec"]["template"]["spec"].get("serviceAccountName")
+        == _API_SERVER_SA
+    ]
+    assert other_pods_on_api_server_account == []
+    assert _service_account_of(resources, "onyx-web-server") == "onyx"
 
 
-def test_log_export_rbac_rejects_unknown_mode() -> None:
-    result = render_chart(["--set", "logExport.kubernetesRbac.mode=sometimes"])
-    assert result.returncode != 0
-    assert "logExport.kubernetesRbac.mode must be auto, true, or false" in (
-        result.stderr
+def test_enabled_turns_on_the_backend_collector() -> None:
+    def _collector_env(resources: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        [workload] = [
+            resource
+            for resource in resources
+            if resource["kind"] == "Deployment"
+            and resource["metadata"]["name"] == "onyx-api-server"
+        ]
+        [container] = workload["spec"]["template"]["spec"]["containers"]
+        return [
+            env
+            for env in container.get("env") or []
+            if env["name"] == "LOG_EXPORT_KUBERNETES_ENABLED"
+        ]
+
+    assert _collector_env(_render(_ENABLED)) == [
+        {"name": "LOG_EXPORT_KUBERNETES_ENABLED", "value": "true"}
+    ]
+    assert _collector_env(_render([])) == []
+
+
+def test_api_server_service_account_keeps_the_shared_annotations() -> None:
+    resources = _render(
+        [
+            *_ENABLED,
+            "--set",
+            "serviceAccount.annotations.shared=a",
+            "--set",
+            "serviceAccount.annotations.overridden=a",
+            "--set",
+            "logExport.kubernetes.serviceAccount.annotations.overridden=b",
+        ]
     )
+    annotations = _log_export_resources(resources)["ServiceAccount"]["metadata"][
+        "annotations"
+    ]
+    assert annotations == {"shared": "a", "overridden": "b"}
 
 
 # Turns on the workloads values-ci.yaml leaves off.

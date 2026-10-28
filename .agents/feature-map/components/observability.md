@@ -136,12 +136,11 @@ reads, through the Kubernetes API, the stdout of every pod of the Helm release
 previous container's log after a restart, a pod status summary with the last
 termination reason (for example `OOMKilled`), and the namespace events for
 those pods. The result is `piece_kubernetes_api.zip` with a `kubernetes`
-receipt. It needs the Role in
-`deployment/helm/charts/onyx/templates/log-export-rbac.yaml`.
-`logExport.kubernetesRbac.mode` controls it: `auto` (default) binds only a
-named service account (`serviceAccount.create` or `serviceAccount.name`), never
-the namespace's `default` one; `true` always binds; `false` never binds.
-Without access to pods the receipt is `failed`; without access to pod logs or
+receipt. It is off by default (`LOG_EXPORT_KUBERNETES_ENABLED`).
+The Helm value `logExport.kubernetes.enabled` turns it on: the api-server then
+runs as its own service account, bound to the Role in
+`deployment/helm/charts/onyx/templates/log-export-rbac.yaml`, so no other Onyx
+pod can read pods, pod logs, or events. Without access to pods the receipt is `failed`; without access to pod logs or
 events it is `uploaded` with a partial piece. Both name the fix in the
 receipt's error, and the rest of the bundle is unchanged.
 
