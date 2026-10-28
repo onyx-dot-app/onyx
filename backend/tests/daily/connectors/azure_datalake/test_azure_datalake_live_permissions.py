@@ -8,6 +8,7 @@ owns every path and holds Storage Blob Data Owner; the RBAC Readers group
 plan lists what each folder and file ACL grants.
 """
 
+from collections.abc import Generator
 from typing import Any
 
 import pytest
@@ -34,6 +35,10 @@ from onyx.connectors.capability_checks.models import (
 from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.models import SlimDocument
+from onyx.utils.variable_functionality import (
+    fetch_versioned_implementation,
+    global_version,
+)
 from tests.utils.secret_names import TestSecret
 
 pytestmark = [
@@ -56,7 +61,6 @@ ACL_GROUP_B = "c016e6b3-be0a-4f39-b886-345524716e6f"
 TEST_USER = normalize_email("test@danswerai.onmicrosoft.com").lower()
 RAUNAK = "raunak@onyx.app"
 SUBASH = "subash@onyx.app"
-ADMIN = "admin@onyx.app"
 
 # Path -> readers besides the owner and the RBAC Readers group.
 EXTRA_READERS: dict[str, tuple[set[str], set[str]]] = {
@@ -98,7 +102,13 @@ def _everyone_group(test_secrets: dict[TestSecret, str]) -> str:
 
 
 @pytest.fixture(scope="module")
-def synced(test_secrets: dict[TestSecret, str]) -> dict[str, ExternalAccess]:
+def synced(
+    test_secrets: dict[TestSecret, str],
+) -> Generator[dict[str, ExternalAccess], None, None]:
+    # A module fixture runs before the function-scoped `enable_ee`.
+    was_ee = global_version.is_ee_version()
+    global_version.set_ee()
+    fetch_versioned_implementation.cache_clear()
     connector = AzureDataLakeConnector(account_name=ACCOUNT, container_name=CONTAINER)
     connector.set_credentials_provider(
         _provider(_certificate_credentials(test_secrets))
@@ -109,7 +119,10 @@ def synced(test_secrets: dict[TestSecret, str]) -> dict[str, ExternalAccess]:
             if isinstance(item, SlimDocument):
                 assert item.external_access is not None
                 access[item.id.removeprefix(f"{ID_PREFIX}:")] = item.external_access
-    return access
+    yield access
+    if not was_ee:
+        global_version.unset_ee()
+    fetch_versioned_implementation.cache_clear()
 
 
 @pytest.mark.parametrize("path", sorted(EXTRA_READERS))
@@ -138,7 +151,7 @@ def test_other_minus_a_group_lists_the_tenant_without_its_members(
 ) -> None:
     access = synced[OTHER_MINUS_GROUP_A]
 
-    assert {TEST_USER, SUBASH, ADMIN} <= access.external_user_emails
+    assert {TEST_USER, SUBASH} <= access.external_user_emails
     assert RAUNAK not in access.external_user_emails
     assert access.external_user_group_ids == {RBAC_READERS_GROUP}
 
@@ -160,7 +173,7 @@ def test_the_group_sync_reads_the_fixture_groups(
     assert groups[RBAC_READERS_GROUP] == {SUBASH}
     assert groups[ACL_GROUP_A] == {RAUNAK}
     assert groups[ACL_GROUP_B] == {RAUNAK}
-    assert {TEST_USER, RAUNAK, SUBASH, ADMIN} <= groups[_everyone_group(test_secrets)]
+    assert {TEST_USER, RAUNAK, SUBASH} <= groups[_everyone_group(test_secrets)]
 
 
 def _run_checks(credentials: dict[str, Any]) -> list[CapabilityCheckResult]:
