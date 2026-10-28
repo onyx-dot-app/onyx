@@ -10,7 +10,7 @@ fails rather than publishing empty notes.
 BREAKING CHANGES:
 
 * provider: this release supports Onyx v4.8.0 and later. On Onyx v4.7 and earlier, pin the
-  provider to `~> 0.3`. This release reads by id and no longer resends agent attachments, so
+  provider to `~> 0.3.0`. (`~> 0.3` also allows 0.4.0.) This release reads by id and no longer resends agent attachments, so
   on older Onyx, resources can look deleted and agent attachments can be cleared.
 * resource/onyx_custom_tool: `enabled` now controls whether the action is available in
   default Chat (`default_chat_enabled`). It no longer disables the action globally, and
@@ -30,15 +30,18 @@ ENHANCEMENTS:
 
 * resource/onyx_cc_pair: `groups`, `auto_sync_options` and `processing_mode` are read back,
   so import fills them and drift shows in the plan. A change to one still replaces the pair.
-* resource/onyx_cc_pair: new `access_type = "sync_restricted"` and `data_access_group_ids`,
-  updated in place (Onyx v5.0+, Enterprise Edition).
+* resource/onyx_cc_pair: new `access_type = "sync_restricted"` (Onyx v5.0+). Like every
+  `access_type` change, switching to it replaces the pair.
+* resource/onyx_cc_pair: new `data_access_group_ids` (Onyx v5.0+, Enterprise Edition), updated
+  in place. On other servers, apply fails instead of leaving the readers unrestricted.
 * resource/onyx_connector: new `check_freq` (Onyx v5.0+). `onyx_connectors` exposes it.
 * resource/onyx_embedding_provider: new `provider_type` values `bifrost` (Onyx v5.0+) and
   `openai_compatible` (Onyx v5.1+). A configured key is sent with `api_key_changed`.
 * resource/onyx_llm_provider: new `model_configurations` attributes `reasoning_effort_max`,
   `reasoning_effort_default` and `temperature_default`.
-* resource/onyx_llm_provider_default: new `craft_provider_id` and `craft_model_name`, and
-  `search_selection_provider_id` and `search_selection_model_name` (Onyx v5.0+).
+* resource/onyx_llm_provider_default: new `craft_provider_id` and `craft_model_name`.
+* resource/onyx_llm_provider_default: new `search_selection_provider_id` and
+  `search_selection_model_name` (Onyx v5.0+).
 * resource/onyx_settings: new `reasoning_override_enabled` and `hide_provider_grouping`. New
   on Onyx v5.0+: `default_language`, `llm_gateway_enabled`,
   `embedding_rate_limit_requests` and `embedding_rate_limit_period_seconds`. The
@@ -54,6 +57,8 @@ BUG FIXES:
   revert a link added at the same time. Destroy retries while the group syncs. A scoped group
   manager can now run a plan.
 * resource/onyx_agent: updates no longer read and resend attached folders and documents.
+  Create sends empty lists, so an agent that reuses a deleted agent's name does not inherit
+  its old attachments.
 * resource/onyx_llm_provider: the delete error says that `force_delete` does not override the
   decision model.
 
