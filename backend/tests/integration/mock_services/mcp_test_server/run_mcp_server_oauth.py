@@ -142,9 +142,8 @@ if __name__ == "__main__":
     issuer = os.getenv(
         "MCP_OAUTH_ISSUER",
         "https://test-domain.okta.com/oauth2/default?well_known_override=https://test-domain.okta.com/oauth2/<as_id>/.well-known/oauth-authorization-server",
-    )  # NOTE: the mcp client library currently tries the root discovery url before
-    # falling back to the one actually used by Okta. Our client code lets you specify this well_known_override
-    # for Okta and other Idps that use these discovery urls.
+    )  # Older configs append a `?well_known_override=...` query for discovery. It is
+    # dropped below: the mcp client finds Okta's path-based discovery URL itself.
 
     # issuer = os.getenv("MCP_OAUTH_ISSUER", "https://test-domain.okta.com/.well-known/oauth-authorization-server?issuer=https://test-domain.okta.com/oauth2/<auth_server_id>")
     jwks_uri = os.getenv(
@@ -153,11 +152,14 @@ if __name__ == "__main__":
     required_scopes = os.getenv("MCP_OAUTH_REQUIRED_SCOPES", "mcp:use")
     print(f"Required scopes: {required_scopes}")
     print(f"Audience: {audience}")
-    print(f"Issuer: {issuer}")
+    # The mcp client requires the advertised authorization server to equal the
+    # issuer in its metadata (RFC 8414), so neither use may keep the query.
+    issuer_url = issuer.split("?")[0]
+    print(f"Issuer: {issuer_url}")
     print(f"JWKS URI: {jwks_uri}")
 
     verifier = JWTVerifier(
-        issuer=issuer.split("?")[0],  # ignore auth url override if present
+        issuer=issuer_url,
         audience=audience,  # exactly what you set on the AS
         jwks_uri=jwks_uri,
         required_scopes=required_scopes.split(
@@ -182,7 +184,7 @@ if __name__ == "__main__":
         mcp_resource_url = f"{normalized_public_url}/"
     else:
         mcp_resource_url = f"http://{public_host}:{port}/mcp/"
-    authorization_servers = [issuer]
+    authorization_servers = [issuer_url]
     scopes_supported = ["mcp:use"]
 
     init_app(app, mcp_resource_url, authorization_servers, scopes_supported)
