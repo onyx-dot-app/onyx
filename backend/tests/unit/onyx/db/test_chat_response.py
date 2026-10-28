@@ -8,13 +8,20 @@ import pytest
 from pydantic import JsonValue, ValidationError
 from pytest import MonkeyPatch
 
+from onyx.agents.models import RunFailure, RunFailureKind
+from onyx.chat.errors import chat_error
 from onyx.configs.constants import MessageType
 from onyx.db import chat_response
 from onyx.db.chat import translate_db_message_to_chat_message_detail
 from onyx.db.chat_response import _extract_referenced_file_descriptors
 from onyx.db.models import ChatMessage
 from onyx.file_store.models import ChatFileType
-from onyx.llm.models import GenerationRequestParams, ReasoningEffort
+from onyx.llm.models import (
+    GenerationRequestParams,
+    LLMErrorInfo,
+    ReasoningEffort,
+    ToolChoiceOptions,
+)
 from onyx.tools.models import PythonExecutionFile, ToolCallInfo
 
 
@@ -288,3 +295,60 @@ def test_chat_detail_validates_stored_request_parameters() -> None:
     message.request_params = invalid_params
     with pytest.raises(ValidationError):
         translate_db_message_to_chat_message_detail(message)
+
+
+@pytest.mark.parametrize("structured", [True, False])
+def test_history_returns_failure_separately_from_partial_answer(
+    structured: bool,
+) -> None:
+    failure = RunFailure(
+        kind=RunFailureKind.LLM,
+        message="Provider declined the request",
+        llm_error=LLMErrorInfo(
+            message="Provider declined the request",
+            error_code="MODEL_REFUSAL",
+            is_retryable=False,
+            tool_choice=ToolChoiceOptions.AUTO,
+            finish_reason="content_filter",
+        ),
+    )
+    message = ChatMessage(
+        id=1,
+        chat_session_id=uuid4(),
+        message="Partial answer",
+        token_count=2,
+        message_type=MessageType.ASSISTANT,
+        time_sent=datetime.now(timezone.utc),
+        search_docs=[],
+        chat_message_feedbacks=[],
+        error=failure.message,
+        response_failure=RunFailure.model_validate_json(failure.model_dump_json())
+        if structured
+        else None,
+        model_display_name="Test model",
+        request_params={
+            "model_name": "test",
+            "model_provider": "openai",
+            "reasoning_effort": "low",
+            "max_tokens": None,
+            "sent_kwargs": {},
+        },
+    )
+    detail = translate_db_message_to_chat_message_detail(message)
+    assert detail.message == "Partial answer"
+    assert detail.error == failure.message
+    assert detail.error_info is not None
+    assert detail.error_info.stack_trace is None
+    assert detail.error_info.details is not None
+    assert detail.error_info.details["model"] == "test"
+    assert detail.error_info.details["provider"] == "openai"
+    if structured:
+        live = chat_error(failure)
+        assert detail.error_info.error_code == live.error_code == "MODEL_REFUSAL"
+        assert detail.error_info.is_retryable == live.is_retryable is False
+        assert detail.error_info.details["finish_reason"] == "content_filter"
+    else:
+        assert detail.error_info.error_code is None
+    message.error = None
+    message.response_failure = None
+    assert translate_db_message_to_chat_message_detail(message).error_info is None

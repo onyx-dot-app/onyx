@@ -21,7 +21,6 @@ from onyx.chat.chat_processing_checker import (
     get_processing_stream_id,
     is_chat_session_processing,
 )
-from onyx.chat.models import StreamingError
 from onyx.chat.stream_buffer import (
     ChatDelivery,
     StreamBufferMeta,
@@ -34,6 +33,7 @@ from onyx.server.query_and_chat.streaming_models import (
     AgentResponseDelta,
     OverallStop,
     Packet,
+    StreamingError,
 )
 from onyx.server.utils import get_json_line
 from tests.unit.fakes import FakeCache

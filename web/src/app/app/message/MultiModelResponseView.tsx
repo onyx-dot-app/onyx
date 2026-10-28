@@ -153,7 +153,7 @@ export default function MultiModelResponseView({
   }, []);
   useEffect(() => {
     if (readOnly || responses.length === 0) return;
-    // Hidden panels and errors have no animated answer to drain.
+    // Hidden and failed responses do not block input on display animation.
     if (
       !responses.every(
         (response) =>

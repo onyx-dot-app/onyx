@@ -23,7 +23,6 @@ from onyx.chat.models import (
     ChatResponseOutcome,
     ChatTurnSetup,
     CreateChatSessionID,
-    StreamingError,
     ToolCallResponse,
 )
 from onyx.chat.prepare import prepare_chat_turn
@@ -47,6 +46,7 @@ from onyx.server.query_and_chat.streaming_models import (
     AgentResponseStart,
     CitationInfo,
     Packet,
+    StreamingError,
 )
 from onyx.server.utils import get_json_line
 from onyx.utils.fleet_query_telemetry import QueryObservation, telemetry_chat

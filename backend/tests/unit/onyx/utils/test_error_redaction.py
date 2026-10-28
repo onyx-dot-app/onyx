@@ -10,13 +10,13 @@ from starlette.requests import Request
 
 from onyx.chat import errors, process_message
 from onyx.chat.errors import EmptyLLMResponseError
-from onyx.chat.models import StreamingError
 from onyx.connectors import connector_runner
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.llm.models import ToolChoiceOptions
 from onyx.main import validation_exception_handler
 from onyx.server.query_and_chat.models import SendMessageRequest
+from onyx.server.query_and_chat.streaming_models import StreamingError
 from onyx.utils import retry_wrapper
 
 

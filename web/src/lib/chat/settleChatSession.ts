@@ -30,10 +30,11 @@ export function preserveFailedMessages(
       if (node.nodeId === latest?.nodeId) return local;
       continue;
     }
-    // Final answer text and its error are saved together; packets can precede that save.
+    // Persisted failures and final answers are authoritative; packets can precede either save.
     if (
-      savedNode.type === "assistant" &&
-      (savedNode.message || savedNode.files.length > 0)
+      savedNode.type === "error" ||
+      (savedNode.type === "assistant" &&
+        (savedNode.message || savedNode.files.length > 0))
     ) {
       continue;
     }
@@ -41,12 +42,13 @@ export function preserveFailedMessages(
       ...savedNode,
       type: "error",
       message: node.message,
+      errorMessage: node.errorMessage,
       errorCode: node.errorCode,
       stackTrace: node.stackTrace,
       isRetryable: node.isRetryable,
       errorDetails: node.errorDetails,
-      packets: [],
-      packetCount: 0,
+      packets: node.packets,
+      packetCount: node.packetCount,
     });
   }
   return saved;
@@ -108,10 +110,11 @@ export async function settleChatSession({
           selectedNodeId == null
             ? undefined
             : local?.get(selectedNodeId)?.messageId;
+        const latestType = getLatestMessageChain(messageTree).at(-1)?.type;
         store.updateSessionData(sessionId, {
           messageTree,
           uncaughtError:
-            getLatestMessageChain(messageTree).at(-1)?.type === "assistant"
+            latestType === "assistant" || latestType === "error"
               ? null
               : (session?.uncaughtError ?? null),
           selectedNodeIdForDocDisplay:

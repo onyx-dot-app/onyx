@@ -165,6 +165,7 @@ export interface Message {
   latestChildNodeId?: number | null;
   alternateAgentID?: number | null;
   stackTrace?: string | null;
+  errorMessage?: string | null;
   errorCode?: string | null;
   isRetryable?: boolean;
   errorDetails?: Record<string, any> | null;
@@ -260,6 +261,7 @@ export interface BackendMessage {
   model_display_name: string | null;
   // Non-null when the model errored during generation
   error: string | null;
+  error_info?: StreamingError | null;
 }
 
 export interface MessageResponseIDInfo {

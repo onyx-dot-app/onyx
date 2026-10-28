@@ -6,6 +6,7 @@ import { BackendChatSession } from "@/app/app/types";
 import { processRawChatHistory } from "@/app/app/services/lib";
 import { getLatestMessageChain } from "@/app/app/services/messageTree";
 import HumanMessage from "@/app/app/message/HumanMessage";
+import { ErrorBanner } from "@/app/app/message/Resubmit";
 import AgentMessage from "@/app/app/message/messageComponents/AgentMessage";
 import MultiModelResponseView from "@/app/app/message/MultiModelResponseView";
 import { getMultiModelResponses } from "@/app/app/message/multiModel";
@@ -177,49 +178,52 @@ export default function SharedChatDisplay({
                   return null;
                 }
 
-                if (message.type === "assistant") {
+                if (message.type === "assistant" || message.type === "error") {
                   return (
                     <div
                       key={message.messageId}
                       className="w-[min(50rem,100%)]"
                     >
-                      <AgentMessage
-                        rawPackets={message.packets}
-                        chatState={{
-                          agent: persona,
-                          docs: message.documents,
-                          citations: message.citations,
-                          setPresentingDocument: setPresentingDocument,
-                          // Shared payload carries the model as `modelDisplayName`,
-                          // not `overridden_model`. Surface it in the read-only footer.
-                          overriddenModel:
-                            message.modelDisplayName ?? undefined,
-                          overriddenModelProvider: message.modelDisplayName
-                            ? modelProviderLookup.get(message.modelDisplayName)
-                            : undefined,
-                        }}
-                        nodeId={message.nodeId}
-                        llmManager={null}
-                        otherMessagesCanSwitchTo={undefined}
-                        onMessageSelection={undefined}
-                      />
+                      {(message.type !== "error" ||
+                        message.packets.length > 0) && (
+                        <AgentMessage
+                          rawPackets={message.packets}
+                          chatState={{
+                            agent: persona,
+                            docs: message.documents,
+                            citations: message.citations,
+                            setPresentingDocument: setPresentingDocument,
+                            // Shared payload carries the model as `modelDisplayName`,
+                            // not `overridden_model`. Surface it in the read-only footer.
+                            overriddenModel:
+                              message.modelDisplayName ?? undefined,
+                            overriddenModelProvider: message.modelDisplayName
+                              ? modelProviderLookup.get(
+                                  message.modelDisplayName
+                                )
+                              : undefined,
+                          }}
+                          nodeId={message.nodeId}
+                          llmManager={null}
+                          otherMessagesCanSwitchTo={undefined}
+                          onMessageSelection={undefined}
+                          hideFooter={message.type === "error"}
+                          disableTTS={message.type === "error"}
+                        />
+                      )}
+                      {message.type === "error" && (
+                        <ErrorBanner
+                          error={message.errorMessage ?? ""}
+                          errorCode={message.errorCode ?? undefined}
+                          isRetryable={message.isRetryable}
+                          details={message.errorDetails ?? undefined}
+                        />
+                      )}
                     </div>
                   );
                 }
 
-                // Error message case
-                return (
-                  <div
-                    key={message.messageId}
-                    className="py-5 ms-4 lg:px-5 w-[min(50rem,100%)]"
-                  >
-                    <div className="mx-auto w-[90%] max-w-message-max">
-                      <p className="text-status-text-error-05 text-sm my-auto">
-                        {message.message}
-                      </p>
-                    </div>
-                  </div>
-                );
+                return null;
               })}
             </div>
           ) : (

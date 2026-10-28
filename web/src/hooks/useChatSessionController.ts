@@ -359,7 +359,7 @@ export default function useChatSessionController({
         };
         const flush = () => {
           if (!ownsStream()) return;
-          node.packets = node.type === "error" ? [] : [...accumulated];
+          node.packets = [...accumulated];
           // AgentMessage's memo compares packetCount, not the packets array.
           node.packetCount = node.packets.length;
           useChatSessionStore
@@ -383,10 +383,9 @@ export default function useChatSessionController({
               store.updateSessionData(sessionId, {
                 queuedMessagesPaused: true,
               });
-              store.setUncaughtError(sessionId, rawPacket.error);
               // Keep the error on its reserved row through readiness retries.
               node.type = "error";
-              node.message = rawPacket.error;
+              node.errorMessage = rawPacket.error;
               if (!("message_id" in rawPacket)) {
                 node.errorCode = rawPacket.error_code;
                 node.stackTrace = rawPacket.stack_trace;
