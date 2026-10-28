@@ -37,6 +37,21 @@ import { rehypeDirection } from "@/lib/rehypeDirection";
 import { cn } from "@opal/utils";
 import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
+import { getLatestMessageChain } from "@/app/app/services/messageTree";
+
+/** True when the session still waits for this node to render: the
+ *  queue gate is closed and the node is the newest message. */
+function isAwaitedLatestMessage(
+  sessionId: string | null,
+  messageNodeId: number | undefined
+): boolean {
+  if (!sessionId || messageNodeId === undefined) return false;
+  const session = useChatSessionStore.getState().sessions.get(sessionId);
+  if (!session || session.latestMessageRenderComplete) return false;
+  return (
+    getLatestMessageChain(session.messageTree).at(-1)?.nodeId === messageNodeId
+  );
+}
 
 /** Maps a visible-char count to a markdown index (skips formatting chars,
  *  extends to word boundary). Used by the voice-sync reveal path only. */
@@ -301,7 +316,7 @@ export const MessageTextRenderer: MessageRenderer<
   // Capture `animate` at mount. `animate = !stopPacketSeen`, which only
   // ever goes true→false during a renderer's lifetime, so its mount-time
   // value distinguishes "actively-streaming renderer" (animate=true) from
-  // "historical mount" (animate=false). Used to gate the queue-release
+  // "historical mount" (animate=false). Used to gate the drain-state
   // write below.
   const wasEverAnimatingRef = useRef(animate);
 
@@ -309,6 +324,18 @@ export const MessageTextRenderer: MessageRenderer<
   // draining doesn't write the completion flag to the newly-active session.
   const sessionIdAtMountRef = useRef(
     useChatSessionStore.getState().currentSessionId
+  );
+
+  // The renderer that releases the queue gate. Usually the one that
+  // animated. If the whole answer arrived before this renderer mounted
+  // (a fast stream, or text held back by tool pacing until the stop
+  // packet), it mounts with animate=false, so also release when the
+  // session still waits for this node. Otherwise the gate stays closed
+  // and queued messages never send.
+  const [releasesQueueGate] = useState(
+    () =>
+      animate ||
+      isAwaitedLatestMessage(sessionIdAtMountRef.current, messageNodeId)
   );
 
   // Fire onComplete exactly once per mount. `onComplete` is an inline
@@ -320,15 +347,18 @@ export const MessageTextRenderer: MessageRenderer<
     if (streamFullyDisplayed && !onCompleteFiredRef.current) {
       onCompleteFiredRef.current = true;
       onComplete();
-      // Only the renderer that was actively streaming (mounted with
-      // animate=true) flips the chat-session gate back to "rendered".
       // Historical mounts leave the flag alone so they don't release the
       // queue while a newer stream is still in flight.
-      if (wasEverAnimatingRef.current && sessionIdAtMountRef.current) {
+      if (releasesQueueGate && sessionIdAtMountRef.current) {
         setLatestMessageRenderComplete(sessionIdAtMountRef.current, true);
       }
     }
-  }, [streamFullyDisplayed, onComplete, setLatestMessageRenderComplete]);
+  }, [
+    streamFullyDisplayed,
+    onComplete,
+    setLatestMessageRenderComplete,
+    releasesQueueGate,
+  ]);
 
   // Mirror the typewriter's drain state into the chat-session store so
   // ChatScrollContainer can pause auto-scroll while the drain runs. Only
