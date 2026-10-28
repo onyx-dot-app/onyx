@@ -441,3 +441,40 @@ def test_indexed_connector_presence_scans_beyond_inventory_cap(schema: str) -> N
             row["cc_pair_id"] for row in collector.connector_rows(db_session)
         }
         assert has_indexed_connectors__no_commit(db_session)
+
+
+@pytest.mark.usefixtures("enable_ee")
+def test_a_pass_reports_permission_sync_times_of_synced_pairs(
+    schema: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with get_session_with_tenant(tenant_id=schema) as db_session:
+        db_session.execute(
+            text(
+                f'UPDATE "{schema}".connector_credential_pair SET '
+                "last_time_perm_sync=now()-interval '5 minutes', "
+                "last_time_external_group_sync=now()-interval '20 minutes', "
+                "perm_sync_pending_since=now()-interval '1 hour'"
+            )
+        )
+        db_session.commit()
+    sender = make_sender(capacity=256)
+    monkeypatch.setattr(collector, "get_sender", lambda: sender)
+    monkeypatch.setattr(collector, "get_cache_backend", Mock(return_value=FakeCache()))
+    collector.collect_snapshots(schema)
+    connectors: dict[int, dict[str, Any]] = {
+        event["data"]["cc_pair_id"]: event["data"]
+        for event in sender._take_batch()
+        if event["event_type"] == "connector"
+    }
+    assert sender.invalid == 0
+    synced: dict[str, Any] = connectors[1]
+    assert {
+        "last_permission_sync_at",
+        "last_group_sync_at",
+        "permission_sync_pending_since",
+    } <= synced.keys()
+    # Google Drive syncs groups on a schedule, but its doc sync waits for the pair's
+    # first successful index, which pair 1 has not had.
+    assert "group_sync_seconds" in synced and "permission_sync_seconds" not in synced
+    # Pair 2 is public.
+    assert "last_permission_sync_at" not in connectors[2]
