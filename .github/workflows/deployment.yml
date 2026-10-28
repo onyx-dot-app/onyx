@@ -2006,6 +2006,18 @@ jobs:
             -f event_type=new-cloud-image \
             -F "client_payload[version]=${VERSION}"
 
+  # Production docs follow the latest stable release (see docs-publish.yml).
+  publish-docs:
+    needs: determine-builds
+    if: >-
+      needs.determine-builds.outputs.is-latest == 'true'
+      && needs.determine-builds.outputs.is-test-run != 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/docs-publish.yml
+    with:
+      tag: ${{ github.ref_name }}
+
   # A failed audit usually means a new advisory, so the CVE Alerts run opens
   # its tracking issue, fix PR, and Slack post. Every release tag also gets a
   # run once its images are published, since a release branch has no schedule

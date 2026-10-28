@@ -1,0 +1,178 @@
+---
+title: "Release Process & Updates"
+description: "Onyx release process, versioning, and recommended update process"
+icon: "rocket"
+---
+
+## Release Channels
+
+### GitHub
+
+Our [GitHub Releases](https://github.com/onyx-dot-app/onyx/releases) publish images to Docker Hub.
+Onyx has two types of releases:
+- **Latest stable version** - Production-ready releases
+- **Pre-release version** - Beta releases for testing
+
+The `main` branch of the [Onyx repository](https://github.com/onyx-dot-app/onyx) is our development branch.
+
+<Warning>
+  Although we try to keep `main` stable through CI/CD tests and code reviews,
+  we do not recommend using `main` in production environments.
+</Warning>
+
+### Docker Hub
+
+[Docker Hub](https://hub.docker.com/r/onyxdotapp/onyx) hosts the actual container images.
+New images are published every night from the `main` branch and when a new release is cut.
+
+To identify the latest images programmatically, use our API endpoint:
+
+```
+https://cloud.onyx.app/api/versions
+```
+
+This endpoint returns the current latest stable and beta versions available on Docker Hub.
+
+<Tip>
+  If you don't specify a version when deploying Onyx, you will get the latest nightly builds.
+</Tip>
+
+## Versioning Scheme
+
+Onyx follows [Semantic Versioning (SemVer)](https://semver.org/).
+
+**Standard Version Format:**
+
+```
+major.minor.hotfix
+```
+
+**Pre-release Version Format:**
+
+```
+major.minor.hotfix-beta.betahotfix
+```
+
+**Examples:**
+- Stable release: `1.2.3`
+- Pre-release: `5.1.0-beta.1`
+- Beta hotfix: `5.1.0-beta.2`
+
+<Note>
+  - **Major version** - Incremented on breaking changes
+  - **Minor version** - Incremented on new features, bugfixes, and backwards-compatible changes
+  - **Hotfix version** - Incremented only when backporting bugfixes to releases
+</Note>
+
+### Docker Files and Helm Charts
+
+Changes to Docker files and Helm charts increment the version numbers in their respective files.
+
+## Release Schedule
+
+Onyx ships a new minor release every two weeks. Each release has a two-week cycle:
+
+**Week 1 (pre-release):**
+- `main` is frozen into a new `release/vX.Y` branch
+- Only `vX.Y.0-beta.N` pre-releases are cut from this branch
+
+**Week 2 (stable):**
+- Only stable `vX.Y.N` releases are cut from the previous week's release branch
+- No new release branch is created
+
+The next cycle starts the following week with `release/vX.(Y+1)`.
+
+### Hotfix Process
+
+- Critical bug fixes are **backported** to stable releases as necessary
+- Hotfixes bypass the normal two-week cycle for urgent production issues
+- Both stable and pre-release branches receive hotfixes when applicable
+
+## Update Best Practices
+
+To maintain a stable deployment, we recommend staying on the latest stable release.
+These are tagged with a version number like `v5.0.0`.
+
+<Steps>
+  <Step title="Check Versions API for Stable Version Tag">
+    Compare your current version with the version tag of the latest stable release.
+    The versions endpoint is public and does not require authentication.
+
+    ```bash
+    curl -X GET "https://cloud.onyx.app/api/versions"
+    ```
+
+    Look for the `stable: onyx` key in the response.
+
+    ```json Example Response expandable
+    {
+      "stable":{
+        "onyx":"v5.0.0",
+        "relational_db":"postgres:15.2-alpine",
+        "index":"opensearchproject/opensearch:3.6.0",
+        "nginx":"nginx:1.25.5-alpine"},
+        "dev":{
+          "onyx":"v5.1.0-beta.0",
+          "relational_db":"postgres:15.2-alpine",
+          "index":"opensearchproject/opensearch:3.6.0",
+          "nginx":"nginx:1.25.5-alpine"
+        },
+        "migration":{
+          "onyx":"airgapped-intfloat-nomic-migration",
+          "relational_db":"postgres:15.2-alpine",
+          "index":"opensearchproject/opensearch:3.6.0",
+          "nginx":"nginx:1.25.5-alpine"
+        }
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Launch Onyx with the Version Tag">
+    <Note>
+      Don't forget the `v` prefix! I.e. `v5.0.0` is correct, `5.0.0` is incorrect.
+    </Note>
+
+    <AccordionGroup>
+      <Accordion title="Docker Pull Images">
+        Specify the version tag in the environment.
+
+        ```bash
+        IMAGE_TAG=v<MAJOR>.<MINOR>.<HOTFIX> docker compose -f docker-compose.prod.yml up -d --pull always --force-recreate
+        ```
+      </Accordion>
+    </AccordionGroup>
+
+    <Accordion title="Docker Build Images">
+      Pull the release branch from GitHub or just the tagged version and build the images.
+
+      The release branch is where the latest stable version is published.
+      Release branches are named `release/v<MAJOR>.<MINOR>`.
+
+      In the Onyx repo:
+
+      ```bash From Release Branch
+      git fetch origin release/v5.0
+      git switch release/v5.0
+
+      docker compose -f docker-compose.prod.yml up -d --build --force-recreate
+      ```
+
+      ```bash From Tagged Version
+      git fetch origin tag v5.0.0
+      git switch --detach v5.0.0
+
+      docker compose -f docker-compose.prod.yml up -d --build --force-recreate
+      ```
+    </Accordion>
+
+    <Accordion title="Helm">
+      To specify a version when deploying with Helm, set the `global: version` value in your `values.yaml` file.
+
+      ```yaml values.yaml
+      global:
+        version: "v5.0.0"
+      ```
+    </Accordion>
+  </Step>
+</Steps>

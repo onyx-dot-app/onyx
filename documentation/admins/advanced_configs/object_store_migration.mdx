@@ -1,0 +1,248 @@
+---
+title: "Object Store Migration"
+description: "Moving files from the bundled MinIO to the SeaweedFS object store"
+icon: "arrow-right-arrow-left"
+---
+
+## Overview
+
+Self-hosted Onyx bundles an S3-compatible store for the files it keeps outside PostgreSQL.
+Until now that store was MinIO. MinIO archived its community edition and removed its public images,
+so Onyx is replacing it with [SeaweedFS](https://github.com/seaweedfs/seaweedfs),
+running as a service called the **object store**.
+
+The upgrade moves your existing files across automatically, with no downtime and a safe rollback.
+Installs that already use external storage (AWS S3, Google Cloud Storage, Azure Blob Storage,
+or another S3-compatible service) are not affected, and neither is Onyx Cloud.
+
+## What the object store holds
+
+The object store holds the only copy of every file body Onyx keeps.
+PostgreSQL holds the pointers to those files and OpenSearch holds the search index,
+but the bytes themselves live only here:
+
+- Files attached to chats and images generated in chats
+- Files uploaded to projects and the user library
+- Documents uploaded through the File connector
+- Craft sandbox snapshots and coding history
+- Enterprise branding assets such as the logo
+- Images and attachments extracted from connector documents during indexing
+- Indexing checkpoints, generated reports, and query history and log exports
+
+Starting the new store empty would break every attachment in old chats, lose uploaded documents and Craft work for good,
+and drop the branding. Only the connector images come back on a re-index.
+
+## Migration
+
+The object store ships in Onyx `v5.0.0` (Helm chart `0.9.0`), a major version bump.
+That release runs both stores side by side during a transition:
+
+- The app writes and deletes every file in both the object store and MinIO, so a rollback still finds it.
+- A read that misses the object store falls back to MinIO.
+- A copy job moves every file that Onyx tracks from MinIO into the object store.
+  It never replaces a file the app wrote, except when an older release wrote a newer version after a rollback,
+  and it skips objects no file record points at.
+
+No input is needed from admins other than upgrading. The app starts serving right away and the copy runs beside it.
+
+### Docker Compose
+
+The `object-store` service runs SeaweedFS on its own `object_store_data` volume,
+and the `object-store-copy` service runs the copy. Upgrades through the [Onyx CLI](/deployment/local/onyx_cli)
+switch the app to the object store and keep MinIO as the fallback on their own.
+
+Watch the copy with:
+
+```bash
+docker compose logs -f object-store-copy
+```
+
+It logs progress per page of objects and ends with `Legacy MinIO copy complete`.
+It finishes only after a pass copies nothing and `LEGACY_COPY_SETTLE_SECONDS` (600 by default)
+have passed since it started. If objects fail to copy, it logs the keys and retries every five minutes.
+The app keeps serving from both stores in the meantime.
+
+#### Upgrading by hand
+
+If you run `docker compose` yourself instead of the CLI, the new release starts with your old `.env`.
+On an install that uses the bundled MinIO (`S3_ENDPOINT_URL=http://minio:9000`), that keeps the app on MinIO:
+the object store and the copy service run empty, and the app keeps writing files to MinIO,
+which a later release removes. Make these two `.env` changes before `docker compose up`.
+An install on external storage (S3, GCS, Azure) needs no change.
+
+1. Set `S3_ENDPOINT_URL=http://object-store:8333`.
+2. Add `S3_LEGACY_ENDPOINT_URL=http://minio:9000`.
+
+Nothing breaks if you forget: the app serves from MinIO as before,
+and the `api_server` and `object-store-copy` logs warn at startup that files are still in MinIO and name the two
+settings. The copy starts once you restart with those values.
+
+Keep `MINIO_REPLICAS` unset or `1` until you retire MinIO. `env.template` sets `0`, which suits only a fresh install.
+
+<Note>
+  The same applies when the CLI upgrades an install whose `.env` reaches the bundled MinIO under any address other than
+  `http://minio:9000`: the CLI leaves that endpoint alone, so make the two changes yourself,
+  with `S3_LEGACY_ENDPOINT_URL` set to the address your `.env` used.
+</Note>
+
+### Helm
+
+Chart `0.9.0` adds the [`objectStore` section](/deployment/local/object_store)
+and the `<fullname>-legacy-minio-copy-<hash>` Job,
+where `<fullname>` is the release name when it contains `onyx` and `<release>-onyx` otherwise.
+The MinIO subchart only gains a keep annotation on its PVC, so its pod does not restart.
+
+Watch the copy with:
+
+```bash
+kubectl logs -f -n <namespace> -l app=legacy-minio-copy
+```
+
+The Job is a plain Job rather than a Helm hook, so `helm upgrade` returns without waiting for it. `--reuse-values`,
+ArgoCD, Flux and rendered manifests all work. If the Job fails, fix the cause, delete it, and upgrade again to rerun it.
+A rerun skips every object already copied.
+
+Before upgrading, check that the new `<fullname>-object-store` PVC can hold all of MinIO's data.
+It takes the size and storage class of `minio.persistence` unless you set `objectStore.persistence`.
+The chart's `MIGRATION.md` covers air-gapped registries, pod security, and OpenShift.
+
+### How long it takes
+
+The copy runs at a couple of hundred files per second, or about 165 MB/s when the files are large.
+The verification pass takes about 20 minutes per million files.
+Measured on a replica of a real install and on a synthetic million-file store:
+
+| Store | Copy | Reported complete |
+| --- | --- | --- |
+| 22,000 files, 4.8 GB (a replica of a real install) | under 3 minutes | about 13 minutes |
+| 1,000,000 files, 174 GB | 80 minutes | about 2 hours |
+
+Both stores hold every file until you retire MinIO. See [sizing](/deployment/local/object_store#sizing).
+
+<Note>
+  The copy is safe to interrupt. If the copier, MinIO, the object store or PostgreSQL goes down mid-copy,
+  the copy stops within about a minute and the next run picks up where it left off. Nothing is lost,
+  because the app keeps writing to both stores and reading from either.
+</Note>
+
+## Rollback
+
+Rolling back to the previous release points the app back at MinIO. MinIO has every file,
+including files uploaded after the upgrade, because the transition release writes to both stores.
+The object store volume stays, and the next upgrade continues the copy.
+The Onyx CLI and Helm switch the endpoint back for you. On a hand-maintained `.env`,
+set `S3_ENDPOINT_URL=http://minio:9000` again and clear `S3_LEGACY_ENDPOINT_URL` before you start the older release.
+
+A rollback does not change the database schema.
+An older release fails to start on the `v5.0.0` schema with `Can't locate revision`.
+Only the `v5.0.0` image has the migrations to downgrade it. Roll back in this order.
+
+<Steps>
+  <Step title="Replay writes that MinIO missed">
+    A file written while MinIO was unavailable reaches MinIO only once the failed write is replayed.
+    In Compose the copy service replays it within five minutes of MinIO answering again.
+    In Helm the replay happens at the next copy run. If MinIO had an outage after the Job completed,
+    delete the Job and upgrade again, and wait for it to complete.
+  </Step>
+
+  <Step title="Downgrade the database schema">
+    <Warning>
+      The downgrade deletes data that only `v5.0.0` stores, such as child chat sessions,
+      OAuth grants and tokens that Onyx issued, and personal MCP and OpenAPI tool preferences.
+    </Warning>
+
+    In Compose, run it from the directory with your compose files. On a prod install,
+    add `-f docker-compose.prod.yml` after `docker compose`.
+    If `docker compose ls` shows a project name other than `onyx`, add `-p <project>`.
+
+    ```bash
+    IMAGE_TAG=<v5 version> docker compose run --rm --no-deps api_server alembic downgrade 25053020dd5a
+    ```
+
+    In Helm:
+
+    ```bash
+    kubectl exec -n <namespace> deploy/<fullname>-api-server -- alembic downgrade 25053020dd5a
+    ```
+
+    `25053020dd5a` is the last migration of `v4.9`. For another release,
+    get it with `docker run --rm onyxdotapp/onyx-backend:<version> alembic heads`.
+  </Step>
+
+  <Step title="Roll back immediately">
+    The app returns errors until the older release is up.
+    A `v5.0.0` API server that restarts before then upgrades the schema again.
+    Run `onyx-cli` from where you usually run it, or pass `--dir <install root>`.
+    It warns that downgrades are not supported. Continue, because the schema now matches.
+
+    ```bash
+    # Compose
+    onyx-cli deploy upgrade --tag <older version> --allow-downgrade
+    # Helm
+    helm rollback -n <namespace> <release> <revision>
+    ```
+  </Step>
+</Steps>
+
+If you rolled back first, the older API server restarts in a loop. Run the downgrade command from step 2. In Helm,
+`kubectl exec` picks the ready pod, which still runs `v5.0.0`.
+
+## Retiring MinIO
+
+Once the copy has completed, you can stop MinIO without waiting for a later release. After this,
+a rollback to a release before the object store no longer sees files uploaded since.
+
+<Steps>
+  <Step title="Run the retire command">
+    In Compose:
+
+    ```bash
+    docker compose exec object-store-copy python -m onyx.file_store.legacy_copy --retire
+    ```
+
+    In Helm, from an API server pod:
+
+    ```bash
+    kubectl exec -n <namespace> deploy/<fullname>-api-server -- \
+      python -m onyx.file_store.legacy_copy --retire
+    ```
+
+    It copies anything left, waits a quiet minute, and checks that nothing reached MinIO alone in that time.
+    If something did, a container or pod on the older release is still running, so it refuses and MinIO stays in use.
+    Otherwise it writes a marker to the object store, and within a minute every running process stops writing to MinIO.
+    No restart is needed.
+  </Step>
+
+  <Step title="Stop MinIO">
+    In Compose, set `MINIO_REPLICAS=0` in `.env`, then stop MinIO and `object-store-copy` without restarting the app:
+
+    ```bash
+    docker compose up -d --no-deps minio object-store-copy
+    ```
+
+    The `minio_data` volume stays until you remove it.
+
+    In Helm, first make sure the MinIO PVC carries the keep annotation,
+    since an upgrade with `--reuse-values` can miss the one the chart adds:
+
+    ```bash
+    kubectl annotate pvc -n <namespace> <release>-minio helm.sh/resource-policy=keep --overwrite
+    ```
+
+    Then set `minio.enabled: false` and `objectStore.enabled: true` and upgrade.
+    The MinIO PVC stays until you delete it.
+  </Step>
+</Steps>
+
+## Deprecation of MinIO
+
+MinIO is deprecated. Move to SeaweedFS as soon as you can. The Helm chart keeps `minio.enabled:
+true` for now so that existing installs can run this copy. A future release changes the default to `false`,
+and a later release removes MinIO from the bundled deployment entirely. Set `minio.enabled:
+false` once the copy completes.
+
+<Warning>
+  Upgrade through `v5.0.0` and let the copy complete before moving to a release that no longer bundles MinIO.
+  Skipping it leaves your files in a MinIO volume that the newer release does not read, and every chat attachment,
+  upload, Craft snapshot and branding asset is unavailable until you go back and run the copy.
+</Warning>

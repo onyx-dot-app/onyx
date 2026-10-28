@@ -1,0 +1,109 @@
+---
+title: "Google OAuth"
+description: "Google OAuth authentication setup"
+icon: "key"
+---
+
+Let users sign in to Onyx with their Google account.
+You create an OAuth client in Google Cloud and add it as an SSO provider in the Onyx admin panel. No restart is needed.
+
+Google is one of three provider types. See [SSO Providers](/deployment/authentication/sso_providers)
+for how providers work together, how to require SSO, and plan limits.
+
+<Note>
+  One enabled SSO provider is available in all editions.
+  Two or more enabled providers at the same time need the Business or Enterprise plan.
+</Note>
+
+## Guide
+
+### Step 1: Create a Google Cloud Project
+
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/) and sign in.
+2. Create a new project, or select an existing one.
+
+![Google Cloud project creation](/assets/deployment/gcc_project_creation.webp)
+
+### Step 2: Enable the People API
+
+Onyx reads the user's name and email from the People API.
+
+1. Go to **APIs & Services → Library**.
+2. Search for **Google People API** and click **Enable**.
+
+![Enable Google People API](/assets/deployment/gcc_people_api.webp)
+
+### Step 3: Configure the OAuth Consent Screen
+
+1. Go to **APIs & Services → OAuth consent screen**.
+2. Choose **Internal** to limit sign-in to users in your Google Workspace.
+   Choose **External** to allow any Google account.
+3. Enter an app name and support email. Add your Onyx domain to **Authorized domains**.
+4. Save. You do not need to add scopes here.
+
+![OAuth consent screen](/assets/deployment/gcc_oauth_consent.webp)
+
+### Step 4: Create an OAuth Client
+
+1. Go to **APIs & Services → Credentials**.
+2. Click **Create Credentials → OAuth client ID**.
+3. Set **Application type** to **Web application**.
+4. Under **Authorized redirect URIs**, add the redirect URI for your provider.
+   Onyx shows this URI in the **Add SSO Provider** modal (next step). It has this form:
+
+```
+https://<your-onyx-domain>/api/auth/oidc/<provider-name>/callback
+```
+
+Use the provider name you plan to enter in Onyx. The example below uses `google`.
+
+![Create OAuth client](/assets/deployment/gcc_oauth_client.webp)
+
+5. Click **Create**. Copy the **Client ID** and **Client secret**.
+
+![OAuth client details](/assets/deployment/gcc_oauth_client_details.webp)
+
+### Step 5: Add the Provider in Onyx
+
+1. In Onyx, go to **Admin Panel → Organization → SSO Providers**.
+2. Click **Add Provider** and set **Provider Type** to **Google**.
+3. Fill in the form:
+
+| Field                     | Value                                                                                  |
+| ------------------------- | -------------------------------------------------------------------------------------- |
+| **Name**                  | A lowercase slug such as `google`. It is part of the redirect URI and cannot change.   |
+| **Display Name**          | The label on the sign-in button, for example `Google`.                                 |
+| **Allowed Email Domains** | Domains that can sign in with this provider. Recommended. Required on Onyx Cloud.      |
+| **Client ID**             | From Google Cloud.                                                                     |
+| **Client Secret**         | From Google Cloud.                                                                     |
+
+4. Copy the **Redirect URI** shown in the modal and make sure it matches the URI you added in Google Cloud.
+
+Users now see a **Sign in with Google** button on the login page.
+
+## Customizing Requested Scopes
+
+By default Onyx requests `openid`, `email`, and `profile`. To request different scopes,
+edit the provider and set **Scopes**. Leave it empty to use the defaults.
+
+To set the default for all Google providers on the deployment,
+set `GOOGLE_OAUTH_SCOPE_OVERRIDE` as a comma-separated list of scopes. Onyx always adds `openid` and `email`.
+
+## Enabling PKCE
+
+Turn on **Enable PKCE** in the provider form to add Proof Key for Code Exchange to the sign-in flow.
+Google supports PKCE for web application clients.
+
+To force PKCE for every OAuth and OIDC provider on the deployment, set `OIDC_PKCE_ENABLED=true`.
+The form then shows the switch as on and locked.
+
+## Upgrading from an Older Version
+
+Before v4.4, Google sign-in was set with `AUTH_TYPE=google_oauth`, `OAUTH_CLIENT_ID`, and `OAUTH_CLIENT_SECRET`.
+When you upgrade, Onyx creates an SSO provider named `google` from these variables. Existing users keep their accounts.
+
+After the upgrade:
+
+1. Go to **Admin Panel → Organization → SSO Providers** and check the `google` provider.
+2. Add its redirect URI (`/api/auth/oidc/google/callback`) to your Google Cloud OAuth client.
+3. Remove `AUTH_TYPE`, `OAUTH_CLIENT_ID`, and `OAUTH_CLIENT_SECRET` from your deployment. Onyx logs a warning while `AUTH_TYPE` is still set.

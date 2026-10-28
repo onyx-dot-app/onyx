@@ -6,7 +6,11 @@ concurrency:
 on:
   merge_group:
   pull_request:
+    paths-ignore:
+      - "documentation/**"
   push:
+    paths-ignore:
+      - "documentation/**"
     branches:
       # A push to main saves the Go build cache that PRs restore.
       - main
