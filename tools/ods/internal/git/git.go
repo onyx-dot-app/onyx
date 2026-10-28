@@ -98,43 +98,37 @@ func PushTag(tag string, force, verify bool) error {
 }
 
 // PushNewBranch pushes commitSHA to origin as a branch that must not exist
-// there yet. An empty --force-with-lease expectation makes origin reject the
-// push when the branch appeared meanwhile, which a plain push would instead
-// fast-forward. Pre-push hooks are skipped unless verify is true, for the same
-// reason PushTag skips them: the commit already passed CI, and the hooks run
-// over the whole branch.
+// there yet. A plain push would instead fast-forward a branch that appeared
+// meanwhile.
 func PushNewBranch(commitSHA, branch string, verify bool) error {
-	args := []string{"push"}
-	if !verify {
-		args = append(args, "--no-verify")
-	}
-	args = append(args,
-		fmt.Sprintf("--force-with-lease=refs/heads/%s:", branch),
-		"origin", fmt.Sprintf("%s:refs/heads/%s", commitSHA, branch))
-	if !verify {
-		return RunCommand(args...)
-	}
-	hint := "Push is slow because --verify runs the pre-push hooks over every commit on the branch. Re-run without --verify to skip them."
-	return HintAfter(PushHookHintDelay, hint, func() error { return RunCommand(args...) })
+	return pushNewRef(commitSHA, "refs/heads/"+branch, verify,
+		"Push is slow because --verify runs the pre-push hooks over every commit on the branch. Re-run without --verify to skip them.")
 }
 
 // PushNewTag pushes commitSHA to origin as a tag that must not exist there
-// yet, without creating or moving a local tag. The empty --force-with-lease
-// expectation makes origin reject the push when the tag appeared meanwhile.
-// Pre-push hooks are skipped unless verify is true, as in PushNewBranch.
+// yet, without creating or moving a local tag.
 func PushNewTag(commitSHA, tag string, verify bool) error {
+	return pushNewRef(commitSHA, "refs/tags/"+tag, verify,
+		"Push is slow because --verify runs the pre-push hooks over the pushed commits. Re-run without --verify to skip them.")
+}
+
+// pushNewRef pushes commitSHA to ref on origin. An empty --force-with-lease
+// expectation makes origin reject the push when ref already exists there.
+// Pre-push hooks are skipped unless verify is true, for the same reason
+// PushTag skips them: the commit already passed CI, and the hooks run over
+// every pushed commit.
+func pushNewRef(commitSHA, ref string, verify bool, slowHint string) error {
 	args := []string{"push"}
 	if !verify {
 		args = append(args, "--no-verify")
 	}
 	args = append(args,
-		fmt.Sprintf("--force-with-lease=refs/tags/%s:", tag),
-		"origin", fmt.Sprintf("%s:refs/tags/%s", commitSHA, tag))
+		fmt.Sprintf("--force-with-lease=%s:", ref),
+		"origin", fmt.Sprintf("%s:%s", commitSHA, ref))
 	if !verify {
 		return RunCommand(args...)
 	}
-	hint := "Push is slow because --verify runs the pre-push hooks over every commit on the branch. Re-run without --verify to skip them."
-	return HintAfter(PushHookHintDelay, hint, func() error { return RunCommand(args...) })
+	return HintAfter(PushHookHintDelay, slowHint, func() error { return RunCommand(args...) })
 }
 
 // GetCommitMessage gets the first line of a commit message
