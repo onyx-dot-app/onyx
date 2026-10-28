@@ -26,7 +26,7 @@ from onyx.db.fleet_telemetry import (
     license_row,
     limit_statement_time,
     stage_rows,
-    user_count,
+    standard_user_count,
 )
 from onyx.utils.fleet_telemetry import (
     CONNECTOR_ROW_SETTINGS,
@@ -441,7 +441,7 @@ def collect_snapshots(tenant_id: str) -> None:
                     },
                 )
             )
-            inventory.append(("users", {"total": user_count(db_session)}))
+            inventory.append(("users", {"total": standard_user_count(db_session)}))
             attempts: list[dict[str, Any]] = attempt_rows(db_session, since)
             stages: list[dict[str, Any]] = stage_rows(
                 db_session, [row["attempt_id"] for row in attempts], since

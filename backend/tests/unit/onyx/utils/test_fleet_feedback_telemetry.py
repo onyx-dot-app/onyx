@@ -1,14 +1,15 @@
 """A thumbs up or down reaches the fleet as a vote with a digest id and a channel,
 and feedback that is only text or a follow-up request sends nothing."""
 
-from typing import Any
 from unittest.mock import Mock
 
 import pytest
 
 from onyx.configs.constants import MessageType
 from onyx.db import feedback
+from onyx.server.query_and_chat.models import MessageOrigin
 from onyx.utils import fleet_telemetry as fleet
+from shared_configs.contextvars import get_current_tenant_id
 from tests.utils.fleet_telemetry import make_sender
 
 
@@ -19,10 +20,9 @@ def sender(monkeypatch: pytest.MonkeyPatch) -> fleet.BoundedTelemetry:
     return enrolled
 
 
-def _assistant_message(*, from_slack: bool) -> Mock:
+def _assistant_message() -> Mock:
     message: Mock = Mock()
     message.message_type = MessageType.ASSISTANT
-    message.chat_session.onyxbot_flow = from_slack
     return message
 
 
@@ -30,12 +30,10 @@ def _record(
     monkeypatch: pytest.MonkeyPatch,
     *,
     is_positive: bool | None,
-    from_slack: bool = False,
+    origin: MessageOrigin = MessageOrigin.WEBAPP,
 ) -> None:
     monkeypatch.setattr(
-        feedback,
-        "get_chat_message",
-        lambda **_kwargs: _assistant_message(from_slack=from_slack),
+        feedback, "get_chat_message", lambda **_kwargs: _assistant_message()
     )
     feedback.create_chat_message_feedback(
         is_positive=is_positive,
@@ -43,24 +41,27 @@ def _record(
         chat_message_id=7,
         user_id=None,
         db_session=Mock(),
-        required_followup=None if is_positive is not None else True,
+        origin=origin,
     )
 
 
-@pytest.mark.parametrize("from_slack,channel", [(False, "web"), (True, "slack")])
+@pytest.mark.parametrize(
+    "origin,channel", [(MessageOrigin.WEBAPP, "web"), (MessageOrigin.SLACKBOT, "slack")]
+)
 def test_a_vote_reports_its_channel_and_a_digest_only(
     monkeypatch: pytest.MonkeyPatch,
     sender: fleet.BoundedTelemetry,
-    from_slack: bool,
+    origin: MessageOrigin,
     channel: str,
 ) -> None:
-    _record(monkeypatch, is_positive=False, from_slack=from_slack)
+    _record(monkeypatch, is_positive=False, origin=origin)
     (event,) = sender._take_batch()
-    data: dict[str, Any] = event["data"]
     assert event["event_type"] == "feedback"
-    assert data["positive"] is False and data["channel"] == channel
-    assert len(data["feedback_id"]) == 64
-    assert "PRIVATE" not in str(event)
+    assert event["data"] == {
+        "feedback_id": fleet.fingerprint(f"{get_current_tenant_id()}:7"),
+        "positive": False,
+        "channel": channel,
+    }
 
 
 def test_the_same_answer_keeps_its_id_across_votes(

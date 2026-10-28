@@ -16,6 +16,7 @@ from shared_configs.contextvars import get_current_tenant_id
 
 if TYPE_CHECKING:
     from onyx.chat.models import AnswerStreamPart, StreamingError
+    from onyx.server.query_and_chat.models import MessageOrigin
     from onyx.server.query_and_chat.streaming_models import Packet
 
 F = TypeVar("F", bound=Callable[..., Any])
@@ -25,8 +26,6 @@ _ORIGIN_CHANNELS: dict[str, str] = {
     "discordbot": "discord",
     "slackbot": "slack",
 }
-WEB_CHANNEL: str = "web"
-SLACK_CHANNEL: str = _ORIGIN_CHANNELS["slackbot"]
 # OverallStop.stop_reason values written by the chat loop.
 _STOP_OUTCOMES: dict[str, str] = {"user_cancelled": "canceled"}
 # The chat stream sends a 4xx OnyxError as an error packet with one of these codes.
@@ -54,25 +53,16 @@ class QueryMode(str, Enum):
     DEEP_RESEARCH = "deep_research"
 
 
+def _origin_channel(origin: "MessageOrigin") -> str:
+    # The origin enum is set by the caller, not user text.
+    return _ORIGIN_CHANNELS.get(origin.value.lower(), "web")
+
+
 def _channel(kwargs: dict[str, Any]) -> str:
     request = kwargs.get("new_msg_req")
     if request is None:
-        return WEB_CHANNEL
-    # The origin enum is part of SendMessageRequest, not user text.
-    return _ORIGIN_CHANNELS.get(request.origin.value.lower(), WEB_CHANNEL)
-
-
-def emit_feedback(chat_message_id: int, positive: bool, *, channel: str) -> None:
-    """Report one thumbs up or down. The id is a digest, so the fleet can tell a
-    changed vote on one answer from a vote on another, but not which answer."""
-    emit_telemetry(
-        "feedback",
-        {
-            "feedback_id": fingerprint(f"{get_current_tenant_id()}:{chat_message_id}"),
-            "positive": positive,
-            "channel": channel,
-        },
-    )
+        return "web"
+    return _origin_channel(request.origin)
 
 
 def _mode(kwargs: dict[str, Any]) -> QueryMode:
@@ -329,3 +319,18 @@ def telemetry_query(*, mode: QueryMode) -> Callable[[F], F]:
         return cast(F, run)
 
     return decorate
+
+
+def emit_feedback(
+    chat_message_id: int, positive: bool, *, origin: "MessageOrigin"
+) -> None:
+    """Report one thumbs up or down. The id is a digest of the message id: stable
+    across re-votes on one answer, never the answer itself."""
+    emit_telemetry(
+        "feedback",
+        {
+            "feedback_id": fingerprint(f"{get_current_tenant_id()}:{chat_message_id}"),
+            "positive": positive,
+            "channel": _origin_channel(origin),
+        },
+    )

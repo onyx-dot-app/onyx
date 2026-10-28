@@ -33,7 +33,7 @@ from onyx.db.fleet_telemetry import (
     license_row,
     limit_statement_time,
     stage_rows,
-    user_count,
+    standard_user_count,
 )
 from onyx.db.models import ConnectorCredentialPair, DocumentByConnectorCredentialPair
 from onyx.db.sync_record import insert_sync_record
@@ -161,7 +161,7 @@ def test_reads_return_changed_and_running_work_only(schema: str) -> None:
         }
         domains: list[dict[str, Any]] = email_domain_rows(db_session)
         license: dict[str, Any] = license_row(db_session)
-        users: int = user_count(db_session)
+        users: int = standard_user_count(db_session)
     # Finished work outside the window and synthetic seeds are not read. Changed
     # rows come first, oldest first, then running rows from before the window.
     assert list(attempts) == [1, 2]
@@ -195,7 +195,7 @@ def test_reads_return_changed_and_running_work_only(schema: str) -> None:
         ("poc.example.com", 2020),
     ]
     assert license["license_present"] is True
-    # Bots are not users.
+    # Only standard accounts count. The seeded bot does not.
     assert users == 3
 
 

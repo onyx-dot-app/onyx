@@ -148,7 +148,9 @@ class _Source:
             collector, "email_domain_rows", lambda _session: self.domains
         )
         monkeypatch.setattr(collector, "license_row", lambda _session: self.license)
-        monkeypatch.setattr(collector, "user_count", lambda _session: self.users)
+        monkeypatch.setattr(
+            collector, "standard_user_count", lambda _session: self.users
+        )
         monkeypatch.setattr(collector, "attempt_rows", attempts)
         monkeypatch.setattr(
             collector, "stage_rows", lambda _session, _ids, _since: self.stages

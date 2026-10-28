@@ -21,7 +21,8 @@ from onyx.db.models import (
     User,
 )
 from onyx.db.models import Document as DbDocument
-from onyx.utils.fleet_query_telemetry import SLACK_CHANNEL, WEB_CHANNEL, emit_feedback
+from onyx.server.query_and_chat.models import MessageOrigin
+from onyx.utils.fleet_query_telemetry import emit_feedback
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -205,6 +206,8 @@ def create_chat_message_feedback(
     # Slack user requested help from human
     required_followup: bool | None = None,
     predefined_feedback: str | None = None,  # Added predefined_feedback parameter
+    # Where the vote came from, for fleet telemetry. The caller knows, the session does not.
+    origin: MessageOrigin = MessageOrigin.WEBAPP,
 ) -> None:
     if (
         is_positive is None
@@ -220,7 +223,6 @@ def create_chat_message_feedback(
 
     if chat_message.message_type != MessageType.ASSISTANT:
         raise ValueError("Can only provide feedback on LLM Outputs")
-    from_slack: bool = chat_message.chat_session.onyxbot_flow
 
     message_feedback = ChatMessageFeedback(
         chat_message_id=chat_message_id,
@@ -234,11 +236,7 @@ def create_chat_message_feedback(
     db_session.commit()
     # Only a vote leaves the deployment, never the text.
     if is_positive is not None:
-        emit_feedback(
-            chat_message_id,
-            is_positive,
-            channel=SLACK_CHANNEL if from_slack else WEB_CHANNEL,
-        )
+        emit_feedback(chat_message_id, is_positive, origin=origin)
 
 
 def remove_chat_message_feedback(
