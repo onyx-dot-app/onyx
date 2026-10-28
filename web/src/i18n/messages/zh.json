@@ -15863,7 +15863,8 @@
         },
         "settingsButton": {
           "ariaLabel": "提供商设置"
-        }
+        },
+        "settingsLoadError": "无法加载此提供商的设置。请重试。"
       },
       "title": "连接您的 LLM 模型"
     },

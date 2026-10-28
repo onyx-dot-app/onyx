@@ -15863,7 +15863,8 @@
         },
         "settingsButton": {
           "ariaLabel": "Provider settings"
-        }
+        },
+        "settingsLoadError": "Couldn't load this provider's settings. Try again."
       },
       "title": "Connect your LLM models"
     },

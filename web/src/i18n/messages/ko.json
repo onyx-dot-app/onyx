@@ -15863,7 +15863,8 @@
         },
         "settingsButton": {
           "ariaLabel": "제공자 설정"
-        }
+        },
+        "settingsLoadError": "이 공급자의 설정을 불러올 수 없습니다. 다시 시도하세요."
       },
       "title": "LLM 모델 연결"
     },

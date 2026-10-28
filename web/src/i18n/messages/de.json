@@ -15863,7 +15863,8 @@
         },
         "settingsButton": {
           "ariaLabel": "Anbieter-Einstellungen"
-        }
+        },
+        "settingsLoadError": "Die Einstellungen dieses Anbieters konnten nicht geladen werden. Versuche es erneut."
       },
       "title": "Verbinden Sie Ihre LLM-Modelle"
     },

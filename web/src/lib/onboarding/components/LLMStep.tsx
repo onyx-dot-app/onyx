@@ -22,16 +22,11 @@ import {
   SvgExternalLink,
   SvgMoreHorizontal,
 } from "@opal/icons";
-import { CardGrid, ContentAction } from "@opal/layouts";
+import { CardGrid, ContentAction, toast } from "@opal/layouts";
 import { CardLoader } from "@opal/loaders";
 import { ONBOARDING_LLM_PROVIDERS } from "@/lib/onboarding/constants";
 import { useLLMProviderOptions } from "@/lib/hooks/useLLMProviderOptions";
 import { useSettings } from "@/lib/settings/hooks";
-
-interface SelectedProvider {
-  llmDescriptor?: WellKnownLLMProviderDescriptor;
-  isCustomProvider: boolean;
-}
 
 interface LLMStepProps {
   state: OnboardingState;
@@ -72,7 +67,7 @@ const LLMStep = memo(
     // SWR types its error as any; only whether it failed matters here.
     const editingProviderFailed = Boolean(editingProviderQuery.error);
     const EditModal = editingProvider
-      ? getProvider(editingProvider.provider).Modal
+      ? getProvider(editingProvider.provider, editingProvider).Modal
       : null;
     const openProviderSettings = async (name: string) => {
       // A provider connected during onboarding is not in the cached list yet,
@@ -89,21 +84,20 @@ const LLMStep = memo(
       if (configuredId !== undefined) setEditingProviderId(configuredId);
     };
     useEffect(() => {
-      if (editingProviderFailed) setEditingProviderId(null);
-    }, [editingProviderFailed]);
+      if (!editingProviderFailed) return;
+      toast.error(t("llmStep.providerCard.settingsLoadError"));
+      setEditingProviderId(null);
+    }, [editingProviderFailed, t]);
 
     const [selectedProvider, setSelectedProvider] =
-      useState<SelectedProvider | null>(null);
+      useState<WellKnownLLMProviderDescriptor | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     // The provider list starts open; the header opens and closes it.
     const [providersOpen, setProvidersOpen] = useState(true);
 
     const handleProviderClick = useCallback(
-      (
-        llmDescriptor?: WellKnownLLMProviderDescriptor,
-        isCustomProvider: boolean = false
-      ) => {
-        setSelectedProvider({ llmDescriptor, isCustomProvider });
+      (llmDescriptor: WellKnownLLMProviderDescriptor) => {
+        setSelectedProvider(llmDescriptor);
         setIsModalOpen(true);
       },
       []
@@ -116,9 +110,7 @@ const LLMStep = memo(
       }
     }, []);
 
-    const providerName = selectedProvider?.isCustomProvider
-      ? "custom"
-      : (selectedProvider?.llmDescriptor?.name ?? "custom");
+    const providerName = selectedProvider?.name ?? "custom";
 
     return (
       <Disabled disabled={disabled} allowClick>
@@ -189,7 +181,7 @@ const LLMStep = memo(
                           onClick={() =>
                             isConnected
                               ? void openProviderSettings(llmDescriptor.name)
-                              : handleProviderClick(llmDescriptor, false)
+                              : handleProviderClick(llmDescriptor)
                           }
                         />
                       );

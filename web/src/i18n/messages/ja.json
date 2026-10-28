@@ -15863,7 +15863,8 @@
         },
         "settingsButton": {
           "ariaLabel": "プロバイダー設定"
-        }
+        },
+        "settingsLoadError": "このプロバイダーの設定を読み込めませんでした。もう一度お試しください。"
       },
       "title": "LLM モデルを接続"
     },

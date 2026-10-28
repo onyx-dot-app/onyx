@@ -15863,7 +15863,8 @@
         },
         "settingsButton": {
           "ariaLabel": "Paramètres du fournisseur"
-        }
+        },
+        "settingsLoadError": "Impossible de charger les paramètres de ce fournisseur. Réessayez."
       },
       "title": "Connectez vos modèles LLM"
     },

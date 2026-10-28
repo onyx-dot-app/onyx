@@ -5,16 +5,16 @@ import { useTranslations } from "next-intl";
 import { Button, IconContainer, SelectCard } from "@opal/components";
 import { SvgCheckCircle, SvgSettings } from "@opal/icons";
 import { ContentAction, Section } from "@opal/layouts";
-import type { IconFunctionComponent } from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { cn } from "@opal/utils";
 import { noProp } from "@/lib/utils";
 
 export interface LLMProviderCardProps {
   icon: IconFunctionComponent;
-  title: string;
-  description: string;
+  title: string | RichStr;
+  description: string | RichStr;
   /** The top-right button's label, e.g. "Connect". */
-  actionLabel: string;
+  actionLabel: string | RichStr;
   /** The top-right button's icon, after the label. */
   actionIcon: IconFunctionComponent;
   /** A connected card shows a check in place of the button. */
