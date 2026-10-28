@@ -31,6 +31,7 @@ def _record(
     *,
     is_positive: bool | None,
     origin: MessageOrigin = MessageOrigin.WEBAPP,
+    db_session: Mock | None = None,
 ) -> None:
     monkeypatch.setattr(
         feedback, "get_chat_message", lambda **_kwargs: _assistant_message()
@@ -40,7 +41,7 @@ def _record(
         feedback_text="PRIVATE words",
         chat_message_id=7,
         user_id=None,
-        db_session=Mock(),
+        db_session=db_session or Mock(),
         origin=origin,
     )
 
@@ -78,4 +79,14 @@ def test_feedback_without_a_vote_sends_nothing(
     monkeypatch: pytest.MonkeyPatch, sender: fleet.BoundedTelemetry
 ) -> None:
     _record(monkeypatch, is_positive=None)
+    assert sender._take_batch() == []
+
+
+def test_a_vote_that_fails_to_save_sends_nothing(
+    monkeypatch: pytest.MonkeyPatch, sender: fleet.BoundedTelemetry
+) -> None:
+    db_session: Mock = Mock()
+    db_session.commit.side_effect = RuntimeError("PRIVATE database error")
+    with pytest.raises(RuntimeError):
+        _record(monkeypatch, is_positive=True, db_session=db_session)
     assert sender._take_batch() == []
