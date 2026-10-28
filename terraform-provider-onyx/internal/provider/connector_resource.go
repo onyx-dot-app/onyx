@@ -102,8 +102,10 @@ func (r *connectorResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 			"prune_freq": schema.Int64Attribute{
 				Optional: true,
 				Computed: true,
-				MarkdownDescription: "Seconds between pruning runs, at least 300. Unset, Onyx uses its " +
-					"default of 604800 (7 days) on create and keeps the stored value on update.",
+				MarkdownDescription: "Seconds between pruning runs, at least 300. Unset on Onyx v5.1 and " +
+					"later, Onyx uses its default of 604800 (7 days) on create and keeps the stored value " +
+					"on update. Unset on Onyx v5.0 and earlier, a new connector has no pruning schedule " +
+					"until its first update sets 7 days. Set it to prune from the start.",
 				Validators: []validator.Int64{
 					int64validator.AtLeast(300),
 				},
