@@ -32,7 +32,10 @@
    hands the control to ContentMd's stacked grid, so this widens that grid's
    control column. 724px is ContentMd's desktop breakpoint. */
 @media (min-width: 724px) {
-  .opal-content-action-responsive[data-fill] > .opal-content-md[data-stacked] {
+  /* `> *` skips the wrapper `Content` puts around `ContentMd`. */
+  .opal-content-action-responsive[data-fill]
+    > *
+    > .opal-content-md[data-stacked] {
     grid-template-columns:
       minmax(0, 1fr)
       minmax(12rem, var(--block-width-form-input-column-max));
