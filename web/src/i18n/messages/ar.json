@@ -8386,6 +8386,9 @@
       "toasts": {
         "settingsUpdated": "تم تحديث الإعدادات",
         "settingsUpdateFailed": "فشل تحديث الإعدادات"
+      },
+      "settingsLoadError": {
+        "description": "فشل تحميل الإعدادات. يرجى تحديث الصفحة."
       }
     }
   },

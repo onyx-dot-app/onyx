@@ -8386,6 +8386,9 @@
       "toasts": {
         "settingsUpdated": "Paramètres mis à jour",
         "settingsUpdateFailed": "Échec de la mise à jour des paramètres"
+      },
+      "settingsLoadError": {
+        "description": "Échec du chargement des paramètres. Essayez d'actualiser la page."
       }
     }
   },

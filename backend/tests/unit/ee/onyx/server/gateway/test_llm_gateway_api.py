@@ -1246,6 +1246,25 @@ def test_authorize_rejects_pat_flow_when_gateway_disabled() -> None:
     assert exc_info.value.error_code == OnyxErrorCode.FEATURE_DISABLED
 
 
+def test_authorize_fails_closed_when_settings_read_fails() -> None:
+    """A settings outage must not fall back to the enabled default."""
+    failing_load = MagicMock(side_effect=RuntimeError("settings unavailable"))
+    with (
+        patch.object(gateway_api, "load_settings", failing_load),
+        patch.object(
+            gateway_api,
+            "gateway_request_flow",
+            MagicMock(return_value=LLMFlow.LLM_GATEWAY),
+        ),
+        pytest.raises(RuntimeError),
+    ):
+        gateway_api._authorize_gateway_request(
+            cast(Request, MagicMock(spec=Request)),
+            cast(User, MagicMock(spec=User)),
+        )
+    failing_load.assert_called_once_with(raise_on_error=True)
+
+
 def test_authorize_allows_craft_flow_when_gateway_disabled() -> None:
     """Craft sandbox traffic is governed by the Craft setting, not the
     gateway switch."""

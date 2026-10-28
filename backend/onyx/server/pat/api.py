@@ -67,13 +67,18 @@ def list_selectable_scopes(
 ) -> list[PatScopeOption]:
     """The scopes a user may assign when minting a token, with display metadata."""
     tier = get_current_tier()
-    options = [
+    options: list[PatScopeOption] = [
         option
         for option in SELECTABLE_PAT_SCOPES.values()
         if tier_at_least(tier, option.min_tier)
     ]
 
-    if not load_settings(raise_on_error=True).llm_gateway_enabled:
+    # Read the switch only when it can change the result, so a settings
+    # outage cannot break the picker on plans without the gateway scope.
+    if (
+        any(option.scope == Permission.USE_LLM_GATEWAY for option in options)
+        and not load_settings(raise_on_error=True).llm_gateway_enabled
+    ):
         options = [
             option for option in options if option.scope != Permission.USE_LLM_GATEWAY
         ]

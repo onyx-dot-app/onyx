@@ -8386,6 +8386,9 @@
       "toasts": {
         "settingsUpdated": "设置已更新",
         "settingsUpdateFailed": "更新设置失败"
+      },
+      "settingsLoadError": {
+        "description": "加载设置失败。请尝试刷新页面。"
       }
     }
   },
