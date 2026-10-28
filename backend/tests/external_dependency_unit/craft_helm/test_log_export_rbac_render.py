@@ -101,19 +101,38 @@ _RELEASE_LABELS = {
     "app.kubernetes.io/instance": "onyx",
 }
 _POD_WORKLOAD_KINDS = ("Deployment", "StatefulSet", "DaemonSet", "Job")
+# Helm prefixes each rendered document with its template path. Subchart
+# documents come from ``onyx/charts/<subchart>/``, which the log export does
+# not collect.
+_ONYX_TEMPLATE_SOURCE = "# Source: onyx/templates/"
+
+
+def _onyx_chart_documents(rendered: str) -> list[dict[str, Any]]:
+    documents: list[dict[str, Any]] = []
+    for document in rendered.split("\n---\n"):
+        if _ONYX_TEMPLATE_SOURCE not in document:
+            continue
+        resource = yaml.safe_load(document)
+        if resource:
+            documents.append(resource)
+    return documents
 
 
 def test_every_onyx_pod_carries_the_release_labels() -> None:
-    """The log export selects Onyx pods by these labels."""
+    """The log export selects the Onyx chart's pods by these labels."""
     result = render_chart(_ALL_WORKLOADS_ARGS)
     assert result.returncode == 0, result.stderr
 
+    workloads = [
+        resource
+        for resource in _onyx_chart_documents(result.stdout)
+        if resource["kind"] in _POD_WORKLOAD_KINDS
+    ]
+    assert workloads
     unlabeled = [
         resource["metadata"]["name"]
-        for resource in yaml.safe_load_all(result.stdout)
-        if resource
-        and resource["kind"] in _POD_WORKLOAD_KINDS
-        and not _RELEASE_LABELS.items()
+        for resource in workloads
+        if not _RELEASE_LABELS.items()
         <= (resource["spec"]["template"]["metadata"].get("labels") or {}).items()
     ]
     assert unlabeled == []
