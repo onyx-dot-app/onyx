@@ -38,6 +38,7 @@ jobs:
               - 'backend/**'
               - 'web/src/lib/searchSettings/constants.ts'
               - '.agents/hooks/**'
+              - '.agents/feature-map/*.py'
               - 'pyproject.toml'
               - '.github/workflows/pr-python-tests.yml'
               - '.github/actions/setup-python-and-install-dependencies/**'

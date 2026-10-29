@@ -8,7 +8,7 @@ on:
     paths:
       - "backend/**"
       - ".agents/hooks/**"
-      - ".agents/feature-map/stale_docs.py"
+      - ".agents/feature-map/*.py"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/pr-external-dependency-unit-tests.yml"
@@ -87,7 +87,7 @@ jobs:
             relevant:
               - 'backend/**'
               - '.agents/hooks/**'
-              - '.agents/feature-map/stale_docs.py'
+              - '.agents/feature-map/*.py'
               - 'pyproject.toml'
               - 'uv.lock'
               - '.github/workflows/pr-external-dependency-unit-tests.yml'
@@ -98,7 +98,7 @@ jobs:
               - 'deployment/helm/**'
             agent_hooks:
               - '.agents/hooks/**'
-              - '.agents/feature-map/stale_docs.py'
+              - '.agents/feature-map/*.py'
               - 'backend/tests/external_dependency_unit/agent_hooks/**'
               - 'backend/tests/unit/agent_hooks/**'
 
