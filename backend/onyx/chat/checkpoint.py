@@ -193,7 +193,9 @@ def _response_digest(response: ResponseRecord) -> str:
                 "steps": [step.model_dump(mode="json") for step in response.steps],
                 "answer_step_index": response.answer_step_index,
                 "input": [
-                    item.model_dump(mode="json") for item in response.input_messages
+                    # The question is durable; attachment and request context live in the checkpoint.
+                    item.model_dump(mode="json")
+                    for item in response.input_messages[-1:]
                 ],
             },
             sort_keys=True,
@@ -268,6 +270,7 @@ def serialize_checkpoint(
         else None,
         request_params=snapshot.request_params,
         message_payloads=[payload(message) for message in snapshot.messages],
+        input_messages=snapshot.input_messages,
         input_payloads=[payload(message) for message in snapshot.input_messages],
     )
     restored = _restore_checkpoint_state(
@@ -304,6 +307,9 @@ def _restore_checkpoint_state(
     serializer: CheckpointSerializer,
 ) -> ExecutionCheckpoint:
     snapshot = response_snapshot(response)
+    snapshot.input_messages = [
+        message.model_copy(deep=True) for message in data.input_messages
+    ]
     snapshot.status = RunStatus.SUSPENDED
     snapshot.revision = data.revision
     snapshot.progress = serializer.decode_progress(data.progress)

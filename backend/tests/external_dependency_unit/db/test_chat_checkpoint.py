@@ -45,6 +45,7 @@ def test_checkpoint_publish_claim_release_and_finalize(db_session: Session) -> N
         compaction_checkpoint=None,
         request_params=None,
         message_payloads=[],
+        input_messages=[],
         input_payloads=[],
     )
     assert (
@@ -114,6 +115,7 @@ def checkpoint_data(message_id: int) -> ResponseCheckpoint:
         compaction_checkpoint=None,
         request_params=None,
         message_payloads=[],
+        input_messages=[],
         input_payloads=[],
     )
 

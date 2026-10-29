@@ -294,6 +294,7 @@ class ResponseCheckpoint(BaseModel):
     # Request display settings are saved by chat finalization, after execution ends.
     request_params: GenerationRequestParams | None
     message_payloads: list[MessagePayload]
+    input_messages: list[Message]
     input_payloads: list[MessagePayload]
 
 

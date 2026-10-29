@@ -606,3 +606,5 @@ take precedence for answer citations; tool cards retain their own saved versions
 Checkpoint format version 1 stores finalized tool-call IDs instead of a completed-tool count.
 This preserves independent completion when parallel calls finish out of order. Older formats are rejected.
 Checkpoint message payloads reject unknown fields instead of silently discarding them.
+
+Checkpoints retain the full current input group, including attachments and request-only context, for resume.
