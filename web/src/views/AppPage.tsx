@@ -808,6 +808,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     (activeAgent?.starter_messages?.length ?? 0) > 0;
 
   const gridStyle = {
+    // The chat column's width, set once here: the messages, the first-open
+    // skeleton, the greeting row and the composer all read it. Full width
+    // keeps a max-width (100%), so the switch animates instead of jumping.
+    "--app-chat-column-width": fullWidthActive
+      ? "100%"
+      : "var(--width-chat-message-max)",
     // minmax(0, 1fr) (instead of "1fr") lets the single column shrink to the
     // grid's width. A bare "1fr" is minmax(auto, 1fr), whose auto minimum is
     // the content's min-content — wide content (e.g. the onboarding cards) would
@@ -982,12 +988,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           aria-label={t("firstOpenLoader.ariaLabel")}
                           variant="mask"
                           shadowDirection="bottom-only"
-                          // The real messages' width, compact or expanded.
                           containerClassName={cn(
-                            "w-full flex-1",
-                            fullWidthActive
-                              ? "md:max-w-full"
-                              : "md:max-w-chat-message",
+                            "w-full flex-1 md:max-w-(--app-chat-column-width)",
                             FULL_WIDTH_TRANSITION
                           )}
                           className="flex-1 min-h-0 overflow-y-hidden"
@@ -1071,9 +1073,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       justifyContent="between"
                       alignItems="end"
                       className={cn(
-                        fullWidthActive
-                          ? "max-w-full"
-                          : "max-w-(--app-page-main-content-width)",
+                        "max-w-(--app-chat-column-width)",
                         FULL_WIDTH_TRANSITION
                       )}
                     >
@@ -1113,9 +1113,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     className={cn(
                       "relative w-full flex flex-col",
                       onboardingVisible && "min-h-0",
-                      fullWidthActive
-                        ? "md:max-w-full"
-                        : "md:max-w-(--app-page-main-content-width)",
+                      "md:max-w-(--app-chat-column-width)",
                       FULL_WIDTH_TRANSITION
                     )}
                   >
