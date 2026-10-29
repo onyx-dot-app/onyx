@@ -2,7 +2,6 @@ import gc
 import os
 import time
 import traceback
-from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -57,7 +56,6 @@ from onyx.configs.app_configs import (
 )
 from onyx.configs.constants import (
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
-    CELERY_INDEXING_LOCK_TIMEOUT,
     DocumentSource,
     MilestoneRecordType,
     NotificationType,
@@ -102,7 +100,6 @@ from onyx.db.enums import (
     SwitchoverType,
 )
 from onyx.db.index_attempt import (
-    IndexAttemptError,
     cc_pair_has_dispatched_index_attempts,
     create_index_attempt_error,
     get_active_index_attempts_without_task,
@@ -114,6 +111,7 @@ from onyx.db.index_attempt import (
     mark_attempt_failed,
     mark_attempt_partially_succeeded,
     mark_attempt_succeeded,
+    resolve_index_attempt_errors_for_documents,
 )
 from onyx.db.index_attempt_metrics import (
     IndexAttemptStage,
@@ -163,10 +161,6 @@ from shared_configs.contextvars import (
     CURRENT_TENANT_ID_CONTEXTVAR,
     INDEX_ATTEMPT_INFO_CONTEXTVAR,
 )
-
-# Bound for waiting on the shared cross-batch DB lock (see usage below).
-CROSS_BATCH_DB_LOCK_ACQUIRE_TIMEOUT_S = 300
-
 
 logger = setup_logger()
 
@@ -1691,48 +1685,6 @@ def _check_failure_threshold(
         )
 
 
-def _resolve_indexing_document_errors(
-    cc_pair_id: int,
-    failures: list[ConnectorFailure],
-    document_batch: list[Document],
-) -> None:
-    with get_session_with_current_tenant() as db_session_temp:
-        # get previously unresolved errors
-        unresolved_errors = get_index_attempt_errors_for_cc_pair(
-            cc_pair_id=cc_pair_id,
-            unresolved_only=True,
-            db_session=db_session_temp,
-        )
-        doc_id_to_unresolved_errors: dict[str, list[IndexAttemptError]] = defaultdict(
-            list
-        )
-        for error in unresolved_errors:
-            if error.document_id:
-                doc_id_to_unresolved_errors[error.document_id].append(error)
-
-        # resolve errors for documents that were successfully indexed
-        failed_document_ids = [
-            failure.failed_document.document_id
-            for failure in failures
-            if failure.failed_document
-        ]
-        successful_document_ids = [
-            document.id
-            for document in document_batch
-            if document.id not in failed_document_ids
-        ]
-        for document_id in successful_document_ids:
-            if document_id not in doc_id_to_unresolved_errors:
-                continue
-
-            logger.info("Resolving IndexAttemptError for document '%s'", document_id)
-            for error in doc_id_to_unresolved_errors[document_id]:
-                error.is_resolved = True
-                db_session_temp.add(error)
-
-        db_session_temp.commit()
-
-
 # Acknowledged on receipt, like docfetching. With acks_late, the broker
 # redelivers a batch that runs past visibility_timeout while the first worker is
 # still processing it, and the duplicate completion can count one batch twice and
@@ -1811,7 +1763,6 @@ def _record_docprocessing_failure_persistent(
     tenant_id: str,
     batch_num: int,
     documents: list[Document] | None,
-    cross_batch_db_lock: RedisLock | None,
 ) -> None:
     """Catch-all recovery for `_docprocessing_task` under PERSISTENT_INDEXING.
 
@@ -1874,30 +1825,17 @@ def _record_docprocessing_failure_persistent(
         )
 
     # Mark the batch complete with zero counts so check_indexing_completion
-    # doesn't wait forever for this batch. Best-effort: if the lock or DB
-    # write fails we still return cleanly.
+    # doesn't wait forever for this batch. Best-effort: if the DB write fails
+    # we still return cleanly.
     try:
-        if cross_batch_db_lock is not None:
-            with (
-                get_session_with_current_tenant() as db_session,
-                cross_batch_db_lock,
-            ):
-                IndexingCoordination.update_batch_completion_and_docs(
-                    db_session=db_session,
-                    index_attempt_id=index_attempt_id,
-                    total_docs_indexed=0,
-                    new_docs_indexed=0,
-                    total_chunks=0,
-                )
-        else:
-            with get_session_with_current_tenant() as db_session:
-                IndexingCoordination.update_batch_completion_and_docs(
-                    db_session=db_session,
-                    index_attempt_id=index_attempt_id,
-                    total_docs_indexed=0,
-                    new_docs_indexed=0,
-                    total_chunks=0,
-                )
+        with get_session_with_current_tenant() as db_session:
+            IndexingCoordination.update_batch_completion_and_docs(
+                db_session=db_session,
+                index_attempt_id=index_attempt_id,
+                total_docs_indexed=0,
+                new_docs_indexed=0,
+                total_chunks=0,
+            )
     except Exception:
         task_logger.exception(
             "Failed to mark batch %s complete during persistent indexing "
@@ -1965,15 +1903,13 @@ def _docprocessing_task(
     )
 
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
-    r = get_redis_client(tenant_id=tenant_id)
 
     # dummy lock to satisfy linter
     per_batch_lock: RedisLock | None = None
 
-    # Hoisted so the except block can safely reference them under
+    # Hoisted so the except block can safely reference it under
     # PERSISTENT_INDEXING when the failure happens mid-try.
     documents: list[Document] | None = None
-    cross_batch_db_lock: RedisLock | None = None
 
     try:
         # Inside the try so a failed first-use import still marks the attempt failed.
@@ -2052,12 +1988,6 @@ def _docprocessing_task(
                 raise RuntimeError(
                     f"Index attempt {index_attempt_id} is not running, status {index_attempt.status}"
                 )
-
-            cross_batch_db_lock: RedisLock = r.lock(
-                redis_connector.db_lock_key(index_attempt.search_settings.id),
-                timeout=CELERY_INDEXING_LOCK_TIMEOUT,
-                thread_local=False,
-            )
 
             callback = IndexingCallback(
                 redis_connector,
@@ -2157,51 +2087,31 @@ def _docprocessing_task(
                 # Log but don't fail indexing if usage tracking fails
                 task_logger.warning(f"Failed to track chunk indexing usage: {e}")
 
-        # Update batch completion and document counts atomically using database coordination
-
-        # Time the lock-acquire wait (the contention signal); record it after
-        # release (below) so the metric write doesn't extend this shared lock.
-        lock_acquire_start = time.monotonic()
-        # Bounded acquire: the lock guards a short DB update (normal hold well
-        # under a second), but a holder killed mid-section (worker restart /
-        # OOM) leaves the key for its full CELERY_INDEXING_LOCK_TIMEOUT (3h15m).
-        # An unbounded acquire() then wedges every docprocessing thread across
-        # all workers until the fossil expires — observed in production. Fail
-        # the task instead. A failed task is not redelivered: its batch stays in
-        # storage, and the next attempt re-issues it.
-        if not cross_batch_db_lock.acquire(
-            blocking_timeout=CROSS_BATCH_DB_LOCK_ACQUIRE_TIMEOUT_S
-        ):
-            raise RuntimeError(
-                f"Could not acquire cross-batch DB lock for index attempt "
-                f"{index_attempt_id} within "
-                f"{CROSS_BATCH_DB_LOCK_ACQUIRE_TIMEOUT_S}s — likely a fossil "
-                f"lock from a killed worker; the next attempt re-issues this batch."
-            )
-        lock_acquire_ms = max(0, int((time.monotonic() - lock_acquire_start) * 1000))
-        try:
-            with get_session_with_current_tenant() as db_session:
-                with time_stage(
-                    IndexAttemptStage.COORDINATION_UPDATE, index_attempt_id
-                ):
-                    IndexingCoordination.update_batch_completion_and_docs(
-                        db_session=db_session,
-                        index_attempt_id=index_attempt_id,
-                        total_docs_indexed=index_pipeline_result.total_docs,
-                        new_docs_indexed=index_pipeline_result.new_docs,
-                        total_chunks=index_pipeline_result.total_chunks,
-                    )
-
-                _resolve_indexing_document_errors(
-                    cc_pair_id,
-                    index_pipeline_result.failures,
-                    documents,
+        # The attempt row lock serializes concurrent batches' counter increments.
+        with get_session_with_current_tenant() as db_session:
+            with time_stage(IndexAttemptStage.COORDINATION_UPDATE, index_attempt_id):
+                IndexingCoordination.update_batch_completion_and_docs(
+                    db_session=db_session,
+                    index_attempt_id=index_attempt_id,
+                    total_docs_indexed=index_pipeline_result.total_docs,
+                    new_docs_indexed=index_pipeline_result.new_docs,
+                    total_chunks=index_pipeline_result.total_chunks,
                 )
-        finally:
-            cross_batch_db_lock.release()
-        safe_record_single_event(
-            IndexAttemptStage.COORD_LOCK_ACQUIRE_WAIT, index_attempt_id, lock_acquire_ms
-        )
+
+            failed_document_ids = {
+                failure.failed_document.document_id
+                for failure in index_pipeline_result.failures
+                if failure.failed_document
+            }
+            resolve_index_attempt_errors_for_documents(
+                db_session=db_session,
+                cc_pair_id=cc_pair_id,
+                document_ids=[
+                    document.id
+                    for document in documents
+                    if document.id not in failed_document_ids
+                ],
+            )
 
         # Post-coordination tail; whatever isn't timed falls into BATCH_UNACCOUNTED.
         _finalization_start = time.monotonic()
@@ -2296,7 +2206,6 @@ def _docprocessing_task(
             tenant_id=tenant_id,
             batch_num=batch_num,
             documents=documents,
-            cross_batch_db_lock=cross_batch_db_lock,
         )
         return
     finally:

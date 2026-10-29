@@ -184,13 +184,6 @@ CELERY_INDEXING_WATCHDOG_SIGTERM_GRACE_SECONDS = 10  # seconds
 # The indexing beat runs every 15 s, so a late kick of its check has no value.
 CHECK_FOR_INDEXING_EXPIRES_SECONDS = 60
 
-# soft timeout for the lock taken by the indexing connector run
-# allows the lock to eventually expire if the managing code around it dies
-# if we can get callbacks as object bytes download, we could lower this a lot.
-# CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT + 15 minutes
-# hard termination should always fire first if the connector is hung
-CELERY_INDEXING_LOCK_TIMEOUT = CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT + 900
-
 # Heartbeat interval for indexing worker liveness detection
 INDEXING_WORKER_HEARTBEAT_INTERVAL = 30  # seconds
 
