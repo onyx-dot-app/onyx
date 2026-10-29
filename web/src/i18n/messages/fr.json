@@ -1254,7 +1254,7 @@
       "decisionModel": {
         "title": "Modèle de décision",
         "openAiDecisionsModelName": "Décisions OpenAI (GPT-6 Luna)",
-        "description": "Sélectionnez un modèle pour les futures fonctions de classification et de révision. Onyx n’utilise pas encore ce modèle.",
+        "description": "La recherche interne utilise ce modèle pour classer les résultats et choisir la quantité de contexte à ajouter. Vous pouvez aussi le définir dans les préférences de chat.",
         "clear": "Effacer",
         "notConfigured": "Non configuré",
         "saveFailed": "Impossible de mettre à jour le modèle de décision"

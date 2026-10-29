@@ -1254,7 +1254,7 @@
       "decisionModel": {
         "title": "Entscheidungsmodell",
         "openAiDecisionsModelName": "OpenAI-Entscheidungen (GPT-6 Luna)",
-        "description": "Wählen Sie ein Modell für künftige Klassifizierungs- und Prüffunktionen. Onyx verwendet dieses Modell noch nicht.",
+        "description": "Die interne Suche nutzt dieses Modell, um Ergebnisse zu ordnen und den Umfang des Kontexts festzulegen. Sie können es auch in den Chat-Einstellungen festlegen.",
         "clear": "Löschen",
         "notConfigured": "Nicht konfiguriert",
         "saveFailed": "Entscheidungsmodell konnte nicht aktualisiert werden"

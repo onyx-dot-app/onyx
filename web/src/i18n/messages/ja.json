@@ -1254,7 +1254,7 @@
       "decisionModel": {
         "title": "判断モデル",
         "openAiDecisionsModelName": "OpenAI Decisions (GPT-6 Luna)",
-        "description": "今後の分類・レビュー機能に使用するモデルを選択します。Onyx はまだこのモデルを使用しません。",
+        "description": "社内検索はこのモデルを使って結果を順位付けし、追加するコンテキストの量を決めます。チャット設定でも設定できます。",
         "clear": "解除",
         "notConfigured": "未設定",
         "saveFailed": "判断モデルを更新できませんでした"

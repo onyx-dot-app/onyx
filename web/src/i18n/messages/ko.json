@@ -1254,7 +1254,7 @@
       "decisionModel": {
         "title": "판단 모델",
         "openAiDecisionsModelName": "OpenAI Decisions (GPT-6 Luna)",
-        "description": "향후 분류 및 검토 기능에 사용할 모델을 선택하세요. Onyx는 아직 이 모델을 사용하지 않습니다.",
+        "description": "내부 검색은 이 모델로 결과의 순위를 매기고 추가할 컨텍스트의 양을 정합니다. 채팅 환경설정에서도 설정할 수 있습니다.",
         "clear": "해제",
         "notConfigured": "설정되지 않음",
         "saveFailed": "판단 모델을 업데이트하지 못했습니다"
