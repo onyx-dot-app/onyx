@@ -72,9 +72,10 @@ the drop, reject and invalid counts.
   API and the EE search stream. A 4xx `OnyxError`, which includes a query that
   a query-processing hook rejects, sends no event. In a chat turn,
   `chat/emitter.py:Emitter.emit` passes each packet to
-  `QueryObservation.packet_queued`, `run_llm_loop` marks each LLM step through
-  the `Emitter`, and the writer thread in `chat/process_message.py` calls
-  `observe_packet` and `finish`.
+  `QueryObservation.packet_queued`.
+  `chat/presentation.py:ResponsePresenter.consume` marks each root LLM step
+  through `Emitter.llm_step_started`, and
+  `chat/stream_buffer.py:ChatDelivery` calls `observe_packet` and `finish`.
 - Indexing: `emit_stage_counter` from the fetch, embed and write steps
   (`background/indexing/run_docfetching.py:_timed_connector_runs`,
   `indexing/indexing_pipeline.py:embed_and_stream`,
