@@ -11,6 +11,9 @@ from onyx.server.metrics.celery_task_metrics import (
     TASK_COMPLETED,
     TASK_DURATION,
     TASK_QUEUE_WAIT,
+    TASK_REJECTED,
+    TASK_RETRIED,
+    TASK_REVOKED,
     TASK_STARTED,
     TASKS_ACTIVE,
     _task_start_times,
@@ -18,13 +21,30 @@ from onyx.server.metrics.celery_task_metrics import (
     on_celery_task_prerun,
 )
 
+_TASK_METRICS = (
+    TASK_STARTED,
+    TASK_COMPLETED,
+    TASK_DURATION,
+    TASKS_ACTIVE,
+    TASK_RETRIED,
+    TASK_REVOKED,
+    TASK_REJECTED,
+    TASK_QUEUE_WAIT,
+)
+
+
+def _clear_metric_state() -> None:
+    _task_start_times.clear()
+    for metric in _TASK_METRICS:
+        metric.clear()
+
 
 @pytest.fixture(autouse=True)
 def reset_metrics() -> Iterator[None]:
     """Clear metric state between tests."""
-    _task_start_times.clear()
+    _clear_metric_state()
     yield
-    _task_start_times.clear()
+    _clear_metric_state()
 
 
 def _make_task(
