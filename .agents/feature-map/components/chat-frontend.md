@@ -604,6 +604,8 @@ Background completion updates its own session without changing the selected conv
 Recovery loading and settlement preserve local incognito messages because saved history can
 contain only usage metadata. This also applies when a streaming reader was aborted before reopening.
 Recovery keeps local content while adding any saved rows needed to replay the accepted stream.
+Recovery matches rows by message ID and preserves local UI node IDs and tree links.
+Replay targets the message ID and writes updates under the matching UI node ID.
 Server readiness still gates the next send.
 
 `AgentMessage` reports when its final content has finished rendering. For multi-model turns,

@@ -11,7 +11,9 @@ import {
 import { Packet } from "@/app/app/services/streamingModels";
 import {
   getLatestMessageChain,
+  getMessageByMessageId,
   setMessageAsLatest,
+  upsertMessages,
 } from "@/app/app/services/messageTree";
 import {
   BackendChatSession,
@@ -282,12 +284,40 @@ export default function useChatSessionController({
       const localMessages = useChatSessionStore
         .getState()
         .sessions.get(chatSession.chat_session_id)?.messageTree;
-      let newMessageMap =
-        recovering && localMessages
-          ? isIncognito
-            ? new Map([...savedMessages, ...localMessages])
-            : preserveFailedMessages(savedMessages, localMessages)
-          : savedMessages;
+      let newMessageMap = savedMessages;
+      if (recovering && localMessages?.size) {
+        if (isIncognito) {
+          // Saved incognito rows omit content; retain local nodes and their UI IDs.
+          const localNodeIds = new Map(
+            Array.from(localMessages.values())
+              .filter((message) => message.messageId !== undefined)
+              .map((message) => [message.messageId, message.nodeId])
+          );
+          const missingMessages: Message[] = [];
+          for (const message of savedMessages.values()) {
+            if (localNodeIds.has(message.messageId)) continue;
+            missingMessages.push({
+              ...message,
+              parentNodeId:
+                message.parentNodeId === null
+                  ? null
+                  : (localNodeIds.get(message.parentNodeId) ??
+                    message.parentNodeId),
+              childrenNodeIds: message.childrenNodeIds?.map(
+                (id) => localNodeIds.get(id) ?? id
+              ),
+              latestChildNodeId:
+                message.latestChildNodeId == null
+                  ? message.latestChildNodeId
+                  : (localNodeIds.get(message.latestChildNodeId) ??
+                    message.latestChildNodeId),
+            });
+          }
+          newMessageMap = upsertMessages(localMessages, missingMessages);
+        } else {
+          newMessageMap = preserveFailedMessages(savedMessages, localMessages);
+        }
+      }
       const currentStream = chatSession.current_stream;
       if (currentStream) {
         // Stop targets the accepted stream even when its output cannot be replayed.
@@ -298,15 +328,23 @@ export default function useChatSessionController({
           });
       }
       const resumedMessage = currentStream
-        ? newMessageMap.get(currentStream.stream_id)
+        ? getMessageByMessageId(newMessageMap, currentStream.stream_id)
         : undefined;
-      if (resumedMessage?.type === "assistant") {
-        const retained = localMessages?.get(resumedMessage.nodeId);
+      if (currentStream && resumedMessage?.type === "assistant") {
+        const retained = localMessages
+          ? getMessageByMessageId(localMessages, currentStream.stream_id)
+          : undefined;
         newMessageMap = new Map(newMessageMap);
         newMessageMap.set(
           resumedMessage.nodeId,
           retained?.replayCursor !== undefined
-            ? { ...retained }
+            ? {
+                ...retained,
+                nodeId: resumedMessage.nodeId,
+                parentNodeId: resumedMessage.parentNodeId,
+                childrenNodeIds: resumedMessage.childrenNodeIds,
+                latestChildNodeId: resumedMessage.latestChildNodeId,
+              }
             : {
                 ...resumedMessage,
                 message: "",
@@ -357,7 +395,7 @@ export default function useChatSessionController({
         runId: number,
         messageMap: Map<number, Message>
       ) {
-        const retained = messageMap.get(runId);
+        const retained = getMessageByMessageId(messageMap, runId);
         if (!retained || resumingRuns.has(runId)) {
           return;
         }
@@ -388,7 +426,7 @@ export default function useChatSessionController({
         };
         const publishResponse = (response: Message) => {
           if (!ownsStream()) return;
-          messageMap.set(runId, response);
+          messageMap.set(response.nodeId, response);
           useChatSessionStore
             .getState()
             .updateSessionMessageTree(sessionId, new Map(messageMap));
@@ -469,10 +507,7 @@ export default function useChatSessionController({
         }
       }
 
-      if (
-        currentStream &&
-        newMessageMap.get(currentStream.stream_id)?.type === "assistant"
-      ) {
+      if (currentStream && resumedMessage?.type === "assistant") {
         void resumeInFlightRun(
           chatSession.chat_session_id,
           currentStream.stream_id,
