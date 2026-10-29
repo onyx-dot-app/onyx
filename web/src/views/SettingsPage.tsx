@@ -663,6 +663,7 @@ function GeneralSettings() {
                 description={t("profile.fullName.description")}
                 center
                 withLabel
+                fillInput
                 responsive
               >
                 <InputTypeIn
@@ -690,6 +691,7 @@ function GeneralSettings() {
                 description={t("profile.workRole.description")}
                 center
                 withLabel
+                fillInput
                 responsive
               >
                 <InputTypeIn
@@ -730,6 +732,7 @@ function GeneralSettings() {
                 description={t("appearance.colorMode.description")}
                 center
                 withLabel
+                fillInput
               >
                 <InputSingleSelect
                   value={theme ?? ""}
@@ -843,6 +846,7 @@ function GeneralSettings() {
                 description={t("language.displayLanguage.description")}
                 center
                 withLabel
+                fillInput
               >
                 <LanguageSelect
                   value={user?.preferences?.language ?? null}
@@ -1326,6 +1330,7 @@ function ChatPreferencesSettings() {
                 appName: settings.appName,
               })}
               withLabel
+              fillInput
             >
               <SimpleModelSelector
                 nullable
@@ -1496,6 +1501,7 @@ function ChatPreferencesSettings() {
                   center
                   disabled={!searchUiEnabled}
                   withLabel
+                  fillInput
                 >
                   <InputSingleSelect
                     value={user?.preferences.default_app_mode ?? "CHAT"}
