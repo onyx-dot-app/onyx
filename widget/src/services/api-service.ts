@@ -63,6 +63,7 @@ export class ApiService {
     signal: AbortSignal,
     onUnconfirmed: () => void
   ): Promise<void> {
+    let authenticationFailures = 0;
     while (!signal.aborted) {
       const controller = new AbortController();
       const onAbort = () => controller.abort();
@@ -83,6 +84,21 @@ export class ApiService {
             signal: controller.signal,
           }
         );
+        if (response.status === 401) {
+          authenticationFailures += 1;
+          if (authenticationFailures >= this.maxRetries) {
+            throw new SessionUnavailableError(
+              "Authentication failed. Reload the page to sign in again."
+            );
+          }
+        } else {
+          authenticationFailures = 0;
+        }
+        if (response.status === 405) {
+          throw new SessionUnavailableError(
+            "This server does not support chat readiness checks. Contact your administrator."
+          );
+        }
         if (response.status === 403 || response.status === 404) {
           throw new SessionUnavailableError(
             "This conversation is no longer available. Start a new conversation."

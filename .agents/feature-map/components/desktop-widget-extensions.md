@@ -473,6 +473,8 @@ The widget keeps Send disabled after a STOP packet and after delivery ends.
 `widget/src/services/api-service.ts:ApiService.waitForSessionIdle` confirms server idle
 through the authenticated session status endpoint. Transient failures retry without enabling
 Send. A 403 or 404 ends the wait and asks the user to start a new conversation.
+A 405 reports an unsupported server. Three consecutive 401 responses report an
+authentication failure. Neither response is treated as confirmed idle.
 Each request has a ten-second deadline, including credential resolution; the wait has no overall deadline.
 Each poll owns an abort controller and timer, including on supported browsers without `AbortSignal.any` or `AbortSignal.timeout`.
 Each poll resolves the current credential. Reset aborts and clears the request controller;

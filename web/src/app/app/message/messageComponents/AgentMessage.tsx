@@ -62,7 +62,7 @@ export interface AgentMessageProps {
   processingDurationSeconds?: number;
   /** Hide the feedback/toolbar footer (used in multi-model non-preferred panels) */
   hideFooter?: boolean;
-  /** Skip TTS streaming (used in multi-model where voice doesn't apply) */
+  /** Disable autoplay for non-primary or failed responses. */
   disableTTS?: boolean;
   /** When on, drop the message's reading-width padding so it sits flush with the chat edge. */
   fullWidthChat?: boolean;
@@ -97,6 +97,7 @@ function arePropsEqual(
       next.llmManager?.isLoadingProviders &&
     prev.processingDurationSeconds === next.processingDurationSeconds &&
     prev.hideFooter === next.hideFooter &&
+    prev.disableTTS === next.disableTTS &&
     prev.fullWidthChat === next.fullWidthChat &&
     prev.onComplete === next.onComplete
     // Skip: chatState.regenerate, chatState.setPresentingDocument,
@@ -316,8 +317,16 @@ const AgentMessage = React.memo(function AgentMessage({
     // Skip if we've already finished TTS for this message
     if (ttsCompletedRef.current) return;
 
+    // A failed answer must close any autoplay session it already started.
+    if (disableTTS) {
+      if (hasStreamedIncompleteRef.current) {
+        stopTTS();
+        ttsCompletedRef.current = true;
+      }
+      return;
+    }
     // Autoplay belongs to locally started answers, not restored history.
-    if (disableTTS || replayPacketCount > 0) return;
+    if (replayPacketCount > 0) return;
 
     // If user cancelled generation, do not send more text to TTS.
     if (stopPacketSeen && stopReason === StopReason.USER_CANCELLED) {
@@ -344,6 +353,8 @@ const AgentMessage = React.memo(function AgentMessage({
       ttsCompletedRef.current = true;
     }
   }, [
+    disableTTS,
+    stopTTS,
     packetCount,
     replayPacketCount,
     isComplete,

@@ -300,7 +300,9 @@ const ChatUI = React.memo(
                   {message.type === "error" && (
                     <ErrorBanner
                       resubmit={
-                        i === messages.length - 1 ? onResubmit : undefined
+                        chatState === "input" && i === messages.length - 1
+                          ? onResubmit
+                          : undefined
                       }
                       error={message.errorMessage ?? ""}
                       errorCode={message.errorCode ?? undefined}
@@ -318,7 +320,7 @@ const ChatUI = React.memo(
           {(error || loadError) && (
             <div className={cn("p-4 w-full self-center", msgWidth)}>
               <ErrorBanner
-                resubmit={onResubmit}
+                resubmit={chatState === "input" ? onResubmit : undefined}
                 error={error || loadError || ""}
               />
             </div>

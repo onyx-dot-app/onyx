@@ -11,9 +11,14 @@ import AgentMessage from "@/app/app/message/messageComponents/AgentMessage";
 import { FullChatState } from "@/app/app/message/messageComponents/types";
 import type { MinimalAgent } from "@/lib/agents/types";
 
+const mockStreamTTS = jest.fn();
+const mockStopTTS = jest.fn();
+
 jest.mock("@/providers/VoiceModeProvider", () => ({
   useVoiceMode: () => ({
     resetTTS: jest.fn(),
+    streamTTS: mockStreamTTS,
+    stopTTS: mockStopTTS,
     revealedCharCount: 0,
     autoPlayback: false,
     isAudioSyncActive: false,
@@ -391,3 +396,35 @@ test.each([0, 1])(
     }
   }
 );
+
+test("a failed streaming answer stops its existing autoplay session", async () => {
+  mockStreamTTS.mockClear();
+  mockStopTTS.mockClear();
+  const props = {
+    nodeId: 102,
+    chatState,
+    parentMessage: message(101, null, "user"),
+    llmManager: null,
+    hideFooter: true,
+    packetCount: 1,
+    rawPackets: answerPackets.slice(0, 1),
+  };
+  const view = render(<AgentMessage {...props} />);
+  view.rerender(
+    <AgentMessage
+      {...props}
+      rawPackets={answerPackets.slice(0, 2)}
+      packetCount={2}
+    />
+  );
+  await waitFor(() => expect(mockStreamTTS).toHaveBeenCalled());
+  view.rerender(
+    <AgentMessage
+      {...props}
+      rawPackets={answerPackets.slice(0, 2)}
+      packetCount={2}
+      disableTTS
+    />
+  );
+  expect(mockStopTTS).toHaveBeenCalledTimes(1);
+});

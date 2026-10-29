@@ -509,3 +509,6 @@ See `backend/AGENTS.md` for required env and secrets.
   standard answer can be given again in a different Slack thread even if a user
   already saw it elsewhere, because `used_standard_answer_ids` is computed from
   `get_chat_sessions_by_slack_thread_id` for the current thread only.
+
+Slack's collected answer retains all root response text sections and their citations,
+including text separated by tool execution. Child-agent packets are not part of that answer.

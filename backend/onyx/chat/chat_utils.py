@@ -22,7 +22,7 @@ from onyx.chat.models import (
     MessageRendering,
     PromptMetadata,
 )
-from onyx.chat.prompt_formatting import count_message_tokens
+from onyx.chat.prompt_formatting import count_message_tokens, prompt_metadata
 from onyx.chat.response import restore_response_sources
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.db.chat import (
@@ -62,6 +62,25 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 IMAGE_GENERATION_TOOL_NAME = "generate_image"
+
+
+def omit_prior_tool_result_content(messages: list[Message]) -> list[Message]:
+    """Keep saved tool content intact while omitting it from later chat prompts."""
+    return [
+        message.model_copy(
+            update={
+                "metadata": prompt_metadata(message).model_copy(
+                    update={
+                        "omit_tool_result_content": message.tool_name
+                        != IMAGE_GENERATION_TOOL_NAME
+                    }
+                )
+            }
+        )
+        if isinstance(message, ToolResultMessage)
+        else message
+        for message in messages
+    ]
 
 
 def create_chat_session_from_request(
@@ -321,12 +340,7 @@ def capture_chat_history(
                         if item.rendering is not None
                     },
                 )
-                for response_message in response_messages:
-                    if isinstance(response_message, ToolResultMessage):
-                        response_message.metadata = PromptMetadata(
-                            omit_tool_result_content=response_message.tool_name
-                            != IMAGE_GENERATION_TOOL_NAME
-                        )
+                response_messages = omit_prior_tool_result_content(response_messages)
             else:
                 response_messages = _legacy_tool_messages(
                     message, tool_names, token_counter

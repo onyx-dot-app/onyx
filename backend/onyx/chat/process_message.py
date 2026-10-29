@@ -479,22 +479,16 @@ def prepare_chat_turn(
                 chat_session_id=chat_session_id,
                 persist_content=False,
             )
-            should_save_user_message = (
-                accepted_text is not None
-                and bool(history.messages)
-                and isinstance(history.messages[-1], UserMessage)
-            )
             history.messages, previous_run_id = history_store.prepare_messages(
                 history.messages, previous_run_id, accepted_text
             )
-            if should_save_user_message:
-                new_user_message = history.messages[-1] if history.messages else None
-                if not isinstance(new_user_message, UserMessage):
-                    raise ValueError(
-                        "History storage must retain the accepted user message last"
-                    )
-                admission.refresh()
-                history_store.save_user_message(new_user_message)
+            selected_user_message = history.messages[-1] if history.messages else None
+            if not isinstance(selected_user_message, UserMessage):
+                raise ValueError(
+                    "History storage must retain the accepted user message last"
+                )
+            admission.refresh()
+            history_store.save_user_message(selected_user_message)
             if incognito_session_ended(chat_session_id):
                 raise RuntimeError("Incognito session ended")
         admission.refresh()
@@ -738,9 +732,14 @@ def gather_stream(
             if packet.placement.sub_turn_index is not None:
                 continue
             if isinstance(packet.obj, AgentResponseStart):
-                answer = ""
-                citations = []
-                top_documents = packet.obj.final_documents or []
+                answer = answer or ""
+                if packet.obj.final_documents:
+                    known_documents = {doc.document_id for doc in top_documents}
+                    top_documents.extend(
+                        doc
+                        for doc in packet.obj.final_documents
+                        if doc.document_id not in known_documents
+                    )
             elif isinstance(packet.obj, AgentResponseDelta):
                 answer = (answer or "") + packet.obj.content
             elif isinstance(packet.obj, CitationInfo):

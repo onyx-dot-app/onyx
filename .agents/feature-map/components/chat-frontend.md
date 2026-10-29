@@ -637,3 +637,8 @@ Multi-model panels own their response errors. A model display name alone does no
 Global banners show session and request failures that do not belong to a response.
 History loading converts API `error_info` or the legacy `error` string into `errorMessage`.
 Renderers use `errorMessage` for failures and `message` for answer text.
+
+An aborted stream reader exits even when it still has buffered packets. Stop sends a
+server request only for an acknowledged stream ID. Regeneration controls stay hidden
+while readiness is unconfirmed. If a response fails after voice autoplay starts,
+the message component stops that autoplay session.

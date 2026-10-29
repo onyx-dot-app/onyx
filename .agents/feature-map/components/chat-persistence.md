@@ -139,7 +139,7 @@ The runtime revision inside `state` tracks execution changes and serves a separa
 Checkpoint bindings identify the tenant and response. Saved progress uses the runtime’s field names, including
 `pending_tool_calls`, `human_tool_answers`, and `finalized_tool_call_ids`.
 Finalized IDs let a resumed step skip completed finalizers even when an earlier call still awaits input.
-Checkpoint format version 2 retains feature-owned search context and typed search-planning metadata.
+Checkpoint format version 1 retains feature-owned search context and typed search-planning metadata.
 Restoration rejects other format versions.
 Feature state is a JSON object validated by its owning feature during restoration.
 Chat's `kind` discriminator selects the feature schema; message metadata and tool details retain their tagged codec.
@@ -622,3 +622,12 @@ error payload used by streaming. It includes the message, error code, retryabili
 and safe model diagnostics. History responses omit stack traces. Legacy rows use
 `chat_message.error` when structured failure data is absent. The existing content
 recording policy still controls persistence; this projection adds no stored fields.
+
+### Temporary history regeneration
+
+Incognito regeneration selects the cached user message by its stable message ID.
+Committing the selected question removes the old response tail once, before response workers start.
+Response saves append output without requiring the question to remain in the retention window.
+An expired question fails explicitly rather than using an old answer as input.
+Later incognito prompts omit prior tool-result content using the same policy as durable chat,
+including the image-generation exception. Stored content remains intact.

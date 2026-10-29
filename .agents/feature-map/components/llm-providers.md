@@ -703,3 +703,6 @@ Generic provider `APIError` failures use a concise public message and the `API_E
 code. The public message excludes raw provider JSON. Specific error classifications
 and configured error mappings retain their behavior. Runtime logs and tracing retain
 the underlying exception for diagnosis under their existing redaction rules.
+
+Streamed tool-call fragments may have a null `type` in LiteLLM. The response adapter
+normalizes null to `function`; unsupported non-null types still fail validation.

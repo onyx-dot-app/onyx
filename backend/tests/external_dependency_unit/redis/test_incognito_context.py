@@ -772,3 +772,66 @@ def test_root_sources_survive_temporary_response_round_trip(is_research: bool) -
         assert result.details.search_docs == []
     restored.content = "changed locally"
     assert load_incognito_context(session_id).messages[-1].content == "Evidence [4]"
+
+
+def test_regeneration_replaces_cached_answer_before_the_next_question() -> None:
+    session_id = uuid4()
+    question = UserMessage(
+        id="chat:17", content="Original question", metadata=PromptMetadata()
+    )
+    old_answer = AssistantMessage(content=[TextContent(text="Old answer")])
+    assert _save(session_id, [question, old_answer])
+    store = RedisChatHistoryStore(
+        message_id=17, chat_session_id=session_id, visible_message_ids=()
+    )
+    selected, previous = store.prepare_messages([], None, None)
+    assert selected == [question]
+    assert previous is None
+    assert len(load_incognito_context(session_id).messages) == 2
+    store.save_user_message(question)
+    assert load_incognito_context(session_id).messages == [question]
+    replacement = _terminal_record("root", "Replacement answer")
+    replacement.steps[0].message.metadata = PromptMetadata()
+    replacement.input_messages = [question]
+    incognito_context.save_incognito_response(
+        session_id, replacement, {}, message_id=19, messages=replacement.messages
+    )
+    incoming = UserMessage(id="chat:20", content="Follow up")
+    messages, previous = store.prepare_messages([incoming], None, "Follow up")
+    assert messages == [question, *replacement.messages, incoming]
+    assert previous == replacement.run_id
+    assert old_answer not in messages
+
+
+@pytest.mark.parametrize("retention_limit", [2, 200])
+def test_parallel_responses_append_after_one_input_commit(
+    retention_limit: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session_id = uuid4()
+    question = UserMessage(id="chat:17", content="Compare answers")
+    store = RedisChatHistoryStore(
+        message_id=17, chat_session_id=session_id, visible_message_ids=()
+    )
+    store.save_user_message(question)
+    monkeypatch.setattr(incognito_context, "_MAX_CONTEXT_MESSAGES", retention_limit)
+    first = _terminal_record("root", "First answer")
+    first.input_messages = [question]
+    first.steps.append(
+        StepRecord(
+            message=AssistantMessage(content=[TextContent(text="First conclusion")]),
+            generation_status=ExecutionStatus.COMPLETE,
+        )
+    )
+    second = _terminal_record("root", "Second answer")
+    second.input_messages = [question]
+    for message_id, response in [(18, first), (19, second)]:
+        incognito_context.save_incognito_response(
+            session_id, response, {}, message_id=message_id, messages=response.messages
+        )
+    # Retention can evict the question before the second response finishes.
+    expected = [question, *first.messages, *second.messages][-retention_limit:]
+    saved = load_incognito_context(session_id)
+    assert [message.text for message in saved.messages] == [
+        message.text for message in expected
+    ]
+    assert saved.previous_run_id == second.run_id

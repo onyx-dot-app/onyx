@@ -355,3 +355,13 @@ describe("widget readiness", () => {
     }
   );
 });
+
+
+it.each([401, 405])("reports permanent readiness failure (%s)", async (status) => {
+  globalThis.fetch = mock(async () => new Response(null, {status})) as typeof fetch;
+  const api = new ApiService("https://onyx.test/api", async () => "key");
+  await expect(api.waitForSessionIdle("session", new AbortController().signal, () => {})).rejects.toThrow(
+    status === 401 ? "Authentication failed" : "does not support"
+  );
+  expect(globalThis.fetch).toHaveBeenCalledTimes(status === 401 ? 3 : 1);
+});

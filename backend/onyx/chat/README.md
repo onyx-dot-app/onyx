@@ -241,12 +241,12 @@ For the execution loop, tool calls, and cancellation contracts, see the [agent S
 
 ## Execution and caller deadlines
 
-`CHAT_RESPONSE_WAIT_TIMEOUT_S` limits how long a full-response caller waits after
-delivery ends. Its default is 3,600 seconds. Expiry returns a caller error; it does
+The internal constant `CHAT_RESPONSE_WAIT_TIMEOUT_S` limits a full-response caller's
+wait after delivery ends to 3,600 seconds. Expiry returns a caller error; it does
 not cancel execution.
 
-`CHAT_EXECUTION_TIMEOUT_S` sets the execution deadline, also 3,600 seconds by
-default. Reaching it requests cancellation. The turn retains session ownership
+The internal constant `CHAT_EXECUTION_TIMEOUT_S` sets the execution deadline to
+3,600 seconds. Reaching it requests cancellation. The turn retains session ownership
 until model calls, tools, storage, and delivery drain. A disconnected browser
 only detaches its reader.
 

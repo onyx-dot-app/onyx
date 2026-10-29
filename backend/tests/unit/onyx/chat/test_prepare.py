@@ -552,7 +552,7 @@ def test_expired_history_preparation_cannot_append_after_new_owner_claims(
         patch("onyx.chat.process_message.ChatTurnAdmission", return_value=admission),
         patch("onyx.chat.process_message.load_chat_files") as load_files,
         patch("onyx.chat.process_message.convert_chat_history") as convert_history,
-        patch("onyx.chat.history_store.append_incognito_message") as append_message,
+        patch("onyx.chat.history_store.save_incognito_user_message") as append_message,
         patch("onyx.chat.history_store.load_incognito_context") as load_history,
     ):
 
@@ -595,8 +595,8 @@ def test_incognito_history_retains_summary_checkpoint(
     stored = IncognitoContext(
         version=0,
         messages=[
-            UserMessage(content="Earlier question"),
-            UserMessage(content="Accepted"),
+            UserMessage(id="chat:1", content="Earlier question"),
+            UserMessage(id="chat:2", content="Accepted"),
         ],
         previous_run_id="previous-run",
     )
@@ -626,7 +626,7 @@ def test_incognito_history_retains_summary_checkpoint(
             return_value=QueryProcessingResponse(query="Accepted"),
         ) as query_hook,
         patch("onyx.chat.history_store.load_incognito_context", return_value=stored),
-        patch("onyx.chat.history_store.append_incognito_message") as append_message,
+        patch("onyx.chat.history_store.save_incognito_user_message") as append_message,
     ):
         setup = prepare_chat_turn(
             SendMessageRequest(
@@ -636,8 +636,8 @@ def test_incognito_history_retains_summary_checkpoint(
             llm_overrides=None,
         )
     expected = [
-        UserMessage(content="Earlier question"),
-        UserMessage(content="Accepted"),
+        UserMessage(id="chat:1", content="Earlier question"),
+        UserMessage(id="chat:2", content="Accepted"),
     ]
     if accepted_text is not None:
         current_user = setup.input_messages[0]
@@ -646,18 +646,20 @@ def test_incognito_history_retains_summary_checkpoint(
         expected.append(current_user)
         append_message.assert_called_once_with(chat_session.id, current_user)
     else:
-        append_message.assert_not_called()
+        append_message.assert_called_once_with(chat_session.id, setup.input_messages[0])
     assert setup.messages + setup.input_messages == expected
     assert setup.checkpoint is not None
     assert setup.checkpoint.summary == "Summary"
     assert setup.checkpoint.covered_through_message_id == "chat:1"
-    assert setup.previous_run_id == "previous-run"
+    assert setup.previous_run_id == (
+        "previous-run" if accepted_text is not None else None
+    )
     query_hook.assert_not_called()
     setup.admission.release()
 
 
 @pytest.mark.parametrize("source_has_user_message", [False, True])
-def test_storage_saves_only_new_input_in_its_resolved_format(
+def test_storage_saves_its_resolved_input(
     chat_session: ChatSession,
     _mock_chat_preparation: None,
     source_has_user_message: bool,
@@ -682,11 +684,8 @@ def test_storage_saves_only_new_input_in_its_resolved_format(
             llm_overrides=None,
         )
     assert setup.input_messages == [stored_user]
-    if source_has_user_message:
-        store.save_user_message.assert_called_once_with(stored_user)
-        assert store.save_user_message.call_args.args[0] is stored_user
-    else:
-        store.save_user_message.assert_not_called()
+    store.save_user_message.assert_called_once_with(stored_user)
+    assert store.save_user_message.call_args.args[0] is stored_user
     setup.admission.release()
 
 
@@ -768,7 +767,7 @@ def test_incognito_preparation_rejects_ended_context_before_reserving_response(
             "onyx.chat.history_store.load_incognito_context",
             return_value=IncognitoContext(version=0, messages=[]),
         ),
-        patch("onyx.chat.history_store.append_incognito_message"),
+        patch("onyx.chat.history_store.save_incognito_user_message"),
         patch(
             "onyx.chat.process_message.reserve_chat_response_ids"
         ) as reserve_response,

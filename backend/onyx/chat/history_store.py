@@ -9,15 +9,16 @@ from typing import Protocol
 from uuid import UUID
 
 from onyx.agents.models import AgentInfo
+from onyx.chat.chat_utils import omit_prior_tool_result_content
 from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.incognito_context import (
-    append_incognito_message,
     load_incognito_agent_history,
     load_incognito_agent_metadata,
     load_incognito_context,
     load_incognito_saved_run,
     lookup_incognito_agent,
     save_incognito_response,
+    save_incognito_user_message,
 )
 from onyx.chat.models import (
     ChatBranch,
@@ -163,11 +164,21 @@ class RedisChatHistoryStore(ChatHistoryStore):
             and isinstance(messages[-1], UserMessage)
         ):
             current_user = messages[-1].model_copy(update={"content": accepted_text})
-            return stored.messages + [current_user], stored.previous_run_id
-        return stored.messages, stored.previous_run_id
+            return (
+                omit_prior_tool_result_content(stored.messages) + [current_user],
+                stored.previous_run_id,
+            )
+        selected_id = f"chat:{self.message_id}"
+        for index, message in enumerate(stored.messages):
+            if isinstance(message, UserMessage) and message.id == selected_id:
+                # The cache tracks only the latest run, which regeneration replaces.
+                return omit_prior_tool_result_content(
+                    stored.messages[: index + 1]
+                ), None
+        raise ValueError("The selected question is no longer in temporary chat history")
 
     def save_user_message(self, message: UserMessage) -> None:
-        append_incognito_message(self.chat_session_id, message)
+        save_incognito_user_message(self.chat_session_id, message)
 
     def save_response(self, response: ChatResponseSnapshot) -> None:
         answer = save_chat_response_to_db(

@@ -1176,11 +1176,11 @@ export default function useChatController({
             }
           }
 
-          if (!ownsStream()) {
+          if (!ownsStream() || controller.signal.aborted) {
             controller.abort();
             return;
           }
-          if (!stack.isEmpty() && !controller.signal.aborted) {
+          if (!stack.isEmpty()) {
             const packet = stack.nextPacket();
             if (!packet) {
               continue;

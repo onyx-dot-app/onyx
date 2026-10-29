@@ -318,3 +318,14 @@ test("a failed response keeps partial text and ends search activity", async () =
     expect(screen.getByTestId("onyx-ai-message")).toBeInTheDocument();
   });
 });
+
+test("readiness errors do not offer regeneration before input is available", () => {
+  useChatSessionStore.getState().updateSessionData("session", {
+    chatState: "unconfirmed",
+    uncaughtError: "Could not confirm readiness",
+  });
+  render(<ChatUI {...props} />);
+  expect(
+    screen.queryByRole("button", { name: /regenerate|retry/i })
+  ).not.toBeInTheDocument();
+});

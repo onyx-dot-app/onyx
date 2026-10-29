@@ -42,6 +42,7 @@ from onyx.server.query_and_chat.streaming_models import (
     StreamingError,
 )
 from onyx.server.utils import get_json_line
+from onyx.utils.fleet_query_telemetry import QueryMode, QueryObservation
 from tests.unit.fakes import FakeCache
 
 _STREAM_ID = 42
@@ -794,7 +795,10 @@ def test_replay_overflow_does_not_suppress_a_later_live_gap(
 ) -> None:
     cache = FakeCache()
     session_id = uuid4()
-    output = ChatDelivery(_make_writer(cache, session_id))
+    observation = QueryObservation(channel="api", mode=QueryMode.CHAT)
+    output = ChatDelivery(
+        _make_writer(cache, session_id), query_observation=observation
+    )
     packet = Packet(placement=Placement(turn_index=0), obj=OverallStop())
     monkeypatch.setattr(
         stream_buffer,
@@ -815,6 +819,7 @@ def test_replay_overflow_does_not_suppress_a_later_live_gap(
     assert len(remaining) == 1
     assert isinstance(remaining[0], StreamingError)
     assert remaining[0].error_code == "STREAM_GAP"
+    assert observation.outcome == "failure"
     output.finished.result(timeout=3)
     saved = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
     assert saved is not None and saved.done and saved.gap

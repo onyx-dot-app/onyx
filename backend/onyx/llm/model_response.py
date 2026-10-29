@@ -68,6 +68,12 @@ class ChatCompletionDeltaToolCall(BaseModel):
     type: Literal["function"] = "function"
     function: ResponseFunctionCall | None = None
 
+    @field_validator("type", mode="before")
+    @classmethod
+    def normalize_type(cls, value: JsonValue) -> JsonValue:
+        # LiteLLM continuation fragments can omit the function type.
+        return "function" if value is None else value
+
 
 class Delta(BaseModel):
     content: str | None = None

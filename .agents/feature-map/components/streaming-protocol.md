@@ -432,3 +432,7 @@ citation. Saved history hides the configured thinking tool, just as live output 
 Coding-child reasoning uses `CodingAgentThinkingDelta`, including native thinking
 and configured thinking-tool output. Replay assigns sections in accepted content
 order. Citation removal also applies to citation-only and interrupted answers.
+
+A live `STREAM_GAP` error also records a query-telemetry failure. It does not change
+the model or tool execution outcome. Non-streaming consumers retain each root answer
+section and its citations; child-agent packets remain excluded.

@@ -1,9 +1,7 @@
 import os
 
 # Bounds full-response callers waiting after delivery ends; execution keeps its own lifetime.
-CHAT_RESPONSE_WAIT_TIMEOUT_S = int(
-    os.environ.get("CHAT_RESPONSE_WAIT_TIMEOUT_S") or "3600"
-)
+CHAT_RESPONSE_WAIT_TIMEOUT_S = 3600
 
 NUM_RETURNED_HITS = 50
 
@@ -116,4 +114,4 @@ SKIP_DEEP_RESEARCH_CLARIFICATION = (
 )
 
 # Bound execution separately from a caller waiting for its saved response.
-CHAT_EXECUTION_TIMEOUT_S = int(os.environ.get("CHAT_EXECUTION_TIMEOUT_S") or "3600")
+CHAT_EXECUTION_TIMEOUT_S = 3600

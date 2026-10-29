@@ -34,7 +34,7 @@ from onyx.configs.chat_configs import (
     CHAT_STREAM_BUFFER_DONE_TTL_S,
     CHAT_STREAM_BUFFER_TTL_S,
 )
-from onyx.llm.models import Message, ToolResultMessage
+from onyx.llm.models import Message, ToolResultMessage, UserMessage
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -216,6 +216,25 @@ def save_incognito_context(chat_session_id: UUID, context: IncognitoContext) -> 
         return _retained_state(context, current.responses)
 
     return _update_incognito_state(chat_session_id, update)
+
+
+def save_incognito_user_message(chat_session_id: UUID, message: UserMessage) -> None:
+    """Save the turn's input, replacing its old response tail on regeneration."""
+
+    def update(state: IncognitoState | None) -> IncognitoState:
+        current = state or IncognitoState()
+        context = _context(current)
+        if message.id is not None:
+            for index, stored in enumerate(context.messages):
+                if isinstance(stored, UserMessage) and stored.id == message.id:
+                    context.messages = context.messages[:index]
+                    context.previous_run_id = None
+                    break
+        context.messages.append(message)
+        return _retained_state(context, current.responses)
+
+    if not _update_incognito_state(chat_session_id, update):
+        raise RuntimeError("Could not save temporary chat input")
 
 
 def append_incognito_message(chat_session_id: UUID, message: Message) -> None:

@@ -27,6 +27,7 @@ from onyx.chat.models import (
     IncognitoState,
 )
 from onyx.chat.presentation import project_response
+from onyx.chat.prompt_formatting import prompt_metadata
 from onyx.chat.subagents import ChatAgentDirectory
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc
@@ -34,7 +35,12 @@ from onyx.db.chat_response import save_chat_response_to_db
 from onyx.db.enums import IncognitoRecordMode
 from onyx.db.models import ChatMessage, ChatSession
 from onyx.llm.interfaces import LLM, LLMUserIdentity
-from onyx.llm.models import AssistantMessage, TextContent, UserMessage
+from onyx.llm.models import (
+    AssistantMessage,
+    TextContent,
+    ToolResultMessage,
+    UserMessage,
+)
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 
@@ -59,19 +65,19 @@ def test_temporary_history_preparation_waits_for_explicit_user_message_save(
     store = RedisChatHistoryStore(
         message_id=17, chat_session_id=session_id, visible_message_ids=()
     )
-    previous = AssistantMessage(content=[TextContent(text="Previous response")])
+    previous = UserMessage(id="chat:17", content="Original question")
     incoming = UserMessage(content="Converted request with attached context")
     saved = IncognitoContext(
         version=1, messages=[previous], previous_run_id="saved-run"
     )
     with (
         patch("onyx.chat.history_store.load_incognito_context", return_value=saved),
-        patch("onyx.chat.history_store.append_incognito_message") as append,
+        patch("onyx.chat.history_store.save_incognito_user_message") as append,
     ):
         messages, previous_run_id = store.prepare_messages(
             [incoming], "database-run", accepted_text
         )
-        assert previous_run_id == "saved-run"
+        assert previous_run_id == ("saved-run" if accepted_text is not None else None)
         append.assert_not_called()
         if accepted_text is None:
             assert messages == [previous]
@@ -288,3 +294,34 @@ def test_agent_lookup_uses_its_tenant_and_restores_the_callers_context(
         assert CURRENT_TENANT_ID_CONTEXTVAR.get() == "caller-tenant"
     finally:
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+
+def test_incognito_regeneration_uses_selected_question_and_prompt_only_tool_policy() -> (
+    None
+):
+    store = RedisChatHistoryStore(
+        message_id=17, chat_session_id=uuid4(), visible_message_ids=()
+    )
+    search = ToolResultMessage(
+        tool_call_id="search", tool_name="search", content="large passages"
+    )
+    image = ToolResultMessage(
+        tool_call_id="image", tool_name="generate_image", content="image location"
+    )
+    question = UserMessage(id="chat:17", content="Original question")
+    answer = AssistantMessage(content=[TextContent(text="Old answer")])
+    cached = IncognitoContext(
+        version=1,
+        messages=[search, image, question, answer],
+        previous_run_id="old-answer",
+    )
+    with patch("onyx.chat.history_store.load_incognito_context", return_value=cached):
+        messages, previous = store.prepare_messages([], None, None)
+
+    assert messages[-1] is question
+    assert answer not in messages
+    assert previous is None
+    assert prompt_metadata(messages[0]).omit_tool_result_content
+    assert not prompt_metadata(messages[1]).omit_tool_result_content
+    assert search.metadata is None
+    assert cached.messages[-1] is answer

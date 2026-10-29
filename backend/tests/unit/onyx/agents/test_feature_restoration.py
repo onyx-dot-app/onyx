@@ -366,9 +366,10 @@ def test_search_planning_survives_partial_step_checkpoint(kind: str) -> None:
     )
     saved = SavedCheckpoint.model_validate_json(encoded)
     assert saved.checkpoint is not None
+    assert saved.checkpoint.version == 1
     with pytest.raises(ValidationError, match="version"):
         ResponseCheckpoint.model_validate(
-            saved.checkpoint.model_dump() | {"version": 1}
+            saved.checkpoint.model_dump() | {"version": 2}
         )
     checkpoint = storage.load(encoded)
     completed_search = checkpoint.run_state.steps[0].tools["search"].result

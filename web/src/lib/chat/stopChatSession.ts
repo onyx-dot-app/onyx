@@ -31,10 +31,9 @@ export async function stopChatSession(
   try {
     streamId = await sendAcknowledged;
     if (!ownsStop()) return;
-    if (streamId !== null) {
-      const query = streamId === undefined ? "" : `?stream_id=${streamId}`;
+    if (typeof streamId === "number") {
       const response = await fetch(
-        `/api/chat/stop-chat-session/${sessionId}${query}`,
+        `/api/chat/stop-chat-session/${sessionId}?stream_id=${streamId}`,
         { method: "POST", signal: AbortSignal.timeout(10_000) }
       );
       if (!response.ok)

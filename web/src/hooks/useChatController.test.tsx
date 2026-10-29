@@ -171,6 +171,7 @@ test.each([false, true])(
       useChatSessionStore.getState().sessions.get("session")?.chatState
     ).toBe("loading");
     await act(async () => result.current.stopGenerating());
+    expect(global.fetch).not.toHaveBeenCalled();
     expect(
       useChatSessionStore.getState().sessions.get("session")?.chatState
     ).toBe("input");
@@ -370,3 +371,49 @@ test.each([false, true])(
     expect(error?.packets.at(-1)?.obj.type).toBe("stop");
   }
 );
+
+test("abort releases a reader with packets queued before its first paint", async () => {
+  const queued = Promise.withResolvers<void>();
+  useChatSessionStore.setState({
+    sessions: new Map(),
+    currentSessionId: "session",
+  });
+  useChatSessionStore.getState().createSession("session");
+  jest.mocked(sendMessage).mockImplementation(async function* () {
+    yield { user_message_id: 11, reserved_assistant_message_id: 12 };
+    yield {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: { type: "message_delta", content: "Buffered text" },
+    };
+    queued.resolve();
+  });
+  const { result, unmount } = renderHook(() =>
+    useChatController({
+      llmManager: createLlmManager(),
+      toolConfiguration,
+      activeAgent: undefined,
+      availableAgents: [],
+      existingChatSessionId: "session",
+      selectedDocuments: [],
+      searchParams: new ReadonlyURLSearchParams(),
+      resetInputBar: jest.fn(),
+      restoreInputBar: jest.fn(),
+    })
+  );
+  let sending: Promise<void> | undefined;
+  act(() => {
+    sending = result.current.onSubmit({
+      message: "Question",
+      currentMessageFiles: [],
+      deepResearch: false,
+    });
+  });
+  await act(async () => {
+    await queued.promise;
+  });
+  const session = useChatSessionStore.getState().sessions.get("session")!;
+  session.abortController.abort();
+  await sending;
+  await expect(session.readerFinished).resolves.toBeUndefined();
+  unmount();
+});
