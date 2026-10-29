@@ -562,3 +562,10 @@ export interface CodingAgentPacket {
   placement: Placement;
   obj: CodingAgentObj;
 }
+
+/** Transport cursor for the complete packet prefix preceding this record. */
+export interface StreamCursor {
+  stream_id: number;
+  next_cursor: number;
+  replay_complete: boolean;
+}

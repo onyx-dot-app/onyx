@@ -15,7 +15,7 @@ import { toast } from "@opal/layouts";
 import { errorHandlingFetcher, parseErrorDetail } from "@/lib/fetcher";
 import { buildApiPath } from "@/lib/urlBuilder";
 import { pinAgents } from "@/lib/agents/svc";
-import type { ChatSession } from "@/app/app/interfaces";
+import type { ChatSession } from "@/app/app/types";
 import { useUser } from "@/providers/UserProvider";
 import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";

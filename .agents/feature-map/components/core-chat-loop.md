@@ -390,7 +390,7 @@ it checks a separate contract between components.
 | Saved response, tools, branches, incognito, restoration | External dependency: `backend/tests/external_dependency_unit/db/test_response_storage.py`, `backend/tests/external_dependency_unit/chat` | Real database writes and fresh reads; expire ORM state before checking reload behavior. |
 | Compaction through chat preparation and storage | External dependency: `backend/tests/external_dependency_unit/answer/test_chat_compaction.py` | Summary reuse, unchanged original history, and the selected branch in subsequent model requests. |
 | Resume API | Integration: `backend/tests/integration/tests/streaming_endpoints/test_resume_stream.py` | Real sockets; buffered output must arrive before the provider finishes, and match saved output. |
-| Reload, network recovery, stop, and rendered history | Playwright: the stream recovery browser tests in the web readiness change | The real chat API and browser, with only the external model scripted. |
+| Reload, network recovery, stop, and rendered history | Playwright: `web/tests/e2e/chat/stream_recovery.spec.ts` | The real chat API and browser, with only the external model scripted. |
 
 `backend/onyx/chat/execution.py` wakes on worker, persistence, idle, and delivery
 completion. Its timed wait still polls stop requests and ownership. Completion

@@ -6,7 +6,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useProjects } from "@/lib/projects/hooks";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { ChatSearchResponse } from "@/app/app/interfaces";
+import { ChatSearchResponse } from "@/app/app/types";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
 

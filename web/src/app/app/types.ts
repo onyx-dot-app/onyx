@@ -26,6 +26,8 @@ export type ChatState =
   | "input"
   | "loading"
   | "streaming"
+  | "cancelling"
+  | "unconfirmed"
   | "toolBuilding"
   | "uploading";
 export interface RegenerationState {
@@ -147,6 +149,15 @@ export interface SearchSession {
 }
 
 export interface Message {
+  // Null means no saved SDK outcome; absent means an older API.
+  responseStatus?:
+    | "running"
+    | "suspended"
+    | "complete"
+    | "limit"
+    | "cancelled"
+    | "error"
+    | null;
   is_generating?: boolean;
   messageId?: number;
   nodeId: number; // Unique identifier for tree structure (can be negative for temp messages)
@@ -163,6 +174,7 @@ export interface Message {
   latestChildNodeId?: number | null;
   alternateAgentID?: number | null;
   stackTrace?: string | null;
+  errorMessage?: string | null;
   errorCode?: string | null;
   isRetryable?: boolean;
   errorDetails?: Record<string, any> | null;
@@ -176,6 +188,10 @@ export interface Message {
   // new gen
   packets: Packet[];
   packetCount?: number; // Tracks packet count for React memo comparison (avoids reading from mutated array)
+
+  // Retained only with this response's packet prefix; never persisted alone.
+  replayCursor?: number;
+  restoredPacketCount?: number;
 
   // cached values for easy access
   documents?: OnyxDocument[] | null;
@@ -205,6 +221,7 @@ export interface BackendChatSession {
   packets: Packet[][];
   // Set while a run is in flight and resumable via the resume-stream endpoint
   current_stream?: { stream_id: number } | null;
+  is_processing?: boolean;
   // True for sessions pinned to an incognito record mode.
   incognito?: boolean;
 }
@@ -226,6 +243,7 @@ export function toChatSession(backend: BackendChatSession): ChatSession {
 }
 
 export interface BackendMessage {
+  response_status?: Message["responseStatus"];
   message_id: number;
   message_type: string;
   research_type: string | null;
@@ -257,10 +275,10 @@ export interface BackendMessage {
   model_display_name: string | null;
   // Non-null when the model errored during generation
   error: string | null;
+  error_info?: StreamingError | null;
 }
 
 export interface MessageResponseIDInfo {
-  type: "message_id_info";
   user_message_id: number | null;
   reserved_assistant_message_id: number; // TODO: rename to agent — https://linear.app/onyx-app/issue/ENG-3766
 }
@@ -271,7 +289,6 @@ export interface ModelResponseSlot {
 }
 
 export interface MultiModelMessageResponseIDInfo {
-  type: "multi_model_message_id_info";
   user_message_id: number | null;
   responses: ModelResponseSlot[];
 }

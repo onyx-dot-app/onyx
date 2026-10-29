@@ -96,8 +96,9 @@ example nginx); this file is not on that path.
 | Endpoint | Called from |
 |---|---|
 | `POST /api/chat/send-chat-message` | `services/lib.tsx:sendMessage` |
-| `GET /api/chat/chat-session/{id}/resume-stream?cursor=N` | `services/lib.tsx:resumeStream`, from `useChatSessionController.ts` |
-| `POST /api/chat/stop-chat-session/{id}?stream_id=N` | `hooks/useChatController.ts:stopChatSession`. `stream_id` is the session store's `streamId`, which the controller sets from the assistant message ID, or the user message ID in multi-model mode. |
+| `GET /api/chat/chat-session/{id}/status` | `lib/chat/sessionReadiness.ts:waitForChatSessionIdle` |
+| `GET /api/chat/chat-session/{id}/resume-stream?stream_id=ID&cursor=N` | `services/lib.tsx:resumeStream`, from `useChatSessionController.ts` |
+| `POST /api/chat/stop-chat-session/{id}?stream_id=N` | `lib/chat/stopChatSession.ts`. `stream_id` comes from the accepted assistant message ID, or the user message ID in multi-model mode. |
 | `POST /api/chat/create-chat-session` | `services/lib.tsx:createChatSession` |
 | `PUT /api/chat/rename-chat-session` | `services/lib.tsx:renameChatSession`, `nameChatSession` |
 | `DELETE /api/chat/delete-chat-session/{id}`, `/api/chat/delete-all-chat-sessions` | `services/lib.tsx` |
@@ -135,7 +136,7 @@ as `"input"`.
 ### The message tree (`services/messageTree.ts`)
 
 `MessageTreeState = Map<number, Message>`, keyed by `nodeId` (`messageTree.ts`). Each
-`Message` (`app/app/interfaces.ts`) carries `parentNodeId`, `childrenNodeIds`,
+`Message` (`app/app/types.ts`) carries `parentNodeId`, `childrenNodeIds`,
 `latestChildNodeId`, and its own `packets: Packet[]`. `getLatestMessageChain`
 (`messageTree.ts:getLatestMessageChain`) walks `latestChildNodeId` from the root to
 produce the linear history the UI renders; editing or regenerating a message creates a
@@ -202,11 +203,34 @@ nested object from such a line, and it can drop or mis-parse the line. See §9.
 
 ### 4.3 Resuming a stream
 
-`useChatSessionController.ts` calls `resumeStream(chatSessionId, cursor)`
-(`services/lib.tsx:resumeStream`) against `GET /chat/chat-session/{id}/resume-stream`,
-which replays the durable buffer from `cursor` and then tails the live stream (owned by
-[[core-chat-loop]], §4.6 of that document). A 404 means nothing to resume; the caller
-falls back to the persisted session state instead of throwing.
+`useChatSessionController.ts` calls `resumeStream(chatSessionId, streamId, cursor)`
+against `GET /chat/chat-session/{id}/resume-stream`. The stream returns display
+packets followed by cursor records. A cursor identifies a complete cache prefix
+for one response. The controller stores that cursor with its packets in the
+session store, so interrupted batches can be read again without duplication.
+
+On a fresh page, the controller replaces the active row's placeholder with the
+buffered output. It waits for `replay_complete` before publishing that output.
+If restoration ends early, the controller retains the last acknowledged batch
+and cursor. It discards the unacknowledged tail. The timeline reveals restored
+steps immediately; text animation starts after the restored prefix. Tool completion still comes from real section-end packets.
+Later batches update the same message. Navigation retains the stream and content
+in memory. A hard refresh reads the backlog once because that memory is gone.
+
+Live text uses elapsed time and buffered text length to set its reveal rate.
+A short animation buffer smooths packet bursts across display refresh rates.
+Completed streams drain the remaining text promptly; restored text skips animation.
+
+An ended HTTP reader does not imply a completed answer. The controller waits for
+server idle and reloads saved history. For content-free incognito sessions, it
+closes the retained display only after the server confirms idle. This also closes
+failed responses with partial content, while preserving their error details.
+
+When completion cannot be confirmed, the input stays blocked and offers **Check again**.
+`settleChatSession` waits for server idle state and reloads saved history before releasing input.
+Automatic settlement requires the send acknowledgement. Explicit recovery can proceed after
+that acknowledgement rejects, but still waits for a pending acknowledgement. Recovery uses
+the original controller identity so it cannot overwrite a newer request's state.
 
 ### 4.4 Rendering: packets to components
 
@@ -303,12 +327,14 @@ all, because the mode is pinned at session creation and cannot be changed mid-se
   `regenerationRequest` that reuses the existing user node and only creates a new
   assistant node (`useChatController.ts`, the `onSubmit` branches on
   `regenerationRequest`).
-- **Stop** calls `stopChatSession` (`useChatController.ts:stopChatSession`, `POST
-  /api/chat/stop-chat-session/{id}`) (with the session's `streamId`, so the stop hits only that stream) **and** aborts the session's local
-  `AbortController` (`abortController.abort()` in the store). Both must fire: the server
-  call stops the backend turn (see [[core-chat-loop]] §4.6); the local abort stops the
-  fetch reader so the UI does not keep waiting on a connection the server may not close
-  immediately.
+- **Stop** uses `lib/chat/stopChatSession.ts`. It waits for send acknowledgement,
+  then targets the accepted response through `POST /api/chat/stop-chat-session/{id}?stream_id=`.
+  Session recovery restores this ID from `current_stream` for both single-model and multi-model turns, independently of output replay.
+  The reader stays open to receive final packets. Settlement waits for reader completion,
+  confirms server idleness, and reloads saved history before enabling input.
+  Stop aborts local preparation only when no send has been dispatched.
+  That Stop restores the draft and attachments in the same focused session; navigation aborts do not restore them.
+  It removes the unsent turn from local history, including incognito, edited, and regenerated turns.
 - **Feedback** goes through `useFeedbackController.ts:handleFeedbackChange`: it
   optimistically calls `updateCurrentMessageFeedback` before the request, and rolls back
   to the previous feedback value if the request fails or throws.
@@ -560,3 +586,72 @@ hoc for a one-off check.
   the sidebar stuck folded.
 
 Shared spreadsheet payload validation lives in `web/src/lib/csv.ts`. Invalid CSV shows a spreadsheet error instead of an empty sheet.
+
+### Session readiness and Stop
+
+The browser keeps input busy until the session status endpoint confirms completion.
+Stream closure alone does not confirm that the answer was saved.
+`lib/chat/sessionReadiness.ts` polls status; `settleChatSession.ts` then reloads saved history.
+Status checks the session owner held by `ChatTurnAdmission`.
+That owner covers preparation, execution, saving, and cleanup.
+
+`stopChatSession.ts` waits for the send acknowledgement before stopping its stream ID.
+A late acknowledgement or history refresh cannot change a newer request.
+Initial history loads capture controller ownership before fetching and check it again after reading the response.
+Failed status checks leave the session unconfirmed and pause queued messages.
+The input bar offers recovery without discarding submitted text or error details.
+Background completion updates its own session without changing the selected conversation.
+
+Recovery loading and settlement preserve local incognito messages because saved history can
+contain only usage metadata. This also applies when a streaming reader was aborted before reopening.
+Recovery keeps local content while adding any saved rows needed to replay the accepted stream.
+Recovery matches rows by message ID and preserves local UI node IDs and tree links.
+Replay targets the message ID and writes updates under the matching UI node ID.
+If reservation IDs have not reached the local reader, incognito recovery connects the active saved turn to unidentified local nodes on the same parent branch.
+It also connects the saved system root to the local root, preserving the visible conversation tree.
+Server readiness still gates the next send.
+
+`AgentMessage` reports when its final content has finished rendering. For multi-model turns,
+`MultiModelResponseView` waits for all visible successful panels before releasing queued
+messages. Failed or hidden panels have no answer animation to wait for.
+
+Stop and recovery wait for the current browser reader to apply its final packets before
+releasing input. Server idleness alone does not mean the local response is complete.
+Settlement belongs to both the request controller and its reader. Replacing the reader
+with replay prevents an earlier settlement from releasing input or replacing history.
+Recovery preserves the latest unsaved failed turn during both initial history loading and settlement.
+Saved responses with `response_status` of `complete`, `limit`, or `cancelled` replace local errors.
+Null, running, or suspended status preserves the local error, even when the saved row contains placeholder text.
+For older servers that omit this field, nonempty text or files remain the completion signal.
+Saved failures restore their error text, code, and retryability; packets alone do not confirm a successful save.
+Manual completion checks belong to their sessions; switching chats does not disable another chat's controls.
+Chat, search, and voice submission preserve drafts while readiness is unconfirmed.
+
+A failed Stop request leaves an acknowledged stream stoppable. The client keeps the draft and pauses queued sends.
+Pending readiness checks do not disable Stop when streaming resumes.
+History refresh preserves the selected source panel by its saved message ID.
+
+
+Response errors belong to their message, with `errorMessage` separate from answer text.
+Single-model chat and shared history render partial output followed by the error banner.
+Multi-model panels own their response errors. A model display name alone does not select panel rendering.
+Global banners show session and request failures that do not belong to a response.
+History loading converts API `error_info` or the legacy `error` string into `errorMessage`.
+Renderers use `errorMessage` for failures and `message` for answer text.
+
+An aborted stream reader exits even when it still has buffered packets. Stop sends a
+server request only for an acknowledged stream ID. Regeneration controls stay hidden
+while readiness is unconfirmed. If a response fails after voice autoplay starts,
+the message component stops that autoplay session.
+
+### Timeline classification after diagnostic packets
+
+`timeline/hooks/packetProcessor.ts` classifies each group when its first tool or display
+packet arrives. Debug and control packets can precede that event without hiding the group.
+The classification then stays fixed for mixed groups. `useTimelineHeader` uses the first
+rendered packet to choose the activity label, so leading debug packets cannot hide a tool name.
+
+
+Timeline groups use their first rendered packet for classification and header text.
+Debug and heartbeat packets can arrive first without hiding later tool output.
+Once classified, a mixed group keeps its original tool or display category.
