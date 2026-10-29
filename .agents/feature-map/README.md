@@ -158,8 +158,8 @@ minute by opening one file, leave it to the code.
 
 **State each fact once.** Write a fact in the component that owns it and link to
 it from the others. When an in-tree README or a customer doc covers a topic, link
-to it; do not repeat it. ARCHITECTURE.md, CROSS-CUTTING.md and GLOSSARY.md link
-to the owning contract and add at most one sentence.
+to it; do not repeat it. Top-level documents, such as
+GLOSSARY.md, link to the owning contract and add at most one sentence.
 
 **Keep documents short.** Cut what does not earn its place; do not trim to a line
 count. **Verification** names test directories and harnesses, not each test file.
