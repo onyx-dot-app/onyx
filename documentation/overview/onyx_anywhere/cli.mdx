@@ -115,19 +115,6 @@ onyx-cli chat
 Use `--agent-id` or `--agent-name` to start the session with a specific Agent,
 and `--no-stream-markdown` to turn off progressive Markdown rendering.
 
-### Waiting for a response
-
-The CLI waits for Onyx to finish the current turn before accepting another question.
-An answer can stop streaming before the server finishes saving it.
-Temporary connection failures keep input blocked while the CLI checks again.
-
-Press **Esc** to stop generation. The CLI waits for the server to accept the request before sending the stop command.
-Input remains blocked until Onyx confirms that the turn has finished. You can still use `/sessions`, `/agent`,
-or `/model` while waiting.
-
-If a readiness check reports an access or server compatibility error, resolve that error before continuing.
-Questions rejected before acceptance remain in the input for retry.
-
 ### One-Shot Questions
 
 Ask a question and get a response without entering the TUI:
