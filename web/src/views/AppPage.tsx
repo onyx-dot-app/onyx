@@ -89,7 +89,7 @@ import { STEP_CONFIG } from "@/lib/onboarding/constants";
 import { useShowOnboarding } from "@/lib/onboarding/hooks";
 import { SvgChevronDown, SvgFileText } from "@opal/icons";
 import { Button, ShadowDiv, Spacer } from "@opal/components";
-import { PageLoader } from "@opal/loaders";
+import { ChatMessageLoader } from "@opal/loaders";
 import {
   IllustrationContent,
   RootLayout,
@@ -962,9 +962,21 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       !sessionFetchError &&
                       showFirstOpenLoader
                     }
-                    className="h-full w-full flex flex-col items-center justify-center"
+                    className="h-full w-full flex flex-col items-center justify-end overflow-hidden px-2 sm:px-4 pb-6"
                   >
-                    <PageLoader />
+                    {/* A conversation's shape in the chat column, from the
+                        bottom up like a real chat. More turns than fit, so it
+                        fills any height; the top ones clip. */}
+                    <div className="w-full md:max-w-chat-message">
+                      <Section gap={12} height="fit">
+                        {Array.from({ length: 8 }, (_, turn) => (
+                          <Section key={turn} gap={12} height="fit">
+                            <ChatMessageLoader orientation="right" />
+                            <ChatMessageLoader orientation="left" />
+                          </Section>
+                        ))}
+                      </Section>
+                    </div>
                   </Fade>
 
                   {/* Session fetch error (404 / 403) */}

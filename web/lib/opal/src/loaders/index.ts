@@ -4,6 +4,13 @@ export {
   type CardLoaderProps,
 } from "@opal/loaders/card-loader/components";
 
+/* ChatMessageLoader */
+export {
+  ChatMessageLoader,
+  type ChatMessageLoaderProps,
+  type ChatMessageLoaderOrientation,
+} from "@opal/loaders/chat-message-loader/components";
+
 /* DropdownLoader */
 export { DropdownLoader } from "@opal/loaders/dropdown-loader/components";
 
