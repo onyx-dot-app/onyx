@@ -113,13 +113,16 @@ def context_budget(model: LLM) -> ContextBudget:
 
 
 def checkpoint_boundary(
-    messages: list[Message], checkpoint: CompactionCheckpoint
+    messages: list[Message],
+    checkpoint: CompactionCheckpoint,
+    *,
+    input_start: int | None = None,
 ) -> int:
     """Locate the inclusive cutoff without comparing reconstructed message content."""
     for index, message in enumerate(messages):
         if message.id == checkpoint.covered_through_message_id:
             boundary = index + 1
-            if boundary not in history_boundaries(messages):
+            if boundary not in history_boundaries(messages, input_start=input_start):
                 raise CheckpointMismatchError(
                     "Compaction cutoff splits a tool exchange or covers unanswered input"
                 )
@@ -130,11 +133,14 @@ def checkpoint_boundary(
 
 
 def working_messages(
-    messages: list[Message], checkpoint: CompactionCheckpoint | None
+    messages: list[Message],
+    checkpoint: CompactionCheckpoint | None,
+    *,
+    input_start: int | None = None,
 ) -> list[Message]:
     if checkpoint is None:
         return list(messages)
-    boundary = checkpoint_boundary(messages, checkpoint)
+    boundary = checkpoint_boundary(messages, checkpoint, input_start=input_start)
     prefix = messages[:boundary]
     retained: list[Message] = [m for m in prefix if isinstance(m, SystemMessage)]
     if checkpoint.summary:
@@ -154,8 +160,13 @@ def working_messages(
     return retained + messages[boundary:]
 
 
-def history_boundaries(messages: list[Message]) -> list[int]:
-    """Cutoffs that preserve tool exchanges and trailing unanswered input."""
+def history_boundaries(
+    messages: list[Message], *, input_start: int | None = None
+) -> list[int]:
+    """Preserve tool exchanges and unanswered input from input_start onward.
+
+    Without a run boundary, retain the whole trailing unanswered input group.
+    """
     boundaries: list[int] = []
     pending: set[str] = set()
     unanswered_input_start: int | None = None
@@ -167,7 +178,11 @@ def history_boundaries(messages: list[Message]) -> list[int]:
             } & completed_tool_call_ids(messages, index)
         elif isinstance(message, ToolResultMessage):
             pending.discard(message.tool_call_id)
-        elif isinstance(message, UserMessage) and unanswered_input_start is None:
+        elif (
+            isinstance(message, UserMessage)
+            and unanswered_input_start is None
+            and (input_start is None or index >= input_start)
+        ):
             unanswered_input_start = index
         if not pending:
             boundaries.append(index + 1)
@@ -243,10 +258,20 @@ def compact_history(
     previous: CompactionCheckpoint | None,
     generation_context: GenerationContext,
     token_counter: Callable[[str], int] = count_tokens,
+    *,
+    input_start: int | None = None,
 ) -> CompactionCheckpoint:
     budget = context_budget(model)
-    start = checkpoint_boundary(history, previous) if previous else 0
-    boundaries = [end for end in history_boundaries(history) if end > start]
+    start = (
+        checkpoint_boundary(history, previous, input_start=input_start)
+        if previous
+        else 0
+    )
+    boundaries = [
+        end
+        for end in history_boundaries(history, input_start=input_start)
+        if end > start
+    ]
     if not boundaries:
         raise ContextLimitError("No completed history is available for compaction")
     cutoff = boundaries[-1]
@@ -343,10 +368,12 @@ def compact_history(
         covered_through_message_id=cutoff_message_id,
     )
     before = sum(
-        message_tokens(m, token_counter) for m in working_messages(history, previous)
+        message_tokens(m, token_counter)
+        for m in working_messages(history, previous, input_start=input_start)
     )
     after = sum(
-        message_tokens(m, token_counter) for m in working_messages(history, checkpoint)
+        message_tokens(m, token_counter)
+        for m in working_messages(history, checkpoint, input_start=input_start)
     )
     if after >= before:
         raise ContextLimitError("Compaction did not reduce the model context")

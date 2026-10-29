@@ -2,6 +2,7 @@
 
 import threading
 from collections.abc import Generator, Sequence
+from contextlib import nullcontext
 from unittest.mock import Mock, patch
 
 import pytest
@@ -954,3 +955,34 @@ def test_checkpoint_cannot_cover_unanswered_input_across_system_messages() -> No
         SystemMessage(content="Conversation summary:\nFile reference"),
         *messages[1:],
     ]
+
+
+@pytest.mark.parametrize("summary_fails", [False, True])
+def test_new_input_can_recover_after_oversized_input(summary_fails: bool) -> None:
+    model = ContextModel(tool_rounds=0)
+    agent = Agent(
+        model, generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE)
+    )
+    oversized = UserMessage(content="Oversized input. " * 2000)
+    failed = agent.start(messages=[oversized], max_steps=1, background=False)
+    with pytest.raises(RunFailed):
+        failed.result()
+    assert failed.wait_for_idle(2)
+    assert not model.generations
+
+    with (
+        patch(
+            "onyx.agents.runtime.compact_history",
+            side_effect=RuntimeError("Unavailable"),
+        )
+        if summary_fails
+        else nullcontext()
+    ):
+        retry = agent.start(
+            messages=[UserMessage(content="Say hello")], max_steps=1, background=False
+        )
+    retry.result()
+    assert model.generations[-1].messages[-1].text == "Say hello"
+    assert request_tokens(model.generations[-1]) <= context_budget(model).input_limit
+    assert failed.snapshot().input_messages[0].text == oversized.text
+    assert agent.state.messages[0].text == oversized.text

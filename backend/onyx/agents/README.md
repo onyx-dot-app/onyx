@@ -54,6 +54,9 @@ result = run.result(timeout=60)
 print(result.output.text)
 ```
 
+Pass the current question, attachments, and request context together to `start(messages=...)`.
+Compaction protects that input group until the model responds. Earlier failed input remains recorded but can be compacted for a new request.
+
 `start()` uses a background thread by default. `background=False` executes on the
 calling thread until the run suspends or finishes. Register `on_event` during
 startup to observe the first event; later subscriptions receive subsequent events.

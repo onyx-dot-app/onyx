@@ -1490,8 +1490,9 @@ def _compact_context(
 ) -> GenerationRequest:
     cancellation_signal = run.cancellation_signal
     previous = run._state.checkpoint
+    input_start = len(run._history.messages) if run._state.input_messages else None
     try:
-        messages = working_messages(source, previous)
+        messages = working_messages(source, previous, input_start=input_start)
     except CheckpointMismatchError as error:
         logger.info("Ignoring compaction checkpoint: %s", error)
         previous = None
@@ -1514,6 +1515,7 @@ def _compact_context(
             previous,
             generation_context,
             partial(count_tokens, cached_counts=run._token_counts),
+            input_start=input_start,
         )
         cancellation_signal.check()
     except Exception:
@@ -1531,7 +1533,7 @@ def _compact_context(
     if selected_checkpoint is not None:
         cancellation_signal.check()
         candidate_request = prepared.generation_request(
-            working_messages(source, selected_checkpoint)
+            working_messages(source, selected_checkpoint, input_start=input_start)
         )
         cancellation_signal.check()
         candidate_size = request_tokens(candidate_request, run._token_counts)
@@ -1544,6 +1546,7 @@ def _compact_context(
             token_counts=run._token_counts,
             input_limit=budget.input_limit,
             original_size=original_size,
+            input_start=input_start,
         )
 
     with run.execution_lock:
@@ -1560,9 +1563,10 @@ def _truncate_context(
     token_counts: dict[str, int],
     input_limit: int,
     original_size: int,
+    input_start: int | None = None,
 ) -> tuple[CompactionCheckpoint, GenerationRequest, int]:
     """Find the first smaller request that fits after removing older turns."""
-    boundaries = set(history_boundaries(source))
+    boundaries = set(history_boundaries(source, input_start=input_start))
     system_messages: list[Message] = []
     for index, message in enumerate(source):
         if isinstance(message, SystemMessage):
@@ -1626,6 +1630,9 @@ def _execute_tools(run: Run) -> bool:
                 *messages_from_steps(run._state.steps[: progress.step_index]),
             ],
             run._state.checkpoint,
+            input_start=len(run._history.messages)
+            if run._state.input_messages
+            else None,
         ),
     )
     if not batch.execute():
