@@ -88,7 +88,7 @@ import { OnboardingStep } from "@/lib/onboarding/types";
 import { STEP_CONFIG } from "@/lib/onboarding/constants";
 import { useShowOnboarding } from "@/lib/onboarding/hooks";
 import { SvgChevronDown, SvgFileText } from "@opal/icons";
-import { Button, ShadowDiv, Spacer } from "@opal/components";
+import { Button, Presence, ShadowDiv, Spacer } from "@opal/components";
 import { ChatMessageLoader } from "@opal/loaders";
 import {
   IllustrationContent,
@@ -916,7 +916,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     its scrollbar sits flush; non-chat siblings add their own px. */}
                 <div className="row-start-1 min-h-0 overflow-hidden flex flex-col items-center">
                   {/* ChatUI */}
-                  <Fade
+                  <Presence
                     show={
                       appPosition.isChat() &&
                       !!currentChatSessionId &&
@@ -924,115 +924,131 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       !sessionFetchError &&
                       !showFirstOpenLoader
                     }
-                    className="h-full w-full flex flex-col items-center"
+                    from="none"
+                    width="full"
+                    height="full"
                   >
-                    <ChatScrollContainer
-                      ref={scrollContainerRef}
-                      sessionId={currentChatSessionId!}
-                      anchorSelector={anchorSelector}
-                      autoScroll={autoScrollEnabled}
-                      isStreaming={isStreaming}
-                      onScrollButtonVisibilityChange={setShowScrollButton}
-                      fullWidth={fullWidthActive}
-                    >
-                      <ChatUI
-                        activeAgent={activeAgent!}
-                        llmManager={llmManager}
-                        deepResearchEnabled={
-                          deepResearchEnabledForCurrentWorkflow
-                        }
-                        currentMessageFiles={currentMessageFiles}
-                        setPresentingDocument={setPresentingDocument}
-                        onSubmit={onSubmit}
-                        onMessageSelection={onMessageSelection}
-                        stopGenerating={stopGenerating}
-                        onResubmit={handleResubmitLastMessage}
-                        anchorNodeId={anchorNodeId}
-                        selectedModels={multiModel.selectedModels}
-                        fullWidthChat={fullWidthActive}
-                      />
-                    </ChatScrollContainer>
-                  </Fade>
+                    <Section justifyContent="start" gap={0}>
+                      <ChatScrollContainer
+                        ref={scrollContainerRef}
+                        sessionId={currentChatSessionId!}
+                        anchorSelector={anchorSelector}
+                        autoScroll={autoScrollEnabled}
+                        isStreaming={isStreaming}
+                        onScrollButtonVisibilityChange={setShowScrollButton}
+                        fullWidth={fullWidthActive}
+                      >
+                        <ChatUI
+                          activeAgent={activeAgent!}
+                          llmManager={llmManager}
+                          deepResearchEnabled={
+                            deepResearchEnabledForCurrentWorkflow
+                          }
+                          currentMessageFiles={currentMessageFiles}
+                          setPresentingDocument={setPresentingDocument}
+                          onSubmit={onSubmit}
+                          onMessageSelection={onMessageSelection}
+                          stopGenerating={stopGenerating}
+                          onResubmit={handleResubmitLastMessage}
+                          anchorNodeId={anchorNodeId}
+                          selectedModels={multiModel.selectedModels}
+                          fullWidthChat={fullWidthActive}
+                        />
+                      </ChatScrollContainer>
+                    </Section>
+                  </Presence>
 
                   {/* First open: the chat is loading and nothing is cached yet */}
-                  <Fade
+                  <Presence
                     show={
                       appPosition.isChat() &&
                       !!currentChatSessionId &&
                       !sessionFetchError &&
                       showFirstOpenLoader
                     }
-                    className="h-full w-full flex flex-col items-center px-2 sm:px-4 pt-6 pb-12"
+                    from="none"
+                    width="full"
+                    height="full"
                   >
-                    {/* A conversation's shape in the chat column, from the
+                    <div className="h-full w-full px-2 sm:px-4 pt-6 pb-12">
+                      <Section justifyContent="start" gap={0}>
+                        {/* A conversation's shape in the chat column, from the
                         top down like a real chat. More turns than fit, so it
                         fills any height; the ones that overflow are clipped
                         (not scrollable) and fade out at the bottom. The bottom
                         keeps clear of the input bar. */}
-                    <ShadowDiv
-                      role="status"
-                      aria-label={t("firstOpenLoader.ariaLabel")}
-                      variant="mask"
-                      shadowDirection="bottom-only"
-                      // The real messages' width, compact or expanded.
-                      containerClassName={cn(
-                        "w-full flex-1",
-                        fullWidthActive
-                          ? "md:max-w-full"
-                          : "md:max-w-chat-message",
-                        FULL_WIDTH_TRANSITION
-                      )}
-                      className="flex-1 min-h-0 overflow-y-hidden"
-                    >
-                      <Section gap={12} height="fit">
-                        {Array.from({ length: 8 }, (_, turn) => (
-                          <Section key={turn} gap={12} height="fit">
-                            <ChatMessageLoader orientation="end" />
-                            <ChatMessageLoader orientation="start" />
+                        <ShadowDiv
+                          role="status"
+                          aria-label={t("firstOpenLoader.ariaLabel")}
+                          variant="mask"
+                          shadowDirection="bottom-only"
+                          // The real messages' width, compact or expanded.
+                          containerClassName={cn(
+                            "w-full flex-1",
+                            fullWidthActive
+                              ? "md:max-w-full"
+                              : "md:max-w-chat-message",
+                            FULL_WIDTH_TRANSITION
+                          )}
+                          className="flex-1 min-h-0 overflow-y-hidden"
+                        >
+                          <Section gap={12} height="fit">
+                            {Array.from({ length: 8 }, (_, turn) => (
+                              <Section key={turn} gap={12} height="fit">
+                                <ChatMessageLoader orientation="end" />
+                                <ChatMessageLoader orientation="start" />
+                              </Section>
+                            ))}
                           </Section>
-                        ))}
+                        </ShadowDiv>
                       </Section>
-                    </ShadowDiv>
-                  </Fade>
+                    </div>
+                  </Presence>
 
                   {/* Session fetch error (404 / 403) */}
-                  <Fade
+                  <Presence
                     show={appPosition.isChat() && sessionFetchError !== null}
-                    className="h-full w-full flex flex-col items-center justify-center px-2 sm:px-4"
+                    from="none"
+                    width="full"
+                    height="full"
                   >
-                    {sessionFetchError && (
-                      <Section
-                        flexDirection="column"
-                        alignItems="center"
-                        gap={4}
-                      >
-                        <IllustrationContent
-                          illustration={
-                            sessionFetchError.type === "access_denied"
-                              ? SvgNoAccess
-                              : SvgNotFound
-                          }
-                          title={
-                            sessionFetchError.type === "not_found"
-                              ? t("sessionNotFound.title")
-                              : sessionFetchError.type === "access_denied"
-                                ? t("sessionAccessDenied.title")
-                                : t("sessionGenericError.title")
-                          }
-                          description={
-                            sessionFetchError.type === "not_found"
-                              ? t("sessionNotFound.description")
-                              : sessionFetchError.type === "access_denied"
-                                ? t("sessionAccessDenied.description")
-                                : sessionFetchError.detail
-                          }
-                        />
-                        <Button href="/app" prominence="secondary">
-                          {t("newChatButton.label")}
-                        </Button>
+                    <div className="h-full w-full px-2 sm:px-4">
+                      <Section>
+                        {sessionFetchError && (
+                          <Section
+                            flexDirection="column"
+                            alignItems="center"
+                            gap={4}
+                          >
+                            <IllustrationContent
+                              illustration={
+                                sessionFetchError.type === "access_denied"
+                                  ? SvgNoAccess
+                                  : SvgNotFound
+                              }
+                              title={
+                                sessionFetchError.type === "not_found"
+                                  ? t("sessionNotFound.title")
+                                  : sessionFetchError.type === "access_denied"
+                                    ? t("sessionAccessDenied.title")
+                                    : t("sessionGenericError.title")
+                              }
+                              description={
+                                sessionFetchError.type === "not_found"
+                                  ? t("sessionNotFound.description")
+                                  : sessionFetchError.type === "access_denied"
+                                    ? t("sessionAccessDenied.description")
+                                    : sessionFetchError.detail
+                              }
+                            />
+                            <Button href="/app" prominence="secondary">
+                              {t("newChatButton.label")}
+                            </Button>
+                          </Section>
+                        )}
                       </Section>
-                    )}
-                  </Fade>
+                    </div>
+                  </Presence>
 
                   {/* ProjectUI */}
                   {appPosition.isProject() && (
