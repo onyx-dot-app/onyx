@@ -472,6 +472,12 @@ If a complex prefix lacks estimates, tracing omits its token count instead of us
 an incomplete text-only estimate. Token counters cache up to 1,024 text values per
 counter. Different counters do not share prompt contents or cached counts.
 
+Explicitly classified model failures retain safe tool-choice and finish-reason diagnostics across saved runs.
+Generic provider API failures return a fixed public message; raw upstream payloads remain in the exception.
+
+Streamed tool-call fragments may have a null `type` in LiteLLM. The response adapter
+normalizes null to `function`; unsupported non-null types still fail validation.
+
 ### 4.7 Tracing
 
 Cancellation listeners use the same exception handling before and after cancellation.
@@ -706,9 +712,3 @@ See `backend/AGENTS.md` for authoritative commands and required env
 Related: [[core-chat-loop]], [[agents-personas]], [[observability]],
 [[llm-gateway]], [[rate-and-usage-limits]], [[auth-and-identity]],
 [[document-index]].
-
-Explicitly classified model failures retain safe tool-choice and finish-reason diagnostics across saved runs.
-Generic provider API failures return a fixed public message; raw upstream payloads remain in the exception.
-
-Streamed tool-call fragments may have a null `type` in LiteLLM. The response adapter
-normalizes null to `function`; unsupported non-null types still fail validation.
