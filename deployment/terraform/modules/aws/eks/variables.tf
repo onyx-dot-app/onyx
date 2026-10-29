@@ -313,3 +313,15 @@ variable "cluster_admin_principal_arn" {
   description = "IAM principal that gets cluster-admin (EKS access entry) and administers the cluster's KMS key. Null keeps the upstream default: whoever runs Terraform, which changes both when a different principal applies. For an SSO role, use the full path ARN (arn:aws:iam::<account>:role/aws-reserved/sso.amazonaws.com/<region>/AWSReservedSSO_...)."
   default     = null
 }
+
+variable "aws_load_balancer_controller_chart_version" {
+  type        = string
+  description = "Controller chart and matching IAM policy. Update existing CRDs before upgrading. Version 1.7.1 is retained for staged rollouts."
+  default     = "3.6.2"
+  nullable    = false
+
+  validation {
+    condition     = contains(["1.7.1", "3.6.2"], var.aws_load_balancer_controller_chart_version)
+    error_message = "Use a chart version with a reviewed IAM policy: 1.7.1 or 3.6.2."
+  }
+}

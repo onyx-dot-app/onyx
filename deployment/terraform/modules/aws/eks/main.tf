@@ -336,8 +336,50 @@ module "eks_blueprints_addons" {
   enable_cluster_autoscaler           = true
 
   # The two add-ons above that create IRSA roles.
-  aws_load_balancer_controller = local.addon_iam_role_settings
-  cluster_autoscaler           = local.addon_iam_role_settings
+  aws_load_balancer_controller = merge(local.addon_iam_role_settings, {
+    chart_version = var.aws_load_balancer_controller_chart_version
+    # Keep Gateway API reconciliation opt-in when moving from v2 to v3.
+    values = var.aws_load_balancer_controller_chart_version == "3.6.2" ? [yamlencode({
+      controllerConfig = {
+        featureGates = { ALBGatewayAPI = false, NLBGatewayAPI = false }
+      }
+    })] : []
+    # Add the v3.6.2 permissions missing from Blueprints 1.16.3's bundled policy.
+    source_policy_documents = var.aws_load_balancer_controller_chart_version == "3.6.2" ? [jsonencode({
+      Version = "2012-10-17"
+      Statement = [
+        {
+          Effect = "Allow"
+          Action = [
+            "ec2:GetSecurityGroupsForVpc",
+            "ec2:DescribeIpamPools",
+            "ec2:DescribeRouteTables",
+            "elasticloadbalancing:DescribeListenerAttributes",
+            "elasticloadbalancing:DescribeCapacityReservation",
+          ]
+          Resource = "*"
+        },
+        {
+          Effect = "Allow"
+          Action = [
+            "elasticloadbalancing:ModifyListenerAttributes",
+            "elasticloadbalancing:ModifyCapacityReservation",
+            "elasticloadbalancing:ModifyIpPools",
+          ]
+          Resource = "*"
+          Condition = {
+            Null = { "aws:ResourceTag/elbv2.k8s.aws/cluster" = "false" }
+          }
+        },
+        {
+          Effect   = "Allow"
+          Action   = ["elasticloadbalancing:SetRulePriorities"]
+          Resource = "*"
+        },
+      ]
+    })] : []
+  })
+  cluster_autoscaler = local.addon_iam_role_settings
 
   depends_on = [module.eks]
 }
