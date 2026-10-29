@@ -713,7 +713,8 @@ def add_search_docs_to_chat_message(
 
     Args:
         chat_message_id: The ID of the chat message
-        search_doc_ids: List of search document IDs to link
+        search_doc_ids: Search document IDs to link, in the order the tool
+            returned them (stored as each link's position)
         db_session: The database session
     """
     for search_doc_id in search_doc_ids:
@@ -736,9 +737,11 @@ def add_search_docs_to_tool_call(
     """
     from onyx.db.models import ToolCall__SearchDoc
 
-    for search_doc_id in search_doc_ids:
+    for position, search_doc_id in enumerate(search_doc_ids):
         tool_call_search_doc = ToolCall__SearchDoc(
-            tool_call_id=tool_call_id, search_doc_id=search_doc_id
+            tool_call_id=tool_call_id,
+            search_doc_id=search_doc_id,
+            position=position,
         )
         db_session.add(tool_call_search_doc)
 
