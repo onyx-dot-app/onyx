@@ -32,10 +32,14 @@ import { Disabled } from "@opal/core";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
 import { useProjectsContext } from "@/lib/projects/providers";
-import { useActiveProject, useProjects } from "@/lib/projects/hooks";
+import {
+  useActiveProject,
+  useFileSendGate,
+  useProjects,
+} from "@/lib/projects/hooks";
 import { FileCard } from "@/sections/cards/FileCard";
 import { ProjectFile } from "@/lib/projects/types";
-import { isFilePending } from "@/lib/projects/utils";
+import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import { ToolsPopover } from "@/lib/tools/components";
 import MCPConnectionPrompt from "@/lib/mcp/components/MCPConnectionPrompt";
@@ -75,6 +79,7 @@ import {
   useChatSessionStore,
 } from "@/app/app/stores/useChatSessionStore";
 import QueuedMessageBar from "@/sections/input/QueuedMessageBar";
+import FileIndexingBanner from "@/sections/input/FileIndexingBanner";
 import { handleInputNavKeys } from "@/sections/input/inputBarKeys";
 
 export interface AppInputBarHandle {
@@ -90,6 +95,8 @@ export interface AppInputBarProps {
   onSubmit: (message: string) => void;
   llmManager: LlmManager;
   chatState: ChatState;
+  /** Context tokens left for attachments; decides if they must index first. */
+  availableContextTokens?: number;
 
   // agents
   activeAgent: MinimalAgent | undefined;
@@ -119,6 +126,7 @@ const AppInputBar = React.memo(
     stopGenerating,
     onSubmit,
     chatState,
+    availableContextTokens = DEFAULT_CONTEXT_TOKENS,
     activeAgent,
     memberPlugins,
     handleFileUpload,
@@ -294,6 +302,13 @@ const AppInputBar = React.memo(
       setIsRecording(nextIsRecording);
     }, []);
 
+    const { currentMessageFiles, setCurrentMessageFiles } =
+      useProjectsContext();
+    const fileSendGate = useFileSendGate(
+      currentMessageFiles,
+      availableContextTokens
+    );
+
     // Wrapper for onSubmit that stops TTS first to prevent overlapping voices
     const handleSubmit = useCallback(
       (text: string) => {
@@ -304,17 +319,15 @@ const AppInputBar = React.memo(
     );
     const submitMessage = useCallback(
       (text: string) => {
-        if (!text.trim()) {
+        // Checked here, not only in the controls, so voice auto-send obeys it.
+        if (!text.trim() || fileSendGate.isSendBlocked) {
           return;
         }
         handleSubmit(text);
         clearChatDraft();
       },
-      [handleSubmit, clearChatDraft]
+      [handleSubmit, clearChatDraft, fileSendGate.isSendBlocked]
     );
-
-    const { currentMessageFiles, setCurrentMessageFiles } =
-      useProjectsContext();
 
     // Expose reset and focus methods to parent via ref
     React.useImperativeHandle(ref, () => ({
@@ -365,12 +378,6 @@ const AppInputBar = React.memo(
     const { isLoading: isLoadingProjects } = useProjects();
     const activeProject = useActiveProject();
 
-    // A file isn't queryable until processing completes, so gate send on it.
-    const hasPendingFiles = useMemo(
-      () => currentMessageFiles.some((file) => isFilePending(file.status)),
-      [currentMessageFiles]
-    );
-
     // Convert ProjectFile to MinimalOnyxDocument format for viewing
     const handleFileClick = useCallback(
       (file: ProjectFile) => {
@@ -398,18 +405,26 @@ const AppInputBar = React.memo(
 
     const prevChatStateRef = useRef(chatState);
     const prevRenderCompleteRef = useRef(latestMessageRenderComplete);
+    const prevSendBlockedRef = useRef(fileSendGate.isSendBlocked);
 
     useEffect(() => {
       // "Ready" requires the backend to be idle AND the previous answer
       // to have finished drawing on screen. Without the render-complete
       // gate, a queued follow-up fires while the smooth-streaming
-      // typewriter is still flushing the prior answer.
+      // typewriter is still flushing the prior answer. Attached files that
+      // still block send hold the queue until they finish indexing.
       const wasReady =
-        prevChatStateRef.current === "input" && prevRenderCompleteRef.current;
-      const isReady = chatState === "input" && latestMessageRenderComplete;
+        prevChatStateRef.current === "input" &&
+        prevRenderCompleteRef.current &&
+        !prevSendBlockedRef.current;
+      const isReady =
+        chatState === "input" &&
+        latestMessageRenderComplete &&
+        !fileSendGate.isSendBlocked;
 
       prevChatStateRef.current = chatState;
       prevRenderCompleteRef.current = latestMessageRenderComplete;
+      prevSendBlockedRef.current = fileSendGate.isSendBlocked;
 
       if (!wasReady && isReady && queuedMessages.length > 0) {
         const nextMessage = queuedMessages[0]!.text;
@@ -422,6 +437,7 @@ const AppInputBar = React.memo(
     }, [
       chatState,
       latestMessageRenderComplete,
+      fileSendGate.isSendBlocked,
       queuedMessages,
       removeCurrentQueuedMessage,
       stopTTS,
@@ -763,11 +779,11 @@ const AppInputBar = React.memo(
               (chatState === "input" &&
                 !isVoicePlaybackControllable &&
                 !message) ||
-              hasPendingFiles ||
+              fileSendGate.isSendBlocked ||
               isClassifying
             }
             tooltip={
-              hasPendingFiles
+              fileSendGate.isSendBlocked
                 ? t("appInputBar.sendButton.processingFilesTooltip")
                 : undefined
             }
@@ -812,6 +828,10 @@ const AppInputBar = React.memo(
           highlightedIndex={queueNav.highlightedIndex}
           onDiscard={removeCurrentQueuedMessage}
           onHighlight={queueNav.setHighlightedIndex}
+        />
+        <FileIndexingBanner
+          reason={fileSendGate.bannerReason}
+          onClose={fileSendGate.dismissBanner}
         />
         <Disabled disabled={disabled} allowClick>
           <div
@@ -948,7 +968,7 @@ const AppInputBar = React.memo(
                               message &&
                               !disabled &&
                               !isClassifying &&
-                              !hasPendingFiles
+                              !fileSendGate.isSendBlocked
                             ) {
                               submitMessage(message);
                             }
@@ -956,7 +976,7 @@ const AppInputBar = React.memo(
                             message.trim() &&
                             !disabled &&
                             !isClassifying &&
-                            !hasPendingFiles &&
+                            !fileSendGate.isSendBlocked &&
                             queuedMessages.length < MAX_QUEUED_MESSAGES
                           ) {
                             enqueueCurrentMessage(message.trim());
@@ -1030,7 +1050,9 @@ const AppInputBar = React.memo(
                     prominence="tertiary"
                   />
                   <Button
-                    disabled={!message || isClassifying || hasPendingFiles}
+                    disabled={
+                      !message || isClassifying || fileSendGate.isSendBlocked
+                    }
                     id="onyx-chat-input-send-button"
                     icon={isClassifying ? IconLoader : SvgSearch}
                     onClick={() => {

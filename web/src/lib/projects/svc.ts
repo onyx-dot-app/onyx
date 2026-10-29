@@ -237,10 +237,15 @@ export async function getProjectTokenCount(projectId: number): Promise<number> {
 }
 
 export async function getMaxSelectedDocumentTokens(
-  personaId: number
+  personaId: number,
+  modelConfigurationId?: number | null
 ): Promise<number | null> {
+  const params = new URLSearchParams({ persona_id: String(personaId) });
+  if (modelConfigurationId != null) {
+    params.set("model_configuration_id", String(modelConfigurationId));
+  }
   const response = await fetch(
-    `/api/chat/max-selected-document-tokens?persona_id=${personaId}`
+    `/api/chat/max-selected-document-tokens?${params}`
   );
   if (!response.ok) {
     return null;

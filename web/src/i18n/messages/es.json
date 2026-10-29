@@ -12396,6 +12396,16 @@
           "label": "Habilidades"
         }
       },
+      "fileIndexingBanner": {
+        "noText": {
+          "description": "Un archivo aún no tiene texto legible. Espera a que termine el procesamiento para que su contenido esté disponible.",
+          "title": "El archivo aún se está leyendo"
+        },
+        "tooLarge": {
+          "description": "Los archivos adjuntos no caben en el contexto del modelo. Espera a que termine la indexación para que la respuesta pueda buscar en ellos.",
+          "title": "El archivo es demasiado grande para el chat"
+        }
+      },
       "inputChip": {
         "removeButton": {
           "ariaLabel": "Quitar {label}"

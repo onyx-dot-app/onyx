@@ -28,6 +28,7 @@ export class InputBar {
   readonly textbox: Locator;
   readonly sendButton: Locator;
   readonly processingFileChips: Locator;
+  readonly fileTooLargeBanner: Locator;
 
   readonly tile: Locator;
   readonly tileRemoveButton: Locator;
@@ -44,6 +45,7 @@ export class InputBar {
     this.textbox = page.locator("#onyx-chat-input-textbox");
     this.sendButton = page.locator("#onyx-chat-input-send-button");
     this.processingFileChips = this.container.getByText("Processing...");
+    this.fileTooLargeBanner = page.getByText("File is too large for the chat");
 
     this.tile = page.locator("[data-rich-tile]");
     this.tileRemoveButton = page.locator("[data-rich-tile-remove]");
@@ -222,6 +224,14 @@ export class InputBar {
       await expect(this.processingFileChips).toHaveCount(0, {
         timeout: 10000,
       });
+    }
+  }
+
+  async expectFileTooLargeBanner(visible = true): Promise<void> {
+    if (visible) {
+      await expect(this.fileTooLargeBanner).toBeVisible();
+    } else {
+      await expect(this.fileTooLargeBanner).toHaveCount(0);
     }
   }
 

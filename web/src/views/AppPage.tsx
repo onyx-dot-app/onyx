@@ -1138,6 +1138,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         stopGenerating={stopGenerating}
                         onSubmit={handleAppInputBarSubmit}
                         chatState={currentChatState}
+                        availableContextTokens={availableContextTokens}
                         activeAgent={activeAgent}
                         handleFileUpload={handleMessageSpecificFileUpload}
                         setPresentingDocument={setPresentingDocument}

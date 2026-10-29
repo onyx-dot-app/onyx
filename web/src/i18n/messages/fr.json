@@ -12396,6 +12396,16 @@
           "label": "Compétences"
         }
       },
+      "fileIndexingBanner": {
+        "noText": {
+          "description": "Un fichier n'a pas encore de texte lisible. Attendez la fin du traitement pour que son contenu soit disponible.",
+          "title": "Le fichier est encore en cours de lecture"
+        },
+        "tooLarge": {
+          "description": "Les fichiers joints ne tiennent pas dans le contexte du modèle. Attendez la fin de l'indexation pour que la réponse puisse y effectuer des recherches.",
+          "title": "Le fichier est trop volumineux pour le chat"
+        }
+      },
       "inputChip": {
         "removeButton": {
           "ariaLabel": "Retirer {label}"
