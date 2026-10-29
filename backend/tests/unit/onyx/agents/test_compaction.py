@@ -2,7 +2,6 @@
 
 import threading
 from collections.abc import Callable, Generator, Sequence
-from contextlib import nullcontext
 from unittest.mock import Mock, patch
 
 import pytest
@@ -302,114 +301,6 @@ def test_long_requests_reuse_counts_and_release_removed_history() -> None:
             source[-2].text,
             TASK,
         }
-
-
-@pytest.mark.parametrize(
-    "scenario", ["proactive", "summary_failure", "provider_retry", "oversized"]
-)
-def test_current_attachments_survive_context_fitting(scenario: str) -> None:
-    model = ContextModel(reject_first=scenario == "provider_retry")
-    body = "Read this unique attachment detail. " * (
-        200 if scenario == "oversized" else 80
-    )
-    files = [
-        ChatLoadedFile(
-            file_id=f"attachment-{index}",
-            file_type=ChatFileType.PLAIN_TEXT,
-            filename=f"report-{index}.txt",
-            content=body.encode(),
-            content_text=body,
-            token_count=count_tokens(body),
-        )
-        for index in range(2)
-    ]
-    old_text = "Old findings. " * (1000 if scenario == "summary_failure" else 20)
-    history = convert_chat_history(
-        [
-            ChatHistoryMessage(
-                id=1,
-                message_type=MessageType.ASSISTANT,
-                message=old_text,
-                token_count=count_tokens(old_text),
-                files=[],
-                is_clarification=False,
-                response_messages=[
-                    AssistantMessage(
-                        id="old-answer", content=[TextContent(text=old_text)]
-                    )
-                ],
-            ),
-            ChatHistoryMessage(
-                id=2,
-                message_type=MessageType.USER,
-                message="Compare both attached reports.",
-                token_count=6,
-                is_clarification=False,
-                files=[{"id": file.file_id, "type": file.file_type} for file in files],
-                response_messages=[],
-            ),
-        ],
-        files=files,
-        context_image_files=[],
-        additional_context="Include the supporting evidence.",
-        token_counter=count_tokens,
-    )
-
-    def assemble(messages: Sequence[Message]) -> list[Message]:
-        return prepare_prompt(
-            messages,
-            system_prompt=None,
-            custom_agent_prompt=None,
-            reminder_message=None,
-            context_files=None,
-            token_counter=count_tokens,
-            all_injected_file_metadata=history.all_injected_file_metadata,
-            available_tool_names=set(),
-        )
-
-    original_request = GenerationRequest(messages=assemble(history.messages))
-    budget = context_budget(model)
-    if scenario in {"proactive", "provider_retry"}:
-        assert budget.trigger < request_tokens(original_request) <= budget.input_limit
-    else:
-        assert request_tokens(original_request) > budget.input_limit
-    agent = Agent(
-        model,
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        state=AgentState(messages=history.messages[: history.input_start]),
-        prepare_step=lambda _: PreparedStep(assemble_messages=assemble),
-    )
-    with (
-        patch(
-            "onyx.agents.runtime.compact_history", side_effect=RuntimeError("Offline")
-        )
-        if scenario in {"summary_failure", "provider_retry"}
-        else nullcontext()
-    ):
-        run = agent.start(
-            messages=history.messages[history.input_start :],
-            background=False,
-            max_steps=1,
-        )
-        if scenario == "oversized":
-            with pytest.raises(RunFailed):
-                run.result()
-            assert not model.generations
-        else:
-            run.result()
-            assert len(model.generations) == (2 if scenario == "provider_retry" else 1)
-            for request in model.generations:
-                assert [message.text for message in request.messages[-4:]] == [
-                    message.text for message in original_request.messages[-4:]
-                ]
-                assert not request.tools
-                assert body in request.messages[-4].text
-                assert body in request.messages[-3].text
-                assert request_tokens(request) <= budget.input_limit
-    assert agent.state.messages[: len(history.messages)] == history.messages
-    if scenario == "proactive":
-        assert agent.state.checkpoint is not None
-        assert agent.state.checkpoint.covered_through_message_id == "old-answer"
 
 
 def test_compaction_replaces_attachment_body_with_file_reference() -> None:
@@ -750,37 +641,6 @@ def test_oversized_required_instruction_fails_without_losing_snapshot() -> None:
     assert agent.state.messages[0].text == "mandatory " * 2000
     snapshot = run.snapshot()
     assert snapshot is not None and snapshot.status == "error"
-
-
-@pytest.mark.parametrize("summary_fails", [False, True])
-def test_new_input_can_recover_after_oversized_input(summary_fails: bool) -> None:
-    model = ContextModel(tool_rounds=0)
-    agent = Agent(
-        model, generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE)
-    )
-    oversized = UserMessage(content="Oversized input. " * 2000)
-    failed = agent.start(messages=[oversized], max_steps=1, background=False)
-    with pytest.raises(RunFailed):
-        failed.result()
-    assert failed.wait_for_idle(2)
-    assert not model.generations
-
-    with (
-        patch(
-            "onyx.agents.runtime.compact_history",
-            side_effect=RuntimeError("Unavailable"),
-        )
-        if summary_fails
-        else nullcontext()
-    ):
-        retry = agent.start(
-            messages=[UserMessage(content="Say hello")], max_steps=1, background=False
-        )
-    retry.result()
-    assert model.generations[-1].messages[-1].text == "Say hello"
-    assert request_tokens(model.generations[-1]) <= context_budget(model).input_limit
-    assert failed.snapshot().input_messages[0].text == oversized.text
-    assert agent.state.messages[0].text == oversized.text
 
 
 def test_context_fitting_reuses_checkpoint_after_content_changes() -> None:

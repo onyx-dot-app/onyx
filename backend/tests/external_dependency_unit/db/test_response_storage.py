@@ -2948,6 +2948,7 @@ def test_invalid_checkpoint_publication_leaves_state_unchanged(
         compaction_checkpoint=None,
         request_params=None,
         message_payloads=[],
+        input_messages=[],
         input_payloads=[],
     )
     executed_sql.clear()

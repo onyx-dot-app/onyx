@@ -195,6 +195,7 @@ def poll_run_owners(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, No
         "root_save",
         "separate_process",
         "compaction",
+        "input_group",
     ],
 )
 def test_transfer_preserves_result_budget_and_callback_boundary(
@@ -327,7 +328,16 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
         tools=tools,
         after_tool_call=lambda call, result: finalized.append(call.call.id) or result,
     )
-    run = agent.start(messages=[user_message], max_steps=2, coordinator=coordinator)
+    input_messages = (
+        [
+            UserMessage(id="attachment", content="Attached report contents"),
+            UserMessage(id="context", content="Use the attached report"),
+            user_message,
+        ]
+        if scenario == "input_group"
+        else [user_message]
+    )
+    run = agent.start(messages=input_messages, max_steps=2, coordinator=coordinator)
     try:
         assert run.wait_until_settled(timeout=10).status == RunStatus.SUSPENDED
         assert run.wait_for_idle(timeout=10)
@@ -429,6 +439,7 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
         else:
             resumed = remote.resume(run.id, context=context)
             assert resumed is not None
+            assert resumed.snapshot().input_messages == input_messages
             resumed.submit(
                 HumanToolAnswer(
                     request_id="answer",

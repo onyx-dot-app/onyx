@@ -140,6 +140,8 @@ Checkpoint bindings identify the tenant and response. Saved progress uses the ru
 `pending_tool_calls`, `human_tool_answers`, and `finalized_tool_call_ids`.
 Finalized IDs let a resumed step skip completed finalizers even when an earlier call still awaits input.
 Checkpoint format version 1 retains feature-owned search context and typed search-planning metadata.
+It also retains the full current input group, including attachments and request-only context, for resume.
+Root response rows reference the saved question; only child responses require a single input instruction.
 Restoration rejects other format versions.
 Feature state is a JSON object validated by its owning feature during restoration.
 Chat's `kind` discriminator selects the feature schema; message metadata and tool details retain their tagged codec.

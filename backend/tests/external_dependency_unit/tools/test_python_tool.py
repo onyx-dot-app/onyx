@@ -37,6 +37,7 @@ from onyx.server.query_and_chat.streaming_models import (
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from tests.external_dependency_unit.answer.stream_test_utils import (
     create_chat_session,
+    final_answer,
 )
 from tests.external_dependency_unit.conftest import create_test_user
 from tests.unit.onyx.agents.fakes import ScriptedLLM
@@ -220,11 +221,13 @@ def _attach_python_tool_to_default_persona(db_session: Session) -> None:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("additional_context", [None, "Use the attached CSV."])
 def test_code_interpreter_receives_chat_files(
     db_session: Session,
     mock_ci_server: MockCodeInterpreterServer,
     _attach_python_tool_to_default_persona: None,
     initialize_file_store: None,  # noqa: ARG001
+    additional_context: str | None,
 ) -> None:
     mock_ci_server.captured_requests.clear()
     mock_ci_server._file_counter = 0
@@ -268,6 +271,7 @@ def test_code_interpreter_receives_chat_files(
         message="Read the CSV and print it.",
         chat_session_id=chat_session.id,
         file_descriptors=[file_descriptor],
+        additional_context=additional_context,
         stream=True,
     )
 
@@ -305,7 +309,8 @@ def test_code_interpreter_receives_chat_files(
     ):
         ci_mod.CodeInterpreterClient.__init__.__defaults__ = (mock_url,)
         try:
-            list(handle_stream_message_objects(new_msg_req=msg_req, user=user))
+            parts = list(handle_stream_message_objects(new_msg_req=msg_req, user=user))
+            assert final_answer(parts) == "The result is 4."
         finally:
             ci_mod.CodeInterpreterClient.__init__.__defaults__ = original_defaults
 

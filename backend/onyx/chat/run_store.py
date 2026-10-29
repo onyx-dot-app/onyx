@@ -281,8 +281,6 @@ class ChatRunStore(RunStore, RunOwnership):
         parent_message_id: str | None,
         parent_tool_call_id: str | None,
     ) -> str:
-        if len(messages) != 1 or not isinstance(messages[0], UserMessage):
-            raise ValueError("A saved chat response requires one user instruction")
         if parent_run_id is None:
             with get_session_with_tenant(tenant_id=self.tenant_id) as session:
                 response = find_response__no_commit(session, self.response_id)
@@ -295,6 +293,8 @@ class ChatRunStore(RunStore, RunOwnership):
                 ):
                     raise ValueError("Response is unavailable for a new run")
             return str(self.response_id)
+        if len(messages) != 1 or not isinstance(messages[0], UserMessage):
+            raise ValueError("A saved child response requires one user instruction")
         if parent_message_id is None or parent_tool_call_id is None:
             raise ValueError("Child instruction has no parent invocation")
         parent_response_id = int(parent_run_id)

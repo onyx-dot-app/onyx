@@ -572,18 +572,17 @@ class _ResponseWriter:
             raise ValueError("Execution identity is missing or repeated")
         if len(record.messages) > MAX_CONVERSATION_MESSAGES:
             raise ValueError("Response exceeds its content limit")
-        if len(record.input_messages) != 1 or not isinstance(
-            record.input_messages[0], UserMessage
-        ):
-            raise ValueError("A saved chat response requires one user instruction")
-        instruction = record.input_messages[0]
         if parent is None:
             response = self.response
             question = response.parent_message
             if question is None or question.message_type != MessageType.USER:
                 raise ValueError("Root response has no question")
         else:
-            response = self._child_response(record, parent, instruction)
+            if len(record.input_messages) != 1 or not isinstance(
+                record.input_messages[0], UserMessage
+            ):
+                raise ValueError("A saved child response requires one user instruction")
+            response = self._child_response(record, parent, record.input_messages[0])
         if str(response.id) != record.run_id:
             raise ValueError("Response identity does not match its reserved message")
         response.response_status = record.status
