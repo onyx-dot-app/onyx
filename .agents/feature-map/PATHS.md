@@ -350,6 +350,7 @@ the admin routes and check that each has a row above, run
 | `backend/onyx/db/models.py`, `backend/onyx/db/enums.py` | Models and enums for every table. Look up the components that own the tables the diff touches. |
 | `backend/onyx/db/dal.py`, `backend/onyx/db/utils.py`, `backend/onyx/db/constants.py`, `backend/onyx/db/pydantic_type.py`, `backend/onyx/db/README.md`, `backend/onyx/db/_deprecated/` | Database helpers that every component uses. |
 | `backend/alembic/` | Migrations. Read the component that owns the table being migrated. |
+| `documentation/` | Customer docs (Mintlify). `documentation/AGENTS.md` sets their rules, and `documentation/audit/` maps each page to the components it describes. A code change updates the page that covers it. |
 | `backend/onyx/db/seeding/`, `backend/onyx/seeding/`, `backend/ee/onyx/server/seeding.py` | Seed data for rows that several components own. The default agent and the built-in tool rows come from migrations. |
 | `backend/onyx/evals/`, `backend/onyx/server/evals/`, `backend/ee/onyx/server/evals/` | The eval harness. Read the component being evaluated. A prompt or retrieval change needs an eval, not only a unit test. |
 | `backend/onyx/main.py`, `backend/ee/onyx/main.py`, `backend/onyx/setup.py` | App assembly: router and middleware registration and startup. Read the component of each router or middleware you change. |
