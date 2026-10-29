@@ -1,438 +1,298 @@
 # Streaming Protocol
 
-> The wire contract between the chat backend and every client. It defines the
-> packet vocabulary, where each packet belongs in the UI, how packets travel
-> from a worker thread to an HTTP response, and how a client resumes a stream
-> it lost.
+> The wire contract between the chat backend and every client: the packet
+> vocabulary, the `Placement` coordinates, the path from a worker thread to the
+> HTTP body, and the buffer that lets a client resume a stream it lost.
 
-**Verified against:** `268e4d5a3d` (2026-10-05)
-**Domain:** core-loop
+**Verified against:** `a4e97fcea1` (2026-10-29)
 **Edition:** CE
-**Owns:**
-`backend/onyx/server/query_and_chat/streaming_models.py`, `placement.py`,
-`backend/onyx/chat/emitter.py`, `stream_buffer.py`, `renderer.py`, `presentation.py`,
-`web/src/app/app/services/streamingModels.ts`, `web/src/lib/search/streamingUtils.ts`,
-`mobile/src/chat/streamingModels.ts`, `mobile/src/chat/ndjson.ts`
 
 ---
 
-## 1. What the user experiences
+## User experience
 
-None of this is directly visible. It is the substrate that makes the chat
-experience possible: reasoning appearing token by token, a search tool block
-opening before its documents arrive, an image placeholder resolving into a
-picture, a page reload picking an in-flight answer back up instead of losing
-it. When this layer is correct, the user never thinks about it. When a packet
-type has no frontend renderer, or a client cannot parse a line, the user sees
-a hole in the answer with no error.
-
----
-
-## 2. Surfaces
-
-### HTTP endpoints (router prefix `/chat`, `chat_backend.py`)
-
-| Method | Path | Handler | Notes |
-|---|---|---|---|
-| POST | `/chat/send-chat-message` | `handle_send_chat_message` | Live stream. NDJSON `text/event-stream` when `stream=true`; a multi-model request streams too, via `multi_model_stream_generator`. |
-| GET | `/chat/chat-session/{id}/resume-stream` | `resume_chat_stream` | Replays the durable buffer from `cursor`, then tails the live run. 404 when there is no resumable run. |
-| GET | `/chat/get-chat-session/{id}` | `get_chat_session` | Not a live stream. Returns the persisted session; the frontend renders it through the same packet types. |
-
-`handle_send_chat_message` builds its NDJSON body with `get_json_line`
-(`backend/onyx/server/utils.py:get_json_line`), which `json.dumps`s the packet and
-appends `"\n"`. Both `stream_generator` and `multi_model_stream_generator` write
-one JSON object per line this way.
-
-### Environment configuration (`backend/onyx/configs/chat_configs.py`)
-
-| Variable | Default | Effect |
-|---|---|---|
-| `CHAT_HEARTBEAT_INTERVAL_S` | 15 | Cadence of `ChatHeartbeat` packets, live and resumed. |
-| `CHAT_RESUME_POLL_INTERVAL_S` | 0.2 | Poll interval `resume_chat_stream` uses while tailing a live run. |
-| `CHAT_STREAM_BUFFER_TTL_S` | 3600 | TTL of each buffered chunk and the run's meta key while the run is in progress. |
-| `CHAT_STREAM_BUFFER_DONE_TTL_S` | 600 | TTL applied to the same keys once the run finishes. |
-| `CHAT_STREAM_BUFFER_MAX_BYTES` | 16 MiB | Cap on compressed bytes per run; past this the buffer is marked `truncated` and resume stops being possible. |
-
-`_RESUME_MAX_CHUNKS_PER_READ = 32` (`chat_backend.py`) caps how many buffer chunks
-`resume_chat_stream` decompresses per loop iteration, bounding peak memory on a
-resume read.
+- **An end user** sees reasoning appear token by token, a tool block open before
+  its results arrive, parallel tool calls in separate tabs, code that types
+  itself while the model writes the tool arguments, and, in a multi-model turn,
+  one column per model.
+- **Reload or reconnect.** When the page reloads during an answer, the client
+  replays everything the run has buffered and then follows the live run. When
+  the buffer is gone or broken, the client shows the saved message instead.
+- **Quiet phases.** During a long tool call the connection stays open, because
+  the server sends heartbeats. The user does not see them.
+- **When this layer breaks**, the user sees a hole in the answer and no error.
+  A packet type that a client does not know renders nothing.
+- **An API caller** reads one JSON object per line. The response says
+  `text/event-stream`, but the body is NDJSON, not SSE. Most lines are packets
+  with `placement` and `obj`. Some lines are not: the session and message IDs
+  at the start, and `StreamingError` objects. To resume, the caller calls
+  `GET /chat/chat-session/{id}/resume-stream?cursor=0`. A 404 means that no run
+  can be resumed. The public guide is
+  `documentation/developers/guides/chat_new_guide.mdx`.
+- **A CLI user** gets the same stream through the Onyx CLI, which parses each
+  line in `cli/internal/parser/parser.go:ParseStreamLine`. A type the CLI does
+  not know becomes an `UnknownEvent` and shows nothing. A line that is not JSON
+  shows as an error.
 
 ---
 
-### Shared runtime presentation
+## Scope
 
-`chat/renderer.py` converts accepted model content and tool results into existing
-browser packets. `chat/presentation.py:ResponsePresenter` consumes shared runtime
-events. `replay_response` uses the same renderers for saved response records.
-The caller supplies saved search documents and tool IDs as detached tool records.
-Neither path runs a model or executes a tool.
+This component owns the packet vocabulary, `Placement`, the line framing, the
+path from the emitter to the HTTP body, the resume buffer and the resume
+endpoint's read rules, the client mirrors of the vocabulary, and the rule that
+API middleware keeps request context through a streamed body. It shares the
+emitter and the buffer writer with [[core-chat-loop]], which owns when they run.
 
-`chat/response.py` captures accepted steps before display processing. A display
-failure can therefore leave a complete response record available for saving.
-`chat/models.py` separates response content from per-message rendering
-settings, such as citation display and research phase.
-
-The detached response record is an in-memory aggregate. Database codecs restore
-concrete tool-result types before replay. It is not a standalone JSON storage schema.
-The response owner classifies execution failures and reports them separately.
-Session reload carries `error_info` alongside rendered packets. It uses the same
-`StreamingError` payload and failure projection as live errors; history omits stack traces.
-`OverallStop` ends rendering; it does not assert that execution succeeded.
-Only tool failures explicitly marked for public display produce error packets.
-Other tool errors remain available to the model for recovery.
-
-Chat, research, coding, and session reload use these shared rendering paths.
-
-## 3. Data model
-
-This component has no tables. Packets are never written to Postgres; the chat
-tables under [[chat-persistence]] store the *result* of a turn (`ChatMessage`,
-`ToolCall`, `SearchDoc`), not the packet stream that produced it.
-
-The stream ID is the reserved assistant message ID, or the user message ID in a multi-model turn
-(`process_message.py:prepare_chat_turn`, `processing_stream_id`). The only durable storage here is the **stream buffer**, a transient,
-cross-pod cache structure (`backend/onyx/chat/stream_buffer.py`), used so any
-api-server pod can replay and tail an in-flight run:
-
-- **Chunk keys** (`chatstream_{chat_session_id}_{stream_id}:{chunk_n}`): zlib-compressed
-  concatenations of the raw NDJSON lines written since the last flush
-  (`StreamBufferWriter.flush`, threshold `_FLUSH_THRESHOLD_BYTES = 32 KiB`).
-- **Meta key** (`chatstream_{chat_session_id}_{stream_id}:meta`): a `StreamBufferMeta`
-  (`chunk_count`, `done`, `truncated`) as JSON.
-- Both live in `CacheBackend` (Redis, or Postgres on the lite deployment flavor)
-  with TTL `CHAT_STREAM_BUFFER_TTL_S`, extended to `CHAT_STREAM_BUFFER_DONE_TTL_S`
-  once `mark_done` runs.
-- Temporary-history teardown deletes the session's literal stream-key prefix through `CacheBackend.delete_prefix`.
-  This includes orphaned chunks and earlier stream IDs; metadata counters alone cannot identify every stored chunk.
-- Incognito (content-free) runs set `delete_on_done=True`: `mark_done` deletes
-  every chunk and the meta key immediately instead of expiring them, so no
-  content survives past the run.
-- Failed truncation metadata writes are retried on later flushes, at most once per second. Replay stays disabled; chunk writes do not resume.
-- A missing chunk before `done` is set (`allkeys-lru` eviction, expiry) is a
-  **gap**: `read_stream_chunks` returns `gap=True`, and callers must fall back to
-  the persisted message rather than replay a broken sequence.
+It does not own:
+- the producers: [[core-chat-loop]] and each tool ([[tools-framework]]);
+- the renderers: [[chat-frontend]] and [[mobile-app]];
+- the saved-session replay, which rebuilds packets from saved rows:
+  [[chat-persistence]];
+- what `CitationInfo` means and its ordering rule: [[citations]];
+- the runtime renderer and presentation modules, which are not wired:
+  [[agent-runtime]].
 
 ---
 
-## 4. How it works
+## Architecture
 
-### 4.1 Packet vocabulary
+```
+producer (llm_step, tool)            Packet(placement, obj)
+  -> Emitter.emit                    no-op after drain_done; stamps model_index
+  -> merged_queue                    one queue for all models
+  -> writer _publish                 get_json_line(packet) ->
+       StreamBufferWriter.append_line   zlib chunks in the cache, flushed at 32 KiB
+                                        or when the queue idles
+       tee -> reader -> HTTP body       reader adds ChatHeartbeat when idle
+                                        for CHAT_HEARTBEAT_INTERVAL_S
 
-Every packet is a `Packet(placement: Placement, obj: PacketObj)`
-(`streaming_models.py:Packet`). `PacketObj` is a `Union` discriminated on the
-literal `type` field (`Field(discriminator="type")`), and `StreamingType`
-(`streaming_models.py:StreamingType`) is the single source of truth for the
-string values.
-
-| Family | Type(s) | Meaning |
-|---|---|---|
-| Control | `SectionEnd` | Closes the current tool/reasoning block on the frontend. |
-| Control | `OverallStop` | Ends the whole run. Carries `stop_reason` (`"user_cancelled"` or unset for natural completion). Also the terminator for `AgentResponseDelta`, which has no dedicated end packet. |
-| Control | `PacketException` | Carries a Python `Exception` (`Field(exclude=True)`, never serialized); used internally, not over the wire as JSON (see §9). |
-| Control | `ChatHeartbeat` | Payload-less keepalive so idle proxies do not kill a silent stream. |
-| Reasoning | `ReasoningStart` / `ReasoningDelta` / `ReasoningDone` | Opens the reasoning block, streams its tokens, closes it. |
-| Answer | `AgentResponseStart` | Opens the final answer block. Carries `final_documents` and `pre_answer_processing_seconds`. |
-| Answer | `AgentResponseDelta` | One chunk of the answer (`content`). No end packet; see `OverallStop` above. |
-| Answer | `CitationInfo` | One citation: `citation_number` (LLM-visible ordinal) to `document_id` (connector doc id, matches the DB). See [[citations]]. |
-| Debug | `ToolCallDebug` | Full tool name/args/id, only under `INTEGRATION_TESTS_MODE`. |
-| Debug | `ToolCallArgumentDelta` | Streams tool-call arguments (`tool_type`, `argument_deltas`) before the tool executes; used by, e.g., the Python tool renderer to show code as it is typed. |
-| Search tool | `SearchToolStart`, `SearchToolQueriesDelta`, `SearchToolFilterDelta`, `SearchToolDocumentsDelta` | Opens the internal/web search block (`is_internet_search` distinguishes them), streams expanded queries, streams applied filters, delivers the found documents. |
-| Open URL tool | `OpenUrlStart`, `OpenUrlUrls`, `OpenUrlDocuments` | Three-stage sequence: start, the URLs to crawl, the crawled documents. |
-| Image tool | `ImageGenerationToolStart`, `ImageGenerationToolHeartbeat`, `ImageGenerationFinal` | Placeholder, keepalive during generation, then all images at once (`GeneratedImage` list). |
-| Python tool | `PythonToolStart`, `PythonToolDelta` | Code block, then `stdout`/`stderr`/`file_ids` as they arrive. |
-| Custom tool | `CustomToolStart`, `CustomToolArgs`, `CustomToolDelta` | Placeholder, args, then a typed response (`data` or `file_ids`, optionally `CustomToolErrorInfo`). |
-| File reader tool | `FileReaderStart`, `FileReaderResult` | Placeholder, then the retrieved excerpt (`file_id`, char range, text previews). |
-| Memory tool | `MemoryToolStart`, `MemoryToolDelta`, `MemoryToolNoAccess` | Placeholder, an add/update memory op, or a no-access notice. |
-| Deep research | `DeepResearchPlanStart/Delta`, `ResearchAgentStart`, `IntermediateReportStart/Delta`, `IntermediateReportCitedDocs` | Plan text, sub-agent kickoff, intermediate report text and its cited docs. |
-| Coding agent | `CodingAgentStart`, `CodingAgentThinkingDelta`, `CodingAgentFinal` | Query/repo, thinking tokens, final answer. Shares the run with `BashToolStart`/`BashToolDelta` for the shell it drives. |
-| Bash tool | `BashToolStart`, `BashToolDelta` | Command, then `stdout`/`stderr`/`exit_code`/`timed_out`. |
-
-The LLM stream carries raw tool-argument fragments. `MessageRenderer` decodes them
-incrementally only for Python code and the configured reasoning tool. It emits the
-existing `ToolCallArgumentDelta` or reasoning packets. Other tools use finalized
-arguments when execution starts. Saved interrupted calls retain raw arguments for
-display without becoming executable. When a run ends, its unfinished tool cards receive
-the same start/end packets as saved replay. This also closes Python code-writing indicators
-when execution stops before a tool starts. Completed tool cards do not emit another end packet.
-Completed coding-tool answers emit only final-answer packets. Research reports emit once,
-whether delivered through a progress update or directly at completion.
-
-### 4.2 `Placement`
-
-`Placement` (`placement.py:Placement`) is the coordinate every packet carries:
-
-- `turn_index`: the frontend's rendering block index, not a backend turn. One
-  LLM inference producing reasoning plus a tool call is one backend step but
-  advances `turn_index` more than once through
-  `backend/onyx/chat/renderer.py:ResponseLayout.next_section`.
-- `tab_index`: disambiguates parallel tool calls that share a `turn_index`, so
-  each gets its own tab in the UI
-  (`backend/onyx/chat/renderer.py:MessageRenderer.tool_placement`).
-  Text or reasoning between tool calls starts a new section; only consecutive
-  top-level calls share tabs.
-- Coding-agent commands each have a distinct child section, so concurrent outputs
-  and exit statuses stay attached to their command.
-- `sub_turn_index`: nesting level for a tool that calls other tools; `None` at
-  the top level.
-- `model_index`: which model produced the packet in a multi-model turn (`0`,
-  `1`, or `2`); `None` for pre-LLM setup packets yielded before any `Emitter`
-  runs. **Only the `Emitter` sets this field.**
-
-### 4.3 The emitter path
-
-`Emitter.emit` (`emitter.py:Emitter.emit`):
-
-1. Passes the packet to the turn's fleet `QueryObservation`, if any
-   (`packet_queued`). In the worker thread, it records the model's LLM cycle
-   count at its first answer text, per [[observability]].
-2. Copies the packet's `Placement` with `model_index` overwritten
-   (`base.model_copy(update={"model_index": self._model_idx})`). The producer's
-   own `model_index`, if any, is discarded here.
-3. Publishes the packet through the turn's `ChatDelivery`. A publication lock
-   preserves the same packet order for live delivery and replay storage.
-
-### 4.4 Transport
-
-`handle_send_chat_message` and `resume_chat_stream` both return
-`StreamingResponse(..., media_type="text/event-stream")`
-(`chat_backend.py:handle_send_chat_message`, `chat_backend.py:resume_chat_stream`),
-but the body is **NDJSON**, not SSE framing: one `json.dumps(...) + "\n"` line
-per packet (`onyx/server/utils.py:get_json_line`), no `data:` prefix, no `event:`
-field.
-
-On the frontend, `handleSSEStream` (`web/src/lib/search/streamingUtils.ts:handleSSEStream`)
-reads the response body, decodes it, splits the accumulated buffer on `"\n"`,
-and `JSON.parse`s each complete line, holding the trailing partial line for the
-next chunk. If a line fails to parse, it falls back to a regex,
-`line.match(/\{[^{}]*\}/g)`, and tries to parse each match individually.
-`sendMessage` (`web/src/app/app/services/lib.tsx:sendMessage`) wraps this in
-`withoutHeartbeats` (`lib.tsx:withoutHeartbeats`), which drops any packet whose
-`obj.type === "chat_heartbeat"` before the caller ever sees it.
-`resumeStream` (`lib.tsx:resumeStream`) uses the same `handleSSEStream`, but does
-**not** filter heartbeats: callers use them as liveness ticks.
-
-Mobile mirrors this independently: `mobile/src/chat/ndjson.ts:NdjsonBuffer` is a
-pure line-buffer with the same brace-recovery fallback, explicitly commented as
-matching web's `handleSSEStream` internals.
-
-The API's context, captcha, and enterprise gating middleware use pure ASGI calls.
-They do not relay each body chunk through `BaseHTTPMiddleware` tasks and queues.
-Request context remains set until the downstream response finishes. The synchronous
-chat generator still runs through Starlette's thread pool for each yielded packet.
-
-### 4.5 Buffering and resume
-
-`ChatDelivery` sends packets to the live reader and stages serialized lines for
-`StreamBufferWriter`. Session and response IDs use this same path before response workers start.
-The event worker flushes a batch when it reaches 32 KiB,
-including when one event produces many packets. It also flushes smaller batches
-every 50 ms. Cache I/O runs outside the publication lock, so control and
-persistence threads can keep publishing while a cache write blocks.
-
-`StreamBufferWriter` compresses lines into cache chunks, flushing at 32 KiB or
-when the delivery worker requests a flush. `mark_done` finalizes replay retention
-or deletes content-free incognito buffers.
-If the event worker cannot start during completion, `ChatDelivery.finish` reports a stream gap and finalizes replay.
-It marks normal replay incomplete and deletes content-free incognito buffers before resolving completion.
-
-Replay overflow, cache errors, and storage limits make the stream non-resumable;
-they do not fail live delivery. `STREAM_GAP` reports missing live output, such as
-failed agent-event delivery. Completion checks unfinished
-events separately from cache cleanup, so a slow final cache write does not
-produce a false live-stream error.
-
-`resume_chat_stream` (`chat_backend.py:resume_chat_stream`) reads numbered cache
-chunks from `cursor`. Clients can supply `stream_id` to prevent using a cursor
-from another response. A mismatch returns 404.
-
-Each batch ends with a transport-only `StreamCursor` record: `stream_id`,
-`next_cursor`, and `replay_complete`. The first read fixes the restore boundary.
-The endpoint drains to that boundary before tailing later chunks. These records
-are not display packets and are not stored in the cache.
-
-The browser retains a cursor only with the complete packet prefix it describes.
-An interrupted initial restore retains its last acknowledged batch, even if the
-full backlog was not read. Unacknowledged content is discarded.
-It restores the initial backlog without animation, then renders new updates live.
-A hard refresh rebuilds that prefix from the cache once. A reconnect with retained
-content starts at its saved cursor. Heartbeats still carry liveness during quiet
-periods; missing or truncated cache data falls back to saved session history.
-
----
-
-## 5. Contracts and invariants
-
-1. **`StreamingType` is the single source of truth for type strings, and two
-   clients mirror it by hand**: `web/src/app/app/services/streamingModels.ts:PacketType`
-   and `mobile/src/chat/streamingModels.ts`. Nothing enforces this at build
-   time. Adding, renaming, or removing a value in `StreamingType` and not
-   updating both frontends is a silent break. The backend no longer sends
-   `top_level_branching`, and web dropped it, but `mobile/src/chat/streamingModels.ts`
-   still lists it.
-2. **A packet with no frontend renderer renders as nothing.** `findRenderer`
-   (`web/src/app/app/message/messageComponents/renderMessageComponent.tsx:findRenderer`)
-   returns `null` when no `is*Packet` predicate matches a group. A new packet
-   type needs both a TypeScript interface and a case in this dispatch (and its
-   mobile equivalent) or it is silently dropped from the UI.
-3. **`model_index` is stamped only by `Emitter.emit`.** No producer (tool,
-   `llm_loop`, `llm_step`) should set it directly; `emit` overwrites whatever
-   was there.
-4. **Every packet needs a `Placement`.** `Packet` has no default for
-   `placement`; a packet built without one fails validation before it can be
-   emitted.
-5. **Unknown packet types must not crash a client.** The frontend union
-   (`PacketType` in `web/src/app/app/services/lib.tsx`) and the backend
-   discriminated union are both closed sets; a client that receives a `type`
-   it does not recognize should degrade to "render nothing for this group",
-   not throw. `findRenderer`'s `null` return is this behavior; verify a new
-   family does not bypass it with an unguarded cast.
-6. **The replay path must produce packets the frontend renders identically, but
-   not necessarily in the same order.** `GET /chat/get-chat-session/{id}`
-   reconstructs a session for display without re-running the turn. Whatever it
-   emits must satisfy the `PacketObj` union. Ordering is **not** identical: live
-   streaming interleaves `CitationInfo` with the answer text
-   (`citation_processor.py:_process_citation`), while replay emits every
-   `CitationInfo` after the whole answer block and under a separate
-   `turn_index` (`session_loading.py:create_citation_packets`, and the
-   `# Citations come after the message` comment beside its call site). This is
-   safe only because the frontend folds citation packets into a map rather than
-   consuming them positionally. Do not "fix" the ordering difference, and do not
-   introduce a packet family whose meaning depends on position. See
-   [[chat-persistence]] and [[citations]].
-7. **Mobile parses this exact stream.** `mobile/src/chat/streamingModels.ts` and
-   `mobile/src/chat/ndjson.ts` consume the same NDJSON body as web. A framing or
-   vocabulary change reaches [[mobile-app]] as certainly as it reaches
-   [[chat-frontend]].
-8. **`AgentResponseDelta` has no end packet.** Code that assumes every stream
-   family closes with a matching `*Done`/`*End` packet needs a special case
-   for the answer stream, which closes via `OverallStop`.
-9. **`PacketException.exception` never serializes.** It is `Field(exclude=True)`;
-   the field exists for in-process error propagation, not for the wire. A
-   client-visible error goes out as `StreamingError`
-   (`backend/onyx/server/query_and_chat/streaming_models.py:StreamingError`), a sibling of `Packet` in the
-   `AnswerStreamPart` union, not as a `PacketObj`.
-10. **The stream buffer can develop a gap.** `read_stream_chunks` returning
-    `gap=True` means the sequence is unrecoverable; `resume_chat_stream` ends
-    the stream rather than replay a broken run, and the client must fall back
-    to `GET /chat/get-chat-session/{id}`.
-
----
-
-## 6. Relationships
-
-**Depends on**
-- [[core-chat-loop]]: `backend/onyx/chat/renderer.py` produces packets;
-  `backend/onyx/chat/execution.py` owns stream publication for the turn.
-- [[citations]]: `CitationInfo` packets originate from the citation processor
-  running inside the loop.
-- [[tools-framework]]: each tool family's packets are defined by that tool's
-  contract with the loop.
-
-**Depended on by**
-- [[chat-frontend]]: `findRenderer` and the renderer tree are the sole consumer
-  of the packet stream on web.
-- [[mobile-app]]: parses the identical NDJSON stream with its own mirrored enum
-  and buffer.
-- [[chat-persistence]]: `save_chat_turn` persists what the packets represented;
-  the session-replay path renders persisted rows back through this same packet
-  vocabulary.
-- [[slack-bot]], [[discord-bot]], [[onyx-api]], [[mcp-server]]: any surface that
-  drives a turn through [[core-chat-loop]] either consumes this stream directly
-  or uses `NullEmitter` to opt out of it.
-
----
-
-## 7. Blast radius
-
-| If your change... | Also check |
-|---|---|
-| adds a packet type | `StreamingType` and the `PacketObj` union; `web/src/app/app/services/streamingModels.ts:PacketType` and its interface; `mobile/src/chat/streamingModels.ts`; a `findRenderer` case (and mobile's `findRenderer.ts`) or the packet silently renders nothing |
-| renames a packet type | every hand-mirrored enum above; any Playwright mock stream in `web/tests/e2e/utils/chatMock.ts` that hardcodes the old string; a saved stream buffer chunk mid-flight uses the old name until it drains |
-| changes `Placement` (adds/removes/redefines a field) | every call site that constructs `Placement(...)` in `backend/onyx/chat/renderer.py`; `Emitter.emit`'s `model_copy(update=...)`; the frontend `Placement` interface in `streamingModels.ts`; the grouping logic that keys off `turn_index`/`tab_index` in [[chat-frontend]] |
-| changes a tool's packet sequence (adds/reorders/removes a stage) | that tool's renderer under `web/src/app/app/message/messageComponents/renderMessageComponent.tsx` and its mobile equivalent; [[tools-framework]] for the tool's producer-side contract |
-| changes the transport framing (NDJSON, line delimiter, SSE headers) | `handleSSEStream` and `withoutHeartbeats` on web; `NdjsonBuffer` on mobile; `resume_chat_stream`'s replay, since buffered chunks are raw NDJSON bytes written by the old framing |
-| changes stream buffer TTLs or chunk size | resumability window for slow clients; `_RESUME_MAX_CHUNKS_PER_READ` memory bound in `chat_backend.py` |
-
----
-
-## 8. How to verify a change
-
-### Tests
-
-```bash
-# Frontend Playwright specs that assert directly on the packet stream.
-cd web && bun run playwright chat_message_rendering
+resume-stream: get_processing_stream_id -> read_stream_chunks(cursor, 32 per read)
+  -> replay blocks -> poll until done or the fence lapses, with heartbeats
 ```
 
-`web/tests/e2e/utils/chatStream.ts` (`parseChatStreamBody`, `getPacketObjectsByType`)
-and `web/tests/e2e/utils/chatMock.ts` (`buildMockStream`, `mockChatEndpoint`) build
-and parse mock NDJSON bodies matching this exact format; use them when a test
-needs to assert on packet ordering or a new packet type without a real LLM call.
+**Line kinds.** `chat/models.py:AnswerStreamPart` lists what the backend
+writes: `Packet`, `MessageResponseIDInfo`, `MultiModelMessageResponseIDInfo`,
+`CreateChatSessionID` and `StreamingError`. Only `Packet` has a placement. A
+per-model error puts `model_index` in `StreamingError.details`.
 
-`backend/onyx/chat/renderer.py:ToolRenderer.start` emits `ToolCallDebug` only in
-integration-test mode, before the start packet. Debug packets must not close a
-coding-agent bash step before its output arrives.
-Tests can use them to assert tool names and arguments without an environment flag.
+**`Placement`.** `turn_index` is the rendering block. `tab_index` separates
+parallel tool calls in one block. `sub_turn_index` is set for packets from a
+tool that runs its own loop, such as the research agent. `model_index` is the
+model column. It is `None` on packets that no `Emitter` tagged, such as
+heartbeats.
 
-### Manual reproduction
+**Packet families.**
+`backend/onyx/server/query_and_chat/streaming_models.py:StreamingType` holds every type string, and `PacketObj` is the union that `Packet.obj` is
+validated against. Families are control (`stop`, `section_end`, `error`,
+`chat_heartbeat`), reasoning, answer (`message_start`, `message_delta`),
+citations, one family per tool, deep research, and the coding agent with the
+bash tool. `ToolCallArgumentDelta` streams string arguments for tools whose
+`should_emit_argument_deltas` returns true (`chat/tool_call_args_streaming.py`).
+`ToolCallDebug` appears only with `INTEGRATION_TESTS_MODE`.
 
-1. Confirm services are up: `tail -f backend/log/api_server_debug.log`.
-2. Open the browser devtools Network tab, send a chat message that triggers a
-   search and an answer, and inspect the `send-chat-message` response body: it
-   should be newline-separated JSON objects, each with a `placement` and `obj`.
-3. Reload mid-answer; confirm buffered output appears immediately and new output
-   continues without repeating completed tool animations.
-4. Wait through a quiet stretch (or throttle the LLM) and confirm
-   `chat_heartbeat` lines appear roughly every `CHAT_HEARTBEAT_INTERVAL_S`
-   seconds, and that they never appear in the rendered UI.
+**Buffer.** The key is the session ID plus the stream ID (the reserved assistant
+message ID, or the user message ID in a multi-model turn). Keys live in the
+cache backend (`cache/factory.py:get_cache_backend`): Redis, or Postgres when
+`CACHE_BACKEND=postgres`. Chunks expire after `CHAT_STREAM_BUFFER_TTL_S`, and
+after `CHAT_STREAM_BUFFER_DONE_TTL_S` once the run is done. A run over
+`CHAT_STREAM_BUFFER_MAX_BYTES`, or a cache error, marks the buffer `truncated`.
+The run continues without resume.
 
-### What "working" looks like
-
-- Every packet line is valid JSON with a `placement` and a recognized `obj.type`.
-- No packet type in the response goes unrendered unless it is intentionally
-  invisible (e.g. `ChatHeartbeat`, `SectionEnd`).
-- A resumed stream is visually identical to what the live stream would have
-  produced.
+**Middleware.** The API server's middleware runs as pure ASGI callables, so a
+context variable that a middleware sets stays set until the streamed body and
+its background task end ([[#pure-asgi-middleware]]).
 
 ---
 
-## 9. Footguns
+## Contracts and traps
 
-- **`turn_index` is not a backend turn.** It is a frontend rendering block
-  boundary. Do not use it to count LLM inferences or tool-call cycles; use the
-  loop's own cycle counters for that (see [[core-chat-loop]]).
-- **Heartbeats are filtered client-side, not server-side.** `send-chat-message`
-  emits `ChatHeartbeat` packets over the wire; `withoutHeartbeats` in
-  `lib.tsx` strips them before the rest of the app sees them. A consumer that
-  bypasses `sendMessage` and calls `handleSSEStream` directly will see
-  heartbeats mixed into its packets.
-- **The frontend's regex fallback can silently mis-parse.** `handleSSEStream`'s
-  `line.match(/\{[^{}]*\}/g)` only recovers flat (non-nested) JSON objects. A
-  malformed line containing a nested object (e.g. a tool packet with a `data`
-  object) can extract a partial, wrong object instead of failing loudly.
-- **`PacketException` cannot reach the client as-is.** Its `exception` field is
-  excluded from serialization; sending one directly over the wire yields an
-  `obj` with no usable content. Client-visible errors must go out as the
-  sibling type `StreamingError`, not as a `Packet` wrapping `PacketException`.
-- **A capped buffer read (`max_chunks`) can return `done=True` with more data
-  still pending.** Any new reader of `read_stream_chunks` must loop until
-  `blocks` comes back empty, not stop at the first `done=True`.
+1. `vocabulary-mirrored-by-hand` **The vocabulary is mirrored by hand, and no
+   build step checks it.** The backend `StreamingType` and `PacketObj` are the
+   source. These copy it: the web and mobile enums
+   (`web/src/app/app/services/streamingModels.ts`,
+   `mobile/src/chat/streamingModels.ts`), the
+   renderer dispatch
+   (`web/src/app/app/message/messageComponents/renderMessageComponent.tsx:findRenderer`,
+   `mobile/src/components/chat/renderers/findRenderer.ts`), the widget
+   (`widget/src/services/stream-parser.ts`), the Onyx CLI
+   (`cli/internal/parser/parser.go`, `cli/internal/models/events.go`), the
+   load-test parser (`tools/loadtest/onyx_client/stream_parser.py`) and the
+   public developer docs (`documentation/developers/`). To find the current
+   set, run `git grep -l reasoning_delta`. A
+   missing entry is a silent break.
+2. `old-bytes-across-deploy` **A rename or framing change meets old bytes.**
+   `server/query_and_chat/chat_backend.py:resume_chat_stream` yields the
+   buffered blocks without re-encoding, so a
+   client that resumes across a deploy reads lines that the previous version
+   wrote, until `CHAT_STREAM_BUFFER_TTL_S` passes. Mobile builds and CLI binaries
+   in the field keep the old vocabulary much longer. Accept the old name or
+   framing, or add the new one beside it.
+3. `unknown-packet-renders-nothing` **An unknown packet renders nothing.**
+   `web/src/app/app/message/messageComponents/renderMessageComponent.tsx:findRenderer`
+   returns `null` when no predicate matches. Keep that path for
+   new families: an unguarded cast can throw instead.
+4. `emitter-sets-model-index` **Only `chat/emitter.py:Emitter.emit` sets
+   `model_index`.** It
+   overwrites what the producer set. Packets that the writer publishes itself,
+   such as the stop `OverallStop`, and heartbeats have no `model_index`.
+5. `not-every-line-is-a-packet` **Not every line is a packet, and heartbeats are
+   the consumer's job.** Clients must check for `obj` before they read it, as
+   `web/src/hooks/useChatSessionController.ts` does on resume. On web, the name
+   `PacketType` means two things: the enum of type strings in
+   `web/src/app/app/services/streamingModels.ts`, and the union of line shapes in
+   `web/src/app/app/services/lib.tsx`. `web/src/app/app/services/lib.tsx:sendMessage`
+   drops heartbeats with `withoutHeartbeats`.
+   `web/src/app/app/services/lib.tsx:resumeStream` keeps them, because its
+   caller uses them as liveness ticks. A new consumer of
+   `web/src/lib/search/streamingUtils.ts:handleSSEStream` sees them.
+6. `turn-index-is-not-a-turn` **`turn_index` is not a backend turn.** It is a
+   rendering block. The loop sets it to the cycle count plus the number of
+   cycles that produced reasoning, so reasoning and the tool call from one
+   inference are two blocks. Inside a nested loop, `sub_turn_index` advances
+   instead. Do not use `turn_index` to count LLM calls.
+7. `tab-index-depends-on-narration` **`tab_index` depends on narration.** Native
+   tool calls start at tab 1 when the model wrote answer text before them, so
+   they render as their own group (`chat/llm_step.py:_extract_tool_call_kickoffs`,
+   `tab_index_start`). Calls that the fallback parser recovers from text start
+   at 0 (`chat/llm_step.py:extract_tool_calls_from_response_text`).
+8. `no-answer-end-packet` **The answer stream has no end packet, and errors are
+   separate lines.** `AgentResponseDelta` ends at `OverallStop`. `OverallStop`
+   ends rendering. It does not mean success: errors arrive as `StreamingError`.
+   `backend/onyx/server/query_and_chat/streaming_models.py:PacketException`
+   never reaches the wire, because its `exception` field is excluded from
+   serialization.
+9. `replay-order-not-live-order` **Replay order is not live order.**
+   Saved-session replay
+   (`server/query_and_chat/session_loading.py:translate_assistant_message_to_packets`)
+   rebuilds a turn in its own order, for example all `CitationInfo` after the
+   answer ([[citations#citation-info-before-text]]). Do not add a packet whose meaning depends
+   on its position.
+10. `buffer-gap-ends-resume` **A buffer gap ends the resume, and the cursor
+    counts chunks.** `chat/stream_buffer.py:read_stream_chunks` reports `gap`
+    for a missing chunk, a bad chunk or a truncated buffer.
+    `server/query_and_chat/chat_backend.py:resume_chat_stream` then ends the
+    stream, and the client refetches the session. A capped read can say `done` with
+    chunks still pending: read until `blocks` is empty. The cursor counts chunks,
+    not packets, so web and mobile resume from 0 and rebuild the message from the
+    full replay. Lines that the writer has not flushed cannot be read.
+11. `pure-asgi-middleware` **API middleware must be pure ASGI.** Each middleware
+    on the API server is a function or class that wraps
+    `await app(scope, receive, send)`, such as
+    `utils/middleware.py:request_id_middleware`,
+    `server/auth/captcha_api.py:CaptchaCookieMiddleware` and
+    `backend/ee/onyx/server/middleware/tier_gate.py:tier_gate_middleware`. Do not
+    use `BaseHTTPMiddleware` or `@app.middleware("http")`. That base class
+    relays every body chunk through an AnyIO memory channel and a separate task,
+    which costs CPU on each chunk of a long chat stream. A pure ASGI middleware
+    sets its context variable around the whole call, so the request ID, tenant
+    and endpoint context hold until the streamed body and its background task
+    end, and reset on completion or cancellation. A middleware that measures or
+    logs must wrap `send`: `server/middleware/latency_logging.py:latency_logging_middleware`
+    logs at `http.response.start`, before the body. The MCP server is a separate
+    app and uses `@app.middleware("http")` for its health check; do not copy it.
+12. `cli-json-event-names` **The CLI event names are an output contract.**
+    `ask --json` prints each event as `{type, event}`, with `type` from the
+    event's `EventType()` in `cli/internal/models/events.go`. Scripts read
+    these names and fields. Keep a name when you rename the wire type, or
+    accept both, as [[#old-bytes-across-deploy]] requires for clients.
 
+---
 
-### Tool rendering and replay
+## Known issues
 
-Malformed model arguments use a generic tool card. They do not prevent the saved
-error or later answer from loading. Tools retain their existing error-display
-policy; a model-facing error alone does not request a browser error marker.
-Generic model-facing error text is not displayed. Explicit public error details and
-structured tool output retain their existing rendering.
+- The web enum keeps `MESSAGE_END`. The mobile enum keeps `MESSAGE_END` and
+  `TOP_LEVEL_BRANCHING`. The backend sends neither. Mobile drops
+  `top_level_branching` so that it can talk to older servers. The
+  `MESSAGE_END` in `backend/onyx/agents/events.py` belongs to the runtime event
+  model, not to this protocol.
+- `SectionEnd` has a code comment that marks it for removal, but renderers
+  still use it to close blocks.
+- **A resumed content-free incognito run loses its tail.**
+  `chat/stream_buffer.py:StreamBufferWriter.mark_done` with `delete_on_done`
+  deletes the keys at completion without a last flush. A client that reads
+  through `resume-stream` stops at that point and shows the saved message. The
+  writer also stops buffering when the incognito session ends.
+- **The parse fallback cannot recover a packet.** When a line fails to parse,
+  `handleSSEStream` and the mobile buffer extract flat `{...}` objects. Every
+  packet is nested, so the fallback yields fragments such as a bare `placement`.
+  On web, parse failures go only to the console.
 
-Live and saved answers retain citation metadata when the answer starts with a
-citation. Saved history hides the configured thinking tool, just as live output does.
-Coding-child reasoning uses `CodingAgentThinkingDelta`, including native thinking
-and configured thinking-tool output. Replay assigns sections in accepted content
-order. Citation removal also applies to citation-only and interrupted answers.
+---
 
-A live `STREAM_GAP` error also records a query-telemetry failure. It does not change
-the model or tool execution outcome. Non-streaming consumers retain each root answer
-section and its citations; child-agent packets remain excluded.
+## Dependencies
+
+- [[core-chat-loop]]: owns the emitter, writer and buffer lifecycle per run.
+- [[citations]]: produces `CitationInfo`.
+- [[tools-framework]]: each tool's packet sequence.
+- [[multi-tenancy]]: the tenant middleware and the tenant-aware cache that holds
+  the buffer.
+
+---
+
+## Recipes
+
+- `packet-type` **A packet type.** Copy the file reader packets
+  (`FileReaderStart`, `FileReaderResult`). List every place that knows them
+  with `git grep -il file_reader`. The search must ignore case: the web
+  renderers and hooks switch on the enum member `PacketType.FILE_READER_START`,
+  not on the wire string.
+  1. Add the value to `StreamingType`, the model class beside the other packet
+     models, and the model to `PacketObj`.
+  2. Emit it through the `Emitter` with a real `Placement`.
+  3. Add the type and interface to the web and mobile enums from
+     [[#vocabulary-mirrored-by-hand]].
+  4. Add a renderer case on web and on mobile. On web, follow
+     [[chat-frontend#packet-type-web-sets]]. Mobile keeps its own copies of the
+     grouping sets ([[mobile-app]]).
+  5. If the packet must survive a reload, add it to the replay in
+     `translate_assistant_message_to_packets` ([[chat-persistence]]). Replay can
+     rebuild a packet only from saved data, the `ToolCall` row or the message.
+     Save the data first.
+  6. Update the other consumers from [[#vocabulary-mirrored-by-hand]]. The
+     non-streaming path (`chat/process_message.py:gather_stream_full`) ignores
+     packet types it does not know, so decide whether `ChatFullResponse` needs
+     the new data.
+  7. If a test mocks the stream, update `web/tests/e2e/utils/chatMock.ts`.
+- `cli-packet-type` **A packet type in the CLI.** Copy the search start event:
+  list every place that knows it with `git grep -n SearchStartEvent -- cli`. A
+  parser case alone shows nothing. Add the event struct and its `EventType()`
+  name in `cli/internal/models/events.go`, the case in
+  `cli/internal/parser/parser.go:ParseStreamLine`, then a render case in the
+  interactive view (`cli/internal/tui/app.go`) and in the `ask` text output
+  (`cli/cmd/ask.go`). The `--json` output carries the event with no extra code
+  ([[#cli-json-event-names]]).
+- `api-middleware` **A new API middleware.** Copy
+  `utils/middleware.py:request_id_middleware`. List the registered middleware
+  with `git grep -n "add_middleware" -- backend/onyx backend/ee/onyx`. Add a
+  case to `backend/tests/unit/onyx/server/middleware/test_streaming_context.py`,
+  which fails when a `BaseHTTPMiddleware` is in the stack
+  ([[#pure-asgi-middleware]]).
+- `investigate-missing-block` **Investigate a missing block or a bad resume.**
+  In the browser network tab, copy the `send-chat-message` request as cURL and
+  run it with `curl -N` against
+  `http://localhost:3000/api/chat/send-chat-message`. Each line must be JSON;
+  find the packet with its `placement`. If the line is there, the fault is in a
+  renderer ([[chat-frontend]], [[mobile-app]]). If it is not, the fault is in
+  the producer. For a resume, call
+  `/api/chat/chat-session/<id>/resume-stream?cursor=0` while the run is live. A
+  404 means the processing fence or the buffer meta key
+  (`chatstream_<session_id>_<stream_id>:meta`) is missing. A stream that ends
+  early means a gap ([[#buffer-gap-ends-resume]]).
+
+---
+
+## Verification
+
+- Unit: `backend/tests/unit/onyx/chat/` (emitter, stream buffer, tool
+  placement, argument deltas) and `backend/tests/unit/onyx/server/middleware/`
+  (context through a streamed body).
+- Integration: `backend/tests/integration/tests/streaming_endpoints/`.
+- CLI: `cli/internal/parser/parser_test.go`.
+- Playwright: `web/tests/e2e/chat/`. The helpers in
+  `web/tests/e2e/utils/chatStream.ts` parse a real body, and
+  `web/tests/e2e/utils/chatMock.ts` builds mock bodies.
+- By hand: in the browser network tab, each line of the `send-chat-message`
+  body is JSON. Reload during an answer: the client must call `resume-stream`
+  and show the same answer. Wait through a long tool call: heartbeat lines
+  arrive and never render.

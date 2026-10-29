@@ -1,573 +1,329 @@
 # Background Jobs (Celery)
 
-> The shared asynchronous machinery. It does not decide what to index, prune, or
-> sync; it decides when a task runs, which worker runs it, how tenant context
-> travels with it, and how a stuck task is detected and recovered.
+> The shared asynchronous machinery: worker apps, queues, the beat schedule,
+> tenant context on each task, fences and task conventions. It also owns the
+> two flows that remove documents, pruning and connector deletion.
 
-**Verified against:** `268e4d5a3d` (2026-10-05)
-**Domain:** background-jobs
-**Edition:** CE, with EE additions dispatched through the same versioned-app
-mechanism as the rest of the codebase
-**Owns:**
-`backend/onyx/background/celery/apps/` (`app_base.py`, `primary.py`, `beat.py`,
-`light.py`, `heavy.py`, `docfetching.py`, `docprocessing.py`,
-`user_file_processing.py`, `monitoring.py`, `scheduled_tasks.py`, `client.py`),
-`backend/onyx/background/celery/versioned_apps/`,
-`backend/onyx/background/celery/configs/`,
-`backend/onyx/background/celery/celery_redis.py`, `celery_utils.py`,
-`celery_k8s_probe.py`, `memory_monitoring.py`,
-`backend/onyx/background/celery/tasks/beat_schedule.py`,
-`backend/onyx/background/celery/tasks/monitoring/`,
-`backend/onyx/background/task_utils.py`, `periodic_poller.py`, `error_logging.py`,
-`backend/onyx/db/tasks.py`, `db/sync_record.py`, `db/background_error.py`,
-`backend/ee/onyx/background/celery/apps/`, `ee/onyx/background/celery/tasks/beat_schedule.py`
+**Verified against:** `a4e97fcea1` (2026-10-29)
+**Edition:** CE. EE adds worker and beat entries through the versioned-app
+mechanism. Cloud fans per-tenant work out through a generator task.
 
-**Read first:** `backend/onyx/background/README.md`. It is the design overview
-written by the team that built this layer. This document maps it to code, adds
-verification guidance, and corrects a few places where the README and the code
-have drifted apart (see §9).
+## Callers
 
----
+The interface is a set of conventions, not one API: tasks on
+`background/celery/apps/app_base.py:TenantAwareTask`, beat templates in
+`background/celery/tasks/beat_schedule.py`, queues in
+`configs/constants.py:OnyxCeleryQueues`, and the checker, generator and monitor
+pattern with a fence.
 
-## 1. What the admin experiences
+- **Developers** add periodic tasks, queues, workers and fenced flows (see
+  Recipes). A mistake here fails with no error: messages wait in a queue until
+  they expire, or a task runs against the default schema. They must keep
+  [[#queue-needs-worker]], [[#default-acks-late]], [[#fence-needs-validator]],
+  [[#beat-interval-stretched]], [[#cloud-timedelta-schedule]],
+  [[#task-kwargs-defaults]] and [[multi-tenancy#celery-task-tenant-kwarg]].
+- **Components that run their flows here:** [[indexing-pipeline]],
+  [[permission-sync]], [[document-index]], [[file-store-and-user-files]],
+  [[connector-capability-checks]] and [[craft-scheduled-tasks]]. They rely on
+  the tenant context, the ack mode and the signal handlers, and keep
+  [[#idempotent-tasks]] and [[#no-session-across-external-call]].
+- **[[cc-pairs-and-creds]]** starts pruning and connector deletion from the
+  connector page. Architecture gives the deletion flow.
 
-A connector configured with a refresh interval indexes on that schedule without
-anyone triggering it by hand. Pruning removes documents deleted at the source on
-its own cadence. Permission and group syncs pick up ACL changes from the external
-system without a user action. A user-uploaded file starts processing within
-seconds of the upload finishing. Code for each claim: schedules in §4.1,
-pruning and the checker pattern in §4.2, user-file enqueue in
-`db/projects.py` and `background/celery/tasks/user_file_processing/tasks.py`.
+## Scope
 
-Connector indexing, pruning, and permission and group sync are periodic scans
-run by Celery Beat. User-file uploads enqueue processing directly
-(`db/projects.py`). The user-file Beat scan recovers files that stay pending.
-Scheduled work runs on its configured cadence plus queue latency. Cloud
-templates also apply the beat multiplier. If a worker is down or a queue is
-backed up, the delay grows. For connector work, the admin sees a stale "last
-indexed" or "last synced" timestamp, not a direct alert.
+This component owns the worker apps and the versioned stubs that workers start
+from, the per-worker configs, the beat schedule and its dynamic tenant
+scheduler, `TenantAwareTask`, the signal handlers, and the readiness and
+liveness probes. It owns the fence and taskset pattern, `SyncRecord`,
+`BackgroundError` and `TaskQueueState`. It owns the pruning and connector
+deletion task flows and the shared document cleanup task they use.
 
----
+The backend AGENTS file lists the workers and their roles, and states the task
+rules that are not repeated here: `@shared_task`, `expires=` on every send, and
+Celery time limits that do nothing in thread pools. The `-Q` flags in the
+supervisord config and in the Helm worker templates are the truth for which
+worker reads which queue.
 
-## 2. Surfaces
+Its neighbours own:
+- [[indexing-pipeline]]: docfetching and docprocessing.
+- [[permission-sync]]: doc and group sync, which use a lease row, not a fence.
+- [[document-index]]: the metadata sync, the reindex port and the index reclaim.
+- [[connectors]]: the slim listing that pruning reads, and its contract.
+- [[multi-tenancy]]: the rule that every task carries a tenant.
+- [[observability]]: Prometheus metrics and the monitoring tasks.
+- [[fleet-telemetry]]: the collection pass that reads job rows.
 
-### Worker apps
+## Architecture
 
-Each worker is a `celery.Celery` app built in `onyx/background/celery/apps/*.py`
-and re-exported through a "factory stub" in
-`onyx/background/celery/versioned_apps/*.py`. The versioned-app file calls
-`fetch_versioned_implementation("onyx.background.celery.apps.<name>", "celery_app")`
-(`versioned_apps/primary.py:app`), which is the same EE/CE dispatch mechanism
-described in `[[editions-and-gating]]`: in a build that ships the EE code,
-the loader resolves to `ee/onyx/background/celery/apps/<name>.py` instead of the
-CE file. `onyx/background/celery/versioned_apps/light.py` is the one exception;
-its docstring states there is no EE variant, so it imports the CE app directly.
-Workers are started against the `versioned_apps` module (`supervisord.conf` and
-the Helm worker templates both use `celery -A onyx.background.celery.versioned_apps.<name>`),
-never the bare `apps` module.
+**Workers.** Each worker is a Celery app in
+`background/celery/apps/<name>.py`. Processes start from
+`background/celery/versioned_apps/<name>.py`, which loads the EE app when the
+build ships EE code (`fetch_versioned_implementation`). Every app sets
+`background/celery/apps/app_base.py:TenantAwareTask` as its task class, and all
+workers use thread pools.
 
-Verified worker-to-queue mapping, cross-checked against
-`backend/supervisord.conf` and `deployment/helm/charts/onyx/templates/celery-worker-*.yaml`
-(both agree with each other):
+**Where Celery does not run.** The Helm chart with `vectorDB.enabled` off and
+the Lite compose overlay start no Celery. There, a poller in the API server runs
+user-file recovery and a few periodic tasks
+(`background/periodic_poller.py:start_periodic_poller`). Celery runs with
+`DISABLE_VECTOR_DB` only when an operator starts workers with the flag set
+([[#vector-db-beat-tasks]]). A worker that is down or a queue that is backed up
+shows only as a stale "last indexed" or "last synced" time; queue depth is in
+the monitoring ([[observability]]).
 
-| Worker | App file | Queues (`-Q`) |
-|---|---|---|
-| Primary | `apps/primary.py` | `celery` (local); the Helm chart additionally passes `celery,periodic_tasks` for the primary deployment, but no task or beat entry in this codebase routes to a `periodic_tasks` queue (see §9). |
-| Light | `apps/light.py` | `vespa_metadata_sync, connector_deletion, doc_permissions_upsert, checkpoint_cleanup, index_attempt_cleanup, index_reclaim, chat_ttl_deletion, capability_checks_draft` |
-| Heavy | `apps/heavy.py` | `connector_pruning, connector_doc_permissions_sync, connector_external_group_sync, csv_generation, sandbox, connector_hierarchy_fetching, capability_checks` |
-| Docprocessing | `apps/docprocessing.py` | `docprocessing, port` |
-| Docfetching | `apps/docfetching.py` | `connector_doc_fetching` |
-| User File Processing | `apps/user_file_processing.py` | `user_file_processing, user_file_project_sync, user_file_delete, user_file_port` |
-| Monitoring | `apps/monitoring.py` | `monitoring` |
-| Scheduled Tasks | `apps/scheduled_tasks.py` | `scheduled_tasks` (Craft scheduled-task dispatch; see `apps/scheduled_tasks.py` docstring) |
+**Beat.** `background/celery/apps/beat.py:DynamicTenantScheduler` generates the
+schedule every 60 seconds and replaces it only when it or the multiplier
+changed.
+- Self-hosted: it adds one entry per template and tenant, with `tenant_id`
+  in the kwargs (`background/celery/apps/beat.py:_generate_schedule`).
+- Cloud (`MULTI_TENANT`): the per-tenant list is empty. Each template becomes
+  one `cloud_beat_task_generator` entry
+  (`backend/onyx/background/celery/tasks/beat_schedule.py:make_cloud_generator_task`), which
+  sends the real task once per tenant with `tenant_id` set
+  (`ee/onyx/background/celery/tasks/cloud/tasks.py:cloud_beat_task_generator`).
+  The interval is multiplied by a runtime `beat_multiplier`, so an operator can
+  slow every tenant's checks without a deploy ([[#beat-interval-stretched]]).
+  Two template options steer the fan-out. `skip_gated` (default true) skips
+  gated tenants. `work_gated` (default false) skips tenants with no recent
+  activity when tenant work gating is on; such a task reaches an inactive
+  tenant only on a full-fanout cycle.
+- System-wide cloud tasks (`beat_cloud_tasks`) run once, not per tenant, and
+  the multiplier does not stretch them. Their Celery task names start with the
+  cloud prefix, so `on_task_postrun` skips its tenant taskset cleanup for them.
 
-`background/README.md`'s worker table lists a "Background (consolidated)" worker
-at `apps/background.py` that runs every queue except `celery`. **That file does
-not exist** (`ls backend/onyx/background/celery/apps/` has no `background.py`,
-and none of `supervisord.conf`, the Helm templates, or `versioned_apps/` reference
-it). The README's table also omits the `scheduled_tasks` worker entirely, and
-understates the Light and Heavy queue lists (missing `index_reclaim`,
-`chat_ttl_deletion`, `capability_checks_draft` on Light, and
-`connector_hierarchy_fetching`, `capability_checks` on Heavy). Treat the table
-above, not the README's, as current. `backend/AGENTS.md`'s worker table matches
-this document.
+**The checker, generator and monitor pattern.** Pruning is the example.
 
-### Non-worker apps
-
-- **Beat** (`apps/beat.py`): the scheduler process, started as
-  `celery -A onyx.background.celery.versioned_apps.beat beat`. Runs
-  `DynamicTenantScheduler` (`apps/beat.py:DynamicTenantScheduler`), a
-  `celery.beat.PersistentScheduler` subclass. See §4.
-- **Client** (`apps/client.py`): a minimal `Celery` app with no worker or beat
-  role, used by non-worker processes (the API server) to call `send_task`.
-
-### `app_base.py`: shared task class and lifecycle hooks
-
-- `TenantAwareTask` (`app_base.py:TenantAwareTask`) is the base `Task` class every
-  worker installs (`celery_app.Task = app_base.TenantAwareTask` in each app
-  module, and `celery_app.conf.task_default_base = app_base.TenantAwareTask` in
-  `beat.py`). Its `__call__` reads `tenant_id` out of the task's kwargs and sets
-  `CURRENT_TENANT_ID_CONTEXTVAR` before running the task body, then resets the
-  contextvar in a `finally` block. **If `tenant_id` is absent from kwargs, it
-  silently falls back to `POSTGRES_DEFAULT_SCHEMA`** rather than raising. See
-  [[multi-tenancy]] and §5.
-- Signal handlers registered per app (each app file wires these functions to
-  its own `celery.signals`; only `apps/light.py` also wires `on_task_revoked`): `on_task_prerun` resets per-task logging context
-  (`app_base.py:on_task_prerun`); `on_task_postrun` removes the task's id from
-  whichever Redis taskset it belongs to, keyed by task-id prefix
-  (`app_base.py:on_task_postrun`); `on_task_revoked` does the same cleanup for the
-  document-sync taskset specifically, because a revoked/expired task never runs
-  `task_postrun` (`app_base.py:on_task_revoked`); `reset_tenant_id` clears the
-  tenant contextvar back to the default schema after every task
-  (`app_base.py:reset_tenant_id`).
-- Readiness and liveness: `wait_for_redis`, `wait_for_db`, and
-  `wait_for_document_index_or_shutdown` (`app_base.py`) block worker startup,
-  raising `WorkerShutdown` on timeout. `on_worker_ready` and `on_worker_shutdown`
-  touch/remove a file-based readiness probe (`app_base.py:make_probe_path`,
-  checked by `celery_k8s_probe.py`'s `main_readiness`/`main_liveness`).
-  `on_worker_ready` also starts the worker's fleet telemetry sender
-  (`utils/fleet_telemetry.py:start_telemetry`). See [[observability]] §4.11.
-  `LivenessProbe` (`app_base.py:LivenessProbe`) is a Celery bootstep that
-  refreshes the liveness file every 15 seconds.
-- The primary worker additionally holds a singleton Redis lock,
-  `OnyxRedisLocks.PRIMARY_WORKER` (`onyx/configs/constants.py`), touched every
-  `CELERY_PRIMARY_WORKER_LOCK_TIMEOUT / 8` seconds and released in
-  `on_worker_shutdown` (`app_base.py:on_worker_shutdown`).
-
-### Beat schedules
-
-The incognito file cleanup task also retries pending Redis context teardown
-before deleting generated files. Busy session locks leave requests pending for
-the next attempt. See [[context-assembly]] §4.10.
-
-`onyx/background/celery/tasks/beat_schedule.py` defines three lists, resolved
-through `fetch_versioned_implementation` so EE can extend them
-(`ee/onyx/background/celery/tasks/beat_schedule.py` imports and re-exports the CE
-lists plus its own additions):
-
-- `beat_task_templates`: self-hosted-or-cloud task templates (`check-for-indexing`,
-  `check-for-vespa-sync`, `check-for-pruning`, `check-for-connector-deletion`,
-  `check-for-user-file-processing`, `check-for-checkpoint-cleanup`,
-  `check-for-index-attempt-cleanup`, `backfill-cc-pair-ids`, and more). The
-  `backfill-cc-pair-ids` entry runs every 5 minutes on the `index_reclaim` queue
-  (Light worker) and fills `cc_pair_ids` on existing OpenSearch chunks for the
-  cc-pair access filter (see [[access-control]] §4.3a). The `tabular-rechunk`
-  entry shares that cadence but runs on the `docprocessing` queue, where its
-  embedding belongs: each tick scans the document table by primary key, across
-  all cc-pairs, and re-chunks the tabular documents still holding more chunks
-  than the current chunker could produce, until its time budget runs out
-  (`background/indexing/run_tabular_rechunk.py`).
-  `TABULAR_RECHUNK_ENABLED` arms it and a KV record stops it, so a finished
-  migration costs one cached read per tick. Both are filtered by
-  `_VECTOR_DB_BEAT_TASK_NAMES` when `DISABLE_VECTOR_DB` is set.
-  `beat_schedule.py:beat_task_templates`
-- `beat_cloud_tasks`: system-wide tasks that exist once regardless of tenant
-  count (`monitor-celery-queues`, `monitor-alembic`, `check-available-tenants`,
-  `monitor-celery-pidbox`), routed to `OnyxCeleryQueues.MONITORING`. The
-  exception is `cleanup-oauth-provider-clients`, which deletes idle OAuth
-  provider clients from the shared catalog schema on `OnyxCeleryQueues.PRIMARY`.
-  `beat_schedule.py:beat_cloud_tasks`
-- `tasks_to_schedule`: the self-hosted (non-`MULTI_TENANT`) schedule, built by
-  taking `beat_task_templates` (with the cloud-only `skip_gated`/`work_gated`
-  option keys stripped) and adding self-hosted-only entries
-  (`monitor-celery-queues`, `monitor-process-memory`, `celery-beat-heartbeat`,
-  `cleanup-oauth-provider-clients`). `beat_schedule.py:tasks_to_schedule`
-
-The per-tenant `cleanup-oauth-provider-grants` template deletes expired OAuth
-provider grants daily; their tokens cascade. Without Celery (`DISABLE_VECTOR_DB`),
-`periodic_poller.py:_build_periodic_tasks` runs both OAuth cleanups daily.
-
-Every schedule entry sets `expires` (default `BEAT_EXPIRES_DEFAULT = 15 * 60`
-seconds, `beat_schedule.py:BEAT_EXPIRES_DEFAULT`), matching the
-`backend/AGENTS.md` rule that no task may be enqueued without an expiration
-(the docfetching `send_task` is the one direct-enqueue exception, see §5).
-
-### Environment configuration
-
-| Variable | Effect |
-|---|---|
-| `MULTI_TENANT` | Switches Beat between per-tenant schedule generation and a single self-hosted schedule; gates which task lists apply (`shared_configs.configs.MULTI_TENANT`). |
-| `DISABLE_VECTOR_DB` | Drops vector-DB-dependent task modules from worker autodiscovery (`app_base.py:_VECTOR_DB_TASK_MODULES`, `filter_task_modules`) and drops the matching beat entries (`beat_schedule.py:_VECTOR_DB_BEAT_TASK_NAMES`). |
-| `CELERY_PRIMARY_WORKER_LOCK_TIMEOUT` | TTL cadence for the primary-worker singleton lock. |
-| `CELERY_WORKER_PRIMARY_CONCURRENCY`, `CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY`, etc. | Per-worker thread-pool sizes, read into each `configs/<worker>.py` (e.g. `configs/scheduled_tasks.py:worker_concurrency`). |
-| `LOG_LEVEL` | Global worker log level, overridable per-process by an explicit `--loglevel` CLI flag (`app_base.py:_resolve_effective_loglevel`). |
-| `IGNORED_SYNCING_TENANT_LIST` | Tenants Beat skips when generating the self-hosted-style per-tenant schedule (`apps/beat.py:_generate_schedule`). |
-| `DISABLE_VECTOR_DB` | Skips the OpenSearch readiness probe that workers run at startup (`app_base.py:wait_for_document_index_or_shutdown`). |
-
----
-
-## 3. Data model
-
-### Postgres tables
-
-- `TaskQueueState` (`onyx/db/models.py`, accessed through `onyx/db/tasks.py`):
-  one row per explicitly registered job (not every Celery task; today only query-history
-  exports call `register_task`, in `ee/onyx/server/query_history/api.py`), tracked by `task_name`/`task_id`/`status`
-  (`TaskStatus.PENDING/STARTED/SUCCESS/FAILURE`). `db/tasks.py:register_task`,
-  `mark_task_as_started_with_id`, `mark_task_as_finished_with_id`,
-  `check_task_is_live_and_not_timed_out`.
-- `SyncRecord` (`onyx/db/models.py`, via `onyx/db/sync_record.py`): one row per
-  sync attempt against an entity (`entity_id` + `SyncType`, e.g. `PRUNING`).
-  `insert_sync_record` cancels any prior `IN_PROGRESS` record for the same
-  entity/type, and sets its end time, before creating the new one
-  (`db/sync_record.py:insert_sync_record`). The fleet collection pass finds the
-  cancellation by that end time (`db/fleet_telemetry.py:job_rows`).
-- `BackgroundError` (`onyx/db/models.py:BackgroundError`, via
-  `onyx/db/background_error.py:create_background_error`): a message plus an
-  optional `cc_pair_id`. Written through
-  `onyx/background/error_logging.py:emit_background_error`, which swallows
-  `IntegrityError` (e.g. the `cc_pair_id` was deleted concurrently) by retrying
-  the insert with `cc_pair_id=None`. `emit_background_error`
-  is called from exactly two places: `ee/onyx/background/celery/tasks/external_group_syncing/tasks.py`
-  and `ee/onyx/external_permissions/confluence/group_sync.py`. No admin API or
-  frontend route reads `BackgroundError` back out (unverified further; a search
-  of `onyx/server` and `ee/onyx/server` found none). See §9.
-
-### Redis key patterns
-
-Every connector-scoped key is namespaced per tenant through the standard Redis
-client factory and, within a tenant, per `cc_pair_id` via the `RedisConnector`
-family in `onyx/redis/` (`redis_connector_prune.py`, `redis_connector_delete.py`,
-`redis_document_set.py`, `redis_usergroup.py`).
-
-| Pattern | Example owner | TTL | Meaning |
-|---|---|---|---|
-| `<prefix>_fence_<id>` | `RedisConnectorPrune.FENCE_PREFIX` (`redis_connector_prune.py`) | 7 days (`FENCE_TTL`) | The task is in progress. Holds a JSON payload (submitted time, celery task id, progress). Presence is the source of truth for "is this running". |
-| `<prefix>_generator_progress_<id>` | `redis_connector_prune.py:GENERATOR_PROGRESS_PREFIX` | tied to fence lifecycle | Running count of work items produced by the generator task. |
-| `<prefix>_generator_complete_<id>` | `redis_connector_prune.py:GENERATOR_COMPLETE_PREFIX` | tied to fence lifecycle | Set once the generator finishes fanning out; its int payload is the starting item count. |
-| `active_fences` (a Redis set) | `OnyxRedisConstants.ACTIVE_FENCES` (`onyx/configs/constants.py`) | n/a (set membership) | A lookup table of every fence key currently believed active, across pruning, deletion, document sync, and docprocessing. Beat-driven checker tasks (`check_for_pruning`, its siblings) scan this set instead of doing a `KEYS`/`SCAN` over the whole keyspace, then re-verify each key still exists before trusting it. |
-| `da_lock:primary_worker` | `OnyxRedisLocks.PRIMARY_WORKER` | touched every `CELERY_PRIMARY_WORKER_LOCK_TIMEOUT / 8`s | Singleton lock so only one primary worker instance is active. |
-| `da_lock:check_prune_beat`, `da_lock:check_vespa_sync_beat`, etc. | `OnyxRedisLocks.*` | short | Per-checker-task locks (`lock_beat` in `check_for_pruning`) so overlapping beat firings of the same checker don't run concurrently. |
-| `signal:block_validate_indexing_fences`, `signal:block_validate_pruning_fences` | `OnyxRedisSignals.*` | a few minutes | Rate-limits the (expensive) fence-validation pass to run less often than the checker task itself. |
-| `onyx:celery:beat:heartbeat` | `ONYX_CELERY_BEAT_HEARTBEAT_KEY` | short | Touched by the `celery_beat_heartbeat` task (dispatched by Beat, run on Primary) so an external watchdog can detect a dead Beat process. |
-| `da_function_lock:try_creating_prune_generator_task` (via `DANSWER_REDIS_FUNCTION_LOCK_PREFIX`) | `pruning/tasks.py:try_creating_prune_generator_task` | 30s | A short-lived mutual-exclusion lock (not a fence) guarding the create-generator-task critical section, since pruning can be triggered by both Beat and a direct API call. |
-
----
-
-## 4. How it works
-
-### 4.1 Beat: turning "what should run" into a schedule
-
-`DynamicTenantScheduler` (`apps/beat.py:DynamicTenantScheduler`) is a
-`PersistentScheduler` whose `tick()` (`apps/beat.py:tick`) checks every
-`RELOAD_INTERVAL` (60s) whether the schedule needs regenerating, via
-`_try_updating_schedule` (`apps/beat.py:_try_updating_schedule`):
-
-1. Read all tenant ids (`get_all_tenant_ids`).
-2. Read the current `beat_multiplier` from `OnyxRuntime.get_beat_multiplier()`,
-   falling back to `CLOUD_BEAT_MULTIPLIER_DEFAULT = 8.0` on error
-   (`beat_schedule.py:CLOUD_BEAT_MULTIPLIER_DEFAULT`).
-3. Call `_generate_schedule(tenant_ids, beat_multiplier)`
-   (`apps/beat.py:_generate_schedule`):
-   - Under `MULTI_TENANT`, add the cloud-only system-wide tasks from
-     `get_cloud_tasks_to_schedule(beat_multiplier)`, which multiplies each
-     per-tenant *template*'s schedule interval by `beat_multiplier`
-     (`beat_schedule.py:generate_cloud_tasks`). This is the throttle: raising the
-     multiplier slows down how often each tenant's checker tasks fire, without a
-     deploy, because `OnyxRuntime.get_beat_multiplier()` reads a runtime-adjustable
-     value.
-   - In self-hosted mode, for every tenant, add one schedule entry per task in
-     `get_tasks_to_schedule()`, named `f"{task_name}-{tenant_id}"`, with
-     `tenant_id` stamped into the entry's `kwargs`
-     (`apps/beat.py:_generate_schedule`, the per-tenant loop). Under
-     `MULTI_TENANT`, `tasks_to_schedule` is empty. The cloud generator tasks
-     fan templates out per tenant and stamp `tenant_id` on the dispatched
-     tasks. A direct `send_task` call elsewhere must set `tenant_id`
-     explicitly (see §5).
-4. Compare the new schedule's task names against the current one
-   (`_compare_schedules`); if unchanged and the multiplier is unchanged, skip the
-   update.
-
-Under `MULTI_TENANT`, per-tenant checker tasks are **not** scheduled individually
-per tenant in the cloud; only the cloud-wide, fixed set in `beat_cloud_tasks` and
-the *cloud generator task* pattern (`make_cloud_generator_task`,
-`OnyxCeleryTask.CLOUD_BEAT_TASK_GENERATOR`) fan a single templated beat entry out
-per tenant at task-dispatch time rather than at schedule-generation time. This
-detail is in `beat_schedule.py` and is why `beat_multiplier` matters even though
-the self-hosted path (`tasks_to_schedule`) does not multiply anything.
-
-### 4.2 The generator-task pattern (pruning as the worked example)
-
-Most "sync this whole cc_pair" tasks split into a cheap dispatcher, a heavier
-generator, and a set of lightweight fan-out subtasks, tied together by a fence:
-
-1. **Checker task** (`check_for_pruning`, run on Primary, beat-scheduled every
-   20s per `background/README.md`): acquires `lock_beat`
-   (`OnyxRedisLocks.CHECK_PRUNE_BEAT_LOCK`), scans due cc_pairs, and for each one
-   calls `try_creating_prune_generator_task`.
-2. **Dispatcher** (`pruning/tasks.py:try_creating_prune_generator_task`): takes
-   a short-lived mutual-exclusion lock, checks that no fence, deletion, or
-   permission sync is already active for the cc_pair, inserts a `SyncRecord`,
-   sets the fence (`redis_connector.prune.set_fence(payload)`), and only then
-   calls `celery_app.send_task(OnyxCeleryTask.CONNECTOR_PRUNING_GENERATOR_TASK, ...)`
-   onto the `connector_pruning` queue (Heavy worker). The fence is set *before*
-   the task is confirmed sent, and the task id is written back into the fence
-   payload once `send_task` returns.
-3. **Generator task** (`connector_pruning_generator_task`, runs on Heavy):
-   does the actual work of walking the connector and fanning out lightweight
-   deletion subtasks (queue `connector_deletion`, Light worker), updating
-   `generator_progress`/`generator_complete` as it goes.
-4. **Monitor** (`monitor_ccpair_pruning_taskset`, invoked from inside
-   `check_for_pruning` for every key found in `ACTIVE_FENCES` that matches the
-   prune fence prefix): reads progress/completion state and, once every
-   fanned-out subtask has drained from the taskset, clears the fence and the
-   `SyncRecord`.
-5. **Fence validation** (`validate_pruning_fences` /
-   `validate_pruning_fence`, rate-limited by
-   `signal:block_validate_pruning_fences`): cross-checks each active fence
-   against what Celery itself reports as queued/reserved/unacked for the
-   relevant queues (`celery_get_unacked_task_ids`, `celery_get_queued_task_ids`
-   in `celery_redis.py`). If a fence's payload fails to parse (schema drift), it
-   is reset rather than left stuck. This is the mechanism by which a fence whose
-   generator task died without cleaning up gets recovered without manual
-   intervention. Either reset also ends the pair's `IN_PROGRESS` prune
-   `SyncRecord` as `FAILED` with the reason (`fail_orphaned_prune_records`,
-   called while the fence still blocks a new prune), and the primary worker's
-   single-tenant startup reset of every prune fence
-   (`reset_prune_fences_on_startup`, which holds the prune dispatch lock with
-   a longer TTL than a dispatch and renews it between steps, so an API call
-   cannot start a prune half inside the reset) does the same for every
-   running prune record, which would otherwise stay `IN_PROGRESS` with no
-   reason until the next prune cancels it;
-   `pruning/tasks.py:validate_pruning_fence` has a comment
-   pointing at `validate_indexing_fence` as the canonical description of the
-   flow. `[[indexing-pipeline]]` documents the indexing-specific version of this
-   same pattern; `[[permission-sync]]` describes the lease that replaced
-   this pattern for doc permission and external group syncs.
-
-### 4.3 Task startup and teardown, mechanically
-
-`before_task_publish` stamps `enqueued_at` into the message headers
-(`app_base.py:on_before_task_publish`), which lets a worker compute queue wait
-time. `TenantAwareTask.__call__` sets the tenant contextvar, runs the task, and
-resets it. `task_prerun` clears per-task logging context vars so a pruning
-task's `[CC Pair:]` log prefix cannot leak into the next task run on the same
-thread. `task_postrun` removes the task id from whichever Redis taskset it
-belongs to (matched by id prefix). `task_revoked` (wired by the Light worker only) removes an expired task id only
-from the document-sync taskset (`app_base.py:on_task_revoked` returns early for
-any other id prefix).
-
-### 4.4 Craft scheduled tasks
-
-The `scheduled_tasks` worker (`apps/scheduled_tasks.py`) autodiscovers only
-`onyx.background.celery.tasks.scheduled_tasks` and is deliberately isolated onto
-its own queue and app: the docstring in `apps/scheduled_tasks.py` explains this
-is so long-running headless-agent task runs do not compete for Heavy's slots
-(pruning, permission sync, CSV export). It uses `worker_pool = "threads"` and
-`worker_prefetch_multiplier = 1` (`configs/scheduled_tasks.py`), like Heavy and most
-other workers. Light is the exception: it reads
-`CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER`, default 8.
-
-Scheduled-task creation and edits save action policies through
-`backend/onyx/db/action_policy.py`. New tasks start with all apps disabled.
-Enabling an app first copies personal settings; later toggles retain its saved choices. The proxy reads task settings for each
-request while the run is RUNNING; workers do not grant blanket app approval.
-Scheduling, queue selection, and dispatch locking are unchanged. See
-[[craft-scheduled-tasks]] for permission ownership and approval outcomes.
-
----
-
-Scheduled-task updates lock and authorize the task through `get_scheduled_task` before saving action policies.
-Policy writes receive that task; they do not repeat task ownership queries.
-
-## 5. Contracts and invariants
-
-The `monitor_opensearch_resources` task runs on the monitoring queue every five minutes.
-It runs once per cluster, including in cloud deployments, and expires after five minutes.
-`DISABLE_VECTOR_DB` disables it. A shared Redis lease prevents duplicate probes.
-Each of its two statistics requests has a three-second timeout and no retries.
-See [[document-index]] for the cached admin warnings it supplies.
-
-1. **Every tenant-scoped task that reaches a worker must carry `tenant_id` in its kwargs.** Cloud system-wide tasks are exempt. For example, `cloud_monitor_celery_queues` takes no `tenant_id`.
-   `TenantAwareTask.__call__` falls back to `POSTGRES_DEFAULT_SCHEMA` when it is
-   missing, which is not an error, it is a silent wrong-tenant execution risk.
-   Beat's per-tenant schedule stamps this automatically
-   (`apps/beat.py:_generate_schedule`); any task sent directly with
-   `celery_app.send_task` or `.apply_async` from application code must pass it
-   explicitly. See `backend/AGENTS.md`: "direct task sends must propagate it
-   themselves (`TenantAwareTask` silently falls back to the default schema when
-   it's absent)."
-2. **Tasks must be idempotent.** Celery can redeliver a task (worker crash,
-   `acks_late`, requeue on connection loss). Nothing in this layer deduplicates
-   at the broker level; idempotency is the task author's responsibility.
-3. **Never enqueue a task without an expiration.** Quoting `backend/AGENTS.md`:
-   "Never enqueue a task without an expiration. Always supply `expires=` when
-   sending tasks, either from the beat schedule or directly from another task."
-   Every entry in `beat_schedule.py` sets `expires`. Most use `BEAT_EXPIRES_DEFAULT`;
-   a few set their own (60 seconds, one hour);
-   a new direct `send_task` call needs the same. One exception exists: the
-   docfetching `send_task` in `docfetching/task_creation_utils.py` sets no
-   `expires=`, because that queue can wait hours under load and the indexing
-   watchdog fails an attempt whose task is lost. Do not add a short expiry there.
-4. **A fence must always be released or expire.** Every Celery connector and indexing
-   `FENCE_TTL` covered here is 7 days, a defensive backstop, not the intended recovery path.
-   The intended path is the checker task's fence-validation pass (§4.2). A
-   change that adds a new fenced flow without wiring it into a `check_for_*`
-   validation loop leaves that fence with only the 7-day TTL as a safety net.
-5. **A task must not hold a DB session across a long external call.** The
-   concrete example is in `ee/onyx/background/celery/tasks/external_group_syncing/tasks.py`:
-   a comment there explains that a DB connection can be killed by Postgres's
-   `idle_in_transaction_session_timeout` during a long external API call, and
-   the fix was to move stale-row cleanup to the *start* of the next cycle
-   instead of depending on the *end* of a cycle that might never finish. Prefer
-   short-lived sessions opened right before a commit over one session held for
-   the duration of a task.
-6. **A worker's `-Q` queue list must match every queue name callers send to.**
-   There is no assertion enforcing this; a mismatch means tasks queue in Redis
-   and are never picked up by any worker, with no error raised anywhere. See §9.
-7. **Always use `@shared_task`, not `@celery_app.task`,** so a task is
-   registered on whichever app imports its module rather than bound to one app
-   at definition time (`backend/AGENTS.md`).
-8. **Task time limits do not work.** All workers run thread pools, not
-   processes, and Celery's `time_limit`/`soft_time_limit` machinery depends on
-   process-level signals. `backend/AGENTS.md`: "Since all tasks are executed in
-   thread pools, the time limit features of Celery are silently disabled and
-   won't work. Timeout logic must be implemented within the task itself." (Some
-   tasks, e.g. `check_for_pruning`, still catch `SoftTimeLimitExceeded`
-   defensively, but nothing raises it under the thread-pool executor.)
-9. **DB operations belong under `onyx/db/` or `ee/onyx/db/`.** Task modules
-   call into `onyx/db/tasks.py`, `db/sync_record.py`, `db/background_error.py`,
-   etc.; they do not run ad hoc queries inline (`backend/AGENTS.md`).
-
----
-
-## 6. Relationships
-
-**Depends on**
-- [[multi-tenancy]]: `TenantAwareTask`, `CURRENT_TENANT_ID_CONTEXTVAR`, and
-  `DynamicTenantScheduler`'s per-tenant fan-out are the tenant-isolation
-  mechanism every background task runs inside.
-- [[editions-and-gating]]: `versioned_apps/*.py` and
-  `fetch_versioned_implementation` are how EE worker/task variants replace CE
-  ones at import time.
-- [[document-index]]: `wait_for_document_index_or_shutdown` gates worker
-  startup; `DISABLE_VECTOR_DB` changes which task modules and beat entries even
-  exist.
-
-**Depended on by**
-- [[indexing-pipeline]]: docfetching/docprocessing queues, the indexing fence
-  and generator-task pattern this document generalizes.
-- [[permission-sync]]: doc permission and external group syncs run on Heavy.
-  They use no fence: the open attempt row is the lock (see [[permission-sync]]
-  §5.9).
-- [[connectors]] and [[cc-pairs-and-credentials]]: pruning, deletion, and
-  hierarchy-fetching all run as Celery tasks scoped to a cc_pair.
-- [[file-store-and-user-files]]: the `user_file_processing` worker and its three
-  queues; `task_utils.py`'s claim-and-mark helpers back the `NO_VECTOR_DB` synchronous
-  fallback path.
-- [[chat-persistence]]: `chat_ttl_deletion` queue (Light worker).
-- [[observability]]: `monitoring` worker, Prometheus metrics, `BackgroundError`
-  rows. The per-tenant `collect-fleet-telemetry` beat entry runs
-  `tasks/monitoring/tasks.py:collect_fleet_telemetry` on the `monitoring` queue,
-  which reads `SyncRecord` rows (`db/fleet_telemetry.py:job_rows`).
-  `monitor_celery_queues` also sends the queue depths to the fleet
-  (`tasks/monitoring/tasks.py:_report_queue_depths`). `DISABLE_TELEMETRY` removes
-  only the fleet entry; the other `monitoring` tasks still run.
-
----
-
-## 7. Blast radius
-
-| If your change... | Also check |
-|---|---|
-| adds a new task | which worker's `-Q` list (supervisord.conf and every relevant Helm `celery-worker-*.yaml`) includes its queue; whether it needs an `expires=`; whether it needs `tenant_id` propagated explicitly if not beat-scheduled |
-| changes a queue name (an `OnyxCeleryQueues` constant) | every `-Q` list in `backend/supervisord.conf` and `deployment/helm/charts/onyx/templates/celery-worker-*.yaml`; every `send_task`/`apply_async` call that references the old name |
-| changes the beat schedule (`beat_schedule.py` or the EE equivalent) | whether the task is per-tenant or cloud-wide (wrong list changes whether `beat_multiplier` applies); the `expires` value; whether `DISABLE_VECTOR_DB` filtering needs the task name added to `_VECTOR_DB_BEAT_TASK_NAMES` |
-| changes a fence or lock (key name, TTL, payload schema) | the checker task's fence-validation pass for that fence family (mirror `validate_pruning_fences`); `on_task_postrun`/`on_task_revoked` taskset cleanup, which matches on key prefix; `ACTIVE_FENCES` membership add/remove sites |
-| adds a worker | its `apps/<name>.py`, `versioned_apps/<name>.py`, `configs/<name>.py`; an entry in `backend/supervisord.conf`; a Helm `celery-worker-<name>.yaml` (plus HPA/ScaledObject if it should autoscale); an entry in `background/README.md`'s worker table (keep it truthful, see §9); whether it needs an EE counterpart under `ee/onyx/background/celery/apps/` |
-| touches `TenantAwareTask` or the tenant contextvar | every worker, since all of them install it as `celery_app.Task`; [[multi-tenancy]] |
-| touches `app_base.py` signal handlers | logging prefixes leaking across tasks, taskset cleanup correctness for every fenced flow, not just the one you're testing |
-
----
-
-## 8. How to verify a change
-
-### Tests
-
-```bash
-# Unit tests for scheduling / beat-adjacent logic
-cd backend && uv run pytest tests/unit -k "beat or periodic_poller or celery"
-# Integration tests exercise the fence/generator pattern end to end for a
-# specific feature (indexing, pruning, permission sync); see those components'
-# own §8 for the concrete paths, e.g. tests/integration -k pruning
+```
+check_for_pruning (beat, primary)          takes lock_beat; finds due pairs
+  try_creating_prune_generator_task        dispatch lock; skip if prune or delete
+                                           fenced, doc perm sync open, or pair
+                                           PAUSED/DELETING; insert SyncRecord;
+                                           set fence; send generator task
+connector_pruning_generator_task (heavy)   slim listing of live IDs, diff against
+                                           Postgres, send one cleanup task per
+                                           missing ID, record progress
+monitor_ccpair_pruning_taskset             called by check_for_pruning per fence
+                                           in ACTIVE_FENCES; clears the fence and
+                                           SyncRecord when the taskset drains
+validate_pruning_fences                    rate-limited; resets a fence whose task
+                                           Celery does not hold, and fails its
+                                           SyncRecord (fail_orphaned_prune_records)
 ```
 
-`backend/tests/unit/onyx/background/test_periodic_poller_license_reclaim.py`
-exercises `periodic_poller.py:_build_periodic_tasks` directly and is a concrete,
-existing example of testing this layer's scheduling logic in isolation from
-Celery itself.
+On a self-hosted start, the primary worker runs
+`background/celery/tasks/pruning/tasks.py:reset_prune_fences_on_startup`
+(under `MULTI_TENANT` it skips the Redis reset). It
+fails every running prune record, then clears every prune fence. It holds the
+prune dispatch lock throughout, with a longer timeout, and reacquires it
+between the two steps. Without the lock, a prune that an API call starts during
+the reset is failed before its fence exists, or runs with no fence. Do not split
+the function or drop the lock.
 
-Prefer an integration test at the owning component (indexing, pruning,
-permission sync) over a new generic Celery test; this document's job is the
-shared machinery, not feature correctness.
+**Pruning without a slim listing.** A connector with no slim listing is
+pruned by a full load or poll
+(`background/celery/celery_utils.py:extract_ids_from_runnable_connector`). It
+installs a tracking raw-file callback, so tabular connectors can stage CSVs, and
+reaps them in a `finally` block, because no index attempt exists for the normal
+staging reapers. Which IDs stay out of the prune set is the connector contract
+in [[connectors]].
 
-### Manual reproduction
+**Connector deletion.** `background/celery/tasks/connector_deletion/tasks.py:check_for_connector_deletion_task`
+handles each pair in `DELETING`. `try_generate_document_cc_pair_cleanup_tasks`
+raises `TaskDependencyError` while indexing is in progress, a port attempt is
+active (it also asks the port to cancel), a prune is fenced, or a doc
+permission sync is open. On the first refusal the beat revokes those tasks and
+sets the pair's stop signal. After the stop timeout it resets the prune and
+cancels the open doc and group sync attempts. Then it
+sends cleanup tasks in batches of `DOCUMENT_INDEX_SYNC_MAX_TASKS`, and
+`monitor_connector_deletion_taskset` sends the next batch when one drains. It
+fails the deletion when a batch does not lower the linked count.
+For a File connector, the route that starts the deletion
+(`server/manage/administrative.py:create_deletion_attempt_for_connector_id`)
+deletes the uploaded files from the file store at once, before any cleanup task
+runs.
 
-1. Confirm workers are up: `tail -f backend/log/celery_primary_debug.log`,
-   substituting `celery_light`, `celery_heavy`, `celery_beat`, etc. for the
-   worker you care about (root `AGENTS.md`: "All Onyx services... will be
-   tailing their logs to this file").
-2. To inspect a queue's backlog, use the same Redis primitives the monitoring
-   task uses: `celery_get_queue_length` / `celery_get_unacked_task_ids`
-   (`celery_redis.py`) are the sanctioned way to read queue depth; a raw
-   `redis-cli LLEN <queue>` undercounts because Celery's Redis transport splits
-   a queue across multiple priority-suffixed lists.
-3. To check whether beat picked up a schedule change, watch for the
-   `_try_updating_schedule - Schedule updated` log line (or, unchanged, the
-   `Schedule unchanged` line) in the beat log.
-4. To find a stuck fence by hand:
-   `PGPASSWORD=... psql ... -c "select * from sync_record where sync_status='IN_PROGRESS' order by id desc limit 20;"`
-   cross-referenced with `SMEMBERS active_fences` in Redis for the same tenant.
+**The cleanup task.** `background/celery/tasks/shared/tasks.py:document_by_cc_pair_cleanup_task`
+serves both flows. If this pair is the document's last owner and no other
+source keeps it, it deletes the chunks from both index generations and the
+`Document` row. Otherwise it removes this pair's link, bumps `last_modified`,
+and updates the chunks' ACL and cc-pair IDs. On its last retry it removes the
+link anyway and marks the document modified, so the metadata sync corrects
+the index.
 
-### What "working" looks like
+**Other periodic flows.** Each owner documents its flow; this list says where
+it runs.
+- Craft scheduled tasks ([[craft-scheduled-tasks]]): the dispatcher and the
+  stuck-run sweeper run on the primary queue on purpose. Only
+  `run_scheduled_task` uses the `scheduled_tasks` queue, so a full executor
+  pool cannot stall dispatch.
+- Capability checks ([[connector-capability-checks]]): the run tasks, the
+  stale-run check, the scheduled check, and the cleanup of stale draft
+  credentials and old runs.
+- Hierarchy fetch: `check_for_hierarchy_fetching` runs hourly under a beat
+  lock and sends a fetch for each active, indexed pair whose
+  `last_time_hierarchy_fetch` is older than `HIERARCHY_FETCH_INTERVAL_SECONDS`.
+  [[connectors]] owns the hierarchy that the fetch loads.
+- License reclaim ([[billing]]): the license middleware schedules
+  `reclaim_license_task` when the cache backend is Redis. Otherwise
+  `background/periodic_poller.py:_run_license_reclaim` runs it on the poller's
+  cadence.
 
-- A newly due connector's `check_for_indexing` (or `_pruning`, etc.) run picks it
-  up within one beat cycle plus queue latency.
-- The fence for a completed sync is gone from `active_fences` and its
-  `SyncRecord` is no longer `IN_PROGRESS`.
-- No task silently vanishes: every `send_task` call's queue is consumed by at
-  least one running worker (cross-check against the table in §2).
+**Signals.** `on_before_task_publish` stamps the enqueue time. `task_prerun`
+clears the per-task log context. `task_postrun` removes a finished task from its
+Redis taskset by task-ID prefix. Only the light worker also drains the
+document-sync taskset on `task_revoked`, because an expired task never reaches
+`task_postrun` (`background/celery/apps/app_base.py:on_task_revoked`).
 
----
+## Contracts and traps
 
-## 9. Footguns
+1. `send-expires` **Give each new send `expires=`.** The backend AGENTS file
+   requires it, and every beat entry sets it. Many sends at the verified commit
+   omit it. Some do so on purpose: the docfetching and docprocessing sends wait
+   in queues for hours, and the heartbeat check and batch reissue recover a
+   lost one. Others, such as the pruning generator send and several
+   API-triggered sends, give no reason. Do not copy a send without checking why
+   it omits `expires`.
+2. `default-acks-late` **The default ack mode is late.**
+   `background/celery/configs/base.py` sets `task_acks_late`, and the broker
+   redelivers an unacked task after `visibility_timeout`. A task that can run
+   longer must set `acks_late=False`, as docfetching, docprocessing, pruning,
+   the permission syncs and the Craft scheduled run do. Otherwise a second
+   worker runs the same task while the first is still running.
+3. `queue-needs-worker` **A queue must be in some worker's `-Q` list.** A task
+   sent to a queue that no worker reads waits until it expires, with no error
+   anywhere. Change `backend/supervisord.conf` and every Helm worker template
+   (`deployment/helm/charts/onyx/templates/`) together.
+4. `no-session-across-external-call` **Do not hold a database session across a
+   long external call.** Postgres kills an idle-in-transaction session, and
+   under fan-out the held sessions use up the pool. Read, close, call, then
+   write in a new session. The cleanup task, the metadata sync and the group
+   sync follow this.
+5. `fence-needs-validator` **A new fence needs a validator.** Fences carry a
+   7-day TTL as a backstop only. A fenced flow must have a validation pass, like
+   `background/celery/tasks/pruning/tasks.py:validate_pruning_fences`, or a lost
+   task blocks the pair for a week. Add the fence key to `ACTIVE_FENCES`, so
+   checkers find it without a key scan.
+6. `cloud-skips-gated` **A new cloud template skips gated tenants by default.**
+   A cleanup task that must also run for gated tenants sets
+   `skip_gated: False` in its template in
+   `background/celery/tasks/beat_schedule.py`, as connector deletion, index
+   reclaim and the cleanup tasks do.
+7. `vector-db-beat-tasks` **A beat entry that needs the vector DB goes in
+   `backend/onyx/background/celery/tasks/beat_schedule.py:_VECTOR_DB_BEAT_TASK_NAMES`.**
+   With `DISABLE_VECTOR_DB`, the entry is dropped from the schedule and its
+   task module from worker autodiscovery
+   (`background/celery/apps/app_base.py:filter_task_modules`).
+8. `idempotent-tasks` **Tasks must be idempotent.** Late acks, retries and
+    revokes can run a task twice or stop it halfway. The cleanup task commits
+    the link removal first, so a retry finishes the index write.
+9. `beat-interval-stretched` **A long beat interval is not what it says.** On
+   cloud, `backend/onyx/background/celery/tasks/beat_schedule.py:generate_cloud_tasks`
+   multiplies every template interval by `beat_multiplier`, and
+   `CLOUD_BEAT_MULTIPLIER_DEFAULT` is 8. A `timedelta(days=1)` template fires
+   about every 8 days unless an operator sets the Redis value. Also,
+   `background/celery/apps/beat.py:DynamicTenantScheduler._try_updating_schedule`
+   rebuilds every entry with no `last_run_at`, so Celery sets it to the rebuild
+   time and each interval starts again. This happens on each beat start (Helm keeps the schedule file
+   on an `emptyDir`) and on each schedule change. A task whose interval is
+   longer than beat's uptime does not run. For a daily task, use a
+   short-interval checker that reads its own last-run time, as
+   `background/celery/tasks/hierarchyfetching/tasks.py:_is_hierarchy_fetching_due`
+   does. On cloud an hourly checker fires about every 8 hours, so a daily task
+   can run up to that much late.
+10. `cloud-timedelta-schedule` **A cloud template must use a `timedelta`
+    schedule.**
+    `backend/onyx/background/celery/tasks/beat_schedule.py:generate_cloud_tasks`
+    multiplies each template's schedule by a float. A `crontab` raises
+    `TypeError` under `MULTI_TENANT`.
+    `background/celery/apps/beat.py:DynamicTenantScheduler.tick` logs and
+    swallows the error, so the whole schedule stops updating. The
+    `scheduled-eval-pipeline` template uses a `crontab` and is safe only on
+    self-hosted.
+11. `task-kwargs-defaults` **Add a task kwarg with a default.** Task kwargs have
+    no shared schema: each `send_task` call site builds them by hand. During a
+    rolling deploy, an old worker can receive a message from a new sender, and
+    a new worker can receive a message from an old sender. Give a new kwarg a
+    default, and send an optional kwarg only when it is set, as the
+    docprocessing send does for `is_backfill`.
 
-- **`apps/background.py` does not exist**, despite `background/README.md`
-  describing a "Background (consolidated)" worker that runs every queue except
-  `celery`. There is no such file in `onyx/background/celery/apps/`, nothing
-  references it in `supervisord.conf`, the Helm templates, or
-  `versioned_apps/`. Do not build against that README entry; it does not
-  reflect the current deployment topology.
-- **The README's worker-to-queue table is out of date in three ways**: it is
-  missing the `scheduled_tasks` worker, and it understates both Light's queues
-  (missing `index_reclaim`, `chat_ttl_deletion`, `capability_checks_draft`) and
-  Heavy's queues (missing `connector_hierarchy_fetching`, `capability_checks`).
-  `backend/AGENTS.md`'s worker table is closer to correct (it does list
-  `scheduled_tasks`) but doesn't enumerate queues per worker either. Trust
-  `supervisord.conf` and the Helm chart's `-Q` flags, not either markdown table,
-  when queue membership matters.
-- **The Helm chart's primary worker passes `-Q celery,periodic_tasks`**, but no
-  `OnyxCeleryQueues` constant, beat entry, or `send_task` call in this codebase
-  targets a `periodic_tasks` queue. Either it is dead configuration left over
-  from a prior design, or something routes to it outside what a code search
-  surfaces; this document could not verify which. Do not assume tasks sent to
-  `periodic_tasks` will be silently dropped or silently consumed; check before
-  relying on it either way.
-- **A queue name typo is invisible.** If a task is sent to a queue no running
-  worker's `-Q` list includes, it queues in Redis forever (or until its
-  `expires`) with no error, no log on the sending side, and no exception
-  anywhere. The only symptom is "this never happened." Cross-check §2's table
-  whenever you touch a queue name.
-- **`BackgroundError` is not a general failure-surfacing mechanism.** It is
-  written from exactly two call sites (both under `ee/onyx`, both in
-  external-group/permission-sync code), and nothing reads it back through an
-  API or the frontend. A new task that calls
-  `emit_background_error` expecting an admin to see it should verify there is
-  in fact a consumer, rather than assuming one exists because the table does.
-- **Time limits are decorative.** `soft_time_limit`/`time_limit` kwargs on
-  `@shared_task` do not fire under the thread-pool executor every worker uses;
-  a task that needs a hard timeout must implement it itself (watchdog pattern,
-  deadline check inside a loop, etc.).
-- **Worker code changes need a manual restart.** There is no file-watcher
-  auto-reload for Celery workers; `backend/AGENTS.md` says to ask the user to
-  restart the worker after any change to task or app code.
+## Known issues
+
+- **`backend/onyx/background/README.md` is out of date.** It lists a
+  consolidated worker that no file defines, omits the `scheduled_tasks` worker,
+  and lists fewer queues than the supervisord config.
+- **The Helm primary worker reads a `periodic_tasks` queue** that no task or beat
+  entry sends to. It looks like dead configuration.
+- **`BackgroundError` has writers but no reader.** Only the EE group sync code
+  writes it, and no route returns it. Do not expect an admin to see it.
+- **A docstring points to a removed function.**
+  `background/celery/tasks/pruning/tasks.py:validate_pruning_fence` refers to
+  `validate_indexing_fence`. Indexing replaced its Redis fence with the attempt
+  row.
+
+## Dependencies
+
+- [[multi-tenancy]]: the tenant contextvar and tenant-scoped Redis clients.
+- [[editions-and-gating]]: the versioned apps and EE beat entries.
+- [[document-index]]: workers wait for the index at startup, and the cleanup
+  task writes through it.
+- [[connectors]]: the slim listing that pruning diffs against.
+
+## Recipes
+
+- `periodic-task` **A periodic task.** Copy the hierarchy-fetch checker
+  (`background/celery/tasks/hierarchyfetching/tasks.py`); list the templates in
+  `background/celery/tasks/beat_schedule.py`. Add a name to
+  `configs/constants.py:OnyxCeleryTask`. Write the task with `@shared_task` and
+  a `tenant_id` kwarg ([[multi-tenancy#celery-task-tenant-kwarg]]); a
+  system-wide cloud task takes none. Add its module to the `autodiscover_tasks`
+  list of the worker app that reads its queue, such as
+  `background/celery/apps/primary.py`; a module missing there is never
+  registered, and its messages wait until they expire. Add a template with a
+  queue, a priority, `expires` and a `timedelta` schedule
+  ([[#beat-interval-stretched]], [[#cloud-timedelta-schedule]]). Decide
+  `skip_gated` and `work_gated`. Add it to `_VECTOR_DB_BEAT_TASK_NAMES` if it
+  needs the index. If it must also run where no Celery runs (see Architecture),
+  add a `_PeriodicTaskDef` to
+  `background/periodic_poller.py:_build_periodic_tasks` as well, as
+  `oauth-provider-cleanup` does. A daily task with no per-row last-run column
+  keeps its last-run time in a `KVStore` row, as
+  `background/periodic_poller.py:_try_claim_task` does. An EE-only task goes in
+  `ee/onyx/background/celery/tasks/beat_schedule.py`: `ee_beat_task_templates`
+  for cloud and `ee_tasks_to_schedule` for self-hosted. A system-wide cloud task
+  goes in `beat_cloud_tasks`. Copy
+  `backend/tests/unit/onyx/background/celery/tasks/test_port_wiring.py` to check
+  that the entry is scheduled and a worker registers the task.
+- `add-queue` **A queue.** Add it to `OnyxCeleryQueues`, to the `-Q` list in
+  `backend/supervisord.conf`, and to the matching Helm worker template.
+- `add-worker` **A worker.** Copy the light worker: its app, versioned app and
+  config modules, a supervisord program, and a Helm template. Update the worker
+  table in the backend AGENTS file.
+- `investigate-task-not-running` **Investigate a task that does not run.** Look
+  for the "Schedule updated" or "Schedule unchanged" beat log line; it gives the
+  task count and the `beat_multiplier`. Read the queue depth with
+  `background/celery/celery_redis.py:celery_get_queue_length`; a raw `LLEN`
+  undercounts, because the transport splits a queue into one list per priority.
+  Check that a worker's `-Q` list holds the queue.
+- `investigate-stuck-fence` **Investigate a stuck fence.** Compare the
+  `sync_record` rows with status `IN_PROGRESS` against the tenant's Redis
+  `active_fences` set. A fence with no live task is what the validator resets; a
+  fence that stays means the flow has no validator or the validator is
+  rate-limited.
+- `investigate-prune` **Investigate documents that a prune removed, or did not
+  remove.** Start a prune by hand with
+  `POST /api/manage/admin/cc-pair/{id}/prune`. The prune task logs "Pruning set
+  collected" with `docs_to_remove` before it deletes.
+- `investigate-deletion` **Investigate a deletion that does not finish.** Read
+  the pair's `deletion_failure_message`. A deletion waits while indexing, a port
+  attempt, a prune or a doc permission sync runs on the pair. A prune fence with
+  no live task is a stuck fence.
+
+## Verification
+
+- Unit tests: `backend/tests/unit/onyx/background/`.
+- External dependency tests: `backend/tests/external_dependency_unit/celery/`
+  (pruning, deletion batches, pause, fence reset) and
+  `backend/tests/external_dependency_unit/background/`.
+- Integration tests: `backend/tests/integration/tests/pruning/` and
+  `backend/tests/integration/tests/connector/`.

@@ -1,514 +1,305 @@
 # Slack Bot
 
-> Onyx answering questions inside Slack. A background process (Socket Mode, not
-> HTTP) listens for Slack events, matches standard answers or runs a chat turn
-> in-process, and posts the answer back into the thread.
+> A separate listener process answers questions in Slack: it turns each Slack
+> event into an in-process chat turn and posts the answer to the thread. It skips
+> the HTTP chat route, so each check on that route must be repeated here or
+> accepted as absent.
 
-**Verified against:** `268e4d5a3d` (2026-10-05)
-**Domain:** platform (bot surface)
-**Edition:** CE core listener and regular-answer path. Standard answers are EE
-(`backend/ee/onyx/onyxbot/slack/handlers/handle_standard_answers.py`); CE falls back to a
-no-op that never matches. Multi-tenant scaling (per-pod tenant acquisition, Redis
-locks) applies to cloud only.
-**Owns:**
-`backend/onyx/onyxbot/slack/listener.py`, `handlers/handle_message.py`,
-`handlers/handle_regular_answer.py`, `handlers/handle_standard_answers.py`,
-`handlers/handle_buttons.py`, `blocks.py`, `config.py`, `constants.py`, `models.py`,
-`utils.py`, `backend/ee/onyx/onyxbot/slack/handlers/handle_standard_answers.py`,
-`backend/onyx/db/slack_bot.py`, `backend/onyx/db/slack_channel_config.py`,
-`backend/onyx/server/manage/slack_bot.py`, `backend/onyx/server/manage/validate_tokens.py`,
-`web/src/app/admin/bots/`
+**Verified against:** `73e0ae3c31` (2026-10-28)
+**Edition:** CE for the listener and the answer path. Standard answers are EE
+([[standard-answers]]). Tenant acquisition across pods matters only on cloud.
 
 ---
 
-## 1. What the user experiences
+## User experience
 
-A Slack user asks a question in a channel the bot is configured for, either by
-tagging `@OnyxBot`, sending a DM, or (if the channel is configured to respond to
-every message) just posting. The bot reacts with an emoji while it thinks, then
-replies in the thread with an answer, source citations, and feedback buttons
-(thumbs up/down, "show everyone" for ephemeral answers, "continue in web UI").
-If the message matches a configured standard answer, the bot posts that instead
-and skips the LLM entirely.
-
-An admin installs a Slack app once, at **Admin > Bots** (`/admin/bots`,
-`web/src/app/admin/bots/page.tsx`), by pasting a bot token and an app token from a
-Slack app the admin created in the Slack API console (`bots/new`,
-`SlackBotCreationForm.tsx` -> `SlackTokensForm.tsx`). Onyx runs the connection over
-Slack's **Socket Mode**, so no public webhook URL is needed.
-
-Per Slack bot, the admin then configures one or more channels
-(`bots/[bot-id]/channels/new`, `SlackChannelConfigCreationForm.tsx`): which agent
-(persona) answers, which document sets restrict its search, whether it responds to
-every message or only tags/DMs, whether replies are ephemeral, follow-up tags,
-answer filters (question-mark-only, cite-or-stay-silent), and which standard-answer
-categories to check first. `bots/[bot-id]/page.tsx` lists a bot's channel configs
-(`SlackChannelConfigsTable.tsx`); `bots/[bot-id]/channels/[id]/page.tsx` edits one.
-
-A user who gets an answer in a public channel can click "Continue in web UI" to
-open the same conversation as a real chat session, continuing where the Slack
-thread left off.
-
----
-
-## 2. Surfaces
-
-### Admin web routes (`web/src/app/admin/bots/`)
-
-| Route | File | Purpose |
-|---|---|---|
-| `/admin/bots` | `page.tsx` (`SlackBotTable.tsx`) | List installed Slack bots. |
-| `/admin/bots/new` | `new/page.tsx` (`SlackBotCreationForm.tsx`) | Paste bot/app/user tokens, name the bot. |
-| `/admin/bots/[bot-id]` | `[bot-id]/page.tsx` | Bot detail: tokens (`SlackBotUpdateForm.tsx`) and its channel configs (`SlackChannelConfigsTable.tsx`). |
-| `/admin/bots/[bot-id]/channels/new` | `channels/new/page.tsx` (`SlackChannelConfigCreationForm.tsx`) | Create a channel config. |
-| `/admin/bots/[bot-id]/channels/[id]` | `channels/[id]/page.tsx` | Edit a channel config. |
-
-### HTTP endpoints (`onyx/server/manage/slack_bot.py`, router prefix `/manage`)
-
-| Method | Path | Handler | Notes |
-|---|---|---|---|
-| POST | `/manage/admin/slack-app/bots` | `create_bot` | Validates tokens via `validate_tokens.py`; also creates a default (`is_default=True`) channel config with `respond_tag_only=True`. |
-| PATCH | `/manage/admin/slack-app/bots/{slack_bot_id}` | `patch_bot` | Re-validates tokens on every save. |
-| DELETE | `/manage/admin/slack-app/bots/{slack_bot_id}` | `delete_bot` | Cascades to its channel configs (`SlackBot.slack_channel_configs`, `cascade="all, delete-orphan"`). |
-| GET | `/manage/admin/slack-app/bots`, `/manage/admin/slack-app/bots/{slack_bot_id}` | `list_bots`, `get_bot_by_id` | |
-| GET | `/manage/admin/slack-app/bots/{bot_id}/config` | `list_bot_configs` | |
-| POST/PATCH/DELETE | `/manage/admin/slack-app/channel[/{id}]` | `create_slack_channel_config`, `patch_slack_channel_config`, `delete_slack_channel_config` | Gated by `require_permission(Permission.MANAGE_BOTS)` on every route in this file. |
-| GET | `/manage/admin/slack-app/channel` | `list_slack_channel_configs` | |
-| POST | `/chat/seed-chat-session-from-slack` | `chat_backend.py:seed_chat_from_slack` | "Continue in web UI". Gated by `Permission.BASIC_ACCESS`, not `MANAGE_BOTS`: any authenticated user can seed from a Slack chat session ID they know. |
-
-### Background process
-
-`backend/onyx/onyxbot/slack/listener.py` runs as its own long-lived process
-(`if __name__ == "__main__"`, not an ASGI app). One `SlackbotHandler` per pod
-manages a `TenantSocketModeClient` per `(tenant_id, slack_bot_id)` pair, acquiring
-tenants via a Redis lock (`OnyxRedisLocks.SLACK_BOT_LOCK`,
-`config.py:TENANT_LOCK_EXPIRATION` = 1800s) so exactly one pod owns a tenant's
-Slack bots at a time, up to `MAX_TENANTS_PER_POD` (default 50).
-
-The `__main__` block starts the process's fleet telemetry sender
-(`utils/fleet_telemetry.py:start_telemetry`) before it creates the
-`SlackbotHandler` and its message-processing threads.
-
-### Environment configuration (`backend/onyx/configs/onyxbot_configs.py`)
-
-| Variable | Default | Effect |
-|---|---|---|
-| `ONYX_BOT_NUM_RETRIES` | 5 | Retries around the LLM call and around posting to Slack. |
-| `ONYX_BOT_MAX_QPM` | unset (uncapped) | `SlackRateLimiter`'s per-process questions-per-minute gate. See §9. |
-| `ONYX_BOT_MAX_WAIT_TIME` | 180 | Seconds a queued question waits before `TimeoutError`. |
-| `ONYX_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD` / `_TIME_PERIOD_SECONDS` | 5000 / 86400 | Global per-process message-volume cap, `utils.py:check_message_limit`. |
-| `ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER` | false | Suppress a reply that found no LLM answer, only documents. |
-| `ONYX_BOT_DISPLAY_ERROR_MSGS` | false | Post the raw exception text into the thread on failure (see §9). |
-| `NOTIFY_SLACKBOT_NO_ANSWER` | false | Post an apology message when `handle_message` returns "failed". |
-| `ONYX_BOT_FEEDBACK_VISIBILITY` | `private` | Who sees the feedback confirmation message: `private`, `anonymous`, or `public`. |
-| `ONYX_BOT_FEEDBACK_REMINDER` | 0 (off) | Minutes until a scheduled DM reminder to leave feedback. |
-| `ONYX_BOT_REACT_EMOJI` / `ONYX_BOT_FOLLOWUP_EMOJI` | `eyes` / `sos` | Reaction emoji while thinking / for follow-up requests. |
-| `MAX_TENANTS_PER_POD` | 50 | Cloud scaling knob, `onyxbot/slack/config.py`. |
+- **A Slack user** tags the bot, sends it a DM, or posts in a channel that is
+  set to answer every message. The bot adds a reaction while it works, then
+  replies in the thread with the answer, its sources and feedback buttons. A
+  configured channel can also show "Continue Chat in Onyx", which opens the
+  conversation as a web chat session.
+- **In a public channel, the answer uses only indexed documents that an
+  anonymous user can see,** even when the asker has wider access. Federated
+  Slack results do not follow this rule ([[#public-channel-anonymous-search]]).
+  In a DM, a slash command, or a channel set to ephemeral replies, the answer
+  uses the Onyx account for the sender's Slack email. The bot creates that
+  account on first contact. When Slack gives no email, the answer uses the
+  anonymous user's access. Users who report "the bot cannot see my documents"
+  usually meet this rule. The asker of an ephemeral answer can click "Share with
+  Everyone" to post it in the thread for the whole channel
+  ([[#share-with-everyone-publishes]]).
+- **A refusal is posted, not silent,** when the asker cannot use the channel's
+  agent, a token budget is reached, the workspace is invite-only or
+  domain-restricted, or no seat is free. A gated tenant or an expired license
+  gets a "subscription has expired" reply.
+- **Other failures are silent by default.** The reaction goes away and nothing
+  is posted. An operator can turn on an apology (`NOTIFY_SLACKBOT_NO_ANSWER`)
+  or the raw exception text (`ONYX_BOT_DISPLAY_ERROR_MSGS`). Both are off when
+  unset.
+- **An admin** with the manage-bots permission adds a Slack app at Admin > Bots
+  with a bot token and an app token. The API validates the tokens before it
+  saves them. Socket Mode needs no public webhook URL. The admin then
+  configures channels: the agent or document sets, tag-only or every message,
+  ephemeral replies, an allowlist of users and groups, answer filters,
+  follow-up tags, and standard-answer categories. The customer setup guide is
+  `documentation/admins/getting_started/slack_bot_setup.mdx`.
 
 ---
 
-## 3. Data model
+## Scope
 
-### `slack_bot` (`SlackBot`, `db/models.py:SlackBot`)
+This component owns the listener process and its tenant acquisition, the event
+filters, the message and button handlers, the Block Kit replies, the Slack bot
+and channel config records with their admin API and admin pages, and the
+per-process message limiters (`SlackRateLimiter`, `check_message_limit`).
 
-| Column | Meaning |
-|---|---|
-| `name` | Admin label. |
-| `enabled` | Soft-disable; `listener.py:prefilter_requests` drops every event for a disabled bot. |
-| `bot_token` | `EncryptedString`, unique. The `xoxb-` token used for `WebClient` (post messages, read channel info). |
-| `app_token` | `EncryptedString`, unique. The `xapp-` token used only to open the Socket Mode WebSocket. |
-| `user_token` | `EncryptedString`, nullable. Validated (`validate_user_token`). The listener path does not read it. Federated Slack search reads it (`search_tool.py:_prefetch_slack_data`, see §9). |
-
-Both `bot_token` and `app_token` are validated against live Slack API calls
-(`server/manage/validate_tokens.py:validate_bot_token`, `validate_app_token`) on
-every create and update, before the row is written.
-
-### `slack_channel_config` (`SlackChannelConfig`, `db/models.py:SlackChannelConfig`)
-
-| Column | Meaning |
-|---|---|
-| `slack_bot_id` | FK to the owning bot. |
-| `persona_id` | Nullable FK to `Persona`. `None` falls back to `DEFAULT_PERSONA_ID` at answer time (`handle_regular_answer.py`). |
-| `channel_config` | JSONB, typed as `ChannelConfig` (`db/models.py:ChannelConfig`, a `TypedDict`). See table below. |
-| `enable_auto_filters` | Whether to auto-detect search filters for this channel. |
-| `is_default` | Exactly one default config per bot (`uq_slack_channel_config_slack_bot_id_default`); used when no channel-specific config matches. |
-| `standard_answer_categories` | M2M to `StandardAnswerCategory` via `slack_channel_config__standard_answer_category`. EE-only concept; see [[standard-answers]]. |
-
-### `ChannelConfig` fields (inside the JSONB column)
-
-| Field | Meaning |
-|---|---|
-| `channel_name` | `None` for the default config, else the Slack channel name (no `#`). |
-| `respond_tag_only` | Only answer when `@OnyxBot` is tagged or the message is a DM. New bots default this to `True` (`server/manage/slack_bot.py:create_bot`). |
-| `respond_to_bots` | Whether to answer messages posted by other bots. |
-| `is_ephemeral` | Post the answer visible only to the asker (`chat_postEphemeral`) instead of into the channel. |
-| `respond_member_group_list` | Allowlist of emails/user-group names. Doubles as an invocation gate (who can trigger the bot at all) and, when set, as the ephemeral-visibility scope. See §5 and §9. |
-| `answer_filters` | `questionmark_prefilter` (skip non-questions) and/or `well_answered_postfilter` (skip answers with no citations). |
-| `follow_up_tags` | Slack user/group tags to notify when a user requests human follow-up; presence (even empty list) enables the follow-up feature. |
-| `show_continue_in_web_ui` | Show the "Continue in web UI" button. |
-| `disabled` | Only meaningful on the default config; disables the bot for the whole channel including DMs. |
-
-### Redis / cache keys
-
-| Key | Owner | Meaning |
-|---|---|---|
-| `OnyxRedisLocks.SLACK_BOT_LOCK` (per tenant) | `listener.py:acquire_tenants` | Exclusive ownership of a tenant's Slack sockets by one pod. |
-| `OnyxRedisLocks.SLACK_BOT_HEARTBEAT_PREFIX:{pod_id}` | `listener.py:send_heartbeats` | Liveness signal, not itself gating ownership. |
-
-In-process (not Redis, not shared across pods): `slack_token_user_ids` /
-`slack_token_bot_ids` caches (`utils.py`, keyed by `(tenant_id, slack_bot_id)`), and
-`SlackRateLimiter`'s counters (`utils.py:SlackRateLimiter`).
+Its neighbours own:
+- [[core-chat-loop]]: the turn that the bot runs in-process.
+- [[standard-answers]]: the canned-answer match that runs before the turn.
+- [[rate-and-usage-limits]]: token budgets. The bot only calls the check.
+- [[federated-search]]: Slack as a live search source. It reads a Slack bot's
+  tokens but is a separate feature.
+- [[slack]]: the Slack connector. The bot imports some of its helpers.
+- [CROSS-CUTTING.md: Who is the acting user](../CROSS-CUTTING.md#who-is-the-acting-user):
+  the acting-user rules for Slack and the other surfaces.
 
 ---
 
-## 4. How it works
-
-### 4.1 The call chain (event to posted answer)
+## Architecture
 
 ```
-create_process_slack_event -> process_slack_event   listener.py
-  ├─ acknowledge_message                              listener.py   (must ack fast or Slack assumes the bot is dead)
-  ├─ _check_tenant_gated                               listener.py   (cloud license/trial gate)
-  └─ process_message                                   listener.py
-       ├─ prefilter_requests                            listener.py  (self-message, greetings, disabled bot, subtype filtering)
-       ├─ build_request_details                          listener.py -> SlackMessageInfo
-       ├─ get_slack_channel_config_for_bot_and_channel    config.py
-       ├─ schedule_feedback_reminder                      handle_message.py
-       └─ handle_message                                  handlers/handle_message.py
-            ├─ _resolve_allowlist_user_ids                  (invocation gate + visibility scope)
-            ├─ add_slack_user_if_not_exists / get_user_by_email   db/users.py  (identity mapping, see §5)
-            ├─ handle_standard_answers                       handlers/handle_standard_answers.py -> EE impl
-            └─ handle_regular_answer                          handlers/handle_regular_answer.py
-                 ├─ get_persona_by_id                           db/persona.py  (persona access check)
-                 ├─ handle_stream_message_objects                chat/process_message.py   <-- direct in-process call
-                 ├─ gather_stream                                chat/process_message.py
-                 └─ build_slack_response_blocks / respond_in_thread_or_channel   blocks.py / utils.py
+SlackbotHandler, every 60 s: acquire_tenants         one socket client per
+  _manage_clients_per_tenant                         (tenant_id, slack_bot_id)
+process_slack_event                                  per event
+  acknowledge_message                                ack first, or Slack retries
+  _check_tenant_gated                                cloud gating, expired license
+  action_routing / view_routing                      buttons and modals (handle_buttons.py)
+  process_message
+    prefilter_requests                               disabled bot, self, greetings,
+                                                     subtypes, non-root thread replies,
+                                                     check_message_limit
+    build_request_details                            sender email via Slack API
+    get_slack_channel_config_for_bot_and_channel     by channel name, else default
+    handle_message                                   handlers/handle_message.py
+      allowlist gate, filters, tag-only
+      provision Slack user (invite, domain, seat)
+      handle_standard_answers -> True: stop
+      handle_regular_answer                          handlers/handle_regular_answer.py
+        persona access check, check_token_rate_limits
+        handle_stream_message_objects + gather_stream   in-process, origin SLACKBOT
+        build_slack_response_blocks, respond_in_thread_or_channel
 ```
 
-### 4.2 Installation and connection
+**Process and tenancy.** `onyx/onyxbot/slack/listener.py` runs as its own
+process (the supervisord `slack_bot` program, the Helm `slackbot` deployment). A
+Redis lock per tenant (`OnyxRedisLocks.SLACK_BOT_LOCK`) lets one pod own a
+tenant's sockets. Token changes and deleted bots reach the sockets only at the
+next acquisition cycle. Until then `prefilter_requests` drops events for a
+missing or disabled bot.
 
-An admin creates tokens in Slack's API console (Socket Mode app), pastes the bot
-token (`xoxb-`) and app token (`xapp-`) into `SlackBotCreationForm.tsx`, which
-posts to `create_bot` (`server/manage/slack_bot.py`). Both tokens are round-tripped
-to Slack (`validate_bot_token`, `validate_app_token`) before the row is written;
-an invalid token is rejected at save time, not silently stored.
+**Identity.** `handle_message` provisions every sender who passes the channel
+filters and has a resolvable email
+(`db/users.py:add_slack_user_if_not_exists`), before the answer path. Then
+`handle_regular_answer` picks two identities. The search runs as the mapped
+user or the anonymous user. Usage is charged to the mapped user, or to the
+Slack service account (`get_or_create_slack_service_account`) when no user
+matches. The service account gets GLOBAL budgets only, so a per-user
+budget cannot silence the bot for every unmapped sender
+([[rate-and-usage-limits#shared-principals-global-only]]).
+[[#public-channel-anonymous-search]] is the trap.
 
-The listener process (`listener.py:SlackbotHandler`) polls every
-`TENANT_ACQUISITION_INTERVAL` (60s) for tenants with enabled bots, opens a
-`TenantSocketModeClient` per `(tenant_id, slack_bot_id)`
-(`listener.py:_get_socket_client`, `start_socket_client`), and appends
-`process_slack_event` as its event listener. A token change is detected by
-comparing the cached `SlackBotTokens` and triggers a full reconnect
-(`_manage_clients_per_tenant`).
+**Context.** Earlier thread messages go to the turn as `additional_context`
+(`build_slack_context_str`), which the chat loop does not persist. The message
+carries `slack_context`, which lets the search tool run federated Slack search
+when the persona's document sets link a Slack federated connector
+(`tools/tool_implementations/search/search_tool.py:SearchTool._prefetch_slack_data`).
+The turn forces the search tool on the first cycle when the persona has an
+enabled one and `SearchTool.is_available` is true.
 
-### 4.3 Channel resolution and filtering
-
-`get_slack_channel_config_for_bot_and_channel` (`config.py`) looks up a config by
-`channel_config["channel_name"]`, falling back to the bot's `is_default` config
-(`db/slack_channel_config.py:fetch_slack_channel_config_for_channel_or_default`).
-`handle_message` then applies, in order: the `respond_member_group_list`
-invocation gate, `answer_filters` (question-mark prefilter), `disabled`, and
-`respond_tag_only` (unless tagged or a DM).
-
-### 4.4 Identity mapping (security-relevant, see §5)
-
-`build_request_details` resolves the Slack sender to an email via
-`expert_info_from_slack_id` (a Slack API call). `handle_message` then, given an
-email: checks invite/domain policy (`verify_email_is_invited`,
-`verify_email_domain`), checks license seat availability, and calls
-`add_slack_user_if_not_exists` (`db/users.py`), which looks up or creates an Onyx
-`User` row for that email (promoting an `EXT_PERM_USER` to `BOT` account type if
-needed). This is how a Slack identity becomes (or reuses) an Onyx account. If
-`message_info.email` is `None` (Slack lookup failed or user has no email), none of
-this runs and no Onyx account is touched for that turn.
-
-`handle_regular_answer` then independently resolves `resolved_user =
-get_user_by_email(...)` and decides which identity actually drives the search:
-see §5 for the exact rule.
-
-### 4.5 Standard answers (before the LLM)
-
-`handle_standard_answers` (`handlers/handle_standard_answers.py`) dispatches via
-`fetch_versioned_implementation` to the EE implementation
-(`ee/onyx/onyxbot/slack/handlers/handle_standard_answers.py:_handle_standard_answers`)
-when EE is active, else a CE no-op that always returns `False`. The EE version
-matches the message against the channel's configured
-`standard_answer_categories`, excluding answers already used in this Slack
-thread (tracked via `chat_message__standard_answer`), creates a real
-`ChatSession`/`ChatMessage` pair so the answer is recorded, and posts the answer
-with a "Generate Full Answer" button. See [[standard-answers]]. If a standard
-answer matches, `handle_regular_answer` (and the LLM) never runs for this
-message.
-
-### 4.6 The regular-answer turn (in-process, not HTTP)
-
-`handle_regular_answer` builds a `SendMessageRequest` with
-`origin=MessageOrigin.SLACKBOT`, then calls
-`chat/process_message.py:handle_stream_message_objects` and `gather_stream`
-**directly as Python functions**, inside the same process as the listener. It
-never issues an HTTP request to `POST /chat/send-chat-message`
-(`chat_backend.py:handle_send_chat_message`), so it never goes through that
-endpoint's FastAPI `Depends` chain. See §5 and §9 for what that skips.
-Because `handle_stream_message_objects` carries
-`utils/fleet_query_telemetry.py:telemetry_chat`, each Slack answer also queues a
-fleet `query` event with the channel `slack` (from `MessageOrigin.SLACKBOT`) on the
-listener's sender.
-
-It passes
-`slack_context=message_info.slack_context` (drives federated Slack search,
-[[internal-search]], `execution.py:create_chat_agent`,
-`context/search/federated/slack_search.py`) and
-`additional_context=slack_context_str` (prior thread messages, formatted by
-`build_slack_context_str`, injected as extra LLM context, never persisted to the
-DB per the `additional_context` docstring in `process_message.py`).
-
-Retries (`@retry_builder`, `ONYX_BOT_NUM_RETRIES`) and the in-process rate limiter
-(`@rate_limits`, `SlackRateLimiter`) wrap the call; see §9 for what they do and do
-not protect against.
-
-### 4.7 Formatting and posting
-
-`build_slack_response_blocks` (`blocks.py:448`) assembles the Slack Block Kit
-payload: the main answer text via `_build_main_response_blocks`, source citations
-via `_build_sources_blocks` / `_build_citations_blocks`, feedback buttons
-(`get_document_feedback_blocks`), and, if configured, a "Continue in web UI"
-button (`_build_continue_in_web_ui_block`, encoding a
-`build_continue_in_web_ui_id`). `respond_in_thread_or_channel` (`utils.py`) posts
-via `chat_postMessage` or, for an allowlisted/ephemeral scope,
-`chat_postEphemeral` per receiver, retrying once with URL-containing blocks
-stripped if Slack rejects the payload (`_check_for_url_in_block`).
-
-### 4.8 Continuing in the web app
-
-The "Continue in web UI" button encodes a `chat_message_id`
-(`build_continue_in_web_ui_id`). Clicking it drives the frontend to call
-`POST /chat/seed-chat-session-from-slack`
-(`chat_backend.py:seed_chat_from_slack`), which calls
-`duplicate_chat_session_for_user_from_slack` (creates a new `ChatSession` owned by
-the clicking user, re-resolving the persona through that user's own access via
-`get_best_persona_id_for_user`) and `add_chats_to_session_from_slack_thread`
-(copies the message history, `db/chat.py`), then redirects to
-`{WEB_DOMAIN}/chat?chatId=...`. Both DB functions read the source Slack chat
-session with `user_id=None` / `skip_permission_check=True`, since the reader at
-that point is not the message's original asker.
-
-The copy retains displayed answers and final thinking, without tool execution history.
-SDK sources read thinking from response items; legacy sources read the existing thinking column.
-The copied messages use the legacy display format, with no execution records or provider signatures.
+**Channel-only agents.** When an admin picks document sets instead of an agent,
+`db/slack_channel_config.py:create_slack_channel_persona` creates a public
+persona named with `SLACK_BOT_PERSONA_PREFIX`. Persona lists hide these by that
+prefix. Deleting the channel config marks that persona deleted.
 
 ---
 
-## 5. Contracts and invariants
+## Contracts and traps
 
-1. **The answer must respect the asking user's actual document access, and the
-   verified mechanism is narrower than "the mapped Onyx user's ACLs".**
-   `handle_regular_answer.py` computes `can_search_over_private_docs =
-   message_info.is_bot_dm or send_as_ephemeral`. Only when that is true does the
-   turn run as the resolved (or newly provisioned) Onyx user; in every ordinary
-   channel post, it runs as `get_anonymous_user()` regardless of whether the
-   sender mapped to a real Onyx account, restricting the search to public
-   documents. `handle_stream_message_objects` (`process_message.py`) takes no
-   ACL-bypass flag; the only lever is which `user` gets passed in
-   (`handle_regular_answer.py:_get_slack_answer`, `onyx_user=` argument). Cross-link [[access-control]].
-2. **An unmapped Slack user (no resolvable email) never gets elevated access.**
-   With `message_info.email is None`, `resolved_user` is `None`, the effective
-   user is `get_anonymous_user()`, and the account-provisioning block in
-   `handle_message.py` is skipped entirely. An unmapped user in a DM or ephemeral
-   context still only gets the anonymous user, the same public-doc-only scope as
-   a public channel post; nothing in the code path grants a private-doc identity
-   without a resolved email. This is verified directly from the code above, not
-   assumed.
-3. **The bot must not post secrets or leak internal errors into a channel by
-   default.** `ONYX_BOT_DISPLAY_ERROR_MSGS` (default enabled in this codebase,
-   see §9) controls whether a raw Python exception string is posted into the
-   thread on failure; anyone touching error handling in `handle_regular_answer`
-   must keep this gate.
-4. **A failed turn must degrade visibly, not silently.** `handle_message`
-   returns `True` ("failed") on genuine failures (persona access denial and the
-   usage-budget reply post their own message, cancel the feedback reminder,
-   and return `False`; document-search or LLM failure returns `True`), and `process_message` in `listener.py` posts
-   `apologize_for_fail` when `notify_no_answer` (`NOTIFY_SLACKBOT_NO_ANSWER`) is
-   set. A change that swallows an exception without hitting one of these paths
-   leaves the user staring at an eyes-emoji reaction forever.
-5. **Protections enforced by the HTTP dependency chain on
-   `/chat/send-chat-message` are not automatically present here.** Because
-   `handle_regular_answer` calls `handle_stream_message_objects` /
-   `gather_stream` directly, any check implemented as a FastAPI `Depends` on
-   `chat_backend.py:handle_send_chat_message` must be either re-implemented in
-   the Slack path or consciously accepted as absent. See §9 for the current,
-   verified list.
-6. **`is_default` is unique per bot, and channel config lookup falls back to it
-   silently** (`fetch_slack_channel_config_for_channel_or_default`). Deleting or
-   corrupting the default config makes `get_slack_channel_config_for_bot_and_channel`
-   raise (`config.py:18`), which fails the whole channel resolution for every
-   unconfigured channel of that bot.
-7. **Tokens are always re-validated against Slack on write**
-   (`validate_bot_token`, `validate_app_token`), never just stored as-typed.
-
----
-
-## 6. Relationships
-
-**Depends on**
-- [[core-chat-loop]]: `handle_stream_message_objects` and `gather_stream` are the
-  same functions `chat_backend.py:handle_send_chat_message` calls; a change to
-  the turn engine's behavior reaches the Slack bot without a code change here.
-- [[standard-answers]]: matched before the LLM runs; EE-gated.
-- [[agents-personas]]: `slack_channel_config.persona_id` selects the persona and
-  its document sets, tools, and prompt.
-- [[access-control]]: the anonymous-vs-real-user split in `handle_regular_answer`
-  is the entire ACL story for this surface; see §5.
-- [[auth-and-identity]]: `add_slack_user_if_not_exists`, invite/domain
-  verification, and seat-limit checks all reuse the same auth primitives as
-  self-serve signup.
-- [[internal-search]]: the persona's search tool is force-enabled on the first
-  cycle when available; Slack-as-search-source (`slack_search.py`) is a
-  *different* mechanism, see below.
-- [[chat-persistence]]: standard answers and regular answers both create real
-  `ChatSession`/`ChatMessage` rows via the same tables `save_chat_turn` writes.
-- [[rate-and-usage-limits]]: `check_token_rate_limits(usage_user)` runs
-  before each answer; see §9 for why it must be called inline.
-- [[observability]]: the fleet telemetry sender that `listener.py` starts (§2),
-  which carries the Slack answers' query events.
-
-**Depended on by**
-- [[chat-persistence]]: seeded web sessions from
-  `/chat/seed-chat-session-from-slack` are ordinary `ChatSession` rows afterward.
-- Nothing depends on this component as infrastructure; it is a leaf consumer of
-  the chat loop.
-
-**Distinct from (do not conflate)**
-- Slack as a **search source**: `backend/onyx/context/search/federated/slack_search.py`
-  lets the chat loop's search tool query live Slack messages/channels as a
-  retrieval source, gated by `execution.py:create_chat_agent` and
-  `SearchTool`'s `slack_context`. This runs for *any* chat turn (web, API, or Slack bot) whose
-  persona/filters select the Slack source, and requires a **federated Slack
-  connector**, a separate config from `SlackBot`/`SlackChannelConfig`. The Slack
-  *bot* (this document) is the inbound event listener that turns a Slack message
-  into a chat turn; Slack *search* is one retrieval source that turn's tools can
-  query. A Slack bot channel config with no document sets and a persona whose
-  tools include Slack search can still answer using content from other Slack
-  channels via `slack_search.py`, independent of `respond_...` filtering.
-  Cross-link [[internal-search]].
+1. `chat-route-depends-skipped` **Checks that are a `Depends` on the HTTP chat
+   route do not run here.**
+   `onyxbot/slack/handlers/handle_regular_answer.py:handle_regular_answer` calls
+   `chat/process_message.py:handle_stream_message_objects` directly, so it
+   skips the dependency chain on
+   `server/query_and_chat/chat_backend.py:handle_send_chat_message`. It calls
+   `check_token_rate_limits(usage_user)` inline for that reason.
+   `check_api_key_usage` does not apply, because no API key is involved. Add a
+   new chat-route check to `handle_regular_answer` before `_get_slack_answer`,
+   or accept it as web-only. Tests that drive `handle_regular_answer` on the
+   shared database must patch the budget check, or budgets left by other suites
+   fail them.
+2. `public-channel-anonymous-search` **Public-channel answers search as the
+   anonymous user.** `can_search_over_private_docs = message_info.is_bot_dm or
+   send_as_ephemeral` in `handle_regular_answer` is the only switch, and for indexed documents the only
+   lever is the `onyx_user` passed to `_get_slack_answer`. Do not pass the
+   mapped user in a shared channel. It would post private document content
+   where others can read it. Keep the persona access check on the mapped user,
+   as it is: it decides who may use the channel's agent. Federated Slack
+   results ignore `onyx_user`: the bot install's token and the channel-type
+   rules in [[federated-search]] decide what they show.
+3. `respond-ignores-ephemeral-flag` **`respond_in_thread_or_channel` ignores
+   `send_as_ephemeral`.** The parameter is marked unused
+   (`onyxbot/slack/utils.py:respond_in_thread_or_channel`). A non-empty
+   `receiver_ids` posts one ephemeral message for each receiver, and an empty
+   one posts publicly. Callers decide visibility only through `receiver_ids`.
+4. `allowlist-gates-and-receives` **`respond_member_group_list` does two
+   jobs.** `onyxbot/slack/handlers/handle_message.py:handle_message` uses it
+   as an invocation gate before provisioning,
+   so a sender who is not on the list gets no answer, not even for a tag or a
+   DM. It is also the receiver list, so every answer goes ephemerally to each
+   listed user. If no entry resolves, the bot is silent in that channel and
+   logs an error. The admin API rejects an allowlist together with
+   `is_ephemeral` (`server/manage/slack_bot.py:_form_channel_config`).
+5. `default-channel-config-required` **The default channel config must
+   exist.** `server/manage/slack_bot.py:create_bot` creates one with
+   `is_default=True` and tag-only on.
+   Channel lookup falls back to it
+   (`db/slack_channel_config.py:fetch_slack_channel_config_for_channel_or_default`).
+   If it is deleted,
+   `onyxbot/slack/config.py:get_slack_channel_config_for_bot_and_channel` raises for
+   every channel that has no config of its own. The delete endpoint does not
+   block this. Lookup is by channel name, so a renamed Slack channel falls back
+   to the default config.
+6. `failed-turn-silent` **A failed turn is silent unless it returns `True`.**
+   `handle_message` returns `True` only for an answer failure. Policy refusals
+   post their own message and return `False`.
+   `onyxbot/slack/listener.py:process_message` posts the
+   apology only for `True` and only when `NOTIFY_SLACKBOT_NO_ANSWER` is on. An
+   exception that escapes another way leaves the reaction in place with no
+   reply.
+7. `display-error-msgs-leaks` **`ONYX_BOT_DISPLAY_ERROR_MSGS` posts raw
+   exception text.** It is off when unset. When on, `handle_regular_answer`
+   posts the exception string into the thread, which can include tool arguments
+   or document text. Keep it behind this flag.
+8. `ack-before-work` **Acknowledge before any work.**
+   `process_slack_event`, built by
+   `onyxbot/slack/listener.py:create_process_slack_event`, calls
+   `acknowledge_message` first, because Slack treats a slow ack as a dead
+   bot. Slack never retries an acked event, so a crash after the ack loses it.
+9. `block-payload-limits` **Block payloads have hard limits.**
+   `handle_regular_answer` cuts the block list to 50.
+   `respond_in_thread_or_channel` retries once without blocks that contain URLs
+   when Slack rejects a payload. A change to `onyxbot/slack/blocks.py` must
+   keep both paths working.
+10. `root-messages-only` **Only root messages start a turn in a channel.**
+    `onyxbot/slack/listener.py:prefilter_requests` drops a thread reply unless it tags the bot or is in a
+    DM. A follow-up in a channel thread therefore needs a tag.
+11. `share-with-everyone-publishes` **"Share with Everyone" posts the asker's
+    private answer publicly.** An ephemeral reply to one receiver searches with
+    the asker's ACL ([[#public-channel-anonymous-search]]) and offers the button
+    (`offer_ephemeral_publication` in `onyxbot/slack/blocks.py`).
+    `onyxbot/slack/handlers/handle_buttons.py:handle_publish_ephemeral_message_button`
+    rebuilds the answer and its sources from the saved `ChatMessage` and posts
+    them with `receiver_ids=None`. No access check runs for the channel
+    audience. The asker's click is the only gate.
 
 ---
 
-## 7. Blast radius
+## Decisions
 
-| If your change... | Also check |
-|---|---|
-| changes the turn entry point (`handle_stream_message_objects`, `gather_stream`, or `build_chat_turn`'s signature) | `handlers/handle_regular_answer.py:_get_slack_answer`, since the bot calls these directly and in-process, not through `chat_backend.py`; a signature change breaks the bot at import/call time, not at request time |
-| adds a new FastAPI dependency to `POST /chat/send-chat-message` | it will **not** run for Slack-originated turns; decide whether the check belongs in `handle_message.py` / `handle_regular_answer.py` too, or is acceptably web-only |
-| changes `ChannelConfig` (adds/renames a field) | `server/manage/slack_bot.py:_form_channel_config`, every `web/src/app/admin/bots/[bot-id]/channels/*` form, and `handle_message.py`'s reads of `channel_conf` |
-| changes identity mapping (`add_slack_user_if_not_exists`, `get_anonymous_user`, the `can_search_over_private_docs` condition) | [[access-control]]; this is the one place document-access scope is decided for this surface, re-verify with a live test, not just code reading |
-| changes `SlackBot` token fields or their encryption | `server/manage/validate_tokens.py`, `listener.py:_manage_clients_per_tenant`'s token-diff/reconnect logic |
-| changes standard-answer matching or its EE/CE dispatch | [[standard-answers]]; `_handle_standard_answers`'s "already used in this thread" de-dup reads `chat_message__standard_answer`, so a change to chat message persistence can silently break de-dup |
-| changes Slack Block Kit payload shape (`blocks.py`) | Slack's 50-block hard limit (`handle_regular_answer.py`'s `all_blocks[:50]`), and the URL-stripping retry path in `utils.py:respond_in_thread_or_channel` |
-| changes multi-tenant Slack bot scaling (`listener.py`'s locks, `MAX_TENANTS_PER_POD`) | cloud only; a self-hosted single-tenant deployment does not exercise the lock-contention paths |
+- **Anonymous search in shared channels.** Slack channel membership does not
+  match Onyx document ACLs, so a shared channel gets public documents only.
+  The one exception is an ephemeral answer that its asker publishes.
+- **The allowlist is a seat gate, not a content filter.** Each new sender
+  takes a seat on first contact, so `handle_message` checks the allowlist
+  before it provisions.
 
 ---
 
-## 8. How to verify a change
+## Known issues
 
-### Tests
-
-```bash
-# Unit: channel config resolution, block formatting, socket client lifecycle, gating
-cd backend && uv run pytest tests/unit/onyx/onyxbot
-
-# External dependency unit: real Slack bot CRUD against a live-ish Slack API surface,
-# and federated search wiring
-uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit/slack_bot
-
-# Slack-as-connector integration tests (permission sync, pruning). These exercise
-# Slack as a document source, not the bot, but changes to Slack API usage in
-# onyxbot/slack/utils.py can affect both
-uv run --env-file .vscode/.env pytest backend/tests/integration/connector_job_tests/slack
-
-# Slack user deactivation / seat interaction
-uv run --env-file .vscode/.env pytest backend/tests/integration/tests/users/test_slack_user_deactivation.py
-```
-
-See `backend/AGENTS.md` for required env and secrets.
-
-### Manual reproduction
-
-1. Confirm the listener process is running: `tail -f backend/log/slack_bot_debug.log`
-   (or the process's configured log target).
-2. In Slack, create/paste a bot+app token pair at `/admin/bots/new`; confirm the
-   save fails with a clear error on an invalid token (`validate_bot_token`).
-3. Configure a channel (`/admin/bots/[bot-id]/channels/new`) with a persona and a
-   document set, `respond_tag_only` off.
-4. Post a plain message in that channel. Confirm the eyes-emoji reaction appears,
-   then an answer with citations posts in-thread.
-5. Post a message matching a configured standard answer (if EE). Confirm it
-   answers instantly with the "Generate Full Answer" button and no LLM latency.
-6. DM the bot as a user with no existing Onyx account. Confirm a new account is
-   provisioned (or blocked with a clear message if invite-only/seat-limited).
-7. Click "Continue in web UI" on a public-channel answer. Confirm the new web
-   chat session shows the same history under the clicking user's account.
-
-### What "working" looks like
-
-- Public-channel answers never surface content the anonymous user could not
-  otherwise see; DM/ephemeral answers only surface private content for the
-  resolved sender's own account.
-- A malformed or over-limit Block Kit payload still posts something (the
-  URL-stripped retry), never a silent drop.
-- Disabling a bot or a channel config stops all replies within one
-  `TENANT_ACQUISITION_INTERVAL` (60s) cycle.
+- **"Generate Full Answer" skips the `handle_message` gates.**
+  `onyxbot/slack/handlers/handle_buttons.py:handle_generate_answer_button`
+  calls `handle_regular_answer` directly with `receiver_ids=None`. It does not
+  check the allowlist, invite or seat rules, and it posts publicly unless the
+  channel is ephemeral.
+- **The publish button reloads the message without its owner.** If
+  `get_chat_message` fails for the asker, the handler retries with no user id,
+  which succeeds only for a session that no user owns.
+- **The slash-command refusal does not stop the answer.** With an allowlist,
+  `handle_message` posts "The OnyxBot slash command is not enabled for this
+  channel" and then goes on to answer.
+- **In-process limits are per process, not per tenant.**
+  `onyxbot/slack/utils.py:check_message_limit` keeps one global counter, so on
+  cloud one tenant's traffic can use up the limit for every tenant on that pod.
+  It drops messages with no reply. `SlackRateLimiter` (`ONYX_BOT_MAX_QPM`, off
+  by default) is also per process.
+- **Federated Slack search may use another bot's token.**
+  `SearchTool._prefetch_slack_data` picks the first enabled bot that has a user
+  token, else the first enabled bot. It does not pick the bot that received the
+  message.
 
 ---
 
-## 9. Footguns
+## Dependencies
 
-- **The Slack bot skips the HTTP dependency chain on
-  `/chat/send-chat-message`, so every metering check must be called inline.**
-  `handle_regular_answer.py` calls `handle_stream_message_objects` and
-  `gather_stream` from `chat/process_message.py` directly. It calls
-  `check_token_rate_limits(usage_user)` itself, before the retry wrapper, and
-  replies with the budget message on `RATE_LIMITED`. When the sender has no
-  Onyx account, `usage_user` is the Slack service account, which the EE check
-  holds to GLOBAL budgets only, so a per-user budget cannot silence the bot
-  for every unmapped user at once ([[rate-and-usage-limits]] §4.1). The cloud cost cap runs
-  inside `process_message`. `check_api_key_usage` does not apply, because no
-  API key is involved. `SlackRateLimiter` (`onyxbot/slack/utils.py`,
-  `ONYX_BOT_MAX_QPM`, uncapped by default) is a separate in-memory QPM gate
-  with no cross-pod coordination, not a budget. Tests that drive
-  `handle_regular_answer` against the shared DB must patch the budget check,
-  or leftover budgets from other suites fail them.
-- **Public-channel answers use the anonymous user regardless of who is asking.**
-  `can_search_over_private_docs = message_info.is_bot_dm or send_as_ephemeral`
-  is the only gate; a resolved, fully-permissioned Onyx user asking in an
-  ordinary channel still gets `get_anonymous_user()`'s document scope. This is
-  intentional (prevents leaking private-doc content into a shared channel) but
-  is easy to mistake for a bug when a user reports "the bot can't see documents
-  I have access to."
-- **`ONYX_BOT_DISPLAY_ERROR_MSGS` defaults to enabled**, because the config
-  computes `not in ["false", ""]` against an unset (empty-string) env var. A
-  raw Python exception, including tool arguments and possibly parts of a
-  document, is posted into the Slack thread on failure unless an operator
-  explicitly sets it to `"false"`.
-- **`respond_member_group_list` is a single allowlist doing two jobs.** It gates
-  who can invoke the bot at all (before answer processing, before user provisioning) and
-  also scopes who sees the ephemeral response. Configuring it wrong (e.g. an
-  admin expecting it to only affect visibility) silences the bot for everyone
-  else in the channel, including tags and DMs.
-- **A deleted Slack bot's socket can keep delivering events until the next
-  acquisition cycle** (`listener.py:_drop_stale_bots`'s docstring says so
-  directly); events are acked before the bot row is checked, so Slack never
-  retries them, but the process may still briefly act on a bot that no longer
-  exists in the DB (guarded by `prefilter_requests`'s `slack_bot is None` check,
-  which then drops the request).
-- **`user_token` is validated on every save and feeds federated Slack search.**
-  `SearchTool._prefetch_slack_data` (`tools/tool_implementations/search/search_tool.py`)
-  prefers an enabled bot row that has a `user_token`. It then sets
-  `access_token = user_token or bot_token`. Federated Slack search uses the user
-  token when one is set.
-- **Standard-answer de-duplication is thread-scoped, not global**: the same
-  standard answer can be given again in a different Slack thread even if a user
-  already saw it elsewhere, because `used_standard_answer_ids` is computed from
-  `get_chat_sessions_by_slack_thread_id` for the current thread only.
+- [[core-chat-loop]]: a change to `handle_stream_message_objects` or `gather_stream` reaches the bot with no change here.
+- [[standard-answers]]: runs before the regular answer and can end the turn.
+- [[agents-personas]]: the channel's persona sets the prompt, tools and document sets.
+- [[access-control]]: the anonymous user's scope bounds public-channel answers.
+- [[auth-and-identity]]: invite, domain and seat checks during provisioning.
+- [[rate-and-usage-limits]]: the inline budget check.
+- [[editions-and-gating]]: standard answers and seat checks load through EE fallbacks.
+- [[multi-tenancy]]: tenant locks and the tenant context of each socket client.
+- [[chat-persistence]]: bot turns and "Continue Chat in Onyx" sessions are normal `ChatSession` rows; `db/chat.py:duplicate_chat_session_for_user_from_slack` copies only sessions owned by no user, the anonymous user or the caller.
+- [[slack]]: the bot imports helpers from `connectors/slack/utils.py` and `connectors/slack/source_operations.py`.
 
-Slack's collected answer retains all root response text sections and their citations,
-including text separated by tool execution. Child-agent packets are not part of that answer.
+---
+
+## Recipes
+
+- `add-channel-setting` **Add a channel setting.** Copy `respond_to_bots`. Add the key to
+  `db/models.py:ChannelConfig` and to
+  `server/manage/models.py:SlackChannelConfigCreationRequest`, set it in
+  `server/manage/slack_bot.py:_form_channel_config`, and read it where the rule
+  applies (`prefilter_requests` reads `respond_to_bots`; most settings are read
+  in `handle_message` or `handle_regular_answer`). Add the field to the forms
+  under `web/src/app/admin/bots/[bot-id]/channels/`. List the current settings
+  in the `ChannelConfig` TypedDict. The config is a JSONB column and existing
+  rows lack the new key, so read it with `.get` and a default.
+- `investigate-no-answer` **Investigate "the bot did not answer".** Read the `slack_bot` process log.
+  A `process_message prefiltered` line means `prefilter_requests` dropped the
+  event: check for a disabled bot, a thread reply with no tag
+  ([[#root-messages-only]]), or the message limit. A "not in
+  respond_member_group_list" line is the allowlist gate
+  ([[#allowlist-gates-and-receives]]). A raise from
+  `get_slack_channel_config_for_bot_and_channel` means the default config is
+  gone ([[#default-channel-config-required]]). No socket at all after a token
+  change can mean the socket failed to start:
+  `SlackbotHandler._manage_clients_per_tenant` stores the new tokens first, so
+  it does not retry until the tokens change again. Set
+  `NOTIFY_SLACKBOT_NO_ANSWER` to see answer failures in the thread.
+- `investigate-private-doc-in-answer` **Investigate a private document in a
+  channel answer.** Check these paths in
+  order: the federated Slack lane ([[#public-channel-anonymous-search]]), a
+  published ephemeral answer ([[#share-with-everyone-publishes]]), a "Generate
+  Full Answer" post (Known issues), a chunk ACL that permission sync has not
+  yet updated ([[permission-sync]]), and a connector that marks the document
+  public.
+- `run-listener-locally` **Run the listener locally.** Use the "Slack Bot" entry in
+  `.vscode/launch.json`, or run `onyx/onyxbot/slack/listener.py` from
+  `backend/`. Create a Slack app with Socket Mode on, add it at Admin > Bots,
+  and wait up to one acquisition cycle for the socket to open.
+
+---
+
+## Verification
+
+- Unit: `backend/tests/unit/onyx/onyxbot/`.
+- External dependency: `backend/tests/external_dependency_unit/slack_bot/`, and
+  the budget order on every LLM entry point in
+  `backend/tests/external_dependency_unit/server/`.
+- Integration: `backend/tests/integration/tests/users/`, which covers Slack user
+  deactivation.
+- By hand, with a real Slack app: a tag in a public channel must cite only
+  public documents, a DM must reach private ones, and a user who is not on the
+  allowlist must get no answer.

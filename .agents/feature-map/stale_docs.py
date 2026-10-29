@@ -62,7 +62,6 @@ from check_feature_map import (
     Line,
     Repo,
     cited_files,
-    legacy_names,
     load_components,
     load_top_level,
     parent_dirs,
@@ -568,9 +567,6 @@ def find(
     updated = {p.removeprefix(map_prefix) for p in changed if p.startswith(map_prefix)}
     by_name = {doc.name: doc for doc in components}
     fork = None if base else branch_base(repo_root)
-    # Legacy PATHS.md rows abbreviate paths that only the old resolver read, so
-    # mapped files look unmapped. This goes away with legacy-schema.txt.
-    check_unmapped = not legacy_names(map_dir)
 
     found: dict[str, Reminder] = {}
     result = Findings()
@@ -581,7 +577,7 @@ def find(
             continue
         owner = owner_of(path, owned)
         # A deleted file needs no row.
-        if owner is None and check_unmapped and (repo_root / path).is_file():
+        if owner is None and (repo_root / path).is_file():
             result.unmapped.append(path)
         elif owner is not None and not owner.components:
             result.not_mapped[owner.prefix] = owner.reason

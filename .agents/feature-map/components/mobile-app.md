@@ -1,530 +1,234 @@
 # Mobile App
 
-> The React Native and Expo client. It is the second client of the [[core-chat-loop]]
-> backend, built independently of [[chat-frontend]]: its own auth transport, its own
-> hand-mirrored copy of the NDJSON parser and packet enum, and a much smaller slice of
-> the packet vocabulary actually wired to a renderer.
+> The React Native and Expo client, and the bearer-token auth gateway it signs
+> in through. It is a second client of the chat backend, built apart from the
+> web chat frontend, with its own copy of the stream parser and packet enum.
 
-**Verified against:** `268e4d5a3d` (2026-10-05)
-**Domain:** core-loop
+**Verified against:** `a4e97fcea1` (2026-10-29)
 **Edition:** CE
-**Owns:**
-`mobile/src/api/` (`auth/`, `chat/`, `files/`, `client.ts`, `config.ts`), `mobile/src/app/`
-(expo-router routes), `mobile/src/chat/` (parser, message tree, contracts, timeline
-transforms), `mobile/src/components/` (`chat/`, `auth/`, `ui/`, `sidebar/`, `settings/`,
-`form/`, `avatars/`), `mobile/src/hooks/`, `mobile/src/query/`, `mobile/src/state/`,
-`mobile/src/icons/`, `mobile/src/logos/`, `backend/onyx/server/auth/mobile.py`,
-`backend/onyx/auth/mobile_sso/`
-
-**Read first:** `mobile/AGENTS.md`. It is the authoritative standards file for this
-component and explicitly does **not** inherit `web/AGENTS.md`.
 
 ---
 
-## 1. What the user experiences
+## User experience
 
-The user installs a development build (not Expo Go), connects it to an Onyx instance URL,
-and signs in with email/password or a browser SSO flow. They land on a chat surface that
-morphs between an empty state, an existing conversation, and a project view without a
-screen transition. They can pick an agent, pick a project, type a message, attach a
-document or a photo-library image, turn on deep research, force a tool, pick a model
-for the turn, and watch the answer stream in with citations that
-resolve to a sources sheet. They can stop generation and reopen a past session from the
-sidebar.
+A user installs a development build, enters the URL of an Onyx instance, and
+signs in with email and password or with Google in the system browser. Other
+SSO providers (OIDC, SAML) have no mobile sign-in.
 
-They cannot regenerate or edit a past message, give thumbs up/down feedback, compare two
-models side by side, use voice input, or watch tool activity (search, code execution,
-image generation, deep research, memory) render as anything beyond a stream that
-temporarily produces no visible content for that block. See §4.4 and §9.
+The user can then:
+- start a chat or open a past session from the sidebar, and open a project;
+- pick an agent and a model, attach a document or a photo from the library,
+  turn on deep research, force a tool, and turn tools and sources on or off;
+- watch the answer stream, open its citations in a sources sheet, and stop
+  the answer.
 
----
+A tool disabled on mobile is also disabled on web, because the server saves
+the setting per agent. The forced tool, the deep-research switch and the
+source selection stay on the device.
 
-## 2. Surfaces
+The user cannot regenerate or edit a message, give feedback, compare models,
+use voice, or take a photo with the camera. Tool activity (search, code,
+image generation, deep research, memory) shows as an empty step in the
+timeline. Only the answer text and reasoning render.
 
-### Routes (`mobile/src/app/`, expo-router)
-
-| Route | File | Notes |
-|---|---|---|
-| `/` | `(app)/index.tsx` | Landing / empty chat state. |
-| `/chat/[id]` | `(app)/chat/[id].tsx` | An existing conversation. |
-| `/projects/[id]` | `(app)/projects/[id].tsx` | Project home: context panel plus the project's session list. |
-| `/agents` | `(app)/agents.tsx` | Agent picker. |
-| `/sources/[id]` | `(app)/sources/[id].tsx` | Source/connector detail. |
-| `/(auth)/login`, `/signup`, `/connect` | `(auth)/login.tsx`, `signup.tsx`, `connect.tsx` | Instance-URL entry, then credential or SSO login. |
-
-`(app)/_layout.tsx` mounts `ChatSurface` as an absolute-fill overlay sibling to `<Stack>`,
-plus `AppSidebar`, `ComposerDraftProvider`, and `UploadReconciler`
-(`mobile/src/app/(app)/_layout.tsx:AppLayout`). Chat routes render `null`; `ChatSurface`
-derives a `ChatFocus` from `usePathname()` via `chatFocus.ts:deriveFocus` and renders the
-matching content without remounting, so the header and composer persist across
-new/chat/project transitions. The URL still changes, for deep links and the back stack.
-The surface is an opaque overlay, not a set of transparent Stack screens, so it does not
-depend on `react-native-screens` transparency or touch behaviour; `AppSidebar` uses the
-same model, and web's `AppPage` also never remounts across these modes. On non-chat
-routes (`/agents`, settings) `deriveFocus` returns `null`, the surface renders nothing,
-and the opaque Stack screen shows. The empty state waits for `!isHydrating`, so a cold
-open of an existing chat does not flash the welcome screen. `AuthGate`
-(`mobile/src/components/auth/AuthGate.tsx:AuthGate`) wraps the whole router tree and
-redirects imperatively based on `resolveAuthGate` (`components/auth/authRoute.ts`).
-
-### Backend endpoints this component calls
-
-| Endpoint | Called from |
-|---|---|
-| `POST /auth/mobile/login` | `api/auth/sessionManager.ts:passwordLogin` |
-| `POST /auth/mobile/refresh` | `api/auth/sessionManager.ts:refreshToken` |
-| `POST /auth/mobile/logout` | `api/auth/sessionManager.ts:logout` |
-| `POST /auth/mobile/sso/exchange` | `api/auth/sessionManager.ts:browserLogin` |
-| `POST /auth/register` | `api/auth/sessionManager.ts:register` (shared web/mobile route; mints no token) |
-| `GET /me` | `hooks/useCurrentUser.ts` |
-| `POST /chat/send-chat-message` | `api/chat/stream.ts:streamChatMessage` |
-| `GET /chat/chat-session/{id}/resume-stream?cursor=` | `api/chat/stream.ts:resumeChatMessage` |
-| `GET /chat/get-chat-session/{id}` | `api/chat/sessions.ts` |
-| `GET /chat/chat-session/{id}/status` | `api/chat/sessions.ts:getChatSessionStatus`, polled by `chat/sessionReadiness.ts:waitForSessionIdle`. Send stays blocked until `is_processing` is `false`. |
-| `POST /chat/stop-chat-session/{id}?stream_id=` | `api/chat/sessions.ts:stopChatSession`, called from `hooks/useChatController.ts:stop`. `stream_id` is the reserved assistant message id; the app waits for the ID packet before sending Stop. Failed Stop requests can be retried for the same response. |
-| `POST /chat/create-chat-session`, `GET /chat/get-user-chat-sessions` | `api/chat/sessions.ts` |
-| `GET /auth/type` | `api/auth/useAuthConfig.ts` |
-| `GET /llm/persona/{id}/providers`, `GET /tool`, `GET/PUT /user/assistant/preferences` | `api/chat/llm.ts`, `api/tools.ts`, `api/chat/agentPreferences.ts` |
-| `/user/projects/file/statuses`, `/user/projects/{id}/files/{fileId}` | `api/chat/projects.ts` |
-| `PUT /chat/rename-chat-session` | `api/chat/sessions.ts` |
-| `GET /persona` | `api/chat/agents.ts` |
-| `POST /user/pinned-assistants` | `api/chat/agents.ts` |
-| `GET /user/projects`, `GET /user/projects/{id}/details` | `api/chat/projects.ts` |
-| `GET /manage/connector-status`, `GET /federated` | `api/chat/connectors.ts` |
-| `GET /settings` | `api/settings.ts` |
-
-The mobile-specific endpoints (`/auth/mobile/*`) are owned by
-`backend/onyx/server/auth/mobile.py`; every other endpoint above is owned by
-[[core-chat-loop]], [[chat-persistence]], [[agents-personas]], [[projects]], or
-[[onyx-api]]'s connector-status surface and is unchanged from what [[chat-frontend]]
-calls, modulo the mobile app calling a **subset** (no multi-model, no feedback, no
-message-branch endpoints).
-
-### Environment / build configuration
-
-`mobile/app.json`, `mobile/metro.config.js`, `mobile/tailwind.config.js` (NativeWind
-content globs), `mobile/patches/` (dependency patches applied via a postinstall patch
-step). `api/config.ts:getBaseUrl()` resolves the active instance URL and appends the
-`/api` prefix; every `apiFetch` call path is bare (`"/chat/..."`, `"/me"`).
+On failure: a stream error shows in the message. A failed token refresh signs
+the user out only when the server rejects the token. A network failure keeps
+the session. When the user switches instance, the app never shows data or
+uses a token from the previous instance.
 
 ---
 
-## 3. Data model
+## Scope
 
-No new backend tables. Client-side state only.
+This component holds the mobile app and the mobile auth gateway on the
+backend: bearer login, refresh and logout, and the Google sign-in hand-off
+through a one-time code. The mobile standards file holds the coding rules
+(see Architecture).
 
-- **Tokens**: `mobile/src/api/auth/tokenStore.ts`. A single bearer access token per
-  instance, stored in `expo-secure-store` (iOS Keychain / Android Keystore) under a key
-  derived from the current base URL (`tokenStore.ts:getAccessTokenKey`), with
-  `keychainAccessible: WHEN_UNLOCKED_THIS_DEVICE_ONLY` so it never syncs to iCloud/backup
-  and never crosses instances. This is the credential of record; see §5 for why it must
-  stay out of MMKV.
-- **Server-state cache**: TanStack Query, persisted to MMKV via
-  `query/client.ts:persister` (`createSyncStoragePersister`), keyed so a
-  `serverUrl`-scoped query key never serves another instance's data
-  (`api/query-keys.ts`, per `mobile/AGENTS.md`). `dehydrateOptions.shouldDehydrateQuery`
-  (`query/client.ts`) excludes any key whose head matches `me`, `agents`,
-  `workspaceSettings`, `userProjects`, `userProject`, `userRecentFiles`, or that starts
-  with `"chat-"`, from the on-disk MMKV snapshot; those stay in-memory only, because MMKV
-  here is unencrypted (`query/client.ts`, the `NON_PERSISTED_KEY_PREFIXES` comment). A
-  new query key with chat content or identity in it must be added to this exclusion or
-  land under a `chat-` prefix.
-- **Per-session chat state**: `mobile/src/state/chatSessionStore.ts` (`useChatSessionStore`,
-  a Zustand store), a `Map<string, SessionData>` keyed by session id, holding
-  `messageTree`, `chatState`, `abortController`, `submittedMessage`. Never persisted; it
-  holds a live `AbortController` (`chatSessionStore.ts`, header comment).
-- **Message tree**: `mobile/src/chat/messageTree.ts`, the same `nodeId`-keyed tree shape
-  as web (`MessageTreeState`), built by `mobile/src/chat/chatHistory.ts` from
-  `GET /chat/get-chat-session/{id}`.
-- **Processed message state**: `mobile/src/chat/messageProcessor.ts` folds a message's
-  packets into `citationMap`, `citations` (`StreamingCitation[]`), and a document map, the
-  same fold pattern as web's `getCitations` (`messageProcessor.ts`, `citation_info`
-  handling).
-- **User files**: `mobile/src/state/userFileStore.ts`, separate from the Query cache so
-  `sessionManager.ts:purgeCache` must clear both on login/logout.
+The backend endpoints the app calls belong to their own components:
+[[core-chat-loop]], [[chat-persistence]], [[agents-personas]], [[projects]] and
+[[auth-and-identity]]. The packet contract belongs to [[streaming-protocol]].
 
 ---
 
-## 4. How it works
+## Architecture
 
-### 4.1 App start and auth
+`mobile/AGENTS.md` is the standards file. It does not inherit `web/AGENTS.md`.
+Read it before you write mobile code.
 
 ```
-AuthGate                                  components/auth/AuthGate.tsx
-  ├─ useCurrentUser (GET /me)             hooks/useCurrentUser.ts
-  ├─ useTokenRefresh(identity confirmed)  hooks/useTokenRefresh.ts
-  └─ resolveAuthGate                      components/auth/authRoute.ts  → redirect / render
+AuthGate (components/auth/AuthGate.tsx) ── resolveAuthGate ── redirect or render
+  └─ (app)/_layout.tsx: ChatSurface overlay + Stack + AppSidebar
+       └─ useChatController.onSubmit (hooks/useChatController.ts)
+            ├─ chatSessionStore (one entry per session, never persisted)
+            └─ streamChatMessage (api/chat/stream.ts, expo/fetch)
+                 └─ NDJSON buffer (chat/ndjson.ts) → messageProcessor → findRenderer
 ```
 
-`useTokenRefresh` is gated on `data !== undefined` (identity confirmed) so a refresh
-cannot race the persisted-cache restore (`useTokenRefresh.ts` doc comment). It fires once
-immediately, then on every foreground transition (`AppState` `"active"`, min gap 60 s) and
-on a 10-minute interval while foregrounded; iOS suspends JS timers in the background, so
-the foreground listener is the real trigger, not the interval (`useTokenRefresh.ts`).
+**One chat surface.** `mobile/src/app/(app)/_layout.tsx` mounts `ChatSurface`
+as an opaque overlay beside the expo-router `Stack`. Chat routes render
+`null`. `chat/chatFocus.ts:deriveFocus` maps the path to the empty state, a
+chat or a project. The header and composer stay mounted across these changes,
+and the URL still changes for deep links and the back stack. On other routes
+`deriveFocus` returns `null`, and the Stack screen shows.
 
-Login (`api/auth/sessionManager.ts:login`) resolves an access token via one of two paths
-and calls `installSession`:
-- **Password**: `passwordLogin` posts an OAuth2 password form (`username`/`password`, not
-  JSON) to `/auth/mobile/login`.
-- **Browser SSO**: `browserLogin` runs `runBrowserSso` (`api/auth/browserSso.ts`), which
-  opens the system browser for the provider's OAuth flow and gets back a one-time
-  `code` + the `codeVerifier` it generated, then exchanges them at
-  `/auth/mobile/sso/exchange`.
+**Auth, client side.** `api/auth/sessionManager.ts` owns sign-in, refresh and
+sign-out. `installSession` bumps `sessionEpoch`, stores the token, purges every
+cache, and then marks the session signed in. `refreshToken` shares one
+in-flight refresh across callers (`api/auth/refreshState.ts`). The token lives
+in `expo-secure-store`, keyed by instance URL.
 
-`installSession` bumps `sessionEpoch`, writes the token via `setToken`, then
-`purgeCache()` (clears the Query client, the user-file store, toasts, and the MMKV
-persister) before flipping `useSession` status to `"authed"`
-(`sessionManager.ts:installSession`). Token-before-purge ordering matters: a query firing
-mid-purge must not repopulate the cache with the previous user's data.
+**Auth, server side.** `server/auth/mobile.py` builds login, refresh and logout
+from `mobile_auth_backend` (`backend/onyx/auth/users.py`). That backend uses the
+same session strategy as the web cookie backend with a bearer transport, so
+mobile gets the same token the web gets in a cookie. Google sign-in uses a
+separate OAuth router at `/auth/mobile/oauth`, which `backend/onyx/main.py`
+mounts only when `OAUTH_ENABLED`. After the IdP callback,
+`auth/mobile_sso/sso_completion.py:complete_mobile_sso` stores the token behind
+a one-time code (`auth/mobile_sso/code_store.py:store_sso_code`, TTL
+`MOBILE_SSO_CODE_TTL_SECONDS`) and redirects to the app deep link with the code
+only. The app trades the code and its PKCE verifier at
+`/auth/mobile/sso/exchange`.
 
-`refreshToken` de-dupes concurrent callers through `refreshState.ts:getInFlightRefresh`/
-`setInFlightRefresh`, and only clears the local session on an **auth** error
-(`isAuthError`); a transient failure re-throws and leaves the existing token in place
-(`sessionManager.ts:refreshToken`). `sameSession` guards against a slow refresh applying
-its result after the user switched instances or logged out mid-flight, by checking both
-the session epoch and the currently stored server URL (`sessionManager.ts:sameSession`).
+**Streaming.** `api/chat/stream.ts` is the one module that does not use
+`apiFetch`, because only `expo/fetch` exposes a readable body on React Native.
+`streamChatMessage` yields packets, the message-id object and stream errors,
+told apart by field presence. It drops heartbeats. `resumeChatMessage` keeps
+them as liveness ticks. Stop calls `stop-chat-session` and aborts the local
+`AbortController`, because a client abort alone leaves the backend generating.
 
-### 4.2 The mobile auth gateway (backend)
+**Timeline.** `chat/messageProcessor.ts` and `hooks/timeline/` port the packet
+processor of the web app. Packets group by `getGroupKey` (`turn_index` and
+`tab_index`). `injectSectionEnd` closes open groups when a new turn starts and
+on `stop`, because the backend does not send `section_end` for every group,
+and never for the final answer. Two hooks differ from web because the mobile
+lint forbids reading refs during render: `usePacketProcessor` regroups in a
+`useMemo`, and `usePacedTurnGroups` keeps pacing state in effects.
 
-`backend/onyx/server/auth/mobile.py` mounts the mobile bearer routes under
-`/auth/mobile` in `main.py`. `login`/`refresh`/`logout` are built from
-`fastapi_users.get_auth_router(mobile_auth_backend)` /
-`get_refresh_router(mobile_auth_backend)`
-(`mobile.py`), where `mobile_auth_backend` (`onyx/auth/users.py`) is the **same**
-session-strategy backend web's cookie flow uses, differing only in transport: web gets
-an HttpOnly cookie, mobile gets the identical token as a `Bearer` header value
-(`mobile.py`, module docstring). It is server-revocable under the redis/postgres
-strategies, and a self-contained non-revocable JWT under `AUTH_BACKEND=jwt`
-(`onyx/auth/mobile_sso/tokens.py:issue_session_credential`).
-
-SSO: `backend/onyx/auth/mobile_sso/sso_completion.py:complete_mobile_sso` runs after the
-existing IdP callback (Google today, through the dedicated `/auth/mobile/oauth` router mounted in `main.py`) when the OAuth state carries a mobile marker
-(`apply_mobile_state`). It mints the session token, stores it behind a single-use,
-PKCE-bound code in Redis (`code_store.py:store_sso_code`, TTL
-`MOBILE_SSO_CODE_TTL_SECONDS`, default 60 s), and 302-redirects to the app's custom-scheme
-deep link carrying **only the opaque code**, never the token
-(`sso_completion.py`). The app's `POST /auth/mobile/sso/exchange`
-(`mobile.py:sso_exchange`) then calls `consume_sso_code`, which atomically `GETDEL`s the
-code and constant-time-compares the PKCE verifier (S256) before returning the token
-(`code_store.py:consume_sso_code`). A wrong code, an expired code, a replayed code, and a
-verifier mismatch all fail identically with one 401 and no oracle
-(`sso_completion.py`, `mobile.py:sso_exchange`).
-
-### 4.3 A chat turn, send to render
-
-```
-InputBar / ActionsMenu                    components/chat/InputBar.tsx
-  └─ useChatController.onSubmit           hooks/useChatController.ts
-      ├─ ensureSession / optimistic node  state/chatSessionStore.ts, chat/messageTree.ts
-      ├─ streamChatMessage (async gen)    api/chat/stream.ts
-      │   └─ readNdjson                   api/chat/stream.ts  (expo/fetch reader)
-      │       └─ NdjsonBuffer.pushChunk   chat/ndjson.ts
-      └─ drain loop → messageProcessor    chat/messageProcessor.ts → chatSessionStore
-```
-
-`streamChatMessage` (`api/chat/stream.ts`) is the **one place mobile bypasses `apiFetch`**:
-only `expo/fetch`'s response exposes a readable `body` on React Native
-(`stream.ts`, header comment). It POSTs `SendMessageBody` to `/chat/send-chat-message` and
-yields `StreamEvent`s, a union of `Packet | MessageResponseIDInfo | StreamingError`
-discriminated by field presence (`isPacket`/`isMessageIdInfo`/`isStreamError`,
-`stream.ts`), because the wire mixes wrapped `{placement, obj}` packets with root control
-objects. `readNdjson` drops `chat_heartbeat` events unless `keepHeartbeats` is set
-(`isHeartbeat`, `stream.ts`); `resumeChatMessage` keeps them, mirroring web's
-`resumeStream` not filtering heartbeats (see [[streaming-protocol]] §4.4).
-
-Stop (`hooks/useChatController.ts:stop`) calls `POST /chat/stop-chat-session/{id}`
-(`api/chat/sessions.ts:stopChatSession`) with the acknowledged response ID, then aborts
-local delivery. Before acknowledgement, Stop waits up to 10 seconds for the response ID.
-If the response ID does not arrive, the app closes local delivery and checks server readiness without sending an unscoped Stop.
-The Stop request times out after 10 seconds; a failed request releases its retry guard only for the same response owner.
-API calls and chat streams share cancellable credential resolution. Request cancellation stops that waiter, not the shared token refresh.
-The request retains its controller while `chat/sessionReadiness.ts:waitForSessionIdle`
-polls `GET /chat/chat-session/{id}/status`. Stream completion alone does not enable Send.
-Transient failures keep input blocked and retry. Access denial or a missing session stops polling, shows an error, and leaves readiness unconfirmed. A stale callback cannot release a newer
-controller. Drafts clear only after acknowledgement and only if unchanged since submission.
-Rejected sends and newer composer edits keep their drafts.
-Before sending to an existing session, a busy or failed readiness check shows a toast and keeps the draft for retry.
-Resumed streams confirm idle before loading saved history. Status, Stop, and history requests have a 10-second deadline, including credentials and response reads. If history loading fails after confirmed idle, the app preserves local messages and shows an error. Send stays disabled until recovery succeeds. Reopening retries history loading, including when no current stream remains.
-Saved responses with `response_status` of `complete`, `limit`, or `cancelled` replace local errors. Null, running, or suspended status preserves the local error despite placeholder text. Saved failures remain authoritative. Older servers without this field use nonempty text or files as the completion signal.
-If saved history has no matching response, recovery retains the local failed question and error for retry.
-Navigating away releases the replay reader, so reopening can reconnect during a blocked read or status check.
-Releasing a reader does not mark the server idle. A reopened response with a local error resumes readiness checks without replaying output.
-Reopening also retries an unresolved readiness check when no current stream remains. Permanent access or missing-session errors stop that attempt; they do not trigger an automatic retry loop.
-
-### 4.4 Parsing and rendering the stream
-
-`chat/streamingModels.ts` declares `PacketType`, one interface per packet body, and the
-`ObjTypes` union, hand-mirroring the backend's `StreamingType`
-(`backend/onyx/server/query_and_chat/streaming_models.py:StreamingType`), independently
-of `web/src/app/app/services/streamingModels.ts` doing the same. `chat/ndjson.ts`'s
-`createNdjsonBuffer` is a pure line-buffer with the identical brace-recovery fallback as
-web's `handleSSEStream`, explicitly commented as matching it (`ndjson.ts`).
-
-Packets are grouped and handed to `findRenderer`
-(`mobile/src/components/chat/renderers/findRenderer.ts:findRenderer`), which checks
-predicates in a fixed order and returns the first match:
-
-| Predicate | Renderer wired? |
-|---|---|
-| chat packets (`message_start`/`_delta`/`_end`) | **`MessageTextRenderer`** |
-| deep-research plan packets | `null` (unwired) |
-| research-agent packets | `null` (unwired) |
-| coding-agent packets | `null` (unwired) |
-| search-tool packets | `null` (unwired) |
-| image-generation packets | `null` (unwired) |
-| python-tool packets | `null` (unwired) |
-| file-reader packets | `null` (unwired) |
-| custom-tool packets | `null` (unwired) |
-| fetch (`open_url_*`) packets | `null` (unwired) |
-| memory-tool packets | `null` (unwired) |
-| reasoning packets, or a bare `section_end`/`error` | **`ReasoningRenderer`** |
-
-`RendererComponent` (`mobile/src/components/chat/renderers/RendererComponent.tsx`) falls
-back to `{ icon: null, status: null, content: <></> }` when `findRenderer` returns `null`
-(`RendererComponent.tsx:RendererComponentImpl`), so every tool family above renders as an
-empty timeline step today: not an error, not a placeholder, nothing. The file's own
-comments name this as intentional interim state, tracked as future "PR 9x" work
-(`findRenderer.ts`, per-branch comments), not a bug.
-
-Citations are **not** rendered as a timeline block on mobile either, matching web:
-`chat/messageProcessor.ts` folds every `CitationInfo` packet into `citationMap` and
-`citations` as it streams (`messageProcessor.ts`, the `citation_info` case), and
-`chat/citations.ts:selectSources` derives the cited/more/files split the `CitedSources`
-sheet component renders (`components/chat/CitedSources.tsx`).
-
-The timeline is a port of web's packet processor and timeline shell
-(`chat/messageProcessor.ts`, `hooks/timeline/*`, `components/chat/AgentTimeline.tsx`), and
-it keeps web's render-prop renderer contract, so a web tool renderer ports with little
-change. Packets group into steps by `"{turn_index}-{tab_index}"` (`getGroupKey`). The
-backend seldom sends `section_end`, so the client synthesizes it (`injectSectionEnd`):
-on `stop` it closes every open group, which is how the final-answer group completes.
-Two hooks differ from web on purpose: web mutates or reads refs during render, which
-mobile's `react-hooks/refs` lint forbids. `usePacketProcessor` recomputes the whole
-grouping in a `useMemo` on each flush, and `usePacedTurnGroups` keeps pacing state in
-effects (same 200 ms cadence). The output is the same as web's.
-
-### 4.4a Composer tool controls
-
-`state/ComposerToolsProvider.tsx` owns the composer tool state; `ToolbarControls` and
-`ActionsMenu` render it. `ActionsMenu` holds the deep-research switch, force-a-tool,
-per-tool enable/disable, and the search-source sub-view. It is a bottom sheet
-(`ui/sheet`), not web's anchored popover, because the keyboard-sticky composer moves the
-anchor. At send time `resolveToolOptions()` gives `useChatController` the values for
-`deep_research`, `forced_tool_id`, `allowed_tool_ids`, and `internal_search_filters`.
-Persistence matches web:
-
-- `disabled_tool_ids` is saved on the server per agent (`hooks/useAgentPreferences.ts`,
-  `api/chat/agentPreferences.ts`), so a tool disabled on mobile is also disabled on web.
-- The forced tool and the deep-research flag are local. They reset on a change of agent
-  or conversation (`useForcedTools`, `useDeepResearchToggle`). They do not reset on the
-  `null` → new-session change, because that change is the send itself.
-- The source selection is a local preference saved per server URL (`useSourceSelection`).
-  It does not reset on a change of conversation. When the agent's source list changes, the
-  hook restores the saved preference for only the sources that agent can reach.
-- Sources are coupled to the search tool (`toggleSource`, `toggleToolEnabled`): turning a
-  source on forces search; turning the last one off releases it; disabling search clears
-  the sources and re-enabling it restores the previous selection.
-
-### 4.5 Session and message lifecycle
-
-`chat/chatHistory.ts` builds the message tree from `GET /chat/get-chat-session/{id}`
-(`api/chat/sessions.ts`). Renaming (`PUT /chat/rename-chat-session`) and stopping are the
-only session-mutation endpoints called; there is no create/delete/share call site
-distinct from `createChatSession` used implicitly by the first send. Branch switching,
-message editing, regeneration, and feedback have no mobile call sites at all (see §5, §9).
+**Composer tools.** `state/ComposerToolsProvider.tsx` holds the tool state.
+`resolveToolOptions` gives the controller `deep_research`, `forced_tool_id`,
+`allowed_tool_ids` and the search filters at send time. Sources are tied to the
+search tool: turning a source on forces search, and turning search off clears
+the sources.
 
 ---
 
-## 5. Contracts and invariants
+## Contracts and traps
 
-### Component rules (`mobile/AGENTS.md`, verified against source)
-
-`mobile/AGENTS.md` states it "complements but does not inherit" `web/AGENTS.md`: no DOM,
-NativeWind instead of web Tailwind, expo-router instead of Next.js routes. The concrete
-rules:
-
-1. **Reuse before building.** Check `components/ui/*`, the shell layouts
-   (`components/{settings,sidebar,auth,chat}`), `@/icons/*` first. If only web has the
-   component, port it deliberately (pixel/behaviour-exact) rather than hand-rolling a
-   divergent lookalike; ask before porting.
-2. **Spacing classes are literal pixels, not Tailwind's step scale.** `p-24` = 24px on
-   mobile; the equivalent web class is `p-6` (step 6 = 1.5rem = 24px). Translate a web
-   step `N` to mobile `N × 4`; never copy a web class number as-is
-   (`mobile/AGENTS.md`, the spacing table).
-3. **All text through `@/components/ui/text` `Text`.** Never React Native's own `Text`,
-   including in tests.
-4. **Icons through `@/icons/*` rendered via `@/components/ui/icon` `Icon`.**
-5. **Colors are semantic classes** (`bg-background-*`, `text-text-*`, `border-border-*`),
-   resolved at runtime by a `vars()` provider from `@onyx-ai/shared/native`. No `dark:`
-   modifier, no raw Tailwind colors.
-6. **HTTP goes through `@/api/client` `apiFetch<T>`**, which injects the bearer and
-   normalizes errors to `ApiError`; `getBaseUrl()` already appends `/api`, so call sites
-   pass bare paths. The chat stream is the one documented exception (`expo/fetch`, for a
-   readable body).
-7. **Server state is TanStack Query, keyed by `serverUrl`.** The MMKV-persisted cache is
-   **unencrypted**; any key naming PII (chat content, identity, agent/project names, file
-   names) must be excluded via `NON_PERSISTED_KEY_PREFIXES` in `query/client.ts`.
-8. **Navigation is expo-router; route groups are path-transparent.** Auth routing is
-   imperative (`components/auth/AuthGate.tsx`), with pure logic isolated in
-   `authRoute.ts`.
-9. **Tests run under `jest-expo`**, import jest globals from `@jest/globals`, and must
-   not import reanimated-pulling barrels (e.g. `@/components/sidebar` as a whole) in a
-   unit test; import the leaf component instead.
-10. **The chat pure layer is intentionally not shared with web.** `mobile/src/chat/*`
-    duplicates web's NDJSON parser, message tree, and packet contracts on purpose
-    (`mobile/AGENTS.md`, "Shared package", gives the reason). This is a deliberate
-    acceptance of drift risk, not an oversight.
-
-### This component's own invariants
-
-11. **The bearer token lives only in `expo-secure-store`, never MMKV or plain state.**
-    `tokenStore.ts` is the sole read/write path; a new auth-adjacent feature that needs
-    the token must go through `getToken`/`setToken`, not thread it through Query state.
-12. **A mobile-mirrored `PacketType` value must match the string the backend's
-    `StreamingType` emits.** See [[streaming-protocol]] §5.1; this is the same contract
-    web carries, verified independently here (see §7 for the drift found in this audit).
-13. **A packet with no matching predicate in `findRenderer` renders nothing, not an
-    error.** `RendererComponent`'s fallback (§4.4) is deliberate degrade-not-crash
-    behaviour; do not let a new packet family reach an unguarded cast that assumes a
-    renderer exists.
-14. **`sessionEpoch` and the stored server URL together gate every async auth
-    continuation** (`sameSession`, `sessionManager.ts`). A new async auth flow (a second
-    SSO provider, a background token exchange) must check both before applying its
-    result, or a slow response can resurrect a logged-out session or write a token under
-    the wrong instance's key.
+1. `install-token-before-purge` **Install the token before the cache purge.**
+   `api/auth/sessionManager.ts:installSession` calls `setToken` and then
+   `purgeCache`. In the other order, a query that fires during the purge fills
+   the cache again with the data of the previous user.
+2. `auth-guard-epoch-and-url` **Every async auth result must check both
+   `sessionEpoch` and the stored server URL.**
+   `api/auth/sessionManager.ts:sameSession` does this for refresh. The epoch
+   alone misses an instance switch. A late refresh would then file the bearer
+   of one instance under the key of another, and every later request would
+   send it to the wrong server. A new async auth flow must use the same guard.
+3. `sign-out-only-on-auth-error` **Sign out only on an auth error.**
+   `api/auth/sessionManager.ts:refreshToken` calls `clearLocalSession` only when `isAuthError` is true. A
+   transient failure throws and keeps the token.
+4. `purge-clears-every-store` **`purgeCache` must clear every client store.**
+   `userFileStore` lives outside the Query cache, so
+   `api/auth/sessionManager.ts:purgeCache` resets it by hand. A new store that holds user data must join `purgeCache`.
+5. `mmkv-snapshot-unencrypted` **The MMKV query snapshot is unencrypted.**
+   `query/client.ts:isNonPersistedKey` keeps every `chat-*` key and the keys in
+   `NON_PERSISTED_KEY_PREFIXES` (identity, agents, workspace settings, projects,
+   recent files) out of it. A new key with chat content, the name of a person
+   or a file name must start with `chat-` or join that list.
+6. `token-in-secure-store` **The token stays in `expo-secure-store`.** Do not
+   put it in MMKV, Query state or a store. Read and write it only through
+   `api/auth/tokenStore.ts`.
+7. `no-renderer-renders-nothing` **A packet with no renderer renders
+   nothing.** `components/chat/renderers/RendererComponent.tsx` falls back to
+   empty content when `findRenderer` returns `null`. A new backend tool appears
+   to do nothing on mobile, with no error.
+8. `keep-null-tool-predicates` **Keep the `null` tool predicates in
+   `components/chat/renderers/findRenderer.ts:findRenderer`.** The reasoning check is last and matches `section_end` and
+   `error`. If you delete a tool predicate that returns `null`, the reasoning
+   renderer claims the closed group of that tool and shows a search or image
+   step as "Thinking". To add a renderer, replace one `null`.
+9. `packet-enum-mirrored` **The packet enum is mirrored by hand.**
+   `mobile/src/chat/streamingModels.ts` copies the backend `StreamingType`
+   apart from web. [[streaming-protocol]] owns the list of mirrors that a new
+   packet type must update.
+10. `sso-exchange-uniform-failure` **The mobile SSO exchange fails the same way
+    for every bad input.**
+    `auth/mobile_sso/code_store.py:consume_sso_code` burns the code with
+    `GETDEL` before it checks the PKCE verifier. A wrong, expired or replayed
+    code and a bad verifier all return one 401. The deep link carries only the
+    code, never the token. The app redirect URI must be in
+    `MOBILE_ALLOWED_REDIRECT_URIS`.
 
 ---
 
-## 6. Relationships
+## Decisions
 
-**Depends on**
-- [[core-chat-loop]]: the turn endpoint this component drives, identically to web modulo
-  the endpoints it does not call (§2, §4.5).
-- [[streaming-protocol]]: the packet vocabulary `mobile/src/chat/streamingModels.ts` and
-  `ndjson.ts` mirror; that document already names this component as the second mirror.
-- [[citations]]: the citation numbering `messageProcessor.ts` folds and `CitedSources.tsx`
-  renders.
-- [[auth-and-identity]]: this component's bearer-token session is the mobile-specific path
-  through that system; web's cookie session is the other.
-- [[agents-personas]]: agent selection (`api/chat/agents.ts`, `/agents` route).
-- [[chat-persistence]]: `get-chat-session`, `rename-chat-session`, `stop-chat-session`.
-- [[onyx-api]]: `/manage/connector-status`, `/federated` for source display.
-
-**Depended on by**
-- Nothing in-repo depends on this component; it is a leaf client, like [[chat-frontend]].
+- **The chat layer is not shared with web.** `mobile/src/chat/` duplicates
+  the NDJSON parser, message tree and contracts of the web app. Sharing would
+  need a shared util, a web change, a jest module mapper and coupling to a
+  `dist` build. `mobile/AGENTS.md` ("Shared package") gives the full reason and
+  the rule to extract again if the copies drift.
+- **The bearer token is the web session token.** One session strategy serves
+  both clients. Only the transport differs, so revocation works the same way.
 
 ---
 
-## 7. Blast radius
+## Known issues
 
-| If your change... | Also check |
-|---|---|
-| adds, renames, or removes a backend packet type (`StreamingType`) | `mobile/src/chat/streamingModels.ts:PacketType` and its interface; `mobile/src/components/chat/renderers/findRenderer.ts` needs a predicate or the packet silently renders nothing; do this alongside the same update to `web/src/app/app/services/streamingModels.ts` (see [[streaming-protocol]] §7) |
-| changes mobile auth (`backend/onyx/server/auth/mobile.py`, `onyx/auth/mobile_sso/`) | `mobile/src/api/auth/*`; confirm `sessionManager.ts` still gets the same `{access_token, token_type}` shape; confirm `sameSession` guards still hold if the token-issuance seam (`tokens.py:issue_session_credential`) changes what it mints |
-| changes an endpoint mobile calls (`/persona`, `/user/projects`, `/chat/get-chat-session/{id}`, ...) | the corresponding file under `mobile/src/api/chat/`; mobile calls a strict subset of what [[chat-frontend]] calls, so verify mobile's caller still matches the response shape, it will not be caught by a web-only test |
-| changes the design system / design tokens | `mobile/AGENTS.md`'s spacing-conversion table stays correct only if the px-per-token relationship in `style-dictionary.config.mjs` is unchanged; a token rename needs the mobile NativeWind theme (`@onyx-ai/shared/nativewind-theme`) regenerated too |
-| changes `resume_chat_stream` or the stream buffer | `api/chat/stream.ts:resumeChatMessage`; mobile keeps heartbeats on resume the same way web does, so a framing change reaches both |
-| adds a message action (regenerate, edit, feedback, branch) on web | mobile has none of these wired (§4.5, §9); decide explicitly whether to port before assuming parity |
-
----
-
-## 8. How to verify a change
-
-### Running the app
-
-`mobile/GETTING_STARTED.md` covers one-time machine setup (Xcode 26.4+, an iOS
-simulator, CocoaPods; JDK 17 plus the pinned NDK version for Android).
-`mobile/README.md`'s steps: `bun install` then `bunx expo install --fix` from `mobile/`,
-then `bun run prebuild -- -p ios` and `bun run run:ios` (Metro on port 8082; first iOS
-build compiles React Native from source, roughly 15 minutes). It is a development build,
-not Expo Go: `react-native-mmkv` v4 and FlashList are native modules Expo Go lacks.
-
-### Tests
-
-```bash
-cd mobile
-bun run typecheck
-bun run lint
-bunx jest
-```
-
-Tests live under `src/**/__tests__/**/*.test.ts(x)`, run with `jest-expo`. Representative
-real paths in this codebase: `mobile/src/chat/__tests__/ndjson.test.ts`,
-`mobile/src/chat/__tests__/messageProcessor.test.ts`,
-`mobile/src/chat/__tests__/citations.test.ts` (via `mobile/src/chat/__tests__/`),
-`mobile/src/components/chat/renderers/__tests__/findRenderer.test.ts`,
-`mobile/src/api/auth/__tests__/sessionManager.test.ts`,
-`mobile/src/api/auth/__tests__/tokenStore.test.ts`,
-`mobile/src/hooks/__tests__/useTokenRefresh.test.tsx`,
-`mobile/src/hooks/__tests__/useChatController.test.tsx`. Native mocks (MMKV self-mock,
-`expo-secure-store`) live in `mobile/src/state/__mocks__/` and per-directory `__mocks__/`
-folders, wired in `jest.setup.ts`.
-
-### Manual reproduction
-
-1. Confirm the backend is up (`backend/log/api_server_debug.log`).
-2. Launch the app against a local instance, sign in with
-   `admin_user@example.com` / `TestPassword123!`.
-3. Send a message that triggers a search. Confirm the answer text streams and citations
-   resolve in the sources sheet; confirm the search step itself renders as an empty
-   timeline block, not an error (expected current behaviour, §4.4).
-4. Background the app for over a minute, foreground it, and confirm a token refresh
-   attempt fires (log or network inspection) without forcing a re-login.
-5. Kill and relaunch the app; confirm the cached session list still shows without
-   chat content, since chat content is excluded from the MMKV snapshot.
-
-### What "working" looks like
-
-- No unrendered tool step is mistaken for a hang; only text and reasoning blocks are
-  expected to show content today.
-- A token refresh failure logs out only on an actual auth error, never on a network blip.
-- Switching the instance URL never serves a previous instance's cached queries or token.
+- **Only text and reasoning render.** Every tool family falls through to
+  `null` in `components/chat/renderers/findRenderer.ts`. The comments mark each
+  slot as planned work.
+- **The mobile enum keeps packet types that the backend never sends**
+  (`MESSAGE_END`, `TOP_LEVEL_BRANCHING`), and `chat/messageProcessor.ts` still
+  checks `MESSAGE_END` for `isComplete` ([[streaming-protocol]]).
+- **Mobile sign-in supports only password and env-configured Google.**
+  `mobile/src/api/auth/providers.ts:PROVIDER_REGISTRY` lists no OIDC or SAML
+  entry.
 
 ---
 
-## 9. Footguns
+## Dependencies
 
-- **Web habits are wrong here by design.** `mobile/AGENTS.md` is explicit that it does
-  not inherit `web/AGENTS.md`: no `useSWR` (TanStack Query instead), no Opal components,
-  no web Tailwind step scale, no DOM. An agent that ports a web fix by copying its class
-  names or import paths will produce a broken or visually wrong screen (see rule 2, the
-  spacing table).
-- **The packet enum is hand-mirrored twice over, not once.** Web mirrors the backend
-  `StreamingType`; mobile mirrors it independently, by an explicit repo decision not to
-  share chat code with web (rule 10).
-  A new backend packet type needs three edits, not two, to stay visible everywhere:
-  `streaming_models.py`, `web/src/app/app/services/streamingModels.ts`, and
-  `mobile/src/chat/streamingModels.ts`.
-- **Comparing the mobile enum to the backend `StreamingType` in this audit found:**
-  mobile (and web) both declare a `message_end`/`MESSAGE_END` packet type that the backend
-  does not currently emit at all (no `MessageEnd`/`"message_end"` anywhere in
-  `streaming_models.py`); the answer stream instead closes via `OverallStop`/`stop`, per
-  [[streaming-protocol]] §5.8. This is vestigial in both clients, not a mobile-specific
-  gap. Mobile also still declares `top_level_branching`, which the backend stopped
-  sending (#15099) and web no longer declares. Backend's `IMAGE_GENERATION_HEARTBEAT` ("image_generation_heartbeat") has no
-  matching type in **either** client's enum; it degrades harmlessly since image-generation
-  packets are entirely unwired on mobile and web filters only `chat_heartbeat`, not this
-  one. `TOOL_CALL_DEBUG` is absent from both clients too (it is `INTEGRATION_TESTS_MODE`-
-  only). None of these three is a mobile-only drift from web; the real gap is not in the
-  **enum**, it is in **renderer wiring** (next point).
-- **Mobile parses the full packet vocabulary but renders almost none of it.**
-  `findRenderer.ts` only wires `message_*` and reasoning/`section_end`/`error`. Search,
-  image generation, python, fetch, custom tools, file reader, memory, deep research,
-  coding agent, and bash tool packets all hit the `null` fallback and render as an empty
-  timeline step (§4.4). This is documented in the file's own comments as staged future
-  work ("PR 9x"), not a bug, but it means a PR that adds a new tool call path on the
-  backend will appear to do nothing visible on mobile until its renderer lands, with no
-  error to signal the gap.
-- **No message-editing, regeneration, feedback, or multi-model comparison exists on
-  mobile.** `useChatController.ts` has no call sites for any of these; do not assume
-  parity with [[chat-frontend]]'s message actions (§4.7 of that document) when reviewing
-  a mobile PR that touches message state.
-- **Only photo-library image attachment is supported, no camera capture**, per
-  `api/files/pickers.ts`'s `ImagePicker.launchImageLibraryAsync` usage; verify a "camera" feature request isn't
-  assumed to already work.
-- **The credential threat model differs from web's cookie session on purpose.** A bearer
-  token in `expo-secure-store` cannot be marked HttpOnly or SameSite; it is protected by
-  OS keychain access control and `WHEN_UNLOCKED_THIS_DEVICE_ONLY` instead. Code that
-  treats the mobile token like a web cookie (assuming automatic browser transport, or
-  storing it anywhere but `tokenStore.ts`) reintroduces the exposure the keychain choice
-  was meant to prevent.
+- [[core-chat-loop]]: the send, resume and stop endpoints.
+- [[streaming-protocol]]: the packet set that the mobile enum mirrors.
+- [[citations]]: `chat/messageProcessor.ts` folds `CitationInfo` into the citation map that the sources sheet reads.
+- [[auth-and-identity]]: the session strategy and the IdP callback that `complete_mobile_sso` extends.
+- [[chat-persistence]]: chat sessions and their messages.
+- [[agents-personas]]: agents and the per-agent tool preferences.
+- [[projects]]: projects and project files.
+
+---
+
+## Recipes
+
+- `add-tool-renderer` **Add a renderer for a tool.** Copy
+  `components/chat/renderers/ReasoningRenderer.tsx`, and port the web renderer
+  from `web/src/app/app/message/messageComponents/timeline/renderers/` to the
+  render-prop contract in `components/chat/renderers/timelineContract.ts`.
+  Return it from the matching `null` slot in
+  `components/chat/renderers/findRenderer.ts`
+  ([[#keep-null-tool-predicates]]). For a new packet family, also add its
+  types to each hand-written set that switches on `PacketType`. To find the
+  sets, run `git grep -l 'PacketType.PYTHON_TOOL_START' mobile/src` and add the
+  new type where a similar type appears. If the start type is missing from
+  `chat/messageProcessor.ts:CONTENT_PACKET_TYPES_SET`, the group is dropped. A
+  miss renders nothing and shows no error.
+- `add-query-key` **Add a query key.** Copy an existing key in `api/query-keys.ts`, and decide
+  whether it may persist ([[#mmkv-snapshot-unencrypted]]).
+- `run-local` **Run the app against a local backend.** Follow `mobile/GETTING_STARTED.md`.
+  The app needs a development build, not Expo Go.
+- `investigate-empty-step` **Investigate an answer step that shows empty.** Find the packet types of
+  the step, then check `findRenderer`. An empty step with no error means no
+  renderer ([[#no-renderer-renders-nothing]]), not a stream failure.
+
+---
+
+## Verification
+
+- `cd mobile && bun run typecheck && bun run lint && bunx jest`. Tests live in
+  `__tests__/` folders next to the code, for example
+  `mobile/src/api/auth/__tests__/` for the session rules.
+- By hand: send a question that runs a search. The answer and citations must
+  render, and the search step must be empty, not an error. Switch the instance
+  URL and confirm that no data from the first instance shows.

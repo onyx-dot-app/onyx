@@ -1,522 +1,279 @@
 # Craft Admin
 
-> The three admin-panel surfaces that govern Onyx Craft: who may use it, which
-> external services a sandbox may reach, and what instructions and default
-> model it runs with. This document does not cover sandboxes, snapshots,
-> streaming, or the webapp proxy; see "Where to go next" for those.
+> The admin controls for Onyx Craft: who may use it, which apps and MCP servers
+> a sandbox may act through with which action policies, and the organization
+> instructions and default model that each session starts with.
 
-**Verified against:** `268e4d5a3d` (2026-10-05)
-**Domain:** craft
-**Edition:** CE, with a Cloud-only lockdown on built-in external-app credential editing (EE)
-**Owns:**
-`web/src/app/admin/craft/access/page.tsx`, `web/src/app/admin/craft/apps/page.tsx`,
-`web/src/app/admin/craft/preferences/page.tsx`,
-`web/src/views/admin/CraftPage/`, `web/src/views/admin/CraftPreferencesPage/`,
-`web/src/sections/plugins/ExternalAppPluginDetail.tsx`,
-`web/src/sections/plugins/PluginAddCatalogModal.tsx`,
-`backend/onyx/server/features/build/api.py`, `build/utils.py`,
-`backend/onyx/server/features/build/external_apps/api.py`,
-`backend/onyx/db/external_app.py`, `backend/onyx/db/action_policy.py`,
-`backend/onyx/db/user_preferences.py`, `backend/onyx/server/settings/api.py`
-
-**Read first:** `[[craft-sessions]]` for the overview of Craft as a product,
-and `[[craft-external-apps]]` for the enforcement of the policies this page
-configures.
+**Verified against:** `73e0ae3c31` (2026-10-28)
+**Edition:** CE. On multi-tenant Cloud, Onyx-managed built-in apps are locked to enable/disable and policy edits.
 
 ---
 
-## 1. What the user experiences
+## User experience
 
-An admin sees Access and Preferences in the Craft sidebar section. Plugins
-manages external apps and MCP servers alongside OpenAPI actions.
+An admin with full admin-panel access manages Craft access, plugins, and
+preferences such as organization instructions and the Craft default model.
 
-On **Access**, the admin sets a workspace-wide default (Craft on or off for
-everyone) and can override that default for individual users, one at a time or
-in bulk, in a searchable table.
+**Access.** The admin sets a workspace default (Craft on or off for everyone;
+on until an admin changes it) and overrides it for single users or in bulk. A
+user whose effective access is off cannot open Craft. Every route on the Craft
+user router returns 403, not only a hidden link. The shared-webapp preview and
+static previews do not check Craft access ([[#preview-routes-skip-access-gate]]). When the admin turns access off for the owner of a scheduled
+task, the next fire records a skipped run instead of running
+([[craft-scheduled-tasks]]).
 
-On **Plugins**, the admin sees every external service and MCP server the Craft
-agent can reach: built-in apps (Slack, Gmail, Google Calendar, Google Drive, Linear,
-HubSpot, Notion, GitHub, Zendesk), any custom app the admin has registered, and connected MCP
-servers. For each, the admin can enable or disable it, edit its per-action
-policy (auto-approve, ask, or deny each kind of action), and configure its
-credentials. Zendesk also exposes Help Center, side conversation, and macro policies.
-Their reads auto-approve and their writes require approval by default.
-External-app policy editors offer search and a Set permissions menu for bulk Auto-approve, Ask, and Disabled choices.
-Bulk changes affect matching editable actions. Default restores each catalog policy.
-Personal and task editors reuse this control, with a workspace-reset callback.
-Workspace-disabled actions remain locked and explain the restriction on hover.
-The MCP tools editor retains its bulk selector; each tool defaults to Ask.
-MCP Configuration places the user approval-settings switch below workspace availability.
-It saves with server configuration. The Tools tab saves only tool availability and action policies.
+**Plugins.** The admin sees built-in apps, custom apps and MCP servers on one
+Plugins page. For each one the admin can turn it on or off for Craft, set
+credentials, attach skills, and set a policy per action: Auto-approve
+(`ALWAYS`), Ask (`ASK`) or Disabled (`DENY`). A switch decides whether users
+may override the workspace policy with their own choices. When the agent later
+tries a Disabled action, the call fails with a policy error. When it tries an
+Ask action, the user gets an approval card in the session. On Onyx Cloud, the
+admin cannot see or edit credentials or URL patterns of Onyx-managed built-ins,
+and cannot create or delete them. The admin can only enable them and set
+policy.
 
-Member plugin details group Available tools and Approval settings under Tools when Craft approvals are available.
-External apps show approval settings directly in Tools and retain their Skills tab. Admin MCP Tools uses the same Approval settings label.
-Policy rows keep controls on the right. Names and descriptions wrap within the
-remaining width so the full text stays visible without hover or expansion.
-On Onyx Cloud, most built-in apps already have Onyx-managed OAuth
-credentials, so the admin can only toggle them on and set policy. Custom apps
-on Cloud keep a normal credential form, as does a built-in whose OAuth client
-cannot be Onyx-owned because it is registered per customer account (Zendesk).
-External-app editors share the Plugins modal frame with MCP and OpenAPI.
-Built-in and custom editors share `web/src/sections/plugins/CraftAppEditorTabs.tsx`.
-Tabs follow the MCP flow: Configuration, Authentication, then Tools.
-Configuration includes identity and URL patterns where applicable. Authentication contains credentials and custom headers.
-Tools contains action policies. Existing skill associations remain in a fourth Skills tab.
-Per-action policy controls stay visible; there is no Advanced disclosure.
-Built-in and custom apps show Enable for Craft above the user-management switch in Configuration.
-Availability saves with the configuration and defaults on during setup.
-External-app directory indicators are read-only; availability has no separate row menu.
-Custom apps have no action catalog, so Tools does not invent per-action controls.
-The user-management switch defaults on and saves with the app configuration.
-For existing apps, changing only this switch enables Save and activates the unsaved-change guard.
-The modal fits the active panel content and scrolls at the 80dvh height limit (or the available viewport space, if smaller);
-parents own the drafts and selected tab, including across skill-upload cancellation.
-The header shows the app logo, name, and a localized Craft availability summary.
-It uses MCP's modal padding and tab spacing.
-`web/src/lib/plugins/externalAppDisplayUrl.ts` formats literal HTTP origins for
-display; it never rewrites stored proxy URL-matching patterns. Complex host
-regexes do not produce a fabricated service URL.
-One footer saves
-the existing payload; managed-app credentials remain hidden and unchanged.
-New drafts close without a discard confirmation. Existing saved edits keep
-their confirmation in the same frame, without a width or position change.
-Creation still advances to the existing optional skills step after persistence.
+**Preferences.** The admin writes organization instructions and picks a Craft
+default model. Instructions appear in each new session's `AGENTS.md` under an
+"Organization instructions" heading. A read-only preview shows the base
+template the text is added to. With no Craft default model, sessions use the
+workspace chat default, and the page shows that model as inherited.
 
-On **Preferences**, the admin sets a workspace default model for Craft
-sessions and a free-text "organization instructions" block that every Craft
-agent sees, alongside a read-only preview of the base instructions template
-those org instructions are appended to.
+In this document "workspace" always means the tenant-wide scope (workspace
+default, workspace policy). The sandbox directory of a session is the "session
+workspace" ([[craft-sandboxes]]).
 
 ---
 
-## 2. Surfaces
+## Scope
 
-### Admin routes (`web/src/lib/admin-routes.ts`)
+This component owns:
+- the access decision for each user and its enforcement on every Craft user
+  route;
+- the Craft admin router and its routes: external-app configuration, the
+  read-only workspace policy views, and the base-instructions preview;
+- the Craft admin pages (Access, Preferences) and the external-app admin
+  editor.
 
-| Route | Component | Gate |
-|---|---|---|
-| `/admin/craft/access` | `CraftPage` (`web/src/views/admin/CraftPage/index.tsx`) | `Permission.FULL_ADMIN_PANEL_ACCESS`; hidden in the sidebar unless `FeatureFlags.craftAvailable` |
-| `/admin/craft/apps` | Redirect to `/admin/plugins`, preserving external-app edit links | same |
-| `/admin/plugins/external-app/[appId]` | `ExternalAppPluginDetail` | `Permission.FULL_ADMIN_PANEL_ACCESS` |
-| `/admin/craft/preferences` | `CraftPreferencesPage` (`web/src/views/admin/CraftPreferencesPage/index.tsx`) | same |
-
-All three carry `requiredTier: null` (`web/src/lib/admin-routes.ts:159-186`): visibility is not tied
-to a billing tier, only to the `craftAvailable` feature flag and the admin
-permission. See §5 for why the flag alone is not the real gate.
-
-### HTTP endpoints
-
-| Method | Path | Handler | Notes |
-|---|---|---|---|
-| PATCH | `/api/manage/admin/users/craft-enabled` | `set_user_craft_access` (`backend/onyx/server/manage/users.py:201`) | Sets or clears `User.craft_enabled` for one or more emails. `Permission.FULL_ADMIN_PANEL_ACCESS`. Emits `AuditAction.USER_CRAFT_ACCESS_CHANGE`. |
-| PATCH | `/api/admin/settings` | `admin_patch_settings` (`backend/onyx/server/settings/api.py`) | Writes `craft_default_enabled` and `craft_instructions` as part of the general `Settings` blob. |
-| GET | `/api/settings` | `fetch_settings` (`backend/onyx/server/settings/api.py`) | Returns the settings, including `craft_default_enabled` and `craft_instructions`. |
-| GET | `/api/build/admin/base-instructions` | `get_base_instructions` (`backend/onyx/server/features/build/api.py:56`) | Returns the raw `AGENTS.template.md`, for the Preferences page's read-only preview. |
-| GET/PATCH/POST/DELETE | `/api/build/admin/apps*` | `backend/onyx/server/features/build/external_apps/api.py` (`admin_router`) | Built-in create/patch (`/apps/built-in`, `/apps/{id}`), custom create (`/apps/custom`), list, catalog options, delete. Gated by `Permission.FULL_ADMIN_PANEL_ACCESS` only, **not** by `require_onyx_craft_enabled` (see §9). |
-| POST/DELETE | `/api/admin/llm/default-craft` | `set_provider_as_default_craft` / `clear_default_craft` (`backend/onyx/server/manage/llm/api.py`, `Permission.MANAGE_LLMS`; see `[[llm-providers]]`) | The Craft default-model picker on the Preferences page. |
-
-`GET /api/manage/users` (`useAdminUsers` hook) returns each `UserRow` with
-`craft_enabled: bool | None`, the per-user override the Access table renders.
-
-### Environment / flags
-
-| Variable | Where | Effect |
-|---|---|---|
-| `ENABLE_CRAFT` | `backend/onyx/server/features/build/configs.py:72` | Deployment-level Craft switch when no PostHog provider is configured. |
-| `onyx-craft-enabled` (PostHog flag) | `build/utils.py:ONYX_CRAFT_ENABLED_FLAG` | Deployment-level switch when PostHog is configured; evaluated per user/tenant. |
-| `AUTO_PROVISION_DEFAULT_EXTERNAL_APPS` | `backend/onyx/configs/app_configs.py:AUTO_PROVISION_DEFAULT_EXTERNAL_APPS` (default `false`) | Seeds Onyx-managed built-in apps (disabled) on tenant creation; `true` on Cloud. |
+Neighbours own the rest:
+- [[craft-external-apps]]: what a policy means at request time, the precedence
+  of workspace, personal and task choices, the action catalogs, and OAuth.
+- [[mcp-and-custom-tools]]: the MCP server admin routes. They write the same
+  policy tables ([[#two-gates-one-policy-table]]).
+- [[plugins]]: the Plugins page shell, which hosts the external-app editor,
+  and the MCP and OpenAPI editors.
+- [[chat-preferences]]: the workspace `Settings` store, which holds the Craft
+  default and the organization instructions. The admin writes them through
+  `PATCH /admin/settings`, like any other workspace setting.
+- [[llm-providers]]: the `CRAFT` model flow behind the default-model picker.
+- [[craft-sandboxes]]: renders the instructions into the session instructions file.
 
 ---
 
-## 3. Data model
+## Architecture
 
-- `User.craft_enabled: bool | None` (`backend/onyx/db/models.py:351`): the
-  per-user override. `None` means "follow the workspace default."
-- `Settings.craft_default_enabled: bool` (default `True`) and
-  `Settings.craft_instructions: str | None`
-  (`backend/onyx/server/settings/models.py:96-104`): the workspace-wide Craft
-  policy and org instructions, both stored on the general settings row (see
-  the settings component for the storage mechanism; this document does not
-  own that table).
-- `ExternalApp`, `ExternalAppUserCredential`, `ExternalApp__Skill`
-  (`backend/onyx/db/models.py`, read through `backend/onyx/db/external_app.py`):
-  the configured app, each user's stored per-user credential, and the skill(s)
-  an app is wired to.
-- `GatedApp` (`backend/onyx/db/models.py`, read through `backend/onyx/db/action_policy.py`):
-  the shared identity row for anything policy-gated, keyed by
-  `(kind, target_id)` where `kind` is `GatedAppKind.EXTERNAL_APP` or
-  `GatedAppKind.MCP_SERVER`. External apps and MCP servers share one gating
-  mechanism through this row.
-- `WorkspaceActionPolicy`: sparse per-action overrides
-  (`{gated_app_id, action_id, policy}`, `policy` one of
-  `ActionPolicy.ALWAYS | ASK | DENY`), written by
-  `replace_workspace_action_policies` (`backend/onyx/db/action_policy.py`).
-  Unset actions resolve to the catalog's `default_policy`, not a stored row.
-- A connected-app request that matches no catalog action gets a synthetic
-  whole-domain `ASK` action. `recognize_actions`
-  (`onyx/external_apps/matching/engine.py`) hard-codes this fallback. It
-  applies to custom apps too, because their catalog is empty. `ExternalApp`
-  has no `default_policy` column. `default_policy` is a catalog field on
-  `EndpointDescriptor`, and it only seeds the admin form.
-- `LLMModelFlow` row with `llm_model_flow_type = LLMModelFlowType.CRAFT`
-  (`backend/onyx/db/llm.py`, `fetch_default_model(..., LLMModelFlowType.CRAFT)`): the Preferences
-  page's default-model selection. See `[[llm-providers]]`.
-
----
-
-### User-managed permission storage
-
-`backend/alembic/versions/131ed5e307a4_add_craft_action_policy_storage.py` adds `gated_app.users_can_manage_policies`, defaulting to true.
-The admin action editor exposes this switch for external apps and MCP servers.
-Workspace DENY blocks every user and task. With user management off, workspace settings
-apply directly; with it on, personal or task settings can override ASK and ALWAYS.
-`GET /api/build/admin/action-policies` lists workspace settings.
-`GET /api/build/admin/action-policies/{kind}/{target_id}` loads one app.
-Admin, personal, and task editors share the search, bulk controls, and action rows.
-Admin editors save policies through the existing external-app and MCP update endpoints.
-The external-app update route refreshes affected sandbox skills after committing policy changes.
-Personal settings use `/api/build/action-policies` and its per-app PUT route.
-Workspace saves replace submitted action settings rather than merging old choices.
-The same migration renames `gated_action_policy` to `workspace_action_policy`.
-Deploy it with the corresponding ORM rename; older code uses the old table name.
-
-## 4. How it works
-
-### 4.1 Access: resolving whether a user can use Craft
+The product name is "Craft". Most backend code says "build"
+(`backend/onyx/server/features/build/`, the `/build` prefix). Search for both.
 
 ```
-require_onyx_craft_enabled                  server/features/build/api.py
-  └─ is_craft_enabled_for_user              server/features/build/utils.py
-       ├─ User.craft_enabled override        (per-user; short-circuits if False)
-       ├─ Settings.craft_default_enabled      (workspace default, when override is None)
-       └─ is_craft_available_for_deployment   (PostHog flag or ENABLE_CRAFT, AND tier >= LLM_GATEWAY_MIN_TIER)
+Access decision (per request)
+  require_onyx_craft_enabled                       server/features/build/api.py
+    -> is_craft_enabled_for_user                   server/features/build/utils.py
+         ANONYMOUS account        -> no
+         User.craft_enabled False -> no
+         User.craft_enabled None  -> Settings.craft_default_enabled must be true
+         User.craft_enabled True  -> skips the workspace default
+         then is_craft_available_for_deployment:
+           PostHog flag "onyx-craft-enabled" (or ENABLE_CRAFT without PostHog)
+           AND tier_at_least(current tier, LLM_GATEWAY_MIN_TIER)
 ```
 
-`is_craft_enabled_for_user` (`build/utils.py:177`) is the single source of
-truth: `AccountType.ANONYMOUS` users never get Craft (it is identity-bound: a
-per-user sandbox, library, and scheduled tasks), then the per-user override
-wins if set to `False`, then the workspace default gates `None`, and finally
-the deployment-level flag must also be true. All three settings-page toggles
-(the per-user switch, the workspace default switch, and the deployment flag)
-feed this one function; nothing else in the codebase re-implements the
-decision.
+`backend/onyx/server/settings/api.py:fetch_settings` evaluates the same functions and
+returns `onyx_craft_available`, `onyx_craft_enabled` and
+`onyx_craft_requires_upgrade`. The admin sidebar shows the Craft section when
+`onyx_craft_available` is true (`web/src/lib/admin-routes.ts`). When the flag
+is on but the tier is too low, `server/features/build/utils.py:is_craft_locked_by_tier`
+makes the web app show an upgrade page instead of Craft. The tier rule exists
+because every Craft turn calls the tier-gated LLM gateway.
 
-The admin Access page never calls this function directly. It reads
-`Settings.craft_default_enabled` and each `User.craft_enabled` through
-`GET /api/manage/users`, and writes through
-`PATCH /api/manage/admin/users/craft-enabled`
-(`web/src/views/admin/CraftPage/svc.ts:setUsersCraftAccess`). A toggle that
-matches the workspace default clears the override (sends `null`) rather than
-storing a redundant explicit value
-(`web/src/views/admin/CraftPage/AccessCell.tsx`).
+**Access writes.** `server/manage/users.py:set_user_craft_access` sets or
+clears `User.craft_enabled` and writes an audit event. The Access table sends
+`null` when a toggle matches the workspace default, so the user follows later
+default changes (`web/src/views/admin/CraftPage/AccessCell.tsx`).
 
-### 4.2 Apps: what an admin configures and how it is enforced
-
-An admin action on `/admin/plugins` is one of: enable/disable an app,
-edit its `auth_template` and `organization_credentials` (not available for
-Onyx-managed built-ins on Cloud),
-edit its per-action policy, or associate/detach a skill. External-app changes
-route through `backend/onyx/db/external_app.py` (`update_external_app`,
-`_write_policies__no_commit`) and, for policy, into the shared `gated_app`
-tables in §3. MCP availability and tool-policy updates use
-`backend/onyx/server/features/mcp/api.py` (`update_mcp_server_with_tools`),
-which also writes policy to the `gated_app` tables.
-
-Enforcement is a separate runtime, the sandbox egress proxy, which reads what
-the admin configured:
+**Policy writes.** Every workspace policy write goes through
+`db/action_policy.py:replace_workspace_action_policies`, keyed by a `GatedApp`
+row for `(kind, target_id)`:
 
 ```
-outbound HTTPS request from a Craft sandbox
-  └─ resolve_app_for_url                 sandbox_proxy/request_evaluator.py
-       (matches request.url against enabled apps' upstream_url_patterns)
-  └─ recognize_actions → shared action policy resolver
-       external_apps/matching/engine.py
-       (classifies the request into one or more catalog action_ids,
-        each carrying its resolved ActionPolicy)
-  └─ gate addon                           sandbox_proxy/addons/gate.py
-       DENY   -> http_403(POLICY_DENIED)
-       ALWAYS -> inject credentials, forward
-       ASK    -> hold for the approval flow (see [[background-jobs]] for the
-                 scheduled/async surface; approvals are out of this doc's scope)
+External app (FULL_ADMIN_PANEL_ACCESS)        MCP server (MANAGE_ACTIONS, scoped allowed)
+  PATCH /build/admin/apps/{id}                  PATCH /admin/mcp/server/{id}
+    update_external_app                           update_mcp_server_simple
+    -> _write_policies__no_commit               POST setup flows
+    -> replace_workspace_action_policies          _publish_mcp_setup
+  commit, then push_skills_for_users            -> replace_workspace_action_policies
+  (SKILL.md lists DENY actions as unavailable)  commit, then _hot_reload_craft_sessions
+                                                (restamps mcp_config_hash only)
 ```
 
-Credential injection (`sandbox_proxy/credential_injection.py`) is a separate
-concern from policy: a resolver injects a secret only for a request the matcher
-attributed to an enabled app. It merges the organization credentials with the
-user's own credentials, if any. An org-credentialed app needs no user
-connection. A request that matches no enabled app's `upstream_url_patterns`
-is not gated by the external-app evaluator. The separate
-`McpRequestEvaluator` can still gate it as an MCP call. A request that
-neither evaluator matches has `matched_actions is None` in
-`request_evaluator.py` and is not gated; see §5 for what governs that traffic instead.
+`replace_workspace_action_policies` validates action ids against the catalog
+and stores only the entries that differ from the catalog default
+(`external_apps/providers/registry.py:normalize_action_policies`). A submitted
+map replaces the old rows. It does not merge.
 
-### 4.3 Preferences: what an admin sets
+**Instructions.** A sandbox manager reads `Settings.craft_instructions` with
+`load_settings()` when it builds a session's `AGENTS.md`
+(`backend/onyx/server/features/build/sandbox/kubernetes/kubernetes_sandbox_manager.py:KubernetesSandboxManager._load_agent_instructions`
+and the Docker equivalent).
+`backend/onyx/server/features/build/sandbox/util/agent_instructions.py:build_organization_instructions_section`
+renders it. Empty or whitespace text renders nothing. A change reaches new
+session workspaces and regenerated session configs without an image rebuild.
+`fetch_settings` hides the text from anonymous callers only.
 
-Two independent settings, both read by the sandbox at session-start:
-
-**Organization instructions.** The admin's free-text `craft_instructions`
-(max 4000 characters client-side, `web/src/views/admin/CraftPreferencesPage/index.tsx:MAX_INSTRUCTIONS_LENGTH`)
-is saved onto `Settings.craft_instructions` via the same
-`updateAdminSettings` call every other settings page uses. At session-start,
-`kubernetes_sandbox_manager.py:453` calls
-`generate_agent_instructions(organization_instructions=load_settings().craft_instructions, ...)`,
-which (`agent_instructions.py:build_organization_instructions_section`) renders
-it as:
-
-```
-## Organization instructions
-
-Your organization's admins set these workspace-wide instructions. Follow them
-in every session; the Hard rules above still win on any conflict.
-
-<the admin's text>
-```
-
-and splices that section into the sandbox's generated `AGENTS.md`. This
-confirms the earlier finding: `craft_instructions` **is** what becomes the
-"## Organization instructions" section. An empty or whitespace-only value
-renders nothing (no empty heading).
-
-**Default model.** The picker calls `setDefaultCraftModel` /
-`deleteDefaultCraftModel` (`web/src/lib/languageModels/svc.ts`), which hit
-`POST` / `DELETE /api/admin/llm/default-craft`. That endpoint writes the
-`LLMModelFlow` row for `LLMModelFlowType.CRAFT`
-(`backend/onyx/db/llm.py:update_default_pointer_model`).
-Per `[[llm-providers]]`, `CRAFT` is a **pointer flow, not a capability check**:
-nothing populates this row automatically, and Craft falls back to the
-workspace chat default (`defaultText` in the page) when no explicit Craft
-default is configured. The page resolves and shows this fallback itself
-(`inheritedSelection` in `CraftPreferencesPage/index.tsx`) so a per-admin
-`localStorage` model pick can never leak into what the page reports as the
-workspace value. A hidden/deprecated model that was previously set as default
-still resolves, so an admin can see and clear it even after it is hidden.
-
-### Where to go next
-
-This document stops at the admin surface. For the parts it deliberately does
-not cover:
-
-- **Sandboxes** (isolation, egress lockdown mechanics, network policy) and
-  **snapshots** (session persistence across restarts): `[[craft-sandboxes]]`.
-- **Streaming** (turn execution and event delivery): `[[craft-streaming]]`.
-- **The webapp proxy** (previewing a sandbox's running app):
-  `[[craft-webapp-proxy]]`.
-- **Scheduled tasks** (the `/build/admin` surface does not cover these; they
-  are user-configured, not admin-configured):
-  `[[craft-scheduled-tasks]]`.
-- **Approvals** (the `ASK` hold/prompt UX referenced in §4.2):
-  `backend/onyx/server/features/build/approvals/api.py`,
-  `[[craft-external-apps]]` §4.5.
-- **OAuth token refresh** for connected apps: `[[craft-external-apps]]` §4.6.
+**Default model.** `server/manage/llm/api.py:set_provider_as_default_craft`
+(`MANAGE_LLMS`) sets the `CRAFT` pointer.
+`backend/onyx/server/features/build/session/manager.py:SessionManager.build_llm_configs` tries the Craft default,
+then the chat default.
 
 ---
 
-## 5. Contracts and invariants
+## Contracts and traps
 
-1. **Craft access gating is enforced server side, on every `/build` request,
-   not only by hiding the sidebar link.** `require_onyx_craft_enabled`
-   (`build/api.py:require_onyx_craft_enabled`) is a router-level FastAPI
-   dependency on the user-facing `/build` router. The separate `/build/admin`
-   router does not use it (item 5). The frontend's `craftAvailable` flag only controls whether
-   the nav item and page render; it grants nothing by itself.
-2. **A disabled app gets no credential injection.**
-   `ExternalAppResolver` renders headers through
-   `external_apps/credentials.py:resolve_injection_headers`. That function
-   returns `{}` when the app is missing or not `enabled`. Otherwise it merges the
-   organization credentials with the user's `ExternalAppUserCredential`, if any.
-   An org-credentialed app needs no per-user row. Disabling an app does not
-   delete stored user credentials.
-3. **A connected app's `DENY`-policied action is blocked before any upstream
-   connection for that action, not just hidden from the agent's tool list.**
-   The gate addon (`sandbox_proxy/addons/gate.py`) returns `http_403` before
-   forwarding; it does not rely on the agent choosing not to attempt the call.
-4. **General internet egress from a sandbox is not the same guarantee as
-   "admin-approved."** Requests that match no connected app's
-   `upstream_url_patterns` get no verdict from `ExternalAppRequestEvaluator`.
-   `McpRequestEvaluator` then runs, and it gates matched MCP tool calls. A
-   request that neither evaluator matches has `matched_actions is None`, is
-   not evaluated by the action-policy gate, and the proxy forwards it unchanged. The
-   sandbox's iptables lockdown (`firewall-init.sh`) drops all outbound traffic
-   except to the proxy. Public-host access (needed for `npm`, `pip`, etc.)
-   therefore goes through the proxy. **The admin-configured app policy governs
-   only requests attributed to a connected app or MCP server; it is not a
-   general internet allowlist.** State this precisely when reasoning about
-   "can a sandbox reach an unapproved service": it can reach arbitrary public
-   hosts, but it cannot authenticate as an org-connected app it wasn't granted,
-   and a connected app's `DENY`-policied actions are blocked.
-5. **`/build/admin/*` endpoints are gated by `FULL_ADMIN_PANEL_ACCESS` alone,
-   deliberately not `require_onyx_craft_enabled`.** An admin configuring Craft
-   for the org may not have Craft enabled for themselves
-   (`build/api.py:46-47`, comment on `admin_router`).
-6. **`craft_instructions` reaching the agent is deterministic, not
-   best-effort.** It is read fresh from `load_settings()` at session-start
-   (not cached in the sandbox image) and always occupies the same template
-   position (`agent_instructions.py`), so a change takes effect on the next
-   new session without a rebuild.
-7. **A `GatedApp` row's identity is `(kind, target_id)`, never a name.**
-   Self-hosted GitLab/Jira instances can share an `app_type`, and two MCP
-   servers can share a display name; anything that looks up policy or grants
-   by name instead of `(kind, id)` will silently collide.
-8. **Workspace action availability must reach sandbox skill files.** Both admin
-   save routes refresh affected users through `push_skills_for_users` after commit.
-   The shared policy route skips this refresh when only user management changes.
-   `test_workspace_policy_api_refreshes_affected_sandbox_skills` checks both paths.
-
----
-
-## 6. Relationships
-
-**Depends on**
-- [[access-control]]: `Permission.FULL_ADMIN_PANEL_ACCESS` gates every admin
-  endpoint in this document except the Craft default-model endpoints, which
-  use `Permission.MANAGE_LLMS` (see `[[llm-providers]]`).
-  `Permission.BASIC_ACCESS` gates the underlying `/build` user-facing router.
-- [[auth-and-identity]]: `AccountType.ANONYMOUS` is excluded from Craft
-  entirely; per-user OAuth credentials for external apps depend on the acting
-  user's identity.
-- [[editions-and-gating]]: `is_craft_available_for_deployment` reads a
-  PostHog feature flag (or `ENABLE_CRAFT`) and also requires the deployment
-  tier to reach `LLM_GATEWAY_MIN_TIER` (Business), because every Craft turn
-  goes through the tier-gated `/gateway`; Community never gets Craft.
-  When the flag is on but the tier is too low, `is_craft_locked_by_tier` sets
-  `onyx_craft_requires_upgrade` in `/settings`: the sidebar keeps Craft with a
-  Business tag and `/craft/*` renders `CraftUpgradePage`; `/build` stays 403.
-  `requiredTier: null` on all three routes confirms Craft admin visibility is
-  not tier-gated at the nav level.
-- [[llm-providers]]: the Preferences default-model picker is the `CRAFT`
-  `LLMModelFlowType`; see `llm-providers.md` §9 for why it is a pointer, not a
-  capability check.
-- [[agents-personas]]: Craft instructions are analogous to (but a separate
-  mechanism from) a persona's custom agent prompt; both ultimately shape what
-  the agent sees, through different templates.
-- [[code-execution]]: the sandbox this document configures access and policy
-  for is where Craft's code actually runs.
-- [[multi-tenancy]]: `Settings`, `User.craft_enabled`, and every `ExternalApp`
-  row are tenant-scoped; the PostHog flag check is evaluated per tenant.
-- [[background-jobs]]: Craft scheduled tasks and the `ASK` approval hold both
-  run through async/background infrastructure this document does not own.
-
-**Depended on by**
-- Every Craft sandbox session: reads `is_craft_enabled_for_user`,
-  `craft_instructions`, the default-model row, and the egress ruleset this
-  document's pages configure.
+1. `admin-router-no-craft-gate` **`/build/admin` must not use
+   `require_onyx_craft_enabled`.** An admin who configures Craft may not have
+   Craft for themselves. The comment on `server/features/build/api.py:admin_router`
+   states this. A new admin route goes on `admin_router`; a new user route
+   goes on `router`.
+2. `frontend-flag-not-gate` **The frontend flag is not the gate.**
+   `onyx_craft_available` only decides what the sidebar shows. The backend
+   dependency (`server/features/build/api.py:require_onyx_craft_enabled`)
+   decides access on every request. A test that checks only the UI
+   proves nothing about access.
+3. `true-override-beats-default` **A `True` override beats a workspace default
+   of `False`.** Only the deployment check can still deny that user. Code that
+   reads `craft_default_enabled` alone gives the wrong answer for overridden
+   users (`server/features/build/utils.py:is_craft_enabled_for_user`).
+4. `two-gates-one-policy-table` **Two permission gates write the same policy
+   tables.** External-app policies need `FULL_ADMIN_PANEL_ACCESS`. MCP policies
+   need `MANAGE_ACTIONS`, and a group-scoped action manager may write them for
+   its servers. `web/src/lib/plugins/hooks.ts:useInstalledPlugins` must not
+   fetch the external-app admin list (organization credentials) for a user
+   without full admin access.
+5. `save-paths-refresh-differently` **The save paths refresh sandboxes
+   differently.** The external-app PATCH commits, then calls
+   `skills/push.py:push_skills_for_users` so the skill file lists DENY actions as
+   unavailable (`skills/rendering.py:build_action_availability_section`).
+   Built-in create and app delete push before commit, so a push failure rolls
+   the write back. Custom create pushes nothing. The MCP routes only restamp
+   `mcp_config_hash`; tool policies need no push because the proxy reads them
+   live. A new write route must pick one of these on purpose.
+6. `unset-action-is-catalog-default` **An unset action is not "no policy".**
+   It resolves to the catalog `default_policy` at read time, and an override
+   equal to the default is not stored. Every MCP tool has the default `ASK`
+   (`db/action_policy.py:_catalog_defaults`). A change to a catalog default changes
+   behaviour for every app that kept the default, with no migration and no
+   row change.
+7. `app-type-immutable` **`app_type` cannot change on update.** The PATCH
+   request has no `app_type` field, and `db/external_app.py:update_external_app`
+   raises on a mismatch, because the type decides the skill and provider.
+   Delete and recreate instead.
+8. `managed-builtins-locked-multi-tenant` **Onyx-managed built-ins are locked
+   only when `MULTI_TENANT`.** `backend/onyx/server/features/build/external_apps/api.py:_to_admin_response` blanks
+   credentials, auth template and URL patterns. The create and delete routes
+   refuse them. The PATCH route silently ignores those three fields and
+   applies the rest (`enabled`, name, policies, the user-management switch and
+   skill associations). Self-hosted built-ins of the same type
+   stay editable. A new admin field for apps needs the same `managed` check.
+9. `masked-credentials-round-trip` **Masked credentials round-trip.** The
+   admin response masks organization credentials. The write path restores
+   masked values that come back unchanged
+   (`db/external_app.py:resolve_masked_credentials`). A per-account provider
+   (Zendesk) then derives its URL patterns from the restored credentials. Do
+   not compare a masked value with the stored value.
+10. `preferences-picker-no-fallback` **`fallbackToDefault={false}` and
+    `persistSelection={false}` on the Preferences model picker are
+    deliberate.** They stop the admin's own remembered model choice from
+    appearing as the workspace default, and stop the workspace pick from
+    becoming the admin's personal choice
+    (`web/src/views/admin/CraftPreferencesPage/index.tsx`, props defined in
+    `web/src/app/craft/components/ModelPickerButton.tsx`).
+11. `gated-app-identity-by-id` **A `GatedApp` row is identified by
+    `(kind, target id)`, never by name.** Self-hosted instances can share an
+    `app_type`, and two MCP servers can share a display name. A policy lookup
+    by name collides silently (`db/models.py:GatedApp`).
+12. `preview-routes-skip-access-gate` **The preview routes are outside the
+    access gate.** `server/features/build/webapp_proxy.py:public_build_router`
+    and `server/features/build/static_preview.py:public_router` sit under
+    `/build` but do not use `require_onyx_craft_enabled`. They check session
+    sharing or a preview token instead
+    ([[craft-webapp-proxy#public-router-checks-access]]). A user whose Craft
+    access is off can still open a webapp that another user shares. Do not
+    assume that a path under `/build` implies the Craft gate.
 
 ---
 
-## 7. Blast radius
+## Known issues
 
-| If your change… | Also check |
-|---|---|
-| changes the access gate (`is_craft_enabled_for_user`, the PostHog flag, or `ENABLE_CRAFT`) | every user-facing `/build` route (they all sit behind `require_onyx_craft_enabled`; `/build/admin` routes do not); the Access page's `enabledCount` math (`CraftPage/index.tsx`); anonymous-user exclusion |
-| adds an external app (built-in or custom) | the egress ruleset the proxy reads (`sandbox_proxy/request_evaluator.py`); the catalog `default_policy` values that seed the admin form; its `upstream_url_patterns` regex correctness (a bad regex is silently skipped, not rejected); the skill it may be associated with, see [[mcp-and-custom-tools]] |
-| changes the egress policy (an action's `ALWAYS/ASK/DENY`, or the hard-coded `ASK` fallback in `recognize_actions`) | `sandbox_proxy/addons/gate.py`'s three branches; the credential-injection path for `ALWAYS` (a token refresh failure there still blocks); the `external-app-skill-action-availability` doc, since `DENY`d actions are meant to be fenced out of the pushed `SKILL.md` |
-| changes admin instructions (`craft_instructions` or the base template) | `agent_instructions.py:generate_agent_instructions` and both sandbox managers (`docker_sandbox_manager.py`, `kubernetes_sandbox_manager.py`) that call it; the Preferences page's base-instructions preview (`GET /build/admin/base-instructions`) must still reflect the template a change touches |
-| changes the Craft default model | `[[llm-providers]]`'s blast radius for `LLMModelFlowType.CRAFT`; the fallback-to-chat-default resolution in `CraftPreferencesPage` |
-| changes `GatedApp` / `WorkspaceActionPolicy` shape | both consumers: the admin API (`external_apps/api.py`) and the live proxy (`sandbox_proxy/request_evaluator.py`, `addons/gate.py`); MCP servers share this table, so an external-app-only migration will silently break MCP gating |
-
----
-
-## 8. How to verify a change
-
-### Tests
-
-```bash
-# Access gating
-cd backend && uv run pytest tests/external_dependency_unit/craft/test_craft_access_admin.py
-cd backend && uv run pytest tests/unit/onyx/server/features/craft/test_feature_gate.py
-
-# External apps: admin CRUD, policy, credentials, Cloud-managed lockdown
-cd backend && uv run pytest tests/external_dependency_unit/craft/test_custom_external_app_create.py
-cd backend && uv run pytest tests/external_dependency_unit/craft/test_external_app_admin_update.py
-cd backend && uv run pytest tests/external_dependency_unit/craft/test_managed_external_apps.py
-cd backend && uv run pytest tests/integration/tests/external_apps/test_external_app_action_policies.py
-cd backend && uv run pytest tests/integration/tests/external_apps/test_external_apps.py
-cd backend && uv run pytest tests/unit/external_apps/matching/test_engine.py
-
-# Shared policy saves and sandbox skill refresh
-cd backend && uv run pytest tests/external_dependency_unit/permissions/test_action_policies.py
-
-# Sandbox network posture (the actual egress lockdown behind §5.4)
-cd backend && uv run pytest tests/integration/tests/craft/docker_e2e/test_sandbox_network_posture_docker.py
-
-# Craft default model
-cd backend && uv run pytest tests/external_dependency_unit/llm/test_llm_provider_default_craft_model.py
-
-# Frontend end-to-end
-cd web && bun run playwright tests/e2e/craft/craft_onboarding.spec.ts
-```
-
-`web/tests/e2e/craft/` currently covers onboarding, not the three admin pages
-directly; a new admin-page Playwright spec would be the first of its kind
-there.
-
-### Manual reproduction
-
-1. Confirm services are up: `tail -f backend/log/api_server_debug.log`.
-2. Sign in as `admin_user@example.com` / `TestPassword123!` at
-   `http://localhost:3000`, and go to `/admin/craft/access`.
-3. Flip the workspace default off, confirm the modal, and verify a
-   non-overridden user's effective toggle follows it. Set one user's override
-   opposite to the default and confirm it sticks independently.
-4. Go to `/admin/craft/apps`. Enable a built-in app, set one action to
-   `DENY`, and confirm on `/admin/craft/preferences` (or in a live Craft
-   session) that the agent's attempt at that action is blocked, not silently
-   ignored.
-5. Go to `/admin/craft/preferences`. Set organization instructions, save, and
-   start a new Craft session; confirm the "## Organization instructions"
-   section appears in the sandbox's `AGENTS.md` with the saved text verbatim.
-6. Set and then clear a Craft default model; confirm the picker shows the
-   "inherited" tag and the workspace chat default once cleared.
-
-### What "working" looks like
-
-- A user with `craft_enabled=False` (override or inherited from a `False`
-  workspace default) gets a `403 INSUFFICIENT_PERMISSIONS` from every
-  `/build` endpoint, not just a hidden UI.
-- A `DENY`-policied action is blocked at the proxy (`POLICY_DENIED` in the
-  sandbox-facing 403), never reaches the upstream host.
-- Saved `craft_instructions` appear in every new session's `AGENTS.md`
-  exactly once, in the same template position.
+- `backend/onyx/configs/app_configs.py:AUTO_PROVISION_DEFAULT_EXTERNAL_APPS` and
+  `external_apps/providers/base.py:OnyxManagedExtApp.configured_managed_credentials`
+  have no callers in this repository. On multi-tenant the admin API refuses to
+  create a managed built-in. The code that seeds managed app rows on Cloud is
+  not in this tree, so how Cloud tenants get them is unverified.
+- `web/src/app/admin/craft/apps/page.tsx` only redirects old app links to the
+  Plugins page. It is a false lead for app admin work.
 
 ---
 
-## 9. Footguns
+## Dependencies
 
-- **Craft/Build naming split.** The product is "Craft" everywhere in the UI
-  and docs; the backend router, its directory, and most Python identifiers say
-  "Build" (`backend/onyx/server/features/build/`, `/build` prefix,
-  `docker_sandbox_manager` comments, `BUILD_MODE_FEATURE_ID`). Do not expect
-  `grep -r craft backend/` to find the router; search for `build` too. See
-  `GLOSSARY.md`.
-- **Plugins has separate permission gates.** MCP and OpenAPI use
-  `MANAGE_ACTIONS`. External-app administration requires full admin access.
-  `useInstalledPlugins` must not fetch organization credentials for scoped
-  action managers. External apps keep their existing `GatedApp` policies.
-- **`craftAvailable` in settings is not the enforcement gate.** The frontend
-  flag only decides what renders; the actual gate is
-  `is_craft_enabled_for_user`, evaluated per request on the backend. Testing
-  only the frontend flag gives false confidence.
-- **An unset action is not "no policy."** It resolves to the catalog's
-  `default_policy` at read time (`get_workspace_action_policies` only returns explicit
-  overrides). A new catalog action changes behavior for every existing app
-  with no backfill and no visible DB row change.
-- **General internet reachability from a sandbox is intentional, not a
-  leak.** Do not treat "the sandbox can reach `example.com`" as a policy
-  violation; only requests attributed to a connected app or MCP server are
-  policy-gated. See §5.4.
-- **Onyx Cloud built-in apps hide their own credential form.** `is_onyx_managed`
-  blanks `organization_credentials`, `auth_template`, and
-  `upstream_url_patterns` in the admin response; an admin on Cloud can only
-  toggle enablement and edit policy for these, by design
-  (`[[craft-external-apps]]` §4.7).
-- **Per-account providers own their gateway host.** The database write path
-  restores masked credentials, then asks the provider to resolve its patterns.
-  Zendesk validates one subdomain and uses it for OAuth, skill files, and the
-  gateway. Fixed-host built-ins keep submitted patterns; `CUSTOM` uses globs.
-- **`app_type` is immutable on update.** `update_external_app` raises rather
-  than allowing a cross-edit between built-in and custom; deleting and
-  recreating is the only path to change it.
-- **The Preferences page's `fallbackToDefault={false}` on the model picker is
-  deliberate.** It exists so an admin's own remembered `localStorage` model
-  pick cannot leak into what the page reports as the workspace default; do
-  not "simplify" this away.
+- [[craft-external-apps]]: enforces the policies, owns precedence, catalogs
+  and OAuth.
+- [[mcp-and-custom-tools]]: MCP server routes and data that share the policy
+  tables.
+- [[craft-sandboxes]]: renders organization instructions into `AGENTS.md`.
+- [[skills]]: `push_skills_for_users` and skill association rules.
+- [[llm-providers]]: the `CRAFT` model flow.
+- [[editions-and-gating]]: `tier_at_least` and the PostHog flag provider.
+- [[authorization]]: `require_permission` and the group-scoped action manager.
+- [[auth-and-identity]]: the anonymous account type.
+
+---
+
+## Recipes
+
+- `admin-endpoint` **A Craft admin endpoint.** Copy `GET /build/admin/base-instructions` in
+  `server/features/build/api.py`. List the admin routes with
+  `git grep -n '@admin_router\.' backend/onyx/server/features/build/`. Put the
+  route on `admin_router` or a router included there. Do not add
+  `require_onyx_craft_enabled` ([[#admin-router-no-craft-gate]]).
+- `workspace-setting` **A workspace setting for Craft.** Copy `craft_instructions`. List the Craft
+  settings with `git grep -n craft_ backend/onyx/server/settings/models.py`.
+  Read the value with `load_settings()` at the point of use. If a sandbox
+  needs it, read it where `AGENTS.md` or the opencode config is built, not at
+  image build time.
+- `external-app-admin-field` **A new admin field for an external app.** Copy `users_can_manage_policies`
+  on the create and PATCH requests in `server/features/build/external_apps/api.py`.
+  Add the `managed` check ([[#managed-builtins-locked-multi-tenant]]) and pick
+  a refresh path ([[#save-paths-refresh-differently]]).
+- `investigate-craft-off` **Investigate "Craft is off for me".** Read `GET /api/settings` as that user
+  through the frontend: `onyx_craft_available` false means the flag or the
+  tier, `onyx_craft_requires_upgrade` true means the tier. Then read
+  `User.craft_enabled` for the user and `craft_default_enabled` in the
+  workspace settings, and apply the table in Architecture.
+- `setup-access-override` **Set up an override for a test.** Set one user's override opposite to the
+  workspace default, flip the default, and confirm that user keeps the
+  override.
+
+---
+
+## Verification
+
+- Access and the feature gate: `backend/tests/external_dependency_unit/craft/`
+  and `backend/tests/unit/onyx/server/features/craft/`.
+- External-app admin and the Cloud lockdown:
+  `backend/tests/external_dependency_unit/craft/`.
+- Policy storage: `backend/tests/external_dependency_unit/permissions/` and
+  `backend/tests/integration/tests/external_apps/`.
+- Default model: `backend/tests/external_dependency_unit/llm/`.
+- By hand: save organization instructions, start a new session, and confirm
+  the section in the session's `AGENTS.md`.

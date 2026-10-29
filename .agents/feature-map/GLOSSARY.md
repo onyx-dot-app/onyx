@@ -1,60 +1,111 @@
 # Onyx Glossary
 
-Onyx overloads several words. The product name and the database name often differ,
-and two words sometimes mean the same thing in different layers. Read this before
-you trust your intuition about an identifier.
-
-There are **two `SearchDoc` classes** and they are not the same thing. There is a
-`Tool` abstract class and a `Tool` database table, and one row can back three very
-different kinds of tool. `Persona` in the database is what the product calls an
-Agent. These are the traps.
+Onyx overloads several words. The product name and the code name often differ,
+and one word can mean different things in different layers. Read this before
+you trust a name. Each entry is a definition and a link to the component that
+owns the rules.
 
 ---
 
-## The renames
+## Product words and code words
 
 | Product word | Code identifier | Note |
 |---|---|---|
-| Agent | `Persona` (`backend/onyx/db/models.py:Persona`) | The product renamed Persona to Agent. The database, the API paths (`/persona`), and most of the backend still say Persona. `web/src/app/admin/agents/` is the admin UI for it. |
-| Onyx | Danswer | The product was renamed. Old identifiers and some comments still say Danswer. |
-| Craft | Build | The Craft product's backend router is `backend/onyx/server/features/build/` and its API paths are under `/build`. |
-| Action | `Tool` | The admin UI calls custom tools "Actions" (`web/src/app/admin/openapi-actions/`, `mcp-actions/`). The code calls them Tools. |
+| Agent | `Persona` (`backend/onyx/db/models.py:Persona`) | The same thing. The product says Agent; the `persona` table, the `/persona` API paths and most Python names say Persona. Search for both words. See [[agents-personas]]. |
+| Default assistant | `DEFAULT_PERSONA_ID` (0) | The built-in Persona that a chat with no named agent uses. See [[agents-personas]]. |
+| Default Chat | the default assistant's `Persona__Tool` rows | The chat with no custom agent. Its plugin tools are tool rows of the default assistant. See [[plugins#default-chat-is-persona-tool]]. |
+| Onyx | Danswer | Some identifiers and comments say Danswer. It is the same product. |
+| Craft | `build` | The product is Craft. The backend directory `backend/onyx/server/features/build/`, the `/build` API paths and `BUILD_MODE_FEATURE_ID` say build. |
+| Action | `Tool` | Some UI text calls tools "Actions". The code calls them Tools. |
+| Plugin | MCP server, OpenAPI `Tool`, or Craft external app | The UI word for all three. See [[plugins]]. |
+| Free plan | `Tier.COMMUNITY` | The web UI shows the Community tier as the Free plan. |
+| Workspace | the tenant | The tenant-wide scope, as in workspace setting, workspace default and workspace policy. An admin sets it. Not the session workspace (see Craft vocabulary). See [[multi-tenancy]]. |
 
 ## The collisions
 
 **`SearchDoc`** exists twice.
 - `backend/onyx/context/search/models.py:SearchDoc` is the in-flight Pydantic model a
   search returns.
-- `backend/onyx/db/models.py:SearchDoc` is the table row that persists a document a
+- `backend/onyx/db/models.py:SearchDoc` is the table row that saves a document a
   turn surfaced, linked to the `ToolCall` that found it.
 
 **`Tool`** exists three ways.
 - `backend/onyx/tools/interface.py:Tool` is the abstract class every tool implements.
-- The `Tool` table is one row per configured tool. Which of three kinds it is depends
-  on which column is set: `in_code_tool_id` (a built-in), `openapi_schema` (a custom
-  OpenAPI action), or `mcp_server_id` (an MCP tool).
-- `backend/onyx/coding_agent/` and `backend/onyx/deep_research/` define SDK agents.
-  Their control tools use `AgentTool` definitions without DB tool rows.
-  Shared execution lives in `backend/onyx/agents/tool_execution.py:ToolBatch`.
+- The `Tool` table has one row per configured tool: a built-in, an OpenAPI action
+  or an MCP tool. The column that is set tells them apart: `in_code_tool_id`,
+  `openapi_schema` or `mcp_server_id`. See [[tools-framework]].
+- A sub-agent loop (the research agent, the coding agent) is an LLM loop that a
+  tool runs inside a turn. Its control functions, such as `think_tool` and
+  `generate_report`, are function schemas, with no `Tool` class and no table row.
   See [[tools-framework]].
 
+**"Turn"** means three things.
+- Chat backend: one user message plus everything the assistant does before it
+  finishes.
+- `Placement.turn_index`: a rendering block, not a backend turn. See
+  [[streaming-protocol#turn-index-is-not-a-turn]].
+- Craft: one user message and the agent's response in a Craft session, tracked
+  by an interactive turn record with a `turn_id`. Craft's `turn_index` is not
+  chat's. See [[craft-streaming#no-chat-packet-placement]].
 
-**"Turn"** means two different things.
-- Backend: one user message plus everything the assistant does before it finishes.
-- Frontend: `Placement.turn_index` is a **rendering block**. One LLM inference that
-  produces reasoning and a tool call is one backend step but two frontend turns.
-  See [[streaming-protocol]].
-
-**"Search"** covers four distinct mechanisms.
+**"Search"** covers four mechanisms.
 - `internal_search`: the tool over your indexed company data. See [[internal-search]].
-- `web_search`: a separate tool hitting an external provider. See [[web-search]].
-- Federated search: query-time search against a source that was never indexed. Slack
-  is a lane inside `internal_search`. Slack is the only registered federated source
-  today. Future sources can plug into `search_chunks`. See [[federated-search]].
+- `web_search`: a separate tool that calls an external provider. See [[web-search]].
+- Federated search: a search of a source at query time through its own API, with
+  no indexing. The federated Slack connector is not the indexed Slack connector.
+  See [[federated-search]].
 - Chat search: `GET /chat/search` searches the user's own conversation history.
+  See [[chat-persistence]].
 
-**"Agent"** means three things depending on context: a `Persona`, an autonomous
-sub-loop (the deep research agent, the coding agent), or the AI assistant generally.
+**"Agent"** means four things: a `Persona`, a sub-agent loop (the deep research
+agent, the coding agent), `agents/runtime.py:Agent` in `backend/onyx/agents/`
+([[agent-runtime]]; its `AgentTool` is not the chat `Tool`), or the AI assistant
+in general.
+
+**"Flow"** means two things.
+- `LLMModelFlowType` (`backend/onyx/db/enums.py`) and the `LLMModelFlow`
+  table (`backend/onyx/db/models.py:LLMModelFlow`): a model capability or a
+  per-task model designation, such as CHAT, VISION or CHAT_NAMING. See
+  [[llm-providers]].
+- `LLMFlow` (`backend/onyx/tracing/flows.py`): the tag on a tracing span that says
+  what an LLM call was for. See [[observability]].
+
+**"Settings"** means three things.
+- The workspace `Settings` record (`backend/onyx/server/settings/models.py:Settings`):
+  one key-value record per tenant that holds workspace options. See
+  [[chat-preferences]].
+- The user's Settings page: per-user preferences. See [[chat-preferences]].
+- Search settings (`SearchSettings`): the embedding model and index
+  configuration. See [[document-index]].
+
+**"Gated"** means three unrelated things.
+- `GATED_ACCESS`: a self-hosted license state, expired past the grace period.
+  See [[billing]].
+- `gated_tenants`: the cloud set of tenants whose subscription lapsed. See
+  [[billing]].
+- `GatedApp`: the Craft action-policy identity of one external app or one MCP
+  server. It has nothing to do with billing. See [[craft-external-apps]].
+
+**"Public" (API)** means two unrelated things. `PUBLIC_API_TAGS` marks a route that
+is documented for integrators; it still needs authentication. `PUBLIC_ENDPOINT_SPECS`
+marks a route that needs no authentication. See [[onyx-api#two-meanings-of-public]].
+
+**"Hook"** in [[hooks]] means a hook extension: a customer HTTPS endpoint that Onyx
+calls at a `HookPoint`. It is not a React hook, an agent hook or a Celery signal.
+
+**"Telemetry"** means two things. Fleet telemetry is the allowlisted health and
+usage events sent to the Onyx fleet service ([[fleet-telemetry]]).
+`backend/onyx/utils/telemetry.py` is cloud PostHog product analytics
+([[observability]]); `DISABLE_TELEMETRY` does not turn it off.
+
+**MCP** goes both ways. Onyx is an MCP client of servers that an admin connects
+([[mcp-and-custom-tools]]), and an MCP server for external clients
+([[mcp-server]]). Check the direction before you change code named `mcp`.
+
+**`message_end`** is not a chat packet. `AgentEventType.MESSAGE_END` in
+`backend/onyx/agents/events.py` belongs to the agent runtime. The chat backend
+never sends `message_end`, but the web and mobile packet enums list it, and
+mobile code checks for it. See [[streaming-protocol]].
 
 ## The retrieval vocabulary
 
@@ -62,60 +113,108 @@ sub-loop (the deep research agent, the coding agent), or the AI assistant genera
 |---|---|
 | Document | One item from a source: a page, a ticket, a message thread. |
 | Chunk | A slice of a document, sized for embedding. The unit the index stores. |
-| Section (`InferenceSection`) | Adjacent chunks from one document, rejoined. `merge_individual_chunks` joins chunks whose `chunk_id` differs by 1. This is the unit the LLM reads. |
-| Lane | One parallel retrieval path inside a single search tool call. One per expanded query, plus an optional Slack lane. Lanes are combined by weighted RRF. |
-| Expansion | Two unrelated meanings. **Query expansion** rewrites one query into several. **Section expansion** pulls chunks surrounding an already-selected section. |
-| Selection | The LLM stage that picks which retrieved sections are worth expanding. It is what Onyx has instead of a reranking model. |
+| Section (`InferenceSection`) | Adjacent chunks from one document, joined again. The unit the LLM reads. See [[internal-search]]. |
+| Lane | One parallel retrieval job inside `SearchTool.run`. Lanes fuse with weighted RRF. See [[internal-search]]. |
+| Expansion | Two meanings. **Query expansion** rewrites one query into several. **Section expansion** pulls the chunks around a selected section. |
+| Selection | The LLM stage that picks which retrieved sections to expand. Onyx uses it instead of a reranking model. |
+| Content provider | The web-search backend that fetches page content for `open_url`. It is separate from the search provider that returns result lists. See [[web-search]]. |
 
 ## Ingestion vocabulary
 
 | Term | Meaning |
 |---|---|
-| Connector | The code that pulls documents from one source type. |
-| Credential | The stored, encrypted secret for one account on a source. |
-| cc-pair (`ConnectorCredentialPair`) | A connector plus a credential. **This is the real unit of ingestion**, not the connector. Indexing, permissions, and deletion all operate on the pair. |
-| Index attempt | One run of indexing for a cc-pair. |
-| Document set | An admin-defined group of cc-pairs and/or federated connectors, used to scope an agent or a search. |
-| User file | A file a user uploaded, as opposed to a connector-sourced document. |
-| Project | A durable collection of user files plus instructions that persists across sessions. |
+| Connector | The code that pulls documents from one source type. See [[connectors]]. |
+| Credential | The stored, encrypted secret for one account on a source. See [[cc-pairs-and-creds]]. |
+| cc-pair (`ConnectorCredentialPair`) | One connector config joined to one credential, and the unit that indexing, access, scheduling and deletion act on. See [[cc-pairs-and-creds#pair-is-the-unit]] and [[cc-pairs-and-creds#pair-id-is-not-the-primary-key]]. |
+| Run resolution | An admin mark that moves a failed run, or a run with document errors, out of the open lists. It does not resolve the run's error rows; see the Decisions in [[cc-pairs-and-creds]]. |
+| Gateway | A `SourceOperations` subclass in `<source>/source_operations.py`. It is the only module that imports the source SDK. Indexing, EE permission sync and capability checks call it. Not the [[llm-gateway]]. See [[connectors]]. |
+| Slim listing | `retrieve_all_slim_docs` and its perm-sync variant. They list document ids, and for perm sync the readers, with no bodies. Pruning compares the index with it. See [[connectors]]. |
+| Field policy | The `connectors/field_policy.py:FieldPolicy` annotation on a connector config field. It tells an edit plan what work a change needs. See [[connectors]]. |
+| Capability check | A named probe of one credential or config assumption. It is not `validate_connector_settings`. See [[connector-capability-checks]]. |
+| Draft run | A capability-check run on the unsaved add-connector form, or an edit's dry run. Its results live in the cache backend, not in database rows. See [[connector-capability-checks]]. |
+| Indexing hold | The rule that keeps a pair's first index attempt from starting while its checks run or after a required check failed. See [[connector-capability-checks]]. |
+| Index attempt | One run of indexing for a cc-pair and one `SearchSettings` generation. See [[indexing-pipeline]]. |
+| Fence (Celery) | A Redis key that marks a flow as running, such as a pair's pruning or deletion. It differs from the chat fences below. See [[background-jobs]]. |
+| Docfetching / docprocessing | The two indexing phases. Docfetching runs the connector and stages document batches. Docprocessing chunks, embeds and writes one batch per task. See [[indexing-pipeline]]. |
+| Builder (Outlook) | The mailbox that writes a thread's shared document: the sender of the first message, or else the lowest mailbox id that the first message names and that the run can open. See [[outlook]]. |
+| Document set | An admin-defined group of cc-pairs and federated connectors, used to scope an agent or a search. See [[access-control]]. |
+| User file | A file a user gave Onyx directly, as opposed to a connector document. See [[file-store-and-user-files]]. |
+| `file_id` and `UserFile.id` | `FileRecord.file_id` names a blob. `UserFile.id` is the UUID that the frontend, the LLM and the index use. See [[file-store-and-user-files]]. |
+| Project | A user's files and instructions kept across sessions. See [[projects]]. |
+| Fit check | `chat/files.py:extract_context_files` decides whether project and agent files go inline or through retrieval. See [[projects]]. |
 
 ## Index vocabulary
 
 | Term | Meaning |
 |---|---|
 | Search settings (`SearchSettings`) | The row that defines the embedding model and index configuration. |
-| PRESENT / FUTURE | `IndexModelStatus`. PRESENT is the live index. FUTURE is a second index being built during an embedding-model swap. |
-| Secondary index | The FUTURE index. During a swap the system writes to both. |
-| `hybrid_alpha` | A caller-level keyword-versus-semantic hint. It is partly a no-op inside the OpenSearch backend. Do not assume it controls scoring. See [[document-index]]. |
+| PRESENT / FUTURE | `IndexModelStatus`. PRESENT is the live index. FUTURE is a second index that a reindex builds; code calls its settings the secondary settings. See [[document-index]]. |
+| Reindex port | Copies and re-embeds PRESENT chunks into a FUTURE index. It does not fetch the sources again. See [[document-index]]. |
+| Metadata sync | The task (`vespa` in Celery names) that copies a document's ACL, document sets and flags from Postgres into its chunks with no re-embed. See [[document-index]]. |
+| `hybrid_alpha` | A caller-level keyword-versus-semantic hint. Do not assume it controls scoring. See [[document-index]]. |
 
 ## Access vocabulary
 
 | Term | Meaning |
 |---|---|
-| ACL | The access control list stored on each indexed document, compiled into every search query as a filter. |
-| External permissions | Permissions pulled from the source system, as opposed to Onyx-native groups. See [[permission-sync]]. |
-| Curator | A user-group-scoped admin role. |
-| CE / EE | Community Edition (MIT, `backend/onyx/`) and Enterprise Edition (`backend/ee/onyx/`, mirroring the CE layout). EE code is reached from CE through `fetch_versioned_implementation` and `fetch_ee_implementation_or_noop`. |
+| ACL | The access control list stored on each indexed document and compiled into every search query as a filter. See [[access-control]]. |
+| External permissions | Permissions copied from the source system, as opposed to Onyx groups. See [[permission-sync]]. |
+| Lease (permission sync) | The open attempt row that locks one pair's sync, kept alive by a heartbeat. See [[permission-sync]]. |
+| Open / ACL / hidden cc-pairs | The three sets in `CCPairAccessFilter` that query-time cc-pair filtering uses. See [[access-control]]. |
+| Curator | A user with `is_group_manager` and the scoped manager bundle, limited to the groups they manage. See [[authorization#user-role-is-dead]]. |
+| GATE 1 / GATE 2 | GATE 1 is `require_permission` at the route; with `allow_scope=True` it lets a scoped manager reach the handler. GATE 2 is the scope check in the handler. See [[authorization#allow-scope-is-reach-only]]. |
+| Scoped PAT | A personal access token whose scopes limit the routes it can reach. See [[authorization#scoped-pat-fails-closed]]. |
+| Tenant | On cloud, a Postgres schema on one shard. Self-hosted has one tenant. See [[multi-tenancy]]. |
+| CE / EE | Community Edition (MIT, `backend/onyx/`) and Enterprise Edition (`backend/ee/onyx/`, which mirrors the CE layout). See [[editions-and-gating]]. |
+| Tier | The plan a deployment resolves to: COMMUNITY, BUSINESS or ENTERPRISE. It is not the edition: loaded EE code is not an unlocked tier. See [[editions-and-gating]]. |
+| Tier vs CustomerTier | `Tier` is the internal tier in `backend/onyx/server/settings/models.py`. `CustomerTier` is the control-plane value in `backend/ee/onyx/server/license/models.py`, with no COMMUNITY. See [[billing]]. |
 
 ## Chat internals
 
 | Term | Meaning |
 |---|---|
-| Step / cycle | One model generation and the tool calls it requests. A run can contain several steps. |
-| Run | One SDK execution. Its state records input, steps, outcome, and children. Durable chat uses the assistant response row ID as its run ID. |
-| Emitter | The object a deep call uses to push a packet without returning it up the stack. It stamps `model_index`. |
-| Run state | Recorded SDK input, steps, outcomes, and compaction checkpoint. Live synchronization and workers belong to `Run`, not this data model. |
-| Reminder | A trailing user message carrying one or two critical instructions. It is last because models attend hardest to final tokens. |
-| Custom agent prompt | The persona's instructions, injected as a user message that moves to sit above the newest user message each turn. |
-| Fence | A cache key acting as a flag. The stop fence means the user pressed stop. The processing fence means a turn is live. |
-| Incognito | Hides the session from ordinary history. Its pinned record mode selects full history or usage-only durable storage. |
+| Step / cycle | One LLM inference with a given context and tool set. A chat turn has up to `MAX_LLM_CYCLES` of them. |
+| Stream ID | The key that the processing fence, the stop fence and the stream buffer share. See [[core-chat-loop]]. |
+| Emitter | The object that deep code uses to push a packet without returning it up the stack. See [[core-chat-loop]]. |
+| State container | The per-model accumulator that streaming code fills and persistence reads at the end of a turn. See [[core-chat-loop]]. |
+| Reminder | A trailing message with one or two critical instructions. See [[context-assembly]]. |
+| Custom agent prompt | The agent's instructions, sent as a user message near the newest user message. See [[context-assembly]]. |
+| Fence (chat) | A cache key that acts as a flag: the stop fence means the user pressed stop, and the processing fence marks a session that runs a turn. It is not a lock. See [[core-chat-loop]]. |
+| Stopping tool | A tool after which the next cycle offers no tools, such as `generate_image`. See [[core-chat-loop#stopping-tools]]. |
+| `BASH_TOOL_SENTINEL_ID` | The id that the coding agent gives its in-memory `BashTool`. See [[code-execution#bash-tool-sentinel]]. |
+| Message types | `ChatMessage` (the row), `ChatMessageSimple` (the in-code model) and `ChatCompletionMessage` (the LLM-facing form). See [[core-chat-loop#three-message-types]]. |
+| Active branch | The chain of `latest_child_message_id` pointers from a session's root message. See [[chat-persistence]]. |
+| Reserved message | An assistant `ChatMessage` row created with placeholder text before streaming starts. See [[chat-persistence]]. |
+| Incognito and record mode | `IncognitoRecordMode` is fixed on a session and decides what the database keeps. See [[chat-persistence]]. |
+| Child session | A `ChatSession` with `spawned_by_message_id` set. See [[agent-runtime]]. |
+| Not wired | A module that no production code path imports. See [[agent-runtime]]. |
+| `use_memories` vs `enable_memory_tool` | `use_memories` controls whether memories reach the prompt. `enable_memory_tool` controls whether the memory tool can write them. See [[chat-preferences]]. |
+| Decision model | A model that answers typed predicate, choice or score questions with probabilities, not through LiteLLM. See [[llm-providers]]. |
+| Passthrough (LLM gateway) | A native OpenAI Responses or Anthropic Messages forward that skips `LitellmLLM`. See [[llm-gateway]]. |
+| Root trace | The trace that a span needs to reach any processor. See [[observability#root-trace-required]]. |
+| Fail strategy (hooks) | HARD stops the pipeline with an error. SOFT keeps the caller's default. See [[hooks#hard-aborts-soft-falls-back]]. |
+| Global notification | A `Notification` row with no `user_id`. See [[notifications]]. |
 
-## Message types
+## Bots
 
-| Type | Owner and purpose |
-| --- | --- |
-| `ChatMessage` | Database row for user input, an assistant response, or a summary. Public feedback and branching attach here. |
-| `Message` (`llm/models.py`) | Typed model content: user, system, assistant, or tool result. The SDK uses it for execution and history. |
-| `ChatResponseItem` | Stored assistant model generation, keyed by response and step. Tool results live on `ToolCall`. |
-| `ChatCompletionMessage` | Provider request format. The LLM adapter converts shared messages into it. |
-| `Packet` | Browser display update, with placement and model identity. Chat renderers derive it from execution content. |
+| Term | Meaning |
+|---|---|
+| Standard answer | An admin-written canned reply that the Slack bot posts instead of an LLM answer when a keyword set or a regex matches. EE only. See [[standard-answers]]. |
+| Slack service account | The `SERVICE_ACCOUNT` user (`get_or_create_slack_service_account`) that is charged for Slack bot usage when the sender has no Onyx account. See [[slack-bot]]. |
+| Discord service API key | One `ApiKey` per tenant, named `DISCORD_SERVICE_API_KEY_NAME`, that the Discord bot uses for every member. See [[discord-bot]]. |
+| Logotype | The wordmark variant of the custom logo. See [[whitelabelling-and-theme]]. |
+
+## Craft vocabulary
+
+| Term | Meaning |
+|---|---|
+| Session workspace | The sandbox directory of one Craft session (`/workspace/sessions/<id>`), with its outputs, attachments and agent config. Not the tenant-wide workspace. See [[craft-sandboxes]]. |
+| Action policy | `ALWAYS` (Auto-approve), `ASK` (Ask) or `DENY` (Disabled) for each catalog action or MCP tool. See [[craft-external-apps]]. |
+| Workspace policy, personal choice, task choice | The three policy layers. See [[craft-external-apps]]. |
+| `unspecified` | The synthetic whole-domain action for a connected-app request that matches no catalog action. See [[craft-external-apps]]. |
+| Session grant | "Approve for session" for specific Ask actions in one Craft session. See [[craft-external-apps]]. |
+| Sandbox sleep | Snapshot, then remove the pod. See [[craft-sandboxes]]. |
+| Prompt slot | A renewable per-session cache lease (`server/features/build/sandbox/serve_transport.py`) that serializes the work on one opencode session. It is not the active-turn lock. See [[craft-sessions]]. |
+| `turn_completed` | The Craft packet that the attach endpoint sends after the turn finishes. It is not opencode's `prompt_response`. See [[craft-streaming]]. |
+| Settlement (Craft) | The browser step that replaces the live transcript with saved history after the turn ends, and then releases the prompt queue. See [[craft-frontend]]. |
+| Built-in skill and custom skill | A built-in skill's files are on disk. A custom skill is an uploaded bundle with an installation policy. See [[skills]]. |

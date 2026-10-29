@@ -1,553 +1,281 @@
 # Multi-Tenancy
 
-> How one Onyx deployment serves many isolated customers. A tenant is a Postgres
-> schema, a physical shard, and a `contextvars` value that must be correct for
-> every session, thread, and task the request or job creates.
+> How one deployment serves many isolated workspaces. A tenant is a Postgres
+> schema on a physical shard, and a context variable that must hold the right
+> tenant in every session, thread and task that a request or job creates.
 
-**Verified against:** `268e4d5a3d` (2026-10-05)
-**Domain:** multi-tenancy
-**Edition:** CE runs with exactly one tenant (the `public` schema) and most of this
-component is inert. EE/cloud is where sharding, provisioning, gating, and
-cross-tenant admin tooling apply.
-**Owns:**
-`backend/onyx/db/engine/sql_engine.py`, `async_sql_engine.py`, `tenant_utils.py`,
-`shard_registry.py`, `shard_routing.py`, `shard_version.py`, `connection_warmup.py`,
-`iam_auth.py`, `pg_ssl.py`, `time_utils.py`,
-`backend/onyx/db/tenant_shard.py`, `tenant_invite_counter.py`,
-`backend/shared_configs/contextvars.py` (the tenant contextvar itself),
-`backend/alembic_tenants/` (catalog migrations), `backend/alembic/` (tenant-schema
-migrations plus `run_multitenant_migrations.py`),
-`backend/onyx/background/celery/apps/app_base.py` (`TenantAwareTask`),
-`backend/ee/onyx/server/middleware/tenant_tracking.py`,
-`backend/ee/onyx/server/tenants/` (`provisioning.py`, `schema_management.py`,
-`admin_api.py`, `product_gating.py`, `tenant_management_api.py`, and neighbors),
-`backend/ee/onyx/background/celery/tasks/tenant_provisioning/`, `cloud/`,
-`backend/ee/onyx/db/user_tenant_mapping.py`,
-`backend/onyx/auth/sso_tenant_token.py`, `backend/onyx/redis/tenant_redis_client.py`,
-`redis_tenant_work_gating.py`
-
-**Does not own:** the ACL clause itself ([[access-control]] owns
-`_get_acl_visibility_filter`), how a chat turn's worker threads copy tenant context
-(described and owned by [[core-chat-loop]]; this document generalizes the pattern),
-CE/EE dispatch mechanics ([[editions-and-gating]]).
+**Verified against:** `a4e97fcea1` (2026-10-29)
+**Edition:** Self-hosted runs one tenant, `POSTGRES_DEFAULT_SCHEMA`, with
+`MULTI_TENANT` off. Schema per tenant, sharding, provisioning, tenant gating
+and impersonation run only on cloud (`MULTI_TENANT=true`, EE).
 
 ---
 
-## 1. What the user experiences
+## Callers
 
-A user never sees multi-tenancy directly. On self-hosted Onyx there is exactly one
-tenant, the `public` schema, and nothing in this document is visible or relevant.
+**Interface.** The tenant of the current request or task, read with
+`shared_configs/contextvars.py:get_current_tenant_id`; the tenant-aware DB
+sessions in `db/engine/sql_engine.py`; the tenant-prefixed Redis client
+(`redis/redis_pool.py:get_redis_client`); the context-copying thread helpers in
+`utils/threadpool_concurrency.py`; `TenantAwareTask` for Celery; and the two
+Alembic trees.
 
-On Onyx Cloud, a user signs up or is invited into one workspace (a tenant). Every
-document, chat, persona, and admin setting they see belongs to that workspace, and
-they cannot see or affect any other workspace's data through normal use. An admin
-never chooses a schema name or a database; that is entirely infrastructure. Cloud
-support staff can impersonate a specific user for troubleshooting
-(`ee/onyx/server/tenants/admin_api.py:impersonate_user`), which is the one place a
-human intentionally crosses the tenant boundary, and it is audited
-(`onyx/utils/audit.py:emit_audit_event`).
+**Who calls it.**
+- Every developer who opens a DB session, a Redis client or a cache, starts a
+  thread, executor or Celery task, or adds a table or a migration. On
+  self-hosted a lost tenant passes silently, because the default schema is the
+  only tenant; on cloud it raises `Tenant ID is not set` or the work does
+  nothing.
+- [[auth-and-identity]] issues the credentials the tenant is read from.
+- [[background-jobs]] fans tasks out per tenant.
+- [[document-index]] adds the tenant clause to every index query.
+- [[rate-and-usage-limits]] keeps tenant-scoped counters.
+- [[billing]] keeps the gated-tenant set that the tenant middleware reads.
 
-For an engineer, the operative rule is: **never let a database session, a cache
-key, a background task, or a new thread cross into existence without an explicit
-tenant.** Every mechanism in this document exists to make that automatic on the
-paths that already exist, and to make it visible when a new path does not.
-
----
-
-## 2. Surfaces
-
-### Environment configuration
-
-| Variable | File | Effect |
-|---|---|---|
-| `MULTI_TENANT` | `shared_configs/configs.py` | Master switch. `False` (default): one tenant, the `public` schema, most of this component is a pass-through. `True`: schema-per-tenant, sharding, gating, and cloud-only code paths activate. |
-| `ONYX_DB_SHARDS` | `configs/app_configs.py` | JSON object of shard name to connection overrides. Unset means exactly one shard (the default). |
-| `ONYX_DB_DEFAULT_SHARD` | same | Name of the always-present default shard; cannot be overridden via `ONYX_DB_SHARDS`. |
-| `ONYX_DB_CATALOG_SHARD` | same | Which shard holds the `public` catalog tables (`tenant_shard`, `user_tenant_mapping`, and friends). Defaults to the default shard. |
-| `ONYX_DB_NEW_TENANT_SHARD` | same | Shard newly created tenants are placed on. |
-| `ONYX_DB_SHARD_POOL_SIZE` / `_OVERFLOW` | same | Pool sizing for non-default shard engines; falls back to the default engine's sizing if unset. |
-| `ONYX_DB_SHARD_OVERRIDES` | same | JSON map of `tenant_id -> shard name`, a static operator escape hatch bypassing the `tenant_shard` catalog table. |
-| `ONYX_DB_SHARD_MAP_TTL_SECONDS` / `_VERSION_POLL_SECONDS` | same | In-process shard-routing cache TTL and the Redis version-poll interval (`db/engine/shard_version.py`). |
-| `USE_IAM_AUTH` | same | RDS IAM auth instead of a static password; token minting is bound to a shard's specific host/port/user (`db/engine/iam_auth.py`). |
-| `TARGET_AVAILABLE_TENANTS` | `configs/app_configs.py`, read by `ee/onyx/background/celery/tasks/tenant_provisioning/tasks.py` | Size of the pre-provisioned tenant pool `check_available_tenants` maintains. |
-
-### Endpoints and tasks
-
-| Surface | Handler | Notes |
-|---|---|---|
-| `POST /tenants/impersonate` | `ee/onyx/server/tenants/admin_api.py:impersonate_user` | Cloud-superuser only. Issues a token for another tenant via `SESSION_TENANT_OVERRIDE_CONTEXTVAR`, audited. |
-| Tenant creation / assignment | `ee/onyx/server/tenants/provisioning.py:get_or_provision_tenant` | Called from the signup/OAuth flow. Draws from the pre-provisioned pool or creates fresh. |
-| `CLOUD_CHECK_AVAILABLE_TENANTS` (Celery) | `ee/onyx/background/celery/tasks/tenant_provisioning/tasks.py:check_available_tenants` | Beat task; tops up the pre-provisioned pool and migrates stale pool tenants. |
-| SSO discovery / authorize | `backend/onyx/server/sso_discovery.py`, `onyx/auth/sso_tenant_token.py` | Cloud serves every workspace from one domain; discovery resolves the tenant and mints a short-lived signed `workspace_token` (`generate_sso_tenant_token`) that pins the authorize step to one tenant. |
-| Alembic (tenant schemas) | `backend/alembic/run_multitenant_migrations.py` | Parallel batched migration runner across every tenant schema on every shard. The `--snapshot-template` flag also stores the template dump new tenants are cloned from. |
-| Alembic (catalog) | `backend/alembic_tenants/` | Migrates only `PublicBase`-derived tables in the `public` schema. |
+**Contracts a caller must keep:** each contract below about where the tenant
+comes from, a session, a thread, a task, a cache key, a table or a migration.
 
 ---
 
-## 3. Data model
+## Scope
+
+This component owns tenant resolution, tenant-scoped sessions and Redis
+clients, shard routing, the catalog tables in `public`, tenant provisioning and
+schema builds, the two Alembic trees, cross-tenant support actions, and the
+rules for carrying tenant context across threads and tasks.
+
+Neighbours own:
+- [[auth-and-identity]]: the credentials the tenant is read from, and the SSO
+  workspace token.
+- [[access-control]]: the ACL clause next to the tenant clause in the index
+  filter.
+- [[background-jobs]]: Celery apps and the beat scheduler that fans tasks out
+  per tenant.
+- [[billing]]: whether a tenant is gated, and the control-plane data behind it.
+- [[editions-and-gating]]: CE and EE dispatch.
+
+---
+
+## Architecture
+
+**An HTTP request.**
 
 ```
-Physical layout (Postgres):
-
-  shard "default" (or any configured shard)
-    schema public              <- catalog tables, PublicBase, always here
-      tenant_shard
-      user_tenant_mapping / user_tenant_mapping_oauth_account
-      available_tenant
-      tenant_invite_counter
-      tenant_anonymous_user_path
-      tenant_sso_domain
-      tenant_schema_snapshot
-    schema tenant_<uuid>        <- one tenant's data, Base-derived tables
-      users, chat_session, document, persona, ...
-    schema tenant_<uuid>        <- another tenant, same table shapes
-    ...
-
-  shard "shard-2" (only if ONYX_DB_SHARDS configures more than one)
-    schema tenant_<uuid>
-    ...
+ee/onyx/server/middleware/tenant_tracking.py:tenant_id_middleware   (EE app, MULTI_TENANT only)
+  _get_tenant_id_from_request, in this order:
+    OAuth-provider token -> tenant in the token
+    API key, PAT or SCIM token -> tenant in the token prefix
+    Redis session (cookie or mobile bearer) -> tenant in the session value
+    anonymous-user cookie -> tenant in its signed JWT (overrides a session)
+    nothing -> POSTGRES_DEFAULT_SCHEMA, which holds no tenant data
+  CURRENT_TENANT_ID_CONTEXTVAR.set(tenant); reset in finally
+  gated-tenant check (Redis set) outside the allowed prefixes
+tier_gate_middleware   registered first in ee/onyx/main.py:get_application, so it
+                       is innermost and runs after the tenant is set
+handler -> db/engine/sql_engine.py:get_session
+  on cloud, refuses POSTGRES_DEFAULT_SCHEMA with 403 "User must authenticate"
+  get_current_tenant_id() -> shard_routing.get_engine_for_tenant
+  -> connection with schema_translate_map={None: tenant_id}
 ```
 
-- **`onyx/db/models.py:Base`**: every tenant-scoped table (`User`, `ChatSession`,
-  `Document`, and effectively all of `onyx/db/models.py`). One copy of this schema
-  exists per tenant, physically separate by Postgres schema.
-- **`onyx/db/models.py:PublicBase`**: the catalog tables, always in `public`, never
-  duplicated per tenant: `UserTenantMapping`, `UserTenantMappingOAuthAccount`,
-  `AvailableTenant`, `TenantAnonymousUserPath`, `TenantSSODomain`,
-  `TenantInviteCounter`, `TenantShard`, `TenantSchemaSnapshot`.
-- **`public.tenant_shard`** (`db/tenant_shard.py`): `(tenant_id, shard_name,
-  updated_at)`. Written by `record_tenant_placement` before a tenant's schema is
-  created; absence means "the default shard". Read by `shard_routing.py`.
-- **`public.user_tenant_mapping`** (`ee/onyx/db/user_tenant_mapping.py`): email to
-  tenant, the reverse lookup used by `get_tenant_id_for_email` /
-  `resolve_tenant_id` during login and impersonation.
-- **`public.available_tenant`**: the pre-provisioned tenant pool
-  `check_available_tenants` (`ee/onyx/background/celery/tasks/tenant_provisioning/tasks.py`)
-  keeps topped up, so signup does not pay the schema build cost synchronously.
-- **`public.tenant_schema_snapshot`** (`onyx/db/models.py:TenantSchemaSnapshot`): a SQL
-  dump of one shard's template schema (`TENANT_TEMPLATE_SCHEMA`) at one Alembic head
-  revision, unique per `(shard_name, alembic_revision)`. The rollout job writes it:
-  `alembic/run_multitenant_migrations.py --snapshot-template` migrates the template
-  and calls `store_template_snapshots`. Only the newest two per shard are kept.
-  `ee/onyx/server/tenants/schema_management.py:build_tenant_schema` clones the
-  snapshot for the code's head into a new tenant (`apply_snapshot`). It replays the
-  migration chain instead when the shard has no snapshot at that head, or when the
-  schema already holds tables (a retried build).
-- **`public.tenant_invite_counter`** (`db/tenant_invite_counter.py`): per-tenant
-  trial invite cap, incremented via `reserve_trial_invites` (a Postgres
-  `INSERT ... ON CONFLICT DO UPDATE` that row-locks the tenant for the
-  transaction) and compensated via `release_trial_invites` on downstream failure.
-- **Schema identity is the tenant ID.** A tenant ID doubles as a Postgres schema
-  name and is validated by `db/engine/sql_engine.py:is_valid_schema_name`
-  (`^[a-zA-Z0-9_-]+$`) and, more strictly, `db/engine/tenant_utils.py:TENANT_ID_PATTERN`
-  (a `tenant_` prefix followed by a UUID, an AWS instance ID, or the literal `dev`).
-  Both checks exist because a schema name cannot be parameterized in SQL; unqualified
-  string interpolation of an unvalidated tenant ID is a SQL-injection path into
-  `CREATE SCHEMA`/`DROP SCHEMA` (`ee/onyx/server/tenants/schema_management.py:drop_schema`
-  checks `validate_tenant_id` explicitly for this reason).
+Every source is signed or server-issued, so a caller cannot name a tenant it
+has not authenticated to. A tenant read from a token only selects the schema.
+The credential lookup then runs in that schema, so a forged prefix fails
+authentication. Paths in `TENANT_RESOLUTION_SKIP_PATHS`, such as health checks
+and the OAuth-provider protocol routes, get the default schema.
+The tenant middleware is pure ASGI, so the tenant holds until a streamed body
+and its background task end ([[streaming-protocol#pure-asgi-middleware]]).
+[[billing]] owns the rules of the gated-tenant check in the same middleware
+([[billing#failure-directions-differ]], [[billing#recovery-paths-reachable]]).
+
+**Background work.** `background/celery/apps/app_base.py:TenantAwareTask`
+reads the `tenant_id` kwarg, sets the context variable for the task body, and
+sets it to `None` after. The `reset_tenant_id` postrun handler then sets it to
+`POSTGRES_DEFAULT_SCHEMA`. The beat scheduler
+(`background/celery/apps/beat.py:DynamicTenantScheduler`) makes one entry per
+tenant for tenant tasks and one entry for cloud-wide tasks.
+
+**Shards.** `db/engine/shard_routing.py:get_shard_for_tenant` checks the
+`ONYX_DB_SHARD_OVERRIDES` map, then an in-process cache, then the
+`public.tenant_shard` row. No row means the default shard. A Redis version
+key tells every process to drop its cache when a tenant moves.
+
+**Provisioning.** `ee/onyx/server/tenants/provisioning.py:get_or_provision_tenant`
+takes a tenant from the `available_tenant` pool, or builds one. A periodic
+task keeps the pool full
+(`ee/onyx/background/celery/tasks/tenant_provisioning/tasks.py:check_available_tenants`).
+`ee/onyx/server/tenants/schema_management.py:build_tenant_schema` clones a
+stored SQL dump of the shard's template schema at the code's Alembic head
+(`ee/onyx/db/tenant_snapshot.py:apply_snapshot`). It runs the migration chain
+instead when no snapshot exists at that head, or when the schema already has
+tables from a failed build.
+
+**Two Alembic trees.** `backend/alembic/` migrates the tenant tables
+(`db/models.py:Base`) once per tenant schema. `backend/alembic_tenants/`
+migrates only the catalog tables (`PublicBase`) in `public`.
 
 ---
 
-## 4. How it works
+## Contracts and traps
 
-### 4.1 An HTTP request: from cookie to a tenant-scoped session
-
-```
-tenant_id_middleware              ee/onyx/server/middleware/tenant_tracking.py
-  (registered only in EE's app; CE's onyx/main.py does not register any
-   tenant-resolving middleware, because in CE MULTI_TENANT is always False)
-  └─ _get_tenant_id_from_request
-       ├─ extract_tenant_from_auth_header(request)          onyx/auth/utils.py  (API key / PAT)
-       ├─ retrieve_auth_token_data_from_redis(request)        session cookie
-       ├─ retrieve_auth_token_data_from_bearer(request)       mobile bearer token
-       └─ decode_anonymous_user_jwt_token(cookie)              anonymous session
-  └─ CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
-  └─ (MULTI_TENANT only) is_tenant_gated(tenant_id) check      product_gating.py
-
-... request handler runs, with the contextvar set for its whole async call stack ...
-
-get_session() / get_session_with_current_tenant()             db/engine/sql_engine.py
-  └─ get_current_tenant_id()                                   reads the contextvar
-  └─ get_engine_for_tenant(tenant_id)                           shard_routing.py
-       └─ get_shard_for_tenant(tenant_id)                       cache -> tenant_shard row -> default
-  └─ engine.connect().execution_options(schema_translate_map={None: tenant_id})
-  └─ Session(bind=connection)
-```
-
-Tenant tracking, tier gating, and license enforcement use pure ASGI middleware.
-Tenant tracking runs before tier gating. It keeps tenant context through response
-streaming and restores the caller's context in `finally`, including on cancellation.
-Errors after response start propagate; they cannot replace the response with JSON.
-The model server's header-based tenant middleware also restores context in `finally`.
-
-Every source in `_get_tenant_id_from_request` is signed or server-issued (a PAT, a
-Redis-backed session token, a JWT). None of them lets an unauthenticated caller name
-an arbitrary tenant; an unauthenticated request resolves to `POSTGRES_DEFAULT_SCHEMA`,
-which owns no tenant data.
-
-**Where this breaks:** `onyx/utils/middleware.py:tenant_header_middleware`
-also sets `CURRENT_TENANT_ID_CONTEXTVAR` from a raw `X-Onyx-Tenant-ID` request
-header, with no signature and no validation. It is wired up only in
-`backend/model_server/main.py`, not in the API server
-(tests also register this middleware in isolated applications).
-The model server is an internal service, not directly internet-facing, which is the
-implicit justification; this document cannot verify the network topology that makes
-that safe, and a change that exposes the model server externally, or that reuses
-this middleware on the API server, reopens tenant spoofing via a plain header.
-
-### 4.2 A background task: establishing tenant context from scratch
-
-Celery tasks and Redis-triggered background work have no request, so the contextvar
-must be set explicitly by whatever dispatches the task:
-
-```
-TenantAwareTask.__call__                       background/celery/apps/app_base.py
-  tenant_id = kwargs.get("tenant_id") or POSTGRES_DEFAULT_SCHEMA
-  CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
-  try:
-      super().__call__(*args, **kwargs)
-  finally:
-      CURRENT_TENANT_ID_CONTEXTVAR.set(None)     # see §9: not a token-based reset
-```
-
-Every Onyx Celery task base class ultimately derives from `TenantAwareTask`; a task
-that does not include `tenant_id` in its kwargs silently runs against the default
-schema. The beat scheduler (`background/celery/apps/beat.py`) iterates
-`get_all_tenant_ids()` (`db/engine/tenant_utils.py`) and schedules one entry per
-tenant per per-tenant task, and one shared entry for cloud-wide tasks
-(`MULTI_TENANT` branch in `beat.py:DynamicTenantScheduler._generate_schedule`).
-
-Other places that set the contextvar directly, without going through
-`TenantAwareTask`, all follow the same `.set(token)` / `try/finally: .reset(token)`
-shape:
-
-- `background/indexing/job_client.py` (indexing subprocess dispatch)
-- `background/periodic_poller.py`
-- `background/celery/tasks/docprocessing/tasks.py`
-- `tracing/processors/user_usage_processor.py`
-- `sandbox_proxy/resolvers/mcp_server.py`
-- `onyxbot/slack/listener.py`, `onyxbot/slack/utils.py`, `onyxbot/discord/cache.py`,
-  `onyxbot/discord/handle_commands.py` (bot event handlers dispatch per-workspace)
-- `key_value_store/factory.py` (uses `DEFAULT_REDIS_PREFIX`, a shared namespace, not
-  a real tenant, for KV state that is intentionally cross-tenant)
-- `server/features/build/interactive_turns/executor.py`
-- `db/engine/sql_engine.py:get_catalog_session` (pins to `POSTGRES_DEFAULT_SCHEMA`
-  for the duration of a catalog-table read)
-- `scripts/debugging/onyx_db.py`, `onyx_redis.py`, `opensearch/*.py` (dev tooling)
-
-**Where this breaks:** a raw thread, a thread pool, or `loop.run_in_executor` call
-started from inside a request or a task does not inherit the current contextvar
-values. The caller must copy the context. [[core-chat-loop]] documents the concrete
-case: `_run_models` (`chat/process_message.py`) submits each per-model worker with a
-copied `contextvars.Context` (`contextvars.copy_context().run`, `process_message.py`)
-because tenant ID and tracing context live in contextvars. Generalize that pattern:
-**a bare `Thread(target=fn)` or a `ThreadPoolExecutor.submit(fn)` that does not wrap
-its target in `contextvars.copy_context().run(...)` loses the tenant context inside
-that thread**, and any DB session or Redis client built inside it resolves to
-whatever the contextvar's *default* is (`None` under `MULTI_TENANT`,
-`POSTGRES_DEFAULT_SCHEMA` otherwise) rather than the request's actual tenant. Under
-`MULTI_TENANT=True` this either raises (`get_current_tenant_id` raises
-`RuntimeError` on `None`, a fail-safe) or, if some caller has looser handling, is a
-real fail-open through wrong data scoping.
-
-`asyncio.create_task` and `asyncio.to_thread` copy the current context
-automatically, per Python's documented behavior. A task created inside a request
-reads the request's tenant. `db/pat.py:_schedule_pat_last_used_update` relies on
-this: its background task calls `get_current_tenant_id()` itself. Both
-`db/engine/async_sql_engine.py:get_async_engine_for_tenant` and
-`ee/onyx/server/middleware/tenant_tracking.py`'s gating check use `asyncio.to_thread`.
-The risk is a new call site that crosses a raw thread boundary without copying.
+1. `tenant-aware-session` **Every DB session comes from a tenant-aware
+   helper.** Use `get_session`,
+   `db/engine/sql_engine.py:get_session_with_current_tenant`,
+   `get_session_with_tenant` or the async versions. A bare
+   `Session(bind=engine)` skips the schema map and the shard.
+   `db/engine/sql_engine.py:get_catalog_session` is the one helper pinned to `public`, for catalog
+   tables only.
+2. `tenant-from-auth-only` **The request's tenant comes from authenticated
+   context, never from client input.** Some routes take a tenant id in the
+   body, such as the control-plane routes behind `control_plane_dep` and the
+   request to join a workspace (`ee/onyx/server/tenants/user_invitations_api.py`).
+   They name a target and never set the request's own tenant from it.
+   `db/engine/sql_engine.py:is_valid_schema_name` and
+   `db/engine/tenant_utils.py:TENANT_ID_PATTERN` check every tenant id before
+   it becomes a schema name, because a schema name cannot be a SQL parameter.
+   `ee/onyx/server/tenants/schema_management.py:drop_schema` checks `validate_tenant_id` for this
+   reason.
+3. `threads-copy-context` **A new thread does not inherit the tenant.** A raw
+   `Thread`, `ThreadPoolExecutor.submit` or `loop.run_in_executor` starts with
+   the context variable's default: `None` on cloud, `POSTGRES_DEFAULT_SCHEMA`
+   on self-hosted. So the bug shows only on cloud. Use the helpers in
+   `utils/threadpool_concurrency.py`, such as
+   `run_functions_tuples_in_parallel` and `start_thread_with_context`, which
+   copy the context. Or set the variable at the top of the thread and reset it
+   in `finally`. `asyncio.create_task` and `asyncio.to_thread` copy the
+   context, so they need nothing more. A long-lived daemon thread that serves
+   one tenant can set the variable once
+   (`background/periodic_poller.py:_poller_loop`). Copy the context once for
+   each thread: one `Context` object cannot be entered by two threads at once.
+   `chat/process_message.py:_run_models` copies it for each model worker and
+   again for the writer thread.
+4. `celery-task-tenant-kwarg` **Every Celery task needs a `tenant_id` kwarg.**
+   `background/celery/apps/app_base.py:TenantAwareTask` falls back to `POSTGRES_DEFAULT_SCHEMA` when it is
+   missing. On cloud that schema has no tenant data, so the task fails or does
+   nothing, with no error that names the cause. Beat adds the kwarg; a direct
+   send must pass it.
+5. `read-tenant-with-getter` **Read the tenant with `get_current_tenant_id()`,
+   not the raw variable.** `shared_configs/contextvars.py:get_current_tenant_id`
+   raises on cloud when the tenant is unset, so a lost context fails loudly.
+   Do not treat `None` from `.get()` as a schema.
+6. `tenant-in-cache-keys` **Every cache key and Redis key needs the tenant.**
+   `redis/redis_pool.py:get_redis_client` returns a `TenantRedisClient` that
+   prefixes every key (`redis/tenant_redis_client.py:_prefix_key`).
+   `redis/redis_pool.py:get_shared_redis_client` and
+   `cache/factory.py:get_shared_cache_backend` are cross-tenant;
+   use them only for data that is the same for every tenant. A module-level
+   `lru_cache` or dict that holds tenant data must include the tenant in its
+   key ([[rate-and-usage-limits#any-rate-limit-exists-fast-path]] is an
+   example).
+7. `one-alembic-tree` **A table belongs to one Alembic tree.** A per-tenant
+   table inherits `Base` and goes in `alembic/`. A table that exists once
+   inherits `PublicBase` and goes in `alembic_tenants/`. The wrong tree means
+   the table is never created, or is copied into every tenant schema.
+8. `pin-search-path` **Pin `search_path` per transaction in tenant
+   migrations.** Cloud reaches Postgres through PgBouncer in transaction
+   pooling. After a migration commits mid-run, the next transaction can use
+   another server connection. `alembic/env.py` calls
+   `db/engine/migration_search_path.py:pin_search_path_per_transaction`, which
+   starts each transaction with `SET LOCAL search_path`. A one-time `SET` would
+   send later DDL to the wrong schema while `alembic_version` records success.
+9. `snapshot-skips-migrations` **A new tenant may not run your migration.**
+   Provisioning clones the template snapshot, which holds the template's tables
+   and rows, not the migration chain. A migration whose effect is outside its
+   own schema, such as Redis keys, files or catalog rows, does not reach
+   tenants built from a snapshot. Rows a migration inserts must be the same on
+   every schema (`backend/AGENTS.md`).
+   `ee/onyx/db/tenant_snapshot.py:check_snapshot_parity` compares a snapshot
+   with a migrated schema.
+10. `shard-routing-fails-closed` **Shard routing fails closed.**
+    `get_shard_for_tenant` raises `ShardConfigurationError` when the catalog
+    names an unknown shard, and `ShardLookupError` when it cannot read the
+    catalog. A fallback to the default shard would send a moved tenant's writes
+    to its old database.
+11. `index-tenant-clause` **Never drop the tenant clause from the index
+    filter.** `document_index/opensearch/search.py` adds a `tenant_id` term
+    when `tenant_state.multitenant` is true. Single-tenant indices have no
+    `tenant_id` field.
+12. `cross-tenant-audit` **Cross-tenant actions use a separate context
+    variable and an audit event.**
+    `ee/onyx/server/tenants/admin_api.py:impersonate_user` needs
+    `current_cloud_superuser`, sets `SESSION_TENANT_OVERRIDE_CONTEXTVAR` only
+    while it issues the session, and calls `emit_audit_event` on success and
+    failure. A new cross-tenant capability needs both.
 
 ---
 
-## 5. Contracts and invariants
+## Decisions
 
-1. **Every DB session must be tenant-scoped.** It must come from
-   `get_session`, `get_session_with_current_tenant`, `get_session_with_tenant`, or
-   `get_async_session` (or their EE equivalents), never from a bare
-   `Session(bind=some_engine)` built against an engine resolved outside these
-   helpers. The one sanctioned exception is `get_catalog_session`
-   (`sql_engine.py`), which is explicitly pinned to `public` for catalog tables.
-2. **The tenant comes from the authenticated context, never from client input.**
-   The only place a header (`X-Onyx-Tenant-ID`) directly sets the contextvar is
-   `onyx/utils/middleware.py:tenant_header_middleware`, wired only into the
-   model server (§4.1, §9). No API-server endpoint accepts a tenant ID as a request
-   body or query parameter; `is_valid_schema_name`/`TENANT_ID_PATTERN` validate
-   every tenant ID that does cross a boundary (a JWT claim, a Redis-cached session,
-   an anonymous cookie) before it is used as a schema name.
-3. **Every new raw thread or thread pool must receive tenant context
-   explicitly.** Either copy the context (`contextvars.copy_context().run`, as
-   [[core-chat-loop]] does) or set the contextvar at the top of the new
-   thread body and reset it in a `finally` (as every listed call site in §4.2
-   does). A new thread that does neither is a tenant-context bug, not a
-   performance bug. `asyncio.create_task` and `asyncio.to_thread` copy the
-   context, so they need nothing extra.
-4. **A tenant-scoped table belongs in `alembic/`, never `alembic_tenants/`.**
-   `alembic_tenants/env.py` targets only `PublicBase.metadata`; a table added to
-   `onyx/db/models.py:Base` and migrated through `alembic_tenants/` would never
-   actually be created, because that tree only ever touches the `public` schema
-   catalog tables. Conversely, a genuinely tenant-independent table (something
-   that must exist exactly once, not once per tenant) must inherit `PublicBase`
-   and go in `alembic_tenants/`, or it will be silently duplicated into every
-   tenant schema instead of shared.
-   `OAuthProviderClient` remains catalog-owned in cloud. On single-tenant installs,
-   its explicit schema is `POSTGRES_DEFAULT_SCHEMA`, so client registration works
-   before login without creating a table in `public` when a custom schema is set.
-5. **The index's tenant filter must never be dropped.** `_get_search_filters`
-   (`document_index/opensearch/search.py`) adds a `{"term": {TENANT_ID_FIELD_NAME:
-   ...}}` clause whenever `tenant_state.multitenant` is true, independently of and
-   AND-ed alongside the ACL clause [[access-control]] adds in the same function.
-   Removing or conditionally skipping this clause on any retrieval path is a
-   cross-tenant document leak, not a ranking bug. **Single-tenant (`MULTI_TENANT`
-   off) indices carry no `tenant_id` field at all** (`schema.py` only adds the
-   field, and `search.py` only emits the clause, when `tenant_state.multitenant`
-   is true). This is a genuine format difference between CE and cloud indices,
-   not merely an unused field.
-6. **Code that works single-tenant can still be broken multi-tenant, and vice
-   versa.** `MULTI_TENANT=False` is the default local dev and CE path; several
-   real behaviors (gating, sharding, the beat multiplier, tenant-scoped rate
-   limits, the tenant contextvar's own default value) only exist when
-   `MULTI_TENANT=True`. See §7 and §9. A change validated only in one mode has not
-   validated the other.
-7. **Shard routing fails closed.** `shard_routing.py:get_shard_for_tenant` raises
-   `ShardConfigurationError` rather than falling back to the default shard when the
-   catalog names a shard this process does not recognize. Silently defaulting
-   could route an already-migrated tenant's writes back to the database it moved
-   off. The one deliberate default-shard fallback is a missing `tenant_shard` table
-   entirely, which means nothing has ever been mapped.
-8. **A cross-tenant admin action (impersonation) must be both narrowly scoped and
-   audited.** `ee/onyx/server/tenants/admin_api.py:impersonate_user` is gated on
-   `current_cloud_superuser`, sets `SESSION_TENANT_OVERRIDE_CONTEXTVAR` (not the
-   plain tenant contextvar, so it cannot be confused with an ambient request
-   tenant) only for the duration of issuing the token, and emits
-   `AuditAction.IMPERSONATE` via `emit_audit_event` on both success and failure.
-   A new cross-tenant capability that skips either the scoping or the audit call
-   is a security regression, not a style issue.
-9. **A tenant migration's search_path is pinned per transaction, not per
-   connection.** Tenant provisioning (`/auth/register` and the pool top-up task)
-   runs the `alembic/` chain through the API and Celery `POSTGRES_HOST`, which
-   in cloud is PgBouncer in transaction pooling. After a migration commits
-   mid-run, the next transaction can run on another server connection.
-   `alembic/env.py` therefore calls
-   `onyx/db/engine/migration_search_path.py:pin_search_path_per_transaction`,
-   which starts every transaction with `SET LOCAL search_path`. Do not replace
-   it with a one-time `SET`: later unqualified DDL would go to whatever schema
-   that server connection has, while `alembic_version` (schema-qualified) still
-   records the tenant as migrated. `SET LOCAL` also keeps the tenant schema off
-   the pooled server connection after the migration ends.
+- **Schema per tenant, not a tenant column.** Every query is scoped by the
+  connection's schema map, so a query that forgets a filter cannot read
+  another tenant. The cost is one migration run per tenant, which the snapshot
+  clone and the parallel runner reduce.
+- **Raise on a missing tenant.** On cloud, the context variable defaults to
+  `None` and the getter raises, so a lost context is an error, not a read of
+  the default schema.
 
 ---
 
-## 6. Relationships
+## Known issues
 
-**Depends on**
-- [[auth-and-identity]]: supplies the authenticated user/session that tenant
-  resolution in §4.1 keys on; the tenant contextvar is meaningless without a prior
-  authentication decision.
-- [[editions-and-gating]]: `MULTI_TENANT` itself, and most of the CE/EE dispatch
-  this component's cloud-only behaviors ride on (`fetch_versioned_implementation`,
-  `fetch_ee_implementation_or_noop`).
-- [[background-jobs]]: `TenantAwareTask` and the beat scheduler's per-tenant
-  schedule generation are the Celery-side half of tenant propagation this
-  document describes.
-
-**Depended on by**
-- [[core-chat-loop]]: every DB session a chat turn opens is tenant-scoped through
-  this component; the turn's worker-thread `contextvars.Context` copy (§4.2) is the
-  most-referenced concrete example of the propagation rule this document
-  generalizes.
-- [[document-index]] and [[access-control]]: the tenant term filter in
-  `_get_search_filters` is this component's contribution to that shared
-  chokepoint; [[access-control]] documents that it composes with, and never
-  substitutes for, the ACL clause. This document is the other half of that
-  composition.
-- [[chat-persistence]]: every table it owns is a `Base`-derived, per-tenant-schema
-  table, migrated through `alembic/`, not `alembic_tenants/`.
-- [[observability]]: tracing context propagation follows the same contextvar
-  discipline (`tracing/processors/user_usage_processor.py` sets the tenant
-  contextvar around usage recording); the tracing admin API is one of the
-  `MULTI_TENANT`-conditional behaviors in §7.
+- **A valid anonymous-user cookie overrides a session** in
+  `_get_tenant_id_from_request`. A signed-in user who still holds an anonymous
+  cookie for another workspace resolves to that workspace's schema. It is not
+  confirmed whether this is intended.
+- **The model server trusts a plain tenant header.**
+  `utils/middleware.py:tenant_header_middleware` sets the tenant from
+  `X-Onyx-Tenant-ID` with no check. Only `backend/model_server/main.py` uses
+  it, and no model-server code reads the tenant. It is safe only while the
+  model server stays internal, which the code cannot show. Do not add it to
+  the API server, or tenant-scoped data access to the model server, without a
+  security review.
+- **Cloud-only code has thin local coverage.** Local dev and most CI run with
+  `MULTI_TENANT` off. Gating, sharding, per-tenant beat entries and other
+  `MULTI_TENANT` branches run only in `backend/tests/integration/multitenant_tests/`
+  or on cloud. Use `git grep -n MULTI_TENANT` to find the branches a change
+  touches.
 
 ---
 
-## 7. Blast radius
+## Dependencies
 
-| If your change… | Also check |
-|---|---|
-| adds a new table | Does it belong once per tenant (`Base`, `alembic/`) or once globally (`PublicBase`, `alembic_tenants/`)? Getting this backwards means the table is either duplicated into every schema or never created at all (§5.4). |
-| adds a new raw thread or thread pool anywhere reachable from a request or task | Does it copy `contextvars.Context`, or set/reset the tenant contextvar explicitly? An uncopied thread silently resolves to the default tenant or raises, depending on `MULTI_TENANT` (§4.2, §9). |
-| adds a new Celery task | Does it take `tenant_id` and route through `TenantAwareTask` (or an equivalent explicit `.set()`/`.reset()`)? Does the beat schedule need a per-tenant entry (`beat.py:DynamicTenantScheduler._generate_schedule`) or a single cloud-wide one? |
-| adds a new global cache (in-process `lru_cache`/`functools.cache`, a module-level dict) that stores anything derived from tenant data | It needs the tenant in its key, or it must genuinely be tenant-independent (see §9 for what was checked and found safe). |
-| changes session creation (`get_session`, `get_async_session`, or their EE equivalents) | Every one of the call sites in §5.1; confirm `schema_translate_map` still gets built from `get_current_tenant_id()`, never a value the caller could substitute. |
-| adds a new retrieval entry point that queries the document index | [[access-control]]'s and this document's §5.5: it must go through `_get_search_filters`, which appends both the ACL clause and, under `MULTI_TENANT`, the tenant term clause. |
-| changes shard routing, the catalog table, or `ONYX_DB_SHARDS`/`ONYX_DB_SHARD_OVERRIDES` | `shard_version.py`'s invalidation contract (§5.7); a routing change during an in-flight tenant migration is the failure mode this whole subsystem exists to prevent. |
-| adds a new cross-tenant admin capability | §5.8: scoping via a narrow contextvar (not the ambient tenant one) plus an audit event, mirroring `impersonate_user`. |
-| adds a new `MULTI_TENANT`-conditional branch | Confirm the CE/self-hosted path is still exercised by CE tests, not only assumed correct by symmetry (§9). |
+- [[auth-and-identity]]: tenant resolution reads the credentials it issues.
+- [[background-jobs]]: `TenantAwareTask` and the beat fan-out.
+- [[editions-and-gating]]: the tenant middleware and provisioning are EE.
 
 ---
 
-## 8. How to verify a change
+## Recipes
 
-### Tests
-
-```bash
-# Integration: real tenant creation, shard migration, mobile-token tenant resolution
-cd backend && uv run pytest tests/integration/multitenant_tests
-cd backend && uv run pytest tests/integration/tests/migrations/test_alembic_tenants.py
-cd backend && uv run pytest tests/integration/tests/migrations/test_run_multitenant_migrations.py
-
-# Unit: contextvar/session/shard-routing correctness in isolation
-cd backend && uv run pytest tests/unit/onyx/db/engine/test_tenant_utils.py
-cd backend && uv run pytest tests/unit/onyx/document_index/test_tenant_scoping.py
-cd backend && uv run pytest tests/unit/onyx/auth/test_session_tenant_resolution.py
-cd backend && uv run pytest tests/unit/onyx/auth/test_password_login_tenant_conflict.py
-cd backend && uv run pytest tests/unit/onyx/auth/test_rekey_tenant_mapping_after_login.py
-cd backend && uv run pytest tests/unit/ee/onyx/server/middleware/test_tenant_tracking.py
-cd backend && uv run pytest tests/unit/ee/onyx/server/tenants/test_impersonation_tenant_binding.py
-cd backend && uv run pytest tests/unit/ee/onyx/server/tenants/test_tenant_resolution_by_oauth_account.py
-cd backend && uv run pytest tests/unit/onyx/background/celery/tasks/tenant_provisioning
-
-# External dependency: real Redis, real rollback path
-cd backend && uv run pytest tests/external_dependency_unit/tenant_work_gating
-cd backend && uv run pytest tests/external_dependency_unit/db/test_tenant_provisioning_rollback.py
-cd backend && uv run pytest tests/external_dependency_unit/redis/test_tenant_redis.py
-```
-
-`tests/integration/common_utils/managers/tenant.py` is the reusable test helper for
-creating and tearing down a real tenant in an integration test.
-
-See `backend/AGENTS.md` for authoritative commands and required secrets/env.
-
-### Manual reproduction
-
-This repository's local dev stack normally runs with `MULTI_TENANT` unset (CE mode,
-one tenant, `public` schema), so exercising the multi-tenant paths requires setting
-`MULTI_TENANT=true` and re-running `alembic upgrade head` against a fresh tenant
-schema, or driving the integration test fixtures above. There is no documented
-one-command way to flip a running local dev stack into multi-tenant mode; treat that
-gap as a real testing blind spot (§9).
-
-To inspect tenant state directly in Postgres (per the root `AGENTS.md` `psql`
-recipe):
-
-```bash
-PGPASSWORD="${POSTGRES_PASSWORD:-password}" psql -h "${POSTGRES_HOST:-localhost}" -U postgres \
-  -c "SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'tenant_%';"
-PGPASSWORD="${POSTGRES_PASSWORD:-password}" psql -h "${POSTGRES_HOST:-localhost}" -U postgres \
-  -c "SELECT * FROM public.tenant_shard;"
-```
-
-### What "working" looks like
-
-- A document indexed for tenant A never appears in tenant B's search results, chat
-  citations, or `/api/search` output, verified the same way [[access-control]]'s
-  two-user test verifies ACL isolation, but across two tenants instead of two users.
-- A Celery task dispatched with `tenant_id=A` reads and writes only schema
-  `tenant_A`'s tables; `SELECT current_schema()` inside the task's session (or the
-  `psql` query above) confirms this if in doubt.
-- Migrating one tenant does not affect another tenant's `alembic_version`; catalog
-  tables are unaffected by any `alembic/` (tenant-tree) migration.
-- Shard routing failures raise loudly (`ShardConfigurationError`,
-  `ShardLookupError`) rather than silently defaulting a migrated tenant back to its
-  old database.
+- `new-table` **Add a table.** Decide `Base` or `PublicBase`, and use the matching Alembic
+  tree ([[#one-alembic-tree]]). Copy `db/models.py:TenantShard` for a catalog
+  table; list the catalog tables with `git grep -n "(PublicBase)"`.
+- `new-thread` **Add a thread or executor.** Use a helper from
+  `utils/threadpool_concurrency.py` ([[#threads-copy-context]]); list the
+  call sites with `git grep -n run_functions_tuples_in_parallel`.
+- `new-celery-task` **Add a Celery task.** Pass `tenant_id` in kwargs, and decide whether beat
+  needs a per-tenant or a cloud-wide entry ([[background-jobs]]).
+- `new-cross-tenant-action` **Add a cross-tenant admin action.** Copy `impersonate_user`
+  ([[#cross-tenant-audit]]).
+- `reproduce-multi-tenant-locally` **Reproduce a multi-tenant bug locally.** No switch turns a running local
+  dev stack into multi-tenant mode. Copy the `multitenant-tests` job in
+  `.github/workflows/pr-integration-tests.yml`: start only the infrastructure
+  containers, then run the code with `MULTI_TENANT=true` and `AUTH_TYPE=cloud`.
+  Use `backend/tests/integration/common_utils/managers/tenant.py` to create
+  tenants.
+- `investigate-tenant-not-set` **Investigate "Tenant ID is not set".** The error carries a stack trace. Find
+  the first frame that runs in a new thread, executor or task, and check that
+  it copies the context or receives `tenant_id`.
 
 ---
 
-## 9. Footguns
+## Verification
 
-- **The tenant contextvar is `CURRENT_TENANT_ID_CONTEXTVAR`
-  (`shared_configs/contextvars.py`).** Its default is `None` when `MULTI_TENANT` is
-  true and `POSTGRES_DEFAULT_SCHEMA` otherwise. Reading it through
-  `get_current_tenant_id()` raises `RuntimeError` on a `None` default rather than
-  silently returning `None`, specifically so a code path that forgot to establish
-  tenant context fails loudly instead of resolving to "no tenant." Do not read the
-  raw contextvar with `.get()` and treat `None` as a valid schema name.
-- **`TenantAwareTask.__call__` resets with `.set(None)`, not a saved token.** Every
-  other tenant-context call site in this codebase (§4.2's list) captures the token
-  from `.set(tenant_id)` and calls `.reset(token)` in a `finally`, which restores
-  whatever value was there before (correct under nested contexts). `app_base.py`'s
-  `TenantAwareTask` instead force-sets the contextvar to `None` unconditionally
-  after the task body runs. On a worker process this is fine because each task
-  invocation starts a fresh context; it would not be fine if `TenantAwareTask`
-  instances were ever nested or reused inside a shared context, which as of this
-  writing they are not. Flag any refactor that changes how Celery invokes
-  `TenantAwareTask` as needing to re-verify this.
-- **A raw thread or executor started without `contextvars.copy_context()` loses
-  tenant context.** [[core-chat-loop]]'s `_run_models` gets this right by copying
-  the context per worker specifically because an earlier version of this exact bug
-  class existed. Any new `Thread(...)`, `ThreadPoolExecutor.submit(...)`, or
-  `loop.run_in_executor` that copies no context and then opens a DB session or
-  builds a Redis client inside itself is reading or writing against the wrong
-  tenant, or raising, not against "no tenant" safely. `asyncio.create_task` and
-  `asyncio.to_thread` copy the context and are not affected.
-- **`onyx/utils/middleware.py:tenant_header_middleware` trusts a bare
-  `X-Onyx-Tenant-ID` header with no signature check.** It is wired into
-  `backend/model_server/main.py` only, never the API server. The exposure is
-  currently bounded by a second fact: the model server never reads the value back.
-  `grep -rn "CURRENT_TENANT_ID_CONTEXTVAR\|get_current_tenant_id\|get_session"
-  backend/model_server/` returns nothing, so the middleware sets a contextvar that
-  no code in that service consumes and it opens no tenant-scoped DB session. The
-  header therefore cannot currently steer data access. Two things would change
-  that: reusing this middleware on a service that does read the contextvar, or
-  adding tenant-aware logic to the model server. Either is a security review. The
-  network-isolation assumption (that the model server is unreachable from outside
-  the cluster) is not verifiable from code, so do not rely on it alone.
-- **Two Alembic trees, easy to confuse.** `backend/alembic_tenants/` migrates
-  `PublicBase` (catalog) tables in `public` only; `backend/alembic/` migrates
-  `Base` (tenant) tables, once per tenant schema, and is the one
-  `run_multitenant_migrations.py` fans out across every tenant and shard. Adding a
-  table to the wrong `Base` subclass, or writing its migration in the wrong tree,
-  produces a table that either never gets created or gets silently duplicated into
-  every tenant schema.
-- **`MULTI_TENANT`-only code paths are easy to leave untested.** Local dev and most
-  of CI run with `MULTI_TENANT` unset. Gating, tenant-scoped rate limiting, the
-  beat-schedule multiplier (`pruning/tasks.py:_get_pruning_block_expiration`), the
-  sharding layer, and the tracing-admin-API rejection (§ table below) are all
-  invisible in that default configuration. A change that only ran self-hosted
-  tests has not exercised any of them.
-- **Caches checked for missing tenant keys, none found.** Redis
-  access is uniformly tenant-prefixed through `TenantRedisClient`
-  (`onyx/redis/tenant_redis_client.py:_prefix_key`), which the module's own
-  docstring calls out as security-relevant specifically to prevent this class of
-  bug. The billing cache (`ee/onyx/server/billing/billing_cache.py`) keys
-  explicitly by `tenant_id`. The handful of in-process `@lru_cache`/
-  `@functools.cache` decorators found (`llm/model_capabilities.py:get_model_map`,
-  `llm/multi_llm.py`'s two log-dedup caches, `indexing/document_push.py:get_document_push_config`,
-  `db/engine/iam_auth.py:create_ssl_context_if_iam`) all cache process-global,
-  non-tenant-derived state (the vendored model catalog, log-once flags, env-derived
-  config, TLS context construction), not tenant data. This is a snapshot, not a
-  standing guarantee: any new module-level cache must be checked against this same
-  question before it is added.
-
----
-
-## Unverifiable / not fully confirmed
-
-- Whether the model server (`backend/model_server/`) is genuinely unreachable from
-  outside the cluster in every deployment topology, which is the implicit
-  justification for `tenant_header_middleware` trusting a raw header. Not
-  verified from the code in this repository.
-- The full list of `MULTI_TENANT`-conditional behaviors below is a representative
-  sample (`grep -rn "MULTI_TENANT" backend/onyx backend/ee | grep -v test` returns
-  roughly 300+ matches across ~100 files), not an exhaustive enumeration. Treat any
-  specific claim of "this is the only place X differs" as unverified unless this
-  document says so explicitly.
-
-### `MULTI_TENANT`-conditional behavior (representative)
-
-| Area | File:symbol | Behavior under `MULTI_TENANT=True` |
-|---|---|---|
-| Tracing admin API | `onyx/server/manage/tracing/api.py:_reject_if_multi_tenant` | Rejects tracing-provider configuration outright (`OnyxErrorCode.SINGLE_TENANT_ONLY`). |
-| Forced document sets | `onyx/context/search/forced_document_set.py:get_forced_document_set_names` | Feature disabled entirely; `FORCED_DOCUMENT_SET_NAMES` is ignored. |
-| Beat scheduling | `background/celery/apps/beat.py:DynamicTenantScheduler._generate_schedule` | Cloud-wide tasks scheduled once for all tenants rather than once per tenant. |
-| Pruning/fence block expiration | `background/celery/tasks/pruning/tasks.py:_get_pruning_block_expiration`, `_get_fence_validation_block_expiration` | Base expiration multiplied by `OnyxRuntime.get_beat_multiplier()`; unmultiplied otherwise. |
-| Feature flags | `onyx/feature_flags/factory.py:get_default_feature_flag_provider` | Uses the PostHog-backed provider (also enabled under `DEV_MODE`); otherwise a no-op provider that always returns `False`. |
-| Signup rate limiting | `onyx/auth/signup_rate_limit.py:enforce_signup_rate_limit` | Enforced only when both `MULTI_TENANT` and `SIGNUP_RATE_LIMIT_ENABLED`; a no-op otherwise. |
-| Password-login lockdown fields | `onyx/server/security/api.py` | `_PASSWORD_LOCKDOWN_FIELDS` and `OPERATOR_LOCKED_FIELDS` are rejected outright when present in the payload. |
-| SSO domain enforcement | `onyx/server/manage/sso/api.py` | Email-domain routing/verification (`allowed_email_domains`, TXT-record domain status) only applies; single-tenant skips both checks. |
-| Web-search provider base URL | `onyx/server/manage/web_search/api.py` | An update that changes `config.base_url` for an existing provider is rejected. |
-| Tenant work-gating (Redis) | `onyx/redis/redis_tenant_work_gating.py` | All public functions (mark-active, size gauge, prune) are no-ops when `MULTI_TENANT` is false. |
-| Usage limits default | `shared_configs/configs.py:USAGE_LIMITS_ENABLED` | Defaults to `MULTI_TENANT`'s value (on for cloud, off self-hosted) unless explicitly overridden. |
-| Document index tenant filter | `document_index/opensearch/search.py`, `schema.py` | Tenant `term` clause and the `tenant_id` field itself exist only when `tenant_state.multitenant` is true (§5.5). |
-| Open-URL tool tenant scoping | `tools/tool_implementations/open_url/open_url_tool.py` | Passes a real `tenant_id` into the crawl/index request only under `MULTI_TENANT`; `None` otherwise. |
-| `DISABLE_VECTOR_DB` guard | `onyx/main.py` | Raises at startup if combined with `MULTI_TENANT` (incompatible configuration). |
+- Integration: `backend/tests/integration/multitenant_tests/` and
+  `backend/tests/integration/tests/migrations/`.
+- Unit: `backend/tests/unit/onyx/db/engine/` and
+  `backend/tests/unit/ee/onyx/server/middleware/`.
+- External dependencies: `backend/tests/external_dependency_unit/redis/` and
+  `backend/tests/external_dependency_unit/db/`.
+- The isolation check: index a document in tenant A and confirm it never
+  appears in tenant B's search, chat citations or `/api/search`.

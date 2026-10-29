@@ -941,11 +941,6 @@ def test_component_link_must_name_the_documents_path(fmap: FixtureMap) -> None:
     assert fmap.check() == ([], [])
 
 
-def test_legacy_map_does_not_ask_for_paths_rows(fmap: FixtureMap) -> None:
-    (fmap.map_dir / "legacy-schema.txt").write_text("# Old format.\ncitations\n")
-    assert _reminder(fmap, ["backend/onyx/server/new_api.py"]) == ""
-
-
 _ROUTE = (
     "router = APIRouter()\n\n\n"
     "@router.post(\n"

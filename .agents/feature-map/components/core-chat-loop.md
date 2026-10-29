@@ -1,502 +1,286 @@
 # Core Chat Loop
 
-> The turn engine. It takes one user message, assembles context, runs an LLM with
-> tools until the LLM stops calling them, streams packets out, and saves the result.
+> The turn engine. It takes one user message, runs one LLM loop per selected
+> model in worker threads, streams packets through one writer thread, and saves
+> each model's result exactly once.
 
-**Verified against:** `268e4d5a3d` (2026-10-05)
-**Domain:** core-loop
-**Edition:** CE, with EE additions in prompt and search layers
-**Owns:**
-`backend/onyx/chat/process_message.py`, `backend/onyx/chat/agent.py:ChatAgent`, `backend/onyx/chat/renderer.py:MessageRenderer`, `backend/onyx/chat/models.py`,
-`emitter.py`, `stop_signal_checker.py`, `chat_processing_checker.py`, `stream_buffer.py`,
-`backend/onyx/server/query_and_chat/chat_backend.py`
-
-**Read first:** `backend/onyx/chat/README.md`. It is the design rationale for this
-component, written by the people who built it. This document maps it to code and
-adds verification guidance.
+**Verified against:** `a4e97fcea1` (2026-10-29)
+**Edition:** CE
 
 ---
 
-## 1. What the user experiences
+## User experience
 
-The user types a message and sends it. The assistant may think out loud, may run
-one or more tools (search the company index, search the web, run code, generate an
-image), and then streams an answer with citations. The user can stop generation at
-any point, and gets to keep whatever was produced. If the browser tab reloads
-mid-answer, the answer resumes rather than being lost.
-
-A user can also send one message to two or three models at once and compare the
-answers side by side, then mark one as preferred.
-
----
-
-## 2. Surfaces
-
-### HTTP endpoints (router prefix `/chat`, `chat_backend.py`)
-
-| Method | Path | Handler | Notes |
-|---|---|---|---|
-| POST | `/chat/send-chat-message` | `handle_send_chat_message` | **The turn endpoint.** Returns NDJSON `text/event-stream` when `stream=true`, else a single `ChatFullResponse`. |
-| GET | `/chat/chat-session/{id}/resume-stream` | `resume_chat_stream` | Replays the durable buffer, then tails the live stream. |
-| POST | `/chat/stop-chat-session/{id}` | `stop_chat_session` | Sets the stop fence for one stream. Optional `stream_id` query parameter. Without it, the endpoint stops the stream in the processing fence. |
-| POST | `/chat/create-chat-session` | `create_new_chat_session` | |
-| GET | `/chat/get-chat-session/{id}` | `get_chat_session` | Replays saved packets for a loaded session. |
-| GET | `/chat/get-user-chat-sessions` | `get_user_chat_sessions` | |
-| PUT | `/chat/rename-chat-session`, `PATCH /chat/chat-session/{id}` | `rename_chat_session`, `patch_chat_session` | |
-| DELETE | `/chat/delete-chat-session/{id}`, `/chat/delete-all-chat-sessions` | `delete_chat_session_by_id`, `delete_all_chat_sessions` | |
-| PUT | `/chat/update-chat-session-{model,temperature,reasoning}` | `update_chat_session_model`, `update_chat_session_temperature`, `update_chat_session_reasoning` | Per-session overrides. |
-| PUT | `/chat/set-preferred-response` | `set_preferred_response_endpoint` | Picks the winner of a multi-model turn. |
-| PUT | `/chat/set-message-as-latest` | `set_message_as_latest` | Branch selection. |
-| POST/DELETE | `/chat/create-chat-message-feedback`, `/chat/remove-chat-message-feedback` | `create_chat_feedback`, `remove_chat_feedback` | |
-| GET | `/chat/search` | `search_chats` | Search across the user's own chat history. |
-| GET | `/chat/file/{file_id:path}` | `fetch_chat_file` | Serves a file attached to a message. |
-| GET | `/chat/max-selected-document-tokens`, `/chat/available-context-tokens/{id}` | `get_max_document_tokens`, `get_available_context_tokens_for_session` | Budget introspection for the UI. |
-| GET/POST | `/chat/incognito-availability`, `/chat/end-incognito-session/{id}` | `get_incognito_availability`, `end_incognito_session` | See §9. |
-| POST | `/chat/seed-chat-session-from-slack` | `seed_chat_from_slack` | Continue a Slack thread in the web UI. See [[slack-bot]]. |
-
-`send-chat-message` layers three dependencies: `require_permission(Permission.WRITE_CHAT, allow_anonymous=True)`,
-`check_token_rate_limits`, and `check_api_key_usage`. See [[rate-and-usage-limits]].
-
-### Environment configuration (`backend/onyx/configs/chat_configs.py` unless noted)
-
-| Variable | Default | Effect |
-|---|---|---|
-| `MAX_LLM_CYCLES` | 6 | Max LLM cycles in one turn. The last cycle turns tools off and forces an answer. |
-| `CHAT_HEARTBEAT_INTERVAL_S` | 15 | SSE keepalive cadence, live and resumed. |
-| `CHAT_RESUME_POLL_INTERVAL_S` | 0.2 | Poll cadence for `resume_chat_stream`. |
-| `CHAT_STREAM_BUFFER_TTL_S` | 3600 | Durable buffer lifetime. |
-| `CHAT_STREAM_BUFFER_DONE_TTL_S` | 600 | Buffer lifetime after the turn completes. |
-| `CHAT_STREAM_BUFFER_MAX_BYTES` | 16 MiB | Buffer cap. |
-| `HARD_DELETE_CHATS` |  | Session delete is a hard delete. |
-| `GEN_AI_INPUT_TOKEN_SAFETY_MARGIN` | 0.05 | (`configs/model_configs.py`) Shrinks the usable input window. |
-| `GEN_AI_NUM_RESERVED_OUTPUT_TOKENS` | 1024 | (`configs/model_configs.py`) Output allowance. |
-| `DEV_MODE` |  | Includes stack traces in `StreamingError`. |
-
-Admin-configured, not env: workspace setting `auto_detect_search_filters`
-(`load_settings()`).
+- **An end user** sends a message. The assistant can think, run tools (search,
+  web, code, images, custom tools) for several cycles, and then streams an answer
+  with citations. On the last allowed cycle the model must answer without tools.
+- **Stop.** The user presses stop. The partial answer stays, with "Generation was
+  stopped by the user." after it. A reload shows the same saved text.
+- **Leaving is not stopping.** If the user closes the tab, navigates away or loses
+  the network, the run continues on the server and is saved. When the user returns
+  while the run is live, the client resumes the stream ([[streaming-protocol]]).
+  After the run ends, the user sees the saved message.
+- **Compare models.** A user can send one message to two or three models. The
+  answers stream side by side, and the user marks one as preferred. A failure in
+  one model shows an error for that model only. The others finish.
+- **Deep research** runs with one model only, and not in a project chat. The
+  backend refuses a multi-model deep research request, and a deep research turn
+  in a project session ends with an error.
+- **When the turn fails** before the run starts (no access to a document set, a
+  bad model setting, a Query Processing hook that rejects the message), the user
+  sees one error and no answer. When a model fails during the run, its reserved
+  message row stores the error text. An incognito session that does not keep
+  content stores a generic error text instead, because provider errors can echo
+  the prompt.
+- **An API caller** gets NDJSON when `stream=true` and one `ChatFullResponse`
+  when `stream=false`. A multi-model request without streaming is rejected.
+- **Bots.** The Slack bot runs the same turn in-process
+  (`onyxbot/slack/handlers/handle_regular_answer.py`). The Discord bot calls the
+  HTTP endpoint (`onyxbot/discord/api_client.py`). A change here reaches both.
 
 ---
 
-## 3. Data model
+## Scope
 
-This component writes, but does not own, the chat tables. [[chat-persistence]] owns
-them. What matters here:
+This component owns the turn: request validation and setup, row reservation,
+the worker and writer threads, the LLM cycle loop and the single inference step,
+the stop and processing fences, the turn endpoints, and the one save per model.
+It shares the emitter and the stream buffer with [[streaming-protocol]].
 
-- `ChatSession`: the conversation.
-- `ChatMessage`: one row per user message and one per assistant message **per model**.
-  Assistant rows are **reserved before streaming begins** so the frontend has an ID
-  immediately.
-- `ToolCall`: one row per tool invocation, linkable to a parent `ToolCall` for
-  sub-agent nesting.
-- `SearchDoc`: the documents a turn surfaced, linked to the tool call that found them.
-
-Redis / cache keys:
-
-| Key | TTL | Owner | Meaning |
-|---|---|---|---|
-| `chatsessionstop_fence_{session_id}_{stream_id}` | 10 min | `stop_signal_checker.py` | User pressed stop for that stream. A later request in the same session is not affected. |
-| `chatprocessing_fence_{session_id}` | 30 min | `chat_processing_checker.py` | A turn is live; holds the stream ID of the active stream buffer (0 means unknown). |
-
-Both are tenant-scoped through `CacheBackend`.
+Neighbours own the rest:
+- [[context-assembly]]: what goes into each prompt, in what order, the token
+  budget and compression. This component calls `construct_message_history`
+  each cycle and decides when compression runs.
+- [[streaming-protocol]]: the packet types, `Placement`, the wire format and the
+  resume buffer.
+- [[chat-persistence]]: the tables, `chat/save_chat.py:save_chat_turn` and how
+  saved history is rebuilt.
+- [[tools-framework]]: tool construction and `run_tool_calls`.
+- [[citations]]: the citation processor that runs inside each step.
+- [[agent-runtime]]: the `onyx/agents` package and the chat modules that are not
+  wired into this loop. Read its status table before you edit a chat module that
+  this document does not name.
 
 ---
 
-## 4. How it works
-
-### 4.1 The call chain
-
-```text
-handle_send_chat_message                     server/query_and_chat/chat_backend.py
-  -> _stream_chat_turn                      chat/process_message.py
-  -> prepare_chat_turn                      chat/process_message.py
-  -> start_chat_turn                        chat/execution.py
-       -> ChatTurnExecution.run             control thread
-            -> _run_response                response thread
-                 -> create_chat_agent       ChatAgent or DeepResearchAgent
-                 -> Agent.start             same response thread
-                      -> model/tool steps   agents/runtime.py, agents/tool_execution.py
-       -> ResponsePresenter                 chat/presentation.py
-            -> browser packets              chat/renderer.py
-       -> ChatResponsePersistence           chat/persistence.py
-            -> history store                chat/history_store.py
-            -> save_chat_turn               db/chat_response.py
-```
-
-
-The application and SDK divide the work as follows:
-
-1. `backend/onyx/chat/process_message.py:prepare_chat_turn` validates requests and resolves
-   history, tool configuration, files, and models. `start_chat_turn` owns processing
-   publication, delivery setup, initial IDs, and worker launch. `ChatTurnExecution`
-   monitors response workers, ownership, saves, and delivery on a non-daemon thread.
-   A process-wide work counter lets API shutdown wait before closing database and
-   tracing services. Shutdown does not cancel responses; the pod grace period
-   limits how long the process can remain alive.
-2. `backend/onyx/agents/runtime.py` runs model and tool steps. `ChatAgent` supplies
-   chat prompts and tool context. Its final step disables further tool calls.
-3. `backend/onyx/llm/multi_llm.py` converts provider streams into generation events.
-   `backend/onyx/chat/renderer.py` converts recorded events into browser packets.
-4. `backend/onyx/chat/persistence.py:ChatResponsePersistence` saves completed responses
-   through the configured history store. Each response gets its own coordinator and
-   persistence object before its worker starts, so startup failures can be saved.
-   `_run_response` connects branch history, subagent discovery, and ownership before
-   starting the agent. It registers durable stores directly with turn control.
-
-### 4.2 Setup: `prepare_chat_turn`
-
-Returns a frozen `ChatTurnSetup` (`backend/onyx/chat/models.py`). It is frozen and detached from
-the DB session on purpose: worker threads must not hold ORM objects.
-
-Preparation resolves:
-- the session, the persona, and the LLM(s) via `get_llm_for_persona`
-- combined project and agent instructions;
-  agent instructions take precedence on conflicts ([[projects]] §4.5)
-- user memories via `get_memories`
-- the combined project and agent file selection via `resolve_context_user_files`,
-  reused by prompt loading and tools; `extract_context_files` applies the shared budget
-- reserved token count via `calculate_reserved_tokens` (`chat/prompt_utils.py`)
-- the user message row via `create_new_chat_message`
-- assistant message IDs via `reserve_chat_response_ids`
-
-Setup clears a forced tool ID when `is_tool_available_for_persona` excludes its
-attached tool. Construction uses the same predicate, so both paths apply the same
-legacy-flag rule. Disabled MCP and built-in tools remain excluded. Legacy disabled
-OpenAPI tools remain excluded from default Chat, while configured custom agents
-can use and force them, subject to access and authentication. No migration changes
-these legacy flags; explicit default Chat selection normalizes them.
-See [[mcp-and-custom-tools]] §4.5 and [[agents-personas]] §4.5.
-
-### 4.3 Execution
-
-`ChatTurnExecution` starts one synchronous response worker per selected model with
-`start_thread_future`. This utility copies tenant and tracing context into the thread.
-Each worker constructs its feature agent and calls `Agent.start(background=False)`.
-Child agents and parallel tools use additional workers when needed.
-`Agent.tools` registers executable tools. `prepare_step` selects registered instances;
-invalid selections fail before model generation. Restored selections must match saved tool declarations.
-Chat restores sources and citations from history, but each new question starts with query expansion enabled.
-Expected tool-selection and research-setting errors use typed application errors so clients receive actionable details.
-Waiting for a cancelled child raises `ChildRunCancelled`, which a tool can handle.
-An unhandled child cancellation becomes a tool error; cancelling the parent interrupts its wait.
-Each run owns its cancellation signal. Caller cancellation propagates into the run;
-run failure or cancellation does not cancel the caller's signal.
-Handoff saves suspended state and invokes the ownership adapter's release once.
-Local execution stays reserved until ownership release finishes. Release failure settles local waiters
-and pending parent dependencies with the cleanup error; saved state remains available for another resume.
-Completion publication uses the existing observer reservation, so a late remote read cannot overwrite the error.
-Tool errors retain their model-facing text in recorded results. Progress updates omit that text;
-structured result details supply public errors to the renderer.
-
-`agents/execution_records.py` assigns stable input-message IDs and prepares model history.
-Model-history replay omits unfinished tool exchanges and orphaned results without changing recorded history.
-When one assistant message repeats a tool-call ID, replay omits those calls and their ambiguous result.
-Other calls and partial text remain available to the model.
-Replay removes thinking without provider blocks and unsigned thinking blocks, while preserving signed and redacted blocks.
-Recorded partial output remains unchanged.
-
-All responses share one `ChatDelivery`. Its event dispatcher renders SDK events,
-publishes browser packets, and writes the replay buffer. `Emitter` stamps each
-response's model index. Closing the browser reader does not stop execution.
-Pending replay lines flush at 32 KiB or on the periodic flush. Their backlog limit
-is 4 MiB of UTF-8 data. Exceeding it disables replay without failing live delivery.
-Normal completion stops new events and retains listeners until accepted events drain.
-Closing is nonblocking. Live delivery can finish before the final cache write.
-Session-owner renewal retries one transient cache failure using the same token.
-Each attempt checks the lease deadline; ownership mismatch fails immediately.
-
-Each worker passes a lazy SEARCH_SELECTION client factory into `construct_tools`.
-Search keeps the answer client for rewrites and filters, resolving the separate
-client only for section selection and relevance classification after retrieval.
-The factory captures the session's pinned incognito policy and request headers.
-An unset SEARCH_SELECTION returns that same answer client and never falls back
-to the independent CHAT_NAMING designation.
-
-The chat control thread polls Stop and ownership state. It observes response worker
-and persistence outcomes, then releases session admission after work and delivery finish.
-A failed response reports its error without discarding other models' output.
-The message renderer closes answer sections at thinking and visible-tool boundaries.
-Later text starts a new section in both live output and saved-history replay.
-
-See [[file-store-and-user-files]] §4.4 for project/persona file-loading
-session boundaries.
-
-### 4.4 Context assembly per cycle
-
-`prepare_prompt` (`backend/onyx/chat/prompt_utils.py`) produces this order:
+## Architecture
 
 ```
-[system] [user information] [history before last user] [custom agent prompt]
-[context/project files] [last user message] [tool calls and responses]
-[file notices] [reminder]
+request thread                 worker thread (one per model)        writer thread
+_stream_chat_turn              _run_model                           _drain_to_completion
+  build_chat_turn   (DB)         construct_tools                      merged_queue.get(50 ms)
+  -> ChatTurnSetup               run_llm_loop                         -> _publish: stream buffer + tee
+  _run_models ---- starts ---->    or run_deep_research_llm_loop      on idle: flush buffer, check stop
+  _read_stream <-- tee --------    Emitter.emit -> merged_queue       finally: mark_done,
+  (yields to HTTP, heartbeats)   finally: _persist_model_outcome        _run_post_steps (fence reset)
 ```
 
-The reasoning behind each position is in `backend/onyx/chat/README.md` and in
-[[context-assembly]]. Two rules worth internalising:
+**Three layers.** `chat/process_message.py` validates, loads history, reserves
+rows, starts threads and saves. It never calls an LLM.
+`chat/llm_loop.py:run_llm_loop` runs the cycles: build context, call
+`run_llm_step`, run tools, repeat until the model answers or `MAX_LLM_CYCLES` is
+reached. `chat/llm_step.py:run_llm_step` runs one inference and splits the
+provider stream into reasoning, answer and tool-call packets.
+`backend/onyx/chat/README.md` gives the design reasons.
 
-- The per-user block (name, email, directory profile, language, preferences,
-  memories) is its own SYSTEM message after the system prompt, so the system
-  prompt itself is identical for users sharing a base prompt, tool set and
-  date, and its cache entry is shared among them.
-- The custom agent prompt is a **user message**, not part of the system prompt, and
-  it **moves** to sit just above the newest user message each turn. If
-  `persona.replace_base_system_prompt` is set, agent instructions form the system
-  prompt; project instructions remain a separate moving user message.
-- The reminder is always **last**. Models attend hardest to the final tokens. The
-  citation reminder lives here, and it stays until the turn ends.
+**Setup.** `chat/process_message.py:build_chat_turn` is a generator. It yields
+the IDs the client needs first (`CreateChatSessionID`, `MessageResponseIDInfo`),
+then returns a frozen `ChatTurnSetup`. It runs the Query Processing hook before
+it saves the user message, only for a new, non-blank message, and only when the
+incognito mode allows hooks (`IncognitoRecordMode.fires_hooks`), because the hook
+sends the query out ([[hooks]]). A rejection raises `QUERY_REJECTED`. Then it
+saves the user message, loads the branch summary, resolves the custom agent
+prompt and memories, reserves tokens, extracts project files, and reserves one
+assistant row per model. The stream ID is the reserved assistant message ID, or
+the user message ID for a multi-model turn. Then it sets the processing fence and
+commits.
 
-Token-budget truncation drops the oldest history first and emits a "forgotten files"
-notice so the model knows content was removed rather than silently losing it.
+**Threads.** `_run_models` starts one worker per model and one writer. The writer
+is the run's owner. It consumes the queue to the end, whether or not a client
+reads. The reader generator only tails a tee queue. When the HTTP client
+disconnects, the reader stops and the writer continues.
 
-Before each inference, `chat/prompt_formatting.py:prepare_model_messages` resolves
-image support and the provider image cap. It uses `LLMConfig.supports_images`
-when set, otherwise the catalog lookup. Text-only history skips this check.
-Prepared messages retain token estimates for `llm/model_request.py:cache_split_stats`,
-without repeating image decisions. Non-vision models receive text markers.
-Dropped images contribute no prefix tokens. History message counts describe the
-prepared request, including image-drop notices.
+**Other turn shapes.** Deep research with one model replaces `run_llm_loop` with
+`deep_research/dr_loop.py:run_deep_research_llm_loop` in the same worker. The
+research agent (`tools/fake_tools/research_agent.py`, which deep research calls)
+and the coding agent tool (`tools/fake_tools/coding_agent.py`) run their own
+sub-loops inside a tool call. All of them reuse `construct_message_history` and
+the step functions in `chat/llm_step.py`.
 
-### 4.5 Persistence
+**Code interpreter state.** `run_llm_loop` reads the `run_python` result to add
+the file reminder, and stages search-hit source files for later Python calls
+([[code-execution]]).
 
-`backend/onyx/chat/persistence.py:ChatResponsePersistence` receives terminal SDK
-runs and projects their recorded state into chat responses. It reports save
-success or failure to the turn coordinator.
-
-`backend/onyx/chat/history_store.py` selects Postgres or temporary Redis storage
-according to the session's content policy. Postgres writes use a fresh session;
-content-free incognito saves retain replay data in Redis instead.
-
-Compaction checkpoints are part of SDK execution state. Saving the response
-preserves the checkpoint needed to continue the selected message branch.
-Feature state also retains search planning decisions across suspension and compaction.
-Chat and research fold those decisions after each step, independently of tool completion order.
-
-### 4.6 Stop, resume, heartbeat
-
-- Stop sets a fence for the active stream ID. Later turns use a different fence.
-- The chat control thread checks Stop and run ownership every 250 ms between calls.
-  Slow cache calls can delay the next check.
-- Cancellation signals reach root runs, children, and tool work. Accepted partial
-  output is saved; late events cannot append new response output.
-- A remote child cancellation failure does not skip sibling cancellation or local
-  cleanup tracking. Unavailable child snapshots cannot block parent finalization.
-- `AgentCoordinator` keeps execution, completion, cleanup, and remote observation
-  in one record per tracked run. Handoff retains completion and cleanup tracking.
-  Each coordinator view authorizes access independently of this shared registry.
-- The browser shows cancellation in progress while active work drains. Session
-  admission remains held until workers, persistence, and delivery finish.
-- Processing status refreshes every 60 seconds. Resume uses the replay buffer and
-  processing status to distinguish active streams from completed work.
-- Heartbeats go out every `CHAT_HEARTBEAT_INTERVAL_S` on live and resumed streams.
+**Persistence.** Every exit path calls `_persist_model_outcome`: worker end,
+stop, normal drain end and post-steps. A lock and a per-model `persisted` flag
+make it run once. It calls `llm_loop_completion_handle` (success or stop) or
+`_save_errored_message`. The completion handle snapshots the state container,
+opens a short DB session, re-reads the reserved row, and calls `save_chat_turn`.
+Then, for the first model to claim it, it checks whether to compress history
+([[context-assembly]]).
 
 ---
 
-## 5. Contracts and invariants
+## Contracts and traps
 
-Break one of these and the symptom appears somewhere far away. Check each one
-whenever you touch this component.
-
-1. **Persistence belongs to the chat application.**
-   `backend/onyx/chat/persistence.py:ChatResponsePersistence` owns response saves.
-   The generic SDK and provider adapter do not write chat database rows.
-   MemoryTool owns memory side effects, subject to the incognito guard.
-
-2. **`ChatTurnSetup` is frozen and detached.** Preparation captures configuration
-   and history before closing its DB session. Workers must not lazy-load that ORM state.
-3. **Worker threads get a copied `contextvars.Context`.** Tenant ID and tracing live
-   there. A new thread without the copy silently writes to the wrong tenant.
-   SDK agents require a generation context with an explicit `LLMFlow` operation tag.
-4. **Browser rendering must not drive execution.** SDK state owns model and tool
-   progress. The presenter and renderer consume that state to produce packets.
-   Text, thinking-text, and argument deltas without mutable attachments are shared
-   with observers. Other events are copied before publication returns and remain
-   isolated between observers. The event queue is unbounded. Pending-event tracking
-   includes queued events, active delivery, and listener output awaiting its flush.
-   Failed flushes mark affected deliveries as failed before releasing their tracked work.
-   The live reader queue is unbounded: unread packets drain before completion.
-   Disconnecting clears its backlog without stopping execution or replay storage.
-5. **Root finalization uses `ChatResponsePersistence`.** It reports one final
-   outcome. Progressive execution saves and checkpoints belong to `ChatRunStore`.
-6. **The assistant message row exists before the first token.** IDs are reserved up
-   front. Do not move reservation later.
-7. **Every packet carries a `Placement`.** `model_index` is stamped by the `Emitter`,
-   never by the producer. See [[streaming-protocol]].
-8. **Cancelled execution cannot publish late response output.** The runtime
-   fences accepted state, and `ChatTurnExecution._publish` checks cancellation.
-9. **The reminder message stays last.** Anything appended after it silently degrades
-   citation reliability.
-10. **Multi-model requires streaming** and is capped at 2-3 models. Deep research
-    cannot run multi-model.
-11. **Incognito persistence depends on the pinned record mode.**
-    `backend/onyx/db/enums.py:record_mode_persists_content` decides. A `FULL_HISTORY`
-    session writes conversation content to `chat_message` like an ordinary chat.
-    A `USAGE_ONLY` session passes `persist_content=False`, which blanks the row.
-    Its input and responses go to Redis through `save_incognito_user_message` and
-    `save_incognito_response`. Both require current turn ownership. Any new field
-    written during a turn needs a decision for each mode.
-
-Launch sets the recording context before copying it into workers, then restores
-the caller's context before returning. Initial session and response IDs enter
-`ChatDelivery` before any response worker starts, preserving live and replay order.
-
----
-
-## 6. Relationships
-
-**Depends on**
-- [[context-assembly]]: builds the prompt, the file messages, and the reminder.
-- [[tools-framework]]: `construct_tools` supplies the tool set; the loop executes them.
-- [[llm-providers]]: `get_llm_for_persona` resolves provider, model, and overrides.
-- [[streaming-protocol]]: the packet vocabulary this loop emits.
-- [[chat-persistence]]: the tables `save_chat_turn` writes.
-- [[citations]]: the citation processor runs inside the loop.
-- [[agents-personas]]: persona fields change prompt, tools, and document scope.
-- [[rate-and-usage-limits]]: gates the endpoint.
-- [[access-control]]: the acting user's ACLs flow into every search tool call.
-
-**Depended on by**
-- [[chat-frontend]]: consumes the packet stream.
-- [[slack-bot]], [[discord-bot]], [[onyx-api]], [[mcp-server]], [[mobile-app]]: all of
-  these drive a turn through this loop. A change here reaches all of them.
-
----
-
-## 7. Blast radius
-
-| If your change… | Also check |
-|---|---|
-| adds or renames a streaming packet | [[streaming-protocol]] and the frontend parser and renderer in [[chat-frontend]]; then [[mobile-app]], which parses the same stream |
-| changes the order or content of assembled context | [[context-assembly]]; re-read the rationale in `chat/README.md` before moving anything; citation quality is the usual casualty |
-| changes SDK output or its chat projection | `ChatResponsePersistence`, `save_chat_turn`, non-streaming responses, and incognito storage |
-| adds a new way for a turn to end | verify `ChatResponsePersistence` reports a final outcome for stop, startup failure, and runtime failure |
-| touches thread creation or the queue | context propagation, cancellation fences, delivery drain, and the control poll |
-| changes `save_chat_turn` or the tables | [[chat-persistence]]; the session-replay path `GET /chat/get-chat-session/{id}` must render the same packets the live stream produced |
-| changes the tool set or tool results | [[tools-framework]] and every tool implementation; SDK history retains results; legacy history can use placeholders |
-| changes prompts | run an eval; see [[observability]] for tracing, and `backend/onyx/evals/` |
-| changes anything in this component at all | the Slack and Discord bots, the public API, and MCP all share this loop |
+1. `only-process-message-saves` **Only `chat/process_message.py` saves the
+   turn.** `chat/llm_loop.py` and `chat/llm_step.py` accumulate state and do not write
+   messages, tool calls or search docs. The one exception: `run_llm_loop` writes
+   memories through `db/memory.py:add_memory` and `update_memory_at_index` when
+   the memory tool runs. In any incognito mode it refuses the write and tells the
+   model so.
+2. `turn-setup-detached-rows` **`ChatTurnSetup` carries detached ORM rows.**
+   `persona` and `reserved_messages` are detached after setup. Workers may read
+   eager-loaded columns only. A lazy relationship raises `DetachedInstanceError`
+   under load. Closures stored on the setup bind IDs, never rows. See the class
+   docstring in `chat/chat_state.py:ChatTurnSetup`.
+3. `threads-copy-context` **Each worker and the writer run in a copied
+   `contextvars.Context`.** The copy carries the tenant ID, tracing and the
+   incognito mode. A thread without it writes to the wrong tenant or loses its
+   trace ([[multi-tenancy#threads-copy-context]]).
+4. `no-db-session-across-stream` **Workers hold no DB session across the LLM
+   stream.** Each step opens short sessions. Cloud infrastructure drops idle
+   connections during long runs.
+5. `state-container-accumulates` **The state container and the emitter
+   accumulate. They never drive logic.** Do not branch on their contents in
+   `llm_loop` or `llm_step` (`chat/README.md`). The research agent is an
+   exception: it reads the search docs of earlier tool calls through
+   `get_tool_calls` to build its URL snippet map
+   (`tools/fake_tools/research_agent.py`). Read the container through its locked
+   getters, because the stop path reads it while a worker still writes.
+6. `persist-once-per-model` **One save attempt per model.** A new way to end a
+   turn must call `chat/process_message.py:_persist_model_outcome`. The
+   `persisted` flag is set before the save runs. If the save raises, later paths do nothing and the reserved row
+   keeps its placeholder.
+7. `reserve-before-first-token` **The assistant row exists before the first
+   token.** IDs are reserved and yielded in setup. The stop endpoint, the resume
+   buffer and the client all key on them. Do not move reservation later.
+8. `disconnect-is-not-stop` **Disconnect is not stop.** Only the stop fence
+   (`chat/stop_signal_checker.py:request_stop`) makes the writer save partial
+   output, publish `OverallStop(stop_reason="user_cancelled")` and set
+   `drain_done`. `drain_done` turns `chat/emitter.py:Emitter.emit` into a
+   no-op. It does not interrupt a worker, which runs until its LLM or tool call returns. Do not
+   add a path that puts packets on `merged_queue` without `Emitter.emit`: after
+   a stop or a writer crash nothing consumes the queue, so it grows. The stop
+   fence is per stream ID, so a late stop cannot cancel the next message. The
+   saved partial text ends with the stop sentence from
+   `chat/process_message.py:llm_loop_completion_handle`, which replay matches
+   by text ([[chat-persistence]]).
+9. `processing-fence` **The processing fence is a status marker that the writer
+   owns, not a lock.** Once the run starts, the writer re-arms the fence every
+   60 s, because a run can outlive the 30-minute TTL and a lapsed fence reads as
+   a dead writer to resume readers. It clears the fence in
+   `chat/process_message.py:_run_post_steps`. Before the run starts,
+   `chat/process_message.py:_stream_chat_turn` clears it on failure. The backend
+   does not refuse a second send on the same session while one runs, so code
+   that assumes one live turn per session is wrong (`chat/incognito_context.py` uses a
+   compare-and-set for this reason).
+10. `stream-closes-after-compression` **The HTTP stream closes after
+    compression.** The worker saves and may compress history before it posts
+    `_MODEL_DONE`, so the summary LLM call keeps the stream open after the
+    answer's `OverallStop`. Only one model claims compression, measured against
+    the smallest context window of the turn's models.
+11. `shared-loop-pieces` **Shared loop pieces have several callers.** A change to
+    the step functions in `chat/llm_step.py` or to `Placement` handling also
+    reaches deep research, the research agent and the coding agent.
+    `chat/llm_loop.py:construct_message_history` has the same callers
+    ([[context-assembly#history-builder-callers]]).
+12. `three-message-types` **Three message types exist.** `ChatMessage` is the DB
+    row: convert it early. `chat/models.py:ChatMessageSimple` is the in-loop
+    model and the one to extend. `llm/model_request.py:ChatCompletionMessage` is
+    the minimal LLM-facing form.
+13. `anonymous-send` **Anonymous users can send.**
+    `server/query_and_chat/chat_backend.py:handle_send_chat_message` uses
+    `require_permission(Permission.WRITE_CHAT, allow_anonymous=True)`. Code that
+    assumes a real user breaks public agents.
+14. `stopping-tools` **Some tools end the tool phase.** After a tool in
+    `tools/built_in_tools.py:STOPPING_TOOLS_NAMES` (image generation) runs, the
+    next cycle has no tools, the same as the last cycle.
 
 ---
 
-## 8. How to verify a change
+## Decisions
 
-### Coverage by tier
-
-Choose the lowest tier that can observe the failure. Keep a higher-tier test when
-it checks a separate contract between components.
-
-| Contract | Tier and examples | What the test must observe |
-| --- | --- | --- |
-| Agent state, cancellation, deadlines, compaction budgets | Unit: `backend/tests/unit/onyx/agents`, `backend/tests/unit/onyx/chat`, `backend/tests/unit/onyx/llm` | Actual runtime behavior with controlled providers and failures. |
-| Provider request and response compatibility | External dependency: `backend/tests/external_dependency_unit/llm/mock_llm_server` | The real LiteLLM adapter and an HTTP provider, including partial output. |
-| Saved response, tools, branches, incognito, restoration | External dependency: `backend/tests/external_dependency_unit/db/test_response_storage.py`, `backend/tests/external_dependency_unit/chat` | Real database writes and fresh reads; expire ORM state before checking reload behavior. |
-| Compaction through chat preparation and storage | External dependency: `backend/tests/external_dependency_unit/answer/test_chat_compaction.py` | Summary reuse, unchanged original history, and the selected branch in subsequent model requests. |
-| Resume API | Integration: `backend/tests/integration/tests/streaming_endpoints/test_resume_stream.py` | Real sockets; buffered output must arrive before the provider finishes, and match saved output. |
-| Reload, network recovery, stop, and rendered history | Playwright: `web/tests/e2e/chat/stream_recovery.spec.ts` | The real chat API and browser, with only the external model scripted. |
-
-`backend/onyx/chat/execution.py` wakes on worker, persistence, idle, and delivery
-completion. Its timed wait still polls stop requests and ownership. Completion
-tests must hold a save open, verify admission remains held, then finish without
-waiting for that poll interval.
-
-`backend/onyx/chat/process_message.py` skips redundant history-store calls for content
-already loaded and saved in PostgreSQL. Ownership checks remain before writes
-and around slow file loading. An expired lease must prevent the next message write.
-
-Do not use FastAPI TestClient's buffered response to prove a mid-stream disconnect.
-Do not use browser packet fixtures to prove backend streaming or persistence.
-Packet fixtures remain useful for isolated rendering cases.
-
-Before deleting an older test, compare its inputs, failure cases, and assertions.
-A matching name or overlapping code coverage does not establish duplication.
-Assert expected content or state, not only equality between two implementation paths.
-
-Scripted model tests establish orchestration behavior, not answer quality. Real
-provider tests, including `backend/tests/external_dependency_unit/llm/test_agent_compaction.py`,
-check separate contracts and need their declared credentials. Screenshot reports
-also need review; default screenshot capture does not fail on visual differences.
-
-### Tests
-
-```bash
-# Integration tests are the preferred level for this component.
-cd backend && uv run pytest tests/integration -k chat
-# Unit tests for the loop internals
-cd backend && uv run pytest tests/unit -k "chat or llm_loop or prompt"
-# Frontend end-to-end
-cd web && bun run playwright chat_message_rendering
-```
-
-See `backend/AGENTS.md` for the authoritative commands and required env.
-
-`INTEGRATION_TESTS_MODE=true` makes the loop emit `ToolCallDebug` packets, so a test
-can assert which tools ran. The `mock_llm_response` hook no longer exists.
-
-### Manual reproduction
-
-1. Confirm services are up: `tail -f backend/log/api_server_debug.log`.
-2. Open `http://localhost:3000`, sign in as `admin_user@example.com` / `TestPassword123!`.
-3. Send a message that forces a search, for example "what does our onboarding doc say".
-4. Watch for, in order: reasoning, a search tool block with queries and documents, the
-   streamed answer, and numbered citations that resolve to real documents.
-5. Press stop mid-answer. The partial answer must persist after a page reload.
-6. Reload the page mid-answer without stopping. The answer must resume, not restart.
-7. Reopen the session from the sidebar. The replayed view must match what you saw live.
-
-Drive the browser with `claude-in-chrome` against the user's real Chrome rather than
-launching Playwright ad hoc.
-
-### What "working" looks like
-
-- No orphaned assistant message rows with empty content and no error.
-- One final outcome per model, with progressive execution saves as needed.
-- Stop shows cancellation until active work drains; admission stays held during that wait.
-- Replay of a saved session is visually identical to the live stream.
+- **A writer thread separate from the reader.** The run must not depend on the
+  HTTP connection. The writer always reaches the end, so the answer is saved and
+  the resume buffer is complete after a dropped connection.
+- **Single-model and multi-model share one path.** A single-model turn is the
+  `N=1` case of `_run_models`. Every packet from a worker carries a
+  `model_index`, `0` for one model.
 
 ---
 
-## 9. Footguns
+## Known issues
 
-- **SDK responses retain completed tool results.** Later requests can use them until
-  compaction replaces older context. Legacy responses can use placeholders.
+- **A forced tool that construction did not build fails the whole message.**
+  `chat/process_message.py:build_chat_turn` clears `forced_tool_id` only when it
+  names the search tool and search is disabled, or when
+  `is_tool_available_for_persona` excludes the tool. A tool that `is_available`
+  or `allowed_tool_ids` hides still fails the message with "Forced tool ... not
+  found in tools" (`_run_models`). See the "Force a tool call" recipe in [[tools-framework]].
+- **Stop latency depends on idle time.** The writer checks the stop fence only
+  when `merged_queue.get` times out after 50 ms with no packet. A steady packet
+  stream can delay the stop.
+- **`chat/README.md` describes a disconnect as a stop** in its "Stopping
+  Generation" section. The code does not ([[#disconnect-is-not-stop]]).
+- **The chat turn repeats a document-set access check** that the search tool
+  also makes ([[internal-search#document-set-access-checks]]).
 
-- **Search tool arguments in history are the LLM's original arguments, not the
-  expanded queries.** Query expansion happens inside `SearchTool.run`. It emits
-  the expanded set in `SearchToolQueriesDelta` and does not change
-  `tool_call.tool_args`.
-- **`turn_index` is not a backend turn.** It is a frontend rendering block. One LLM
-  inference that produces reasoning plus a tool call is one backend step but two
-  frontend turns.
-- **Message types have different owners.** `ChatMessage` is a database row.
-  SDK `Message` holds model conversation content. Provider `ChatCompletionMessage`
-  is a wire format; browser `Packet` is a display format.
+---
 
-- **Moving a sentence inside the system prompt changes behaviour a lot.** The team
-  measured instruction-follow rates swinging from roughly 30% to 90% by moving the
-  same sentence into the right section. Do not reorganise prompt text for tidiness.
-- **File extraction uses the smallest selected context window.** Each SDK run
-  then fits and compacts its prompt against its own model context budget.
-- **Compaction belongs to each SDK run.** The saved summary is tied to its response
-  branch. A later turn must use the summary from its selected ancestry.
-  Chat preparation puts the current question, attachment contents, and request context in the run's input list.
-  Summarization and fallback truncation protect that group until the model responds.
-  Oversized current input fails instead of silently losing an attachment. Earlier failed input can be compacted for a new request.
-- **Anonymous access is allowed** on several of these endpoints
-  (`allow_anonymous=True`). A change that assumes a logged-in user will break the
-  anonymous flow.
+## Dependencies
 
+- [[context-assembly]]: prompt content, message order, token budget, compression.
+- [[tools-framework]]: `construct_tools` and `run_tool_calls`.
+- [[llm-providers]]: `get_llm_for_persona` resolves provider, model and overrides.
+- [[streaming-protocol]]: the packet vocabulary and the resume buffer.
+- [[chat-persistence]]: the tables `save_chat_turn` writes and history loading.
+- [[citations]]: one `DynamicCitationProcessor` per loop.
+- [[agents-personas]]: agent fields change the prompt and the tools.
+- [[projects]]: project fields change the prompt and the file scope.
+- [[hooks]]: the Query Processing hook in setup.
+- [[rate-and-usage-limits]]: `check_token_rate_limits` and `check_api_key_usage`
+  at the endpoint, and the LLM cost check in setup.
+- [[multi-tenancy]]: tenant context in threads.
 
-### Child completion and generation retries
+---
 
-Restoring a terminal child resolves its existing completion future so waiting parents
-resume. Discovery updates only when that child is still the latest run. Conflicting
-terminal records are rejected before changing the retained execution. Cancelling a suspended child can start another worker; parent cleanup waits
-for that worker to release ownership.
+## Recipes
 
-Context-limit retries are allowed only before model content arrives. Partial thinking,
-text, or tool calls remain part of the failed generation instead of disappearing during
-a retry.
+- `new-turn-exit` **A new way for a turn to end.** Copy the stop path in `_drain_to_completion`,
+  which calls `_persist_model_outcome` with `_PersistContext.STOP_BUTTON`. List
+  the current exit paths with
+  `git grep -n "_PersistContext\." backend/onyx/chat/process_message.py`. Check
+  that the stop path and the error path still save once.
+- `turn-state-field` **A field on the turn state.** Copy a locked getter such as
+  `ChatStateContainer.get_answer_tokens` (list them with
+  `git grep -n "def get_" backend/onyx/chat/chat_state.py`). Read the field in
+  `llm_loop_completion_handle`, `_save_errored_message` and `gather_stream_full`
+  (non-streaming API). Decide what each incognito mode stores
+  ([[chat-persistence#incognito-decision-per-field]]).
+- `in-process-caller` **A new in-process caller.** Copy the Slack bot: it calls
+  `handle_stream_message_objects` and consumes it with `gather_stream`. List the
+  callers with `git grep -n "handle_stream_message_objects(" backend`. Do not
+  call `run_llm_loop` directly: setup, fences and saving live above it.
+- `investigate-stuck-turn` **Investigate a turn that does not end, or a stop
+  that does nothing.** In
+  `backend/log/api_server_debug.log`, find "chat stream reader detached; writer
+  continues" (a disconnect, not a stop), "chat stream writer crashed", and
+  "completion failed for model". The processing fence key is
+  `chatprocessing_fence_<session_id>` and the stop key is
+  `chatsessionstop_fence_<session_id>_<stream_id>`, both in the tenant's cache.
+  A stop key for an older stream ID does nothing ([[#disconnect-is-not-stop]]).
 
-### Readiness during cache outages
+---
 
-Session details remain readable when the processing cache fails. They report
-`is_processing=True` until the status endpoint confirms that the session is idle.
-A failed status lookup must not enable another send.
+## Verification
+
+- Unit: `backend/tests/unit/onyx/chat/` covers the loop, the step, cancellation,
+  multi-model streaming and `gather_stream`.
+- Integration: `backend/tests/integration/tests/streaming_endpoints/`.
+  `INTEGRATION_TESTS_MODE=true` makes the loop emit `ToolCallDebug` packets, so a
+  test can assert which tools ran.
+- By hand: send a message that forces a search. Press stop during the answer and
+  reload: the partial answer must stay. Send again, close the tab during the
+  answer, and reopen the session: the answer must resume or show as saved. Run a
+  multi-model turn and confirm that each column ends with its own answer or error.

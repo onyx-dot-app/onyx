@@ -1,181 +1,201 @@
 # Shared Agent Runtime
 
-> Executes model and tool steps with explicit cancellation, ownership, and restoration boundaries.
+> A Python engine that runs an agent through model steps and parallel tools, with
+> child agents, cancellation, compaction and suspension, which no production path
+> runs. This document is the one record of which runtime, chat and database
+> modules around it are live, shared or not wired.
 
-**Verified against:** `2cbd700b67` (2026-10-27)
-**Domain:** core-loop
+**Verified against:** `a4e97fcea1` (2026-10-29)
 **Edition:** CE
-**Owns:** `backend/onyx/agents/`
 
-## 1. What the user experiences
+---
 
-Chat, coding, and research use this runtime for model and tool execution.
-It retains partial output, coordinates child agents, and propagates Stop to active
-work. Chat owns request admission, durable storage, and browser delivery.
+## Callers
 
-## 2. Surfaces
+**Interface.** A caller creates an `Agent` with an `LLM` and a
+`GenerationContext` that names an `LLMFlow`, starts a `Run`, and reads typed
+events and a `RunResult`. Tools receive a `ToolInvocation` and can start child
+agents through an `AgentCoordinator`. The application supplies storage and
+ownership through the `RunStore`, `RunOwnership` and `AgentDirectory`
+interfaces. `backend/onyx/agents/README.md` is the full contract: cancellation,
+event delivery, pure message assemblers, child agents, compaction and handoff.
+This document does not repeat it.
 
-Python callers create `Agent` and start a `Run`. Tools use `ToolInvocation` and
-optional child controls. Applications can implement storage and access interfaces
-on `AgentCoordinator`. The package adds no HTTP endpoint or configuration setting.
+**Who calls it.**
+- **A backend developer who builds a feature on the runtime.** Start from the
+  package README and [[#run-by-hand]].
+- **No product component.** Chat, deep research and the coding agent run
+  through [[core-chat-loop]], and [[chat-persistence]] owns the live history and
+  display writes. Only the not-wired chat and database modules in the status
+  table call the runtime, and only tests call them.
+- **A reviewer** uses the status table to tell whether a change to a module can
+  reach users.
 
-## 3. Data model
+**What a caller must keep:** [[#result-before-storage]],
+[[#restored-tools-must-match]], [[#context-captured-at-start]] and, to make a
+module live, [[#no-side-effect-wiring]].
 
-`AgentState` stores conversation history and a compaction checkpoint. `RunState`
-stores accepted input, ordered steps, outcomes, and resumable progress. Each step
-contains a model message and its tool execution records.
+---
 
-`ExecutionCheckpoint` combines preceding history with run state. These are Python
-models; this package adds no database writes or schema changes.
+## Scope
 
-## 4. How it works
+This component owns the runtime package and the status of the modules that
+were built to connect it to chat. It owns no endpoint, table or worker.
 
-`Agent.start` reserves conversation ownership and starts a `Run`. The run prepares
-model requests, accepts streaming output, executes tools, and decides whether to
-continue. `ToolBatch` schedules the selected tools and identifies completed calls.
-`Run` reads their recorded results, invokes finalization hooks, and emits completion
-events. Recorded results retain model-call order while tools complete concurrently.
+Neighbours: [[core-chat-loop]] owns the live turn. [[chat-persistence]] owns the
+tables, including the columns that only not-wired writers fill. [[llm-providers]]
+owns the `LLM` interface that the runtime calls. [[context-assembly]] owns the
+compaction prompt text.
 
-`ToolExecutionMode.SEQUENTIAL` orders calls to the same registered tool name within a step.
-An earlier call holds that place until finalization, including waits for input or children.
-Unrelated tools can run concurrently. This mode does not coordinate separate runs.
+---
 
-`AgentCoordinator` controls children and application storage callbacks. Foreground
-children delay parent completion. A parent can suspend while waiting for input or
-child results, then resume with its original identity and budget.
+## Architecture
 
-See `backend/onyx/agents/README.md` for the public contracts and usage.
+```
+Agent (history, defaults, registered tools)
+  start() -> Run (one request, step budget, own cancellation signal)
+    step: prepare_step -> model generation -> ToolBatch (parallel, ordered results)
+          -> after_step decides: continue, finish, or suspend
+  AgentCoordinator: children, RunStore / RunOwnership / AgentDirectory adapters
+  handoff(save=...) -> ExecutionCheckpoint -> Agent.resume(snapshot) elsewhere
+```
 
-### Child completion and generation retries
+- `backend/onyx/agents/runtime.py` holds `Agent`, `Run` and the step loop
+  (`_advance_step`).
+- `backend/onyx/agents/tool_execution.py:ToolBatch` schedules a step's tools and
+  records results in model-call order.
+- `backend/onyx/agents/agent_coordination.py:AgentCoordinator` runs children and
+  calls the application's storage and ownership adapters.
+- `backend/onyx/agents/compaction.py` summarizes working context. Recorded
+  history stays intact.
+- `backend/onyx/agents/execution_records.py:messages_for_model` filters history
+  for the model. It drops incomplete tool exchanges and thinking that cannot be
+  replayed.
 
-`backend/onyx/agents/agent_coordination.py:AgentCoordinator.restore_completed`
-resolves the existing completion future so waiting parents resume. It updates
-latest-run discovery only for that run and rejects conflicting terminal records.
-A later dependency lookup can retry a failed remote observation or load its saved
-terminal result. Local execution and persistence failures remain authoritative.
-Views without a directory preserve observation failures; they cannot start a replacement observer.
+The package has no database adapter, no cross-process ownership service and no
+HTTP surface.
 
-Cancelling a suspended child can start another worker.
-`backend/onyx/agents/agent_coordination.py:RunCoordination.finish` tracks its new
-cleanup work so the parent waits for ownership release.
+**Module status.** This table is the one record. Other documents link here
+instead of repeating a status.
 
-`backend/onyx/agents/runtime.py:_advance_step` retries context-limit failures only
-before model content arrives. Partial thinking, text, and calls remain in the
-failed generation.
+| Module | Status | Evidence |
+|---|---|---|
+| `agents/runtime.py`, `agents/agent_coordination.py`, `agents/tool_execution.py`, `agents/concurrency.py`, `agents/tools.py` | not wired | No import outside the package. |
+| `backend/onyx/agents/events.py` | not wired | Imported outside the package only by `chat/presentation.py`. |
+| `backend/onyx/agents/compaction.py`, `backend/onyx/agents/execution_records.py` | not wired | Outside the package, `chat/prompt_formatting.py` and `db/chat_response.py` import `agents/compaction.py`; `db/chat_response.py` and `db/chat_subagents.py` import `agents/execution_records.py`. |
+| `backend/onyx/agents/models.py` | shared | `db/models.py:ChatMessage.response_status` maps to `RunStatus`. `db/chat.py` and `chat/models.py` import its types. |
+| `chat/response_models.py` | shared | `CitationMode` drives the live citation processor and the research agent. `db/chat.py` uses `HistoryLink` and `SessionAncestor`. |
+| `chat/presentation.py`, `chat/renderer.py`, `chat/response.py` | not wired | Only each other and tests import them. |
+| `chat/prompt_formatting.py` | not wired | No importer outside tests. The live loop formats history in `chat/llm_step.py:translate_history_to_llm_format`. |
+| `db/chat_response.py`, `db/chat_subagents.py` | not wired | Only each other and tests import them. |
+| `ChatResponseItem`, `ChatResponseCheckpoint`, `ChatMessage.response_failure`, `ChatMessage.invoking_tool_call_id` | not wired | Mapped in the ORM (`db/models.py:ChatResponseItem`, `db/models.py:ChatResponseCheckpoint`, `db/models.py:ChatMessage.response_failure`, `db/models.py:ChatMessage.invoking_tool_call_id`), not database-only. Only `db/chat_response.py` and `db/chat_subagents.py` write them. |
+| `db/chat_display.py` | live | `chat/save_chat.py:save_chat_turn` calls `save_chat_display__no_commit`. |
+| `ChatSession.spawned_by_message_id` | shared | Live queries in `db/chat.py`, `db/chat_search.py`, `db/incognito.py` and `backend/ee/onyx/db/query_history.py` exclude or refuse child sessions. Deletion and retention walk them through `db/chat.py:session_descendants`. Only `db/chat_response.py` creates them. |
 
-### Ownership and restoration
+To check a row again, run
+`git grep -n "onyx.<module path>" -- backend ':!backend/tests'` and confirm that
+every importer is itself not wired.
 
-Each run owns its cancellation signal. Caller cancellation reaches the run;
-run cancellation does not cancel the caller's signal.
+---
 
-`Agent.tools` registers executable tools. `PreparedStep.tools` selects those same
-instances. Invalid selections fail before generation. Restored selections must
-match the saved declarations.
+## Contracts and traps
 
-Waiting for a cancelled child raises `ChildRunCancelled`. A tool can handle this
-exception; otherwise, it becomes a tool error. Parent cancellation still interrupts
-the wait with `AgentCancelled`.
+1. `result-before-storage` **`run.result()` can return before storage and
+   cleanup finish.** Wait on
+   `backend/onyx/agents/agent_coordination.py:AgentCoordinator.completion` for
+   saved completion; a storage or cleanup failure shows there, not in
+   `run.result()`. Wait on `backend/onyx/agents/runtime.py:Run.wait_for_idle`
+   before reuse or handoff. The table in the package README lists what each wait means.
+2. `two-save-chat-turn` **Two functions named `save_chat_turn` exist.** The live
+   one is `chat/save_chat.py:save_chat_turn`. `db/chat_response.py:save_chat_turn`
+   is not wired. Check the import before you edit one.
+3. `no-side-effect-wiring` **Do not add a production import of a not-wired
+   module as a side effect.** That makes it live without review of its
+   persistence and display paths. Update the status table in the same change.
+4. `shared-modules-reach-live-chat` **A shared module serves both sides.** A
+   change to `backend/onyx/agents/models.py` or `chat/response_models.py`
+   reaches the live citation processor, the ORM mapping and `db/chat.py`. Run the
+   chat tests, not only the runtime tests.
+5. `restored-tools-must-match` **A restored run needs the same tools.** A
+   checkpoint holds data only. It does not serialize clients, callbacks or other
+   resources, so the new owner rebuilds them, possibly in another process or
+   after a deploy. Each tool's definition must equal the saved step's
+   declaration, or `backend/onyx/agents/runtime.py:_execute_tools` raises
+   `ValueError`. Keep a tool's definition stable while saved checkpoints can
+   still resume.
+6. `context-captured-at-start` **A run copies the caller's context when it
+   starts.** `backend/onyx/agents/runtime.py:Run._start` calls `copy_context()`,
+   and the run's worker threads use that copy. So set the tenant and open the
+   root trace before `Agent.start` or `Agent.resume`. A trace that opens later,
+   or a tenant that a tool sets, does not reach the run. A Celery task or a
+   process that resumes a checkpoint ([[#restored-tools-must-match]]) must do
+   both first ([[multi-tenancy#threads-copy-context]],
+   [[observability#root-trace-required]]).
 
-Handoff saves suspended state and releases the ownership adapter's reservation
-once. Local execution stays reserved until release finishes. Release failure
-reports the cleanup error to local waiters and pending parent dependencies.
-Saved state remains available for another resume. Completion publication uses
-the existing observer reservation, so a late remote read cannot replace the error.
+---
 
-Tool progress omits failed results' model-facing text. Structured result details
-carry explicit public errors. Recorded results retain the model-facing text.
+## Decisions
 
-Saved model failures retain redacted diagnostics, including tool choice and finish reason
-when available. Chat adds the selected model and provider to the client error.
+- **The runtime holds no chat code.** Applications supply the model,
+  instructions, tools and storage adapters (package README). The chat display,
+  citation and persistence adapters live in the chat and database modules.
+- **Storage and ownership are interfaces** (`RunStore`, `RunOwnership`,
+  `AgentDirectory`), so each application chooses its durability and
+  authorization.
 
-Compaction validates its source message ID before it calls the summary model.
+---
 
-### Model-history replay
+## Known issues
 
-`backend/onyx/agents/execution_records.py` supplies stable input-message IDs and model-history replay.
-Its `messages_for_model` function creates model context from recorded messages.
-It retains partial text and signed thinking, but omits tool calls without adjacent results.
-Thinking without provider blocks and unsigned provider thinking blocks cannot be replayed.
-Signed and redacted blocks remain intact.
-It also removes orphaned or duplicate tool results and copies messages by default.
-Calls with duplicate IDs in one assistant message are ambiguous; replay omits them and their results.
-This helper prepares history without deleting the recorded output.
-Chat uses this replay path when restoring saved conversations and preparing model requests.
+- No integration test runs a real chat turn through the not-wired modules, and
+  nothing compares their packets with the live stream.
+- The package README source map lists the runtime files only. The status table
+  is the record for the chat and database modules.
 
-## 5. Contracts and invariants
+---
 
-- Cancellation rejects late updates but retains ownership until workers drain.
-- Child cancellation failures do not skip siblings, retained local work, or parent completion.
-- Model events recheck cancellation under the execution lock before changing recorded state.
-- Result readiness, saved completion, suspension, and idle state have distinct meanings.
-- Recorded partial output survives even when replay excludes incomplete exchanges or thinking without replayable provider blocks.
-- Model history retains original tool-call order. Completion callbacks and events follow result readiness.
-  A slow call does not delay another call's completion. Callbacks remain serial on the execution thread.
-  Saved progress identifies finalized callbacks by call ID and rejects old counter-based snapshots.
-- Run owns recorded mutations; tool scheduling receives explicit borrowed step data.
-- Collaborators lock borrowed step data with execution_lock and use recording methods for changes.
-- Step callback inputs and public snapshots do not share mutable recorded state.
-- Message assembly borrows history and must not mutate its messages or nested data.
-- Compaction changes working context, not recorded conversation history.
-- Summary batches share one operation deadline.
-- Every Agent requires an explicit tracing flow.
-- Feature state is stored as JSON; restoration validates it into a feature model.
-- Tool-facing child waits observe saved completion; parent records are detached.
-- Restored parents can wait for authorized remote children without treating them as completed.
-- A retried remote-completion observation gets a new wake-up subscription; subscriptions follow futures, not only run IDs.
-  Healthy subscriptions are reused without loading saved run content again.
-- Completing an older remote run does not replace a newer latest run for that agent.
-- Handoff requires suspended, idle execution and terminal foreground children.
-- A failed handoff save leaves the existing local owner intact.
-- Each tracked run retains completion and cleanup work when handoff releases its local execution.
-- Application directories authorize saved-run access, including cached results across views.
-- Listener and output-flush failures mark affected deliveries failed without failing execution or storage.
-- Closing delivery rejects new events; accepted events remain pending through buffered-output flushes.
-  A worker startup failure still closes admission; the caller handles final output cleanup.
-- Immutable deltas can be shared; mutable event payloads remain isolated between listeners.
-- Token-count caches belong to one run and retain only the current request text.
+## Dependencies
 
-## 6. Dependencies
+- [[llm-providers]]: messages, generation events and the shared `LLM` client.
+- [[observability]]: every `Agent` needs an explicit `LLMFlow` tag, and the
+  run needs a root trace from its caller.
+- [[multi-tenancy]]: the run copies the caller's tenant context.
+- [[context-assembly]]: the compaction instruction in
+  `prompts/compression_prompts.py`.
 
-- [[llm-providers]] supplies messages, generation events, cancellation, and the shared LLM client.
-- `backend/onyx/utils/threadpool_concurrency.py` starts workers with saved context.
-- `backend/onyx/prompts/compression_prompts.py` supplies the compaction instruction.
+---
 
-[[core-chat-loop]] creates feature agents. [[tools-framework]] binds application
-tools to runtime invocations. [[chat-persistence]] implements durable state and
-authorized child-history access through the coordinator interfaces.
+## Recipes
 
-## 7. Blast radius
+- `run-by-hand` **Run the runtime by hand.** Copy the "Start a run" example in
+  `backend/onyx/agents/README.md`. For a run against a fake model and fake tools,
+  copy `backend/tests/unit/onyx/agents/fakes.py`. For real LiteLLM requests to a
+  mock HTTP provider, copy
+  `backend/tests/external_dependency_unit/llm/test_agent_runtime_http.py`.
+- `new-feature` **Build a new feature on the runtime.** Start from
+  [[#run-by-hand]], then settle these:
+  - Runtime tools are `agents/tools.py:AgentTool`, not the chat `Tool` of
+    [[tools-framework]], and no adapter exists. The built-in search, web and
+    image tools do not plug in as they are.
+  - Only tests implement `agents/agent_coordination.py:RunStore`, `RunOwnership`
+    and `AgentDirectory` (`backend/tests/unit/onyx/agents/fakes.py`). Children,
+    handoff and durable completion need adapters of your own.
+  - A run that a user starts is an LLM entry point and needs the budget checks.
+  - The first production import makes the runtime live. Update the status table
+    ([[#no-side-effect-wiring]]).
+- `wire-module` **Wire a not-wired module into a product path.** Add an integration test that
+  runs a real turn through it, compare its packets with the live stream
+  ([[streaming-protocol]]), update the status table, and update the
+  [[core-chat-loop]] and [[chat-persistence]] documents in the same change.
 
-| Change | Review |
-| --- | --- |
-| Run lifecycle | Tool workers, child completion, saving, idle notifications, and Agent reuse. |
-| Tool scheduling | Call order, pending input, merged calls, and resumed steps. |
-| Snapshot or checkpoint models | History replay, callback boundaries, and restoration. |
-| Event delivery | Pending delivery, ancestor listeners, context propagation, and worker cleanup. |
-| Application adapters | Authorization and ownership across coordinator views. |
+---
 
-## 8. How to verify
+## Verification
 
-Run the isolated runtime scenarios under `backend/tests/unit/onyx/agents/`.
-Cover parallel tools, cancellation, child lifetimes, suspension, restoration,
-compaction, and storage failure. Check typing and existing LLM tests as well.
-
-These tests use controlled model and tool implementations. Verify database
-durability and chat integration through the [[chat-persistence]] and
-[[core-chat-loop]] test suites.
-
-## 9. Footguns
-
-- `run.result()` can return before storage and cleanup finish.
-- Cancellation cannot undo tool side effects or interrupt arbitrary blocking I/O.
-- Event listeners must not wait for their own run to become idle.
-- Event queues are unbounded; slow listeners can increase retained memory.
-- Message assembly receives a tuple, but its nested objects remain mutable.
-- A checkpoint cannot serialize Python callbacks or external resources.
-- Local ownership does not exclude another process; the application must supply that guarantee.
-- A suspended run can be idle while still reserving its Agent.
-
-Compaction preserves the current run's unanswered input as one group, including attachment text and request context.
-The boundary comes from the run's history and input lists. Earlier failed input remains recorded but can be compacted for a new request.
-Oversized current input fails instead of silently removing its contents. Without an explicit run input, compaction preserves the entire trailing unanswered group.
+- Unit: `backend/tests/unit/onyx/agents/` covers lifecycle, child coordination,
+  compaction, concurrency and execution records with fake models and tools.
+- The not-wired chat modules have tests in `backend/tests/unit/onyx/chat/`. The
+  storage modules have tests and migration tests in
+  `backend/tests/external_dependency_unit/db/`. The runtime HTTP test in
+  `backend/tests/external_dependency_unit/llm/` runs the runtime through real
+  LiteLLM requests to a mock HTTP provider.

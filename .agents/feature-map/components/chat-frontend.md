@@ -1,657 +1,325 @@
 # Chat Frontend
 
-> The chat user interface. It takes the packet stream the [[core-chat-loop]]
-> emits and turns it into a scrollable conversation: routes, the streaming
-> client, packet-to-component rendering, state, message actions, uploads, and
-> the agent/model pickers.
+> The web chat at `/app`: it sends a turn, reads the packet stream, keeps each
+> session's message tree in a client store, and renders timeline steps and the
+> answer. It also drives the actions that change the saved conversation, and
+> owns the development proxy that forwards `/api` to the backend.
 
-**Verified against:** `268e4d5a3d` (2026-10-05)
-**Domain:** core-loop
+**Verified against:** `a4e97fcea1` (2026-10-29)
 **Edition:** CE
-**Owns:**
-`web/src/app/app/` (`page.tsx`, `layout.tsx`, `agents/`, `shared/[chatId]/`, `settings/`,
-`services/`, `stores/`, `message/`, `components/`), `web/src/views/AppPage.tsx`,
-`web/src/hooks/useChatController.ts`, `useChatSessionController.ts`,
-`useFeedbackController.ts`, `useChatSessions.ts`, `useMultiModelChat.ts`,
-`web/src/lib/search/streamingUtils.ts`, `web/src/sections/sidebar/`, `sections/input/`,
-`sections/model-selector/`, `sections/document-sidebar/`, `sections/modals/`
-
-**Read first:** `web/AGENTS.md`. Its component rules gate every PR in this component,
-and §5 below restates them.
 
 ---
 
-## 1. What the user experiences
+## User experience
 
-The user lands on `/app` and either sees a welcome screen, an ongoing conversation, or a
-project view, depending on what is in the URL. They type a message, watch the assistant
-think, search, and answer with live-updating text and citations, and can stop generation
-at any time. They can edit or regenerate a past message, branch between alternate
-answers, copy a response, and like or dislike it. They can send one message to two or
-three models at once and pick a favorite. They can drag a file onto the page or paste an
-image to attach it, pick a different agent or model before sending, and share a
-conversation as a public read-only link. If they reload mid-answer, the answer keeps
-streaming instead of restarting (`web/src/hooks/useChatSessionController.ts:resumeInFlightRun`).
-
----
-
-DOCX modal previews share the detached, sanitized renderer and page styles in `web/src/lib/docx/` with Craft.
-The renderer owns HTML sanitization; callers receive only sanitized document nodes.
-Superseded document loads cannot replace the current modal document.
-
-## 2. Surfaces
-
-### Routes (`web/src/app/app/`)
-
-| Route | File | Notes |
-|---|---|---|
-| `/app` | `page.tsx` → `AppPage.tsx` (`views/AppPage.tsx:AppPage`) | The single chat surface. Renders the welcome screen, a conversation, or a project view depending on client state and query params, not separate routes. `page.tsx` reads `firstMessage` from the search params and redirects via `defaultAgentRedirectTarget` (`lib/app/utils`) before rendering. |
-| `/app/agents`, `/app/agents/create`, `/app/agents/edit/[id]` | `agents/page.tsx`, `agents/create/`, `agents/edit/[id]/` | Agent management. See [[agents-personas]]. |
-| `/app/plugins` | `plugins/page.tsx` | Member directory for approved workspace plugins and personal connections. See [[mcp-and-custom-tools]]. |
-| `/app/plugins/oauth/complete` | `plugins/oauth/complete/page.tsx` | Verifies the saved member connection against the originating roster before notifying the opener or the attempt's `BroadcastChannel`. Uncorrelated visits do not fetch. Craft authorizations return to the Craft Plugins directory. |
-| `/app/shared/[chatId]` | `shared/[chatId]/page.tsx` → `SharedChatDisplay.tsx` | Public, read-only. Server-fetches with `fetchSS("/chat/get-chat-session/{id}?is_shared=True")` (`shared/[chatId]/page.tsx:getSharedChat`) and renders `SharedChatDisplay`. Still requires `requireAuth()`; "shared" means shareable, not unauthenticated. |
-| `/app/settings/*` | `settings/{accounts-access,chat-preferences,connectors,general,llm-gateway,usage}/` | Per-user settings pages, not part of the turn loop. |
-
-`layout.tsx` (`app/app/layout.tsx:Layout`) wraps every `/app/*` route with `ProjectsProvider`,
-`VoiceModeProvider`, `AppSidebar`, and `AppChrome`, and calls `requireAuth()` server-side.
-
-The member Plugins directory uses All, Connected, and Needs sign-in filters.
-Craft-enabled users also see external apps, marked Craft-only. Those apps
-cannot enter Chat tool selection. `/craft/v1/plugins` uses the shared member
-directory with only MCP and external apps.
-
-The input bar's Actions menu contains a Plugins row with a right-side flyout.
-Hover, click, touch, and ArrowRight open its search and plugin controls.
-ArrowLeft or Escape returns focus to the row before Actions closes.
-The connection dialog stays mounted after the menus close. Agent changes cancel the old connection.
-
-The forced-tool pill uses the same member catalog and availability rule as the send path.
-Default Chat hides unavailable plugins while retaining the stored selection.
-Custom agents retain their own forced-tool settings without member catalog data.
-
-### Query params (`services/searchParams.ts:SEARCH_PARAM_NAMES`)
-
-`chatId`, `searchId`, `agentId`, `projectId`, `allMyDocuments`, plus per-send overrides
-(`temperature`, `model-version`, `system-prompt`, `structured-model`), message seeding
-(`user-prompt`, `submit-on-load`, `title`, `files`, `seeded`, `send-on-load`), and
-`skip-reload` (suppresses a page reload right after the first message in a new session).
-`buildChatUrl` (`services/lib.tsx:buildChatUrl`) is the single place that assembles a
-chat URL; it drops `chatId`/`agentId`/`projectId`/`submit-on-load`/`user-prompt`/`title`
-from whatever params already exist (`PARAMS_TO_SKIP`) so they are never accidentally
-carried over from the previous URL. `agentId` and `projectId` are mutually exclusive: if
-both appear, `AppPage` strips `projectId` (`views/AppPage.tsx`, the effect that calls
-`router.replace` when both params are present).
-
-### The dev proxy (`web/src/app/api/[...path]/route.ts`)
-
-`handleRequest` forwards every method to `${INTERNAL_URL}/${path}` and pipes the response
-back, including SSE bodies (it disables buffering and forwards `Transfer-Encoding` when
-the response is chunked or `Content-Type` contains `stream`). It refuses to run unless
-`NODE_ENV === "development"` or `OVERRIDE_API_PRODUCTION === "true"`
-(`route.ts:handleRequest`). In production, `/api/...` is served by something else (for
-example nginx); this file is not on that path.
-
-### HTTP endpoints this component calls (owned by [[core-chat-loop]] and [[chat-persistence]])
-
-| Endpoint | Called from |
-|---|---|
-| `POST /api/chat/send-chat-message` | `services/lib.tsx:sendMessage` |
-| `GET /api/chat/chat-session/{id}/status` | `lib/chat/sessionReadiness.ts:waitForChatSessionIdle` |
-| `GET /api/chat/chat-session/{id}/resume-stream?stream_id=ID&cursor=N` | `services/lib.tsx:resumeStream`, from `useChatSessionController.ts` |
-| `POST /api/chat/stop-chat-session/{id}?stream_id=N` | `lib/chat/stopChatSession.ts`. `stream_id` comes from the accepted assistant message ID, or the user message ID in multi-model mode. |
-| `POST /api/chat/create-chat-session` | `services/lib.tsx:createChatSession` |
-| `PUT /api/chat/rename-chat-session` | `services/lib.tsx:renameChatSession`, `nameChatSession` |
-| `DELETE /api/chat/delete-chat-session/{id}`, `/api/chat/delete-all-chat-sessions` | `services/lib.tsx` |
-| `PUT /api/chat/set-message-as-latest` | `services/lib.tsx:patchMessageToBeLatest` |
-| `PUT /api/chat/set-preferred-response` | `services/lib.tsx:setPreferredResponse` |
-| `POST/DELETE /api/chat/create-chat-message-feedback`, `/api/chat/remove-chat-message-feedback` | `services/lib.tsx:handleChatFeedback`, `removeChatFeedback` via `hooks/useFeedbackController.ts` |
-| `PATCH /api/chat/chat-session/{id}` (`sharing_status`) | `sections/modals/ShareChatSessionModal.tsx` |
-| `POST /api/chat/end-incognito-session/{id}` | `services/lib.tsx:endIncognitoSession`, from `views/AppPage.tsx` |
-| `POST /api/chat/seed-chat-session-from-slack` | `hooks/useChatController.ts` |
-| `POST /api/user/projects/file/upload` | `lib/projects/providers.tsx:beginUpload` via `lib/projects/svc.ts`, see [[file-store-and-user-files]] |
+- **A new user meets first-run onboarding** on the chat page. A user with no
+  name gives one. An admin also connects an LLM provider, then sees optional
+  setup cards and a final step. The chat input stays locked until the optional
+  setup step. An admin who leaves part way resumes at the saved step, or at the
+  optional setup step when the required steps are done. Finishing or hiding
+  the steps, or sending a message, ends onboarding in that browser.
+- **A user sends a message** and watches it work: reasoning, search and other
+  tool steps appear as a timeline, then the answer streams with citation chips.
+  The user can stop at any time. The partial answer stays, marked as stopped.
+- **A user types while an answer streams.** The message joins a short queue
+  and sends by itself when the answer has finished drawing on screen.
+- **A user edits or regenerates** an earlier message. A switcher then moves
+  between the versions, and the rest of the chat follows the chosen one. A
+  reload shows the same version.
+- **A user sends one message to several models** and sees the answers side by
+  side. They can pick one. If they send a follow-up without a pick, the chat
+  continues from the answer they were looking at.
+- **A user attaches files** by drag and drop, paste or the input bar. If the
+  active model has no vision support, an upload that contains an image is
+  refused with a message, and none of its files attach.
+- **A user reloads during an answer.** With one model, the answer keeps
+  streaming from where the server is. With several models, each answer shows
+  its saved placeholder text until the user reloads after the run ends.
+- **A user rates, copies or shares an answer.** Copy turns markdown tables into
+  tab-separated text so a spreadsheet keeps the columns. A share link opens a
+  read-only copy. The page needs a session, so a visitor with none goes to
+  sign-in.
+- **A user in incognito** cannot turn incognito on or off once the session
+  exists, and answers show no rating buttons. Leaving the chat or closing the
+  tab ends it. If an explicit exit fails, an error shows and the user stays in
+  the chat to retry.
+- **When a send fails**, an error message replaces the answer. A usage limit
+  shows a banner with the reset time and no retry
+  ([[rate-and-usage-limits]]).
+- **A developer who runs the web server in development** reaches the backend
+  at `/api` on the web origin, streams included. A production web server
+  answers that route with a 404 and a message that nginx must serve `/api`
+  ([[#dev-api-proxy-only]]).
 
 ---
 
-## 3. Data model
+## Scope
 
-No database tables here; the state is client-side. [[chat-persistence]] owns the rows
-this component reads and writes to over HTTP.
+This component owns:
 
-### The Zustand store (`stores/useChatSessionStore.ts`)
+- the `/app` page and its routes;
+- the chat controllers: send, session load, feedback and multi-model;
+- the per-session client store and the message tree;
+- the client services that call the chat endpoints, and the stream reader;
+- packet grouping and the timeline and answer renderers;
+- the chat sections: input bar, sidebar, document sidebar and model selector;
+- the incognito controls in the app chrome;
+- first-run onboarding on the chat page, which uses the provider setup forms
+  of [[llm-providers]];
+- the development `/api` proxy route.
 
-`useChatSessionStore` holds a `Map<string, ChatSessionData>` keyed by chat session id,
-plus `currentSessionId`. `ChatSessionData` (`useChatSessionStore.ts`) carries, per
-session: `messageTree`, `chatState` (`"input" | "uploading" | "streaming" | ...`),
-`regenerationState`, `abortController`, `canContinue`, `queuedMessages`,
-`selectedNodeIdForDocDisplay`, `documentSidebarVisible`, `chatSessionSharedStatus`,
-`incognito`, `latestMessageRenderComplete`, `isStreamDraining`, and loading/error flags
-(`isFetchingChatMessages`, `uncaughtError`, `loadingError`, `isReady`). The store exports
-many selector hooks (`useCurrentChatState`, `useCurrentMessageTree`,
-`useCurrentMessageHistory`, `useIsReady`, `useDocumentSidebarVisible`,
-`useCurrentIsStreamDraining`, ...) so components subscribe to one field instead of the
-whole session. Every session starts from `createInitialSessionData`
-(`useChatSessionStore.ts`), which seeds `messageTree` as an empty `Map` and `chatState`
-as `"input"`.
+It shares the file preview renderers with [[craft-frontend]].
 
-### The message tree (`services/messageTree.ts`)
-
-`MessageTreeState = Map<number, Message>`, keyed by `nodeId` (`messageTree.ts`). Each
-`Message` (`app/app/types.ts`) carries `parentNodeId`, `childrenNodeIds`,
-`latestChildNodeId`, and its own `packets: Packet[]`. `getLatestMessageChain`
-(`messageTree.ts:getLatestMessageChain`) walks `latestChildNodeId` from the root to
-produce the linear history the UI renders; editing or regenerating a message creates a
-sibling node and repoints `latestChildNodeId`, so branch switching
-(`patchMessageToBeLatest`, `messageTree.ts:setMessageAsLatest`) is a pure client-side
-walk of the existing tree, no refetch. `upsertMessages` merges new or updated nodes into
-the tree immutably.
-
-### The packet FIFO (`services/currentMessageFIFO.ts`)
-
-`CurrentMessageFIFO` is a plain array-backed queue (`push`/`nextPacket`/`isEmpty`) plus
-`isComplete` and `error` flags. `updateCurrentMessageFIFO` drives `sendMessage` and
-pushes every yielded packet onto the queue, so the consumer (`useChatController.ts`) can
-drain it on its own animation cadence instead of reacting to every network chunk
-directly. A caught error with `error.name === "AbortError"` (for example the
-`DOMException` from an aborted `fetch`) is a clean stop. Any other thrown error is
-recorded in `stack.error`. The loop's own check on `params.signal?.aborted` throws
-`new Error("AbortError")`. That error has `name === "Error"`, so it lands in
-`stack.error` with the message `AbortError`. It is not a clean stop.
-
-### Packets (`services/streamingModels.ts`)
-
-`Packet = { placement: Placement; obj: ObjTypes }`. `PacketType` (`streamingModels.ts`)
-enumerates the packet types the client renders or reads; `ObjTypes` is the discriminated
-union of their bodies. `chat_heartbeat` packets are not in the enum. `lib.tsx:withoutHeartbeats`
-drops them on the send-message stream. `image_generation_heartbeat` is not in the enum
-either, and no filter drops it: it reaches the client and renders nothing. `resumeStream` does not filter, so its
-caller sees heartbeat packets too. The enum **must** match the Python packet types the
-backend emits for the client; see §5.
+Neighbours own the rest. [[streaming-protocol]] owns the packet vocabulary,
+the enum mirrors, line framing and heartbeats. [[citations]] owns marker
+resolution and the partial-link hiding inside the answer. [[core-chat-loop]]
+owns the send, stop and resume endpoints, and [[chat-persistence]] the server
+tree and replay. [[agents-personas]] owns `/app/agents`. [[plugins]] owns the
+plugins page and the tools popover, and [[mcp-and-custom-tools]] the MCP
+connection prompt. [[desktop-widget-extensions]] owns the Chrome extension's
+new-tab and side-panel pages and framed sign-in.
 
 ---
 
-## 4. How it works
+## Architecture
 
-### 4.1 Sending a message
+Component, styling, i18n and data fetching rules for this code are in
+`web/AGENTS.md`. This document does not repeat them.
 
 ```
-AppInputBar (sections/input/)
-  └─ useChatController.onSubmit          hooks/useChatController.ts
-      ├─ createChatSession (if new)      services/lib.tsx
-      ├─ updateCurrentMessageFIFO        services/currentMessageFIFO.ts
-      │   └─ sendMessage (async generator) services/lib.tsx
-      │       └─ handleSSEStream         lib/search/streamingUtils.ts
-      └─ drain loop → useChatSessionStore.updateSessionAndMessageTree
+AppInputBar -> useChatController.onSubmit           web/src/hooks/useChatController.ts
+  implicit multi-model pick (if needed)             PUT set-preferred-response
+  optimistic user + assistant nodes in the tree
+  updateCurrentMessageFIFO                          app/app/services/currentMessageFIFO.ts
+    sendMessage -> handleSSEStream -> withoutHeartbeats   app/app/services/lib.tsx
+  drain loop, one store update per animation frame
+    updateSessionMessageTree(frozenSessionId, ...)
+AgentMessage -> usePacketProcessor -> processPackets   timeline/hooks/packetProcessor.ts
+  groups by (turn_index, tab_index); builds citationMap, documentMap, stop state
+  tool groups -> timeline steps;  display groups -> answer
+  RendererComponent -> findRenderer                 renderMessageComponent.tsx
 ```
 
-`sendMessage` (`services/lib.tsx:sendMessage`) POSTs the turn payload to
-`/api/chat/send-chat-message` and yields packets from the response body. A 429 with
-`error_code === RATE_LIMITED_ERROR_CODE` is converted into a synthetic `StreamingError`
-packet instead of a thrown error, so the UI renders the usage-limit banner through the
-normal packet path (`services/lib.tsx:sendMessage`, the `response.status === 429` branch).
-`withoutHeartbeats` (`services/lib.tsx`) filters `chat_heartbeat` packets before they
-reach the FIFO.
+**The store.** `web/src/app/app/stores/useChatSessionStore.ts` holds a `Map`
+of session data keyed by session id, plus `currentSessionId`. Each session has
+its own message tree, chat state, `streamId`, `AbortController` and message
+queue. A stream keeps writing to the session that started it
+(`frozenSessionId`), so a user can switch chats while one streams.
 
-### 4.2 Parsing the stream (`lib/search/streamingUtils.ts:handleSSEStream`)
+**The message tree.** `app/app/services/messageTree.ts` mirrors the server tree:
+nodes keyed by `nodeId`, each with `latestChildNodeId`.
+`getLatestMessageChain` walks it to get what the page shows. On load,
+`app/app/services/lib.tsx:processRawChatHistory` builds the tree from the
+session response and its replay packets ([[chat-persistence]]).
 
-Reads the response body with a `ReadableStreamDefaultReader`, decodes it, and splits the
-buffer on `\n`. Each line is `JSON.parse`d individually. If a line fails to parse, a
-regex fallback (`/\{[^{}]*\}/g`) extracts and parses any flat `{...}` object
-substrings out of that line (`streamingUtils.ts:handleSSEStream`). The buffer keeps the
-trailing partial line, so a line split across chunks is joined before parsing. The
-fallback runs only for a complete line that is not valid JSON. It cannot recover a
-nested object from such a line, and it can drop or mis-parse the line. See §9.
+**Packet processing.** `processPackets` is incremental. It processes only
+packets past `nextPacketIndex` and keeps its state in a ref. It decides each
+group's kind from the group's first packet: a tool packet (`isToolPacket`)
+makes a timeline step, and `MESSAGE_START` or `IMAGE_GENERATION_TOOL_START`
+makes an answer group. `buildGroupsFromKeys` drops a group with no packet in
+`CONTENT_PACKET_TYPES_SET`. Citation and stop packets update state instead of
+making their own step. A group that mixes answer text and generated images
+renders through `MixedContentHandler`.
 
-### 4.3 Resuming a stream
+**Resume.** `web/src/hooks/useChatSessionController.ts` loads the session.
+When the response has `current_stream` and that id is an assistant node,
+`resumeInFlightRun` replays the stream buffer from cursor 0, flushes at most
+every 100 ms, then refetches the session to settle text and citations. It
+skips lines with no `obj` ([[streaming-protocol]]).
 
-`useChatSessionController.ts` calls `resumeStream(chatSessionId, streamId, cursor)`
-against `GET /chat/chat-session/{id}/resume-stream`. The stream returns display
-packets followed by cursor records. A cursor identifies a complete cache prefix
-for one response. The controller stores that cursor with its packets in the
-session store, so interrupted batches can be read again without duplication.
+**First-run onboarding.** `AppPage` renders
+`web/src/lib/onboarding/components/OnboardingFlow.tsx`, and
+`web/src/lib/onboarding/hooks.ts:useShowOnboarding` decides whether it shows.
+The step order is in `web/src/lib/onboarding/constants.ts:STEP_CONFIG`.
+Dismissal and an admin's saved step live in `localStorage`, keyed by user id,
+so another browser starts again. The input lock is a comparison against
+`STEP_CONFIG[OnboardingStep.OptionalSetup].index` in the input bar's
+`disabled` prop in `AppPage`; a change to the step order must keep it.
 
-On a fresh page, the controller replaces the active row's placeholder with the
-buffered output. It waits for `replay_complete` before publishing that output.
-If restoration ends early, the controller retains the last acknowledged batch
-and cursor. It discards the unacknowledged tail. The timeline reveals restored
-steps immediately; text animation starts after the restored prefix. Tool completion still comes from real section-end packets.
-Later batches update the same message. Navigation retains the stream and content
-in memory. A hard refresh reads the backlog once because that memory is gone.
+**Forced tools.** At send time `onSubmit` filters the forced tool through
+`web/src/lib/plugins/chat.ts:effectiveChatForcedToolId`. The stored per-chat
+choice does not change. [[plugins]] owns the rule.
 
-Live text uses elapsed time and buffered text length to set its reveal rate.
-A short animation buffer smooths packet bursts across display refresh rates.
-Completed streams drain the remaining text promptly; restored text skips animation.
-
-An ended HTTP reader does not imply a completed answer. The controller waits for
-server idle and reloads saved history. For content-free incognito sessions, it
-closes the retained display only after the server confirms idle. This also closes
-failed responses with partial content, while preserving their error details.
-
-When completion cannot be confirmed, the input stays blocked and offers **Check again**.
-`settleChatSession` waits for server idle state and reloads saved history before releasing input.
-Automatic settlement requires the send acknowledgement. Explicit recovery can proceed after
-that acknowledgement rejects, but still waits for a pending acknowledgement. Recovery uses
-the original controller identity so it cannot overwrite a newer request's state.
-
-### 4.4 Rendering: packets to components
-
-`RendererComponent` (`message/messageComponents/renderMessageComponent.tsx`) is the
-top-level switch. Packets are grouped by `(turn_index, tab_index)` first
-(`services/packetUtils.ts:groupPacketsByTurnIndex`), then each group is handed to
-`findRenderer` (`renderMessageComponent.tsx:findRenderer`), which inspects the packet
-types present and returns one renderer:
-
-| Packet family | Renderer |
-|---|---|
-| `message_start`/`message_delta`/`message_end` | `MessageTextRenderer` (`messageComponents/renderers/MessageTextRenderer.tsx`) |
-| `deep_research_plan_start`/`_delta` | `DeepResearchPlanRenderer` (`web/src/app/app/message/messageComponents/timeline/renderers/deepresearch/`) |
-| `research_agent_start`, `intermediate_report_*` | `ResearchAgentRenderer` (`web/src/app/app/message/messageComponents/timeline/renderers/deepresearch/`) |
-| Coding-agent and bash-tool packets (`isCodingAgentPackets`, `timeline/packetHelpers.ts`) | `CodingAgentRenderer` (`web/src/app/app/message/messageComponents/timeline/renderers/code/`) |
-| `search_tool_start` with `is_internet_search: true` | `WebSearchToolRenderer` (`web/src/app/app/message/messageComponents/timeline/renderers/search/`) |
-| `search_tool_start` with `is_internet_search` falsy | `InternalSearchToolRenderer` (`web/src/app/app/message/messageComponents/timeline/renderers/search/`) |
-| `image_generation_start` | `ImageToolRenderer` (`messageComponents/renderers/ImageToolRenderer.tsx`) |
-| `python_tool_start`, or `tool_call_argument_delta` for a code-interpreter tool type | `PythonToolRenderer` (`web/src/app/app/message/messageComponents/timeline/renderers/code/`) |
-| `file_reader_start` | `FileReaderToolRenderer` (`web/src/app/app/message/messageComponents/timeline/renderers/filereader/`) |
-| `custom_tool_start` | `CustomToolRenderer` (`messageComponents/renderers/CustomToolRenderer.tsx`) |
-| `open_url_start` | `FetchToolRenderer` (`web/src/app/app/message/messageComponents/timeline/renderers/fetch/`) |
-| `memory_tool_start`/`memory_tool_no_access` | `MemoryToolRenderer` (`web/src/app/app/message/messageComponents/timeline/renderers/memory/`) |
-| `reasoning_start`/`_delta`, or a bare `section_end`/`error` | `ReasoningRenderer` (`web/src/app/app/message/messageComponents/timeline/renderers/reasoning/`) |
-| `citation_info`, `stop` | **No renderer.** See below. |
-
-`findRenderer` checks in a fixed order (chat text, then deep research, then research
-agent, then coding agent, then the remaining tools, then reasoning last), because a group
-can contain more than one packet family (for example a deep-research group mixes plan,
-reasoning, and fetch packets) and the first true predicate wins
-(`renderMessageComponent.tsx:findRenderer`). `RendererComponent` special-cases a group
-that mixes chat text and image-generation packets via `MixedContentHandler`, which
-renders `MessageTextRenderer` and `ImageToolRenderer` together so a text-then-image
-answer is not split into two blocks.
-
-Citation packets carry no renderer of their own: `getCitations`
-(`services/packetUtils.ts:getCitations`) folds every `citation_info` packet in a message
-into a `citation_num → document_id` map, which `MemoizedAnchor` resolves at render time
-(§4.5). `stop` packets are not rendered either; they are threaded through renderer props
-as `stopPacketSeen: boolean` and `stopReason?: StopReason`
-(`renderMessageComponent.tsx:RendererComponentProps`) so a renderer can show "stopped by
-user" without a dedicated component.
-
-Packets are grouped into timeline blocks by `usePacketProcessor` /
-`packetProcessor` (`message/messageComponents/timeline/hooks/usePacketProcessor.ts`,
-`packetProcessor.ts`), upstream of `RendererComponent`.
-
-### 4.5 Citations and markdown
-
-`MemoizedAnchor` (`message/MemoizedTextComponents.tsx:MemoizedAnchor`) is the
-`react-markdown` anchor renderer. For a link whose text matches `[D<n>]` or `[Q<n>]`, it
-looks up `citations[n]` to get a `document_id`, then finds that document in the `docs`
-array passed down from `FullChatState`. If no document (or sub-question) resolves, it
-renders `<></>`, nothing, rather than the raw markdown link
-(`MemoizedTextComponents.tsx:MemoizedAnchor`, the "Citation not resolved yet" branch).
-This is deliberate: during streaming, a citation number can arrive before its
-`citation_info` packet.
-
-`processContent` (`message/messageComponents/markdownUtils.tsx:processContent`) runs
-before every markdown render and strips trailing incomplete citation markup
-(`/\[\[\d+\]\]\([^)]*$/` and a lone `[[`/`[[N`/`[[N]` at the end) so a citation link never
-flashes half-formed while its closing `)` is still in flight. It also escapes an
-unclosed trailing `$$` so `remark-math` does not choke on a LaTeX block mid-stream.
-
-### 4.6 Session lifecycle
-
-`createChatSession`, `renameChatSession`, `nameChatSession`, `deleteChatSession`,
-`deleteAllChatSessions` all live in `services/lib.tsx`. Auto-naming
-(`nameChatSession(chatSessionId)` with `name: null`, which asks the backend to name the
-session from the conversation) is triggered from two places:
-`useChatController.ts:handleNewSessionNaming` after a brand-new session's first exchange
-(with a 200 ms delay to give the backend time to persist the session row), and
-`useChatSessionController.ts` on load, if the loaded session has no `description` yet
-and is either a seeded one-message chat or has at least two messages. An empty or
-single-message unseeded session is not auto-named.
-Both call `refreshChatSessions()` afterward. See §9 for the double-fire footgun.
-
-Sharing: `ShareChatSessionModal.tsx` calls `PATCH /api/chat/chat-session/{id}` with
-`{ sharing_status: "public" | "private" }`. The shareable link is
-`${window.location.origin}/app/shared/{id}`.
-
-Incognito: `AppPage.tsx` calls `endIncognitoSession(sessionId)`
-(`services/lib.tsx:endIncognitoSession`) whenever `currentChatSessionId` changes away
-from a live incognito session, and again on `pagehide` via
-`navigator.sendBeacon(`/api/chat/end-incognito-session/${sessionId}`)` since `fetch`
-would be cancelled by the unload (`views/AppPage.tsx`, the `pagehide` effect). The
-incognito toggle locks (`setIncognitoLocked`) once a session has any message or exists at
-all, because the mode is pinned at session creation and cannot be changed mid-session.
-
-### 4.7 Message actions
-
-- **Regenerate and edit** both route through `onSubmit` in `useChatController.ts`: edit
-  passes `messageIdToResend` with the new text, regenerate passes a
-  `regenerationRequest` that reuses the existing user node and only creates a new
-  assistant node (`useChatController.ts`, the `onSubmit` branches on
-  `regenerationRequest`).
-- **Stop** uses `lib/chat/stopChatSession.ts`. It waits for send acknowledgement,
-  then targets the accepted response through `POST /api/chat/stop-chat-session/{id}?stream_id=`.
-  Session recovery restores this ID from `current_stream` for both single-model and multi-model turns, independently of output replay.
-  The reader stays open to receive final packets. Settlement waits for reader completion,
-  confirms server idleness, and reloads saved history before enabling input.
-  Stop aborts local preparation only when no send has been dispatched.
-  That Stop restores the draft and attachments in the same focused session; navigation aborts do not restore them.
-  It removes the unsent turn from local history, including incognito, edited, and regenerated turns.
-- **Feedback** goes through `useFeedbackController.ts:handleFeedbackChange`: it
-  optimistically calls `updateCurrentMessageFeedback` before the request, and rolls back
-  to the previous feedback value if the request fails or throws.
-- **Copy** is client-only: `getTextContent` (`services/packetUtils.ts:getTextContent`)
-  concatenates `message_start`/`message_delta` content, and `copyingUtils.tsx:handleCopy`
-  / `copyAll` write it to the clipboard, converting markdown tables to TSV
-  (`copyingUtils.tsx:convertMarkdownTablesToTsv`) so a paste into a spreadsheet keeps
-  columns.
-- **Branch switching** is a pure client-side tree walk:
-  `patchMessageToBeLatest` (`services/lib.tsx`) persists the choice server-side via `PUT
-  /api/chat/set-message-as-latest`, and `messageTree.ts:setMessageAsLatest` updates the
-  local tree's `latestChildNodeId` chain immediately so the UI does not wait on the
-  round-trip.
-- **`setPreferredResponse`** (`services/lib.tsx:setPreferredResponse`, `PUT
-  /api/chat/set-preferred-response`) records which multi-model answer the user picked as
-  the winner.
-
-### 4.8 Uploads
-
-`AppPage.tsx` wraps the whole `/app` content area in a `react-dropzone` `<Dropzone>` with
-`noClick noPaste` (`views/AppPage.tsx`, around the main content grid). `onDrop` calls
-`handleMessageSpecificFileUpload` (`hooks/useChatController.ts`), which checks the
-dropped files against the current model's image support
-(`modelSupportsImageInput`, `lib/languageModels/utils.ts`) before uploading, rejecting image files with
-a toast if the active model has no vision support. It then calls `beginUpload`
-(`lib/projects/providers.tsx:beginUpload`, which calls `lib/projects/svc.ts` for `POST /api/user/projects/file/upload`, see
-[[file-store-and-user-files]]) and appends the results to `currentMessageFiles` via
-`ProjectsProvider`.
-
-Chat CSV and spreadsheet file previews use `web/src/lib/csv.ts` for quoted-field validation.
-Craft uses the same parser with bounded preview limits; chat keeps its complete-file parsing contract.
-
-### 4.9 Pickers
-
-- **Tool connections**: `AppInputBar` shows `MCPConnectionPrompt` after Deep Research
-  when an enabled tool requires a user connection. The pill is blue for first-time
-  setup and orange if any pending connection requires reauthentication. Its modal connects MCP servers
-  for the active agent, including the default Onyx agent. It does not block send
-  or open automatically. Switching agents resets the modal. See
-  [[mcp-and-custom-tools]] for credential scope and connection handling.
-
-- **Agent**: `useActiveAgent` (`lib/agents/hooks.ts:useActiveAgent`) resolves the active
-  agent from the `agentId` query param against the loaded agent list, falling back to the
-  default assistant. `AgentButton` (`lib/agents/components/AgentButton.tsx`) is the picker
-  UI, used from `AppSidebar.tsx`.
-- **Model**: `ModelSelector` (`sections/model-selector/ModelSelector.tsx`) and
-  `MultiModelSelector` (`sections/model-selector/MultiModelSelector.tsx`) are backed by
-  `useLlmManager` (`lib/hooks`) for the single-model path and `useMultiModelChat`
-  (`hooks/useMultiModelChat.ts`) for 2-3 parallel models. `useMultiModelChat` derives the
-  displayed single model straight from `llmManager.currentLlm` unless the user has
-  explicitly added more than one model (`useMultiModelChat.ts`, `currentLlmModel`
-  memo), so it never drifts out of sync with the manager in single-model mode.
+**The development `/api` proxy.**
+`web/src/app/api/[...path]/route.ts` forwards every method under `/api` to
+`INTERNAL_URL` with the `/api` prefix removed. It passes the request body as a
+stream, forwards each `set-cookie` header, and returns redirects to the
+browser. For a streamed response it turns off caching and proxy buffering, so
+packets reach the client as they arrive. In development, `DEBUG_AUTH_COOKIE`
+adds an auth cookie so a local web server can call a remote backend. More
+specific routes under `web/src/app/api/` take precedence over this one.
 
 ---
 
-DOCX previews render sanitized content and document styles inside a shadow root to isolate retained viewers.
+## Contracts and traps
 
-## 5. Contracts and invariants
-
-### Component rules (`web/AGENTS.md`, verified against source)
-
-These are the rules a reviewer checks on every diff in this component; they are also
-enforced by lint (`i18n/no-raw-jsx-text`) and pre-commit (`typescript-check`) where noted.
-
-1. **Component source priority:** `web/lib/opal/src/` (`@opal/*`) first, then
-   `web/src/refresh-components/`, then `web/src/sections/`/`web/src/layouts/`. Never
-   import from `web/src/components/` (legacy, being deleted); the sole exception is
-   `createLogoIcon` in `src/components/icons/icons.tsx`.
-2. **No raw `<button>`.** Use `Button` from `@opal/components`.
-3. **No raw `<input>`, `<textarea>`, or `<select>`.** Use Opal or refresh-components
-   equivalents.
-4. **No naked text nodes.** Use `Text` from `@opal/components` with `font` and `color`
-   props. `Text` **strips `className`**; a caller that needs layout must wrap it, not
-   style it directly (see §9).
-5. **Icons only from `@opal/icons`.** Never `lucide-react` or `react-icons`. A missing
-   icon is imported from Figma into `lib/opal/src/icons/`, not substituted.
-6. **No `dark:` Tailwind modifier.** Design tokens already define both themes; the one
-   exception is `createLogoIcon`.
-7. **No built-in Tailwind colors** (`bg-gray-100`, `text-blue-600`, ...). Use token
-   classes (`text-0X`, `background-neutral-0X`, `background-tint-0X`, `border-0X`,
-   `action-selection-0X`, `action-danger-0X`, `status-{info,success,warning,error}-0X`,
-   `theme-*`).
-8. **`cn()` from `@opal/utils`** for every conditional class name, never a template
-   string.
-9. **Absolute imports only:** `@/` for `src/`, `@opal/` for Opal. No `../` paths.
-10. **Components are `function` declarations**, not arrow functions; the props interface
-    lives in the same file as the component.
-11. **No hard-coded user-facing strings under `src/`.** Use `useTranslations(...)` /
-    `getTranslations(...)`; a raw JSX text node fails the `i18n/no-raw-jsx-text` oxlint
-    rule. Add new keys to `web/src/i18n/messages/en.json` and every other locale file.
-12. **Data fetching is `useSWR`, client-side, inside the component that needs it**, with
-    a loader while pending. Do not fetch at the page top and pass data down.
-
-### Streaming invariants (this component's own)
-
-13. **Every backend display packet type needs a renderer, or a matching predicate in
-    `findRenderer`, or it silently renders as nothing.** Control and metadata packets
-    (`stop`, `citation_info`) have no renderer by design; see §4.5. `RendererComponent` falls back to
-    `{ icon: null, status: null, content: <></> }` when no renderer matches
-    (`renderMessageComponent.tsx:RendererComponent`), so an unhandled packet type does not
-    error, it disappears. A new backend packet type is invisible in the UI until
-    `findRenderer` and `streamingModels.ts:PacketType` both know about it.
-14. **The TypeScript `PacketType` enum (`services/streamingModels.ts`) must match the
-    Python packet types** the backend emits for the client, except the heartbeats:
-    the send-message stream filters out `chat_heartbeat`, and the client ignores
-    `image_generation_heartbeat` (see [[streaming-protocol]]). A mismatch is a
-    silent no-render, not a type error, because packets arrive as parsed JSON.
-15. **An unresolved citation renders nothing, never broken markup.** `MemoizedAnchor`
-    returns `<></>` rather than the raw `[D1](url)` text when the citation or document has
-    not arrived yet (`MemoizedTextComponents.tsx:MemoizedAnchor`).
-16. **`stop` and `citation_info` are never rendered as timeline blocks.** They are
-    threaded as props (`stopPacketSeen`/`stopReason`) or folded into a lookup map
-    (`getCitations`). Do not add a case in `findRenderer` for them; add to the prop
-    threading or the fold instead.
-17. **The message tree is the source of truth for branch state.** `latestChildNodeId`
-    determines what `getLatestMessageChain` renders; a UI change that shows an alternate
-    branch without going through `setMessageAsLatest`/`patchMessageToBeLatest` will
-    desync from what a reload shows.
-
----
-
-## 6. Relationships
-
-**Depends on**
-- [[core-chat-loop]]: the turn endpoint and the packet stream this component parses and
-  renders.
-- [[streaming-protocol]]: the packet vocabulary; `PacketType` here must track it.
-- [[citations]]: the citation numbering this component resolves to documents.
-- [[chat-persistence]]: every session/message CRUD endpoint this component calls.
-- [[agents-personas]]: `agentId`, `useActiveAgent`, the agent picker.
-- [[projects]]: `ProjectsProvider`, `currentProjectId`, project file context.
-- [[llm-providers]]: `useLlmManager`, `ModelSelector`, `MultiModelSelector`.
-- [[file-store-and-user-files]]: `beginUpload`, attached files, in-message images.
-- [[voice]]: `VoiceModeProvider` wraps this component's layout.
-
-**Depended on by**
-- Nothing upstream inside the web app; this is the top-level chat surface.
-
----
-
-## 7. Blast radius
-
-| If your change... | Also check |
-|---|---|
-| adds or renames a streaming packet type | `services/streamingModels.ts:PacketType`, `findRenderer` in `renderMessageComponent.tsx`, and whether it belongs in `isToolPacket`/`isDisplayPacket` (`services/packetUtils.ts`); confirm parity with [[streaming-protocol]] and [[mobile-app]], which parses the same stream |
-| changes the Zustand store shape (`ChatSessionData`) | every selector hook in `stores/useChatSessionStore.ts`, `createInitialSessionData`'s defaults, and any component reading the field directly instead of through a selector |
-| changes a route or a query param name | `services/searchParams.ts:SEARCH_PARAM_NAMES`, `buildChatUrl`'s `PARAMS_TO_SKIP`, and `useActiveAgent`/`useActiveProject`, which read params directly |
-| changes an endpoint this client calls | `services/lib.tsx` (the fetch wrapper), the e2e mocks in `web/tests/e2e/utils/chatMock.ts`, and the matching backend component in [[core-chat-loop]] or [[chat-persistence]] |
-| touches markdown or citation rendering | `MemoizedAnchor`, `processContent`, and `chat_message_rendering.spec.ts`; verify unresolved citations still render nothing during streaming, not broken link text |
-| changes the message tree shape or branch logic | `messageTree.ts` functions, `message_edit_regenerate.spec.ts`, and reload parity (a reloaded session must show the same branch as before reload) |
-| touches uploads | `handleMessageSpecificFileUpload`, the `Dropzone`'s `noClick noPaste` props, and `chat_file_uploads.spec.ts` |
-| changes sharing | `ShareChatSessionModal.tsx`, the `/app/shared/[chatId]` route and `SharedChatDisplay.tsx`, and `share_chat.spec.ts` |
-| touches any `@opal/components` usage in this component | re-read the rules in §5; a missed rule usually fails review, not CI |
+1. `packet-list-append-only` **A message's packet list is append-only.**
+   `app/app/message/messageComponents/timeline/hooks/packetProcessor.ts:processPackets`
+   resets only when the list gets shorter. Otherwise it
+   processes only the packets past `nextPacketIndex`, so a list replaced with
+   one of the same or greater length keeps the state built from the old
+   packets. `app/app/message/messageComponents/AgentMessage.tsx:AgentMessage`
+   memoizes on `packetCount`, not on the array. Update both together, as
+   `web/src/hooks/useChatSessionController.ts:resumeInFlightRun` does.
+2. `packet-type-web-sets` **A new packet type needs more than an enum entry.**
+   [[streaming-protocol]] lists the hand-mirrored places, including
+   `findRenderer`. The web client keeps more hand-written sets that switch on
+   `PacketType`, such as `app/app/services/packetUtils.ts:isToolPacket` and
+   `app/app/message/messageComponents/timeline/hooks/packetProcessor.ts:CONTENT_PACKET_TYPES_SET`.
+   To find all of them, run
+   `git grep -l 'PacketType.FILE_READER_START' web/src`. Run it again for a
+   type that behaves like the new one. Add the new type where a similar type
+   appears. If an entry is missing, the packet renders as
+   nothing, or as a generic step, and nothing logs an error
+   (`RendererComponent` returns an empty block).
+3. `background-keeps-current-session` **Only the active view may move
+   `currentSessionId`.** `updateSessionAndMessageTree` in
+   `web/src/app/app/stores/useChatSessionStore.ts` sets `currentSessionId`.
+   Code that runs in the background, such as a resume tail, must check that
+   its session is still current or use `updateSessionMessageTree`. Otherwise
+   it takes over the chat the user moved to, and their next send goes to the
+   wrong session.
+4. `stop-does-not-abort-fetch` **Stop does not abort the fetch.**
+   `stopGenerating` calls `POST /chat/stop-chat-session/{id}` with the
+   session's `streamId` and sets the chat state to `input`. The stream ends
+   when the backend sends its stop packet. `streamId` is the assistant message
+   id, or the user message id for a multi-model turn. The session's
+   `AbortController` fires only when the route changes (the cleanup effect in
+   `web/src/hooks/useChatController.ts`).
+5. `fifo-abort-records-error` **The FIFO's own abort records an error.** In
+   `app/app/services/currentMessageFIFO.ts:updateCurrentMessageFIFO`, the loop
+   throws `new Error("AbortError")` when the signal is set. Its `name` is
+   `"Error"`, so it lands in `stack.error` and the controller renders an error
+   node. Only the `DOMException` from an aborted `fetch` is a clean stop.
+6. `queue-needs-two-flags` **The queue needs two flags.**
+   `sections/input/AppInputBar.tsx:AppInputBar` sends
+   the next queued message when the chat state is `input` and
+   `latestMessageRenderComplete` is true. A path that ends a stream without
+   the text renderer finishing, such as stop or an error, must set
+   `latestMessageRenderComplete` itself. If it does not, the queue stalls with
+   no error.
+7. `branch-switch-reaches-server` **A branch switch must reach the server.**
+   `web/src/hooks/useChatSessionController.ts:onMessageSelection` updates the
+   local tree and calls `app/app/services/lib.tsx:patchMessageToBeLatest`. The
+   backend accepts a send only when its parent is on the server's active branch
+   ([[chat-persistence#send-parent-on-active-branch]]), and a reload shows the
+   server's branch. A UI path that changes `latestChildNodeId` without the PUT
+   breaks both.
+8. `implicit-pick-revertible` **An implicit model pick must be revertible.** A
+   follow-up to an unpicked multi-model turn picks the most visible answer,
+   applies it locally and PUTs it. If the PUT fails, the local pick is
+   reverted, unless a newer explicit pick replaced it. Keep that guard in
+   `web/src/hooks/useChatController.ts:onSubmit`.
+9. `usage-limit-is-packet` **A 429 usage limit is a packet, not a throw.**
+   `app/app/services/lib.tsx:sendMessage` turns it into a `StreamingError` with
+   `is_retryable: false`, so the banner renders through the normal error path. The response shape is
+   owned by [[rate-and-usage-limits]].
+10. `incognito-toggle-locks` **The incognito toggle locks once a session id
+    exists.** The mode is pinned when the session is created, so an empty
+    session that is reused keeps its mode.
+    `app/app/services/lib.tsx:createChatSession` throws when an
+    incognito create comes back without `incognito: true`, because an old API
+    server pod in a rolling deploy does not pin the mode. Leaving an incognito session calls
+    `endIncognitoSession`; closing the tab sends a `sendBeacon` on `pagehide`.
+    When both fail, the server sweep cleans up ([[chat-persistence]]).
+11. `chat-url-drops-ids` **`app/app/services/lib.tsx:buildChatUrl` drops
+    `PARAMS_TO_SKIP`.** Chat, agent and project ids are never carried over
+    from the old URL. `views/AppPage.tsx:AppPage` removes
+    `projectId` when `agentId` is also present, because an agent pick replaces
+    project context.
+12. `dev-api-proxy-only` **The `/api` route handler serves development only.**
+    `handleRequest` in `web/src/app/api/[...path]/route.ts` returns 404 unless
+    `NODE_ENV` is `development` or `OVERRIDE_API_PRODUCTION` is `true` (for
+    preview environments). In production, nginx strips `/api` and forwards to
+    the API server (`deployment/data/nginx/app.conf.template`). A fix to
+    streaming, cookies or redirects in this file does not reach production;
+    behaviour that works through it in development must also hold behind
+    nginx.
+13. `group-packets-false-lead` **False lead:
+    `app/app/services/packetUtils.ts:groupPacketsByTurnIndex` has no
+    production caller.** Grouping happens in `processPackets`
+    ([[#packet-list-append-only]]).
 
 ---
 
-## 8. How to verify a change
+## Decisions
 
-### Tests
-
-```bash
-# Playwright e2e, the preferred level for this component
-cd web && bun run playwright chat_message_rendering
-cd web && bun run playwright message_edit_regenerate
-cd web && bun run playwright message_feedback
-cd web && bun run playwright chat_file_uploads
-cd web && bun run playwright share_chat
-cd web && bun run playwright queued_messages
-cd web && bun run playwright sidebar_chat_rename
-cd web && bun run playwright chat-search-command-menu
-cd web && bun run playwright chat_session_not_found
-```
-
-Do not use `bunx` or `npx` for Playwright; they can fetch an unpinned version
-(`web/AGENTS.md`).
-
-`web/tests/e2e/utils/chatStream.ts` and `chatMock.ts` let a test drive a fully
-deterministic stream without a real LLM: `mockChatEndpoint` /
-`mockChatEndpointSequence` (`chatMock.ts`) intercept `send-chat-message` and serve a
-hand-built SSE body, and `buildMockStream`, `buildMockImageGenStream`,
-`buildMockSearchStream` (`chatMock.ts`) construct the NDJSON payloads packet by packet.
-`parseChatStreamBody` / `getPacketObjectsByType` / `getToolPacketCounts`
-(`chatStream.ts`) then let the test assert on exactly which packets were sent, which is
-the fastest way to add coverage for a new renderer or a packet-parsing edge case without
-touching the backend at all.
-
-### Manual reproduction
-
-Prefer driving the user's real Chrome via `claude-in-chrome` over launching Playwright ad
-hoc for a one-off check.
-
-1. Confirm services are up: `tail -f backend/log/api_server_debug.log`.
-2. Open `http://localhost:3000/app`, sign in as `admin_user@example.com` /
-   `TestPassword123!`.
-3. Send a message that forces a tool call, e.g. "what does our onboarding doc say".
-   Confirm reasoning, a search block, the streamed answer, and citations that resolve to
-   real documents (not blank spots).
-4. Edit an earlier message, confirm a new branch appears and the switcher lets you go
-   back to the original.
-5. Add a second model in the model selector, send a message, confirm both columns stream
-   independently, then mark one as preferred.
-6. Drag an image file onto the page (not into the input bar) and confirm it uploads.
-7. Press stop mid-answer, reload the page, confirm the partial answer persisted and the
-   session did not resume generating.
-8. Open the share modal, toggle public, and copy the `/app/shared/{id}` link. In a private
-   window, sign in as another user and open the link. Confirm it renders read-only.
-   An unauthenticated window redirects to sign-in.
-
-### What "working" looks like
-
-- No packet renders as a mysteriously empty block (check `findRenderer` returned
-  something).
-- No half-formed `[D1](` citation text flashes during streaming.
-- A page reload during or after a turn reproduces exactly what was on screen live.
-- Every new/changed visible string obeys the i18n and Opal rules in §5.
+- **Packets pass through a FIFO and flush once per animation frame.** The
+  network delivers many small chunks. A React update per chunk would stall the
+  page, so the drain loop in `onSubmit` batches them.
+- **Each session has its own store entry.** A stream keeps running while the
+  user reads another chat, and its result is there when they return.
+- **The page-level `Dropzone` sets `noClick` and `noPaste`.** The input bar
+  handles click and paste uploads. Without `noPaste`, one paste attaches the
+  file twice.
 
 ---
 
-## 9. Footguns
+## Known issues
 
-- **`web/src/app/api/[...path]/route.ts` is dev-only.** It 404s outside
-  `NODE_ENV=development` unless `OVERRIDE_API_PRODUCTION=true`. Do not assume `/api/...`
-  calls in this component are proxied the same way in production; something else (nginx)
-  handles that path there.
-- **The SSE regex fallback can silently mis-parse.** Chunk boundaries do not cause it,
-  because `handleSSEStream` joins lines before parsing. It runs when a complete line
-  fails `JSON.parse`. Its `/\{[^{}]*\}/g` recovery only handles a flat, single-level
-  JSON object, so it cannot reliably recover a nested packet from a malformed line. Both
-  the `JSON.parse` failure and the fallback failure are only `console.error`ed, never
-  surfaced to the user.
-- **`noClick noPaste` on the page-level `Dropzone` is deliberate**, not a bug. The input
-  bar already handles click-to-upload and paste itself; without `noPaste` the dropzone
-  and the input bar would both attach a pasted image, duplicating it.
-- **Auto-naming can fire twice.** `handleNewSessionNaming`
-  (`useChatController.ts`) names a new session after its first exchange;
-  `useChatSessionController.ts` also renames on load if `chatSession.description` is
-  still empty and the session is a seeded one-message chat or has two or more messages. A rapid reload right after the first message can trigger both.
-- **Opal `Text` strips `className`.** A component that needs to control `Text`'s layout
-  must use a wrapping element or `Text`'s own props, not a passed-in class.
-- **Citations resolve by `document_id` lookup at render time, not by index.** A
-  `citation_info` packet arriving after its `[D<n>]` markdown link has already streamed
-  in is normal, not a bug; `MemoizedAnchor` renders nothing until the lookup succeeds.
-- **The message tree's `latestChildNodeId` is what a reload replays**, not whatever the
-  UI happens to be showing client-side. A branch switch that updates local state without
-  calling `patchMessageToBeLatest` will look right until the next reload.
-- **Multi-model mode auto-folds the sidebar** (`views/AppPage.tsx`,
-  `foldSidebarForMultiModel`) and restores the prior fold state only when the user drops
-  back to a single model; a change to the multi-model exit path that skips this can leave
-  the sidebar stuck folded.
+- **Resume covers one model only.** For a multi-model turn, `current_stream`
+  is the user message id, so `resumeInFlightRun` skips it. Nothing refetches
+  the session, so the reserved rows' placeholder text ("Response was
+  terminated prior to completion") shows until the user reloads after the run
+  ends.
+- **A fast send after a branch switch can race.** `patchMessageToBeLatest` is
+  not awaited. A send that reaches the server first can fail with "not on the
+  latest mainline". This is inferred from the code, not seen in a test.
+- **Auto-naming can run twice.** `handleNewSessionNaming` names a new session
+  after its first answer, and the session controller names an untitled session
+  with two or more messages on load. A quick reload can trigger both.
 
-Shared spreadsheet payload validation lives in `web/src/lib/csv.ts`. Invalid CSV shows a spreadsheet error instead of an empty sheet.
+---
 
-### Session readiness and Stop
+## Dependencies
 
-The browser keeps input busy until the session status endpoint confirms completion.
-Stream closure alone does not confirm that the answer was saved.
-`lib/chat/sessionReadiness.ts` polls status; `settleChatSession.ts` then reloads saved history.
-Status checks the session owner held by `ChatTurnAdmission`.
-That owner covers preparation, execution, saving, and cleanup.
+- [[core-chat-loop]]: the send, stop and resume endpoints.
+- [[streaming-protocol]]: the packets this component parses and renders.
+- [[chat-persistence]]: session reads, replay packets, branch and pick
+  endpoints, feedback, sharing and incognito teardown.
+- [[citations]]: marker resolution inside the answer.
+- [[agents-personas]]: the active agent from `agentId`.
+- [[projects]]: `ProjectsProvider` and project context.
+- [[llm-providers]]: `useLlmManager` and model capabilities.
+- [[file-store-and-user-files]]: `beginUpload` and attached files.
+- [[voice]]: `VoiceModeProvider` wraps the layout.
+- [[plugins]]: the forced-tool rule and the member plugins sent with a turn.
+- [[rate-and-usage-limits]]: the 429 usage-limit response shape.
 
-`stopChatSession.ts` waits for the send acknowledgement before stopping its stream ID.
-A late acknowledgement or history refresh cannot change a newer request.
-Initial history loads capture controller ownership before fetching and check it again after reading the response.
-Failed status checks leave the session unconfirmed and pause queued messages.
-The input bar offers recovery without discarding submitted text or error details.
-Background completion updates its own session without changing the selected conversation.
+---
 
-Recovery loading and settlement preserve local incognito messages because saved history can
-contain only usage metadata. This also applies when a streaming reader was aborted before reopening.
-Recovery keeps local content while adding any saved rows needed to replay the accepted stream.
-Recovery matches rows by message ID and preserves local UI node IDs and tree links.
-Replay targets the message ID and writes updates under the matching UI node ID.
-If reservation IDs have not reached the local reader, incognito recovery connects the active saved turn to unidentified local nodes on the same parent branch.
-It also connects the saved system root to the local root, preserving the visible conversation tree.
-Server readiness still gates the next send.
+## Recipes
 
-`AgentMessage` reports when its final content has finished rendering. For multi-model turns,
-`MultiModelResponseView` waits for all visible successful panels before releasing queued
-messages. Failed or hidden panels have no answer animation to wait for.
+- `packet-type-renderer` **A packet type.** Copy how `FILE_READER_START` is
+  handled; list the web sets with the `git grep` in
+  [[#packet-type-web-sets]]. Add a renderer to `findRenderer`. Cover it with a
+  mocked stream ([[#mock-stream-test]]).
+- `message-action` **A message action.** Copy regenerate, which routes through `onSubmit`
+  with `messageIdToResend`, if the action sends a turn. Otherwise copy
+  `patchMessageToBeLatest`; list the client calls in
+  `app/app/services/lib.tsx`. Update the tree in the store, and check that a
+  reload shows the same result.
+- `query-parameter` **A query parameter.** Copy `PROJECT_ID`; list the set in
+  `app/app/services/searchParams.ts:SEARCH_PARAM_NAMES`. Add it to
+  `PARAMS_TO_SKIP` if it must not survive navigation
+  ([[#chat-url-drops-ids]]).
+- `mock-stream-test` **Test a renderer with no LLM.** Copy a spec in `web/tests/e2e/chat/` that
+  calls `mockChatEndpoint`. `web/tests/e2e/utils/chatMock.ts` builds a stream
+  by hand (`buildMockStream`, `buildMockSearchStream`), and
+  `web/tests/e2e/utils/chatStream.ts` parses a captured stream for
+  assertions.
+- `remote-backend` **Run the web app against another backend.** In development, set
+  `INTERNAL_URL` to the backend origin. For a backend that needs a session,
+  copy the auth cookie value from that site into `DEBUG_AUTH_COOKIE`. The
+  proxy adds it to each request ([[#dev-api-proxy-only]]).
 
-Stop and recovery wait for the current browser reader to apply its final packets before
-releasing input. Server idleness alone does not mean the local response is complete.
-Settlement belongs to both the request controller and its reader. Replacing the reader
-with replay prevents an earlier settlement from releasing input or replacing history.
-Recovery preserves the latest unsaved failed turn during both initial history loading and settlement.
-Saved responses with `response_status` of `complete`, `limit`, or `cancelled` replace local errors.
-Null, running, or suspended status preserves the local error, even when the saved row contains placeholder text.
-For older servers that omit this field, nonempty text or files remain the completion signal.
-Saved failures restore their error text, code, and retryability; packets alone do not confirm a successful save.
-Manual completion checks belong to their sessions; switching chats does not disable another chat's controls.
-Chat, search, and voice submission preserve drafts while readiness is unconfirmed.
+---
 
-A failed Stop request leaves an acknowledged stream stoppable. The client keeps the draft and pauses queued sends.
-Pending readiness checks do not disable Stop when streaming resumes.
-History refresh preserves the selected source panel by its saved message ID.
+## Verification
 
-
-Response errors belong to their message, with `errorMessage` separate from answer text.
-Single-model chat and shared history render partial output followed by the error banner.
-Multi-model panels own their response errors. A model display name alone does not select panel rendering.
-Global banners show session and request failures that do not belong to a response.
-History loading converts API `error_info` or the legacy `error` string into `errorMessage`.
-Renderers use `errorMessage` for failures and `message` for answer text.
-
-An aborted stream reader exits even when it still has buffered packets. Stop sends a
-server request only for an acknowledged stream ID. Regeneration controls stay hidden
-while readiness is unconfirmed. If a response fails after voice autoplay starts,
-the message component stops that autoplay session.
-
-### Timeline classification after diagnostic packets
-
-`timeline/hooks/packetProcessor.ts` classifies each group when its first tool or display
-packet arrives. Debug and control packets can precede that event without hiding the group.
-The classification then stays fixed for mixed groups. `useTimelineHeader` uses the first
-rendered packet to choose the activity label, so leading debug packets cannot hide a tool name.
-
-
-Timeline groups use their first rendered packet for classification and header text.
-Debug and heartbeat packets can arrive first without hiding later tool output.
-Once classified, a mixed group keeps its original tool or display category.
+- Playwright: the specs in `web/tests/e2e/chat/`, with the stream mocks in
+  `web/tests/e2e/utils/`.
+- Jest: the `*.test.ts` and `*.test.tsx` files beside the code in
+  `web/src/app/app/`.
+- By hand: force a tool call, edit, switch back, stop mid-answer, and reload.
+  Citations resolve, the branch holds, and the partial answer stays.

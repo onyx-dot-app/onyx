@@ -1,488 +1,248 @@
-# Desktop, Widget, and Chrome Extension
+# Desktop, Widget and Chrome Extension
 
-> Three thin client surfaces that deliver Onyx outside the main web app: a
-> Tauri desktop shell, an embeddable chat widget for third-party sites, and a
-> Chrome extension. None of the three runs its own product logic. Each one
-> loads or calls the same chat backend that [[chat-frontend]] uses.
+> Thin clients that bring Onyx outside the main web app: a Tauri desktop
+> shell, a chat widget that a site embeds, and a Chrome extension. None runs
+> product logic, and only the widget calls the chat endpoints itself.
 
-**Verified against:** `268e4d5a3d` (2026-10-05)
-**Domain:** client-surfaces
-**Edition:** CE
-**Owns:**
-`desktop/` (`package.json`, `src/index.html`, `src/titlebar.js`, `src-tauri/`),
-`widget/` (`package.json`, `vite.config.ts`, `index.html`, `src/`),
-`extensions/chrome/` (`manifest.json`, `service_worker.js`, `src/`, `public/`)
-
-**Read first:** `desktop/README.md`, `widget/README.md`,
-`extensions/chrome/README.md`. Each is the design rationale for its surface.
-This document maps all three to code and adds verification guidance.
+**Verified against:** `a4e97fcea1` (2026-10-29)
+**Edition:** CE. JWT passthrough for the widget works on single-tenant
+deployments only.
 
 ---
 
-## 1. What the user experiences
+## User experience
 
-**Desktop.** A native macOS/Windows/Linux app window (`desktop/README.md`)
-that looks and feels like a small native shell around Onyx: a custom
-traffic-light titlebar, a settings panel for the server URL on first launch,
-global keyboard shortcuts (new chat, new window, reload, back/forward, open
-config), and a system tray/menu-bar summon shortcut. Once configured, the
-window shows the exact same web app a browser would (`web/`), plus platform
-polish: window-state memory, vibrancy (macOS), and links that open in the
-user's regular browser instead of a second app window.
+- **A desktop user** installs the app for macOS, Windows or Linux. On first
+  launch it asks for the server URL (default `https://cloud.onyx.app`), then
+  shows the normal web app in a native window with global shortcuts and a
+  summon shortcut. On macOS the window has a custom titlebar. Links from a
+  chat open in the system browser. A server that cannot be reached shows the
+  settings page again.
+- **A visitor to a customer's site** sees a chat launcher or an inline chat
+  box. Answers stream as in the main app. There is no login screen. The site
+  owner either puts a scoped API key in the page, or gives the widget a
+  `tokenProvider` function that returns the visitor's own IdP token, so each
+  visitor acts as their own Onyx user. The transcript survives a reload in the
+  same tab for 24 hours. The admin guide is
+  `documentation/deployment/configuration/website_widget.mdx`.
+- **A Chrome user** gets a side panel with the full web app, a "select text
+  and ask Onyx" icon on every page, the `onyx <query>` omnibox keyword, and an
+  optional new-tab page. The user is signed in as in a browser tab, because the
+  panel is an iframe of their Onyx domain. An enterprise admin can set the
+  domain and the new-tab default by Chrome policy. SSO sign-in inside the panel
+  opens the IdP in a new tab, and the panel picks up the session when the user
+  returns.
 
-**Widget.** A customer visiting a third party's website sees a floating chat
-launcher button (or an inline chat box embedded in the page) that they did
-not get from onyx.app. It streams answers the same way the main chat UI
-does: reasoning, then an answer, optionally with markdown formatting. There
-is no login screen. The site owner pre-authorizes the widget in one of two
-ways. In API-key mode, the owner embeds a shared key in the page. In JWT
-passthrough mode, the host page assigns a `tokenProvider` function that returns
-the visitor's own identity-provider token, so each visitor acts as their own
-Onyx user. Passthrough works on single-tenant deployments only: a multi-tenant
-deployment reads the tenant from the credential
-(`backend/ee/onyx/server/middleware/tenant_tracking.py:_get_tenant_id_from_request`), and
-an external IdP token carries none. The admin setup is in
-`documentation/deployment/configuration/website_widget.mdx` and
-`documentation/deployment/authentication/jwt.mdx`.
-
-**Chrome extension.** A user installs it from the Chrome Web Store, sees a
-welcome page on first install (`extensions/chrome/src/pages/welcome.html`),
-and gets: a side panel that renders the full Onyx web app in an iframe, a
-"select text on any page, click a small icon, ask Onyx about it" flow, an
-omnibox keyword (`onyx <query>`) that jumps straight to a chat, and an
-optional new-tab-page override. Because the side panel is just an iframe to
-the user's own Onyx domain, this user is logged in exactly as they would be
-in a browser tab; the extension carries no credentials of its own.
+On failure: the widget shows the error text in the chat when the send fails,
+for example on a stream line that is not valid JSON, a backend `error` packet,
+or a missing credential. The extension shows its own timeout dialog when the
+iframe does not report that it loaded.
 
 ---
 
-## 2. Surfaces
+## Scope
 
-| Surface | Entry point | Build command | Output artifact | Onyx endpoints called |
-|---|---|---|---|---|
-| Desktop | `desktop/src-tauri/src/main.rs:main`, webview loads the configured `server_url` (`desktop/src-tauri/src/config.rs:DEFAULT_SERVER_URL`) | `bun run build` (`desktop/package.json`, wraps `tauri build`) | Platform bundle: `.dmg`/`.app` (macOS), `.msi`/`.exe` (Windows, via `bun run build:windows`), `.deb`/`.rpm` (Linux) in `src-tauri/target/release/bundle/` | None directly. The webview loads the full web app, which calls the normal `/api/*` surface; the Rust side only calls `GET {server_url}/api/version` (`desktop/src-tauri/src/main.rs:fetch_server_version`) and does an unauthenticated `HEAD` reachability check (`desktop/src-tauri/src/commands.rs:check_server_reachable`) |
-| Widget | `widget/src/index.ts` (registers the `<onyx-chat-widget>` custom element from `widget/src/widget.ts`) | `bun run build:cloud` or `bun run build:self-hosted` (`widget/package.json`, Vite library mode, `widget/vite.config.ts`) | `dist/onyx-widget.js`, a single ES module (~100-150kb gzipped per `widget/README.md`) | `POST {backend-url}/chat/create-chat-session` and `POST {backend-url}/chat/send-chat-message` (`widget/src/services/api-service.ts:createChatSession`, `streamMessage`) |
-| Chrome extension | `extensions/chrome/manifest.json` (`background.service_worker`, `action.default_popup`, `side_panel.default_path`); no bundler, files are loaded unpacked | None. `extensions/chrome/README.md` says "load unpacked ... refresh extension in Chrome" | The `extensions/chrome/` directory itself, zipped for the Chrome Web Store | None directly from extension JS. `extensions/chrome/src/pages/panel.js` points an `<iframe>` at `{onyx-domain}/nrf/side-panel` (`extensions/chrome/src/utils/constants.js:SIDE_PANEL_PATH`); every backend call happens inside that iframe, through the normal web app, under the user's cookie session |
+This component holds the desktop shell, the widget, the Chrome extension, and
+the framed pages and framed sign-in path in the web app that only these clients
+need. Each client has a README with its build and design notes.
 
-### Configuration
-
-| Surface | Setting | Where | Effect |
-|---|---|---|---|
-| Desktop | `server_url` | `~/Library/Application Support/app.onyx.onyx-desktop/config.json` (macOS path; see `desktop/README.md` for Linux/Windows), read by `desktop/src-tauri/src/config.rs:load_config` | The only server this instance talks to. Defaults to `https://cloud.onyx.app` (`config.rs:DEFAULT_SERVER_URL`). Self-hosted use is a config edit, not a rebuild. |
-| Desktop | `summon_shortcut` | Same config file, `config.rs:default_summon_shortcut` | Global OS shortcut (`Super+Shift+Space` macOS / `Ctrl+Alt+Space` elsewhere) that raises the app from anywhere; can be set to `null` |
-| Widget | `backend-url`, `api-key` | HTML attributes on `<onyx-chat-widget>`, or `VITE_WIDGET_BACKEND_URL`/`VITE_WIDGET_API_KEY` baked in at build time for self-hosted builds (`widget/vite.config.ts`, `widget/src/config/config.ts:resolveConfig`) | Which backend the widget calls and the credential it authenticates with. Attributes always win over the baked-in env values. |
-| Widget | `tokenProvider` | JavaScript property on the element, not an attribute (`widget/src/widget.ts`) | An async function that returns a bearer token. It wins over `api-key`. The widget calls it before every request attempt (`config.ts:resolveAuthToken`). |
-| Chrome extension | `onyxExtensionDomain` | `chrome.storage.local`, default `http://localhost:3000` (`extensions/chrome/src/utils/constants.js:DEFAULT_ONYX_DOMAIN`), set via the options page (`extensions/chrome/src/pages/options.js`); `getOnyxDomain` (`storage.js`) trims the value and strips trailing slashes | Which Onyx deployment the side panel, new-tab override, and omnibox all point at |
-| Chrome extension | `onyxExtensionDomain`, `onyxExtensionDefaultNewTab` (enterprise policy) | `chrome.storage.managed`, populated by Chrome's extension policy (`extensions/chrome/managed_schema.json`, `extensions/chrome/README.md`'s "Enterprise configuration") | Admin-set values in managed storage take precedence over `chrome.storage.local` and are read-only in the options page; `setUseOnyxAsDefaultNewTab` (`storage.js`) is a no-op when the toggle is managed |
+It does not own the chat UI that the desktop shell and the side panel load
+([[chat-frontend]]), the chat endpoints ([[core-chat-loop]]), API keys and JWT
+verification ([[auth-and-identity]]), or the acting-user rules for the widget
+(CROSS-CUTTING.md). [[mobile-app]] is a separate, native client.
 
 ---
 
-## 3. Data model
+## Architecture
 
-Mostly not applicable: none of the three owns a database table, and all
-three are stateless clients of the same chat backend tables
-([[chat-persistence]]).
+**Desktop.** `desktop/src-tauri/src/main.rs:main` loads the config
+(`desktop/src-tauri/src/config.rs:load_config`), builds the window, and
+registers shortcuts, the tray and a navigation plugin. `desktop/src/index.html`
+is the fallback page for a missing or unreachable server. It calls the Tauri
+commands `get_bootstrap_state`, `check_server_reachable` and `set_server_url`
+(`desktop/src-tauri/src/commands.rs`), then sends the webview to the server. On
+macOS, `desktop/src-tauri/src/window.rs:eval_titlebar_script` injects
+`desktop/src/titlebar.js` on every page load. The Rust side calls the server
+only for `/api/version` and a reachability check. The webview holds the cookie
+session.
 
-**Desktop.** The persisted local state is the config file and the window
-state. The window state (size, position) comes from
-`tauri_plugin_window_state` (`desktop/src-tauri/src/main.rs`). The config file
-(`desktop/src-tauri/src/config.rs:AppConfig`) holds `server_url`, `window_title`,
-`show_menu_bar`, `hide_window_decorations`, `summon_shortcut`,
-`summon_opens_new_chat`. No credential is stored here; the app holds no
-session of its own; whatever cookie the webview accumulates is the webview's
-own storage, managed by the OS webview engine, not by Tauri code.
-
-**Widget.** `sessionStorage`, one JSON blob per browser tab
-(`widget/src/utils/storage.ts:SESSION_KEY`, TTL 24h), holding
-`{ sessionId, messages, timestamp, identity }`. This is the chat session ID and message
-history, not a credential. `identity` is the JWT `sub` or `email` claim, or a fixed
-shared value for an API key (`widget/src/config/config.ts:deriveCredentialIdentity`).
-`loadSession` discards a stored session whose identity differs, so a second person with a
-different `sub` or `email` claim on the same tab never sees the first person's messages.
-A JWT with neither claim (for example only `preferred_username` or `upn`) gets the shared
-fallback identity, so a second such visitor can restore the first person's transcript. **The widget does not persist the API key**; it holds the value
-in memory only (`config.apiKey`). The key comes from the customer page's HTML (an attribute on
-`<onyx-chat-widget>`) or, for self-hosted builds, gets compiled directly into
-the published `dist/onyx-widget.js` (`widget/vite.config.ts`'s `define`
-block). Either way it is plain text, readable by anyone who views the
-embedding page's source or the shipped bundle.
-
-**Chrome extension.** `chrome.storage.local` holds only UI preferences:
-`onyxExtensionDomain`, `onyxExtensionDefaultNewTab`, `onyxExtensionTheme`,
-background image URLs, and an onboarding-complete flag
-(`extensions/chrome/src/utils/constants.js:CHROME_SPECIFIC_STORAGE_KEYS`).
-`chrome.storage.session` holds a short-lived `pendingInput` (selected text
-plus target URL, 5-second TTL, cleared after use,
-`extensions/chrome/service_worker.js:sendToOnyx`) and a `tabReadingEnabled`
-flag. No credential is stored; auth is the cookie session inside the iframe.
-`chrome.storage.managed` (enterprise policy, `managed_schema.json`) can set
-`onyxExtensionDomain` and `onyxExtensionDefaultNewTab`; `getOnyxDomain` and
-`getUseOnyxAsDefaultNewTab` (`storage.js`) read managed storage first and
-fall back to `chrome.storage.local` only when policy has not set the key.
-
----
-
-## 4. How it works
-
-### 4.1 Desktop: first launch to a loaded chat
-
+**Widget.**
 ```
-main()                                          src-tauri/src/main.rs
-  ├─ config::load_config()                      reads config.json or returns defaults
-  ├─ Builder::default().setup(setup_app)        src-tauri/src/main.rs:setup_app
-  │    ├─ window::build_main_window(app)        builds the "create": false window from tauri.conf.json
-  │    ├─ shortcuts::setup_global_shortcuts     registers summon_shortcut
-  │    ├─ menu::setup_app_menu / setup_tray_icon
-  │    ├─ apply_vibrancy (macOS)
-  │    └─ window::inject_titlebar(window)       src-tauri/src/window.rs, evals titlebar.js on a retry schedule
-  └─ on_page_load: eval_titlebar_script + inject_console_capture (debug mode)
+<onyx-chat-widget backend-url=... api-key=...>      widget/src/widget.ts
+  └─ resolveConfig (attributes win over VITE_* build values)  config/config.ts
+send → ApiService                                   services/api-service.ts
+  ├─ createChatSession   (first message only)
+  └─ streamMessage → POST /chat/send-chat-message, origin "widget"
+       └─ parseSSEStream (NDJSON lines) → stream-parser.ts:processPacket
+            └─ saveSession to sessionStorage, scoped by credential identity
 ```
+`widget/src/config/config.ts:resolveAuthToken` picks the credential for each
+request: the `tokenProvider` result, else the API key, else it throws. The
+widget reads a `tokenProvider` at request time because the host page often
+sets it after the element mounts. In passthrough mode the backend verifies the
+JWT (RS256) in `backend/onyx/auth/jwt.py:verify_jwt_token`.
 
-`src/index.html` is the **fallback page** (`desktop/README.md`'s "Project
-Structure"), shown only when no `server_url` is configured yet or the
-configured server is unreachable
-(`commands.rs:check_server_reachable`). It calls
-`invoke("get_bootstrap_state")` and `invoke("set_server_url")`
-(`commands.rs:get_bootstrap_state`, `set_server_url`) then redirects
-`window.location.href` to the real server. Once redirected, the webview is
-just the web app; `titlebar.js` is re-injected on every page load
-(`window.rs:eval_titlebar_script`) to draw the draggable native-feeling
-titlebar over it, and CSS custom properties reserve space at the top of
-`<html>` so the web app's own `100vh`/`100dvh` layouts do not draw under it.
+**Chrome extension.** The extension has no bundler. Chrome loads the files as
+they are. `extensions/chrome/src/pages/panel.js` points an iframe at
+`{domain}/nrf/side-panel`. The selection icon
+(`extensions/chrome/src/utils/selection-icon.js`, a content script on every
+page) sends an `OPEN_SIDE_PANEL_WITH_INPUT` message to the service worker,
+which opens the panel with a `user-prompt` URL. The keyboard command takes the
+same route through `extensions/chrome/service_worker.js:sendToOnyx`. When tab
+reading is on, the service worker sends the URL of the active tab to the
+panel, which passes it to the iframe. `extensions/chrome/src/utils/storage.js`
+reads `chrome.storage.managed` (policy) before `chrome.storage.local`.
 
-### 4.2 Widget: embed to first answer
-
-```
-customer HTML: <onyx-chat-widget backend-url=... api-key=...>
-  └─ OnyxChatWidget.connectedCallback()          widget/src/widget.ts
-       ├─ resolveConfig(...)                     widget/src/config/config.ts (attrs win over VITE_* env)
-       ├─ new ApiService(...)                     widget/src/services/api-service.ts (token resolved per request)
-       └─ loadSession() from sessionStorage       widget/src/utils/storage.ts
-user sends a message
-  ├─ ApiService.createChatSession()  → POST /chat/create-chat-session   (first message only)
-  └─ ApiService.streamMessage()      → POST /chat/send-chat-message, origin="widget"
-       └─ parseSSEStream(response)                api-service.ts, newline-delimited JSON
-            └─ processPacket(...)                 widget/src/services/stream-parser.ts
-                 └─ widget.ts re-renders messages, saveSession() after each update
-```
-
-Every request carries `Authorization: Bearer {token}`
-(`api-service.ts:getHeaders`) straight from the browser to `backend-url`. The token is
-the `tokenProvider` result when one is set, else the `api-key`. In passthrough mode the
-backend verifies the JWT in `auth/users.py:_check_for_saml_and_jwt` and
-`auth/jwt.py:verify_jwt_token` (RS256 only).
-`origin: "widget"` on the send-message body maps to
-`MessageOrigin.WIDGET` (`backend/onyx/server/query_and_chat/models.py:MessageOrigin`).
-The backend uses it for telemetry only. When the request uses an API key or PAT,
-`chat_backend.py:handle_send_chat_message` overrides it to `MessageOrigin.API`.
-JWT-passthrough requests keep `WIDGET`.
-
-### 4.3 Chrome extension: side panel to answer
-
-```
-user clicks the toolbar icon (its popup opens) and picks the side panel button,
-or presses the "openSidePanel" command
-  └─ chrome.sidePanel.open()                      popup.js, service_worker.js:openSidePanel
-       └─ panel.html loads panel.js
-            ├─ loadOnyxDomain()                    reads onyxExtensionDomain from storage
-            └─ iframe.src = {domain}/nrf/side-panel
-user selects text on any page and clicks the injected icon
-  └─ selection-icon.js posts {action: OPEN_SIDE_PANEL_WITH_INPUT, selectionText}
-       └─ service_worker.js:sendToOnyx builds a /nrf/side-panel?user-prompt=... URL,
-          opens the side panel, and relays it to panel.js
-```
-
-The extension never talks to `/chat/*` itself. The iframe loads the real
-Onyx web app at the user's configured domain, and that page (running the
-same code as [[chat-frontend]]) does everything a normal browser session
-would, including cookie-based auth. `panel.js:handleMessage` only accepts
-`postMessage` events whose `event.source` is the iframe's own
-`contentWindow` and whose `event.origin` matches `getIframeOrigin()`, so a
-page that later navigates the iframe cross-origin cannot send it privileged
-messages such as `TAB_READING_ENABLED`.
-
-**SSO inside the embedded panel and new-tab page.** An identity provider
-refuses to render its own login page inside a frame, so
-`ProviderSignInButton` (`web/src/app/auth/login/ProviderSignInButton.tsx`)
-detects that it is framed (`isFramed`, `window.top !== window.self`) and
-opens the IdP in a new browser tab instead of navigating the iframe
-(`openIdpTab`/`navigateToIdp`), falling back to the top-level window if the
-popup is blocked. `NRFPage` (`web/src/app/nrf/NRFPage.tsx`) re-checks the
-session (`refreshUser`) on `visibilitychange`/`focus` while unauthenticated,
-so the panel or new-tab page picks up the completed sign-in when the user
-returns to it, since the IdP redirect landed in the other tab, not this
-frame.
+**Framed sign-in.** In an iframe,
+`web/src/app/auth/login/ProviderSignInButton.tsx:openIdpTab` opens the IdP in a
+new tab, because IdPs refuse to load in a frame.
+`web/src/app/nrf/NRFPage.tsx` calls `refreshUser` on `visibilitychange`, so the
+panel picks up the new session when the user returns.
 
 ---
 
-## 5. Contracts and invariants
+## Contracts and traps
 
-1. **The desktop shell must not grant the webview more native capability than
-   it uses.** `desktop/src-tauri/capabilities/main.json` currently grants
-   exactly three permissions: `core:window:allow-start-dragging`,
-   `core:window:allow-internal-toggle-maximize`, and `shell:default` (for
-   `target="_blank"` links), scoped `"remote": {"urls": ["http://*:*",
-   "https://*:*"]}` because the server is user-configurable. Any addition
-   here (filesystem, clipboard, process spawn, etc.) widens what a
-   compromised or malicious remote page can do, since the same grant applies
-   to every origin the webview loads.
-2. **Only `http`, `https`, `mailto`, `tel` may reach the OS opener.**
-   `desktop/src-tauri/src/window.rs:is_externally_openable` gates
-   `window.open`/`target="_blank"` (`open_new_window_externally`). The
-   external-navigation handler in `main.rs` uses
-   `window.rs:should_open_in_external_browser`, which has its own scheme match
-   for the same four schemes. Change both together. Loosening either (adding
-   `file:` or a custom scheme) turns a link click on a compromised page into
-   local code or file execution.
-3. **External navigation only redirects away from an active chat
-   session.** `window.rs:should_open_in_external_browser` only fires when
-   `is_chat_session_url` matches (`/app` path plus a `chatId` query param);
-   this scoping is deliberate so the settings/login flow is not redirected
-   out to the OS browser.
-4. **The widget must never expose the API key back to the embedding page.**
-   The widget only ever *reads* the `api-key` attribute the page owner set
-   (`widget/src/widget.ts`'s `@property({attribute: "api-key"})`) and sends
-   it as a request header (`api-service.ts:getHeaders`); it does not persist
-   it, echo it into the DOM beyond the attribute the page itself wrote, or
-   put it in `sessionStorage`. In `tokenProvider` mode no long-lived secret is in the
-   page at all. The unavoidable exposure is structural, not a
-   widget bug: **any credential placed in an HTML attribute or a shipped JS
-   bundle is visible to that page's own script and to anyone who views
-   source.** `widget/README.md`'s "Security Note" states this and tells
-   integrators to use a scoped key, not a full-access one.
-5. **The Chrome extension must request the narrowest permissions and host
-   permissions that work.** Today it requests
-   `["sidePanel", "storage", "activeTab", "tabs"]` plus
-   `"host_permissions": ["<all_urls>"]` and a content script matching
-   `<all_urls>` (`extensions/chrome/manifest.json`). See §9: this is broader
-   than the visible feature set needs.
-6. **All three consume the same chat backend contract.** None of them
-   re-implements chat logic; the desktop shell loads the web app verbatim,
-   the widget calls `/chat/create-chat-session` and `/chat/send-chat-message`
-   directly, and the extension's side panel is the web app in an iframe. A
-   backend contract change to those two endpoints, or to the streaming
-   packet shape, reaches all three simultaneously.
-7. **The extension pages' `postMessage` channels are origin-locked in both
-   directions.** `panel.js` computes `getIframeOrigin()` from `iframe.src`,
-   and the new tab page (`onyx_home.js`) does the same with
-   `getOnyxOrigin(iframe)`. Neither falls back to `"*"`. A `postMessage`
-   failure here must fail closed (reject the message), not silently widen to
-   any origin. Some new tab handlers (`PREFERENCES_UPDATED`, `LOAD_NEW_PAGE`)
-   have no sender in the web app, so the origin check is their only guard.
-
----
-
-## 6. Relationships
-
-**Depends on**
-- [[core-chat-loop]] and [[streaming-protocol]]: the widget parses the same
-  NDJSON packet stream `run_llm_loop` emits; the desktop and extension
-  surfaces consume it indirectly, through the embedded/loaded web app.
-- [[chat-frontend]]: the desktop shell and the extension's side panel both
-  load this app wholesale rather than reimplementing any UI.
-- [[auth-and-identity]]: the widget authenticates as a non-human caller
-  through the API-key path (`backend/onyx/auth/api_key.py`), or as the visitor through
-  JWT passthrough (`tokenProvider`, single-tenant only); the desktop
-  webview and the extension's iframe authenticate as the logged-in human,
-  through the normal cookie session that [[auth-and-identity]] documents.
-  Several `/chat/*` endpoints also allow `allow_anonymous=True`
-  (`backend/onyx/server/query_and_chat/chat_backend.py`), but the widget
-  cannot use that path. A widget with neither `api-key` nor `tokenProvider`
-  throws the missing-credential error in `resolveAuthToken`
-  (`widget/src/config/config.ts`) before it sends a request.
-- [[onyx-api]]: the widget's two-endpoint integration is a narrow, unofficial
-  slice of the same public HTTP surface.
-- [[whitelabelling-and-theme]]: the widget's color attributes
-  (`primary-color`, `background-color`, `text-color`, `logo`) are a
-  per-embed equivalent of the enterprise branding settings that component
-  owns; they are not the same mechanism and are not read from the backend.
-
-**Depended on by**
-- Nothing in the codebase depends on these three; they are leaf clients.
-
-**Related, not dependent**
-- [[mobile-app]]: a fourth "Onyx outside the web app" surface, but a native
-  React Native app rather than a thin wrapper or embed; it is out of scope
-  for this document.
+1. `desktop-capabilities-reach-every-server` **Every desktop capability
+   applies to every server the user enters.**
+   `desktop/src-tauri/capabilities/main.json` grants window dragging,
+   double-click maximize and `shell:default` to the remote pattern
+   `http://*:*` and `https://*:*`, because the server URL is user-set. A new
+   permission reaches any page that any configured server serves. Add one
+   only for a native feature the webview calls. The same holds for each app
+   command in the `generate_handler!` list in
+   `desktop/src-tauri/src/main.rs`: `desktop/src-tauri/build.rs` declares no
+   app manifest, so Tauri allows every registered command, and a page from
+   any server can invoke it.
+2. `os-opener-scheme-allowlist` **Only `http`, `https`, `mailto` and `tel`
+   reach the OS opener.**
+   `desktop/src-tauri/src/window.rs:is_externally_openable` gates popups and
+   the `open_in_browser` command, and
+   `desktop/src-tauri/src/window.rs:should_open_in_external_browser` has its
+   own scheme match for in-page navigation. Change both together. A `file:` or
+   custom scheme would let a link on a hostile page open local files or apps.
+3. `external-nav-only-from-chat` **In-page navigation leaves the app only from
+   a chat.** `should_open_in_external_browser` returns true only when the
+   current URL is a chat session (`is_chat_session_url`: `/app` with a
+   `chatId`), and then only for `mailto`, `tel` or an `http(s)` link to another
+   origin. This keeps the settings and login flows inside the app. Popups
+   (`window.open`, `target="_blank"`) go to the browser from every page.
+4. `widget-credential-public` **A widget credential is visible to anyone who
+   can read the page.** The API key sits in an HTML attribute, or, for a
+   self-hosted build, in the bundle (`widget/vite.config.ts` `define`). The
+   widget keeps it in memory and never writes it to `sessionStorage`. Keep it
+   that way, and tell integrators to use a scoped key.
+5. `widget-transcript-scoped-by-identity` **The stored widget transcript is
+   scoped by credential identity.**
+   `widget/src/config/config.ts:deriveCredentialIdentity` uses the JWT `sub` or
+   `email`, else a shared value. `widget/src/utils/storage.ts:loadSession`
+   drops a session for another identity. A JWT with neither claim falls back
+   to the shared value, so a second such visitor in the same tab can restore
+   the transcript of the first.
+6. `widget-reset-cancels-send` **`resetConversation` must cancel a send at
+   every stage.** The admin guide tells host pages to call it on sign-out or an
+   account change, so a send that survives a reset shows the previous user's
+   response to the next user in the same tab.
+   `widget/src/widget.ts:OnyxChatWidget.sendMessage` creates its
+   `AbortController` before the first await, and checks for an abort after
+   each await and for each packet. Its `finally` clears shared state only when
+   `this.abortController` is still its own controller, so a stale send cannot
+   clear the state of a newer send. Keep all three when you add an await or a
+   new step to a send.
+7. `widget-ignores-unknown-packets` **The widget stream fails only on a
+   malformed line or an `error` packet.**
+   `widget/src/services/api-service.ts:parseSSEStream` throws on a line that
+   does not parse. `widget/src/services/stream-parser.ts:processPacket` throws
+   on a packet with no `obj` or no `type`, and on an `error` packet. It
+   ignores an unknown packet type. A new backend packet therefore does not
+   break the widget, but it shows nothing until `processPacket` handles it.
+8. `widget-bundle-outlives-backend` **A deployed widget bundle outlives the
+   backend version it was built for.** Customer sites keep the old widget
+   bundle. A change to the request shape of `create-chat-session` or
+   `send-chat-message`, or to an existing packet, breaks those embeds with no
+   version check. Treat the attributes on `<onyx-chat-widget>` as a public API
+   for the same reason.
+9. `widget-passthrough-single-tenant` **Widget passthrough needs a
+   single-tenant deployment.** On cloud the tenant comes from the credential
+   (`ee/onyx/server/middleware/tenant_tracking.py:_get_tenant_id_from_request`),
+   and an external IdP token carries none.
+10. `extension-postmessage-origin-locked` **Extension `postMessage` channels
+   are origin-locked both ways.**
+   `extensions/chrome/src/pages/panel.js:handleMessage` accepts a message only
+   from the window of its own iframe and from `getIframeOrigin()`.
+   `extensions/chrome/src/pages/onyx_home.js` checks `getOnyxOrigin`. Neither
+   falls back to `"*"`. The new-tab messages `PREFERENCES_UPDATED` and
+   `LOAD_NEW_PAGE` have no sender in the web app, so the origin check is their
+   only guard. A failed check must reject the message.
+11. `test-panel-signin-before-narrowing-hosts` **Test sign-in in the side panel
+    before you narrow `<all_urls>`.** `extensions/chrome/manifest.json`
+    requests `<all_urls>` host access and injects the selection icon on every
+    page. The host grant may also be what lets the panel iframe send its
+    auth cookie (Known issues).
 
 ---
 
-## 7. Blast radius
+## Known issues
 
-| If your change... | Also check |
-|---|---|
-| changes `/chat/send-chat-message` or `/chat/create-chat-session`'s request/response shape | the widget's `ApiService` (`widget/src/services/api-service.ts`) breaks immediately; the desktop shell and extension are unaffected directly (they load the web app, which is versioned together), but any deployed *old* widget bundle against a *new* backend breaks silently for every site that embedded it |
-| changes the NDJSON packet vocabulary ([[streaming-protocol]]) | `widget/src/services/stream-parser.ts:processPacket` needs the new packet type or it is silently dropped; there is no server-side version negotiation, so an old cached widget bundle on a customer's site keeps parsing the old shape |
-| changes chat auth (cookie shape, session mechanics, or the API-key check in `backend/onyx/auth/api_key.py`) | the widget's Bearer-token flow breaks first, since it is the only one of the three that authenticates directly rather than through a full browser session; the desktop webview and extension iframe ride the normal cookie flow and are unaffected unless cookie/session behavior itself changes |
-| changes `desktop/src-tauri/capabilities/main.json` | re-derive from zero: does the new permission match a concrete native feature the webview invokes; a broadened `remote.urls` scope widens what a malicious `server_url` (or a compromised legitimate one) can do |
-| changes `extensions/chrome/manifest.json`'s `permissions`/`host_permissions` | re-justify each one against the visible feature list (§9); a Chrome Web Store review will also flag unused broad permissions |
-| changes the widget's public HTML-attribute contract (`widget/src/widget.ts`'s `@property` list) | `widget/README.md`'s configuration tables go stale; every existing customer embed snippet is a compatibility surface, so removing or renaming an attribute is a breaking change for every site that already embedded the old snippet |
-| changes `SIDE_PANEL_PATH` or the `postMessage` message types (`extensions/chrome/src/utils/constants.js`) | `panel.js`'s `handleMessage` and the corresponding web app code that posts `ONYX_APP_LOADED`/`AUTH_REQUIRED`/etc. must change together; a mismatch shows the extension's own timeout error modal (`extensions/chrome/src/utils/error-modal.js`), not a backend error |
-
----
-
-## 8. How to verify a change
-
-### Tests
-
-**Desktop** has real unit tests, in Rust, colocated with the code:
-```bash
-cd desktop/src-tauri && cargo test
-```
-Covers: URL/origin logic in `window.rs` (`same_origin`, `is_chat_session_url`,
-`should_open_in_external_browser`, `is_externally_openable`, `redact_url`),
-config serde defaults in `config.rs`, and alt-menu/shortcut logic in
-`alt_menu.rs`/`shortcuts.rs`/`debug_log.rs` (see each file's
-`#[cfg(test)] mod tests`). Run `cargo clippy` too; `Cargo.toml`'s
-`[lints.clippy]` block enables `pedantic`/`nursery`/`unwrap_used`/
-`expect_used`/`panic`, so most failure paths are required to return
-`Result` rather than panic.
-
-**Widget** tests cover session readiness and failed drafts:
-`cd widget && bun test tests/readiness.test.ts`.
-Run `bun run type-check` for TypeScript checks (`widget/package.json`).
-
-**Chrome extension** has no test files or build tooling at all; it is loaded
-unpacked directly from source. There is no `type-check` or lint script in
-this directory.
-
-None of the three surfaces has an integration or playwright suite in this
-repository. Verification below is manual.
-
-### Manual reproduction
-
-**Desktop**
-1. `cd desktop && bun install` (once, from repo root per `desktop/README.md`),
-   then `bun run dev`.
-2. On first launch, confirm the settings screen (`desktop/src/index.html`)
-   appears and rejects a URL without `http(s)://`.
-3. Point it at `http://localhost:3000`, confirm it redirects into the real
-   web app and the custom titlebar (`titlebar.js`) is drawn above it without
-   clipping the app's own header.
-4. Test `⌘N` (new chat), `⌘⇧N` (new window), `⌘,` (open config), and confirm
-   a `target="_blank"` link opens in the system browser, not a new app
-   window.
-
-**Widget**
-1. `cd widget && bun install && bun run dev`, opens
-   `http://localhost:5173` (`widget/README.md`).
-2. Confirm the launcher button appears, and that clicking it opens a working
-   chat backed by a real `backend-url`/`api-key` you configure (see
-   `widget/.env.example`).
-3. Send a message; confirm the SSE stream renders progressively and the
-   session persists across a page reload (`sessionStorage`, §3).
-4. Open browser devtools and confirm the `api-key` attribute is visible in
-   the DOM inspector, demonstrating the credential-exposure contract in §5.4
-   is real, not theoretical.
-
-**Chrome extension**
-1. Visit `chrome://extensions`, enable Developer Mode, "Load unpacked",
-   select `extensions/chrome/`.
-2. Set the Onyx domain in the options page to `http://localhost:3000`.
-3. Open the side panel (toolbar icon popup, or the `openSidePanel` shortcut: `Ctrl+O`, `Alt+O` on Windows, `MacCtrl+O` on Mac) and confirm it loads
-   `/nrf/side-panel` and shows a logged-in Onyx session if one exists in that
-   browser profile.
-4. Select text on any page, click the injected icon, and confirm the side
-   panel opens pre-filled with that text as a prompt.
-5. Test the omnibox: type `onyx <query>` in the address bar and confirm it
-   navigates to `/chat?user-prompt=...`.
-
-### What "working" looks like
-
-- Desktop: the webview shows the identical chat experience a browser tab
-  would, with no layout collisions from the injected titlebar.
-- Widget: streaming latency and citation rendering match the main chat UI,
-  and no network request from the widget carries anything other than the
-  configured `backend-url`/`api-key`.
-- Extension: the side panel iframe reaches `ONYX_APP_LOADED` within the
-  panel's 2.5s timeout (`panel.js:startIframeLoadTimeout`), or the auth/error
-  modal appears instead of a blank panel.
+- **The widget and the extension have no tests.** The widget has a
+  `type-check` script. The extension has no build, type check or lint.
+- **`<all_urls>` is broader than the features need.** Only the selection icon
+  and tab reading need page access. Open question: the host grant may also be
+  what lets the panel iframe send its `SameSite=Lax` auth cookie, because
+  Chrome treats a request from an extension page to a permitted origin as
+  same-site. Nobody has tested this. A possible replacement is
+  `optional_host_permissions` with a `chrome.permissions.request` for the one
+  Onyx origin.
+- **API-key widgets have no key rotation.** The key is whatever the site owner
+  pasted. Passthrough leaves expiry to the host page.
 
 ---
 
-## 9. Footguns
+## Dependencies
 
-- **The desktop capability grant is broad by necessity, not by oversight,
-  but it is still broad.** `remote.urls: ["http://*:*", "https://*:*"]`
-  (`capabilities/main.json`) means *any* server the user points the app at
-  gets the same `shell:default` and window-dragging grants as the official
-  cloud server. This is a materially different risk profile from a browser
-  tab: a browser scopes its own capability per origin via web platform APIs
-  and extension permissions, while this grant is not re-evaluated per
-  `server_url` change. Whether this is exploitable depends on what
-  `shell:default` allows beyond opening URLs in the default browser; this
-  document does not verify the full transitive capability of the `shell`
-  plugin beyond what `main.json`'s own description states, and that is worth
-  treating as an open question rather than a settled one.
-- **The Chrome extension's host permissions and content-script match pattern
-  are `<all_urls>`, but only two features plausibly need page access:** the
-  text-selection icon (`selection-icon.js`, injected via the
-  `content_scripts` block) and the tab-URL-reading feature gated behind
-  `tabReadingEnabled` (`service_worker.js`'s `tabs.onActivated`/`onUpdated`
-  listeners). Everything else (side panel, omnibox, new-tab override,
-  options) works through `chrome.tabs`/`chrome.sidePanel`/`chrome.storage`
-  APIs that do not require host permissions at all. `<all_urls>` is a Chrome
-  Web Store review flag and a bigger blast radius than the feature set
-  implies; narrowing it would need per-origin activation (e.g.
-  `activeTab`-only for selection, explicit opt-in for tab reading) rather
-  than a standing broad grant. Before you remove the host permission, check
-  that the embedded Onyx iframe still sends its `SameSite=Lax` auth cookie.
-  Chrome treats a request from an extension page to an origin the extension
-  has host permission for as same-site, and the Onyx domain is user-set, so
-  the likely replacement is `optional_host_permissions` plus a
-  `chrome.permissions.request` for that one origin when the user saves it.
-- **The widget's own README states the exposure explicitly**
-  (`widget/README.md`'s "Security Note"): the API key is visible client-side
-  by construction, so a full-access key embedded in a widget is a live
-  credential leak, not a hypothetical one. In API-key mode, nothing
-  rotates the key; it is whatever the site owner pasted into the HTML. The
-  `tokenProvider` mode avoids this: the host page controls token expiry and refresh.
-- **Self-hosted widget builds bake the API key into the published JS file**
-  (`widget/vite.config.ts`'s `define` block under `isSelfHosted`). Anyone who
-  downloads `dist/onyx-widget.js` from the customer's CDN gets the key in
-  plaintext; `terserOptions.compress.drop_console` strips `console.*` calls
-  but does nothing to the embedded string literal.
-- **The desktop app's external-navigation allowlist is narrower than it
-  looks.** `should_open_in_external_browser` only redirects away from a
-  `/app?chatId=...` URL (`window.rs:is_chat_session_url`); a plain link
-  clicked from the settings page or a non-chat route stays inside the app
-  webview instead of going to the system browser, which can surprise a user
-  expecting every external link to leave the app. `window.open` and
-  `target="_blank"` popups are separate: both window builders send them to
-  `open_new_window_externally` on every route.
-- **The widget's SSE parser fails hard on any malformed line**
-  (`api-service.ts:parseSSEStream` deliberately throws rather than skipping
-  a bad packet, per its own comment "Fail fast ... don't hide backend
-  issues"). A backend change that emits one packet type the widget doesn't
-  recognize as `Packet`-shaped will end the entire stream for every widget
-  user, not just log a warning.
-- **Widget readiness has automated coverage** in `widget/tests/readiness.test.ts`,
-  including cleanup delays, failed status checks, stale requests, and failed drafts.
-  Other widget behavior and extension behavior still require the manual checks in §8.
-  The extension has no type-checking step; it ships plain, unbundled JavaScript.
+- [[chat-frontend]]: the desktop shell and the side panel load it as it is.
+- [[core-chat-loop]]: the widget calls the chat endpoints directly.
+- [[streaming-protocol]]: the widget parses the packet stream itself.
+- [[auth-and-identity]]: API keys and JWT verification for the widget, and the cookie session for the other two clients. The send endpoint sets the origin to `api` for an API key or PAT caller, so only passthrough requests keep `widget`.
+- [[multi-tenancy]]: tenant resolution blocks passthrough on cloud.
 
 ---
 
-Cross-links: [[chat-frontend]], [[core-chat-loop]], [[streaming-protocol]],
-[[auth-and-identity]], [[onyx-api]], [[whitelabelling-and-theme]],
-[[mobile-app]]
+## Recipes
 
-### Widget session readiness
+- `widget-packet-type` **Handle a packet type in the widget.** Copy the `citation_info` case in
+  `widget/src/services/stream-parser.ts:processPacket`, and add a field to the
+  message model. List the handled types with
+  `grep -n 'case "' widget/src/services/stream-parser.ts`. Old bundles on
+  customer sites ignore the new type ([[#widget-bundle-outlives-backend]]).
+- `desktop-native-feature` **Add a desktop native feature.** Copy the `check_server_reachable` command
+  in `desktop/src-tauri/src/commands.rs`, and register it in the
+  `generate_handler!` list in `desktop/src-tauri/src/main.rs`. Add the
+  narrowest permission to `desktop/src-tauri/capabilities/main.json`
+  ([[#desktop-capabilities-reach-every-server]]). Validate the input in the
+  command, because any server page can call it. Add a Rust unit test next to
+  the code.
+- `run-widget-local` **Run the widget against a local backend.** `cd widget && bun run dev`, with
+  a `backend-url` attribute and a scoped API key. `widget/README.md` covers
+  the build modes and the "Security Note".
+- `run-extension-local` **Run the extension against a local app.** Load `extensions/chrome/`
+  unpacked, set the domain to `http://localhost:3000`, and open the side
+  panel. `extensions/chrome/README.md` covers the policy settings.
+- `investigate-panel-timeout` **Investigate a side panel that shows the
+  timeout dialog.** The iframe did
+  not post its loaded message to the panel page. Check that the domain is right and
+  that the user can sign in at `{domain}/nrf/side-panel` in a tab. Then check
+  the origin match in `handleMessage`
+  ([[#extension-postmessage-origin-locked]]).
 
-The widget keeps Send disabled after a STOP packet and after delivery ends.
-`widget/src/services/api-service.ts:ApiService.waitForSessionIdle` confirms server idle
-through the authenticated session status endpoint. Transient failures retry without enabling
-Send. A 403 or 404 ends the wait and asks the user to start a new conversation.
-A 405 reports an unsupported server. Three consecutive 401 responses report an
-authentication failure. Neither response is treated as confirmed idle.
-Each request has a ten-second deadline, including credential resolution; the wait has no overall deadline.
-Each poll owns an abort controller and timer, including on supported browsers without `AbortSignal.any` or `AbortSignal.timeout`.
-Each poll resolves the current credential. Reset aborts and clears the request controller;
-the next send creates a new controller. An old callback cannot change the new conversation.
-Readiness status does not replace a failed send's error message. Before acknowledgement, a failed
-send removes its optimistic message and restores the draft if the input is empty.
-After acknowledgement, the widget keeps the accepted message without restoring a duplicate draft.
-Inline mode keeps the full conversation panel open while an error is present, even with no messages.
+---
 
-The required quality-check workflow runs `bun run test` from `widget/` after installing
-the root workspace dependencies. This runs widget readiness regressions on pull requests and merge groups.
+## Verification
+
+- Desktop: `cd desktop/src-tauri && cargo test && cargo clippy`. Tests sit in
+  `#[cfg(test)]` modules next to the code. The clippy config warns on
+  `unwrap`, `expect` and `panic`.
+- Widget: `cd widget && bun run type-check`. By hand, send a message, reload,
+  and confirm the transcript returns.
+- Extension: by hand, select text on a page and confirm the panel opens with
+  it as the prompt. Try `onyx <query>` in the address bar.

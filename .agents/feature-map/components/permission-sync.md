@@ -1,846 +1,368 @@
 # Permission Sync
 
-> Pulling permissions from a source system into Onyx. Two independent syncs, doc
-> sync (who can see this document) and group sync (who is in this external group),
-> feed the raw material that [[access-control]] turns into query-time ACL strings.
+> Copies permissions from a source system into Postgres: doc sync records who can
+> see each document, and group sync records who is in each external group.
+> [[access-control]] turns the data into query-time ACLs, and the metadata sync
+> in [[document-index]] pushes it into the index.
 
-**Verified against:** `268e4d5a3d` (2026-10-05)
-**Domain:** access-control
-**Edition:** EE only. There is no CE permission sync; a CE-only deployment has no
-mechanism to narrow a connector's documents below "public" or "shared with an
-Onyx user/group" set by hand.
-**Owns:**
-`backend/ee/onyx/external_permissions/` (`sync_params.py`, `perm_sync_types.py`,
-`utils.py`, `post_query_censoring.py`, and the per-source `doc_sync.py` /
-`group_sync.py` / `access.py` files),
-`backend/ee/onyx/background/celery/tasks/doc_permission_syncing/tasks.py`,
-`backend/ee/onyx/background/celery/tasks/external_group_syncing/tasks.py`,
-`group_sync_utils.py`,
-`backend/ee/onyx/db/external_perm.py`, `backend/ee/onyx/db/user_group.py`,
-`backend/ee/onyx/db/document.py` (`upsert_document_external_perms`),
-`backend/onyx/db/permission_sync_attempt.py`.
+**Verified against:** `a4e97fcea1` (2026-10-29)
+**Edition:** EE only, on the business tier. A CE deployment has no doc sync and
+no group sync, and its documents are never narrowed below the access type that
+an admin sets.
 
-**Does not own:** how the ACL is computed from synced data or enforced at query
-time ([[access-control]] owns `_get_acl_for_user`, `_get_access_for_documents`,
-and the OpenSearch filter chokepoint), or how a document's ACL snapshot is
-actually written into the index once it changes ([[document-index]] and
-[[indexing-pipeline]] own `document_index_metadata_sync_task` and the
-`needs_sync` machinery this document only describes the trigger for).
+## User experience
 
----
+- **An admin sets a connector's access type to Sync** (or Sync restricted) for a
+  source that supports it. From then on, the source decides who sees each
+  document, and Onyx copies that decision. The admin does not grant or revoke
+  access to synced documents in Onyx.
+- **A pair that starts to use Sync shows nothing at first.** For a source with
+  doc sync, until the first sync writes permissions into the index, the pair
+  grants no access and its documents are hidden
+  (`ConnectorCredentialPair.perm_sync_pending_since`).
+- **Access changes are eventual.** A user who loses access to a Drive folder
+  stops seeing its documents after the next successful doc sync and the next
+  metadata sync, not at once. The wait is the source's sync interval plus
+  queue time.
+- **The connector page shows each sync kind.** It shows the newest run, its
+  counts and the time of the last success. The admin can start a sync by hand.
+  The request fails with a conflict while a sync of that kind is queued or
+  running, or, for doc sync, while the pair is paused. It fails with invalid
+  input for a pair that is not perm-synced.
+- **A source that keeps failing backs off.** After failed attempts, the beat
+  waits longer before the next one, up to hours. A manual sync ignores the
+  wait.
+- **When it fails, access does not widen, but revocation can stall.** A failed
+  doc sync leaves each document's last synced ACL. A failed group sync keeps
+  last cycle's memberships, including ones the source removed, until the next
+  group sync starts ([[#failed-group-sync-keeps-memberships]]).
+- **An admin who picks Sync for an unsupported source**, or below the business
+  tier, gets an error when saving the connector.
+- **A person who has never logged in** can already hold access. Doc sync and
+  group sync create a `User` row for an unknown email, so access is ready when
+  that person signs up.
 
-## 1. What the user experiences
+## Scope
 
-An admin turns on permission sync by setting a connector's access type to
-**Sync** (or **Sync (restricted)**) instead of Public or Private, for a source that supports it (Google
-Drive, Confluence, Jira, Slack, Box, Canvas, GitHub, SharePoint, OneDrive, Teams, Outlook,
-Gmail, Linear, HubSpot, YouTrack; Salesforce is a partial case, see §4.5). With `SYNC_RESTRICTED`, the sync is the
-same, but only members of the connector's data-access groups can see the documents their
-source ACL allows (see [[access-control]]). From that point, Onyx does not
-decide who can see a document. The source system does, and Onyx mirrors it.
+This component owns the source registry and each source's doc sync and group
+sync functions, the doc sync and group sync Celery tasks, the Postgres writes of
+document permissions and external groups, and the attempt rows with their lease.
 
-The admin does not manually grant or revoke access to synced documents; the
-connector's own sharing settings are authoritative. What the admin sees is a
-sync attempt history per connector (recent `DocPermissionSyncAttempt` and
-`ExternalGroupPermissionSyncAttempt` rows), and, indirectly, the effect: a user
-who loses Drive access to a folder stops seeing its documents in Onyx search
-and chat once the next sync cycle runs, not instantly.
+Its neighbours own:
+- [[access-control]]: computing a document's ACL and a user's ACL from the
+  synced data, the query filter, and post-query censoring
+  (`censor_chunks_for_user`).
+- [[document-index]]: the `needs_sync` predicate and the metadata sync task that
+  writes a changed ACL into the chunks.
+- [[connectors]]: the connector interfaces that fetch permissions
+  (`SlimConnectorWithPermSync`, `CheckpointedConnectorWithPermSync`).
+- [[connector-capability-checks]]: the named perm-sync checks a source
+  registers for the connector form.
+- [[cc-pairs-and-creds]]: the access type, the pairing rules, and the
+  connector page.
+- [[billing]]: what the Community downgrade deletes.
 
-This lag is a real product property, not a bug: permission sync is
-**eventually consistent**. Between a permission change at the source and the
-next successful sync plus the next index metadata write, Onyx's answer to "can
-this user see this document" can be stale. See §9.
+## Architecture
 
----
+**The registry.** `ee/onyx/external_permissions/sync_params.py:_SOURCE_TO_SYNC_CONFIG`
+says what each source supports. A `SyncConfig` holds up to three optional
+parts. `doc_sync_config` holds the sync function, its frequency, and
+`initial_index_should_sync`. When that flag is true, indexing already fetches
+permissions, so doc sync waits for the first successful index.
+`group_sync_config` holds the group function and whether one run serves every
+cc-pair of the source. `censoring_config` filters chunks after retrieval instead
+of syncing (Salesforce). The loaders import each source's code on first use, so
+importing the registry does not import every SDK. Frequencies live in
+`ee/onyx/configs/app_configs.py`. The doc sync interval is multiplied by a
+runtime value from Redis (`server/runtime/onyx_runtime.py:OnyxRuntime`,
+default 1), which cloud operators set.
 
-## 2. Surfaces
-
-There are no end-user HTTP endpoints owned by this component; it is entirely a
-background job. Its only visible surface is connector configuration
-(`ConnectorCredentialPair.access_type` in `AccessType.perm_synced_types()`: `SYNC` or `SYNC_RESTRICTED`) and whatever the
-admin UI renders from `PermissionSyncAttempt` rows (owned by
-[[cc-pairs-and-credentials]]).
-
-### Celery tasks
-
-| Task | Trigger | Body |
-|---|---|---|
-| `CHECK_FOR_DOC_PERMISSIONS_SYNC` | Beat, every 30s, EE-gated | `doc_permission_syncing/tasks.py:check_for_doc_permissions_sync`. Scans perm-synced cc_pairs (`get_all_auto_sync_cc_pairs`), fails expired attempts (§5.9), decides which are due (`_is_external_doc_permissions_sync_due`) among pairs with no open attempt, and dispatches one generator task per due cc_pair. |
-| `CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK` | Dispatched by the check task | `doc_permission_syncing/tasks.py:connector_permission_sync_generator_task`. Runs one source's `doc_sync_func`, streams `DocExternalAccess`/`NodeExternalAccess` into Postgres. |
-| `CHECK_FOR_EXTERNAL_GROUP_SYNC` | Beat, every 20s, EE-gated | `external_group_syncing/tasks.py:check_for_external_group_sync`. Same shape as the doc check task, for group sync; dispatches one cc_pair per cc_pair-agnostic source. |
-| `CONNECTOR_EXTERNAL_GROUP_SYNC_GENERATOR_TASK` | Dispatched by the check task | `external_group_syncing/tasks.py:connector_external_group_sync_generator_task` (claims the attempt, runs the lease) -> `_timed_perform_external_group_sync`. Runs one source's `group_sync_func`, upserts `ExternalUserGroup` rows. |
-
-Both beat entries are registered in `backend/onyx/background/celery/tasks/beat_schedule.py`
-(not the `ee/` file of the same name, which is empty of these entries) and are
-only added to `beat_task_templates` when the build ships the EE code
-(`beat_schedule.py`, the block starting `if is_ee_available():`). Both are
-`work_gated: True` and route through the `heavy` worker per `backend/AGENTS.md`.
-
-### Per-source sync frequency (`ee/onyx/configs/app_configs.py`)
-
-| Source | Doc sync | Group sync |
-|---|---|---|
-| Google Drive | `DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY` (5 min) | `GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY` (5 min) |
-| Confluence | `CONFLUENCE_PERMISSION_DOC_SYNC_FREQUENCY` (30 min) | `CONFLUENCE_PERMISSION_GROUP_SYNC_FREQUENCY` (30 min) |
-| Jira | `JIRA_PERMISSION_DOC_SYNC_FREQUENCY` (30 min) | `JIRA_PERMISSION_GROUP_SYNC_FREQUENCY` (30 min) |
-| Canvas | `CANVAS_PERMISSION_DOC_SYNC_FREQUENCY` (30 min) | `CANVAS_PERMISSION_GROUP_SYNC_FREQUENCY` (30 min) |
-| Box | `BOX_PERMISSION_DOC_SYNC_FREQUENCY` (30 min) | `BOX_PERMISSION_GROUP_SYNC_FREQUENCY` (5 min) |
-| GitHub | `GITHUB_PERMISSION_DOC_SYNC_FREQUENCY` (5 min) | `GITHUB_PERMISSION_GROUP_SYNC_FREQUENCY` (5 min) |
-| Slack | `SLACK_PERMISSION_DOC_SYNC_FREQUENCY` (5 min) | no group sync (§4.5) |
-| Teams | `TEAMS_PERMISSION_DOC_SYNC_FREQUENCY` (5 min) | `TEAMS_PERMISSION_GROUP_SYNC_FREQUENCY` (5 min) |
-| Outlook | `OUTLOOK_PERMISSION_DOC_SYNC_FREQUENCY` (24 h) | no group sync; the doc sync relists every mailbox's folders and decides readers from message headers (connectors §4.6.1), so one sync is a full metadata walk; polls keep readers current as mail changes, so the daily sync repairs what a poll missed and catches deletions |
-| SharePoint | `SHAREPOINT_PERMISSION_DOC_SYNC_FREQUENCY` (30 min) | `SHAREPOINT_PERMISSION_GROUP_SYNC_FREQUENCY` (5 min) |
-| OneDrive | `ONEDRIVE_PERMISSION_DOC_SYNC_FREQUENCY` (30 min) | `ONEDRIVE_PERMISSION_GROUP_SYNC_FREQUENCY` (5 min) |
-| Gmail | `DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY` (5 min) | no group sync |
-| Zoom | `DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY`, but `doc_sync_func=mock_doc_sync` (a no-op; see §4.3) | no group sync |
-| Linear | `LINEAR_PERMISSION_DOC_SYNC_FREQUENCY` (1 h); `initial_index_should_sync=False` because `ConnectorRunner` passes `include_permissions` only to checkpointed connectors, so an issue stays private until the first doc sync lists it. A targeted reindex (`LinearConnector.reindex`) sets access itself through the EE `issue_access_by_id`, which reuses the doc sync's access rules | `LINEAR_PERMISSION_GROUP_SYNC_FREQUENCY` (5 min); one group per team the token can see plus `workspace_members:<organization id>`; a public team's issues name both, a restricted sub-team's its private parent too |
-| Salesforce | none (`doc_sync_config=None`) | none; `censoring_config` only (§4.5) |
-| HubSpot | `HUBSPOT_PERMISSION_DOC_SYNC_FREQUENCY` (1 h); `initial_index_should_sync=False` (the crawl never fetches viewers, so only the doc sync grants access; a targeted reindex (`HubSpotConnector.reindex`) on a perm-synced cc-pair also sets access, with the same `HubSpotPermissionReader`) | no group sync; stores the viewer emails HubSpot's permitted-users API returns |
-| YouTrack | `YOUTRACK_PERMISSION_DOC_SYNC_FREQUENCY` (30 min); `initial_index_should_sync=False`, so an issue stays private until the first doc sync lists it | `YOUTRACK_PERMISSION_GROUP_SYNC_FREQUENCY` (30 min); per project a readers group (Read Issue and Read Issue Comment through project, organization or global roles) and an Override Visibility group, plus one group per visibility entry restricted issues name, intersected with the readers except in helpdesk projects |
-
-Every value is env-overridable and is additionally multiplied by
-`OnyxRuntime.get_doc_permission_sync_multiplier()` in
-`_is_external_doc_permissions_sync_due` (cloud-only backpressure knob).
-
----
-
-## 3. Data model
+**Doc sync.**
 
 ```
-ConnectorCredentialPair
-  .access_type: PUBLIC | PRIVATE | SYNC | SYNC_RESTRICTED
-  .last_time_perm_sync, .last_time_external_group_sync
-
-DocPermissionSyncAttempt                          onyx/db/models.py
-  .connector_credential_pair_id, .status (PermissionSyncStatus),
-  .total_docs_synced, .docs_with_permission_errors,
-  .error_message, .full_exception_trace, .time_started/.time_finished
-
-ExternalGroupPermissionSyncAttempt                onyx/db/models.py
-  .connector_credential_pair_id (nullable: some sources sync groups once for
-   every cc_pair of that source, see source_group_sync_is_cc_pair_agnostic),
-  .status, .total_users_processed, .total_groups_processed,
-  .total_group_memberships_synced, .errors_encountered
-
-Document
-  .external_user_emails: str[]
-  .external_user_group_ids: str[]   # already namespaced, see §4.1
-  .is_public: bool
-  .last_modified: timestamp         # bumped only when perm-sync actually changes a value
-  .last_synced: timestamp           # set by the separate index-write task, [[document-index]]
-
-User__ExternalUserGroupId                          ee/onyx/db/models via external_perm.py
-  .user_id, .external_user_group_id (namespaced string), .cc_pair_id, .stale: bool
-
-PublicExternalUserGroup
-  .external_user_group_id, .cc_pair_id, .stale: bool
-  # a synced group marked "gives everyone access" (e.g. a Drive domain share)
-
-ExternalUserGroup (pydantic, not a table)           ee/onyx/db/external_perm.py
-  .id, .user_emails: list[str], .gives_anyone_access: bool
-  # what a source's group_sync_func yields; upsert_external_groups writes it
-  # into User__ExternalUserGroupId / PublicExternalUserGroup rows
-
-ExternalAccess (frozen dataclass)                   onyx/access/models.py
-  .external_user_emails, .external_user_group_ids, .is_public
-  # what a source's doc_sync_func yields per document, wrapped as:
-
-DocExternalAccess / NodeExternalAccess              onyx/access/models.py
-  .doc_id / .raw_node_id, .external_access
-  # union type ElementExternalAccess is what doc_sync generators actually yield
+beat: check_for_doc_permissions_sync          doc_permission_syncing/tasks.py
+  fail expired and lost attempts
+  is_external_doc_permissions_sync_due, retry-after backoff
+  try_create_doc_permission_sync_attempt      NOT_STARTED row = the per-pair lock
+  send_task(attempt_id, expires=PERMISSION_SYNC_TASK_EXPIRES)
+connector_permission_sync_generator_task      heavy worker
+  claim attempt, start LeaseHeartbeat
+  doc_sync_func (or checkpointed_doc_sync_func) yields ElementExternalAccess
+  update_element_permissions_batch -> element_update_permissions
+    document -> upsert_document_external_perms: write and bump last_modified
+                only when the value changed
+    hierarchy node -> node permissions
+  complete attempt, set last_time_perm_sync
+then: the metadata sync ([[document-index]]) writes the new ACL into the index
 ```
 
-```
-                 doc_sync_func yields ElementExternalAccess
-                              |
-                              v
-              element_update_permissions (per element)
-                    |                       |
-                    v                       v
-        upsert_document_external_perms   db_update_hierarchy_node_permissions
-        (Document.external_* / is_public)   (HierarchyNode.*, see access-control §3)
-                              |
-                              v
-              Document.last_modified bumped IF changed
-                              |
-                    (picked up later, see §4.3)
-                              v
-              document_index_metadata_sync_task
-              recomputes get_access_for_document
-              and writes the ACL into the index
-```
+Most sources use `ee/onyx/external_permissions/utils.py:generic_doc_sync`. It
+streams the source's slim documents with their access. It raises when a
+document has no access, so a connector bug stops the sync instead of hiding
+one document. Then it diffs the result against the pair's existing document
+IDs and yields an empty, private ACL for each ID the source did not return.
+SharePoint and OneDrive can report the same document: a SharePoint doc sync
+does not overwrite a document that a perm-synced OneDrive pair indexed
+(`ee/onyx/db/document.py:upsert_document_external_perms`).
+
+**Group sync.**
 
 ```
-              group_sync_func yields ExternalUserGroup
-                              |
-                              v
-              upsert_external_groups (batch upsert,
-              stale=False on every row touched this cycle)
-                              |
-                              v
-        User__ExternalUserGroupId / PublicExternalUserGroup
-                              |
-              read by fetch_external_groups_for_user /
-              fetch_public_external_group_ids (access-control §4.3)
+beat: check_for_external_group_sync           external_group_syncing/tasks.py
+  one active cc-pair per source when the source is cc-pair agnostic
+connector_external_group_sync_generator_task -> _timed_perform_external_group_sync
+  remove_stale_external_groups                rows a previous cycle left stale
+  mark_old_external_groups_as_stale           commit at once
+  group_sync_func yields ExternalUserGroup -> upsert_external_groups (stale=False)
+  remove_stale_external_groups                rows this cycle did not confirm
 ```
 
----
+`upsert_external_groups` and `element_update_permissions` create the `User` rows
+for unknown emails (`db/users.py:batch_add_ext_perm_user_if_not_exists`). A
+group change needs no index write: chunks hold group IDs, and a user's groups
+are read at query time.
 
-## 4. How it works
+**Namespacing.** A raw group ID from a source becomes
+`build_ext_group_name_for_onyx(raw_id, source)`: the source prefix, lowercased.
+`upsert_document_external_perms` applies it to a document's group IDs, and
+`upsert_external_groups` to membership rows. Google Drive puts a domain-wide
+share on a document as `build_domain_group_id(domain)`, and group sync emits a
+group with the same raw ID and the domain roster.
 
-### 4.1 The registry: `get_source_perm_sync_config`
+**The lease.** The open attempt row is the per-pair lock. Partial unique indexes
+allow one `NOT_STARTED` or `IN_PROGRESS` row per cc-pair for each sync kind.
+`background/celery/tasks/shared/lease_heartbeat.py:LeaseHeartbeat` renews
+`heartbeat_at` and the progress counts while the row is `IN_PROGRESS`. The beat
+reaper fails a row whose lease expired, and a doc sync row with no progress for
+`PERMISSION_SYNC_STALL_TIMEOUT`. A worker whose renewal finds no row, or that
+could not renew for a while, sees `is_lost()` and stops. Each write takes a
+share lock on the attempt row in its own transaction
+(`lock_doc_permission_sync_attempt_if_owned`,
+`lock_external_group_sync_attempt_if_owned`), so the reaper cannot fail the
+attempt mid-write and a write after the reaper is refused.
 
-`ee/onyx/external_permissions/sync_params.py:_SOURCE_TO_SYNC_CONFIG` is the one
-place that says what a source supports. Each entry is a `SyncConfig` with up to
-three independent, optional pieces:
+**Validation.** `ee/onyx/connectors/perm_sync_valid.py:validate_perm_sync`
+dispatches through `_VALIDATOR_BY_CONNECTOR_CLASS`. It runs in pairing
+validation (`connectors/factory.py:_build_and_validate_connector`) and at the
+start of every docfetching attempt of a perm-synced pair
+(`background/indexing/run_docfetching.py:_get_connector_runner`, stage
+`PERMISSION_VALIDATION`). A failed probe there fails the index attempt and,
+unless the error is an `UnexpectedValidationError` or the attempt is a
+backfill, pauses the pair. Named capability checks run only in capability-check
+runs.
 
-- `doc_sync_config: DocSyncConfig | None`. If set: a `doc_sync_func`
-  (`DocSyncFuncType`, `perm_sync_types.py`), a `doc_sync_frequency`, and
-  `initial_index_should_sync` (whether the connector already fetches
-  permissions inline during indexing, so doc sync must wait for the first
-  successful index before it has anything meaningful to correct;
-  `_is_external_doc_permissions_sync_due` gates on this).
-- `group_sync_config: GroupSyncConfig | None`. If set: a `group_sync_func`
-  (`GroupSyncFuncType`), a `group_sync_frequency`, and
-  `group_sync_is_cc_pair_agnostic` (Confluence and Jira: one sync run at the
-  source level, not per cc_pair, `sync_params.py:_SOURCE_TO_SYNC_CONFIG`
-  entries for `CONFLUENCE`/`JIRA`).
-- `censoring_config: CensoringConfig | None`. A `chunk_censoring_func`
-  (`CensoringFuncType`). Salesforce is the only current user (§4.5); it has
-  `censoring_config` set and `doc_sync_config=None`.
+## Contracts and traps
 
-A source with none of the three is not in the dict at all;
-`get_source_perm_sync_config` returns `None` and
-`check_if_valid_sync_source`/`source_requires_doc_sync`/
-`source_requires_external_group_sync` all report `False`.
+1. `doc-sync-covers-known-docs` **A doc sync must account for every document it
+   knew.** `ee/onyx/external_permissions/utils.py:generic_doc_sync` makes a
+   document private when the source stops
+   returning it. A doc sync that does not use it needs its own rule. GitHub has
+   one: it re-checks the existing documents. Slack, Google Drive and Gmail
+   ignore the existing-docs functions and have no such rule, so a document that
+   left those sources keeps its ACL until pruning removes it. List the doc syncs
+   that do not use `generic_doc_sync` with
+   `git grep -L generic_doc_sync -- 'backend/ee/onyx/external_permissions/*/doc_sync.py'`.
+2. `namespace-group-ids` **Namespace group IDs on both sides with one
+   function.** Every write and compare of an external group ID must call
+   `onyx/access/utils.py:build_ext_group_name_for_onyx`. It adds the source
+   prefix, so "Engineering" in Confluence and in Jira stay apart, and it
+   lowercases. An ID built by hand differs only in case or prefix. The match
+   then fails closed: the user loses access, and the sync looks healthy. The
+   doc sync and group sync writes apply it for you. The indexing write
+   (`onyx/db/document.py:upsert_documents`) stores group IDs as the connector
+   gives them, so a connector that sets `external_access` during indexing must
+   namespace its group IDs itself (see `add_prefix` in
+   `ee/onyx/external_permissions/google_drive/doc_sync.py`). A change to the
+   namespacing needs a full doc sync and group sync, not a reindex, because the
+   Postgres rows hold the old IDs.
+3. `never-widen-first` **Never clear or widen access before the new value is
+   confirmed.** `ee/onyx/db/document.py:upsert_document_external_perms` commits
+   per document. A doc sync that fails halfway leaves each document either
+   updated or as it was. That is safe only because no step clears an ACL first.
+4. `failed-group-sync-keeps-memberships` **A failed group sync keeps revoked
+   memberships for one interval.**
+   `ee/onyx/db/external_perm.py:fetch_external_groups_for_user` does not filter
+   on `stale`. The end-of-cycle
+   `ee/onyx/db/external_perm.py:remove_stale_external_groups` runs only
+   when the cycle succeeds, so a user removed from a source group keeps that
+   group's access after a failure. The next attempt deletes the stale rows when
+   it starts, before it fetches. That delete also drops valid memberships that
+   the failed cycle did not confirm, and the user loses them until the new
+   cycle writes them again. A change to this order can widen the open window or
+   the closed one. Treat a run of `FAILED` group sync attempts as a security
+   alert, because backoff delays the next start.
+5. `bump-only-on-change` **Bump `last_modified` only on a real change.**
+   `ee/onyx/db/document.py:upsert_document_external_perms` compares before it
+   writes. An unconditional bump makes every synced document look stale to the
+   metadata sync.
+6. `registry-gates-sync-choice` **A source must be in the registry before an
+   admin can pick Sync.** `connectors/pairing_access.py:validate_pairing_access`
+   calls `check_if_valid_sync_source` and requires the business tier for a
+   perm-synced access type. The routes in `server/documents/` and the connector
+   edit plan call it. A new path that sets the access type must call it too.
+7. `only-perm-synced-write-acl` **Only perm-synced pairs may write source
+   ACLs.** `indexing/indexing_pipeline.py:_upsert_documents_in_db` drops a
+   connector's `external_access` unless the writing pair is perm-synced.
+8. `oversized-acl-skipped` **An oversized ACL is skipped, not cut.**
+   `ee/onyx/background/celery/tasks/doc_permission_syncing/tasks.py:_write_element_permissions`
+   skips an element whose users and groups exceed
+   `access/models.py:ExternalAccess.MAX_NUM_ENTRIES` and counts it as an error.
+   The document keeps its previous ACL. Repeated `docs_with_permission_errors` is a
+   real gap.
+9. `guarded-terminal-status` **Write a terminal status only through the guarded
+   helpers** in `db/permission_sync_attempt.py`. `complete_*` raises
+   `PermissionSyncAttemptLostError` unless the row is still `IN_PROGRESS`, and
+   `mark_*_failed` keeps an existing `FAILED` or `CANCELED` reason. Do not set the status directly.
+10. `doc-sync-blocks-prune-delete` **An open doc sync blocks pruning and
+    connector deletion.** An open group sync blocks neither
+    (`background/celery/tasks/pruning/tasks.py:try_creating_prune_generator_task`,
+    `background/celery/tasks/connector_deletion/tasks.py:try_generate_document_cc_pair_cleanup_tasks`).
+    Deletion revokes both tasks and, after its timeout, cancels both attempts.
+11. `checkpoint-after-flush` **A doc sync checkpoint covers only flushed
+    writes.** The task writes elements in parallel batches of
+    `PERMISSION_WRITE_BATCH_SIZE`.
+    `ee/onyx/background/celery/tasks/doc_permission_syncing/checkpointer.py:FileStoreDocSyncCheckpointer`
+    flushes the pending batch before it saves. A failed element write freezes
+    the checkpointer, so a resume starts before that element and retries it.
+    Do not save a checkpoint ahead of unflushed writes.
+12. `web-sync-source-list` **The web form keeps its own list of Sync sources.**
+    `web/src/lib/connectors/types/source.ts:validAutoSyncSources` decides
+    whether the admin form offers Sync, and
+    `web/src/lib/connectors/AutoSyncOptionFields.tsx:autoSyncConfigBySource` is
+    keyed by it. It mirrors `_SOURCE_TO_SYNC_CONFIG` by hand. A source missing
+    from it cannot be set to Sync from the UI, and no test fails.
+13. `stub-documents` **Doc sync can create a stub `Document`.** When a source
+    reports a document that is not indexed yet,
+    `upsert_document_external_perms` creates a row with an empty `semantic_id`,
+    so the permission is ready when indexing arrives. Code that lists documents
+    must not assume every row was indexed.
+14. `lease-timings` **The lease timings bound how long a pair stays locked.**
+    Keep them in step: `configs/constants.py:PERMISSION_SYNC_HEARTBEAT_INTERVAL`,
+    `configs/constants.py:PERMISSION_SYNC_LEASE_TIMEOUT`,
+    `configs/constants.py:PERMISSION_SYNC_LEASE_OVERRUN`,
+    `configs/constants.py:PERMISSION_SYNC_LEASE_SELF_EXPIRY`,
+    `configs/constants.py:PERMISSION_SYNC_STALL_TIMEOUT`,
+    `configs/constants.py:PERMISSION_SYNC_LOST_TASK_GRACE` and
+    `backend/onyx/configs/app_configs.py:PERMISSION_SYNC_TIMEOUT`. The beat fails a `NOT_STARTED`
+    attempt older than `PERMISSION_SYNC_LOST_TASK_GRACE` whose task is in
+    neither the broker queue nor the unacked set, for example after a Redis
+    restart
+    (`ee/onyx/background/celery/tasks/doc_permission_syncing/tasks.py:fail_lost_queued_doc_permission_sync_attempts`).
+    A task that a worker already took also looks lost; its claim then fails and
+    the beat dispatches again. A group sync's heartbeat stops renewing
+    `PERMISSION_SYNC_LEASE_OVERRUN` after `PERMISSION_SYNC_TIMEOUT`, so a crawl
+    thread hung in a source call cannot hold the lease for the life of the
+    process. `PERMISSION_SYNC_LEASE_SELF_EXPIRY` is shorter than
+    `PERMISSION_SYNC_LEASE_TIMEOUT` on purpose: a worker that cannot reach the
+    database stops writing before the reaper can start a replacement. A change
+    to these values, or to the reaper order, can let two workers write one
+    pair.
 
-`DocSyncFuncType`/`GroupSyncFuncType`/`CensoringFuncType` are `Protocol`/
-`Callable` type aliases in `perm_sync_types.py`; every `_load_*` function in
-`sync_params.py` lazily imports the real implementation on first call (`_lazy_doc_sync`,
-`_lazy_group_sync`, `_lazy_censoring`), so importing `sync_params` does not pull
-in every connector SDK.
+## Decisions
 
-Perm-sync capability checks (`validate_perm_sync` probes and named checks) are
-dispatched from `ee/onyx/connectors/capability_checks.py` and `perm_sync_valid.py`. The
-check implementations live in the connector modules. Confluence, Google Drive, OneDrive,
-Outlook, SharePoint, GitHub, Slack, HubSpot, and YouTrack have named perm-sync checks. See [[connectors]] §4.8.
+- **The attempt row is the lock, not a Redis fence.** The admin page, the
+  reaper, pause and deletion all read the same row. Dispatch creates it in the
+  transaction that also reads the pair's status under its row lock, so a pause
+  either cancels the new attempt or is seen by it. A Redis fence could disagree
+  with the row, and it is lost on Redis eviction. Indexing made the same move
+  (`db/indexing_coordination.py:IndexingCoordination.try_create_index_attempt`).
+- **Salesforce censors after retrieval.** Its documents under a perm-synced pair
+  pass the index ACL filter for every user, and
+  `ee/onyx/external_permissions/salesforce/postprocessing.py:censor_salesforce_chunks`
+  removes what the user cannot see. Salesforce therefore has no sync attempts
+  to inspect. A Salesforce access bug is a censoring bug.
+- **Long crawls resume.** A source whose doc sync can run for days (Google
+  Drive) sets `checkpointed_doc_sync_func`. `FileStoreDocSyncCheckpointer` saves
+  a checkpoint per cc-pair in the file store. The next attempt resumes it only
+  when the attempt that saved it failed or was canceled, started after any
+  requested full refresh, and no later attempt succeeded
+  (`db/permission_sync_attempt.py:is_doc_permission_sync_attempt_resumable`),
+  and when the file is younger than `NUM_DAYS_TO_KEEP_CHECKPOINTS` and the
+  connector config hash did not change (`FileStoreDocSyncCheckpointer`).
 
-### 4.2 Doc sync flow
+## Known issues
 
-```
-beat: CHECK_FOR_DOC_PERMISSIONS_SYNC (every 30s)
-  check_for_doc_permissions_sync                doc_permission_syncing/tasks.py
-    get_all_auto_sync_cc_pairs                   ee/onyx/db/connector_credential_pair.py
-    _is_external_doc_permissions_sync_due(cc_pair)  per cc_pair, per §2 frequency table
-    try_creating_permissions_sync_task            skips a pair being deleted or pruned
-      try_create_doc_permission_sync_attempt      onyx/db/permission_sync_attempt.py; NOT_STARTED
-                                                   row with celery_task_id, None if one is open
-      send_task(attempt_id=..., expires=PERMISSION_SYNC_TASK_EXPIRES)
-  CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK
-    connector_permission_sync_generator_task
-      mark_doc_permission_sync_attempt_in_progress   skips an attempt closed while queued
-      fails the attempt if the cc_pair is no longer perm-synced
-      LeaseHeartbeat renews heartbeat_at          tasks/shared/lease_heartbeat.py, see §5.9
-      doc_sync_func(cc_pair, fetch_existing_docs_fn, fetch_existing_doc_ids_fn, callback)
-        -> Generator[ElementExternalAccess]
-        (checkpointed_doc_sync_func with a FileStoreDocSyncCheckpointer instead,
-         when the source sets one; see §5.9)
-      for each element:
-        update_element_permissions_batch           doc_permission_syncing/tasks.py
-          -> element_update_permissions
-             DocExternalAccess  -> upsert_document_external_perms      ee/onyx/db/document.py
-             NodeExternalAccess -> db_update_hierarchy_node_permissions onyx/db/hierarchy.py
-      complete_doc_permission_sync_attempt (SUCCESS or COMPLETED_WITH_ERRORS)
-      mark_cc_pair_as_permissions_synced          sets last_time_perm_sync
-      on exception: _fail_doc_permission_sync_attempt, re-raised
-```
+- **Two Confluence sites share one attempt history.** Group sync for an agnostic
+  source runs once for the source.
+  `db/permission_sync_attempt.py:relevant_external_group_sync_attempts_filter`
+  widens the run feed to the whole source.
+- **Two clocks.** Doc sync, group sync and the metadata sync run on separate
+  schedules. A document's group ID and that group's members can update at
+  different times.
+- **Group sync errors go to `BackgroundError`**, which no API reads
+  ([[background-jobs]]).
 
-The manual triggers `POST /manage/admin/cc-pair/{id}/sync-permissions` and
-`/sync-groups` (`ee/onyx/server/documents/cc_pair.py`) return `INVALID_INPUT`
-for a cc_pair that is not perm-synced, and `CONFLICT` while a sync is queued or
-running. The connector page's Manage Index menu offers Sync Permissions on a
-perm-synced pair whose source syncs document permissions (`supports_doc_permission_sync`
-on the pair, so Salesforce gets none), hidden while the pair is paused or deleting. It posts
-`sync-permissions` and is disabled while a sync is queued or running. The page's status
-card has a column for each sync kind the pair runs, and a pair that is not perm-synced gets
-a document access column instead. A column shows the newest run's tag, or Synced when the
-pair has a success but no run, and Paused on a paused pair unless a run is queued or in
-progress. Under the tag it shows the live rate while a run is in progress, else the time from
-`last_time_perm_sync` or `last_time_external_group_sync`, else "Waiting for first index" for
-a doc sync until the pair's first index succeeds and "Not synced yet" otherwise. A paused
-pair's documents card shows the newest runs' synced document and membership counts in place
-of the chart. The indexing pipeline
-(`indexing_pipeline.py:_upsert_documents_in_db`) also drops connector-emitted
-`external_access` unless the writing cc_pair is perm-synced.
+## Dependencies
 
-Most doc-sync implementations funnel through
-`ee/onyx/external_permissions/utils.py:generic_doc_sync`, which:
+- [[connectors]]: the permission-fetching connector interfaces.
+- [[google-drive]]: the Drive perm-sync listing does not raise on unreachable
+  targets and can resume from a checkpoint.
+- [[confluence]]: every Confluence call holds the credential provider's lock.
+- [[cc-pairs-and-creds]]: the access type and the sync timestamps on the pair.
+- [[document-index]]: the metadata sync that makes a Postgres ACL searchable.
+- [[background-jobs]]: beat and the heavy worker.
+- [[editions-and-gating]]: the beat entries exist only when EE code ships.
 
-1. Streams the source's `SlimConnectorWithPermSync.retrieve_all_slim_docs_perm_sync`
-   output (interface: `onyx/connectors/interfaces.py:SlimConnectorWithPermSync`).
-2. Yields a `DocExternalAccess` per fetched document, or a `NodeExternalAccess`
-   for a `HierarchyNode`.
-3. Raises `RuntimeError` if a fetched document has no `external_access` set at
-   all (`utils.py:generic_doc_sync`, `"No external access found for document ID"`):
-   a connector bug here stops the whole sync rather than silently under-permissioning
-   one document.
-4. Diffs the fetched ID set against `fetch_all_existing_docs_ids_fn()`
-   (`get_document_ids_for_connector_credential_pair`). Every existing document
-   **not** seen in this fetch gets `DocExternalAccess(external_access=ExternalAccess.empty())`,
-   i.e. `is_public=False` and both ID sets emptied: the source stopped
-   reporting it, so Onyx makes it private. This is the fail-closed default for
-   the "document disappeared or the user lost access" case.
+## Recipes
 
-Confluence, Jira, Canvas, Box, SharePoint, OneDrive, Teams, Outlook, HubSpot, and YouTrack doc_sync
-(`ee/onyx/external_permissions/{confluence,jira,canvas,box,sharepoint,onedrive,teams,outlook,hubspot,youtrack}/doc_sync.py`)
-are thin wrappers around `generic_doc_sync`, differing only in which connector
-class and `DocumentSource` they pass. Four sources have a different
-shape: Slack and Google Drive (below), and Gmail and GitHub (own `doc_sync.py`, no
-`generic_doc_sync`; GitHub uses `fetch_all_existing_docs_fn` to re-check repository visibility).
-GitHub group sync reads the collaborators of private repositories and the members of
-the organization of internal ones, and maps each user by the public email of the
-profile. The `github_user_emails` check warns when no sampled user has one.
+- `doc-sync-source` **A source with doc sync.** Copy the `youtrack` source; list
+  the sources with
+  `git ls-files 'backend/ee/onyx/external_permissions/*/doc_sync.py'`. First
+  implement `SlimConnectorWithPermSync` on the connector ([[connectors]]). Write
+  the source's doc sync module, which calls `generic_doc_sync`
+  (`ee/onyx/external_permissions/youtrack/doc_sync.py`). It builds the connector
+  with `build_connector_kwargs` and a DB credentials provider; youtrack keeps
+  that in
+  `ee/onyx/external_permissions/youtrack/connector.py:youtrack_connector`, so
+  copy that file too. Register it in
+  `ee/onyx/external_permissions/sync_params.py`: a `_load_<source>_doc_sync`
+  loader and a `_SOURCE_TO_SYNC_CONFIG` entry. Set `initial_index_should_sync`
+  to whether the crawl fetches permissions. True requires the connector to
+  implement `CheckpointedConnectorWithPermSync`: the first index of a
+  perm-synced pair runs with `include_permissions`, and
+  `connectors/connector_runner.py:ConnectorRunner` raises for any other
+  connector. That crawl must namespace its group IDs ([[#namespace-group-ids]]).
+  The CE connector builds its `ExternalAccess` through
+  `onyx/connectors/youtrack/access.py`, which reaches
+  `ee/onyx/external_permissions/youtrack/access.py` at call time and returns
+  None in CE; it never imports `ee.` ([[editions-and-gating]]).
+  Add a frequency to `ee/onyx/configs/app_configs.py`. Add the source to the web
+  lists ([[#web-sync-source-list]]). Add a validator to
+  `ee/onyx/connectors/perm_sync_valid.py:_VALIDATOR_BY_CONNECTOR_CLASS`; copy
+  `validate_youtrack_perm_sync`, which runs each mirrored check ID once, so
+  scheduled runs validate too.
+- `group-sync-source` **A source with groups.** Write a group sync module that
+  yields raw group IDs; copy
+  `ee/onyx/external_permissions/youtrack/group_sync.py`. Let the write path
+  namespace them ([[#namespace-group-ids]]). Register it like doc sync: a
+  `_load_<source>_group_sync` loader and a `GroupSyncConfig` in its
+  `_SOURCE_TO_SYNC_CONFIG` entry, a `<SOURCE>_PERMISSION_GROUP_SYNC_FREQUENCY` in
+  `ee/onyx/configs/app_configs.py`, and group-sync checks in
+  `ee/onyx/connectors/capability_checks.py:_EXTERNAL_GROUP_SYNC_CHECKS_BY_SOURCE`.
+  Set `group_sync_is_cc_pair_agnostic` when one run serves every cc-pair of the
+  source. A source without group sync registers no group-sync
+  checks: Slack has none, because channel access resolves user groups to single
+  users (`ee/onyx/connectors/capability_checks.py`).
+- `investigate-stopped-sync` **Investigate a sync that stopped.** A connector
+  stops with a generic "Stop signal detected" error for a stop signal or a lost
+  lease. Read the attempt's `error_message` for the cause: a reaper or cancel
+  reason stays there ([[#guarded-terminal-status]]).
+- `investigate-leak` **Investigate a leak or a missing document.** Read the
+  document's `external_user_emails`, `external_user_group_ids` and `is_public`
+  in Postgres. If they are right, the fault is later: in the index ACL or in the
+  user's ACL. If they are wrong, check the newest doc sync attempt and the group
+  rows of the user.
+- `reproduce-propagation` **Reproduce propagation with two users.** Share a
+  document at the source with user A only. After a doc sync and a metadata sync,
+  A sees it and B does not. Share it with B, wait again, and B sees it. For
+  groups, remove a user from a source group, make one group sync fail, and check
+  that the old access holds until the next group sync starts.
 
-- **Slack** (`ee/onyx/external_permissions/slack/doc_sync.py:slack_doc_sync`)
-  does not use `generic_doc_sync` at all. Slack has no document-level ACL
-  concept in the same sense; access is channel membership, resolved from
-  `get_channel_access` and workspace user/email maps. There is no
-  `group_sync_config` for Slack (`sync_params.py` comment: "All channel access
-  is done at the individual user level").
-- **Google Drive** (`ee/onyx/external_permissions/google_drive/doc_sync.py:gdrive_doc_sync`)
-  is custom because a Drive file's ACL includes domain-wide and "anyone with
-  link" grants. `_domain_group_for_permission` maps a domain-wide permission to
-  `build_domain_group_id(domain)` (`onyx/access/utils.py`), placed into the
-  document's `external_user_group_ids`, resolved later against the real domain
-  roster by group sync (§4.4).
+## Verification
 
-**Zoom and the mock connector are a documented no-op** (`sync_params.py:mock_doc_sync`):
-permissions are set once, during indexing, and doc sync never revises them. A
-missing or stale permission for these sources is an indexing bug, not a sync
-bug; a change here needs the indexing pipeline, not this component.
-
-### 4.3 From `Document` row to indexed ACL: the missing link, made explicit
-
-**Doc sync writes to Postgres only.** `element_update_permissions` calls
-`upsert_document_external_perms` (`ee/onyx/db/document.py`), which compares
-the incoming `ExternalAccess` against the current `Document` row and, **only if
-something actually changed**, updates the columns and bumps
-`document.last_modified = datetime.now(timezone.utc)`
-(`ee/onyx/db/document.py:upsert_document_external_perms`). Nothing in the doc
-sync task pushes a value into the document index directly.
-
-**The index write is a separate, generic mechanism**, owned by
-[[document-index]] and [[indexing-pipeline]], that this component depends on
-rather than implements:
-
-```
-beat: CHECK_FOR_VESPA_SYNC_TASK                    onyx/background/celery/tasks/vespa/tasks.py
-  try_generate_stale_document_sync_tasks
-    construct_document_id_select_by_needs_sync_or_secondary_pending   onyx/db/document.py
-      predicate: Document.last_modified > Document.last_synced
-              OR Document.last_synced IS NULL
-    -> dispatches DOCUMENT_INDEX_METADATA_SYNC_TASK per stale document id
-  document_index_metadata_sync_task
-    get_access_for_document(document_id)           access-control's dispatch point
-    MetadataUpdateRequest(access=doc_access, document_sets=..., ...)
-    RetryDocumentIndex(document_index).update(...)  a metadata-only write, not
-                                                     a full re-embed/re-chunk
-    (on success) mark_document_as_synced             sets Document.last_synced
-```
-
-**Verified**: `upsert_document_external_perms` (`ee/onyx/db/document.py`) bumps
-`last_modified` only on an actual diff; `construct_document_id_select_by_needs_sync_or_secondary_pending`
-(`onyx/db/document.py`) is the query the vespa-sync beat task uses to find work;
-`document_index_metadata_sync_task` (`onyx/background/celery/tasks/vespa/tasks.py`)
-is the task that calls `get_access_for_document` and issues the index write. This
-is a **metadata-only** update (chunk content, embeddings, and text are
-untouched); it is not what "reindex" usually means for content changes, but it
-is the mechanism that makes a permission-sync ACL change visible in search.
-Until this task runs for a given document, that document's indexed ACL is
-whatever the previous sync (or the initial index) wrote.
-
-Group sync has no equivalent per-document trigger of its own: a group
-membership change does not bump any `Document.last_modified`, because a
-document's indexed ACL contains the *group id*, not the resolved member list
-(`DocumentAccess.to_acl`, [[access-control]] §4.1). The membership change takes
-effect at **read time**, the next time `fetch_external_groups_for_user` runs
-for that user, with no index write needed. See §5.4 for why this makes group
-sync safe to lag doc sync.
-
-### 4.4 Group sync flow
-
-```
-beat: CHECK_FOR_EXTERNAL_GROUP_SYNC (every 20s)
-  check_for_external_group_sync                  external_group_syncing/tasks.py
-    fail_expired_external_group_sync_attempts_for_tenant   see §5.9
-    get_all_auto_sync_cc_pairs                     every perm-synced cc_pair
-    (filter in check_for_external_group_sync)      keeps only active statuses (not PAUSED,
-                                                   INVALID, DELETING); for agnostic sources
-                                                   keeps the lowest-id active cc_pair; skips
-                                                   pairs with an open attempt
-    is_external_group_sync_due(cc_pair)            per cc_pair, per §2 frequency table
-    get_external_group_sync_retry_after            backs off after consecutive FAILED attempts
-                                                   (request_retry_delay: 5 min doubling to 6 h);
-                                                   the manual sync endpoint ignores it
-    try_creating_external_group_sync_task
-      try_create_external_group_sync_attempt       NOT_STARTED row with celery_task_id,
-                                                   None if one is open
-      send_task(attempt_id=..., expires=PERMISSION_SYNC_TASK_EXPIRES)
-  CONNECTOR_EXTERNAL_GROUP_SYNC_GENERATOR_TASK
-    connector_external_group_sync_generator_task
-      mark_external_group_sync_attempt_in_progress  skips an attempt closed while queued
-      LeaseHeartbeat renews heartbeat_at            see §5.9
-      _timed_perform_external_group_sync:
-        remove_stale_external_groups(cc_pair_id)     clears LAST cycle's leftovers, see §5.4
-        mark_old_external_groups_as_stale(cc_pair_id) tags this cycle's starting rows stale=True,
-                                                       commits immediately (idle-in-transaction
-                                                       safety, ee/onyx/db/external_perm.py comment)
-        group_sync_func(tenant_id, cc_pair) -> Generator[ExternalUserGroup]
-        for each batch of 100:
-          upsert_external_groups                     sets stale=False on every touched row
-        remove_stale_external_groups(cc_pair_id)     removes rows nothing in THIS cycle re-confirmed
-        complete_external_group_sync_attempt
-        mark_all_relevant_cc_pairs_as_external_group_synced   group_sync_utils.py; widens to every
-                                                               cc_pair of the source if
-                                                               source_group_sync_is_cc_pair_agnostic
-      on exception: mark_external_group_sync_attempt_failed, re-raised
-                    (no final remove_stale_external_groups call: see §5.3/§5.4)
-```
-
-`upsert_external_groups` (`ee/onyx/db/external_perm.py`) does the namespacing:
-for each `ExternalUserGroup`, it computes
-`build_ext_group_name_for_onyx(ext_group_name=external_group.id, source=source)`
-once, and reuses that value as `external_user_group_id` for every member row
-(and, if `gives_anyone_access`, for the `PublicExternalUserGroup` row too). It
-batch-adds any not-yet-known member emails via
-`batch_add_ext_perm_user_if_not_exists` (`onyx/db/users.py`) before writing
-group rows, so a user who has never logged into Onyx can still be granted
-access via a synced group.
-
-**Confluence/Jira group sync is source-scoped, not cc_pair-scoped**
-(`source_group_sync_is_cc_pair_agnostic` returns `True` for these sources in
-`sync_params.py`). `group_sync_utils.py:mark_all_relevant_cc_pairs_as_external_group_synced`
-looks up every cc_pair for that source and marks all of them synced after one
-successful run, and `permission_sync_attempt.py:relevant_external_group_sync_attempts_filter`
-(used by the run feed in `db/cc_pair_runs.py`) widens the attempt filter to
-the whole source for these two, with a documented caveat:
-two independent Confluence sites in the same deployment share one merged
-attempt history.
-
-**Google Drive is the concrete "domain group" case.**
-`ee/onyx/external_permissions/google_drive/group_sync.py:gdrive_group_sync`
-yields, among per-folder and per-Google-group entries, one
-`ExternalUserGroup(id=build_domain_group_id(google_drive_connector.google_domain), ...)`
-populated with the real Workspace roster for that domain. Doc sync
-independently emits `build_domain_group_id(permission.domain)` as a raw group
-id on any document with a domain-wide share
-(`google_drive/doc_sync.py:_domain_group_for_permission`). Both are raw,
-unprefixed ids; `build_ext_group_name_for_onyx` is applied identically to both
-by `upsert_external_groups` (group write path) and by
-`upsert_document_external_perms` (doc write path, which prefixes every id in
-`external_access.external_user_group_ids` the same way). This symmetry is what
-makes a domain-wide share resolvable at read time; see §5.2 and §9.
-
-### 4.5 Salesforce: censoring instead of doc sync
-
-Salesforce has `doc_sync_config=None` and `censoring_config` set
-(`sync_params.py:_SOURCE_TO_SYNC_CONFIG[DocumentSource.SALESFORCE]`). Per
-[[access-control]] §4.5, this makes every Salesforce document indexed under a
-perm-synced cc_pair pass the ACL filter for everyone
-(`ee/onyx/access/access.py:_get_access_for_documents`, `is_only_censored`
-branch, keyed on `db/document.py:get_document_access_types`), and access is
-narrowed **after** retrieval instead. Documents under only private or public
-Salesforce connectors keep those ACLs. Documents under a public connector are
-never censored, while private-only ones still are
-(`CensoringConfig.censors_private_connectors`), since older indexes hold the
-open ACL for them:
-`ee/onyx/external_permissions/salesforce/postprocessing.py:censor_salesforce_chunks`
-is invoked per user, per chunk, by
-`ee/onyx/external_permissions/post_query_censoring.py:_post_query_chunk_censoring`,
-itself reached from `context/search/pipeline.py` via
-`fetch_ee_implementation_or_noop`. There is no group sync for Salesforce.
-
-This means Salesforce has **no doc-sync `PermissionSyncAttempt` history at
-all** for admins to inspect; "is Salesforce permission sync working" is a
-question about `censor_salesforce_chunks` behaving correctly per query, not
-about a background job's status.
-
----
-
-## 5. Contracts and invariants
-
-This is the write side of the same trust boundary [[access-control]] enforces
-on read. A silent bug here does not throw; it shows (or hides) the wrong
-document to the wrong person.
-
-1. **A doc sync generator must account for every document it used to know
-   about, or "disappeared" documents keep their old ACL forever.**
-   `generic_doc_sync` (`utils.py`) does this by diffing against
-   `fetch_all_existing_docs_ids_fn()` and emitting `ExternalAccess.empty()`
-   for anything missing, which is a fail-closed default (§4.2, point 4). A new
-   source's doc_sync that does **not** route through `generic_doc_sync` (Slack
-   is the current exception) must implement an equivalent "document vanished
-   means private" rule itself, or a deleted/unshared source document stays
-   visible in Onyx indefinitely. `slack_doc_sync`, `gdrive_doc_sync`, and the Gmail doc sync ignore `fetch_all_existing_docs_*`.
-   They have no vanished-document rule. Slack re-applies current channel membership to every
-   document it still sees. A document that left the source stays as it was until pruning
-   removes it.
-2. **The write-side namespacing (`upsert_document_external_perms`,
-   `upsert_external_groups`) and the read-side namespacing
-   (`_get_acl_for_user`'s `prefix_external_group`) must both go through
-   `build_ext_group_name_for_onyx`, with the same `(raw_id, source)` pair.**
-   Both call sites apply it: `ee/onyx/db/document.py:upsert_document_external_perms`
-   for the document's `external_user_group_ids`, and
-   `ee/onyx/db/external_perm.py:upsert_external_groups` for
-   `User__ExternalUserGroupId.external_user_group_id`. Since
-   `build_ext_group_name_for_onyx` also **lowercases** its output
-   (`onyx/access/utils.py`, "NOTE: the name is lowercased to handle case
-   sensitivity"), any code path that stores or compares a group id **without**
-   calling this function breaks the match silently: the ACL entry and the
-   membership row diverge only in case, `set` equality fails, and the user
-   loses access to a document they should see. This fails closed (an
-   availability bug), which is the safer direction, but it is still silent.
-   A new source's doc_sync or group_sync must call `build_ext_group_name_for_onyx`
-   at both id-producing sites, never construct the prefixed id by hand.
-3. **A failed doc sync attempt does not roll back what it already wrote.**
-   `element_update_permissions` commits per-document
-   (`upsert_document_external_perms` calls `db_session.commit()` directly on
-   the changed-value branch). If the generator raises partway through
-   (`connector_permission_sync_generator_task`'s `except` block), documents
-   already processed keep their new (correct, freshly-fetched) ACL; documents
-   not yet reached keep their old ACL and are picked up on the next scheduled
-   attempt. This is safe **only** because no doc sync clears an ACL
-   speculatively before confirming the new one: a partial sync never leaves a
-   document in a wider state than before the sync started, only a
-   possibly-stale one. Do not add a step that clears or widens a document's
-   access before the fetch confirming the replacement value succeeds.
-4. **A failed or partial group sync leaves last-cycle's memberships in place,
-   including ones that should have been revoked.** `fetch_external_groups_for_user`
-   and `fetch_external_groups_for_user_email_and_group_ids`
-   (`ee/onyx/db/external_perm.py`) select from `User__ExternalUserGroupId`
-   **without filtering on `stale`**. `stale` is a bookkeeping flag consumed
-   only by `remove_stale_external_groups`, called at the **start** of the next
-   cycle (`_timed_perform_external_group_sync`, "Clean up stale rows from
-   previous cycle BEFORE marking new ones") and again at the **end** of a
-   successful cycle. If a cycle throws (`except Exception` block,
-   `external_group_syncing/tasks.py:_timed_perform_external_group_sync`), the
-   end-of-cycle `remove_stale_external_groups` call is skipped and the
-   exception re-raises; rows marked stale this cycle (i.e. every row from the
-   *previous* successful cycle that this cycle's fetch has not yet
-   re-confirmed) remain queryable and still grant access until the next
-   attempt succeeds. **A user removed from a source group keeps that group's
-   access in Onyx until a group sync attempt completes successfully**, not
-   just runs. This is a real fail-open window, bounded by the sync frequency
-   table in §2 plus however many consecutive attempts fail. Treat a string of
-   `FAILED` `ExternalGroupPermissionSyncAttempt` rows for a cc_pair as a
-   security-relevant alert, not just an operational one.
-5. **CE has no permission sync at all; the CE fallback for the dispatch points
-   this component feeds is "no group ever resolves; only manually-shared
-   access applies".** There is no dispatched function in this component
-   itself analogous to `_get_acl_for_user`/`_get_access_for_documents`; those
-   live in [[access-control]] and already degrade correctly
-   (`ee.onyx.access.access._get_access_for_documents` reads
-   `Document.external_user_emails`/`external_user_group_ids`/`is_public`,
-   which are EE-only-populated columns; the CE `_get_access_for_documents`
-   never reads them). A CE deployment simply never gets these columns
-   populated, so it narrows rather than widens by construction. See
-   [[access-control]] §5.9 for the general dispatch-safety contract this
-   depends on.
-6. **A source with `doc_sync_config=None` and no `censoring_config` either
-   must not be marked `AccessType.SYNC`.** `_is_external_doc_permissions_sync_due`
-   logs an error and returns `False` for such a cc_pair
-   (`"No sync config found for %s"` / `"No doc sync config found for %s"`), so
-   the connector silently never gets a permission sync attempt, ever, while
-   `connector_permission_sync_generator_task` treats it as a hard failure if
-   dispatched anyway (`"No doc sync func found for ... with cc_pair="`,
-   raises). `add_credential_to_connector` blocks this at creation: for `SYNC` and
-   `SYNC_RESTRICTED` it calls `check_if_valid_sync_source` and raises `INVALID_INPUT`. It also
-   requires the business tier (`require_business_tier_for_sync_access`).
-7. **`MAX_NUM_ENTRIES` (5000, `ExternalAccess.MAX_NUM_ENTRIES`) is enforced only
-   at consumption time, not by the connector.** `update_element_permissions_batch`
-   skips (does not apply, counts as an error) any element whose combined
-   user+group entry count exceeds this, logging a warning
-   (`doc_permission_syncing/tasks.py`). A document with a
-   pathologically large ACL keeps its **previous** synced state rather than
-   silently truncating to a wrong-but-smaller set. This is fail-static, not
-   fail-closed or fail-open; treat repeated skips (visible via
-   `docs_with_permission_errors` on the attempt) as a real gap, not noise.
-8. **The Community downgrade removes all synced permission data, with no
-   sync.** `ee/onyx/db/community_downgrade.py:make_all_cc_pairs_public__no_commit`
-   sets every perm-synced cc-pair to `PUBLIC` and clears its
-   `auto_sync_options`, `last_time_perm_sync` and
-   `last_time_external_group_sync`, so `get_all_auto_sync_cc_pairs` returns no
-   pair. It deletes every `User__ExternalUserGroupId` and
-   `PublicExternalUserGroup` row. It clears `external_user_emails` and
-   `external_user_group_ids` on every `Document` and `HierarchyNode` and sets
-   `Document.is_public` to false. It bumps `Document.last_modified` for the
-   documents of the changed pairs
-   (`onyx/db/document.py:mark_cc_pair_documents_for_sync__no_commit`), so the
-   index write in §4.3 applies. See [[billing]] §4.5.
-9. **An open attempt row is held by a lease in Postgres.** While a doc or group
-   sync runs, a `LeaseHeartbeat` thread
-   (`onyx/background/celery/tasks/shared/lease_heartbeat.py`) sets
-   `heartbeat_at = now()` every `PERMISSION_SYNC_HEARTBEAT_INTERVAL`, only while
-   the row is `IN_PROGRESS`. Each beat check runs
-   `fail_expired_doc_permission_sync_attempts` /
-   `fail_expired_external_group_sync_attempts`. These set `FAILED` on
-   `IN_PROGRESS` rows whose `coalesce(heartbeat_at, time_started)` is older
-   than `PERMISSION_SYNC_LEASE_TIMEOUT`, and on `NOT_STARTED` rows that are
-   that old. A worker that dies therefore cannot leave its attempt open. A
-   worker that lost its row (renewal updates no row) stops: the heartbeat
-   sets `lost`, which `PermissionSyncCallback.should_stop` and the group-sync
-   loop read through `LeaseHeartbeat.is_lost()`. `is_lost()` is also true when
-   no renewal has succeeded for `PERMISSION_SYNC_LEASE_SELF_EXPIRY`, which is
-   shorter than the reaper's timeout, so a worker that cannot reach the DB
-   stops first. For a group sync the heartbeat also stops renewing
-   `PERMISSION_SYNC_LEASE_OVERRUN` after the sync's time limit
-   (`max_duration`), so a crawl thread that hangs in a source call cannot hold
-   the lease for the life of the process. A doc sync passes no `max_duration`:
-   the doc reaper also fails an `IN_PROGRESS` row whose
-   `coalesce(last_progress_at, time_started)` is older than
-   `PERMISSION_SYNC_STALL_TIMEOUT`, which frees a hung crawl's row the same
-   way without capping a crawl that keeps yielding. Group sync writes (`upsert_external_groups`,
-   `remove_stale_external_groups` with `owning_attempt_id`) take a share lock
-   on the attempt row in the write's own transaction
-   (`lock_external_group_sync_attempt_if_owned`). The reaper cannot fail the
-   attempt while such a write is open, and a write after it is refused. Doc
-   sync does the same per element: `element_update_permissions` calls
-   `lock_doc_permission_sync_attempt_if_owned` before it writes, and
-   `update_element_permissions_batch` re-raises `PermissionSyncAttemptLostError`
-   instead of counting it as an element error. `complete_*` raises `PermissionSyncAttemptLostError` unless the
-   row is still `IN_PROGRESS`, and `mark_*_failed` keeps an existing
-   `FAILED`/`CANCELED` reason. Do not write a terminal status without this
-   check.
-   The same renewal writes the running counts (`total_docs_synced`, or the
-   group counts) and `last_progress_at` from an in-memory
-   `DocPermissionSyncProgress` / `ExternalGroupSyncProgress`, so the admin UI
-   and fleet telemetry see progress mid-run; `complete_*` replaces the counts
-   with the final values. One group sync stops after
-   `PERMISSION_SYNC_TIMEOUT` (`PERMISSION_SYNC_TIMEOUT_SECONDS`, default
-   `JOB_TIMEOUT`). A doc sync has no time limit: it runs for as long as it
-   keeps yielding. The doc reaper fails an attempt with no recorded progress
-   for `PERMISSION_SYNC_STALL_TIMEOUT`, which costs the worker its lease at
-   the next renewal; the task ticks progress on every yielded element, so a
-   source that never reports progress still counts. The attempt's
-   `error_message` names the real stop cause (timeout or stall, stop signal,
-   or lost lease), because connectors raise a generic "Stop signal detected"
-   for all of them.
-   A source whose full crawl runs for days (Google Drive) sets
-   `DocSyncConfig.checkpointed_doc_sync_func` instead of `doc_sync_func`, so
-   a stopped attempt resumes instead of restarting. The
-   task passes it a
-   `FileStoreDocSyncCheckpointer` (`doc_permission_syncing/checkpointer.py`),
-   which saves one checkpoint file per cc_pair to the file store at most every
-   `CHECKPOINT_SAVE_INTERVAL_SECONDS`, holding the crawl window, the saving
-   attempt, and the connector config hash. The next attempt resumes it when the
-   saving attempt failed, only failures followed, the file is younger than
-   `NUM_DAYS_TO_KEEP_CHECKPOINTS`, the config hash matches, and no full refresh
-   was requested since. It keeps that window, and on success sets
-   `last_time_perm_sync` to the window end and deletes the file. The task
-   writes elements in batches of `PERMISSION_WRITE_BATCH_SIZE`, in parallel,
-   and the checkpointer flushes the pending batch before every save. Saving
-   stops after a failed element write, so the resume retries that element.
-   Connector deletion removes the file.
-   The open attempt is also the per-cc_pair lock, for doc sync and group sync.
-   The partial unique indexes `uq_doc_permission_sync_attempt_open_cc_pair`
-   and `uq_group_sync_attempt_open_cc_pair` allow one `NOT_STARTED`/`IN_PROGRESS`
-   row per cc_pair. Dispatch creates that row before it sends the task, so
-   there is no Redis fence. An open doc attempt blocks pruning and connector
-   deletion (`get_open_doc_permission_sync_attempt`); an open group attempt
-   blocks neither. The manual `sync-permissions` / `sync-groups` endpoints
-   return 409 while the matching attempt is open. Deletion revokes the
-   `celery_task_id` of both open attempts, and after its stop timeout it
-   cancels both (`cancel_open_*`), which makes their workers lose their leases.
-   A `NOT_STARTED` attempt older than `PERMISSION_SYNC_LOST_TASK_GRACE` whose
-   `celery_task_id` is in neither the broker queue nor the unacked set lost
-   its task, and the beat fails it (`fail_lost_queued_*_attempts`). A task a
-   worker already took looks lost too; its claim then fails and the beat
-   dispatches again. As a backstop, the reaper fails any `NOT_STARTED` row
-   after `PERMISSION_SYNC_TASK_EXPIRES` plus the lease timeout. Neither sync
-   writes a `SyncRecord`.
-
----
-
-## 6. Relationships
-
-**Depends on**
-- [[connectors]]: `SlimConnectorWithPermSync.retrieve_all_slim_docs_perm_sync`
-  and `CheckpointedConnectorWithPermSync` (`onyx/connectors/interfaces.py`) are
-  the connector-side contracts doc sync fetches through; a connector that adds
-  perm-sync support implements one of these.
-- [[cc-pairs-and-credentials]]: `ConnectorCredentialPair.access_type` of `SYNC` or `SYNC_RESTRICTED`
-  is what makes a cc_pair eligible at all; `last_time_perm_sync`/
-  `last_time_external_group_sync` live on that model.
-- [[background-jobs]]: the Celery beat schedule and the Heavy worker both
-  syncs run on. Neither uses a Redis fence (§5.9).
-- [[editions-and-gating]]: `onyx/utils/variable_functionality.py:is_ee_available`
-  gates both beat entries
-  (`onyx/background/celery/tasks/beat_schedule.py`).
-
-**Depended on by**
-- [[access-control]]: reads `Document.external_user_emails`/
-  `external_user_group_ids`/`is_public` (write path,
-  `ee.onyx.access.access._get_access_for_documents`) and
-  `User__ExternalUserGroupId`/`PublicExternalUserGroup` (read path,
-  `fetch_external_groups_for_user`/`fetch_public_external_group_ids`) that
-  this component alone populates. Every claim in access-control.md's §4.2 and
-  §4.3 about where synced data comes from resolves here.
-- [[document-index]] / [[indexing-pipeline]]: the `needs_sync` /
-  `document_index_metadata_sync_task` machinery this component relies on to
-  turn a Postgres ACL change into an indexed one (§4.3) is owned there, not
-  here; a bug in that machinery makes a correct permission-sync write
-  invisible.
-- [[auth-and-identity]]: `batch_add_ext_perm_user_if_not_exists`
-  (`onyx/db/users.py`) can create a `User` row for someone who has never
-  logged into Onyx, purely because a sync mentioned their email.
-- [[observability]]: the fleet telemetry collection pass reads
-  `DocPermissionSyncAttempt` and `ExternalGroupPermissionSyncAttempt` rows as fleet
-  job snapshots (`db/fleet_telemetry.py:job_rows`). No permission-sync code path
-  calls the fleet sender.
-
----
-
-## 7. Blast radius
-
-| If your change… | Also check |
-|---|---|
-| adds a source's perm sync | register it in `sync_params.py`'s `_SOURCE_TO_SYNC_CONFIG`; decide `initial_index_should_sync` correctly (§4.1) or the first sync races the first index; if it uses groups, get the namespacing right (§5.2) from the first commit, not as a follow-up |
-| changes an ACL prefix or the namespacing (`build_ext_group_name_for_onyx`, `prefix_external_group`) | [[access-control]] §7's reindex requirement applies; additionally, every write site here (`upsert_document_external_perms`, `upsert_external_groups`) must change in the same PR as the read side, and a full doc + group re-sync is needed, not just a reindex, since the raw Postgres rows are wrong, not just the derived index ACL |
-| changes the sync schedule (frequencies in `ee/onyx/configs/app_configs.py`, or the beat interval in `beat_schedule.py`) | the eventual-consistency window in §9 widens or narrows; re-run the two-user propagation test in §8 with the new interval to confirm it still completes in a reasonable multiple of the schedule |
-| changes `DocumentAccess` (fields, `to_acl`) | [[access-control]] §7 covers the read side; on the write side, confirm `upsert_document_external_perms` and every `doc_sync_func` still populate exactly the fields `DocumentAccess.build`/`ee.onyx.access.access._get_access_for_documents` expect |
-| changes group resolution (`fetch_user_groups_for_user`, `fetch_external_groups_for_user`, `remove_stale_external_groups`, `mark_old_external_groups_as_stale`) | re-run the revocation half of the two-user test (§8); a change to the stale-marking order can reopen or widen the fail-open window in §5.4 |
-| touches `element_update_permissions` or `upsert_document_external_perms`'s change-detection | confirm `Document.last_modified` still only bumps on a real diff; bumping it unconditionally does not break correctness but defeats the point of `needs_sync` filtering and can make every synced document look permanently stale to [[document-index]]'s beat task |
-| adds a new `doc_sync_func` that does not use `generic_doc_sync` | re-implement the "document vanished means private" rule (§5, point 1) explicitly; do not assume it comes for free |
-
----
-
-## 8. How to verify a change
-
-### Tests
-
-```bash
-# External dependency unit: exercises real Postgres/Redis with connector SDKs
-# mocked at the network boundary. The confluence group sync test is the
-# canonical example referenced in backend/AGENTS.md.
-uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit/permission_sync
-uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit/connectors/confluence/test_confluence_group_sync.py
-uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit/connectors/google_drive/test_google_drive_group_sync.py
-uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit/connectors/jira/test_jira_group_sync.py
-
-# Integration: full sync attempt against a live connector job test environment
-uv run --env-file .vscode/.env pytest backend/tests/integration/connector_job_tests/google/test_google_drive_permission_sync.py
-uv run --env-file .vscode/.env pytest backend/tests/integration/connector_job_tests/slack/test_permission_sync.py
-uv run --env-file .vscode/.env pytest backend/tests/integration/connector_job_tests/github/test_github_permission_sync.py
-uv run --env-file .vscode/.env pytest backend/tests/integration/connector_job_tests/jira/test_jira_permission_sync_full.py
-uv run --env-file .vscode/.env pytest backend/tests/integration/tests/indexing/test_initial_permission_sync.py
-uv run --env-file .vscode/.env pytest backend/tests/integration/tests/usergroup/test_usergroup_syncing.py
-
-# Unit: attempt-record bookkeeping, redis fencing, per-source group-sync logic
-cd backend && uv run pytest tests/unit/onyx/redis/test_connector_permission_sync.py
-cd backend && uv run pytest tests/unit/ee/onyx/external_permissions
-cd backend && uv run pytest tests/unit/ee/onyx/connectors/test_perm_sync_valid.py
-```
-
-`test_perm_sync_no_pg_conn_during_crawl.py`
-(`tests/external_dependency_unit/permission_sync/`) specifically covers the
-idle-in-transaction concern noted in `mark_old_external_groups_as_stale`'s
-inline comment (§4.4); re-run it if you touch transaction boundaries in either
-generator task.
-
-See `backend/AGENTS.md` for authoritative commands and required secrets/env
-(connector credentials resolve through `backend/tests/utils/aws_secrets.py`
-per the root `CLAUDE.md`).
-
-### Manual reproduction: two-user, two-permission propagation test
-
-This is the load-bearing check for this component, distinct from
-[[access-control]]'s two-user test: that one proves enforcement works for a
-fixed ACL; this one proves **sync correctly changes** the ACL over time.
-
-1. Confirm services are up: `tail -f backend/log/api_server_debug.log` and the
-   `heavy` worker's log (permission sync tasks route there per
-   `backend/AGENTS.md`).
-2. Connect a source that supports doc sync (Google Drive is the most complete
-   example) as `AccessType.SYNC`, using real source-side sharing you control.
-3. At the source, share one document with User A only. Wait for a doc
-   permission sync attempt to complete (poll
-   `get_latest_doc_permission_sync_attempt_for_cc_pair` or the admin UI; do not
-   assume it already ran).
-4. As User A (`admin_user@example.com` / `TestPassword123!`, or a second
-   registered user), confirm the document is visible in chat and
-   `/api/search` (called via the frontend per this repo's `CLAUDE.md`).
-5. As User B, a different Onyx user with no source-side access, confirm the
-   document is **not** visible through the same surfaces.
-6. **Now change the permission at the source**: share the document with User B
-   as well (or, for the revocation direction, remove User A's access).
-7. Force or wait for the next doc permission sync attempt. Separately, confirm
-   [[document-index]]'s metadata sync has also run (`document.last_synced`
-   should move past the new `last_modified`; there is no dedicated UI for
-   this, check via the database or logs).
-8. Re-check both users through chat and `/api/search`. The visibility split
-   must now match the **new** source-side permission, not the one from step 3.
-9. If the source and sync support groups, repeat steps 3-8 with a group
-   membership change instead of a direct share: add/remove a user from a
-   source group, wait for a **successful** (not just attempted) external
-   group sync attempt, and confirm the propagation. Deliberately induce one
-   failed attempt first (for example, revoke the connector credential
-   mid-cycle) and confirm the previous membership is still honored until a
-   subsequent attempt succeeds, per §5.4.
-
-### What "working" looks like
-
-- A document's visibility in chat/search matches the source system's current
-  permission, not a permanently stale snapshot, within one sync-plus-index-write
-  cycle.
-- A `DocPermissionSyncAttempt`/`ExternalGroupPermissionSyncAttempt` history
-  shows `SUCCESS` or `COMPLETED_WITH_ERRORS` for steady-state operation;
-  a persistent run of `FAILED` attempts for a cc_pair means that cc_pair's
-  access is frozen at whatever it last successfully synced, per §5.3/§5.4,
-  not automatically corrected by later successful indexing.
-- Revoking a source-side group membership removes a document from that user's
-  results only after a group sync attempt **succeeds**, never mid-failure.
-
----
-
-## 9. Footguns
-
-- **Lowercasing.** `build_ext_group_name_for_onyx` lowercases the final id.
-  Anything that constructs or compares a namespaced external group id without
-  calling this function (a debugging script, a new connector's inline logic, a
-  manual DB query) will not match, and the mismatch fails closed (invisible,
-  not leaked) but is easy to misdiagnose as "the sync isn't running" when it
-  actually ran and wrote a differently-cased string.
-- **Per-source namespacing is mandatory, not cosmetic.** Two sources
-  legitimately producing the same raw group name (`"Engineering"` in both
-  Confluence and Jira) would collide into one ACL entry without the
-  `source.value` prefix `build_ext_group_name_for_onyx` adds. Never store or
-  compare a raw, unprefixed group id anywhere in this component.
-- **A permission-sync write to Postgres is not a permission-sync write to the
-  index.** §4.3 is the single most important flow to internalize: doc sync
-  changes `Document` columns and bumps `last_modified`; a separate,
-  differently-scheduled beat task in [[document-index]] notices the staleness
-  and performs a metadata-only index write. A code review that only checks
-  "does `upsert_document_external_perms` get called with the right value" has
-  not verified the user-visible effect.
-- **Sync is eventually consistent by design, on two independent clocks.** Doc
-  sync frequency and group sync frequency differ per source (§2) and are
-  unrelated to the index metadata-sync beat interval. A document's *group id*
-  can update quickly while the *group's membership* update is still pending, or
-  vice versa; do not assume both halves of a group-based grant land atomically.
-- **A failed group sync is a security-relevant silence, not just an
-  operational one (§5.4).** `stale` rows are not excluded from
-  `fetch_external_groups_for_user`; they are only cleaned up by a
-  **subsequent successful** cycle. Do not read "the last attempt failed" as
-  "access is currently correct but sync is behind"; it specifically means "a
-  revocation that should have happened may not have happened yet."
-- **This entire component is EE-only.** A CE deployment has no doc sync, no
-  group sync, and no `PermissionSyncAttempt` rows ever created; `AccessType.SYNC`
-  exists as an enum value but nothing populates the columns it implies are
-  kept fresh. Do not test a permission-sync fix only in a CE dev environment
-  and conclude it works; see [[access-control]]'s footgun about CE/EE
-  divergence, which applies here even more directly since the feature does
-  not exist at all in CE.
-- **Salesforce has no doc-sync attempt history to check (§4.5).** If a
-  Salesforce access bug is reported, do not look for a failed
-  `DocPermissionSyncAttempt`; there will never be one. Look at
-  `censor_salesforce_chunks` and `_post_query_chunk_censoring` instead.
+- External dependency tests: `backend/tests/external_dependency_unit/permission_sync/`
+  (the lease, and session use during a crawl).
+- Unit tests: `backend/tests/unit/ee/onyx/external_permissions/` and
+  `backend/tests/unit/ee/onyx/connectors/`.
+- Integration tests: `backend/tests/integration/connector_job_tests/` (per
+  source) and `backend/tests/integration/tests/indexing/`.
