@@ -1306,7 +1306,7 @@ def _cc_pair_errors(
     containing ``query``."""
     stmt = stmt.where(IndexAttemptError.connector_credential_pair_id == cc_pair_id)
     if unresolved_only:
-        stmt = stmt.where(IndexAttemptError.is_resolved.is_(False))
+        stmt = stmt.where(~IndexAttemptError.is_resolved)
     if index_attempt_id is not None:
         stmt = stmt.where(IndexAttemptError.index_attempt_id == index_attempt_id)
     if query:
@@ -1416,8 +1416,8 @@ def get_index_attempt_errors_across_connectors(
         count_stmt = count_stmt.where(IndexAttemptError.error_type == error_type)
 
     if unresolved_only:
-        stmt = stmt.where(IndexAttemptError.is_resolved.is_(False))
-        count_stmt = count_stmt.where(IndexAttemptError.is_resolved.is_(False))
+        stmt = stmt.where(~IndexAttemptError.is_resolved)
+        count_stmt = count_stmt.where(~IndexAttemptError.is_resolved)
 
     if start_time is not None:
         stmt = stmt.where(IndexAttemptError.time_created >= start_time)
