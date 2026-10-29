@@ -21,19 +21,21 @@ The interface is `tools/interface.py:Tool`, which returns
   it to an agent. Keep [[#built-in-needs-constructor-branch]],
   [[#is-available-cheap-and-silent]], [[#run-errors-become-results]],
   [[#renderer-dispatches-by-name]], [[#durable-details-registered]],
-  [[#parallel-by-default]] and [[#tool-name-is-lookup-key]]. A change to
-  `tool_definition()` stops saved checkpoints from resuming
-  ([[agent-runtime#restored-tools-must-match]]). The concrete tools are
+  [[#parallel-by-default]], [[#tool-name-is-lookup-key]] and
+  [[#child-wait-cleanup]]. Checkpoint resume is not wired ([[agent-runtime]]).
+  When it is, a change to `tool_definition()` stops saved checkpoints from
+  resuming ([[agent-runtime#restored-tools-must-match]]). The concrete tools are
   [[internal-search]], [[web-search]], [[image-generation]],
   [[code-execution]], [[mcp-and-custom-tools]], [[chat-preferences]]
   (`MemoryTool`) and [[file-store-and-user-files]] (`read_file`).
 - **[[core-chat-loop]]** calls `construct_tools` once per model response and
   gives the tools to `chat/agent.py:ChatAgent` or
-  `deep_research/agent.py:DeepResearchAgent`. Each agent supplies the
-  `ToolContext` for its tools.
-- **The sub-agents** run on the same runtime. `DeepResearchAgent` passes the
-  constructed tools to `deep_research/research_agent.py:ResearchAgent`.
-  `coding_agent/agent.py:CodingAgent` calls `BashTool.run` from its own
+  `deep_research/agent.py:DeepResearchAgent`. `ChatAgent` binds them with its
+  own `ToolContext`.
+- **The sub-agents** run on the same runtime. `DeepResearchAgent` does not bind
+  the tools. It passes them to each
+  `deep_research/research_agent.py:ResearchAgent` child, which binds them with
+  its own `ToolContext`. `coding_agent/agent.py:CodingAgent` calls `BashTool.run` from its own
   `AgentTool`, so `Tool.run` error handling applies but no construction gate
   does ([[code-execution#errors-are-results]]).
 - **[[citations]]** gets a block of citation numbers per search-like call.
@@ -71,7 +73,7 @@ chat/process_message.py:prepare_chat_turn    capture_persona_tool_configuration
                                              (db/tools.py) -> PersonaToolConfiguration
 chat/execution.py:create_chat_agent          per model response
   construct_tools                            -> {Tool row id: [Tool instances]}
-  ChatAgent / DeepResearchAgent              Tool.bind(_tool_context) -> AgentTool
+  ChatAgent / ResearchAgent                  Tool.bind(_tool_context) -> AgentTool
 agents/runtime.py                            a model step returns tool calls
   agents/tool_execution.py:ToolBatch         merge -> run in parallel -> finalize
     Tool.run -> _invoke_tool -> Tool._run    trace, convert errors, check cancel
@@ -96,15 +98,22 @@ captured tools in order and applies these gates:
 2. `allowed_tool_ids`, the per-message list that the web client sends.
 3. For a built-in tool, `is_available(db_session)`. An exception counts as "not
    available" and is logged.
-4. A class-specific branch builds the instance. OpenAPI and MCP rows go through
-   their own branches ([[mcp-and-custom-tools]]). The MCP branch builds every
-   `MCPTool` of a server from the captured rows with the same `mcp_server_id`,
-   and resolves credentials once per server.
-5. Only for Default Chat (`DEFAULT_PERSONA_ID`): the user's OpenAPI and MCP
-   plugin preferences ([[plugins]]), and `user_can_access_mcp_server`, which
-   stops Default Chat from giving a group-restricted MCP server to every user
-   ([[mcp-and-custom-tools#access-grants-default-chat-only]]). A custom agent
-   applies neither.
+4. A class-specific branch builds the instance, and some branches skip the
+   tool with no error:
+   - `SearchTool` is skipped when the search usage setting from
+     `chat/files.py:determine_search_params` is `DISABLED`.
+   - `OpenURLTool` is skipped when web search is off for the message and
+     `DISABLE_VECTOR_DB` is set ([[web-search]]).
+   - An OpenAPI tool with `oauth_config_id` or `passthrough_auth` is skipped
+     for an anonymous user, with only a warning in the log.
+   - OpenAPI and MCP rows go through their own branches
+     ([[mcp-and-custom-tools]]). Both first apply the user's plugin
+     preferences ([[plugins]]), which exist only for Default Chat
+     (`DEFAULT_PERSONA_ID`). The MCP branch then applies
+     `user_can_access_mcp_server` in Default Chat only
+     ([[mcp-and-custom-tools#access-grants-default-chat-only]]), resolves
+     credentials once per server, and builds every `MCPTool` of that server
+     from the captured rows.
 
 Two tools are added outside this loop. `SearchTool` is added when the request
 forces search on (`SearchToolUsage.ENABLED`), `DISABLE_VECTOR_DB` is off, and
@@ -115,17 +124,29 @@ renames MCP tools whose names collide.
 **Execution.** A tool implements `_run(invocation, context)` and returns a
 `ToolResult`, or a `ChildRunWait` when it delegates to a sub-agent. Call data,
 such as arguments, `call_index`, the cancellation signal and the progress
-callback, comes in `agents/tools.py:ToolInvocation`. Per-request data, such as
-chat files, memory and the next citation number, comes in
-`tools/models.py:ToolContext`. `ChatAgent._tool_context` and
-`ResearchAgent._tool_context` build it when the call starts. `ToolBatch` answers
+callback, comes in `agents/tools.py:ToolInvocation`. `invocation.update` can
+raise `AgentCancelled`; do not catch it. An update sent after `_run` returns is
+dropped, and a result that arrives after the run closes is discarded.
+Per-request data, such as chat files, memory and the next citation number,
+comes in `tools/models.py:ToolContext`. `ChatAgent._tool_context` and
+`ResearchAgent._tool_context` build it when the call starts.
+
+When the run completes normally, every call gets a result: `ToolBatch` answers
 an unknown tool name, malformed arguments or truncated arguments with an error
-result, so every call gets a result.
+result. On Stop or a run failure, a running call ends with no result (status
+`CANCELLED` or `ERROR`) and renders with no details. `_invoke_tool` discards a
+result that finishes after cancellation. Side effects that the tool already
+made are not undone, so check `invocation.cancellation` before irreversible
+work.
 
 **Sub-agents.** `DeepResearchAgent`, `ResearchAgent` and `CodingAgent` are
 runtime agents. `DeepResearchAgent` and `CodingAgentTool` spawn a child run and
 return `ChildRunWait`; the runtime calls `result_from_children` when the child
-ends. Their control functions, such as `think_tool`, `generate_report` and
+ends ([[#child-wait-cleanup]]). A step count bounds the coding agent, not time:
+`CodingAgentTool` gives it `MAX_CODING_AGENT_CYCLES + 1` steps.
+`coding_agent/agent.py:CodingAgent._prepare_step` forces a final answer step
+with no tools on the last step, after a `generate_answer` call, or after a step
+with no tool calls. Their control functions, such as `think_tool`, `generate_report` and
 `generate_answer`, are plain `AgentTool` objects with no `Tool` row, and
 `chat/renderer.py:HIDDEN_TOOLS` keeps them out of the stream.
 
@@ -138,6 +159,11 @@ ends. Their control functions, such as `think_tool`, `generate_report` and
    adds it after the agent tool loop whenever `user.enable_memory_tool` is set.
    A user who turns every tool off for a message can still get a memory write.
    A change to per-message filtering must decide whether memory follows it.
+   In an incognito turn the tool is still offered, but `MemoryTool._run`
+   refuses the write when `get_current_incognito_record_mode()` is set. A new
+   tool with durable side effects outside the file store must make the same
+   check. File-store writes get the incognito cleanup stamp automatically
+   ([[file-store-and-user-files]]).
 2. `built-in-needs-constructor-branch` **A built-in tool without a constructor
    branch is silently dropped.** The `if/elif` chain in
    `tools/tool_constructor.py:_construct_tools_impl`
@@ -168,7 +194,10 @@ ends. Their control functions, such as `think_tool`, `generate_report` and
    error result with its `llm_facing_message`; raise it for errors that the
    model can fix, such as bad arguments (`parse_tool_arguments` does this). Any
    other exception becomes "Tool failed with error: ..." with the exception
-   text, which the model reads and chat saves. Raise
+   text, which the model reads and chat saves. `Tool.bind` wraps
+   `result_from_children` in the same conversion and span. `ToolBatch` also
+   converts exceptions from bare `AgentTool` callbacks that have no `Tool.run`.
+   Raise
    `ToolExecutionException(emit_error_packet=True)` when the user must see the
    error. Cancellation is `llm/cancellation.py:AgentCancelled`, a
    `BaseException`: never catch `BaseException` in a tool.
@@ -182,25 +211,46 @@ ends. Their control functions, such as `think_tool`, `generate_report` and
    chosen by tool name and details type.** `chat/renderer.py:ToolRenderer.start`
    picks the start packet by `call.name`, and `ToolRenderer.update` picks the
    delta by the type of `details`. A tool with no branch renders as a custom
-   tool (`CustomToolStart`, then its `content` as text). Streamed argument
+   tool: `CustomToolStart` and `CustomToolArgs`, then its `content` as text for
+   a successful result only. An error shows no text unless its details are
+   `ToolExecutionError`. Return typed `details`: with `details=None`, the live
+   stream sends the text twice, because both the result update and the
+   completion emit it. Streamed argument
    deltas go only to `run_python` (`chat/renderer.py:MessageRenderer.consume`).
    Saved responses replay through the same renderer
    (`chat/presentation.py:replay_response`), so a change here changes reload too.
 8. `durable-details-registered` **A new `details` type must be registered
    twice.** Chat saves `details` through the discriminated union in
    `db/models.py:StoredToolResult`, keyed by the model's `type` literal, and
-   checkpoints it through `chat/checkpoint.py:CHECKPOINT_PAYLOAD_TYPES`. A type
-   missing from the union fails the save with a `ValidationError`; a type
-   missing from the registry fails the checkpoint. Saved rows and checkpoints
-   keep the `type` value and the tag, so never rename them.
+   checkpoints it through `chat/checkpoint.py:CHECKPOINT_PAYLOAD_TYPES`. A new
+   `type` literal missing from the union fails every save with a
+   `ValidationError`. A subclass that keeps its parent's `type` literal saves as
+   the parent and drops its own fields with no error.
+   `chat/agent.py:ChatAgent._finalize_tool` replaces each `SearchDocsResponse`
+   with `chat/models.py:ChatSearchResult` in this way, and its `staged_files`
+   are not saved. Only the unwired checkpoint handoff path reads the registry
+   ([[agent-runtime]]), so a missing registration fails only that path and its
+   tests. Saved rows and checkpoints keep the `type` value and the tag, so
+   never rename them.
 9. `parallel-by-default` **Calls in one step run in parallel and share one
    `ToolContext`.** `agents/tool_execution.py:ToolBatch` starts every call of a
    step together. `ChatAgent._tool_context` advances only after the step, so
    sibling calls read the same context; citation-producing tools offset their
    numbers by `CITATIONS_PER_TOOL_CALL * invocation.call_index`
-   ([[citations#number-block-per-tool-call]]). A tool whose calls must not
-   overlap returns `ToolExecutionMode.SEQUENTIAL` from `execution_mode`, as
-   `MemoryTool` does.
+   ([[citations#number-block-per-tool-call]]). Calls start in call order. Each
+   pass of `ToolBatch.execute` finalizes the calls that have completed, in call
+   order, so end events follow completion order only across passes, and tab
+   placement follows call order. Each finished
+   call is finalized at once: `after_tool_call` (`ChatAgent._finalize_tool`)
+   runs one call at a time on the run's thread. `Run.finish_tool` then writes
+   the finalized result into the run record that chat saves, and publishes
+   `ToolEndEvent`. After a cancel between `Run.record_tool_results` and
+   `finish_tool`, the saved result is the raw result and no `ToolEndEvent` is
+   sent. A tool whose calls must not overlap
+   returns `ToolExecutionMode.SEQUENTIAL` from `execution_mode`, as
+   `MemoryTool` does. This orders only calls with the same name: each starts
+   after the previous one is finalized, and a call that waits for a child run
+   or input blocks the calls after it.
 10. `tool-name-is-lookup-key` **`Tool.name` is a lookup key and must be a valid
    function name.** `ToolBatch`, `ToolRenderer` and the `tool_ids` map in
    `chat/execution.py:ChatTurnExecution._run_response` find tools by name, so
@@ -217,10 +267,25 @@ ends. Their control functions, such as `think_tool`, `generate_report` and
 12. `calls-are-merged` **Merged calls share one execution and one result.**
     `agents/tool_execution.py:ToolBatch._start_compatible_calls` merges later
     calls to the same tool when the tool sets `merge_list_argument` and all
-    other arguments match (`tools/interface.py:merge_tool_arguments`). One
+    other arguments match (`tools/interface.py:merge_tool_arguments`). Both
+    lists must be non-empty string lists, and the merged list must stay within
+    `merge_list_limit` (`open_url` sets `MAX_URLS_PER_CALL`). No merge happens
+    when the run has `before_tool_call`, or when arguments are truncated or
+    invalid. A parallel tool can merge calls that are not next to each other;
+    a `SEQUENTIAL` tool merges only up to its first call that cannot merge. One
     execution runs with the first call's `call_index`, and each merged call
-    gets the pooled result. Search, web search and `open_url` merge. A tool
-    whose calls must stay separate leaves `merge_list_argument` unset.
+    gets every progress update and the pooled result. A merged execution must
+    return a `ToolResult`: a `ChildRunWait` fails the batch with `ValueError`.
+    Search, web search and `open_url` merge. A tool whose calls must stay
+    separate leaves `merge_list_argument` unset.
+13. `child-wait-cleanup` **A tool that returns `ChildRunWait` releases its
+    resources through the child's completion.** `_run` returns before the
+    child ends, so register cleanup with
+    `invocation.agents.add_completion_cleanup(run_id, cleanup)` during `_run`.
+    It runs on completion, cancellation or release. If `_run` fails before it
+    returns the wait, clean up in `_run`. `CodingAgentTool._run` does both for
+    its sandbox ([[code-execution]]). `result_from_children` must not depend on
+    state held from `_run`.
 
 ---
 
@@ -245,9 +310,12 @@ ends. Their control functions, such as `think_tool`, `generate_report` and
 - **A tool call has no time limit of its own.** When no call of a step
   finishes within `agents/concurrency.py:OPERATION_TIMEOUT_SECONDS`,
   `agents/runtime.py:Run.wait_for_tool_activity` raises `TimeoutError` and the
-  run fails. Nothing stops the tool's thread: a tool that blocks without I/O
-  timeouts and does not call `invocation.cancellation.check()` keeps running
-  after the answer fails.
+  run fails. Nothing stops the tool's thread. A tool that ignores cancellation
+  holds the turn open after Stop, a tool timeout or the turn deadline
+  (`CHAT_EXECUTION_TIMEOUT_S`): `chat/execution.py:ChatTurnExecution._poll_responses`
+  waits for `Run.wait_for_idle`, so the stream stays open and the session
+  rejects new messages until the thread exits. Use I/O timeouts, and call
+  `invocation.cancellation.check()` in long loops.
 - **A step with more than 64 tool calls fails the run.**
   `agents/tool_execution.py:ToolBatch` raises `ValueError` above
   `MAX_TOOL_CALLS_PER_STEP`.
@@ -289,7 +357,9 @@ ends. Their control functions, such as `think_tool`, `generate_report` and
   1. Put the class in `tools/tool_implementations/<name>/`, subclass `Tool`,
      and implement `_run`. Parse arguments with
      `tools/interface.py:parse_tool_arguments`.
-  2. Add it to `BUILT_IN_TOOL_MAP`.
+  2. Add it to `BUILT_IN_TOOL_TYPES` and `BUILT_IN_TOOL_MAP`. Define `name` on
+     the class itself (a `str` or a property), or the import of
+     `tools/built_in_tools.py` fails in `_tool_llm_name`.
   3. Seed its `Tool` row in an Alembic migration with
      `in_code_tool_id=YourTool.__name__`. Copy
      `backend/alembic/versions/d3fd499c829c_add_file_reader_tool.py`.
@@ -330,12 +400,18 @@ ends. Their control functions, such as `think_tool`, `generate_report` and
   Check the `allowed_tool_ids` that the client sent. For a built-in tool, run its
   `is_available` in a shell, or look for "Failed checking availability" in
   `backend/log/api_server_debug.log`; the "Skipping tool" line is at debug
-  level. For Default Chat, check the user's plugin preferences. For MCP, look
-  for the credential warning. Last, check for a name collision (Known issues).
+  level. Check the branch skips in gate 4: search usage `DISABLED`, an
+  anonymous user on an OAuth or passthrough OpenAPI tool, and `open_url` with
+  no vector DB. For Default Chat, check the user's plugin preferences. For MCP,
+  look for the credential warning. Last, check for a name collision (Known
+  issues).
 - `force-tool-call` **Force a tool call in a test or a reproduction.** Send `forced_tool_id` with
   the message. Copy `backend/tests/integration/tests/tools/test_force_tool_use.py`.
-  The tool must pass every construction gate: a forced ID that construction did
-  not build fails the whole message.
+  `chat/process_message.py:prepare_chat_turn` drops a forced ID with no error
+  when the tool fails `is_tool_available_for_persona`, or when it is search and
+  search is disabled; the model then answers without the forced call. Any
+  other forced ID that construction did not build makes
+  `chat/execution.py:create_chat_agent` fail the message with `BAD_REQUEST`.
 
 ---
 

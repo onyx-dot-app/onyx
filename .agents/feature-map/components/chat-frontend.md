@@ -46,13 +46,13 @@
   read-only copy. The page needs a session, so a visitor with none goes to
   sign-in.
 - **A user in incognito** cannot turn incognito on or off once the session
-  exists, and answers show no rating buttons. Leaving the chat or closing the
-  tab ends it. If an explicit exit fails, an error shows and the user stays in
+  exists, and answers show no rating buttons. Leaving the chat, reloading or
+  closing the tab ends it. If an explicit exit fails, an error shows and the user stays in
   the chat to retry.
 - **When a send fails**, the partial answer stays and an error banner follows
-  it. In a multi-model turn, only the failed panel shows the error. A usage
-  limit shows a banner with the reset time and no retry
-  ([[rate-and-usage-limits]]).
+  it. In a multi-model turn, only the failed panel shows the error. In a
+  single-model send, a usage limit shows a banner with the reset time and no
+  retry ([[rate-and-usage-limits]]).
 - **A developer who runs the web server in development** reaches the backend
   at `/api` on the web origin, streams included. A production web server
   answers that route with a 404 and a message that nginx must serve `/api`
@@ -117,14 +117,18 @@ its own message tree, chat state, `AbortController`, `sendAcknowledged` and
 the request that owns the session; late work from an older request checks it
 and stops. A stream keeps writing to the session that started it
 (`frozenSessionId`), so a user can switch chats while one streams. Chat states
-beyond `input`, `loading` and `streaming` are `cancelling` (Stop sent) and
-`unconfirmed` (the client could not confirm that the server is idle).
+beyond `input`, `loading` and `streaming` include `cancelling` (Stop sent),
+`unconfirmed` (the client could not confirm that the server is idle) and
+`uploading` (attachments upload). `onSubmit` ignores a send unless the state
+is `input`, so the input bar queues a send made during an upload.
 
 **The message tree.** `app/app/services/messageTree.ts` mirrors the server tree:
 nodes keyed by `nodeId`, each with `latestChildNodeId`.
 `getLatestMessageChain` walks it to get what the page shows. On load,
 `app/app/services/lib.tsx:processRawChatHistory` builds the tree from the
-session response and its replay packets ([[chat-persistence]]).
+session response and its replay packets ([[chat-persistence]]). A saved
+failure becomes an `error` node with `errorMessage`, `errorCode` and
+`isRetryable` from `error_info`; `message` holds only answer text.
 
 **Packet processing.** `processPackets` is incremental. It processes only
 packets past `nextPacketIndex` and keeps its state in a ref. It decides each
@@ -136,6 +140,14 @@ that arrive first do not decide the kind. `buildGroupsFromKeys` drops a group wi
 making their own step. A group that mixes answer text and generated images
 renders through `MixedContentHandler`.
 
+A group closes on its own `SECTION_END` or `ERROR`; a new `turn_index` or a
+stop packet adds a `SECTION_END` to each open group. Parallel tools share a
+`turn_index` and differ by `tab_index`. A subagent's child packets carry the
+parent's key plus `sub_turn_index`, which the processor ignores, so they join
+the parent group. `ResearchAgentRenderer` and `CodingAgentRenderer` split on
+`sub_turn_index`, and `app/app/message/messageComponents/toolDisplayHelpers.tsx:isToolComplete` ignores nested
+`SECTION_END` packets.
+
 **Resume.** `web/src/hooks/useChatSessionController.ts` loads the session.
 When the response has `current_stream`, Stop can target that stream ID at
 once. When the ID is an assistant node, `resumeInFlightRun` calls
@@ -144,20 +156,35 @@ page). It publishes packets only at each `StreamCursor` line, so the cursor
 and the packets it covers are stored together
 ([[streaming-protocol#buffer-gap-ends-resume]]). It holds the backlog until
 `replay_complete`, and marks it with `restoredPacketCount` so that
-`AgentMessage` shows it without animation. When the reader ends, it settles
-the session. A multi-model turn, whose stream ID is the user message, only
-settles.
+`AgentMessage` shows it without animation. `resumeStream` does not drop
+heartbeats, so `resumeInFlightRun` drops `chat_heartbeat` itself. A resumed
+error packet turns the node into an `error` node and pauses the queue. When
+the reader ends, it settles the session. A multi-model turn, whose stream ID
+is the user message, only settles.
+
+When the user opens a session, it is fetched again when its state is
+`input` or `unconfirmed`, or its `AbortController` is aborted. In the last two
+cases the load recovers: it
+merges the local tree into saved history (`preserveFailedMessages`, or
+`app/app/services/messageTree.ts:restoreIncognitoMessages` for incognito,
+which maps saved ids onto local nodes), resumes, and settles in `recovery`
+mode. An `onSubmit` path that returns without settling must leave the session
+in one of these states, or it stays busy.
 
 **Settlement.** `web/src/lib/chat/settleChatSession.ts:settleChatSession` is
 the only path back to the `input` state after a send, a Stop or a resume
 ([[#settle-before-input]]). It waits for the send acknowledgement and the
-reader and polls `/status` until idle. After a resume, a Stop, an error or a
-failed save it also reloads saved history, and keeps a local failed turn that
-the server did not save (`preserveFailedMessages`). After a clean send, the
-streamed tree stays. An incognito session has no saved content, so
-settlement keeps the local tree and only closes the last answer with a stop
-packet. A failure sets `unconfirmed` and pauses the queue; the input bar's manual
-check calls it again in `recovery` mode.
+reader, then polls `/status` once a second, with no time limit, until idle.
+After a resume, a Stop, an error or a failed save it also reloads saved
+history. `preserveFailedMessages` keeps a local error unless the saved row's
+`response_status` is `complete`, `limit` or `cancelled` (text or files when
+the field is absent). After a clean send, the streamed tree stays. Settlement
+never reloads history for an incognito session, in either record mode; on a
+reload or recovery it only adds a stop packet to the last answer if it has
+none. A failed or timed-out (10 s) request, or a session that is busy again
+during the reload, sets `unconfirmed` and pauses the queue. Recovery comes
+from the input bar's manual check or from loading the session again (see
+Resume).
 
 **First-run onboarding.** `AppPage` renders
 `web/src/lib/onboarding/components/OnboardingFlow.tsx`, and
@@ -187,7 +214,7 @@ specific routes under `web/src/app/api/` take precedence over this one.
 
 1. `packet-list-append-only` **A message's packet list is append-only.**
    `app/app/message/messageComponents/timeline/hooks/packetProcessor.ts:processPackets`
-   resets only when the list gets shorter. Otherwise it
+   resets only when the list gets shorter or the `nodeId` changes. Otherwise it
    processes only the packets past `nextPacketIndex`, so a list replaced with
    one of the same or greater length keeps the state built from the old
    packets. `app/app/message/messageComponents/AgentMessage.tsx:AgentMessage`
@@ -218,18 +245,26 @@ specific routes under `web/src/app/api/` take precedence over this one.
    and then settles. The reader stays open to receive the final packets. Only
    a Stop before the send is dispatched aborts, with the reason
    `STOP_BEFORE_DISPATCH`; `onSubmit` then removes the unsent turn and puts
-   the draft back. A failed stop request leaves the stream stoppable. A route
-   change also aborts (the cleanup effect in `web/src/hooks/useChatController.ts`).
+   the draft back. A failed stop request returns the session to `streaming`.
+   A rejected acknowledgement leaves it `unconfirmed`, and a `null` one sends
+   no stop request and only settles. A `pathname` change also aborts (the
+   cleanup effect in `web/src/hooks/useChatController.ts`); a chat switch
+   inside `/app` does not. That abort only detaches the reader: the server turn
+   continues, `onSubmit` returns without settling, and the next load of the
+   session recovers it.
 5. `fifo-abort-records-error` **The FIFO records an abort as an error.** In
    `app/app/services/currentMessageFIFO.ts:updateCurrentMessageFIFO`, an
-   aborted send can set `stack.error`. The drain loop in `onSubmit` checks
-   `controller.signal.aborted` and stream ownership before it reads
-   `stack.error`, so an abort renders no error node. Keep that order in any
-   new consumer of the FIFO.
-6. `queue-needs-two-flags` **The queue needs three flags.**
+   aborted send sets `stack.error` to `"AbortError"`. The catch block in
+   `onSubmit` returns on `controller.signal.aborted` or lost stream ownership
+   before it builds error nodes, so an abort renders no error node. Make the
+   same check in any new consumer of the FIFO before it turns `stack.error`
+   into UI.
+6. `queue-needs-three-flags` **The queue needs three flags.**
    `sections/input/AppInputBar.tsx:AppInputBar` sends
    the next queued message when the chat state is `input`,
    `latestMessageRenderComplete` is true and `queuedMessagesPaused` is false.
+   It sends on the change into that state, not while in it, so clearing the
+   pause alone sends nothing.
    `AgentMessage` sets render-complete when its text has drawn;
    `app/app/message/MultiModelResponseView.tsx` sets it when every visible
    successful panel has drawn. A path that ends a stream without the text
@@ -246,13 +281,16 @@ specific routes under `web/src/app/api/` take precedence over this one.
    breaks both.
 8. `implicit-pick-revertible` **An implicit model pick must be revertible.** A
    follow-up to an unpicked multi-model turn picks the most visible answer,
-   applies it locally and PUTs it. If the PUT fails, the local pick is
-   reverted, unless a newer explicit pick replaced it. Keep that guard in
-   `web/src/hooks/useChatController.ts:onSubmit`.
+   applies it locally and PUTs it. `web/src/hooks/useChatController.ts:onSubmit`
+   waits for that PUT before dispatch. If it fails, the send fails and only
+   the preference is cleared, so a retry runs the PUT again; a newer explicit
+   pick is kept. A Stop while it waits is a before-dispatch abort.
 9. `usage-limit-is-packet` **A 429 usage limit is a packet, not a throw.**
    `app/app/services/lib.tsx:sendMessage` turns it into a `StreamingError` with
-   `is_retryable: false`, so the banner renders through the normal error path. The response shape is
-   owned by [[rate-and-usage-limits]].
+   `is_retryable: false` and no `model_index`, so in a single-model send the
+   banner renders through the normal error path. A multi-model send drops it
+   (see Known issues). The response shape is owned by
+   [[rate-and-usage-limits]].
 10. `incognito-toggle-locks` **The incognito toggle locks once a session id
     exists.** The mode is pinned when the session is created, so an empty
     session that is reused keeps its mode.
@@ -277,14 +315,18 @@ specific routes under `web/src/app/api/` take precedence over this one.
 13. `settle-before-input` **Only settlement returns a session to `input`.**
     A stream that ends does not mean the turn is saved
     ([[streaming-protocol#stream-end-is-not-idle]]). Do not set `input` when
-    the reader ends; call `settleChatSession`. Each step re-checks that the
+    the reader ends; call `settleChatSession`. The server admits one turn per
+    session until execution and storage drain, so an early send gets a 409
+    ([[core-chat-loop#session-admission]]). Each step re-checks that the
     session's `abortController` and `readerFinished` are still the ones it
-    started with, so a late settlement cannot overwrite a newer request. The
-    send acknowledgement decides what is safe:
-    `app/app/services/lib.tsx:sendMessage` throws `ChatSendRejectedError` for a
-    4xx other than 408, which resolves the acknowledgement with `null` because
-    the server did not admit the turn. A 5xx or a network error rejects it,
-    and only the manual check (`recovery` mode) can settle after that.
+    started with, so a late settlement cannot overwrite a newer request;
+    session load makes the same check after each await. The send
+    acknowledgement decides what is safe. It resolves with the stream ID on
+    the ID line, or with `null` when the request ends without one (a 4xx
+    other than 408, which `app/app/services/lib.tsx:sendMessage` throws as
+    `ChatSendRejectedError`, or the usage-limit packet). It rejects only for a
+    5xx, 408 or network failure before the ID line; after that only a
+    `recovery` settlement can return to `input`.
 14. `group-packets-false-lead` **False lead:
     `app/app/services/packetUtils.ts:groupPacketsByTurnIndex` has no
     production caller.** Grouping happens in `processPackets`
@@ -307,6 +349,10 @@ specific routes under `web/src/app/api/` take precedence over this one.
 
 ## Known issues
 
+- **A multi-model send that hits the usage limit shows no banner.** In a
+  multi-model turn `onSubmit` drops a `StreamingError` without
+  `details.model_index`, and the 429 packet has none. The panels also get no
+  stop packet.
 - **Resume covers one model only.** For a multi-model turn, `current_stream`
   is the user message id, so `resumeInFlightRun` skips it. The page shows no
   live output for that turn; settlement loads the answers when the run ends.

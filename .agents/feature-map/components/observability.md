@@ -21,8 +21,10 @@ for the usage report, log export, query history and workspace analytics.
   Each LLM call then shows as a trace with model and tokens. A call in full
   content mode, such as a chat turn, also shows the prompt and response, with
   secrets masked. Indexing calls, such as contextual RAG and image
-  summarization, use `TraceContentMode.METADATA_ONLY` and show no content. An incognito turn never shows. On cloud, env vars set
-  tracing, and the admin page refuses changes.
+  summarization, use `TraceContentMode.METADATA_ONLY` and show no content. A
+  usage-only incognito turn never shows. A full-history incognito turn shows
+  (`db/enums.py:IncognitoRecordMode.emits_external_traces`). On cloud, env
+  vars set tracing, and the admin page refuses changes.
 - **A user** sees their own token and cost usage, and their budget, in
   Settings > Usage. **An admin** sees usage per user and for system work such
   as contextual RAG, resets a user's usage, and sets per-model prices. On EE,
@@ -147,6 +149,15 @@ and starts the Kubernetes collection in a thread. Each piece has 90 s.
    budgets do not count it. A new Celery task or endpoint that calls an LLM
    must wrap its work in `tracing/framework/create.py:trace` or
    `tracing/framework/create.py:ensure_trace`.
+   **Trap: the chat root trace ends at the first suspension.**
+   `chat/execution.py:ChatTurnExecution._run_response` wraps only
+   `chat_agent.start(background=False)` in `trace`. The call returns when the
+   run suspends on a `ChildRunWait` (deep research, coding agent). Steps that
+   resume after the children finish run in a thread with the copied context
+   of the ended trace (`agents/runtime.py:Run._wake_execution`). Langfuse then
+   makes orphan spans, and the per-trace incognito drop no longer applies. A
+   root trace must stay open until the run is terminal, or each processor must
+   handle spans after trace end.
 2. `tag-llm-flow` **Tag each new LLM, embedding, rerank, image or voice call
    with an `LLMFlow`.** Set `GenerationContext.flow` on `invoke` or `stream`,
    or use `tracing/llm_utils.py:llm_generation_span` or
@@ -158,13 +169,14 @@ and starts the Kubernetes collection in a thread. Each piece has 90 s.
    through `tracing/dynamic_processor.py:_build_braintrust_processor`, which
    calls `braintrust.set_masking_function`. Langfuse masks in
    `tracing/langfuse_tracing_processor.py:LangfuseTracingProcessor._mask_if_enabled`,
-   on by default. Both call
-   `tracing/incognito.py:suppresses_external_traces` at trace start and drop
-   the whole trace. A new destination must do both.
+   on by default. At trace start each processor calls
+   `tracing/incognito.py:suppresses_external_traces`. When it is true, the
+   processor drops the whole trace, spans included. Only a `USAGE_ONLY`
+   incognito turn makes it true. A new destination must do both.
 4. `incognito-counted-in-usage` **Incognito is dropped from traces but counted
    in usage.**
    `tracing/processors/user_usage_processor.py:UserUsageTracingProcessor._capture`
-   records an incognito span
+   records every incognito span, of both modes,
    with `incognito=True`. Budgets and the usage report still see it. Do not
    make the usage processor honour the incognito check.
 5. `metrics-fail-closed` **`/metrics` fails closed.**
@@ -294,4 +306,5 @@ and starts the Kubernetes collection in a thread. Each piece has 90 s.
   `backend/tests/integration/tests/log_export/` and the Helm render tests in
   `backend/tests/external_dependency_unit/craft_helm/`.
 - By hand: connect Langfuse and run the call site. The flow is not
-  `untagged_*`. An incognito chat makes no trace but an `incognito` usage row.
+  `untagged_*`. A usage-only incognito chat makes no trace but an `incognito` usage
+  row.

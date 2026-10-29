@@ -25,7 +25,8 @@
   tool, the model is told which files it lost and how to read them. Without it,
   the model is not told ([[#forgotten-files-need-metadata]]).
 - **Project files** that fit go into every step as full text and can be cited.
-  A project that is too large is searched instead ([[projects]]).
+  Project images go on the newest user message as images. A project that is too
+  large is searched instead ([[projects]]).
 - **Long chats** keep working. When a request reaches about 85% of the model's
   usable input, older history is summarized before the model call. Research and
   coding child agents do the same. The user does not see the summary.
@@ -33,16 +34,20 @@
   `system_prompt`. An agent can replace the base prompt fully.
 - **Images and model switches.** When a chat has images and the user switches
   to a model without vision, the model sees a text marker for each image, not
-  the image. When a provider image cap applies, the model sees only the most
-  recent images and a notice of how many were dropped.
-- **Incognito.** In a usage-only session, if the stored conversation expires,
-  the next turn continues without the earlier messages and with no error
+  the image. With `ENABLE_AZURE_IMAGE_CAP=true`, an Azure model gets at most 50
+  images per request: the most recent ones, and a notice of how many were
+  dropped. No other provider has a cap.
+- **Incognito.** In a usage-only session, the model never sees the text files
+  or request context of a message, only the forgotten-files notice
+  ([[#usage-only-history-shape]]). If the stored conversation expires, a new
+  message continues without the earlier messages and with no error
   ([[chat-persistence]]).
 - **When it breaks**, users report that the assistant "forgot" a file, ignored
   the agent's instructions, narrated citation numbers, or lost the thread. None
   of these shows a stack trace. When the instructions and the current question
-  with its attachments do not fit the model's window, that model's answer ends
-  with a context-limit error ([[#fixed-parts-must-fit]]).
+  do not fit the model's window, that model's answer ends with a generic,
+  retryable "An unexpected error occurred" message, not a context-limit message
+  ([[#fixed-parts-must-fit]]).
 
 ---
 
@@ -76,23 +81,29 @@ working history, after it applies any compaction checkpoint, and again for each
 compaction candidate. The list on each model call:
 
 ```
-[system]                    base prompt, shared user-information framing, tool guidance   cached
-[user information]          SYSTEM message: per-user block                                cached
-[conversation summary]      SYSTEM message, when a compaction checkpoint applies          cached
-[history before last user]  includes the newest message's file and request-context messages cached
-[custom agent prompt]       USER message, placed above the newest user message            cached
-[project files]             USER message, JSON documents                                  cached
-[last user message]                                                                       cached
-[this turn's tool calls and responses]                                                    cached
+[system]                    base prompt, shared user-information framing, tool guidance   stable
+[user information]          SYSTEM message: per-user block                                stable
+[conversation summary]      SYSTEM message, when a compaction checkpoint applies          stable
+[history before last user]  includes the newest message's file and request-context messages stable
+[custom agent prompt]       USER message, placed above the newest user message            stable
+[project files]             USER message, JSON documents                                  stable
+[last user message]         also carries project images, with no token count              stable
+[this turn's tool calls and responses]                                                    stable
 [oversized-files notice]    USER, names the retrieval tools offered this step
 [forgotten-files notice]    USER, files that are not in the working history
 [reminder]                  USER, wrapped in <system-reminder>
 [image-drop notice]         USER reminder, only when an image cap dropped images
 ```
 
-The notices and reminders change between steps, so they stay after the cached
-prefix. `prepare_prompt` copies the messages it receives and never changes
-recorded history. On a later turn, saved tool results carry
+The notices and reminders change between steps, so they stay after the stable
+prefix. The stable part gets explicit cache markers only when
+`PROMPT_CACHE_CHAT_HISTORY=true` (`chat/prompt_formatting.py:prepare_model_messages`);
+by default only provider-side prefix caching uses it. `prepare_prompt` copies
+the messages it receives and never changes recorded history. Within one step it
+replaces a search passage that repeats an earlier result's passage (same
+document and text) with a pointer to that result
+(`chat/prompt_utils.py:_deduplicate_search_passages`), so a change to the
+search result JSON must keep that parse working. On a later turn, saved tool results carry
 `omit_tool_result_content` (`chat/chat_utils.py:omit_prior_tool_result_content`),
 and `prepare_prompt` sends `TOOL_CALL_RESPONSE_CROSS_MESSAGE` in their place.
 Image generation results stay visible. `backend/onyx/chat/README.md` has worked
@@ -139,8 +150,9 @@ replacement and agent prompts, and the files attached to the new message. Then
 `chat/files.py:extract_context_files` uses the window that remains, for the
 smallest model of the turn, to decide whether project files go inline
 ([[projects]]). On each model call, the runtime counts the whole assembled
-request, tool definitions included, against `agents/compaction.py:context_budget`,
-and caps the output with `llm/token_budget.py:resolve_token_budget`
+request, tool definitions included, against `agents/compaction.py:context_budget`.
+That count uses `cl100k_base` and a fixed estimate per image
+(`agents/compaction.py:request_tokens`), not the model's tokenizer. It caps the output with `llm/token_budget.py:resolve_token_budget`
 ([[agent-runtime]]).
 
 **Compaction.** The runtime summarizes or truncates older history before a model
@@ -152,16 +164,18 @@ only through the forgotten-files notice and a file tool. In a session that keeps
 content, `db/chat_response.py` saves a changed summary as a `SUMMARY` row whose
 parent is the response where compaction ran. The next turn loads the summary of
 the nearest ancestor on its branch (`db/chat.py:find_summary_for_branch`), so a
-sibling answer or a branch that forks earlier does not see it. A content-free
-incognito session saves no summary row. `chat/COMPRESSION.md` describes the
-stored form.
+sibling answer or a branch that forks earlier does not see it. A truncation
+fallback sends no summary and saves none, so the next turn starts again from
+the last saved summary. A content-free incognito session saves no summary row
+and keeps no root checkpoint, so each of its turns above the trigger summarizes
+the stored history again. `chat/COMPRESSION.md` describes the stored form.
 
 **Images in history.** `chat/prompt_formatting.py:prepare_model_messages` runs
 on each request. It takes `LLMConfig.supports_images`, or the model catalog when
 that is unset. For a model without vision, history images become text markers.
-`chat/prompt_formatting.py:resolve_image_cap` keeps only the most recent images
-when a provider cap applies, and appends a reminder notice for the dropped
-images. The cache-prefix estimate (`llm/model_request.py:cache_split_stats`)
+`chat/prompt_formatting.py:resolve_image_cap` sets the Azure cap, and
+`prepare_model_messages` then keeps the most recent images and appends a
+reminder notice for the dropped images. The cache-prefix estimate (`llm/model_request.py:cache_split_stats`)
 counts what is sent, not the stored token counts.
 
 ---
@@ -172,7 +186,7 @@ counts what is sent, not the stored token counts.
    system prompt stays byte-stable across steps.** Models attend most to the
    last tokens, so per-step guidance (citations, open-URL, last step) goes into
    the reminder. Only the image-drop notice can follow it. The head prompt must
-   not change between steps, so the prompt cache holds. It must not depend on
+   not change between steps, so the provider prefix cache holds. It must not depend on
    the tool results so far, the tools offered this step or the last-step flag.
    Tool guidance uses the agent's configured tools (`ChatAgent.application_tools`),
    not the step's tools. The date has day precision.
@@ -191,13 +205,16 @@ counts what is sent, not the stored token counts.
    `chat/process_message.py:prepare_chat_turn`. Reverse them and a large project
    takes space the prompt needs.
 5. `fixed-parts-must-fit` **The fixed parts must fit, or the response fails.**
-   `agents/runtime.py:_truncate_context` raises `ContextLimitError` when the
-   system messages and the current turn do not fit, including the head prompt,
-   project files, notices, the reminder, the newest question with its
-   attachments and request context, and this turn's tool rounds. Only older
-   turns are summarized or dropped, at boundaries that keep a tool call with
-   its result ([[agent-runtime#run-input-protected]]). A new large fixed element
-   makes this error more frequent.
+   The head prompt, project files, notices, the reminder and the newest
+   question always stay. Before the first model step, its attachments and
+   request context also stay. After a tool round, compaction can summarize this
+   turn's earlier tool rounds and attachments, and truncation can drop the
+   attachments ([[agent-runtime#run-input-protected]]).
+   `agents/runtime.py:_truncate_context` raises
+   `agents/compaction.py:ContextLimitError` when the rest does not fit. That
+   error is a `ValueError`, so `llm/exceptions.py:litellm_exception_to_safe_error`
+   reports it as `UNKNOWN_ERROR`, not `CONTEXT_TOO_LONG`. A new large fixed
+   element makes this error more frequent.
 6. `forgotten-files-need-metadata` **A forgotten-files notice needs file
    metadata.** `chat/process_message.py:prepare_chat_turn` clears the metadata
    map when the persona has no file reader tool. Then a file that compaction or
@@ -211,7 +228,11 @@ counts what is sent, not the stored token counts.
 8. `history-builder-callers` **`chat/prompt_utils.py:prepare_prompt` has
    several callers.** `ChatAgent`, `DeepResearchAgent`, `ResearchAgent` and
    `CodingAgent` call it with their own arguments, such as no custom agent
-   prompt. Check them after you change its signature or order.
+   prompt. Only `ChatAgent` passes `available_tool_names`, so a deep research
+   file notice names no tool. The coding agent's final-step reminder has no
+   `is_reminder` flag, so it is sent as a plain user message without the
+   `<system-reminder>` wrap. Check all callers after you change the signature or
+   order.
 9. `replace-base-drops-user-block` **Replacing the base prompt drops the
    per-user block.** With `replace_base_system_prompt`, or with an empty default
    prompt, `build_chat_prompt` builds no user-information message, so memories
@@ -221,12 +242,25 @@ counts what is sent, not the stored token counts.
     instruction-following from about 30% to about 90% (`chat/README.md`,
     "Reasons / Experiments"). A prompt change needs an eval run, not only a unit
     test.
-11. `new-context-element-decisions` **Each new context element needs four
+11. `new-context-element-decisions` **Each new context element needs five
     decisions.** Its position relative to the agent prompt and project files,
     whether `calculate_reserved_tokens` counts it, whether it is request-only
     (then set `allow_compaction_cutoff=False`,
-    [[agent-runtime#stable-message-ids]]), and what each incognito mode stores
-    ([[chat-persistence#incognito-decision-per-field]]).
+    [[agent-runtime#stable-message-ids]]), what each incognito mode stores
+    ([[chat-persistence#incognito-decision-per-field]]), and whether a resumed
+    turn needs it. A resumed turn rebuilds `ChatAgent` only from
+    `chat/models.py:ChatFeatureState` (`chat/restoration.py:restore_chat_agent`),
+    not from the current persona or settings. A new prompt input that is not in
+    that state, `ChatAgent.capture_state` and `ChatAgent.restore_state` is lost
+    on resume or makes the restore fail.
+12. `usage-only-history-shape` **A usage-only session replaces the history.**
+    `chat/history_store.py:RedisChatHistoryStore.prepare_messages` returns the
+    stored Redis messages plus the bare question. The newest message's text-file
+    messages and request-context message are dropped, and earlier turns never
+    stored them. Only images on the question survive. The files reach the model
+    only through the forgotten-files notice ([[#forgotten-files-need-metadata]]).
+    A new element that `convert_chat_history` puts before the question does not
+    reach a usage-only turn.
 
 ---
 
@@ -252,7 +286,11 @@ counts what is sent, not the stored token counts.
   names there is in `chat/prompt_utils.py:_create_context_files_message`.
 - **`COMPRESSION_TRIGGER_RATIO` is a false lead.** `configs/chat_configs.py`
   still reads it, but nothing uses it. The trigger is a constant in
-  `agents/compaction.py`.
+  `agents/compaction.py`. `LOG_ONYX_MODEL_INTERACTIONS` in
+  `configs/app_configs.py` is also read but unused, and logs nothing.
+- **A context-limit failure looks like an unknown error.** The user sees a
+  retryable "unexpected error" when the fixed parts do not fit
+  ([[#fixed-parts-must-fit]]).
 
 ---
 
@@ -265,7 +303,7 @@ counts what is sent, not the stored token counts.
 - [[file-store-and-user-files]]: `UserFile.token_count` and file loading.
 - [[chat-preferences]]: memories, preferences and language.
 - [[tools-framework]]: configured tools gate guidance sections and file notices.
-- [[llm-providers]]: the model sets the window, the tokenizer and image support.
+- [[llm-providers]]: the model sets the window, image support and the tokenizer for setup counts.
 - [[chat-persistence]]: saved history and summary rows.
 
 ---
@@ -294,9 +332,10 @@ counts what is sent, not the stored token counts.
   ([[#reminder-last-head-stable]]).
 - `investigate-forgotten-file` **Investigate "the assistant forgot a file" or
   "ignored the instructions".**
-  Set `LOG_ONYX_MODEL_INTERACTIONS=true` and reproduce in a normal (not
-  incognito) chat. `backend/log/api_server_debug.log` then shows the message
-  list for each inference. Check the order in the Architecture diagram, whether a
+  Reproduce in a normal (not incognito) chat with LLM tracing on
+  (`backend/AGENTS.md`). The generation span from `tracing/llm_utils.py:llm_generation_span`
+  holds the sent messages as `input_messages`. Or set a breakpoint at the
+  return of `chat/prompt_utils.py:prepare_prompt`. Check the order in the Architecture diagram, whether a
   forgotten-files notice is present ([[#forgotten-files-need-metadata]]), and
   whether a `SUMMARY` row on the branch covers the turn that held the file.
 - `compressed-chat-setup` **Set up a compacted chat for a test.** Copy

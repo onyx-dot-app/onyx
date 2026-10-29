@@ -16,7 +16,8 @@ is on (`ee/onyx/server/tenants/provisioning.py`).
 - **An end user** asks for an image in chat. A progress indicator shows, then
   the image appears in the answer. The user can ask for changes to an image
   they attached or to one that the assistant made, and the model uses it as a
-  reference. After an image, the assistant answers without calling more tools.
+  reference. After an image call, the assistant answers without calling more
+  tools in that turn.
 - **An admin** opens the image generation admin page, picks a model from
   OpenAI, Azure or Vertex AI, enters credentials, and makes it the default. A
   test call can generate one image to check the credentials. A
@@ -58,7 +59,8 @@ chat turn
   tool_constructor.py:_get_image_generation_config   default config -> credentials
   ImageGenerationTool._run
     _resolve_reference_image_file_ids            dedupe, cap, reject if unsupported
-    worker thread: generate_images_with_provider tool thread polls for cancellation
+    worker thread: generate_images_with_provider tool thread polls for cancellation,
+                                                 then waits for started provider calls
     save_files(base64, chat_session_id)          -> FinalImageGenerationResponse details
   chat/renderer.py:ToolRenderer                  ImageGenerationToolStart, then
                                                  ImageGenerationFinal from the details
@@ -108,11 +110,15 @@ and saves no files. The caller needs `Permission.GENERATE_IMAGE`.
    only that the fields are present. It does not call the provider. A wrong key
    shows the tool and fails at run time.
 3. `image-ends-tool-phase` **Image generation ends the tool phase.**
-   [[core-chat-loop]] owns the stopping-tool rule. After an image,
-   `chat/agent.py:ChatAgent._prepare_step` offers no tools, and
+   [[core-chat-loop]] owns the stopping-tool rule.
+   `chat/agent.py:ChatAgent._update_tool_context` sets `ran_image_gen` when a
+   step calls `generate_image`, even if the call fails. Other calls in that step
+   still run. Then `chat/agent.py:ChatAgent._prepare_step` offers no tools for
+   the rest of the turn, so the model cannot retry. The flag resets at the next
+   turn and is saved in `ChatFeatureState`. When reminders are on,
    `chat/prompt_utils.py:build_chat_reminder` uses
    `prompts/chat_prompts.py:IMAGE_GEN_REMINDER`. Any tool added to
-   `tools/built_in_tools.py:STOPPING_TOOLS_NAMES` also gets this image reminder.
+   `tools/built_in_tools.py:STOPPING_TOOLS_NAMES` gets the same rule and reminder.
 4. `response-format-per-model` **`response_format` depends on the model.**
    `image_gen/generation.py:response_format_for_model` leaves it out for
    `gpt-image-*` models, which reject it, and asks for `b64_json` for the rest.
@@ -171,6 +177,9 @@ and saves no files. The caller needs `Permission.GENERATE_IMAGE`.
   passes with `file_store/utils.py:load_chat_file_by_id`, which does not check
   that the user can read the file. A file ID that reaches the model, for example
   through document text, can load another user's image.
+- **The image heartbeat packet is not used.** `ImageGenerationToolHeartbeat`
+  (`image_generation_heartbeat`) is defined in
+  `server/query_and_chat/streaming_models.py`, but nothing emits it.
 
 ---
 

@@ -114,11 +114,19 @@ disabled, `construct_tools` does not build `OpenURLTool`.
 **Snippets and citations.** The chat and research agents put snippets from
 earlier results (`tools/tool_implementations/web_search/utils.py:extract_url_snippet_map`)
 in `ToolContext.url_snippet_map`, and `open_url` truncates a crawled page around
-the snippet. `open_url` reuses the number that a URL already has in the turn,
-from `ToolContext.citation_mapping`. `chat/agent.py:ChatAgent._tool_context`
-builds that map from the turn's citation mapping, which holds every numbered
-document, not only the cited ones. Repeated calls merge: `web_search` merges
-its queries, and `open_url` merges its URLs up to `MAX_URLS_PER_CALL`.
+the snippet. `open_url` reuses the number that a URL already has in the chat
+session (history and the current turn), from `ToolContext.citation_mapping`.
+`chat/agent.py:ChatAgent` seeds that map from every history message, so it
+holds every numbered document, not only the cited ones. New numbers start
+after the session's highest number. Repeated calls merge: `web_search` merges
+its queries, and `open_url` merges its URLs. One `open_url` call reads at most
+`MAX_URLS_PER_CALL` (10) URLs and drops the rest with only a log warning.
+After a `web_search` step with results, the model is told to open the URLs:
+`chat/prompt_utils.py:build_chat_reminder` sends `OPEN_URL_REMINDER`, and
+`deep_research/research_agent.py:ResearchAgent._prepare_step` sends
+`OPEN_URL_REMINDER_RESEARCH_AGENT`. Both do this only when the agent has
+`open_url` and steps remain, and the chat reminder does not replace an
+image-generation reminder.
 
 **Runtime API.** `server/features/web_search/api.py` builds clients from the
 active rows with the same factories, but it does not use the tool classes.

@@ -54,9 +54,10 @@ It does not own:
 run_python (stateless, one call = one execution)
   PythonTool._run
     _select_files_for_staging        referenced files first, then recent, inside caps
-    _upload_and_stage                upload once per (filename, hash) per tool instance
+    _upload_and_stage                upload once per (filename, hash) per tool instance;
+                                     best effort across parallel calls
     client.execute_streaming         POST /v1/execute/stream (SSE); on 404 -> /v1/execute
-    per output event                 invocation.update(PythonExecutionDelta)
+    per output event                 invocation.update(ToolProgress(details=PythonExecutionDelta))
     generated files                  download -> file store (session stamp)
                                      -> delete the service copy
 
@@ -66,8 +67,10 @@ bash (one session per coding-agent call)
                                      (1 h TTL) -> extract -> session_id
     CodingAgent(BashTool(BASH_TOOL_SENTINEL_ID, session_id))
     spawn_agent -> ChildRunWait      the child run calls bash, one call at a time
-    add_completion_cleanup           delete_session when the child ends; best effort,
-                                     the TTL is the backstop
+    add_completion_cleanup           after the child's first run completes or releases
+                                     and its workers drain: mark the agent's sandbox
+                                     unavailable, delete_session; best effort, the
+                                     TTL is the backstop
 ```
 
 **Availability.** `PythonTool.is_available` needs three things: a non-empty
@@ -80,10 +83,12 @@ URL in the process (`_HEALTH_CACHE_TTL_SECONDS`). The admin health endpoint
 makes a live check, and every live check refreshes that cache.
 
 **Input files.** `PythonTool` reads the turn's chat files from
-`ToolContext.chat_files`. `chat/agent.py:ChatAgent._finalize_tool` also stages
-the raw source files of search hits that connectors stored
-(`chat/files.py:build_python_chat_files_from_search_docs`), and later steps of
-the turn get them, so the code can open a spreadsheet that search found. Staging has caps on file
+`ToolContext.chat_files`. `chat/agent.py:ChatAgent._finalize_tool` attaches the
+raw source files of search hits to `ChatSearchResult.staged_files`
+(`chat/files.py:build_python_chat_files_from_search_docs`, connector-origin
+files only). `chat/agent.py:ChatAgent._update_tool_context` merges them into
+`chat_files` after the step and skips a filename already present, so the code in
+a later step can open a spreadsheet that search found. Staging has caps on file
 count, total bytes and parallel uploads. When files are dropped, the model gets
 a `staging_notice` in the result.
 
@@ -100,10 +105,12 @@ health calls are not retried.
 1. `isolation-is-service-job` **Isolation is the service's job, not Onyx's.**
    Nothing in `backend/onyx` sandboxes code or checks that the service does.
    Onyx trusts the URL in `CODE_INTERPRETER_BASE_URL`. The "no network access"
-   rule for bash sessions exists only as text: the docstring on
-   `tools/tool_implementations/python/code_interpreter_client.py:CodeInterpreterClient.execute_bash_in_session`
-   and the `BashTool` description that the model reads. Treat a change to what
-   that URL may point at as a security change.
+   rule for bash sessions exists only as text. The model reads it in
+   `coding_agent/tool_definitions.py:BASH_TOOL_DESCRIPTION` and the coding-agent
+   prompt (`prompts/coding_agent/coding_agent.py:CODING_AGENT_PROMPT`).
+   `BashTool.DESCRIPTION` is not sent to the model, because `CodingAgent`
+   registers its own bash definition. Treat a change to what that URL may point
+   at as a security change.
 2. `default-url-not-empty` **The default URL is not empty.**
    `CODE_INTERPRETER_BASE_URL` defaults to `http://localhost:8000` in
    `configs/app_configs.py`. Only an explicit empty value turns the tools off
@@ -112,8 +119,12 @@ health calls are not retried.
 3. `truncate-before-model` **Truncate output before it reaches the model.**
    Both tools pass stdout and stderr through
    `tools/tool_implementations/utils.py:truncate_output`, each capped at
-   `CODE_INTERPRETER_MAX_OUTPUT_LENGTH`. `PythonTool` streams the raw chunks to
-   the UI and truncates only the model text.
+   `CODE_INTERPRETER_MAX_OUTPUT_LENGTH`. Only the live `PythonExecutionDelta`
+   stream is complete. The saved `details` hold the truncated output, so a
+   reloaded chat shows truncated output. When live output was streamed,
+   `chat/renderer.py:ToolRenderer.update` sends the final result with empty
+   stdout and stderr and only the new file IDs, so the client must keep the
+   deltas it already has.
 4. `errors-are-results` **Execution errors are results, not exceptions.** Both
    `_run` methods catch client errors and return the result JSON with
    `exit_code=-1` and `error` set. The model sees the failure and can fix its
@@ -123,8 +134,10 @@ health calls are not retried.
 5. `run-python-result-json` **`LlmPythonExecutionResult` is saved in two
    forms.** `tools/models.py:LlmPythonExecutionResult` is the model text, as
    JSON in `content`, and the typed `details` that chat saves in
-   `ToolCall.result` and in checkpoints. `chat/renderer.py:ToolRenderer.update`
-   draws the block from `details` live and on reload.
+   `ToolCall.result` and in checkpoints. Checkpoints store `details` under a
+   stable tag in `chat/checkpoint.py:CHECKPOINT_PAYLOAD_TYPES` (`tool.python.v1`,
+   `tool.bash.v1`, `coding.result.v1`). Register a new details type there, and
+   keep each tag able to parse old payloads, or checkpoint restore fails.
    `server/query_and_chat/session_loading.py:translate_assistant_message_to_packets`
    parses the JSON for messages saved before response items existed. Both
    readers, and `db/chat_response.py:_extract_referenced_file_descriptors`,
@@ -148,19 +161,29 @@ health calls are not retried.
    system and run in order.** `coding_agent/agent.py:CodingAgent` registers
    bash with `ToolExecutionMode.SEQUENTIAL` on purpose. Do not make it
    parallel.
-9. `run-python-stateless` **`run_python` has no state between calls.** Each call
-   is a new execution, and variables do not carry over.
+9. `coding-sandbox-one-run` **The coding sandbox lives for one child run.**
+   `CodingAgentTool._run` registers the sandbox cleanup with
+   `add_completion_cleanup` on the first run. The cleanup sets
+   `CodingAgent.is_sandbox_available` to false, and
+   `coding_agent/agent.py:CodingAgent._prepare_step` then rejects a new run. Before
+   a feature sends a follow-up run to a coding agent, tie the cleanup to the
+   agent's lifetime. Only a locally owned child run can register the cleanup.
+10. `run-python-stateless` **`run_python` has no state between calls.** Each call
+   is a new execution, and variables do not carry over. `run_python` is a
+   `PARALLEL` tool, so the calls of one model step run at the same time on one
+   `PythonTool` instance.
    `tools/tool_implementations/python/python_tool.py:PythonTool._uploaded_file_cache`
-   only stops the same input file from
-   uploading twice. A generated file is not an input to a later call in the same
-   turn. It becomes an input in later turns only when the answer text contains
-   its file ID: `db/chat_response.py:_extract_referenced_file_descriptors` then
-   attaches it to the message, and the next turn loads message files as chat
-   files.
-10. `keep-run-python-name` **Do not rename `run_python` to `python`.** OpenAI
+   only reduces repeat uploads, with no lock: two parallel calls can upload
+   the same file. Do not add other state that calls share. A generated file is
+   not an input to a later call in the same turn. In a turn that persists
+   content, it becomes an input in later turns only when the answer text
+   contains its file ID: `db/chat_response.py:_extract_referenced_file_descriptors`
+   then attaches it to the message, and the next turn loads message files as
+   chat files. A content-free turn saves no tool calls, so it attaches none.
+11. `keep-run-python-name` **Do not rename `run_python` to `python`.** OpenAI
     rejects a function named `python` (the comment on
     `tools/tool_implementations/python/python_tool.py:PythonTool`).
-11. `version-gate-new-routes` **A new service route needs a version gate.** The
+12. `version-gate-new-routes` **A new service route needs a version gate.** The
     service ships on its own release line, and a deployment can run an older
     image. Mark a client method that needs a newer service with
     `@requires("x.y.z")`
@@ -168,7 +191,7 @@ health calls are not retried.
     and check it with `CodeInterpreterClient.supports` in `is_available`. Otherwise an older service makes the tool appear and then
     fail on every call. `execute_streaming` shows the other pattern: it falls
     back to `/v1/execute` when the service answers 404.
-12. `single-settings-row` **The settings table has exactly one row.**
+13. `single-settings-row` **The settings table has exactly one row.**
     `db/code_interpreter.py:fetch_code_interpreter_server` uses `.one()`. A
     migration seeds the row with `server_enabled=true`. Without the row,
     `is_available` raises and both tools are hidden.
@@ -187,17 +210,28 @@ health calls are not retried.
 
 ## Known issues
 
-- **Staged input files stay on the service.** `PythonTool` does not delete
-  them, because its upload cache reuses their IDs. The service's own file TTL
-  removes them. Onyx cannot see that TTL.
+- **Uploaded input files stay on the service.** `PythonTool` does not delete
+  staged files, because its upload cache reuses their IDs.
+  `coding_agent/agent.py:coding_sandbox_session` does not delete the uploaded
+  repository archive (up to 500 MB). The service's own file TTL removes them.
+  Onyx cannot see that TTL.
 - **The coding agent reaches only public repositories.**
   `tools/tool_constructor.py:_construct_tools_impl` builds `CodingAgentTool`
   without a `github_token`, so `coding_sandbox_session` downloads without
   credentials.
-- **A coding-agent call cannot resume in another process.** The sandbox
-  session lives in the process that made it, and
-  `chat/subagents.py:ChatAgentDirectory.restore_agent` restores only research
-  agents.
+- **Nothing resumes an interrupted coding-agent call.** After a process stops,
+  the next read of the turn marks it ERROR
+  (`chat/run_store.py:ChatRunStore._load_status` calls
+  `db/chat_checkpoint.py:interrupt_response__no_commit`). The cleanup never
+  runs, so the sandbox stays until its 1 h TTL. Also,
+  `chat/subagents.py:ChatAgentDirectory.restore_agent` raises for a coding
+  agent: the coding child is saved without a restoration configuration.
+- **Stop does not abort a running execution.** Neither tool cancels its HTTP
+  request. A bash call blocks until the service returns, up to
+  `CODE_INTERPRETER_DEFAULT_TIMEOUT_MS` plus 10 s, and the sandbox delete waits
+  for it. A `run_python` stream stops at its next output chunk. The result is
+  discarded, and generated files that `PythonTool` already saved belong to no
+  `ToolCall`.
 
 ---
 

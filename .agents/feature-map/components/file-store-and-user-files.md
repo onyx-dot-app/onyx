@@ -198,12 +198,16 @@ preview.
     success, `_extract_text_and_images` returns no embedded images and no
     metadata, so image analysis, PDF metadata and per-file `ONYX_METADATA` do
     nothing. An Unstructured error falls back to the local parsers.
-12. `checkpoint-file-is-blob-id` **A saved tool file keeps only a blob id.**
+12. `checkpoint-file-is-blob-id` **A saved run file keeps only a blob id.**
     `tools/file_snapshot.py:SavedChatFile.capture` drops the bytes of a
-    `ChatFile` that has a `file_id`, and `restore` reads that id from the file
-    store with no access check. A `ChatFile.file_id` must be a
-    `FileRecord.file_id` the run may read, never a `UserFile.id`
-    ([[#say-which-id]]). Inline bytes become
+    `ChatFile` that has a `file_id`, and
+    `tools/file_snapshot.py:SavedContextFiles.capture` keeps only the blob id
+    of each project or agent context image. `restore` reads these ids from the
+    file store with no access check and no `UserFile` lookup. A
+    `ChatFile.file_id` must be a `FileRecord.file_id` the run may read, never
+    a `UserFile.id` ([[#say-which-id]]). File deletion does not check for
+    these references. If a user deletes a context file while a run is
+    suspended, the resumed run fails when it loads that image. Inline bytes become
     `agent-checkpoint/<root session id>/<sha256>` blobs with
     `FileOrigin.OTHER` and no `UserFile`
     (`chat/restoration.py:persist_checkpoint_files`); session hard delete

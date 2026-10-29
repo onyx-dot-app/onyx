@@ -45,9 +45,11 @@ that mode a poller in the API server does the small periodic jobs
 - **Redis** is the Celery broker and result backend. It also holds locks,
   fences, tenant-prefixed keys and, by default, login sessions. Code that only
   needs a key-value store uses `cache/factory.py:get_cache_backend`, which can
-  run on Postgres. The chat resume buffer, the stop signal and the session
-  admission use it. See
-  [[background-jobs]] and [[multi-tenancy]].
+  run on Postgres. The chat resume buffer, the stop signals, the session
+  admission and the per-response ownership leases use it. Incognito chat
+  history and its sub-agent records live only in this cache, need the Redis
+  backend and expire after an hour. See [[background-jobs]],
+  [[multi-tenancy]] and [[chat-persistence]].
 - **The file store** (`file_store/file_store.py:get_default_file_store`) is S3
   by default, or GCS, Azure Blob or Postgres large objects. It holds uploads,
   staged ingestion batches, connector checkpoints and Craft snapshots. See
@@ -161,34 +163,47 @@ prepare_chat_turn:
   load the session and its agent                     [[agents-personas]]
   ChatTurnAdmission.claim: one turn per session      [[core-chat-loop]]
   the LLM, then its managed-key cost cap             [[llm-providers]], [[rate-and-usage-limits]]
-  load the branch and its summary                    [[chat-persistence]]
-  Query Processing hook                              [[hooks]]
-  save the user message                              [[chat-persistence]]
+  load the branch                                    [[chat-persistence]]
+  new message only (a regeneration skips both):
+    Query Processing hook, unless the record mode    [[hooks]]
+      does not fire hooks
+    save the user message                            [[chat-persistence]]
+  find the branch summary                            [[chat-persistence]]
+  incognito: save the user text to the Redis history [[chat-persistence]]
   reserve one assistant row per model
 chat/execution.py:start_chat_turn
+  clear the old stop flag, publish the stream ID     [[core-chat-loop]]
+    to the processing fence (Stop can target the turn from here)
   publish the ID lines, start the chat-control thread, return ChatDelivery.reader
 ChatTurnExecution.run: one chat-response thread per model
   create_chat_agent -> construct_tools               [[tools-framework]]
-  ChatAgent (or DeepResearchAgent).start, each step: [[agent-runtime]]
+  ChatRunStore: response ownership lease and record  [[agent-runtime]]
+    (sessions that keep content only)
+  open the trace, ChatAgent (or DeepResearchAgent)   [[agent-runtime]]
+    .start, each step:
     ChatAgent._prepare_step: prompt and tool set     [[context-assembly]]
-    compaction when history passes the budget        [[context-assembly]]
+    compaction when history passes the budget        [[agent-runtime]]
     stream from the provider                         [[llm-providers]]
     ToolBatch: search, web, code, MCP, sub-agents    [[internal-search]], [[web-search]],
                                                      [[mcp-and-custom-tools]], [[tools-framework]]
   ResponsePresenter -> MessageRenderer -> packets    [[streaming-protocol]]
     citation processor rewrites [n] markers          [[citations]]
   Emitter -> ChatDelivery -> reader + replay buffer  [[streaming-protocol]]
-run done -> ChatResponsePersistence
-  -> ChatHistoryStore.save_response -> save_chat_turn  [[chat-persistence]]
+run done -> AgentCoordinator.complete               [[chat-persistence]]
+  -> ChatRunStore.save (incognito skips it) -> ChatResponsePersistence
+  -> ChatHistoryStore.save_response (Postgres, or Redis for incognito)
+  -> save_chat_turn
 ChatDelivery.finished -> ChatTurnAdmission.release   [[core-chat-loop]]
 generation spans -> user_usage                       [[observability]]
 ```
 
 - **The run outlives its reader.** `start_chat_turn` starts a non-daemon control
   thread and returns a reader. A browser that disconnects detaches only the
-  reader; the run and its save continue. Only Stop, a lost admission lease or
-  the execution deadline cancels the run, and every response saves once
-  ([[core-chat-loop#disconnect-is-not-stop]]).
+  reader; the run and its save continue. Disconnect never cancels. These do:
+  Stop, a lost session admission lease, a lost per-response ownership lease,
+  a parent agent that cancels a child run, a failure on the chat-control
+  thread, and the execution deadline. The final save and its outcome happen
+  once per response ([[core-chat-loop#disconnect-is-not-stop]]).
 - **One turn per session.** The admission owner key is held from preparation
   until delivery and cleanup finish. A second send gets a `CONFLICT` error, and
   clients poll `GET /chat/chat-session/{id}/status` before they send again

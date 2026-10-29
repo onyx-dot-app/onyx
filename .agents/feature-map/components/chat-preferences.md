@@ -139,7 +139,12 @@ paths read it; find them with `git grep -n load_settings backend`.
 3. `memory-update-by-position` **Memory updates address a position, not an
    id.** `db/memory.py:update_memory_at_index` uses the 0-based index in `id`
    order, the same order as `get_memories`. A change to either order makes the
-   model replace the wrong memory. `get_memories` skips rows with empty text
+   model replace the wrong memory. `MemoryTool._run` picks the index from
+   `ToolContext.user_memory_context`, the list that `chat/process_message.py`
+   reads once when the turn starts (a restored run reuses the saved copy). It
+   does not read the database again. So any memory change after the turn
+   starts can make it replace the wrong row: an earlier memory write in the
+   same turn, a cap eviction in `add_memory`, or a Settings edit. `get_memories` skips rows with empty text
    and the update counts them, so an empty row shifts every later index. The
    web drops empty memories before it saves; `PATCH /user/personalization`
    does not.

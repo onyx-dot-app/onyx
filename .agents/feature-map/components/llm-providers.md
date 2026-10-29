@@ -60,12 +60,15 @@ Its neighbours own:
 
 ## Architecture
 
-**Per-turn resolution.** `llm/factory.py:get_llm_for_persona` picks the model in
-this order: the session's `LLMOverride` (by `model_configuration_id`, else
-provider name plus model), then `Persona.default_model_configuration_id`, then
-the CHAT default. It then calls `db/llm.py:can_user_access_llm_provider`. A
-missing model or a failed access check falls back to the CHAT default with a
-log warning, not an error.
+**Per-turn resolution.** Before the turn starts,
+`chat/process_message.py:_select_models` resolves one model for each requested
+override (a multi-model turn has several), else for the message's
+`LLMOverride`, else the session's. It runs the managed-key cost check on each
+model. `llm/factory.py:get_llm_for_persona` picks the model in this order: the
+override (by `model_configuration_id`, else provider name plus model), then
+`Persona.default_model_configuration_id`, then the CHAT default. It then calls
+`db/llm.py:can_user_access_llm_provider`. A missing model or a failed access
+check falls back to the CHAT default with a log warning, not an error.
 
 **Access matrix.** `can_user_access_llm_provider` decides who may use a
 provider. MANAGE_LLMS bypasses the group check, never the agent check.
@@ -180,18 +183,25 @@ a client.
    `yielded_any` is false, up to `1 + LLM_FIRST_CHUNK_MAX_RETRIES` attempts. A
    retry after content would duplicate output. The boundary is the first
    chunk, even a role-only one.
-5. `tool-call-deltas-by-index` **Accumulate tool-call deltas by `index`.** A raw
+5. `context-limit-error-type` **A context overflow must raise
+   `LLMContextLimitError`.** `llm/multi_llm.py:_provider_scope` maps LiteLLM's
+   `ContextWindowExceededError` to it, and timeouts and rate limits to
+   `LLMTimeoutError` and `LLMRateLimitError`, for `invoke` and `stream`. When
+   no content has streamed, `agents/runtime.py` catches
+   `LLMContextLimitError`, compacts the history and generates once more. A
+   path that raises another type ends the turn without that recovery.
+6. `tool-call-deltas-by-index` **Accumulate tool-call deltas by `index`.** A raw
    chunk carries fragments: the first one for an index has the id and name,
    later ones only argument text. Use
    `llm/model_response.py:MessageAccumulator` or
    `ee/onyx/server/gateway/stream_bridge.py:merge_tool_call_delta`. On the
    event layer, execute a call only after `ToolCallEndEvent`.
-6. `raw-caller-owns-span` **A raw-layer caller owns the span and its
+7. `raw-caller-owns-span` **A raw-layer caller owns the span and its
    `LLMFlow`.** `invoke` and `stream` open a span tagged from
    `GenerationContext.flow`. Without a flow, the span is `UNTAGGED_INVOKE` or
    `UNTAGGED_STREAM`. `invoke_raw` and `stream_raw` open none
    ([[observability]]).
-7. `provider-api-mask-and-invalidate` **A provider API path masks, restores and
+8. `provider-api-mask-and-invalidate` **A provider API path masks, restores and
    invalidates.** Every provider view in `server/manage/llm/api.py` passes
    through `_mask_provider_credentials`. On update,
    `_restore_masked_custom_config_values` turns a masked value back into the
@@ -201,38 +211,38 @@ a client.
    outside this API call it too, such as the persona API (the listing includes
    each agent's default model) and the Community downgrade. Search for
    `invalidate_provider_listing_cache` to find every caller.
-8. `personal-default-string-format` **Deleting a provider clears personal
+9. `personal-default-string-format` **Deleting a provider clears personal
    defaults by string match.** `User.default_model` stores
    `<display name>__<provider type>__<model>`. `db/llm.py:remove_llm_provider`
    clears matching values, and for a nameless provider it matches both the
    empty name and the provider id. A new writer of that string must use the
    same format.
-9. `selected-decision-blocks-delete` **A selected decision model blocks
-   deletion.** `server/manage/llm/api.py:delete_llm_provider` and
-   `db/voice.py:delete_voice_provider` refuse while the selection is on that
-   provider. `db/llm.py:upsert_decision_provider` refuses to drop the selected model. Clear the
-   selection first.
-10. `image-gen-rows-hidden-from-list` **Image-generation configs own hidden
+10. `selected-decision-blocks-delete` **A selected decision model blocks
+    deletion.** `server/manage/llm/api.py:delete_llm_provider` and
+    `db/voice.py:delete_voice_provider` refuse while the selection is on that
+    provider. `db/llm.py:upsert_decision_provider` refuses to drop the selected model. Clear the
+    selection first.
+11. `image-gen-rows-hidden-from-list` **Image-generation configs own hidden
     provider rows.** Each config has its own `LLMProvider` named
     `Image Gen - <image_provider_id>`. The provider list hides these rows unless
     the caller passes `include_image_gen=true`. A client that syncs providers,
     such as the Terraform provider, must pass it, or it reads those rows as
     deleted. [[image-generation]] explains why its writes do not use the
     provider upsert.
-11. `env-lock-every-litellm-call` **Every LiteLLM call goes through the env
+12. `env-lock-every-litellm-call` **Every LiteLLM call goes through the env
     lock.** A new path that calls LiteLLM outside
     `llm/multi_llm.py:LitellmLLM._completion`
     skips `temporary_env_and_lock`. On a single-tenant deployment with
     injection on, it can then read another provider's injected secrets. Keep
     `llm_custom_config_env_injection_enabled` false on multi-tenant
     ([[multi-tenancy]]).
-12. `agent-cancelled-base-exception` **`AgentCancelled` is a `BaseException`.**
+13. `agent-cancelled-base-exception` **`AgentCancelled` is a `BaseException`.**
     `llm/cancellation.py:AgentCancelled` bypasses `except Exception`, so a Stop
     is not handled as a model or tool error. Catch it on purpose. A broad
     `except BaseException` swallows a Stop. On cancellation, `LitellmLLM.stream`
     emits a `GenerationErrorEvent` with `stop_reason="aborted"` and records the
     partial content and usage.
-13. `claude-thinking-tool-loop` **Claude thinking stays on for the whole tool
+14. `claude-thinking-tool-loop` **Claude thinking stays on for the whole tool
     loop.** For the Anthropic reasoning styles, `_completion` sends thinking on
     every request, so the effort setting holds across tool turns.
     `llm/litellm_singleton/monkey_patches.py:_patch_anthropic_keeps_requested_thinking`
@@ -240,7 +250,7 @@ a client.
     cleanup. Claude behind an OpenAI-style gateway is the exception:
     `llm/multi_llm.py:_prompt_in_tool_loop` skips reasoning there, because the
     signed thinking block cannot always be replayed.
-14. `flow-rows-not-deprecated-columns` **Read defaults from the `LLMModelFlow`
+15. `flow-rows-not-deprecated-columns` **Read defaults from the `LLMModelFlow`
     rows, not the deprecated columns.** `LLMProvider.default_model_name`,
     `is_default_provider`, `is_default_vision_provider` and
     `default_vision_model` are not kept in step and can hold stale values.

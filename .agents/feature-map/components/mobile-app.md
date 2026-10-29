@@ -112,9 +112,10 @@ saved history.
 
 **Timeline.** `chat/messageProcessor.ts` and `hooks/timeline/` port the packet
 processor of the web app. Packets group by `getGroupKey` (`turn_index` and
-`tab_index`). `injectSectionEnd` closes open groups when a new turn starts and
-on `stop`, because the backend does not send `section_end` for every group,
-and never for the final answer. Two hooks differ from web because the mobile
+`tab_index`). The backend closes each answer, reasoning and tool group with
+`section_end`, also on Stop. `injectSectionEnd` closes groups that are still
+open when a new turn starts or on `stop`, for a stream that ends on a root
+error or a dropped connection. Two hooks differ from web because the mobile
 lint forbids reading refs during render: `usePacketProcessor` regroups in a
 `useMemo`, and `usePacedTurnGroups` keeps pacing state in effects.
 
@@ -166,8 +167,9 @@ the sources.
    apart from web. [[streaming-protocol]] owns the list of mirrors that a new
    packet type must update.
 10. `stream-end-is-not-idle` **The end of a stream does not enable Send.**
-    The server can still save the turn after delivery ends, so only the status
-    poll in `chat/sessionReadiness.ts:waitForSessionIdle` returns the session
+    `chat/execution.py` releases the session admission lease only after
+    delivery finishes and child-run work drains. A send before the release
+    fails with a `CONFLICT` `StreamingError`, so only the status poll in `chat/sessionReadiness.ts:waitForSessionIdle` returns the session
     to `input`. A transient failure keeps polling. An auth error or a 404
     stops the poll and leaves the state `unconfirmed`. A server without the
     status route answers 404, so a new app on an older server cannot send a

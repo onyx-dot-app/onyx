@@ -174,13 +174,13 @@ mobile code checks for it. See [[streaming-protocol]].
 | Term | Meaning |
 |---|---|
 | Step / cycle | One model generation and the tool calls it requests. A chat response has up to `MAX_LLM_CYCLES` of them. See [[agent-runtime]]. |
-| Run | One execution of an agent on the shared runtime (`agents/runtime.py:Run`). Its `RunState` records the input, steps, outcome and child runs. A chat response's root run ID is its assistant `ChatMessage` ID. See [[agent-runtime#run-id-is-message-id]]. |
+| Run | One execution of an agent on the shared runtime (`agents/runtime.py:Run`). Its `RunState` records the input, steps, outcome and child runs. In a session that keeps content, a chat response's root run ID is its assistant `ChatMessage` ID. A content-free incognito run uses generated IDs. See [[agent-runtime#run-id-is-message-id]]. |
 | Stream ID | The key that the processing fence, the stop fence and the stream buffer share. See [[core-chat-loop]]. |
 | Presenter and renderer | `ResponsePresenter` and `MessageRenderer` turn runtime events into packets. They never drive execution. See [[core-chat-loop#presentation-does-not-drive-execution]]. |
 | Emitter | The object that stamps `model_index` on a packet and hands it to delivery. See [[streaming-protocol#emitter-sets-model-index]]. |
 | Reminder | A trailing message with one or two critical instructions. See [[context-assembly]]. |
 | Custom agent prompt | The agent's instructions, sent as a user message near the newest user message. See [[context-assembly]]. |
-| Fence (chat) | A cache key that acts as a flag: the stop fence means the user pressed stop, and the processing fence holds the live stream ID. The admission owner key, not a fence, marks a busy session. See [[core-chat-loop#session-admission]]. |
+| Fence (chat) | A per-session cache flag. The stop fence (`chat/stop_signal_checker.py`, keyed by session and stream ID) means the user pressed Stop. The processing fence holds 0 after admission and the live stream ID after `ChatTurnAdmission.publish`. The admission owner key, not a fence, marks a busy session. The per-response keys in `chat/run_store.py:ChatRunStore` are not fences: `chat_response_owner` is the execution lease, and `chat_response_stop` is the flag that `cancel_run` sets when a parent cancels a child agent. See [[core-chat-loop#session-admission]]. |
 | Stopping tool | A tool after which the next step offers no tools, such as `generate_image`. See [[core-chat-loop#stopping-tools]]. |
 | `BASH_TOOL_SENTINEL_ID` | The id that the coding agent gives its in-memory `BashTool`. See [[code-execution#bash-tool-sentinel]]. |
 | Message types | `ChatMessage` (the row), `ChatResponseItem` (the saved steps of a response), `llm/models.py:Message` (the conversation type the runtime uses) and `llm/model_request.py:ChatCompletionMessage` (the provider wire form). See [[core-chat-loop#three-message-types]]. |
@@ -188,7 +188,7 @@ mobile code checks for it. See [[streaming-protocol]].
 | Reserved message | An assistant `ChatMessage` row created with placeholder text before streaming starts. See [[chat-persistence]]. |
 | Incognito and record mode | `IncognitoRecordMode` is fixed on a session and decides what the database keeps. See [[chat-persistence]]. |
 | Child session | A `ChatSession` with `spawned_by_message_id` set. Research and coding child agents get one in a session that keeps content. See [[chat-persistence]]. |
-| Not wired | A part of the shared runtime that no product path reaches: suspension, input requests, and checkpoint handoff and resume. See [[agent-runtime#wire-module]]. |
+| Not wired | A part of the shared runtime that no product path reaches: explicit suspension (`Run.suspend`), input requests (`PendingToolInput`), `start_run`, and checkpoint handoff and resume. Suspension on `ChildRunWait` in the same process is live. See [[agent-runtime#wire-module]]. |
 | `use_memories` vs `enable_memory_tool` | `use_memories` controls whether memories reach the prompt. `enable_memory_tool` controls whether the memory tool can write them. See [[chat-preferences]]. |
 | Decision model | A model that answers typed predicate, choice or score questions with probabilities, not through LiteLLM. See [[llm-providers]]. |
 | Passthrough (LLM gateway) | A native OpenAI Responses or Anthropic Messages forward that skips `LitellmLLM`. See [[llm-gateway]]. |

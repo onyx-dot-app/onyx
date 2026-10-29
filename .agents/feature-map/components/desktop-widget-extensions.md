@@ -34,8 +34,8 @@ deployments only.
   returns.
 
 On failure: the widget shows the error text in the chat when the send fails,
-for example on a stream line that is not valid JSON, a backend `error` packet,
-or a missing credential. A send that fails before the server accepts it
+for example on a stream line that is not valid JSON or a missing credential.
+A server error shows a generic message, not the server text (Known issues). A send that fails before the server accepts it
 removes the message and puts the text back in the input. Send stays disabled
 until the server confirms that the conversation is idle
 ([[#widget-send-waits-for-idle]]). The extension shows its own timeout dialog when the
@@ -155,12 +155,14 @@ panel picks up the new session when the user returns.
    clear the state of a newer send. Keep all three when you add an await or a
    new step to a send.
 7. `widget-ignores-unknown-packets` **The widget stream fails only on a
-   malformed line or an `error` packet.**
+   malformed line, a line with no `obj`, or an `error` packet.**
    `widget/src/services/api-service.ts:parseSSEStream` throws on a line that
    does not parse. `widget/src/services/stream-parser.ts:processPacket` throws
    on a packet with no `obj` or no `type`, and on an `error` packet. It
    ignores an unknown packet type. A new backend packet therefore does not
    break the widget, but it shows nothing until `processPacket` handles it.
+   A new line shape without `obj`, or a new use of the `error` packet, ends
+   the send.
 8. `widget-bundle-outlives-backend` **A deployed widget bundle outlives the
    backend version it was built for.** Customer sites keep the old widget
    bundle. A change to the request shape of `create-chat-session` or
@@ -208,6 +210,16 @@ panel picks up the new session when the user returns.
   same-site. Nobody has tested this. A possible replacement is
   `optional_host_permissions` with a `chrome.permissions.request` for the one
   Onyx origin.
+- **The widget treats every server error as fatal and hides its text.** A
+  turn-level failure (for example a busy session or a save error) arrives as a
+  root `StreamingError` line with no `obj`, so `processPacket` shows
+  "Received malformed packet" instead of the server text. A tool failure
+  inside a turn arrives as a placed `error` packet
+  (`backend/onyx/chat/renderer.py:ToolRenderer.complete`, from tools that set
+  `emit_error_packet`, such as image generation). The server continues the
+  turn and saves the answer, but the widget stops at that packet with
+  "Stream error: undefined", because `exception` is not serialized. A reload
+  does not restore the answer, because the widget saves only what it rendered.
 - **API-key widgets have no key rotation.** The key is whatever the site owner
   pasted. Passthrough leaves expiry to the host page.
 

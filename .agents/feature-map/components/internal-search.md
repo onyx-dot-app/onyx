@@ -110,8 +110,10 @@ but only the unused `warm_up_cross_encoder` builds one.
 query processing use the agent's primary model. Selection and relevance
 classification use `selection_llm`, which resolves lazily from the
 SEARCH_SELECTION default after retrieval returns sections. If that fails or
-is unset, it uses the primary model and checks the primary provider's cost
-limit first, once per call. The Slack lane shares that check, and a failure
+is unset, it uses the primary model. Chat checks the primary provider's cost
+limit at turn start (`chat/process_message.py`). The tool checks it itself,
+once per call, only when a `/search` caller skipped that check
+(`primary_llm_cost_checked`). The Slack lane shares that check, and a failure
 skips only that lane. When a separate selection
 model is in use, `secondary_llm_flows/search_prompt_budget.py` trims candidates
 until the prompt fits that model's limits ([[llm-providers]]).
@@ -125,16 +127,18 @@ between calls. It reads the turn's planning state from
 new decisions as `SearchPlanningResult` in the result metadata. After each step,
 `chat/agent.py:ChatAgent._after_step` and the research agent fold them with
 `tools/tool_implementations/search/search_tool.py:update_search_context`, in
-model-call order. Each search adds a `SearchCycle`, and the next call's scope
+model-call order. Each completed search adds a `SearchCycle`, also one with no
+hits; an error or an empty source selection adds none. The next call's scope
 decision reads those cycles, so a "check A, then B" request advances to the next
 unsearched source. `_build_scope_note` tells the model which sources and queries
-ran. After a step that ran a search, `ChatAgent._tool_context` sets
-`skip_search_query_expansion`. A repeat search then makes no rephrase or
-keyword-expansion LLM call and uses the model's own queries. The one exception:
-when the call advances to a source not yet searched, it reuses the turn's
-`SearchContext.cached_expansion`. Selection and expansion run whatever the
-flag's value. A change to this flag changes the LLM cost of every multi-search
-turn.
+ran. In chat only, after a step that called `internal_search` (also one that
+failed), `ChatAgent._tool_context` sets `skip_search_query_expansion`. A repeat
+search then makes no rephrase or keyword-expansion LLM call and uses the
+model's own queries. The one exception: when the call advances to a source not
+yet searched, it reuses the turn's `SearchContext.cached_expansion`. The
+research agent never sets the flag, so each of its searches expands. Selection
+and expansion run whatever the flag's value. A change to this flag changes the
+LLM cost of every multi-search chat turn.
 
 **Other entry points.** `server/features/search/api.py` builds a `SearchTool`
 and calls `SearchTool.search` outside the chat runtime, with its own trace and
@@ -176,7 +180,13 @@ calls the index directly for admin document inspection.
    different readers.** The model reads the trimmed, cited string in `content`.
    `SearchDocsResponse.search_docs` holds every top section before selection.
    `displayed_docs` holds only the selected ones; `None` means all, and an empty
-   list means none. Do not feed `details` fields back into the prompt.
+   list means none. Do not feed `details` fields back into the prompt. In chat,
+   `ChatAgent._finalize_tool` stages the connector files of all `search_docs`
+   for the Python tool by `SearchDoc.file_id`, which
+   `populate_file_ids_on_sections` fills ([[code-execution]]). The saved result
+   (`chat/response.py:_saved_message`) drops `search_docs` and the planning
+   metadata. The `ToolCall` row keeps the selected documents, so replay and
+   later turns cannot see the candidates before selection.
 5. `empty-source-list-searches-nothing` **An empty source list means "search
    nothing".** `tools/tool_implementations/search/search_tool.py:SearchTool.search` returns an empty response when
    `user_selected_filters.source_type == []`, outside project-only search.
@@ -195,7 +205,8 @@ calls the index directly for admin document inspection.
    it finds no source directive (`SearchContext.scope_decision_settled`). A
    source list makes the next call decide again. Parallel searches in one step
    read the same state and each decide; `update_search_context` keeps the first
-   time decision in model-call order and counts merged calls once.
+   time decision and the last new `cached_expansion` in model-call order, and
+   counts merged calls once.
 8. `weights-parallel-to-lanes` **Keep `search_weights` parallel to
    `search_functions`.** A new lane must append to both lists in the same order.
    `tools/tool_implementations/search/search_utils.py:weighted_reciprocal_rank_fusion`
@@ -219,9 +230,9 @@ calls the index directly for admin document inspection.
 
 ## Known issues
 
-- **Chat history keeps the model's original query arguments.** The UI shows
-  the expanded queries from `SearchToolQueriesDelta`, but the saved tool call
-  keeps what the model wrote.
+- **Saved tool-call arguments keep the model's original queries.** The UI, also
+  after a reload, shows the expanded queries from the saved result. The
+  `ToolCall` row arguments and the model's history keep what the model wrote.
 - **Context expansion never drops a selected section.** A `NOT_RELEVANT`
   classification makes `expand_section_with_context` return `None`, and
   `expand_section_safe` then keeps the original section.

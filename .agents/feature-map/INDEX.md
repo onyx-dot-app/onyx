@@ -24,7 +24,7 @@ A chat turn: assemble context, run the agent loop with tools, stream packets, sa
 | [code-execution](components/code-execution.md) | Runs code for the user: `run_python` runs Python, and the coding agent's `bash` runs shell commands in a repository. Both are HTTP clients of an external Code Interpreter service, so no user code runs in an Onyx process. |
 | [image-generation](components/image-generation.md) | Turns a prompt, and optional reference images, into an image through one admin-chosen provider. It serves the `generate_image` chat tool and a standalone endpoint that the CLI and Craft use. |
 | [citations](components/citations.md) | The chain that turns a retrieved document into a numbered marker the model emits, and turns that marker back into a clickable source in the UI. A break at any point in the tools, prompt, stream parser, database or renderer fails without an error. |
-| [chat-persistence](components/chat-persistence.md) | How a conversation is stored and read back: the session, the message tree and its branches, model steps, tool calls, surfaced documents, feedback, sharing, incognito, history search and retention. Each answer row is reserved before the run, filled while it runs, and finalized in one transaction; every reload, share link and later turn reads that record. |
+| [chat-persistence](components/chat-persistence.md) | How a conversation is stored and read back: the session, the message tree and its branches, model steps, tool calls, surfaced documents, feedback, sharing, incognito, history search and retention. Each answer row is reserved before the run, marked running when the run starts, and finalized in one transaction; every reload, share link and later turn reads that record. |
 | [agent-runtime](components/agent-runtime.md) | A Python engine that runs chat, deep research, research and coding agents through model steps and parallel tools, with child agents, cancellation, compaction and suspension. This document is the one record of which chat adapters implement its interfaces, and which runtime features no product path reaches. |
 | [llm-providers](components/llm-providers.md) | Admins configure LLM providers, their models and the default model for each task, and a factory resolves the model for every call. The factory builds `LitellmLLM`, the wrapper that owns streaming, retries and managed-key cost tracking. |
 | [chat-preferences](components/chat-preferences.md) | Per-user preferences that reach the prompt (profile, language, memories) and prompt shortcuts, plus the workspace `Settings` store that the admin Chat Preferences page and other admin pages edit. |
@@ -130,11 +130,11 @@ The product that runs a coding agent in a sandbox for each user.
 For new work that needs recipes from more than one document. This table is the
 only record of the order of recipes for a task. Follow the links in order. A
 step in parentheses applies only in the case it names. Also read the matching
-section of [CROSS-CUTTING.md](CROSS-CUTTING.md).
+section of [CROSS-CUTTING.md](CROSS-CUTTING.md), if one exists.
 
 | Task | Recipes, in order |
 |---|---|
-| A new packet type | [[streaming-protocol#packet-type]] → [[chat-frontend#packet-type-renderer]] → [[chat-frontend#mock-stream-test]] → [[mobile-app#add-tool-renderer]] → [[desktop-widget-extensions#widget-packet-type]] → [[streaming-protocol#cli-packet-type]] → [[chat-persistence#replay-new-tool]] |
+| A new packet type | [[streaming-protocol#packet-type]] → [[chat-persistence#replay-new-tool]] → [[chat-frontend#packet-type-renderer]] → [[chat-frontend#mock-stream-test]] → [[mobile-app#add-tool-renderer]] → [[desktop-widget-extensions#widget-packet-type]] → [[streaming-protocol#cli-packet-type]] |
 | A new built-in tool | [[tools-framework#built-in-tool]] → [[citations#citeable-tool]] (if it cites) → [[context-assembly#tool-guidance-section]] → the packet type row (if it reuses the search packets, only the search branch of [[chat-persistence#replay-new-tool]]) → [[tools-framework#gate-a-tool]] |
 | A tool that generates files | [[tools-framework#built-in-tool]] → [[file-store-and-user-files#add-generated-file-writer]] |
 | A new feature on the agent runtime | [[agent-runtime#new-feature]] → [[observability#add-llm-call-site]] → [[rate-and-usage-limits#add-llm-entry-point]] (if a user starts the run) → [[agent-runtime#wire-module]] (if it uses suspension or checkpoint transfer) |

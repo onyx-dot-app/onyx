@@ -66,8 +66,11 @@ each point to its spec. `validate_registry` runs at API server startup and
 fails when a point has no spec.
 
 **Execution.** `backend/ee/onyx/hooks/executor.py:_execute_hook_impl` reads the
-hook with the caller's session and copies the fields it needs, so no session is
-in use during the HTTP call. After the call it writes a `HookExecutionLog` row
+hook with the caller's session and copies the fields it needs. It does not use
+that session during the HTTP call, but it does not end the caller's transaction.
+The chat caller keeps its database connection and its chat-session admission
+until the hook returns, so a slow endpoint delays the turn and blocks other sends
+to that session. After the call it writes a `HookExecutionLog` row
 on failure only, in its own session. It updates `is_reachable` in a second
 session, and only when the outcome carries a reachability signal that differs
 from the stored value. A concurrent deletion makes that update fail, and the
@@ -78,7 +81,10 @@ separate session keeps the failure log.
   non-blank message, and only when the session's incognito mode allows it
   (`IncognitoRecordMode.fires_hooks`). An empty `query` in the response rejects
   with `QUERY_REJECTED`
-  (`chat/process_message.py:_process_query`).
+  (`chat/process_message.py:_process_query`). `prepare_chat_turn` saves the
+  rewritten, stripped query as the user message, so the model and later turns
+  see it, not the typed text. Regeneration reuses that message and does not
+  run the hook again.
 - Document ingestion runs per document, in order, in
   `indexing/indexing_pipeline.py:_apply_document_ingestion_hook`. An empty
   `sections` drops the document. When the first document returns `HookSkipped`,

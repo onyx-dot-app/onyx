@@ -214,9 +214,9 @@ Policy precedence is in [[craft-external-apps]].
     or a redirect, and flags only 401 and 403. Both put a
     `CustomToolCallSummary` in `details`, which the chat renderer draws:
     `CustomTool` fills its `error`, and `MCPTool` puts an `{"error": ...}`
-    object in `tool_result`. Other `CustomTool` exceptions reach `Tool.run`, which gives the model
-    a generic error and the user no error detail
-    ([[tools-framework#run-errors-become-results]]).
+    object in `tool_result`. Other `CustomTool` exceptions reach `Tool.run`,
+    which gives the model "Tool failed with error: <exception text>" and the
+    user no error detail ([[tools-framework#run-errors-become-results]]).
 12. `reauth-mark-if-current` **A rejected credential is marked only if it is
     still current.**
     `MCPTool._run` marks it only for a 401 on a connection config whose headers

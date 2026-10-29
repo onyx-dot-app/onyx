@@ -202,6 +202,19 @@ prefix. Deleting the channel config marks that persona deleted.
     rebuilds the answer and its sources from the saved `ChatMessage` and posts
     them with `receiver_ids=None`. No access check runs for the channel
     audience. The asker's click is the only gate.
+12. `answer-retry-reruns-turn` **Each retry is a new chat turn in a new
+    session.** `_get_slack_answer` in `handle_regular_answer` retries on any
+    exception, up to `ONYX_BOT_NUM_RETRIES` (5) times. It raises whenever
+    `gather_stream` returns an `error_msg`, that is, for any root
+    `StreamingError`. Every attempt sends `chat_session_info`, so the prepare
+    step creates a new `ChatSession` and runs the LLM and tools again. A
+    `RESPONSE_SAVE_ERROR` after a complete answer
+    (`chat/persistence.py:ChatResponsePersistence`) and a `QUERY_REJECTED` hook
+    rejection both cause retries. An unconfirmed save can still finish, so one
+    question can leave up to five sessions and five billed turns. A new error
+    type in the chat runtime reaches this retry with no change here. To stop
+    the retry for an error, pass `retry_if` to the `retry_builder` on
+    `_get_slack_answer`.
 
 ---
 
