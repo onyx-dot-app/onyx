@@ -962,7 +962,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       !sessionFetchError &&
                       showFirstOpenLoader
                     }
-                    className="h-full w-full flex flex-col items-center justify-end overflow-hidden px-2 sm:px-4 pb-6"
+                    className="h-full w-full flex flex-col items-center justify-end overflow-hidden px-2 sm:px-4 pb-12"
                   >
                     {/* A conversation's shape in the chat column, from the
                         bottom up like a real chat. More turns than fit, so it
@@ -971,8 +971,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       <Section gap={12} height="fit">
                         {Array.from({ length: 8 }, (_, turn) => (
                           <Section key={turn} gap={12} height="fit">
-                            <ChatMessageLoader orientation="right" />
-                            <ChatMessageLoader orientation="left" />
+                            <ChatMessageLoader orientation="end" />
+                            <ChatMessageLoader orientation="start" />
                           </Section>
                         ))}
                       </Section>
