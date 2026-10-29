@@ -7,9 +7,11 @@ sections and contract or recipe keys that cite the changed code. A document cite
 file through a backticked path, or through a path or `path:symbol` token inside a
 fenced block such as a diagram. A `path:symbol` citation is skipped only when
 the parser finds the symbol's definition in the old or new file and no changed
-line sits in it. Definitions are the `def`, `class` and assignment names (Python)
+line sits in it. Definitions are the `def`, `class` and module- or class-level
+assignment names (Python, from `ast`; a definition starts at its first decorator)
 and the function, class, method, declaration and function-valued `const` or `let`
-names (TypeScript). A symbol the parser cannot find, such as an interface member,
+names (TypeScript). Python text that does not parse uses indentation and line
+patterns. A symbol the parser cannot find, such as an interface member,
 matches any change to the file, as does a bare path and every citation of a new,
 deleted or other file. The change is the diff from `--base` (the commit at the
 start of the agent's turn) to the working tree. Without `--base`, it is the
@@ -35,12 +37,13 @@ Usage: stale_docs.py [--session ID] [--base COMMIT] FILE [FILE ...]
 """
 
 import argparse
+import ast
 import fnmatch
 import json
 import re
 import subprocess
 import tempfile
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -163,17 +166,86 @@ def _definition(line: str, language: str, parent: str | None) -> tuple[int, str]
     return (len(match.group(1)), match.group(2)) if match else None
 
 
+def _statements(node: ast.AST) -> Iterator[ast.stmt]:
+    """The statements directly inside a node, through `except` and `case` clauses."""
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, ast.stmt):
+            yield child
+        elif isinstance(child, (ast.excepthandler, ast.match_case)):
+            yield from _statements(child)
+
+
+def _target_names(target: ast.expr) -> list[str]:
+    """The names a target binds; `a, *b` binds both, `obj.attr` binds none."""
+    if isinstance(target, ast.Name):
+        return [target.id]
+    if isinstance(target, ast.Starred):
+        return _target_names(target.value)
+    if isinstance(target, (ast.Tuple, ast.List)):
+        return [name for item in target.elts for name in _target_names(item)]
+    return []
+
+
+def _assigned_names(node: ast.stmt) -> list[str]:
+    if isinstance(node, ast.Assign):
+        return [name for target in node.targets for name in _target_names(target)]
+    if isinstance(node, ast.AnnAssign):
+        return _target_names(node.target)
+    return []
+
+
+def _python_spans(
+    node: ast.AST, prefix: str, in_function: bool
+) -> Iterator[tuple[str, int, int]]:
+    """(qualified name, first line, last line) of each definition under a node.
+
+    A definition starts at its first decorator. Assignments count at module and
+    class level only.
+    """
+    for child in _statements(node):
+        end = child.end_lineno or child.lineno
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            name = prefix + child.name
+            start = min([d.lineno for d in child.decorator_list] + [child.lineno])
+            yield name, start, end
+            is_function = not isinstance(child, ast.ClassDef)
+            yield from _python_spans(child, name + ".", is_function)
+        elif not in_function and (names := _assigned_names(child)):
+            yield from ((prefix + name, child.lineno, end) for name in names)
+        else:
+            # A block such as `if` or `try`: its definitions keep the scope.
+            yield from _python_spans(child, prefix, in_function)
+
+
 def enclosing_names(text: str, wanted: set[int], language: str) -> set[str]:
     """The qualified names of the definitions that hold the wanted lines.
 
-    The definitions on a line's stack all count: a change in `ToolRunner.run`
-    gives `ToolRunner` and `ToolRunner.run`.
+    Nested definitions all count: a change in `ToolRunner.run` gives `ToolRunner`
+    and `ToolRunner.run`. Blank lines count for no definition.
     """
+    lines = text.splitlines()
+    wanted = {n for n in wanted if 0 < n <= len(lines) and lines[n - 1].strip()}
+    if language == "python":
+        try:
+            tree = ast.parse(text)
+        except (SyntaxError, ValueError):
+            pass  # Text that does not parse uses the line patterns below.
+        else:
+            return {
+                name
+                for name, start, end in _python_spans(tree, "", False)
+                if any(start <= n <= end for n in wanted)
+            }
+    return _names_by_indent(lines, wanted, language)
+
+
+def _names_by_indent(lines: list[str], wanted: set[int], language: str) -> set[str]:
+    """`enclosing_names` from line patterns and indentation."""
     comment = "#" if language == "python" else "//"
     stack: list[tuple[int, str, str]] = []  # (indent, name, kind)
     found: set[str] = set()
     decorated = False
-    for number, line in enumerate(text.splitlines(), start=1):
+    for number, line in enumerate(lines, start=1):
         body = line.lstrip()
         if body and not body.startswith((comment, "*", "/*")):
             indent = len(line) - len(body)
@@ -193,7 +265,7 @@ def enclosing_names(text: str, wanted: set[int], language: str) -> set[str]:
                 decorated = False
             elif body.startswith("@") and number in wanted:
                 decorated = True
-        if body and number in wanted:
+        if number in wanted:
             found.update(_prefixes(stack))
     return found
 
@@ -301,7 +373,11 @@ def _has_code(text: str) -> bool:
     )
 
 
-def is_ignored(path: str, repo_root: Path, base: str | None = None) -> bool:
+def is_ignored(path: str, repo_root: Path, ref: str | None) -> bool:
+    """True when the change cannot alter what the map states.
+
+    `ref` is the commit the change is measured from, as `diff_ref` gives it.
+    """
     if path.startswith(_IGNORED_PREFIXES) or any(m in path for m in _IGNORED_MARKERS):
         return True
     if _NO_BEHAVIOUR.search(path):
@@ -310,7 +386,7 @@ def is_ignored(path: str, repo_root: Path, base: str | None = None) -> bool:
     if Path(path).name == "__init__.py":
         file = repo_root / path
         new = file.read_text(errors="ignore") if file.is_file() else ""
-        old = _old_text(repo_root, base or "HEAD", path) or ""
+        old = (_old_text(repo_root, ref, path) if ref else None) or ""
         return not _has_code(old) and not _has_code(new)
     return False
 
@@ -435,7 +511,8 @@ def find(
     found: dict[str, Reminder] = {}
     result = Findings()
     for path in changed:
-        if is_ignored(path, repo_root, base):
+        ref = diff_ref(repo_root, path, base, fork)
+        if is_ignored(path, repo_root, ref):
             continue
         owner = owner_of(path, owned)
         # A deleted file needs no row.
@@ -449,9 +526,7 @@ def find(
             found[doc.rel] = replace(current, owned=current.owned + (path,))
         if not cited.get(path):
             continue
-        symbols = changed_symbols(
-            repo_root, diff_ref(repo_root, path, base, fork), path
-        )
+        symbols = changed_symbols(repo_root, ref, path)
         for citation in cited[path]:
             by_symbol = False
             if citation.symbol and symbols is not None:

@@ -680,6 +680,8 @@ def test_enclosing_names() -> None:
     assert names(python, {5}, "python") == {"Model", "Model.column"}
     assert names(python, {8}, "python") == {"Model", "Model.run"}
     assert names(python, {2}, "python") == set()
+    # An attribute target binds no name; unpacking binds each name.
+    assert names("settings.LIMIT = 1\nA, *B = 1, 2\n", {1, 2}, "python") == {"A", "B"}
     typescript = (
         "export class Store {\n"
         "  async load(id: string): Promise<void> {\n"
@@ -887,3 +889,78 @@ def test_component_link_must_name_the_documents_path(fmap: FixtureMap) -> None:
 def test_legacy_map_does_not_ask_for_paths_rows(fmap: FixtureMap) -> None:
     (fmap.map_dir / "legacy-schema.txt").write_text("# Old format.\ncitations\n")
     assert _reminder(fmap, ["backend/onyx/server/new_api.py"]) == ""
+
+
+_ROUTE = (
+    "router = APIRouter()\n\n\n"
+    "@router.post(\n"
+    '    "/search",\n'
+    "    dependencies=[Depends(check_token_rate_limits)],\n"
+    "    response_model=SearchResponse,\n"
+    ")\n"
+    "def search() -> None:\n"
+    "    pass\n\n\n"
+    'IMAGE_GEN_REMINDER = """\n'
+    "Use the image tool.\n"
+    '""".strip()\n'
+)
+
+
+def _brief_for_symbol(fmap: FixtureMap, symbol: str, old: str, new: str) -> str:
+    """The brief after replacing `old` with `new` in a file that a key cites by symbol."""
+    rel = "backend/onyx/tools/api.py"
+    source = fmap.root / rel
+    source.write_text(_ROUTE)
+    _git(fmap.root, "add", rel)
+    _git(fmap.root, "commit", "-qm", "route")
+    fmap.edit(
+        _CIT,
+        "**The first mapping wins.**",
+        f"**The first mapping wins.** `{rel}:{symbol}`",
+    )
+    assert old in _ROUTE
+    source.write_text(_ROUTE.replace(old, new))
+    return _reminder(fmap, [rel])
+
+
+def test_multiline_decorator_change_matches_the_decorated_function(
+    fmap: FixtureMap,
+) -> None:
+    removed = "    dependencies=[Depends(check_token_rate_limits)],\n"
+    assert "`first-wins`" in _brief_for_symbol(fmap, "search", removed, "")
+
+
+def test_decorator_continuation_is_not_an_assignment() -> None:
+    line = _ROUTE.splitlines().index("    response_model=SearchResponse,") + 1
+    assert stale_docs.enclosing_names(_ROUTE, {line}, "python") == {"search"}
+
+
+def test_change_in_a_column_zero_string_matches_its_assignment(
+    fmap: FixtureMap,
+) -> None:
+    text = _brief_for_symbol(
+        fmap, "IMAGE_GEN_REMINDER", "Use the image tool.", "Never use the image tool."
+    )
+    assert "`first-wins`" in text
+
+
+@pytest.mark.parametrize("symbol", ["search", "gone"])
+def test_file_that_fails_to_parse_still_briefs(fmap: FixtureMap, symbol: str) -> None:
+    text = _brief_for_symbol(fmap, symbol, "    pass\n", "    return (\n")
+    assert "`first-wins`" in text
+
+
+def test_branch_emptied_package_marker_is_relevant_without_a_base(
+    fmap: FixtureMap,
+) -> None:
+    rel = "backend/onyx/server/__init__.py"
+    (fmap.root / rel).write_text("from .app import create\n")
+    fmap.edit(
+        _CIT, "**The first mapping wins.**", f"**The first mapping wins.** `{rel}`"
+    )
+    _git(fmap.root, "add", ".")
+    _git(fmap.root, "commit", "-qm", "package")
+    _git(fmap.root, "checkout", "-qb", "topic")
+    (fmap.root / rel).write_text("")
+    _git(fmap.root, "commit", "-qam", "empty the package marker")
+    assert "`first-wins`" in _reminder(fmap, [rel])
