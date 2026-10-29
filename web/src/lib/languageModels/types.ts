@@ -66,6 +66,7 @@ export enum LLMProviderName {
   OPENAI = "openai",
   ANTHROPIC = "anthropic",
   OLLAMA_CHAT = "ollama_chat",
+  LLMMAN = "llmman",
   LM_STUDIO = "lm_studio",
   AZURE = "azure",
   OPENROUTER = "openrouter",
