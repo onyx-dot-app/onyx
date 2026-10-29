@@ -5,7 +5,7 @@
 > answer. It also drives the actions that change the saved conversation, and
 > owns the development proxy that forwards `/api` to the backend.
 
-**Verified against:** `a4e97fcea1` (2026-10-29)
+**Verified against:** `6bac4e012f` (2026-10-29)
 **Edition:** CE
 
 ---
@@ -21,8 +21,13 @@
 - **A user sends a message** and watches it work: reasoning, search and other
   tool steps appear as a timeline, then the answer streams with citation chips.
   The user can stop at any time. The partial answer stays, marked as stopped.
+  The input stays busy until the server confirms that the turn is saved. If
+  the client cannot confirm it, the send button changes to a manual check,
+  and the typed text stays.
 - **A user types while an answer streams.** The message joins a short queue
-  and sends by itself when the answer has finished drawing on screen.
+  and sends by itself when the answer has finished drawing on screen and the
+  server is idle. After an error or a failed save, the queue pauses until the
+  user sends again.
 - **A user edits or regenerates** an earlier message. A switcher then moves
   between the versions, and the rest of the chat follows the chosen one. A
   reload shows the same version.
@@ -32,9 +37,10 @@
 - **A user attaches files** by drag and drop, paste or the input bar. If the
   active model has no vision support, an upload that contains an image is
   refused with a message, and none of its files attach.
-- **A user reloads during an answer.** With one model, the answer keeps
-  streaming from where the server is. With several models, each answer shows
-  its saved placeholder text until the user reloads after the run ends.
+- **A user reloads during an answer.** With one model, the buffered part
+  appears at once, without animation, and the rest streams live. With several
+  models, the answers appear when the run ends; the input stays busy until
+  then.
 - **A user rates, copies or shares an answer.** Copy turns markdown tables into
   tab-separated text so a spreadsheet keeps the columns. A share link opens a
   read-only copy. The page needs a session, so a visitor with none goes to
@@ -43,8 +49,9 @@
   exists, and answers show no rating buttons. Leaving the chat or closing the
   tab ends it. If an explicit exit fails, an error shows and the user stays in
   the chat to retry.
-- **When a send fails**, an error message replaces the answer. A usage limit
-  shows a banner with the reset time and no retry
+- **When a send fails**, the partial answer stays and an error banner follows
+  it. In a multi-model turn, only the failed panel shows the error. A usage
+  limit shows a banner with the reset time and no retry
   ([[rate-and-usage-limits]]).
 - **A developer who runs the web server in development** reaches the backend
   at `/api` on the web origin, streams included. A production web server
@@ -73,7 +80,7 @@ It shares the file preview renderers with [[craft-frontend]].
 Neighbours own the rest. [[streaming-protocol]] owns the packet vocabulary,
 the enum mirrors, line framing and heartbeats. [[citations]] owns marker
 resolution and the partial-link hiding inside the answer. [[core-chat-loop]]
-owns the send, stop and resume endpoints, and [[chat-persistence]] the server
+owns the send, stop, resume and status endpoints, and [[chat-persistence]] the server
 tree and replay. [[agents-personas]] owns `/app/agents`. [[plugins]] owns the
 plugins page and the tools popover, and [[mcp-and-custom-tools]] the MCP
 connection prompt. [[desktop-widget-extensions]] owns the Chrome extension's
@@ -92,8 +99,11 @@ AppInputBar -> useChatController.onSubmit           web/src/hooks/useChatControl
   optimistic user + assistant nodes in the tree
   updateCurrentMessageFIFO                          app/app/services/currentMessageFIFO.ts
     sendMessage -> handleSSEStream -> withoutHeartbeats   app/app/services/lib.tsx
+    FIFO.acknowledged resolves with the stream ID from the ID line
   drain loop, one store update per animation frame
     updateSessionMessageTree(frozenSessionId, ...)
+  settleChatSession                                 web/src/lib/chat/settleChatSession.ts
+    await ack and reader -> waitForChatSessionIdle -> reload history if asked -> "input"
 AgentMessage -> usePacketProcessor -> processPackets   timeline/hooks/packetProcessor.ts
   groups by (turn_index, tab_index); builds citationMap, documentMap, stop state
   tool groups -> timeline steps;  display groups -> answer
@@ -102,9 +112,13 @@ AgentMessage -> usePacketProcessor -> processPackets   timeline/hooks/packetProc
 
 **The store.** `web/src/app/app/stores/useChatSessionStore.ts` holds a `Map`
 of session data keyed by session id, plus `currentSessionId`. Each session has
-its own message tree, chat state, `streamId`, `AbortController` and message
-queue. A stream keeps writing to the session that started it
-(`frozenSessionId`), so a user can switch chats while one streams.
+its own message tree, chat state, `AbortController`, `sendAcknowledged` and
+`readerFinished` promises, and message queue. The `AbortController` identifies
+the request that owns the session; late work from an older request checks it
+and stops. A stream keeps writing to the session that started it
+(`frozenSessionId`), so a user can switch chats while one streams. Chat states
+beyond `input`, `loading` and `streaming` are `cancelling` (Stop sent) and
+`unconfirmed` (the client could not confirm that the server is idle).
 
 **The message tree.** `app/app/services/messageTree.ts` mirrors the server tree:
 nodes keyed by `nodeId`, each with `latestChildNodeId`.
@@ -114,18 +128,36 @@ session response and its replay packets ([[chat-persistence]]).
 
 **Packet processing.** `processPackets` is incremental. It processes only
 packets past `nextPacketIndex` and keeps its state in a ref. It decides each
-group's kind from the group's first packet: a tool packet (`isToolPacket`)
-makes a timeline step, and `MESSAGE_START` or `IMAGE_GENERATION_TOOL_START`
-makes an answer group. `buildGroupsFromKeys` drops a group with no packet in
+group's kind from the group's first tool or display packet, and keeps it: a
+tool packet (`isToolPacket`) makes a timeline step, and `MESSAGE_START` or
+`IMAGE_GENERATION_TOOL_START` makes an answer group. Debug and control packets
+that arrive first do not decide the kind. `buildGroupsFromKeys` drops a group with no packet in
 `CONTENT_PACKET_TYPES_SET`. Citation and stop packets update state instead of
 making their own step. A group that mixes answer text and generated images
 renders through `MixedContentHandler`.
 
 **Resume.** `web/src/hooks/useChatSessionController.ts` loads the session.
-When the response has `current_stream` and that id is an assistant node,
-`resumeInFlightRun` replays the stream buffer from cursor 0, flushes at most
-every 100 ms, then refetches the session to settle text and citations. It
-skips lines with no `obj` ([[streaming-protocol]]).
+When the response has `current_stream`, Stop can target that stream ID at
+once. When the ID is an assistant node, `resumeInFlightRun` calls
+`resumeStream` with the stream ID and the node's `replayCursor` (0 on a fresh
+page). It publishes packets only at each `StreamCursor` line, so the cursor
+and the packets it covers are stored together
+([[streaming-protocol#buffer-gap-ends-resume]]). It holds the backlog until
+`replay_complete`, and marks it with `restoredPacketCount` so that
+`AgentMessage` shows it without animation. When the reader ends, it settles
+the session. A multi-model turn, whose stream ID is the user message, only
+settles.
+
+**Settlement.** `web/src/lib/chat/settleChatSession.ts:settleChatSession` is
+the only path back to the `input` state after a send, a Stop or a resume
+([[#settle-before-input]]). It waits for the send acknowledgement and the
+reader and polls `/status` until idle. After a resume, a Stop, an error or a
+failed save it also reloads saved history, and keeps a local failed turn that
+the server did not save (`preserveFailedMessages`). After a clean send, the
+streamed tree stays. An incognito session has no saved content, so
+settlement keeps the local tree and only closes the last answer with a stop
+packet. A failure sets `unconfirmed` and pauses the queue; the input bar's manual
+check calls it again in `recovery` mode.
 
 **First-run onboarding.** `AppPage` renders
 `web/src/lib/onboarding/components/OnboardingFlow.tsx`, and
@@ -179,25 +211,32 @@ specific routes under `web/src/app/api/` take precedence over this one.
    its session is still current or use `updateSessionMessageTree`. Otherwise
    it takes over the chat the user moved to, and their next send goes to the
    wrong session.
-4. `stop-does-not-abort-fetch` **Stop does not abort the fetch.**
-   `stopGenerating` calls `POST /chat/stop-chat-session/{id}` with the
-   session's `streamId` and sets the chat state to `input`. The stream ends
-   when the backend sends its stop packet. `streamId` is the assistant message
-   id, or the user message id for a multi-model turn. The session's
-   `AbortController` fires only when the route changes (the cleanup effect in
-   `web/src/hooks/useChatController.ts`).
-5. `fifo-abort-records-error` **The FIFO's own abort records an error.** In
-   `app/app/services/currentMessageFIFO.ts:updateCurrentMessageFIFO`, the loop
-   throws `new Error("AbortError")` when the signal is set. Its `name` is
-   `"Error"`, so it lands in `stack.error` and the controller renders an error
-   node. Only the `DOMException` from an aborted `fetch` is a clean stop.
-6. `queue-needs-two-flags` **The queue needs two flags.**
+4. `stop-does-not-abort-fetch` **Stop does not abort a dispatched fetch.**
+   `web/src/lib/chat/stopChatSession.ts:stopChatSession` sets `cancelling`,
+   waits for `sendAcknowledged`, posts `stop-chat-session` with that stream ID
+   (the assistant message id, or the user message id for a multi-model turn),
+   and then settles. The reader stays open to receive the final packets. Only
+   a Stop before the send is dispatched aborts, with the reason
+   `STOP_BEFORE_DISPATCH`; `onSubmit` then removes the unsent turn and puts
+   the draft back. A failed stop request leaves the stream stoppable. A route
+   change also aborts (the cleanup effect in `web/src/hooks/useChatController.ts`).
+5. `fifo-abort-records-error` **The FIFO records an abort as an error.** In
+   `app/app/services/currentMessageFIFO.ts:updateCurrentMessageFIFO`, an
+   aborted send can set `stack.error`. The drain loop in `onSubmit` checks
+   `controller.signal.aborted` and stream ownership before it reads
+   `stack.error`, so an abort renders no error node. Keep that order in any
+   new consumer of the FIFO.
+6. `queue-needs-two-flags` **The queue needs three flags.**
    `sections/input/AppInputBar.tsx:AppInputBar` sends
-   the next queued message when the chat state is `input` and
-   `latestMessageRenderComplete` is true. A path that ends a stream without
-   the text renderer finishing, such as stop or an error, must set
-   `latestMessageRenderComplete` itself. If it does not, the queue stalls with
-   no error.
+   the next queued message when the chat state is `input`,
+   `latestMessageRenderComplete` is true and `queuedMessagesPaused` is false.
+   `AgentMessage` sets render-complete when its text has drawn;
+   `app/app/message/MultiModelResponseView.tsx` sets it when every visible
+   successful panel has drawn. A path that ends a stream without the text
+   renderer finishing must have `settleChatSession` set it
+   (`completeRendering`). If none does, the queue stalls with no error.
+   `onSubmit` clears the pause; errors, failed saves and failed settlement set
+   it.
 7. `branch-switch-reaches-server` **A branch switch must reach the server.**
    `web/src/hooks/useChatSessionController.ts:onMessageSelection` updates the
    local tree and calls `app/app/services/lib.tsx:patchMessageToBeLatest`. The
@@ -235,7 +274,18 @@ specific routes under `web/src/app/api/` take precedence over this one.
     streaming, cookies or redirects in this file does not reach production;
     behaviour that works through it in development must also hold behind
     nginx.
-13. `group-packets-false-lead` **False lead:
+13. `settle-before-input` **Only settlement returns a session to `input`.**
+    A stream that ends does not mean the turn is saved
+    ([[streaming-protocol#stream-end-is-not-idle]]). Do not set `input` when
+    the reader ends; call `settleChatSession`. Each step re-checks that the
+    session's `abortController` and `readerFinished` are still the ones it
+    started with, so a late settlement cannot overwrite a newer request. The
+    send acknowledgement decides what is safe:
+    `app/app/services/lib.tsx:sendMessage` throws `ChatSendRejectedError` for a
+    4xx other than 408, which resolves the acknowledgement with `null` because
+    the server did not admit the turn. A 5xx or a network error rejects it,
+    and only the manual check (`recovery` mode) can settle after that.
+14. `group-packets-false-lead` **False lead:
     `app/app/services/packetUtils.ts:groupPacketsByTurnIndex` has no
     production caller.** Grouping happens in `processPackets`
     ([[#packet-list-append-only]]).
@@ -258,10 +308,8 @@ specific routes under `web/src/app/api/` take precedence over this one.
 ## Known issues
 
 - **Resume covers one model only.** For a multi-model turn, `current_stream`
-  is the user message id, so `resumeInFlightRun` skips it. Nothing refetches
-  the session, so the reserved rows' placeholder text ("Response was
-  terminated prior to completion") shows until the user reloads after the run
-  ends.
+  is the user message id, so `resumeInFlightRun` skips it. The page shows no
+  live output for that turn; settlement loads the answers when the run ends.
 - **A fast send after a branch switch can race.** `patchMessageToBeLatest` is
   not awaited. A send that reaches the server first can fail with "not on the
   latest mainline". This is inferred from the code, not seen in a test.
@@ -273,7 +321,7 @@ specific routes under `web/src/app/api/` take precedence over this one.
 
 ## Dependencies
 
-- [[core-chat-loop]]: the send, stop and resume endpoints.
+- [[core-chat-loop]]: the send, stop, resume and status endpoints.
 - [[streaming-protocol]]: the packets this component parses and renders.
 - [[chat-persistence]]: session reads, replay packets, branch and pick
   endpoints, feedback, sharing and incognito teardown.
@@ -322,4 +370,5 @@ specific routes under `web/src/app/api/` take precedence over this one.
 - Jest: the `*.test.ts` and `*.test.tsx` files beside the code in
   `web/src/app/app/`.
 - By hand: force a tool call, edit, switch back, stop mid-answer, and reload.
-  Citations resolve, the branch holds, and the partial answer stays.
+  Citations resolve, the branch holds, and the partial answer stays. Queue a
+  message during an answer: it sends only after the input returns to idle.

@@ -4,7 +4,7 @@
 > prompt shortcuts, plus the workspace `Settings` store that the admin Chat
 > Preferences page and other admin pages edit.
 
-**Verified against:** `73e0ae3c31` (2026-10-28)
+**Verified against:** `6bac4e012f` (2026-10-29)
 **Edition:** CE. Search Mode and the LLM gateway switch need Business, and
 chat retention needs Enterprise. The settings API enforces these tiers.
 
@@ -69,34 +69,40 @@ It does not own:
 
 **From setting to prompt.** `db/memory.py:get_memories` builds one
 `UserMemoryContext` per turn, called from
-`chat/process_message.py:build_chat_turn` ([[core-chat-loop]]). Nothing is
-cached on the chat session, so a change applies on the next message.
+`chat/process_message.py:prepare_chat_turn` ([[core-chat-loop]]). Nothing is
+cached on the chat session, so a change applies on the next message. A memory
+that the tool saves during a turn reaches the prompt on the next turn.
 
 Language falls back from `User.language` to `Settings.default_language` through
 `server/settings/store.py:resolve_user_language`.
 `server/manage/users.py:set_locale_cookie` copies the resolved language into
 the `NEXT_LOCALE` cookie, so the UI and the answers use the same language.
-`chat/llm_loop.py:run_llm_loop` substitutes `{{user.<key>}}` placeholders into
-the agent, project and task prompts. Name, role and email never overwrite an
+`chat/prompt_utils.py:build_chat_prompt` substitutes `{{user.<key>}}`
+placeholders into the agent, project and task prompts on each step, and
+`prepare_chat_turn` substitutes them before it reserves tokens. Name, role and email never overwrite an
 IdP field with the same key. [[context-assembly]] owns the prompt section
 where each value lands.
 
 **Memory write path.**
 ```
 tool_constructor.py: user.enable_memory_tool -> MemoryTool in every turn
-MemoryTool.run -> process_memory_update decides add or replace (no DB write)
-llm_loop.py: MemoryToolResponse
-  incognito record mode set? -> refusal string to the model, nothing saved
-  else index_to_replace?     -> db/memory.py:update_memory_at_index
+MemoryTool._run                              tools/tool_implementations/memory/memory_tool.py
+  incognito record mode set? -> error result to the model, nothing saved
+  no user id?                -> error result, nothing saved
+  process_memory_update      -> decides add or replace (LLM call, no DB write)
+  index_to_replace?          -> db/memory.py:update_memory_at_index
        else                  -> db/memory.py:add_memory (drops the oldest past the cap)
+  MemoryUpdated details      -> live packet and replay
 ```
 
 **Two memory switches.** `use_memories` is a read switch.
-`chat/process_message.py:build_chat_turn` passes the full context to the loop,
-so the memory tool can still see and change memories, and uses
+`chat/process_message.py:prepare_chat_turn` passes the full context to the
+run, so the memory tool can still see and change memories, and uses
 `without_memories()` only for the token reservation.
-`chat/llm_loop.py:run_llm_loop` receives `inject_memories_in_prompt` and strips
-memories from the system prompt and from the search tool's context.
+`chat/execution.py:create_chat_agent` passes `user.use_memories` as
+`inject_memories_in_prompt`; `chat/prompt_utils.py:build_chat_prompt` and
+`tools/tool_implementations/search/search_tool.py:SearchTool._run` strip
+memories when it is false.
 `enable_memory_tool` is the write switch.
 
 **Input prompts.** A user creates only private prompts (`POST /input_prompt`
@@ -138,10 +144,12 @@ paths read it; find them with `git grep -n load_settings backend`.
    web drops empty memories before it saves; `PATCH /user/personalization`
    does not.
 4. `no-memory-write-in-incognito` **Never write a memory in incognito.** The
-   check in `chat/llm_loop.py:run_llm_loop` must run before `add_memory` or
-   `update_memory_at_index` on every path. A new memory writer needs the same
-   check and the explicit refusal, so the model does not claim it saved
-   something.
+   check in `tools/tool_implementations/memory/memory_tool.py:MemoryTool._run`
+   must run before `add_memory` or `update_memory_at_index`. It reads the
+   record mode from a context variable that `chat/execution.py:start_chat_turn`
+   sets, so it works only in threads that copy the turn's context. A new memory
+   writer needs the same check and the explicit error result, so the model
+   does not claim it saved something.
 5. `personalization-replaces-memory-set` **A personalization save replaces the
    whole memory set.** `PATCH /user/personalization` with a `memories` list
    deletes every row whose id is not in the list

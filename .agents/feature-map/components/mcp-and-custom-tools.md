@@ -5,7 +5,7 @@
 > rows, how their credentials are stored and resolved, and how one call
 > succeeds or fails.
 
-**Verified against:** `73e0ae3c31` (2026-10-28)
+**Verified against:** `6bac4e012f` (2026-10-29)
 **Edition:** CE. Restricting an MCP server to users or groups needs EE
 (`backend/onyx/db/mcp.py:make_mcp_server_private` is a CE stub).
 
@@ -205,17 +205,21 @@ Policy precedence is in [[craft-external-apps]].
     `server/features/mcp/api.py:_assert_mcp_setup_current` rejects it only
     when `_mcp_setup_configuration_fingerprint` changed. A setting left out of the
     fingerprint is overwritten without a conflict.
-11. `expected-failure-tool-response` **An expected failure returns a
-    `ToolResponse`.** `tools/tool_implementations/mcp/mcp_tool.py:MCPTool.run`
+11. `expected-failure-tool-response` **An expected failure returns an error
+    `ToolResult`.** `tools/tool_implementations/mcp/mcp_tool.py:MCPTool._run`
     catches every exception and reports an auth error for a 401,
     `MCPReauthenticationRequired`, or auth words in the message.
-    `tools/tool_implementations/custom/custom_tool.py:CustomTool.run` returns a
-    failed response for a blocked destination, a timeout, a connection error
-    or a redirect, and flags only 401 and 403. Other `CustomTool` exceptions reach the tool runner
-    ([[tools-framework]]).
+    `tools/tool_implementations/custom/custom_tool.py:CustomTool._run` returns a
+    failed result for a blocked destination, a timeout, a connection error
+    or a redirect, and flags only 401 and 403. Both put a
+    `CustomToolCallSummary` in `details`, which the chat renderer draws:
+    `CustomTool` fills its `error`, and `MCPTool` puts an `{"error": ...}`
+    object in `tool_result`. Other `CustomTool` exceptions reach `Tool.run`, which gives the model
+    a generic error and the user no error detail
+    ([[tools-framework#run-errors-become-results]]).
 12. `reauth-mark-if-current` **A rejected credential is marked only if it is
     still current.**
-    `MCPTool.run` marks it only for a 401 on a connection config whose headers
+    `MCPTool._run` marks it only for a 401 on a connection config whose headers
     the user manages
     (`server/features/mcp/credentials.py:uses_user_managed_headers`).
     `backend/onyx/db/mcp.py:mark_connection_config_reauth_required` compares
@@ -283,8 +287,8 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
 
 ## Dependencies
 
-- [[tools-framework]]: the `Tool` interface, per-turn construction and the tool
-  runner that runs these tools.
+- [[tools-framework]]: the `Tool` interface, per-turn construction and the
+  error handling of `Tool.run`.
 - [[auth-and-identity]]: `user.live_oauth_token`, the OpenAPI per-tool OAuth
   rows, and the attempt store.
 - [[authorization]]: `require_permission`, and `assert_within_scope` (GATE 2) for
@@ -313,7 +317,7 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
   `db/enums.py:MCPTransport`, and branch in
   `server/features/mcp/client.py:_create_mcp_client_function_runner`. Decide
   how OAuth refreshes: `auth` goes only to Streamable HTTP, because httpx auth
-  reads the whole response body, which never ends on SSE. `MCPTool.run`
+  reads the whole response body, which never ends on SSE. `MCPTool._run`
   refreshes before an SSE call instead. Add the transport to the probe in
   `server/features/mcp/setup_probe.py`.
 - `mcp-server-setting` **A server-level setting.** Copy `oauth_cimd_enabled`. Store it through

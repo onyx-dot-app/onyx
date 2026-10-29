@@ -4,7 +4,7 @@
 > in through. It is a second client of the chat backend, built apart from the
 > web chat frontend, with its own copy of the stream parser and packet enum.
 
-**Verified against:** `a4e97fcea1` (2026-10-29)
+**Verified against:** `6bac4e012f` (2026-10-29)
 **Edition:** CE
 
 ---
@@ -30,6 +30,9 @@ The user cannot regenerate or edit a message, give feedback, compare models,
 use voice, or take a photo with the camera. Tool activity (search, code,
 image generation, deep research, memory) shows as an empty step in the
 timeline. Only the answer text and reasoning render.
+
+After an answer ends, Send stays disabled until the server confirms that the
+session is idle. A send that the server does not accept keeps its draft.
 
 On failure: a stream error shows in the message. A failed token refresh signs
 the user out only when the server rejects the token. A network failure keeps
@@ -94,8 +97,18 @@ only. The app trades the code and its PKCE verifier at
 `apiFetch`, because only `expo/fetch` exposes a readable body on React Native.
 `streamChatMessage` yields packets, the message-id object and stream errors,
 told apart by field presence. It drops heartbeats. `resumeChatMessage` keeps
-them as liveness ticks. Stop calls `stop-chat-session` and aborts the local
-`AbortController`, because a client abort alone leaves the backend generating.
+them as liveness ticks. Stop calls `stop-chat-session` with the response id
+from the message-id packet and aborts the local `AbortController`, because a
+client abort alone leaves the backend generating. Before that packet arrives,
+`mobile/src/hooks/useChatController.ts:stop` waits for it (`STOP_ACK_TIMEOUT_MS`), then
+aborts locally and never sends an unscoped Stop.
+
+**Readiness.** When delivery ends, the session goes to `settling` and
+`chat/sessionReadiness.ts:waitForSessionIdle` polls
+`GET /chat/chat-session/{id}/status` until `is_processing` is `false`. Only
+then does the chat state return to `input`. A resumed stream in
+`hooks/useChatSessionController.ts` also waits for idle before it loads the
+saved history.
 
 **Timeline.** `chat/messageProcessor.ts` and `hooks/timeline/` port the packet
 processor of the web app. Packets group by `getGroupKey` (`turn_index` and
@@ -152,7 +165,16 @@ the sources.
    `mobile/src/chat/streamingModels.ts` copies the backend `StreamingType`
    apart from web. [[streaming-protocol]] owns the list of mirrors that a new
    packet type must update.
-10. `sso-exchange-uniform-failure` **The mobile SSO exchange fails the same way
+10. `stream-end-is-not-idle` **The end of a stream does not enable Send.**
+    The server can still save the turn after delivery ends, so only the status
+    poll in `chat/sessionReadiness.ts:waitForSessionIdle` returns the session
+    to `input`. A transient failure keeps polling. An auth error or a 404
+    stops the poll and leaves the state `unconfirmed`. A server without the
+    status route answers 404, so a new app on an older server cannot send a
+    second message in a session. Keep each `stillOurs` guard in
+    `hooks/useChatController.ts`: a stale callback must not release a newer
+    send's controller.
+11. `sso-exchange-uniform-failure` **The mobile SSO exchange fails the same way
     for every bad input.**
     `auth/mobile_sso/code_store.py:consume_sso_code` burns the code with
     `GETDEL` before it checks the PKCE verifier. A wrong, expired or replayed
@@ -190,7 +212,7 @@ the sources.
 
 ## Dependencies
 
-- [[core-chat-loop]]: the send, resume and stop endpoints.
+- [[core-chat-loop]]: the send, resume, stop and session status endpoints.
 - [[streaming-protocol]]: the packet set that the mobile enum mirrors.
 - [[citations]]: `chat/messageProcessor.ts` folds `CitationInfo` into the citation map that the sources sheet reads.
 - [[auth-and-identity]]: the session strategy and the IdP callback that `complete_mobile_sso` extends.

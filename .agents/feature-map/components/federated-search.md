@@ -4,7 +4,7 @@
 > `FederatedConnectorSource` lists the sources, and their results join the
 > same ranked set, document cards and citations as indexed documents.
 
-**Verified against:** `a4e97fcea1` (2026-10-29)
+**Verified against:** `6bac4e012f` (2026-10-29)
 **Edition:** CE
 
 ---
@@ -52,7 +52,7 @@ Its neighbours own:
 ## Architecture
 
 ```
-SearchTool.run  (one DB session, before any parallel work)
+SearchTool.search  (one DB session, before any parallel work)
   -> get_federated_retrieval_functions      skips Slack, so it returns [] for every source
   -> _prefetch_slack_data                    bot token (bot context, gated by
                                             document sets) or the user's OAuth token
@@ -85,10 +85,10 @@ Slack API search for each expanded query.
   check.
 
 Chat sets `enable_slack_search` through
-`chat/process_message.py:_should_enable_slack_search`: true for the default
+`chat/execution.py:create_chat_agent`: true for the default
 agent with no source filter, or when the source filter includes Slack. The
 `/search` API (`server/features/search/api.py`) always sets it. After scope
-detection, `SearchTool.run` drops the Slack token when the resolved scope
+detection, `SearchTool.search` drops the Slack token when the resolved scope
 excludes `DocumentSource.SLACK`. The lane also needs `original_query`, and it is
 skipped when the primary model's cost check fails, because `slack_retrieval`
 uses that model for query processing.
@@ -169,7 +169,7 @@ both.
    field, and `server/federated/api.py:handle_oauth_callback_generic` checks that the signed-in user
    matches the OAuth state. Do not add a token to the response.
 7. `one-registry-fetch-per-call` **Two registry call sites do not mean two
-   fetches.** `tools/tool_implementations/search/search_tool.py:SearchTool.run` calls the registry once and passes the result to
+   fetches.** `tools/tool_implementations/search/search_tool.py:SearchTool.search` calls the registry once and passes the result to
    every lane as `prefetched_federated_retrieval_infos`.
    `context/search/retrieval/search_runner.py:search_chunks` calls the registry
    itself only when nothing was prefetched. That happens on the EE Search page
@@ -231,7 +231,7 @@ both.
   Decide whether it uses the registry path or its own lane in `SearchTool`. On
   the registry path it is the first source to run there in production: test
   the document-set filter in `get_federated_retrieval_functions`, the
-  resolved-scope filter in `SearchTool.run`, and [[#registry-skip-in-step]].
+  resolved-scope filter in `SearchTool.search`, and [[#registry-skip-in-step]].
 - `token-refresh` **Add token refresh.** Add a refresh-token column with an encrypted type,
   store it in `update_federated_connector_oauth_token`, and refresh before
   `_prefetch_slack_data` reads the token.

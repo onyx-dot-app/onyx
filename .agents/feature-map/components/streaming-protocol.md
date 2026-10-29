@@ -4,7 +4,7 @@
 > vocabulary, the `Placement` coordinates, the path from a worker thread to the
 > HTTP body, and the buffer that lets a client resume a stream it lost.
 
-**Verified against:** `a4e97fcea1` (2026-10-29)
+**Verified against:** `6bac4e012f` (2026-10-29)
 **Edition:** CE
 
 ---
@@ -18,6 +18,7 @@
 - **Reload or reconnect.** When the page reloads during an answer, the client
   replays everything the run has buffered and then follows the live run. When
   the buffer is gone or broken, the client shows the saved message instead.
+  Closing the connection does not stop the run; only Stop does.
 - **Quiet phases.** During a long tool call the connection stays open, because
   the server sends heartbeats. The user does not see them.
 - **When this layer breaks**, the user sees a hole in the answer and no error.
@@ -26,8 +27,10 @@
   `text/event-stream`, but the body is NDJSON, not SSE. Most lines are packets
   with `placement` and `obj`. Some lines are not: the session and message IDs
   at the start, and `StreamingError` objects. To resume, the caller calls
-  `GET /chat/chat-session/{id}/resume-stream?cursor=0`. A 404 means that no run
-  can be resumed. The public guide is
+  `GET /chat/chat-session/{id}/resume-stream?stream_id=<id>&cursor=0`. A 404
+  means that no run with that stream ID can be resumed. Before the next send,
+  the caller waits until `GET /chat/chat-session/{id}/status` reports
+  `is_processing: false` ([[#stream-end-is-not-idle]]). The public guide is
   `documentation/developers/guides/chat_new_guide.mdx`.
 - **A CLI user** gets the same stream through the Onyx CLI, which parses each
   line in `cli/internal/parser/parser.go:ParseStreamLine`. A type the CLI does
@@ -40,64 +43,77 @@
 
 This component owns the packet vocabulary, `Placement`, the line framing, the
 path from the emitter to the HTTP body, the resume buffer and the resume
-endpoint's read rules, the client mirrors of the vocabulary, and the rule that
-API middleware keeps request context through a streamed body. It shares the
-emitter and the buffer writer with [[core-chat-loop]], which owns when they run.
+endpoint's read rules, the client mirrors of the vocabulary, the rule that a
+stream's end does not mean the session is idle, and the rule that API
+middleware keeps request context through a streamed body. It shares the
+emitter and the delivery with [[core-chat-loop]], which owns when they run and
+the session admission behind the status endpoint.
 
 It does not own:
 - the producers: [[core-chat-loop]] and each tool ([[tools-framework]]);
 - the renderers: [[chat-frontend]] and [[mobile-app]];
 - the saved-session replay, which rebuilds packets from saved rows:
   [[chat-persistence]];
-- what `CitationInfo` means and its ordering rule: [[citations]];
-- the runtime renderer and presentation modules, which are not wired:
-  [[agent-runtime]].
+- what `CitationInfo` means and its ordering rule: [[citations]].
 
 ---
 
 ## Architecture
 
 ```
-producer (llm_step, tool)            Packet(placement, obj)
-  -> Emitter.emit                    no-op after drain_done; stamps model_index
-  -> merged_queue                    one queue for all models
-  -> writer _publish                 get_json_line(packet) ->
-       StreamBufferWriter.append_line   zlib chunks in the cache, flushed at 32 KiB
-                                        or when the queue idles
-       tee -> reader -> HTTP body       reader adds ChatHeartbeat when idle
-                                        for CHAT_HEARTBEAT_INTERVAL_S
+producer: chat/presentation.py:ResponsePresenter -> chat/renderer.py MessageRenderer, ToolRenderer
+  -> chat/emitter.py:Emitter.emit                   stamps model_index
+  -> chat/execution.py:ChatTurnExecution._publish   drops packets once the turn is cancelled
+  -> chat/stream_buffer.py:ChatDelivery.publish     one lock orders live and replay output
+       -> ChatStream (reader) -> HTTP body          heartbeat after CHAT_HEARTBEAT_INTERVAL_S idle;
+                                                    closing it detaches only the reader
+       -> pending replay lines -> EventDispatcher worker flush (50 ms or 32 KiB)
+            -> StreamBufferWriter                   zlib chunks in the cache
 
-resume-stream: get_processing_stream_id -> read_stream_chunks(cursor, 32 per read)
-  -> replay blocks -> poll until done or the fence lapses, with heartbeats
+resume-stream: get_processing_stream_id (must match stream_id) -> read_stream_chunks(cursor, 32 per read)
+  -> blocks + StreamCursor line per batch -> poll until done or the owner lapses, with heartbeats
 ```
+
+`chat/execution.py:start_chat_turn` publishes the ID lines and starts the turn
+on its own threads, then returns the reader. A client that disconnects leaves
+the run, its save and its buffer running.
 
 **Line kinds.** `chat/models.py:AnswerStreamPart` lists what the backend
 writes: `Packet`, `MessageResponseIDInfo`, `MultiModelMessageResponseIDInfo`,
 `CreateChatSessionID` and `StreamingError`. Only `Packet` has a placement. A
-per-model error puts `model_index` in `StreamingError.details`.
+per-model error puts `model_index` in `StreamingError.details`. The resume
+endpoint adds a sixth kind,
+`backend/onyx/server/query_and_chat/streaming_models.py:StreamCursor`, after each batch. It
+is never buffered.
 
 **`Placement`.** `turn_index` is the rendering block. `tab_index` separates
 parallel tool calls in one block. `sub_turn_index` is set for packets from a
 tool that runs its own loop, such as the research agent. `model_index` is the
 model column. It is `None` on packets that no `Emitter` tagged, such as
-heartbeats.
+heartbeats. `chat/renderer.py:ResponseLayout.next_section` hands out turn and
+sub-turn indexes.
 
 **Packet families.**
 `backend/onyx/server/query_and_chat/streaming_models.py:StreamingType` holds every type string, and `PacketObj` is the union that `Packet.obj` is
 validated against. Families are control (`stop`, `section_end`, `error`,
 `chat_heartbeat`), reasoning, answer (`message_start`, `message_delta`),
 citations, one family per tool, deep research, and the coding agent with the
-bash tool. `ToolCallArgumentDelta` streams string arguments for tools whose
-`should_emit_argument_deltas` returns true (`chat/tool_call_args_streaming.py`).
-`ToolCallDebug` appears only with `INTEGRATION_TESTS_MODE`.
+bash tool. `ToolCallArgumentDelta` streams the Python tool's code while the
+model writes it; the configured reasoning tool streams as reasoning packets
+instead (`chat/renderer.py:MessageRenderer.consume`). Other tools show their
+arguments when they start. `chat/renderer.py:ToolRenderer.start` emits
+`ToolCallDebug` before the start packet, only with `INTEGRATION_TESTS_MODE`.
 
 **Buffer.** The key is the session ID plus the stream ID (the reserved assistant
 message ID, or the user message ID in a multi-model turn). Keys live in the
 cache backend (`cache/factory.py:get_cache_backend`): Redis, or Postgres when
 `CACHE_BACKEND=postgres`. Chunks expire after `CHAT_STREAM_BUFFER_TTL_S`, and
 after `CHAT_STREAM_BUFFER_DONE_TTL_S` once the run is done. A run over
-`CHAT_STREAM_BUFFER_MAX_BYTES`, or a cache error, marks the buffer `truncated`.
-The run continues without resume.
+`CHAT_STREAM_BUFFER_MAX_BYTES`, a replay backlog over 4 MiB, or a cache error
+marks the buffer `truncated`. The run continues without resume. Cache writes
+run outside the publication lock, so a slow cache never blocks live delivery.
+When live delivery itself loses output, `ChatDelivery.report_gap` sends a
+`StreamingError` with `STREAM_GAP` that asks the user to reload.
 
 **Middleware.** The API server's middleware runs as pure ASGI callables, so a
 context variable that a middleware sets stays set until the streamed body and
@@ -134,8 +150,9 @@ its background task end ([[#pure-asgi-middleware]]).
    new families: an unguarded cast can throw instead.
 4. `emitter-sets-model-index` **Only `chat/emitter.py:Emitter.emit` sets
    `model_index`.** It
-   overwrites what the producer set. Packets that the writer publishes itself,
-   such as the stop `OverallStop`, and heartbeats have no `model_index`.
+   overwrites what the producer set. Lines that `chat/execution.py:ChatTurnExecution`
+   or `ChatDelivery` publish directly, such as the user-cancel `OverallStop`
+   and the `STREAM_GAP` error, and heartbeats have no `model_index`.
 5. `not-every-line-is-a-packet` **Not every line is a packet, and heartbeats are
    the consumer's job.** Clients must check for `obj` before they read it, as
    `web/src/hooks/useChatSessionController.ts` does on resume. On web, the name
@@ -144,39 +161,64 @@ its background task end ([[#pure-asgi-middleware]]).
    `web/src/app/app/services/lib.tsx`. `web/src/app/app/services/lib.tsx:sendMessage`
    drops heartbeats with `withoutHeartbeats`.
    `web/src/app/app/services/lib.tsx:resumeStream` keeps them, because its
-   caller uses them as liveness ticks. A new consumer of
-   `web/src/lib/search/streamingUtils.ts:handleSSEStream` sees them.
+   caller uses them as liveness ticks, and also yields `StreamCursor` lines. A
+   new consumer of `web/src/lib/search/streamingUtils.ts:handleSSEStream` sees
+   both. Mobile resumes without `stream_id` and skips `StreamCursor` lines
+   because they have no `obj`.
 6. `turn-index-is-not-a-turn` **`turn_index` is not a backend turn.** It is a
-   rendering block. The loop sets it to the cycle count plus the number of
-   cycles that produced reasoning, so reasoning and the tool call from one
-   inference are two blocks. Inside a nested loop, `sub_turn_index` advances
-   instead. Do not use `turn_index` to count LLM calls.
-7. `tab-index-depends-on-narration` **`tab_index` depends on narration.** Native
-   tool calls start at tab 1 when the model wrote answer text before them, so
-   they render as their own group (`chat/llm_step.py:_extract_tool_call_kickoffs`,
-   `tab_index_start`). Calls that the fallback parser recovers from text start
-   at 0 (`chat/llm_step.py:extract_tool_calls_from_response_text`).
+   rendering block. `chat/renderer.py:ResponseLayout.next_section` gives each
+   answer, reasoning or tool section its own index, so reasoning and the tool
+   call from one inference are two blocks. Under a parent tool,
+   `sub_turn_index` advances instead. Do not use `turn_index` to count LLM
+   calls.
+7. `tab-index-depends-on-narration` **`tab_index` depends on narration.** Only
+   consecutive top-level tool calls share a `turn_index` as tabs
+   (`chat/renderer.py:MessageRenderer.tool_placement`). Answer text or
+   reasoning between two calls starts a new section, so the second call opens
+   a new block at tab 0. Calls under a parent tool always take a new
+   `sub_turn_index`. Saved-session replay uses the same renderer, so a change
+   here changes reloads too.
 8. `no-answer-end-packet` **The answer stream has no end packet, and errors are
    separate lines.** `AgentResponseDelta` ends at `OverallStop`. `OverallStop`
-   ends rendering. It does not mean success: errors arrive as `StreamingError`.
-   `backend/onyx/server/query_and_chat/streaming_models.py:PacketException`
-   never reaches the wire, because its `exception` field is excluded from
-   serialization.
+   ends rendering. It does not mean success: response errors arrive as
+   `StreamingError`. A failed tool sends
+   `backend/onyx/server/query_and_chat/streaming_models.py:PacketException` in
+   its tab (`chat/renderer.py:ToolRenderer.complete`). Its `exception` field is
+   excluded from serialization, so the client gets a bare `error` packet with
+   no message.
 9. `replay-order-not-live-order` **Replay order is not live order.**
    Saved-session replay
    (`server/query_and_chat/session_loading.py:translate_assistant_message_to_packets`)
-   rebuilds a turn in its own order, for example all `CitationInfo` after the
-   answer ([[citations#citation-info-before-text]]). Do not add a packet whose meaning depends
-   on its position.
+   rebuilds a turn in its own order. A message with an execution record replays
+   through `chat/presentation.py:replay_response` and the live renderer; an
+   older row replays every `CitationInfo` after the answer
+   ([[citations#citation-info-any-order]]). Do not add a packet whose meaning
+   depends on its position.
 10. `buffer-gap-ends-resume` **A buffer gap ends the resume, and the cursor
     counts chunks.** `chat/stream_buffer.py:read_stream_chunks` reports `gap`
     for a missing chunk, a bad chunk or a truncated buffer.
     `server/query_and_chat/chat_backend.py:resume_chat_stream` then ends the
     stream, and the client refetches the session. A capped read can say `done` with
     chunks still pending: read until `blocks` is empty. The cursor counts chunks,
-    not packets, so web and mobile resume from 0 and rebuild the message from the
-    full replay. Lines that the writer has not flushed cannot be read.
-11. `pure-asgi-middleware` **API middleware must be pure ASGI.** Each middleware
+    not packets. A client may keep a `StreamCursor.next_cursor` only together
+    with every packet before it, and must send the matching `stream_id`, or it
+    replays a cursor from another response. The first read fixes the restore
+    boundary; `replay_complete` marks the end of the backlog. Lines that the
+    writer has not flushed cannot be read.
+11. `stream-end-is-not-idle` **The end of a stream does not mean the session
+    is idle.** The reader closes when delivery ends, but the turn keeps the
+    session owner key until saving and cleanup finish
+    (`chat/chat_processing_checker.py:ChatTurnAdmission`). A send in that window
+    gets 409 `CONFLICT`. Every client polls
+    `server/query_and_chat/chat_backend.py:get_chat_session_processing_status`
+    before it releases input or sends a queued message:
+    `web/src/lib/chat/sessionReadiness.ts:waitForChatSessionIdle`,
+    `mobile/src/chat/sessionReadiness.ts:waitForSessionIdle`,
+    `cli/internal/api/client.go:IsChatSessionProcessing` and
+    `widget/src/services/api-service.ts`. The CLI and widget stop with an error
+    when an older server has no status endpoint. An old client in the field
+    that sends as soon as the stream closes can meet the 409.
+12. `pure-asgi-middleware` **API middleware must be pure ASGI.** Each middleware
     on the API server is a function or class that wraps
     `await app(scope, receive, send)`, such as
     `utils/middleware.py:request_id_middleware`,
@@ -191,7 +233,7 @@ its background task end ([[#pure-asgi-middleware]]).
     logs must wrap `send`: `server/middleware/latency_logging.py:latency_logging_middleware`
     logs at `http.response.start`, before the body. The MCP server is a separate
     app and uses `@app.middleware("http")` for its health check; do not copy it.
-12. `cli-json-event-names` **The CLI event names are an output contract.**
+13. `cli-json-event-names` **The CLI event names are an output contract.**
     `ask --json` prints each event as `{type, event}`, with `type` from the
     event's `EventType()` in `cli/internal/models/events.go`. Scripts read
     these names and fields. Keep a name when you rename the wire type, or
@@ -206,8 +248,6 @@ its background task end ([[#pure-asgi-middleware]]).
   `top_level_branching` so that it can talk to older servers. The
   `MESSAGE_END` in `backend/onyx/agents/events.py` belongs to the runtime event
   model, not to this protocol.
-- `SectionEnd` has a code comment that marks it for removal, but renderers
-  still use it to close blocks.
 - **A resumed content-free incognito run loses its tail.**
   `chat/stream_buffer.py:StreamBufferWriter.mark_done` with `delete_on_done`
   deletes the keys at completion without a last flush. A client that reads
@@ -222,7 +262,8 @@ its background task end ([[#pure-asgi-middleware]]).
 
 ## Dependencies
 
-- [[core-chat-loop]]: owns the emitter, writer and buffer lifecycle per run.
+- [[core-chat-loop]]: owns the emitter, delivery and buffer lifecycle per run,
+  and the session admission that the status endpoint reads.
 - [[citations]]: produces `CitationInfo`.
 - [[tools-framework]]: each tool's packet sequence.
 - [[multi-tenancy]]: the tenant middleware and the tenant-aware cache that holds
@@ -250,9 +291,9 @@ its background task end ([[#pure-asgi-middleware]]).
      rebuild a packet only from saved data, the `ToolCall` row or the message.
      Save the data first.
   6. Update the other consumers from [[#vocabulary-mirrored-by-hand]]. The
-     non-streaming path (`chat/process_message.py:gather_stream_full`) ignores
-     packet types it does not know, so decide whether `ChatFullResponse` needs
-     the new data.
+     non-streaming path (`chat/process_message.py:gather_stream_full`) builds
+     `ChatFullResponse` from the saved response snapshot, not from packets, so
+     decide whether the snapshot needs the new data.
   7. If a test mocks the stream, update `web/tests/e2e/utils/chatMock.ts`.
 - `cli-packet-type` **A packet type in the CLI.** Copy the search start event:
   list every place that knows it with `git grep -n SearchStartEvent -- cli`. A
@@ -276,19 +317,23 @@ its background task end ([[#pure-asgi-middleware]]).
   renderer ([[chat-frontend]], [[mobile-app]]). If it is not, the fault is in
   the producer. For a resume, call
   `/api/chat/chat-session/<id>/resume-stream?cursor=0` while the run is live. A
-  404 means the processing fence or the buffer meta key
+  404 means the session owner key or the processing fence is missing, the
+  `stream_id` does not match the fence, or the buffer meta key
   (`chatstream_<session_id>_<stream_id>:meta`) is missing. A stream that ends
-  early means a gap ([[#buffer-gap-ends-resume]]).
+  early means a gap ([[#buffer-gap-ends-resume]]). If the input stays busy
+  after the stream ends, call `/api/chat/chat-session/<id>/status`
+  ([[#stream-end-is-not-idle]]).
 
 ---
 
 ## Verification
 
-- Unit: `backend/tests/unit/onyx/chat/` (emitter, stream buffer, tool
-  placement, argument deltas) and `backend/tests/unit/onyx/server/middleware/`
+- Unit: `backend/tests/unit/onyx/chat/` (emitter, stream buffer, renderer,
+  replay, argument deltas) and `backend/tests/unit/onyx/server/middleware/`
   (context through a streamed body).
 - Integration: `backend/tests/integration/tests/streaming_endpoints/`.
-- CLI: `cli/internal/parser/parser_test.go`.
+- Clients: `cli/internal/parser/parser_test.go`, the readiness tests beside
+  each client's readiness code, and `web/tests/e2e/chat/stream_recovery.spec.ts`.
 - Playwright: `web/tests/e2e/chat/`. The helpers in
   `web/tests/e2e/utils/chatStream.ts` parse a real body, and
   `web/tests/e2e/utils/chatMock.ts` builds mock bodies.

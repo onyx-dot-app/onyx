@@ -1,12 +1,11 @@
 # Context Assembly
 
-> What the LLM sees on each cycle of a turn: the system prompt, the per-user
+> What the LLM sees on each step of a turn: the system prompt, the per-user
 > block, the custom agent prompt, project files, history, file notices and the
-> trailing reminder, kept within the token budget by truncation and history
-> compression. A wrong change here rarely raises an error; the answers just get
-> worse.
+> trailing reminder, kept within the token budget by the runtime's compaction. A
+> wrong change here rarely raises an error; the answers just get worse.
 
-**Verified against:** `a4e97fcea1` (2026-10-29)
+**Verified against:** `6bac4e012f` (2026-10-29)
 **Edition:** CE
 
 ---
@@ -25,10 +24,11 @@
   long chat they can drop out of the prompt. If the agent has the file reader
   tool, the model is told which files it lost and how to read them. Without it,
   the model is not told ([[#forgotten-files-need-metadata]]).
-- **Project files** that fit go into every cycle as full text and can be cited.
+- **Project files** that fit go into every step as full text and can be cited.
   A project that is too large is searched instead ([[projects]]).
-- **Long chats** keep working. After a turn passes about 75% of the usable
-  window, older messages are summarized. The user does not see the summary.
+- **Long chats** keep working. When a request reaches about 85% of the model's
+  usable input, older history is summarized before the model call. Research and
+  coding child agents do the same. The user does not see the summary.
 - **Admins** edit the default system prompt, which is the default assistant's
   `system_prompt`. An agent can replace the base prompt fully.
 - **Images and model switches.** When a chat has images and the user switches
@@ -40,128 +40,142 @@
   ([[chat-persistence]]).
 - **When it breaks**, users report that the assistant "forgot" a file, ignored
   the agent's instructions, narrated citation numbers, or lost the thread. None
-  of these shows a stack trace. When the fixed parts of the prompt do not fit the
-  model's window, that model's answer ends with a "Not enough tokens" error
-  ([[#fixed-parts-must-fit]]).
+  of these shows a stack trace. When the instructions and the current question
+  with its attachments do not fit the model's window, that model's answer ends
+  with a context-limit error ([[#fixed-parts-must-fit]]).
 
 ---
 
 ## Scope
 
 This component owns the content and order of the prompt, the prompt text, the
-token budget and reservation, the budget that decides whether project files fit
-inline, the file notices, and history compression. The assembly functions
-(`construct_message_history`, `select_reminder_text`,
-`_create_context_files_message`, `_create_file_tool_metadata_message`) sit in
-the loop module that [[core-chat-loop]] owns. This document owns what they
-build. That document owns when they run.
+token reservation, the budget that decides whether project files fit inline,
+the file notices, image replay, and what a compaction summary looks like to the
+model. The chat agent of [[core-chat-loop]] calls the prompt builders on each
+step; that document owns when a step runs.
 
 Neighbours:
+- [[agent-runtime]]: when compaction runs, the input budget, truncation and the
+  checkpoint rules.
 - [[citations]]: the document JSON shape, numbering and the citation guidance
   text.
 - [[projects]]: whether project files go inline or through retrieval.
-- [[chat-persistence]]: how saved history is rebuilt, including the placeholder
-  that replaces tool responses from earlier turns, and the incognito store.
+- [[chat-persistence]]: how saved history is rebuilt, the summary rows, and the
+  incognito store.
 - [[file-store-and-user-files]]: upload, token counts and file lifecycle.
 - [[chat-preferences]]: memories, preferences and language.
-- [[agent-runtime]]: a second history formatter that is not wired.
 
 ---
 
 ## Architecture
 
-`run_llm_loop` rebuilds the whole list on every cycle:
+`chat/agent.py:ChatAgent._prepare_step` calls
+`chat/prompt_utils.py:build_chat_prompt` to pick the instructions and the
+reminder. The runtime then calls `chat/prompt_utils.py:prepare_prompt` on the
+working history, after it applies any compaction checkpoint, and again for each
+compaction candidate. The list on each model call:
 
 ```
 [system]                    base prompt, shared user-information framing, tool guidance   cached
 [user information]          SYSTEM message: per-user block                                cached
-[history before last user]  newest first until the budget ends; older messages drop       cached
+[conversation summary]      SYSTEM message, when a compaction checkpoint applies          cached
+[history before last user]  includes the newest message's file and request-context messages cached
 [custom agent prompt]       USER message, placed above the newest user message            cached
 [project files]             USER message, JSON documents                                  cached
 [last user message]                                                                       cached
 [this turn's tool calls and responses]                                                    cached
-[oversized-files notice]    USER, names the retrieval tools offered this cycle
-[forgotten-files notice]    USER, files that truncation or a summary removed
-[reminder]                  USER_REMINDER, always last
+[oversized-files notice]    USER, names the retrieval tools offered this step
+[forgotten-files notice]    USER, files that are not in the working history
+[reminder]                  USER, wrapped in <system-reminder>
+[image-drop notice]         USER reminder, only when an image cap dropped images
 ```
 
-The notices and the reminder change between cycles, so they stay after the
-cached prefix. `backend/onyx/chat/README.md` has worked examples of how the agent
-prompt and project files move from turn to turn.
+The notices and reminders change between steps, so they stay after the cached
+prefix. `prepare_prompt` copies the messages it receives and never changes
+recorded history. On a later turn, saved tool results carry
+`omit_tool_result_content` (`chat/chat_utils.py:omit_prior_tool_result_content`),
+and `prepare_prompt` sends `TOOL_CALL_RESPONSE_CROSS_MESSAGE` in their place.
+Image generation results stay visible. `backend/onyx/chat/README.md` has worked
+examples of how the agent prompt and project files move from turn to turn.
 
 **System prompt.** `chat/prompt_utils.py:build_system_prompt` resolves the
 `{{CURRENT_DATETIME}}`, `{{CITATION_GUIDANCE}}` and `{{REMINDER_TAG_DESCRIPTION}}`
 tags, adds the shared user-information framing and company context, then adds
-one guidance section per configured tool. The live loop calls it with
+one guidance section per configured tool. `build_chat_prompt` calls it with
 `include_user_info=False` and without `should_cite_documents`. The per-user
 block goes into a separate message from `build_user_information_prompt`, so the
 system message stays the same for every user. Two callers use
-`build_system_prompt`: `run_llm_loop` for the live prompt, and
+`build_system_prompt`: `build_chat_prompt` for the live prompt, and
 `calculate_reserved_tokens` for the token estimate with
 `include_all_guidance=True`. A new parameter must reach both, or the
 reservation undercounts. A change to the base prompt reaches normal chat turns
-and the Slack bot. It does not reach deep research, which writes its own system
-messages in `deep_research/dr_loop.py` with no company context and no agent
-prompt, or an agent that replaces the base prompt.
+and the Slack bot. It does not reach deep research or its research agents, which
+write their own system messages in `deep_research/agent.py` and
+`deep_research/research_agent.py` with no company context and no agent prompt,
+or an agent that replaces the base prompt.
 
-**Custom agent prompt.** `chat/chat_utils.py:get_custom_agent_prompt` labels
+**Custom agent prompt.** `chat/process_message.py:prepare_chat_turn` labels
 project and agent instructions when both exist, and tells the model to follow
 the agent on a conflict. The default assistant gives no agent instructions. If
 `persona.replace_base_system_prompt` is set, the persona's own prompt is the
 system message, and the custom agent prompt holds only project instructions. If
 the default base prompt is empty, the custom agent prompt becomes the system
-message and stops moving.
+message and stops moving (`build_chat_prompt`).
 
-**Reminder.** `chat/llm_loop.py:select_reminder_text` starts from the image
-generation reminder, the open-URL nudge (after a web search that found
-results, when the agent has the open-URL tool and cycles remain) or the persona
-task prompt. Only one of the three is used, so the task prompt is left out of a
-cycle that gets the image or open-URL reminder.
-`chat/prompt_utils.py:build_reminder_message` then adds the last-cycle reminder,
-the citation guidance once a citeable tool has run or the turn has project files
-(inline or searched), and the file reminder after the Python tool makes a file.
+**Reminder.** `chat/prompt_utils.py:build_chat_reminder` starts from the image
+generation reminder, the open-URL nudge (after a web search in the previous step
+that found results, when the agent has the open-URL tool and steps remain) or
+the persona task prompt. Only one of the three is used, so the task prompt is
+left out of a step that gets the image or open-URL reminder.
+`chat/prompt_utils.py:build_reminder_message` then adds the last-step reminder,
+the citation guidance once a citeable tool has run in this turn or the turn has
+project files (inline or searched), and the file reminder after the Python tool
+makes a file. `chat/prompt_formatting.py:prepare_model_messages` wraps it in
+`<system-reminder>` tags.
 
 **Budget.** In setup, `calculate_reserved_tokens` reserves a worst-case system
 prompt (`include_all_guidance=True`, so it overshoots on purpose), the
 replacement and agent prompts, and the files attached to the new message. Then
 `chat/files.py:extract_context_files` uses the window that remains, for the
 smallest model of the turn, to decide whether project files go inline
-([[projects]]). In each cycle, the loop takes
-`resolve_token_budget(llm).input_tokens`, subtracts the tool definitions, and
-passes the rest to `construct_message_history`.
+([[projects]]). On each model call, the runtime counts the whole assembled
+request, tool definitions included, against `agents/compaction.py:context_budget`,
+and caps the output with `llm/token_budget.py:resolve_token_budget`
+([[agent-runtime]]).
 
-**Compression.** After a turn is saved, `chat/compression.py:get_compression_params`
-compares the next turn's history with `COMPRESSION_TRIGGER_RATIO` of the window
-left after the reservation. `compress_chat_history` summarizes the older part,
-keeps the newest `RECENT_MESSAGES_RATIO` of tokens verbatim, and folds in the
-previous summary. It saves the summary as a `SUMMARY` row whose parent is the
-last user message of the chain
-(`chat/compression.py:get_summary_parent_message_id`). All answers to that
-message, such as multi-model answers and regenerations, share the summary. A
-branch that forks earlier does not see it. The next turn loads it with
-`load_branch_summary`, drops the messages it covers, and puts it first as an
-assistant message. An incognito session that does not keep content skips
-compression, because a summary is a saved content row.
+**Compaction.** The runtime summarizes or truncates older history before a model
+call ([[agent-runtime]]). The summary reaches the model as a "Conversation
+summary" system message after the head, and the history after its cutoff
+follows. Summary input replaces attachment text with the file name and ID
+(`PromptMetadata.compaction_text`), so facts only in an attachment body survive
+only through the forgotten-files notice and a file tool. In a session that keeps
+content, `db/chat_response.py` saves a changed summary as a `SUMMARY` row whose
+parent is the response where compaction ran. The next turn loads the summary of
+the nearest ancestor on its branch (`db/chat.py:find_summary_for_branch`), so a
+sibling answer or a branch that forks earlier does not see it. A content-free
+incognito session saves no summary row. `chat/COMPRESSION.md` describes the
+stored form.
 
-**Images in history.** `chat/llm_step.py:_resolve_history_image_replay` runs
-before each inference. It takes `LLMConfig.supports_images`, or the model
-catalog when that is unset. For a model without vision, history images become
-text markers. `chat/llm_step.py:resolve_image_cap` keeps only the most recent
-images when a provider cap applies, and the dropped images add a reminder
-notice. The cache-prefix estimate (`_cache_split_stats`) counts what is sent,
-not the stored token counts.
+**Images in history.** `chat/prompt_formatting.py:prepare_model_messages` runs
+on each request. It takes `LLMConfig.supports_images`, or the model catalog when
+that is unset. For a model without vision, history images become text markers.
+`chat/prompt_formatting.py:resolve_image_cap` keeps only the most recent images
+when a provider cap applies, and appends a reminder notice for the dropped
+images. The cache-prefix estimate (`llm/model_request.py:cache_split_stats`)
+counts what is sent, not the stored token counts.
 
 ---
 
 ## Contracts and traps
 
-1. `reminder-last-head-stable` **The reminder is the last message, and the
-   system prompt stays byte-stable across cycles.** Models attend most to the
-   last tokens, so per-cycle guidance (citations, open-URL, last cycle) goes into
-   the reminder. The head prompt must not change between cycles, so the prompt
-   cache holds. It must not depend on `should_cite_documents`, the tools offered
-   this cycle or `out_of_cycles`. Tool guidance uses the turn's configured tools,
-   not `final_tools`. The date has day precision.
+1. `reminder-last-head-stable` **The reminder follows everything else, and the
+   system prompt stays byte-stable across steps.** Models attend most to the
+   last tokens, so per-step guidance (citations, open-URL, last step) goes into
+   the reminder. Only the image-drop notice can follow it. The head prompt must
+   not change between steps, so the prompt cache holds. It must not depend on
+   the tool results so far, the tools offered this step or the last-step flag.
+   Tool guidance uses the agent's configured tools (`ChatAgent.application_tools`),
+   not the step's tools. The date has day precision.
 2. `no-citation-guidance-in-system-prompt` **Citation guidance is never in the
    live system prompt.** A `{{CITATION_GUIDANCE}}` tag in the base or agent
    prompt resolves to empty. The same tag in a persona task prompt resolves to
@@ -174,41 +188,45 @@ not the stored token counts.
 4. `reserve-before-extract` **Reserve before you extract.**
    `chat/prompt_utils.py:calculate_reserved_tokens` runs before
    `chat/files.py:extract_context_files` in
-   `chat/process_message.py:build_chat_turn`. Reverse them and a large project
+   `chat/process_message.py:prepare_chat_turn`. Reverse them and a large project
    takes space the prompt needs.
-5. `fixed-parts-must-fit` **The fixed parts must fit, or the turn fails.**
-   `chat/llm_loop.py:construct_message_history` raises `ValueError` when the
-   system prompt, user block, agent prompt, project files, oversized-files
-   notice and reminder exceed the budget, or when the last user message and this
-   turn's tool rounds do not fit. Only older history is trimmed. Then
-   `chat/llm_loop.py:_drop_orphaned_tool_call_responses` removes responses
-   whose call was trimmed, because some providers reject them.
+5. `fixed-parts-must-fit` **The fixed parts must fit, or the response fails.**
+   `agents/runtime.py:_truncate_context` raises `ContextLimitError` when the
+   system messages and the current turn do not fit, including the head prompt,
+   project files, notices, the reminder, the newest question with its
+   attachments and request context, and this turn's tool rounds. Only older
+   turns are summarized or dropped, at boundaries that keep a tool call with
+   its result ([[agent-runtime#run-input-protected]]). A new large fixed element
+   makes this error more frequent.
 6. `forgotten-files-need-metadata` **A forgotten-files notice needs file
-   metadata.** `chat/process_message.py:build_chat_turn` passes an empty map
-   when the persona has no file reader tool. Then a file dropped by truncation
-   is not disclosed. Files removed by a summary are always listed.
+   metadata.** `chat/process_message.py:prepare_chat_turn` clears the metadata
+   map when the persona has no file reader tool. Then a file that compaction or
+   truncation removes is not disclosed. With the map, `prepare_prompt` lists
+   every attached file whose message is not in the working history.
 7. `file-notice-names-offered-tools` **A file notice names only tools the model
-   has this cycle.** `chat/llm_loop.py:_create_file_tool_metadata_message`
+   has this step.** `chat/prompt_utils.py:_create_file_tool_metadata_message`
    prefers `read_file`, then internal search, then the Python tool (only when
    every file was staged for it). A notice that names a missing tool makes the
    model guess or search the web.
-8. `history-builder-callers` **`chat/llm_loop.py:construct_message_history`
-   has several callers.** Deep research, the research agent and the coding
-   agent call it with their own arguments, such as `last_n_user_messages`.
-   Check them after you change its signature or order.
+8. `history-builder-callers` **`chat/prompt_utils.py:prepare_prompt` has
+   several callers.** `ChatAgent`, `DeepResearchAgent`, `ResearchAgent` and
+   `CodingAgent` call it with their own arguments, such as no custom agent
+   prompt. Check them after you change its signature or order.
 9. `replace-base-drops-user-block` **Replacing the base prompt drops the
    per-user block.** With `replace_base_system_prompt`, or with an empty default
-   prompt, the loop builds no user-information message, so memories and
-   preferences do not reach the model.
+   prompt, `build_chat_prompt` builds no user-information message, so memories
+   and preferences do not reach the model.
 10. `prompt-change-needs-eval` **Prompt wording and position change behaviour a
     lot.** Moving one sentence in the system prompt changed
     instruction-following from about 30% to about 90% (`chat/README.md`,
     "Reasons / Experiments"). A prompt change needs an eval run, not only a unit
     test.
-11. `new-context-element-decisions` **Each new context element needs three
+11. `new-context-element-decisions` **Each new context element needs four
     decisions.** Its position relative to the agent prompt and project files,
-    whether `calculate_reserved_tokens` counts it, and what each incognito mode
-    stores ([[chat-persistence#incognito-decision-per-field]]).
+    whether `calculate_reserved_tokens` counts it, whether it is request-only
+    (then set `allow_compaction_cutoff=False`,
+    [[agent-runtime#stable-message-ids]]), and what each incognito mode stores
+    ([[chat-persistence#incognito-decision-per-field]]).
 
 ---
 
@@ -226,21 +244,21 @@ not the stored token counts.
 
 ## Known issues
 
-- **The forgotten-files budget can overrun.** When eviction adds a file to the
-  notice, `construct_message_history` rebuilds the notice but does not subtract
-  the added tokens. The history can exceed the budget by that amount.
 - **`chat/README.md` is out of date.** It says citation guidance and per-cycle
   tool descriptions go into the system prompt
   ([[#no-citation-guidance-in-system-prompt]], [[#reminder-last-head-stable]]).
-  Its document example does not match the code ([[citations#document-key-prompt-design]]).
-- **The compression docs name the wrong summary parent.** The module docstring
-  of `chat/compression.py` and `chat/COMPRESSION.md` say the parent is the last
-  message. `get_summary_parent_message_id` uses the last user message.
+  Its document example does not match the code ([[citations#document-key-prompt-design]]),
+  and it names a file, chat/llm_loop.py, that does not exist. The function it
+  names there is in `chat/prompt_utils.py:_create_context_files_message`.
+- **`COMPRESSION_TRIGGER_RATIO` is a false lead.** `configs/chat_configs.py`
+  still reads it, but nothing uses it. The trigger is a constant in
+  `agents/compaction.py`.
 
 ---
 
 ## Dependencies
 
+- [[agent-runtime]]: compaction, the input budget and the step hooks.
 - [[agents-personas]]: `system_prompt`, `task_prompt`,
   `replace_base_system_prompt`, `datetime_aware` and persona files.
 - [[projects]]: project instructions and the inline-or-retrieval rule.
@@ -269,8 +287,8 @@ not the stored token counts.
   user-information message. The text does not reach deep research or an agent
   that replaces the base prompt. Run an eval ([[#prompt-change-needs-eval]]).
   The `Settings` field itself is [[chat-preferences#new-workspace-option]].
-- `per-cycle-instruction` **A new per-cycle instruction.** Copy `OPEN_URL_REMINDER`: its text is in
-  `prompts/chat_prompts.py` and `select_reminder_text` picks it. List the
+- `per-cycle-instruction` **A new per-step instruction.** Copy `OPEN_URL_REMINDER`: its text is in
+  `prompts/chat_prompts.py` and `build_chat_reminder` picks it. List the
   reminders with `git grep -n "_REMINDER = " backend/onyx/prompts`. Put the
   instruction in the reminder, not in the system prompt
   ([[#reminder-last-head-stable]]).
@@ -280,22 +298,26 @@ not the stored token counts.
   incognito) chat. `backend/log/api_server_debug.log` then shows the message
   list for each inference. Check the order in the Architecture diagram, whether a
   forgotten-files notice is present ([[#forgotten-files-need-metadata]]), and
-  whether a `SUMMARY` row covers the turn that held the file.
-- `compressed-chat-setup` **Set up a compressed chat for a test.** Set `COMPRESSION_TRIGGER_RATIO` low
-  (for example `0.05`), restart the API server, because the value is read at
-  import, and send a few turns. A `SUMMARY` row appears in
-  `chat_message` with its parent on the last user message.
+  whether a `SUMMARY` row on the branch covers the turn that held the file.
+- `compressed-chat-setup` **Set up a compacted chat for a test.** Copy
+  `backend/tests/external_dependency_unit/answer/test_chat_compaction.py`: it
+  patches `get_llm_for_persona` with a scripted model, sends a long turn, then
+  lowers the model's `max_input_tokens` so the next turn compacts. A `SUMMARY`
+  row appears in `chat_message` with its parent on the response. Setting
+  `COMPRESSION_TRIGGER_RATIO` does nothing.
 
 ---
 
 ## Verification
 
-- Unit: `backend/tests/unit/onyx/chat/` covers message order, compression,
-  context files, the organization profile, the user language and incognito
-  modes.
+- Unit: `backend/tests/unit/onyx/chat/` covers message order, reminders, prompt
+  caching, context files, the organization profile, the user language and
+  incognito modes. `backend/tests/unit/onyx/agents/` covers compaction.
+- External dependency: `backend/tests/external_dependency_unit/answer/test_chat_compaction.py`
+  runs compaction through chat preparation and storage.
 - Prompt text or order: run the eval harness in `backend/onyx/evals/` (see its
   README) before and after the change.
 - By hand: in a project with files, attach a file to an early message and chat
-  until compression runs. Agent instructions must still apply, project files
+  until compaction runs. Agent instructions must still apply, project files
   must still be cited, and a question about the early file must get a correct
   answer or a clear "not available", never a wrong answer.

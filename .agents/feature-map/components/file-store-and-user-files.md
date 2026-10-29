@@ -2,7 +2,7 @@
 
 > Files that users give Onyx directly (chat attachments, project files and agent files) and the files that tools generate. This component owns the blob store, the `UserFile` lifecycle from upload to deletion, text extraction and token counts, user-file indexing, and the route that serves a file back.
 
-**Verified against:** `73e0ae3c31` (2026-10-28)
+**Verified against:** `6bac4e012f` (2026-10-29)
 **Edition:** CE
 
 ---
@@ -90,8 +90,10 @@ translates. `fetch_chat_file` accepts either id.
 the `FileRecord` row for every backend. The Postgres backend adds a
 `FileContent` row that points at a large object. Callers use `FileStore`
 through `get_default_file_store` and never branch on the backend.
-`upsert_filerecord` also stamps a blob saved during an incognito turn with
-its session id. The incognito cleanup finds blobs only through that stamp.
+`upsert_filerecord` also stamps a blob saved during a `USAGE_ONLY` incognito
+turn with its session id (`CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR`, set by
+`chat/execution.py:start_chat_turn`). The incognito cleanup finds blobs only
+through that stamp.
 
 **Token counts are written twice.** `categorize_uploaded_files` counts tokens
 at upload with the default chat model's tokenizer, and estimates images from
@@ -176,10 +178,12 @@ preview.
    processing gets its ids from the indexing adapter
    (`db/user_file.py:fetch_user_project_ids_for_user_files`).
 9. `no-session-across-file-reads` **Do not hold an ORM session across file
-   reads.** `db/user_file.py:capture_user_file_metadata` copies file fields
-   into `UserFileMetadata` before parallel reads, and
-   `file_store/utils.py:load_in_memory_chat_files` takes those values. The tasks use short read sessions and run index and
-   blob I/O with no connection held.
+   reads.** `db/user_file.py:capture_user_file_metadata` copies context file
+   fields into `UserFileMetadata`, and `db/user_file.py:prepare_chat_file_inputs`
+   copies each attachment's token count and processing status, before the turn
+   closes its session. `file_store/utils.py:load_in_memory_chat_files` and
+   `chat/files.py:load_chat_files` read blobs from those values only. The tasks
+   use short read sessions and run index and blob I/O with no connection held.
 10. `disable-vector-db-paths` **`DISABLE_VECTOR_DB` changes three paths.**
     Processing stores plaintext with no chunks, overflow files go to
     `FileReaderTool` (available only in this mode), and upload, delete and
@@ -194,7 +198,17 @@ preview.
     success, `_extract_text_and_images` returns no embedded images and no
     metadata, so image analysis, PDF metadata and per-file `ONYX_METADATA` do
     nothing. An Unstructured error falls back to the local parsers.
-12. `minio-dual-store` **While `S3_LEGACY_ENDPOINT_URL` is set, the S3 store
+12. `checkpoint-file-is-blob-id` **A saved tool file keeps only a blob id.**
+    `tools/file_snapshot.py:SavedChatFile.capture` drops the bytes of a
+    `ChatFile` that has a `file_id`, and `restore` reads that id from the file
+    store with no access check. A `ChatFile.file_id` must be a
+    `FileRecord.file_id` the run may read, never a `UserFile.id`
+    ([[#say-which-id]]). Inline bytes become
+    `agent-checkpoint/<root session id>/<sha256>` blobs with
+    `FileOrigin.OTHER` and no `UserFile`
+    (`chat/restoration.py:persist_checkpoint_files`); session hard delete
+    removes them by that prefix ([[chat-persistence#checkpoints-not-written]]).
+13. `minio-dual-store` **While `S3_LEGACY_ENDPOINT_URL` is set, the S3 store
     serves two stores.** A deployment that upgrades from the bundled MinIO
     keeps it as a second, read-fallback store. `S3BackedFileStore` writes and
     deletes in both

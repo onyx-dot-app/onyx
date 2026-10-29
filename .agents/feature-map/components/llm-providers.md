@@ -5,7 +5,7 @@
 > `LitellmLLM`, the wrapper that owns streaming, retries and managed-key cost
 > tracking.
 
-**Verified against:** `73e0ae3c31` (2026-10-28)
+**Verified against:** `6bac4e012f` (2026-10-29)
 **Edition:** CE. The access check is CE code, but user groups are EE, so
 restricting a provider to groups needs EE.
 
@@ -116,8 +116,9 @@ of the chat picker.
 **The wrapper.** `llm/multi_llm.py:LitellmLLM` has two layers. `invoke_raw` and
 `stream_raw` return provider chunks (`ModelResponseStream`). `invoke` and
 `stream` add the event layer (`GenerationEvent`, see `backend/onyx/llm/README.md`)
-and open a generation span. The chat loop (`chat/llm_step.py`) and the gateway
-use the raw layer and open their own spans. `_completion` shapes the request
+and open a generation span. The agent runtime
+(`agents/runtime.py`) uses `stream`; the gateway uses the raw layer and opens
+its own spans. `_completion` shapes the request
 for each model family and provider. When a provider 400 names a reasoning or
 temperature kwarg, `_completion` retries without it (`_retry_attempts`). It
 never drops tools, tool choice or messages. `_track_llm_cost` counts cost only when
@@ -248,8 +249,8 @@ a client.
     override: `llm_from_provider` passes `True` when it is set, else `None`, and
     `LitellmLLM` then asks the catalog. So an admin can turn on vision for a
     model that the catalog does not know, but never turn it off. Chat image
-    replay (`chat/llm_step.py:_resolve_history_image_replay`) uses the resolved
-    value. Do not remove that read.
+    replay (`chat/prompt_formatting.py:prepare_model_messages`) reads the resolved
+    `LLMConfig.supports_images`. Do not remove that read.
 
 ---
 

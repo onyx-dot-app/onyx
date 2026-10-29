@@ -81,9 +81,11 @@ sit in.
 ## A new thread or Celery task
 
 - **A thread does not inherit the tenant.** Start it with a helper from
-  `utils/threadpool_concurrency.py`, such as `run_functions_tuples_in_parallel`
-  or `start_thread_with_context`, which copy the context. Copy once per thread
-  ([[multi-tenancy#threads-copy-context]],
+  `utils/threadpool_concurrency.py`, such as `run_functions_tuples_in_parallel`,
+  `start_thread_with_context` or `start_thread_future`, which copy the context.
+  Copy once per thread. An agent-runtime run copies the context once, in
+  `agents/runtime.py:Run._start`, so set a context variable before the run
+  starts ([[multi-tenancy#threads-copy-context]],
   [[core-chat-loop#threads-copy-context]]).
 - **A tenant-scoped task needs a `tenant_id` kwarg.** Without it, `TenantAwareTask` runs in
   the default schema with no error ([[multi-tenancy#celery-task-tenant-kwarg]]).
@@ -121,10 +123,14 @@ sit in.
 Every call site:
 
 - **Open a root trace** with `tracing/framework/create.py:trace` or
-  `ensure_trace`. A span outside a trace records no usage, so budgets do not
-  count the call ([[observability#root-trace-required]]).
-- **Tag it with an `LLMFlow`** through `tracing/llm_utils.py:llm_generation_span`
-  or `traced_llm_call` ([[observability#tag-llm-flow]]).
+  `ensure_trace`, before `Agent.start` for an agent-runtime run. A span outside
+  a trace records no usage, so budgets do not count the call
+  ([[observability#root-trace-required]]).
+- **Tag it with an `LLMFlow`.** `LLM.invoke` and `LLM.stream` open their own
+  generation span from `llm/interfaces.py:GenerationContext.flow`, and
+  `agents/runtime.py:Agent` refuses a context with no flow. Another call uses
+  `tracing/llm_utils.py:llm_generation_span` or `traced_llm_call`
+  ([[observability#tag-llm-flow]]).
 
 A call that a user starts (chat, a bot, an API caller):
 

@@ -4,7 +4,7 @@
 > `bash` runs shell commands in a repository. Both are HTTP clients of an
 > external Code Interpreter service, so no user code runs in an Onyx process.
 
-**Verified against:** `a4e97fcea1` (2026-10-29)
+**Verified against:** `6bac4e012f` (2026-10-29)
 **Edition:** CE
 
 ---
@@ -52,21 +52,22 @@ It does not own:
 
 ```
 run_python (stateless, one call = one execution)
-  PythonTool.run
+  PythonTool._run
     _select_files_for_staging        referenced files first, then recent, inside caps
     _upload_and_stage                upload once per (filename, hash) per tool instance
     client.execute_streaming         POST /v1/execute/stream (SSE); on 404 -> /v1/execute
-    per output event                 PythonToolDelta packet
+    per output event                 invocation.update(PythonExecutionDelta)
     generated files                  download -> file store (session stamp)
                                      -> delete the service copy
 
 bash (one session per coding-agent call)
-  run_coding_agent_call              tools/fake_tools/coding_agent.py
-    _setup_session                   download HEAD archive -> upload -> create_session
-                                     (1 h TTL) -> extract -> yield session_id
-      BashTool(BASH_TOOL_SENTINEL_ID, session_id)
-      _run_bash_call per LLM call    POST /v1/sessions/{id}/bash, one at a time
-    finally: delete_session          best effort; the TTL is the backstop
+  CodingAgentTool._run               tools/tool_implementations/coding_agent/
+    coding_sandbox_session           download HEAD archive -> upload -> create_session
+                                     (1 h TTL) -> extract -> session_id
+    CodingAgent(BashTool(BASH_TOOL_SENTINEL_ID, session_id))
+    spawn_agent -> ChildRunWait      the child run calls bash, one call at a time
+    add_completion_cleanup           delete_session when the child ends; best effort,
+                                     the TTL is the backstop
 ```
 
 **Availability.** `PythonTool.is_available` needs three things: a non-empty
@@ -78,10 +79,11 @@ minimum of the session methods. `CodingAgentTool.is_available` returns
 URL in the process (`_HEALTH_CACHE_TTL_SECONDS`). The admin health endpoint
 makes a live check, and every live check refreshes that cache.
 
-**Input files.** `run_tool_calls` passes the turn's chat files to `PythonTool`.
-`chat/llm_loop.py:run_llm_loop` also adds the raw source files of search hits
-that connectors stored (`chat/files.py:build_python_chat_files_from_search_docs`),
-so the code can open a spreadsheet that search found. Staging has caps on file
+**Input files.** `PythonTool` reads the turn's chat files from
+`ToolContext.chat_files`. `chat/agent.py:ChatAgent._finalize_tool` also stages
+the raw source files of search hits that connectors stored
+(`chat/files.py:build_python_chat_files_from_search_docs`), and later steps of
+the turn get them, so the code can open a spreadsheet that search found. Staging has caps on file
 count, total bytes and parallel uploads. When files are dropped, the model gets
 a `staging_notice` in the result.
 
@@ -113,23 +115,22 @@ health calls are not retried.
    `CODE_INTERPRETER_MAX_OUTPUT_LENGTH`. `PythonTool` streams the raw chunks to
    the UI and truncates only the model text.
 4. `errors-are-results` **Execution errors are results, not exceptions.** Both
-   `run` methods catch client errors and return the result JSON with
+   `_run` methods catch client errors and return the result JSON with
    `exit_code=-1` and `error` set. The model sees the failure and can fix its
-   code. For `run_python`, [[tools-framework#run-errors-become-results]] is a
-   second guard. Bash calls skip the runner. An exception that escapes
-   `BashTool.run` reaches the handler in
-   `tools/fake_tools/coding_agent.py:run_coding_agent_call`, which ends the
-   whole coding-agent call with an error packet.
-5. `run-python-result-json` **The `run_python` result JSON is a contract with
-   two readers.** `tools/results.py:LlmPythonExecutionResult` is the model text
-   and is saved as the tool call response. `chat/llm_loop.py:run_llm_loop` reads
-   `generated_files` from it to add the file reminder.
+   code. `Tool.run` is a second guard for both
+   ([[tools-framework#run-errors-become-results]]): the coding agent calls
+   `BashTool.run` from `coding_agent/agent.py:CodingAgent._bash`.
+5. `run-python-result-json` **`LlmPythonExecutionResult` is saved in two
+   forms.** `tools/models.py:LlmPythonExecutionResult` is the model text, as
+   JSON in `content`, and the typed `details` that chat saves in
+   `ToolCall.result` and in checkpoints. `chat/renderer.py:ToolRenderer.update`
+   draws the block from `details` live and on reload.
    `server/query_and_chat/session_loading.py:translate_assistant_message_to_packets`
-   reads `stdout`, `stderr` and `generated_files[].file_link` from it to rebuild
-   the block on reload. It takes the file ID from the last segment of
-   `file_link`, as `db/chat_display.py:extract_referenced_file_descriptors` does
-   with the rich response. Saved chats keep the old JSON, so a field rename or a
-   new `file_link` format must keep these readers able to parse it.
+   parses the JSON for messages saved before response items existed. Both
+   readers, and `db/chat_response.py:_extract_referenced_file_descriptors`,
+   take the file ID from the last segment of `file_link`. Saved rows keep old
+   data, so a field rename or a new `file_link` format must keep every reader
+   able to parse it.
 6. `generated-files-need-session` **Generated files need the chat session ID.**
    `PythonTool` saves them with
    `file_store/utils.py:chat_image_gen_metadata` and the chat session ID.
@@ -138,21 +139,22 @@ health calls are not retried.
    [[file-store-and-user-files]].
 7. `bash-tool-sentinel` **`BashTool` exists only inside the coding agent.** It
    has no `Tool` row and is not in `BUILT_IN_TOOL_MAP`.
-   `tools/fake_tools/coding_agent.py:run_coding_agent_call` builds it with
-   `BASH_TOOL_SENTINEL_ID = 0`, and its calls are not saved as `ToolCall` rows.
-   A reloaded chat shows the coding agent's query and answer, but not its bash
-   steps. Persona attachment, `Tool.enabled` and `allowed_tool_ids` act on
+   `tools/tool_implementations/coding_agent/coding_agent_tool.py:CodingAgentTool._run`
+   builds it with `BASH_TOOL_SENTINEL_ID = 0`. Its calls are saved with the
+   coding agent's child run and replay on reload, but they have no `tool_id`.
+   Persona attachment, `Tool.enabled` and `allowed_tool_ids` act on
    `CodingAgentTool`, not on `bash`.
 8. `bash-calls-sequential` **Bash calls in one coding-agent call share a file
-   system and run in order.** `run_coding_agent_call` runs them one at a time on
-   purpose. Do not run them in parallel.
+   system and run in order.** `coding_agent/agent.py:CodingAgent` registers
+   bash with `ToolExecutionMode.SEQUENTIAL` on purpose. Do not make it
+   parallel.
 9. `run-python-stateless` **`run_python` has no state between calls.** Each call
    is a new execution, and variables do not carry over.
    `tools/tool_implementations/python/python_tool.py:PythonTool._uploaded_file_cache`
    only stops the same input file from
    uploading twice. A generated file is not an input to a later call in the same
    turn. It becomes an input in later turns only when the answer text contains
-   its file ID: `db/chat_display.py:extract_referenced_file_descriptors` then
+   its file ID: `db/chat_response.py:_extract_referenced_file_descriptors` then
    attaches it to the message, and the next turn loads message files as chat
    files.
 10. `keep-run-python-name` **Do not rename `run_python` to `python`.** OpenAI
@@ -190,16 +192,19 @@ health calls are not retried.
   removes them. Onyx cannot see that TTL.
 - **The coding agent reaches only public repositories.**
   `tools/tool_constructor.py:_construct_tools_impl` builds `CodingAgentTool`
-  without a `github_token`, so `_setup_session` downloads without credentials.
-- **`CODING_AGENT_BASH_TIMEOUT_MS` has no reader.** Bash calls use
-  `CODE_INTERPRETER_DEFAULT_TIMEOUT_MS`.
+  without a `github_token`, so `coding_sandbox_session` downloads without
+  credentials.
+- **A coding-agent call cannot resume in another process.** The sandbox
+  session lives in the process that made it, and
+  `chat/subagents.py:ChatAgentDirectory.restore_agent` restores only research
+  agents.
 
 ---
 
 ## Dependencies
 
-- [[tools-framework]]: the `Tool` interface, construction, the runner, and the
-  coding-agent loop.
+- [[tools-framework]]: the `Tool` interface, construction, and the coding
+  agent.
 - [[file-store-and-user-files]]: generated files and their session stamp.
 - [[streaming-protocol]]: the Python, bash and coding-agent packets.
 - [[authorization]]: `require_permission(FULL_ADMIN_PANEL_ACCESS)` guards the admin

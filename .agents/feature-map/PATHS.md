@@ -23,23 +23,26 @@ covers new files that match it.
 
 | Path | Component(s) |
 |---|---|
-| `backend/onyx/chat/renderer.py`, `backend/onyx/chat/presentation.py`, `backend/onyx/chat/response.py`, `backend/onyx/chat/response_models.py` | agent-runtime |
+| `backend/onyx/chat/execution.py`, `backend/onyx/chat/agent.py`, `backend/onyx/chat/errors.py` | core-chat-loop |
+| `backend/onyx/chat/renderer.py`, `backend/onyx/chat/presentation.py` | streaming-protocol, core-chat-loop |
+| `backend/onyx/chat/persistence.py` | chat-persistence, core-chat-loop |
+| `backend/onyx/chat/history_store.py`, `backend/onyx/chat/response.py`, `backend/onyx/db/chat_checkpoint.py` | chat-persistence |
+| `backend/onyx/chat/run_store.py`, `backend/onyx/chat/checkpoint.py`, `backend/onyx/chat/restoration.py` | agent-runtime, chat-persistence |
+| `backend/onyx/chat/subagents.py` | agent-runtime |
 | `backend/onyx/chat/files.py` | context-assembly, projects |
 | `backend/onyx/chat/README.md` | core-chat-loop, context-assembly |
 | `backend/onyx/chat/models.py` | core-chat-loop, streaming-protocol |
-| `backend/onyx/chat/COMPRESSION.md`, `backend/onyx/chat/prompt_utils.py`, `backend/onyx/chat/compression.py`, `backend/onyx/llm/token_budget.py` | context-assembly |
+| `backend/onyx/chat/COMPRESSION.md`, `backend/onyx/chat/prompt_utils.py`, `backend/onyx/chat/prompt_formatting.py`, `backend/onyx/llm/token_budget.py` | context-assembly |
 | `backend/onyx/chat/chat_utils.py` | context-assembly, chat-persistence |
-| `backend/onyx/chat/prompt_formatting.py` | agent-runtime |
-| `backend/onyx/chat/llm_loop.py`, `backend/onyx/chat/llm_step.py`, `backend/onyx/chat/process_message.py`, `backend/onyx/chat/chat_state.py`, `backend/onyx/chat/chat_processing_checker.py`, `backend/onyx/chat/stop_signal_checker.py` | core-chat-loop |
+| `backend/onyx/chat/process_message.py`, `backend/onyx/chat/chat_processing_checker.py`, `backend/onyx/chat/stop_signal_checker.py` | core-chat-loop |
 | `backend/onyx/deep_research/` | core-chat-loop, tools-framework |
 | `backend/onyx/chat/emitter.py`, `backend/onyx/chat/stream_buffer.py` | core-chat-loop, streaming-protocol |
-| `backend/onyx/chat/tool_call_args_streaming.py` | streaming-protocol |
 | `backend/onyx/chat/incognito.py`, `backend/onyx/db/incognito.py` | chat-persistence |
 | `backend/onyx/chat/incognito_context.py` | chat-persistence, context-assembly |
 | `backend/onyx/prompts/`, `backend/ee/onyx/prompts/` | context-assembly |
 | `backend/onyx/chat/citation_processor.py`, `backend/onyx/chat/citation_utils.py` | citations |
 | `backend/onyx/db/chat_response.py`, `backend/onyx/db/chat_subagents.py` | chat-persistence |
-| `backend/onyx/db/chat_display.py`, `backend/onyx/chat/save_chat.py`, `backend/onyx/db/chat.py`, `backend/onyx/db/chat_search.py`, `backend/onyx/db/feedback.py` | chat-persistence |
+| `backend/onyx/db/chat.py`, `backend/onyx/db/chat_search.py`, `backend/onyx/db/feedback.py` | chat-persistence |
 | `backend/ee/onyx/background/celery/tasks/ttl_management/` | chat-persistence, background-jobs |
 | `backend/onyx/server/query_and_chat/chat_backend.py`, `backend/onyx/server/query_and_chat/models.py`, `backend/onyx/server/query_and_chat/session_loading.py`, `backend/onyx/server/query_and_chat/chat_utils.py` | core-chat-loop, chat-persistence |
 | `backend/onyx/server/query_and_chat/streaming_models.py`, `backend/onyx/server/query_and_chat/placement.py` | streaming-protocol |
@@ -59,6 +62,7 @@ covers new files that match it.
 | `backend/onyx/tools/tool_implementations/mcp/`, `backend/onyx/tools/tool_implementations/custom/` | mcp-and-custom-tools |
 | `backend/onyx/tools/tool_implementations/memory/`, `backend/onyx/db/memory.py`, `backend/onyx/context/models.py` | chat-preferences |
 | `backend/onyx/tools/tool_implementations/file_reader/` | file-store-and-user-files |
+| `backend/onyx/tools/file_snapshot.py` | file-store-and-user-files, chat-persistence |
 | `backend/onyx/tools/tool_implementations/coding_agent/`, `backend/onyx/coding_agent/` | tools-framework |
 
 ## Backend: search and index
@@ -208,6 +212,8 @@ covers new files that match it.
 | `backend/onyx/image_gen/`, `backend/onyx/server/features/image_generation/`, `backend/onyx/server/manage/image_generation/`, `backend/onyx/db/image_generation.py` | image-generation |
 | `backend/onyx/db/code_interpreter.py`, `backend/onyx/server/manage/code_interpreter/` | code-execution |
 | `backend/onyx/agents/` | agent-runtime |
+| `backend/onyx/agents/compaction.py` | agent-runtime, context-assembly |
+| `backend/onyx/agents/tool_execution.py`, `backend/onyx/agents/tools.py` | agent-runtime, tools-framework |
 | `backend/onyx/llm/`, `backend/onyx/server/manage/llm/`, `backend/onyx/db/llm.py` | llm-providers |
 | `cli/internal/parser/`, `cli/internal/models/events.go` | streaming-protocol |
 

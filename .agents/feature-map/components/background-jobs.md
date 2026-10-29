@@ -4,7 +4,7 @@
 > tenant context on each task, fences and task conventions. It also owns the
 > two flows that remove documents, pruning and connector deletion.
 
-**Verified against:** `a4e97fcea1` (2026-10-29)
+**Verified against:** `6bac4e012f` (2026-10-29)
 **Edition:** CE. EE adds worker and beat entries through the versioned-app
 mechanism. Cloud fans per-tenant work out through a generator task.
 

@@ -5,7 +5,7 @@
 > the HTTP chat route, so each check on that route must be repeated here or
 > accepted as absent.
 
-**Verified against:** `73e0ae3c31` (2026-10-28)
+**Verified against:** `6bac4e012f` (2026-10-29)
 **Edition:** CE for the listener and the answer path. Standard answers are EE
 ([[standard-answers]]). Tenant acquisition across pods matters only on cloud.
 
@@ -17,7 +17,8 @@
   set to answer every message. The bot adds a reaction while it works, then
   replies in the thread with the answer, its sources and feedback buttons. A
   configured channel can also show "Continue Chat in Onyx", which opens the
-  conversation as a web chat session.
+  conversation as a web chat session. The copy keeps the text, files and
+  final reasoning of each message, but no tool calls or sources.
 - **In a public channel, the answer uses only indexed documents that an
   anonymous user can see,** even when the asker has wider access. Federated
   Slack results do not follow this rule ([[#public-channel-anonymous-search]]).
@@ -242,7 +243,7 @@ prefix. Deleting the channel config marks that persona deleted.
 
 ## Dependencies
 
-- [[core-chat-loop]]: a change to `handle_stream_message_objects` or `gather_stream` reaches the bot with no change here.
+- [[core-chat-loop]]: a change to `handle_stream_message_objects` or `chat/process_message.py:gather_stream` reaches the bot with no change here. `gather_stream` joins every root answer section and skips child-agent packets.
 - [[standard-answers]]: runs before the regular answer and can end the turn.
 - [[agents-personas]]: the channel's persona sets the prompt, tools and document sets.
 - [[access-control]]: the anonymous user's scope bounds public-channel answers.

@@ -5,7 +5,7 @@
 > a document, or receive each indexed document. The hook decides what enters the
 > pipeline, so a failure must follow its fail strategy exactly.
 
-**Verified against:** `a4e97fcea1` (2026-10-29)
+**Verified against:** `6bac4e012f` (2026-10-29)
 **Edition:** EE, self-hosted only. CE runs a no-op. Cloud refuses the admin API
 and skips every hook.
 
@@ -78,7 +78,7 @@ separate session keeps the failure log.
   non-blank message, and only when the session's incognito mode allows it
   (`IncognitoRecordMode.fires_hooks`). An empty `query` in the response rejects
   with `QUERY_REJECTED`
-  (`chat/process_message.py:_resolve_query_processing_hook_result`).
+  (`chat/process_message.py:_process_query`).
 - Document ingestion runs per document, in order, in
   `indexing/indexing_pipeline.py:_apply_document_ingestion_hook`. An empty
   `sections` drops the document. When the first document returns `HookSkipped`,

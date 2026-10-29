@@ -4,7 +4,7 @@
 > schema on a physical shard, and a context variable that must hold the right
 > tenant in every session, thread and task that a request or job creates.
 
-**Verified against:** `a4e97fcea1` (2026-10-29)
+**Verified against:** `6bac4e012f` (2026-10-29)
 **Edition:** Self-hosted runs one tenant, `POSTGRES_DEFAULT_SCHEMA`, with
 `MULTI_TENANT` off. Schema per tenant, sharding, provisioning, tenant gating
 and impersonation run only on cloud (`MULTI_TENANT=true`, EE).
@@ -148,8 +148,8 @@ migrates only the catalog tables (`PublicBase`) in `public`.
    one tenant can set the variable once
    (`background/periodic_poller.py:_poller_loop`). Copy the context once for
    each thread: one `Context` object cannot be entered by two threads at once.
-   `chat/process_message.py:_run_models` copies it for each model worker and
-   again for the writer thread.
+   `agents/runtime.py:Run._start_execution` passes a fresh copy of the
+   context captured at start each time a run thread starts.
 4. `celery-task-tenant-kwarg` **Every tenant-scoped Celery task needs a
    `tenant_id` kwarg.**
    `background/celery/apps/app_base.py:TenantAwareTask` falls back to `POSTGRES_DEFAULT_SCHEMA` when it is

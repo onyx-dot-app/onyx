@@ -4,7 +4,7 @@
 > `open_url` tools, the admin page that picks the active providers, and the
 > `/web-search` API for callers outside the chat loop.
 
-**Verified against:** `a4e97fcea1` (2026-10-29)
+**Verified against:** `6bac4e012f` (2026-10-29)
 **Edition:** CE
 
 ---
@@ -41,7 +41,9 @@ API and page, and the runtime API.
 
 Its neighbours own:
 - [[tools-framework]]: tool construction, `should_disable_open_url_web_fetch`,
-  call merging and citation ranges.
+  the `ToolContext` and the citation offset rule.
+- [[agent-runtime]]: merging of repeated calls, which each tool turns on with
+  `merge_list_argument`.
 - [[citations]]: the citation number blocks and the document JSON format.
 - [[internal-search]]: `InferenceSection` handling and the search packets that
   both tools reuse.
@@ -52,14 +54,14 @@ Its neighbours own:
 ## Architecture
 
 ```
-web_search(queries)                         WebSearchTool.run
+web_search(queries)                         WebSearchTool._run
   -> one provider call per query, parallel  errors kept per query
   -> drop results with no title or snippet, round-robin merge,
      dedupe by (title, link), cap at DEFAULT_MAX_RESULTS
   -> inference_section_from_internet_search_result
   -> convert_inference_sections_to_llm_string        [[citations]]
 
-open_url(urls)                              OpenURLTool.run
+open_url(urls)                              OpenURLTool._run
   -> resolve URLs to indexed document IDs   _resolve_urls_to_document_ids
   -> in parallel: indexed retrieval (user ACL)  +  crawl via content provider
   -> _fallback_link_lookup for URLs both missed
@@ -109,12 +111,14 @@ coupling.
 crawls. It has no indexed retrieval and no link fallback. If web fetch is also
 disabled, `construct_tools` does not build `OpenURLTool`.
 
-**Snippets and citations.** The chat loop and the research agent pass snippets from earlier results
-(`tools/tool_implementations/web_search/utils.py:extract_url_snippet_map`) to `open_url`, which truncates
-a crawled page around the snippet. `open_url` reuses the number that a URL
-already has in the turn. `tools/tool_runner.py:run_tool_calls` builds that map
-from the turn's citation mapping, which holds every numbered document, not only
-the cited ones.
+**Snippets and citations.** The chat and research agents put snippets from
+earlier results (`tools/tool_implementations/web_search/utils.py:extract_url_snippet_map`)
+in `ToolContext.url_snippet_map`, and `open_url` truncates a crawled page around
+the snippet. `open_url` reuses the number that a URL already has in the turn,
+from `ToolContext.citation_mapping`. `chat/agent.py:ChatAgent._tool_context`
+builds that map from the turn's citation mapping, which holds every numbered
+document, not only the cited ones. Repeated calls merge: `web_search` merges
+its queries, and `open_url` merges its URLs up to `MAX_URLS_PER_CALL`.
 
 **Runtime API.** `server/features/web_search/api.py` builds clients from the
 active rows with the same factories, but it does not use the tool classes.
@@ -170,8 +174,10 @@ change on tool behaviour, such as partial results or the indexed fallback.
    `SearchDocsResponse`.** Web citations need no special case downstream because
    of this. A new shape breaks citations without an error.
 7. `citation-block-per-tool` **A new search-like tool needs its own citation
-   block.** Add a branch in `tools/tool_runner.py:run_tool_calls` that sets
-   `starting_citation_num` and advances it ([[citations]] owns the rule).
+   block.** Start its numbers at `ToolContext.next_citation_num` plus
+   `tools/interface.py:CITATIONS_PER_TOOL_CALL` times `invocation.call_index`,
+   as both tools do ([[tools-framework#parallel-by-default]]; [[citations]]
+   owns the rule).
 8. `query-cleaning-not-security` **Query cleaning is not a security boundary.**
    `tools/tool_implementations/web_search/web_search_tool.py:_sanitize_query`
    strips control characters that models sometimes emit. It does not protect the
@@ -181,8 +187,9 @@ change on tool behaviour, such as partial results or the indexed fallback.
 
 ## Dependencies
 
-- [[tools-framework]]: builds both tools, applies the coupling, merges repeated
-  calls and assigns citation blocks.
+- [[tools-framework]]: builds both tools, applies the coupling, and supplies
+  the `ToolContext` with snippets and citation numbers.
+- [[agent-runtime]]: merges repeated calls.
 - [[citations]]: numbers the sections both tools return.
 - [[internal-search]]: shares the search packets and section conversion.
 - [[access-control]]: ACL for the indexed path of `open_url`.

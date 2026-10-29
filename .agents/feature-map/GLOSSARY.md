@@ -34,10 +34,11 @@ owns the rules.
 - The `Tool` table has one row per configured tool: a built-in, an OpenAPI action
   or an MCP tool. The column that is set tells them apart: `in_code_tool_id`,
   `openapi_schema` or `mcp_server_id`. See [[tools-framework]].
-- A sub-agent loop (the research agent, the coding agent) is an LLM loop that a
-  tool runs inside a turn. Its control functions, such as `think_tool` and
-  `generate_report`, are function schemas, with no `Tool` class and no table row.
-  See [[tools-framework]].
+- `backend/onyx/agents/tools.py:AgentTool` is the tool the shared runtime runs.
+  A chat `Tool` becomes one through `Tool.bind`. The control tools of the
+  research and coding agents, such as `think_tool` and `generate_report`, are
+  `AgentTool` objects only, with no `Tool` class and no table row. See
+  [[tools-framework]].
 
 **"Turn"** means three things.
 - Chat backend: one user message plus everything the assistant does before it
@@ -57,10 +58,9 @@ owns the rules.
 - Chat search: `GET /chat/search` searches the user's own conversation history.
   See [[chat-persistence]].
 
-**"Agent"** means four things: a `Persona`, a sub-agent loop (the deep research
-agent, the coding agent), `agents/runtime.py:Agent` in `backend/onyx/agents/`
-([[agent-runtime]]; its `AgentTool` is not the chat `Tool`), or the AI assistant
-in general.
+**"Agent"** means three things: a `Persona`; an `agents/runtime.py:Agent` of
+the shared runtime, such as `ChatAgent`, the deep research agent, the research
+agent or the coding agent ([[agent-runtime]]); or the AI assistant in general.
 
 **"Flow"** means two things.
 - `LLMModelFlowType` (`backend/onyx/db/enums.py`) and the `LLMModelFlow`
@@ -114,7 +114,7 @@ mobile code checks for it. See [[streaming-protocol]].
 | Document | One item from a source: a page, a ticket, a message thread. |
 | Chunk | A slice of a document, sized for embedding. The unit the index stores. |
 | Section (`InferenceSection`) | Adjacent chunks from one document, joined again. The unit the LLM reads. See [[internal-search]]. |
-| Lane | One parallel retrieval job inside `SearchTool.run`. Lanes fuse with weighted RRF. See [[internal-search]]. |
+| Lane | One parallel retrieval job inside `SearchTool.search`. Lanes fuse with weighted RRF. See [[internal-search]]. |
 | Expansion | Two meanings. **Query expansion** rewrites one query into several. **Section expansion** pulls the chunks around a selected section. |
 | Selection | The LLM stage that picks which retrieved sections to expand. Onyx uses it instead of a reranking model. |
 | Content provider | The web-search backend that fetches page content for `open_url`. It is separate from the search provider that returns result lists. See [[web-search]]. |
@@ -173,21 +173,22 @@ mobile code checks for it. See [[streaming-protocol]].
 
 | Term | Meaning |
 |---|---|
-| Step / cycle | One LLM inference with a given context and tool set. A chat turn has up to `MAX_LLM_CYCLES` of them. |
+| Step / cycle | One model generation and the tool calls it requests. A chat response has up to `MAX_LLM_CYCLES` of them. See [[agent-runtime]]. |
+| Run | One execution of an agent on the shared runtime (`agents/runtime.py:Run`). Its `RunState` records the input, steps, outcome and child runs. A chat response's root run ID is its assistant `ChatMessage` ID. See [[agent-runtime#run-id-is-message-id]]. |
 | Stream ID | The key that the processing fence, the stop fence and the stream buffer share. See [[core-chat-loop]]. |
-| Emitter | The object that deep code uses to push a packet without returning it up the stack. See [[core-chat-loop]]. |
-| State container | The per-model accumulator that streaming code fills and persistence reads at the end of a turn. See [[core-chat-loop]]. |
+| Presenter and renderer | `ResponsePresenter` and `MessageRenderer` turn runtime events into packets. They never drive execution. See [[core-chat-loop#presentation-does-not-drive-execution]]. |
+| Emitter | The object that stamps `model_index` on a packet and hands it to delivery. See [[streaming-protocol#emitter-sets-model-index]]. |
 | Reminder | A trailing message with one or two critical instructions. See [[context-assembly]]. |
 | Custom agent prompt | The agent's instructions, sent as a user message near the newest user message. See [[context-assembly]]. |
-| Fence (chat) | A cache key that acts as a flag: the stop fence means the user pressed stop, and the processing fence marks a session that runs a turn. It is not a lock. See [[core-chat-loop]]. |
-| Stopping tool | A tool after which the next cycle offers no tools, such as `generate_image`. See [[core-chat-loop#stopping-tools]]. |
+| Fence (chat) | A cache key that acts as a flag: the stop fence means the user pressed stop, and the processing fence holds the live stream ID. The admission owner key, not a fence, marks a busy session. See [[core-chat-loop#session-admission]]. |
+| Stopping tool | A tool after which the next step offers no tools, such as `generate_image`. See [[core-chat-loop#stopping-tools]]. |
 | `BASH_TOOL_SENTINEL_ID` | The id that the coding agent gives its in-memory `BashTool`. See [[code-execution#bash-tool-sentinel]]. |
-| Message types | `ChatMessage` (the row), `ChatMessageSimple` (the in-code model) and `ChatCompletionMessage` (the LLM-facing form). See [[core-chat-loop#three-message-types]]. |
+| Message types | `ChatMessage` (the row), `ChatResponseItem` (the saved steps of a response), `llm/models.py:Message` (the conversation type the runtime uses) and `llm/model_request.py:ChatCompletionMessage` (the provider wire form). See [[core-chat-loop#three-message-types]]. |
 | Active branch | The chain of `latest_child_message_id` pointers from a session's root message. See [[chat-persistence]]. |
 | Reserved message | An assistant `ChatMessage` row created with placeholder text before streaming starts. See [[chat-persistence]]. |
 | Incognito and record mode | `IncognitoRecordMode` is fixed on a session and decides what the database keeps. See [[chat-persistence]]. |
-| Child session | A `ChatSession` with `spawned_by_message_id` set. See [[agent-runtime]]. |
-| Not wired | A module that no production code path imports. See [[agent-runtime]]. |
+| Child session | A `ChatSession` with `spawned_by_message_id` set. Research and coding child agents get one in a session that keeps content. See [[chat-persistence]]. |
+| Not wired | A part of the shared runtime that no product path reaches: suspension, input requests, and checkpoint handoff and resume. See [[agent-runtime#wire-module]]. |
 | `use_memories` vs `enable_memory_tool` | `use_memories` controls whether memories reach the prompt. `enable_memory_tool` controls whether the memory tool can write them. See [[chat-preferences]]. |
 | Decision model | A model that answers typed predicate, choice or score questions with probabilities, not through LiteLLM. See [[llm-providers]]. |
 | Passthrough (LLM gateway) | A native OpenAI Responses or Anthropic Messages forward that skips `LitellmLLM`. See [[llm-gateway]]. |

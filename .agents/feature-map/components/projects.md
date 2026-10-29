@@ -2,7 +2,7 @@
 
 > A named set of files and instructions that one user keeps across chat sessions. This component owns the project row, its links to files and sessions, and the per-turn choice between inline files and retrieval.
 
-**Verified against:** `73e0ae3c31` (2026-10-28)
+**Verified against:** `6bac4e012f` (2026-10-29)
 **Edition:** CE
 
 ---
@@ -60,14 +60,16 @@ Neighbours own the rest:
 ## Architecture
 
 ```
-build_chat_turn                          chat/process_message.py
+prepare_chat_turn                        chat/process_message.py
   resolve_context_user_files             project files + custom agent files, deduped by UserFile.id
-  get_custom_agent_prompt                chat/chat_utils.py: project + agent instructions
+  capture_user_file_metadata             db/user_file.py: copies rows before the DB session closes
+  custom prompt                          project + agent instructions, built inline
   calculate_reserved_tokens
-  extract_context_files                  all-or-nothing fit check
+  extract_context_files                  all-or-nothing fit check, after the session closes
      fits    -> file_texts, image_files  -> project message (context-assembly)
      too big -> use_as_search_filter     -> no file text in the prompt
   determine_search_params                project_id_filter, persona_id_filter, search usage
+create_chat_agent                        chat/execution.py: rejects deep research in a project
 ```
 
 **The fit check.** `extract_context_files` sums `token_count` for every file
@@ -83,8 +85,8 @@ overflow. For the default assistant in a project, search is on when files
 overflow, and off when the files fit or the project has no files. A custom
 agent keeps its own search setting. Overflow adds the project and agent
 filters to the agent's own knowledge; it does not add a tool the agent lacks.
-`build_chat_turn` clears a forced search tool when search is off. Inside
-`SearchTool.run`, an inferred source scope gets `USER_FILE` added back when
+`prepare_chat_turn` clears a forced search tool when search is off. Inside
+`SearchTool._run`, an inferred source scope gets `USER_FILE` added back when
 project or agent files need retrieval, unless the user's own source filter
 leaves it out. A project-only search (`project_id_filter` set,
 `persona_id_filter` not set) ignores the user's selected filters
@@ -109,7 +111,7 @@ metadata.
 ## Contracts and traps
 
 1. `one-file-selection` **Choose context files in one place.**
-   `chat/process_message.py:build_chat_turn` calls
+   `chat/process_message.py:prepare_chat_turn` calls
    `chat/files.py:resolve_context_user_files` once, and the result
    feeds prompt loading, the `read_file` id list and the Python tool's file
    staging. A path that collects project or agent files on its own can drop a
@@ -152,12 +154,12 @@ metadata.
 ## Decisions
 
 - **Agent instructions win over project instructions.**
-  `get_custom_agent_prompt` labels both and tells the model to follow the
-  agent on a conflict. When the agent replaces the base system prompt, only
+  `prepare_chat_turn` labels both and tells the model to follow the agent on
+  a conflict. When the agent replaces the base system prompt, only
   the project instructions go in this message, so the agent text is not sent
   twice.
-- **No deep research in projects.** `chat/process_message.py` raises for a
-  project session, and `web/src/views/AppPage.tsx` turns it off when a project
+- **No deep research in projects.** `chat/execution.py:create_chat_agent`
+  raises for a project session, and `web/src/views/AppPage.tsx` turns it off when a project
   is active.
 
 ---

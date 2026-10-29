@@ -45,7 +45,8 @@ that mode a poller in the API server does the small periodic jobs
 - **Redis** is the Celery broker and result backend. It also holds locks,
   fences, tenant-prefixed keys and, by default, login sessions. Code that only
   needs a key-value store uses `cache/factory.py:get_cache_backend`, which can
-  run on Postgres. The chat resume buffer and the stop signal use it. See
+  run on Postgres. The chat resume buffer, the stop signal and the session
+  admission use it. See
   [[background-jobs]] and [[multi-tenancy]].
 - **The file store** (`file_store/file_store.py:get_default_file_store`) is S3
   by default, or GCS, Azure Blob or Postgres large objects. It holds uploads,
@@ -76,7 +77,7 @@ states what they see.
   [[permission-sync]], [[document-index]] and [[access-control]].
 - **A user asks a question in chat.** Tool steps and the answer stream, with
   citations. Leaving the page does not stop the run; Stop keeps the partial
-  answer. A failure before the run shows one error; a usage limit shows the
+  answer. The next message waits until the run and its save end. A failure before the run shows one error; a usage limit shows the
   reset time. Read [[chat-frontend]], [[core-chat-loop]], [[citations]] and
   [[rate-and-usage-limits]]; the trace is Flow 2.
 - **A user asks the bot in a Slack channel.** A public channel post answers
@@ -155,39 +156,50 @@ POST /api/chat/send-chat-message                     server/query_and_chat/chat_
   token budgets, API-call cap (Depends)              [[rate-and-usage-limits]]
 handle_stream_message_objects                        [[core-chat-loop]]
   (or handle_multi_model_stream) -> _stream_chat_turn
+prepare_chat_turn:
   reject document-set filters the user cannot see    [[access-control]]
-build_chat_turn:
-  agent                                              [[agents-personas]]
-  managed-key cost cap, then the LLM                 [[rate-and-usage-limits]], [[llm-providers]]
-  load history                                       [[chat-persistence]]
+  load the session and its agent                     [[agents-personas]]
+  ChatTurnAdmission.claim: one turn per session      [[core-chat-loop]]
+  the LLM, then its managed-key cost cap             [[llm-providers]], [[rate-and-usage-limits]]
+  load the branch and its summary                    [[chat-persistence]]
   Query Processing hook                              [[hooks]]
   save the user message                              [[chat-persistence]]
   reserve one assistant row per model
-_run_models: one worker thread per model, one writer thread
-  construct_tools                                    [[tools-framework]]
-  run_llm_loop, each cycle:
-    construct_message_history                        [[context-assembly]]
-    run_llm_step: stream from the provider           [[llm-providers]]
-    run_tool_calls: search, web, code, MCP ...       [[internal-search]], [[web-search]],
-                                                     [[mcp-and-custom-tools]]
+chat/execution.py:start_chat_turn
+  publish the ID lines, start the chat-control thread, return ChatDelivery.reader
+ChatTurnExecution.run: one chat-response thread per model
+  create_chat_agent -> construct_tools               [[tools-framework]]
+  ChatAgent (or DeepResearchAgent).start, each step: [[agent-runtime]]
+    ChatAgent._prepare_step: prompt and tool set     [[context-assembly]]
+    compaction when history passes the budget        [[context-assembly]]
+    stream from the provider                         [[llm-providers]]
+    ToolBatch: search, web, code, MCP, sub-agents    [[internal-search]], [[web-search]],
+                                                     [[mcp-and-custom-tools]], [[tools-framework]]
+  ResponsePresenter -> MessageRenderer -> packets    [[streaming-protocol]]
     citation processor rewrites [n] markers          [[citations]]
-  Emitter -> writer -> resume buffer + NDJSON        [[streaming-protocol]]
-_persist_model_outcome -> llm_loop_completion_handle
-  -> save_chat_turn                                  [[chat-persistence]]
-  optional history compression                       [[context-assembly]]
+  Emitter -> ChatDelivery -> reader + replay buffer  [[streaming-protocol]]
+run done -> ChatResponsePersistence
+  -> ChatHistoryStore.save_response -> save_chat_turn  [[chat-persistence]]
+ChatDelivery.finished -> ChatTurnAdmission.release   [[core-chat-loop]]
 generation spans -> user_usage                       [[observability]]
 ```
 
-- **The writer thread owns the run.** A browser that disconnects does not stop
-  it. Only the stop fence stops it, and every exit path saves once
-  ([[core-chat-loop]]).
+- **The run outlives its reader.** `start_chat_turn` starts a non-daemon control
+  thread and returns a reader. A browser that disconnects detaches only the
+  reader; the run and its save continue. Only Stop, a lost admission lease or
+  the execution deadline cancels the run, and every response saves once
+  ([[core-chat-loop#disconnect-is-not-stop]]).
+- **One turn per session.** The admission owner key is held from preparation
+  until delivery and cleanup finish. A second send gets a `CONFLICT` error, and
+  clients poll `GET /chat/chat-session/{id}/status` before they send again
+  ([[core-chat-loop#session-admission]]).
 - **Other callers of the same turn.** The Slack bot calls
   `handle_stream_message_objects` in its own process, so it skips the route's
   `Depends` checks. It calls `check_token_rate_limits` itself, but no API-call
   cap applies ([[slack-bot]]). The Discord bot, the widget and API callers
-  use the HTTP route. Deep research and the agent tools reuse the loop pieces
-  ([[core-chat-loop]]). The acting user for each caller is in
-  [CROSS-CUTTING.md](CROSS-CUTTING.md).
+  use the HTTP route. Deep research and the research and coding sub-agents run
+  on the same shared runtime ([[agent-runtime]]). The acting user for each
+  caller is in [CROSS-CUTTING.md](CROSS-CUTTING.md).
 - **Budgets lag.** Usage reaches `user_usage` from tracing spans in batches, so
   a budget check sees usage a few seconds late
   ([[rate-and-usage-limits#budgets-lag-usage]]).
@@ -216,8 +228,8 @@ runner:
 GET /build/sessions/{id}/turns/{turn_id}/events      [[craft-streaming]], [[craft-frontend]]
 ```
 
-- **The opposite split from chat.** In chat, the API server runs the LLM loop
-  and calls each tool. In Craft, the API server sends one prompt and records
+- **The opposite split from chat.** In chat, the API server runs the agent
+  loop and calls each tool. In Craft, the API server sends one prompt and records
   events. Planning, tools and model calls happen in the sandbox
   ([[craft-sessions]]).
 - **Attach never drives the turn.** The runner and each browser attach

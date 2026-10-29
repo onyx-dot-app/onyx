@@ -2,7 +2,7 @@
 
 > Agents (`Persona` in the database and most Python code): the configurable row of instructions, tools, knowledge and model that a user talks to. This component owns the row, who can see and change it, sharing, pins and the default assistant.
 
-**Verified against:** `73e0ae3c31` (2026-10-28)
+**Verified against:** `6bac4e012f` (2026-10-29)
 **Edition:** CE for the row, user shares, pins and the default assistant. EE
 adds group shares, group ownership and per-agent usage stats.
 
@@ -82,10 +82,11 @@ POST/PATCH /persona               server/features/persona/api.py
        -> upsert_persona          attach guards, field writes
        -> update_persona_access   CE or EE (fetch_versioned_implementation)
             -> mark_persona_user_files_for_sync
-chat turn (build_chat_turn)       loads the persona
+chat turn (prepare_chat_turn)     chat/process_message.py: loads the persona
+  -> agent prompt plus project instructions, resolved in prepare_chat_turn
   -> capture_persona_tool_configuration   db/tools.py: detached PersonaSearchInfo
-  -> construct_tools              [[tools-framework]]
-  -> get_custom_agent_prompt      chat/chat_utils.py, with project instructions
+  -> create_chat_agent            chat/execution.py
+       -> construct_tools         [[tools-framework]]
 ```
 
 **Two names.** The database, most Python and the `/persona` routes say

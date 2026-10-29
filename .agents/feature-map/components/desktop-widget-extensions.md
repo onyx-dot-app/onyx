@@ -4,7 +4,7 @@
 > shell, a chat widget that a site embeds, and a Chrome extension. None runs
 > product logic, and only the widget calls the chat endpoints itself.
 
-**Verified against:** `a4e97fcea1` (2026-10-29)
+**Verified against:** `6bac4e012f` (2026-10-29)
 **Edition:** CE. JWT passthrough for the widget works on single-tenant
 deployments only.
 
@@ -35,7 +35,10 @@ deployments only.
 
 On failure: the widget shows the error text in the chat when the send fails,
 for example on a stream line that is not valid JSON, a backend `error` packet,
-or a missing credential. The extension shows its own timeout dialog when the
+or a missing credential. A send that fails before the server accepts it
+removes the message and puts the text back in the input. Send stays disabled
+until the server confirms that the conversation is idle
+([[#widget-send-waits-for-idle]]). The extension shows its own timeout dialog when the
 iframe does not report that it loaded.
 
 ---
@@ -71,10 +74,12 @@ session.
 <onyx-chat-widget backend-url=... api-key=...>      widget/src/widget.ts
   └─ resolveConfig (attributes win over VITE_* build values)  config/config.ts
 send → ApiService                                   services/api-service.ts
+  ├─ waitForSessionIdle  (existing session) → GET /chat/chat-session/{id}/status
   ├─ createChatSession   (first message only)
-  └─ streamMessage → POST /chat/send-chat-message, origin "widget"
-       └─ parseSSEStream (NDJSON lines) → stream-parser.ts:processPacket
-            └─ saveSession to sessionStorage, scoped by credential identity
+  ├─ streamMessage → POST /chat/send-chat-message, origin "widget"
+  │    └─ parseSSEStream (NDJSON lines) → stream-parser.ts:processPacket
+  │         └─ saveSession to sessionStorage, scoped by credential identity
+  └─ finally: waitForSessionIdle again, then enable Send
 ```
 `widget/src/config/config.ts:resolveAuthToken` picks the credential for each
 request: the `tokenProvider` result, else the API key, else it throws. The
@@ -174,7 +179,17 @@ panel picks up the new session when the user returns.
    falls back to `"*"`. The new-tab messages `PREFERENCES_UPDATED` and
    `LOAD_NEW_PAGE` have no sender in the web app, so the origin check is their
    only guard. A failed check must reject the message.
-11. `test-panel-signin-before-narrowing-hosts` **Test sign-in in the side panel
+11. `widget-send-waits-for-idle` **The end of the stream does not enable
+    Send.** `widget/src/widget.ts:OnyxChatWidget.sendMessage` polls
+    `widget/src/services/api-service.ts:ApiService.waitForSessionIdle` before a
+    send to an existing session and after every send, because the server can
+    still save the turn after the stream ends. Failed polls retry and keep
+    Send disabled; there is no overall deadline. A 403 or 404, a 405, or three
+    401s in a row end the wait with an error, and none counts as idle. A
+    backend without the status route answers 404, so a new bundle on an older
+    server shows "no longer available" after the first answer
+    ([[#widget-bundle-outlives-backend]]).
+12. `test-panel-signin-before-narrowing-hosts` **Test sign-in in the side panel
     before you narrow `<all_urls>`.** `extensions/chrome/manifest.json`
     requests `<all_urls>` host access and injects the selection icon on every
     page. The host grant may also be what lets the panel iframe send its
@@ -184,8 +199,8 @@ panel picks up the new session when the user returns.
 
 ## Known issues
 
-- **The widget and the extension have no tests.** The widget has a
-  `type-check` script. The extension has no build, type check or lint.
+- **The extension has no tests, build, type check or lint.** The widget tests
+  cover only session readiness and failed drafts.
 - **`<all_urls>` is broader than the features need.** Only the selection icon
   and tab reading need page access. Open question: the host grant may also be
   what lets the panel iframe send its `SameSite=Lax` auth cookie, because
@@ -242,7 +257,8 @@ panel picks up the new session when the user returns.
 - Desktop: `cd desktop/src-tauri && cargo test && cargo clippy`. Tests sit in
   `#[cfg(test)]` modules next to the code. The clippy config warns on
   `unwrap`, `expect` and `panic`.
-- Widget: `cd widget && bun run type-check`. By hand, send a message, reload,
+- Widget: `cd widget && bun run type-check && bun run test` (tests in
+  `widget/tests/`, also run by `.github/workflows/pr-quality-checks.yml`). By hand, send a message, reload,
   and confirm the transcript returns.
 - Extension: by hand, select text on a page and confirm the panel opens with
   it as the prompt. Try `onyx <query>` in the address bar.

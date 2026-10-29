@@ -4,7 +4,7 @@
 > Braintrust or Langfuse, the per-user usage and cost ledger, the audit log
 > stream, the support log export and query history.
 
-**Verified against:** `a4e97fcea1` (2026-10-29)
+**Verified against:** `6bac4e012f` (2026-10-29)
 **Edition:** CE for metrics, tracing, usage accounting and audit logging. EE
 for the usage report, log export, query history and workspace analytics.
 
@@ -96,13 +96,14 @@ from Braintrust and Langfuse.
 the root. Use `ChatTraceMetadata` when a chat session exists and
 `SearchTraceMetadata` when none does.
 
-**Spans.** Two helpers in `tracing/llm_utils.py` open generation spans.
-`llm_generation_span` is for a call through an `LLM` object.
-`traced_llm_call` is for a direct SDK call or a call to the model server, such
-as image generation, voice, embedding and rerank. Both tag the span with an
-`LLMFlow` (`tracing/flows.py`). `LitellmLLM.invoke` and `stream` open their
-own span. With no flow set, they tag `UNTAGGED_INVOKE` or `UNTAGGED_STREAM`.
-`invoke_raw` and `stream_raw` open no span. A span in
+**Spans.** `LitellmLLM.invoke` and `stream` open their own generation span,
+tagged with the `LLMFlow` (`tracing/flows.py`) in `GenerationContext.flow`.
+With no flow set, they tag `UNTAGGED_INVOKE` or `UNTAGGED_STREAM`.
+`invoke_raw` and `stream_raw` open no span. Two helpers in
+`tracing/llm_utils.py` open a span for other callers.
+`llm_generation_span` is for a raw-layer call through an `LLM` object, such as
+the gateway's. `traced_llm_call` is for a direct SDK call or a call to the
+model server, such as image generation, voice, embedding and rerank. A span in
 `TraceContentMode.METADATA_ONLY` records tokens and model but no prompt or
 response. Indexing work, such as contextual RAG, uses it.
 
@@ -147,9 +148,9 @@ and starts the Kubernetes collection in a thread. Each piece has 90 s.
    must wrap its work in `tracing/framework/create.py:trace` or
    `tracing/framework/create.py:ensure_trace`.
 2. `tag-llm-flow` **Tag each new LLM, embedding, rerank, image or voice call
-   with an `LLMFlow`.** Use `tracing/llm_utils.py:llm_generation_span` or
-   `tracing/llm_utils.py:traced_llm_call`, and add
-   the enum value first. `UNTAGGED_*` in a dashboard means a call site with no
+   with an `LLMFlow`.** Set `GenerationContext.flow` on `invoke` or `stream`,
+   or use `tracing/llm_utils.py:llm_generation_span` or
+   `tracing/llm_utils.py:traced_llm_call`. Add the enum value first. `UNTAGGED_*` in a dashboard means a call site with no
    flow, not a tracing bug. A direct `invoke_raw` or `stream_raw` caller
    opens no span at all and needs one of the helpers.
 3. `external-processor-mask-and-drop-incognito` **Each external trace
@@ -254,10 +255,10 @@ and starts the Kubernetes collection in a thread. Each piece has 90 s.
   family to `documentation/deployment/production/monitoring.mdx`, and a panel
   in `deployment/helm/charts/onyx/dashboards/` if it needs one.
 - `add-llm-call-site` **Add an LLM call site.** Add an `LLMFlow` value. Copy how
-  `secondary_llm_flows/chat_session_naming.py` wraps its call in
-  `llm_generation_span`, or how `image_gen/providers/openai_img_gen.py` uses `traced_llm_call`
+  `secondary_llm_flows/chat_session_naming.py:generate_chat_session_name` sets
+  `GenerationContext.flow` on `llm.invoke`, or how `image_gen/providers/openai_img_gen.py` uses `traced_llm_call`
   for a direct SDK call. List the call sites with
-  `git grep -lE "traced_llm_call|llm_generation_span" backend`. Open the span
+  `git grep -lE "flow=LLMFlow|traced_llm_call|llm_generation_span" backend`. Open the span
   inside a root trace ([[#root-trace-required]], [[#tag-llm-flow]]). If no
   user starts the call, add the flow to `SYSTEM_TEXT_GENERATION_FLOWS`. A raw-layer caller owns its span
   ([[llm-providers#raw-caller-owns-span]]). The gateway rules are

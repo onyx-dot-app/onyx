@@ -5,7 +5,7 @@
 > (start, run, stop, finish), attachments, output cards, the user library and
 > the session's model.
 
-**Verified against:** `a4e97fcea1` (2026-10-29)
+**Verified against:** `6bac4e012f` (2026-10-29)
 **Edition:** CE
 
 ---

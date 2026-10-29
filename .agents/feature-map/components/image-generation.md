@@ -4,7 +4,7 @@
 > admin-chosen provider. It serves the `generate_image` chat tool and a
 > standalone endpoint that the CLI and Craft use.
 
-**Verified against:** `a4e97fcea1` (2026-10-29)
+**Verified against:** `6bac4e012f` (2026-10-29)
 **Edition:** CE. EE tenant provisioning creates a default config from the
 deployment's `OPENAI_DEFAULT_API_KEY` when `AUTO_PROVISION_DEFAULT_LLM_PROVIDERS`
 is on (`ee/onyx/server/tenants/provisioning.py`).
@@ -56,11 +56,12 @@ admin page -> /admin/image-generation/config    creates LLMProvider + ModelConfi
 chat turn
   ImageGenerationTool.is_available               generation.py:is_image_generation_configured
   tool_constructor.py:_get_image_generation_config   default config -> credentials
-  ImageGenerationTool.run
+  ImageGenerationTool._run
     _resolve_reference_image_file_ids            dedupe, cap, reject if unsupported
-    background thread: generate_images_with_provider
-    main thread: ImageGenerationToolHeartbeat every 5 s
-    save_files(base64, chat_session_id)          -> ImageGenerationFinal packet
+    worker thread: generate_images_with_provider tool thread polls for cancellation
+    save_files(base64, chat_session_id)          -> FinalImageGenerationResponse details
+  chat/renderer.py:ToolRenderer                  ImageGenerationToolStart, then
+                                                 ImageGenerationFinal from the details
 standalone
   POST /image-generation/generate                ensure_image_generation_configured (404)
     _GenerationRun in a bounded pool             whitespace keepalives, then one JSON body
@@ -107,10 +108,11 @@ and saves no files. The caller needs `Permission.GENERATE_IMAGE`.
    only that the fields are present. It does not call the provider. A wrong key
    shows the tool and fails at run time.
 3. `image-ends-tool-phase` **Image generation ends the tool phase.**
-   [[core-chat-loop]] owns the stopping-tool rule. The next cycle of
-   `chat/llm_loop.py:run_llm_loop` uses `prompts/chat_prompts.py:IMAGE_GEN_REMINDER`.
-   Any tool added to `tools/built_in_tools.py:STOPPING_TOOLS_NAMES` also gets
-   this image reminder.
+   [[core-chat-loop]] owns the stopping-tool rule. After an image,
+   `chat/agent.py:ChatAgent._prepare_step` offers no tools, and
+   `chat/prompt_utils.py:build_chat_reminder` uses
+   `prompts/chat_prompts.py:IMAGE_GEN_REMINDER`. Any tool added to
+   `tools/built_in_tools.py:STOPPING_TOOLS_NAMES` also gets this image reminder.
 4. `response-format-per-model` **`response_format` depends on the model.**
    `image_gen/generation.py:response_format_for_model` leaves it out for
    `gpt-image-*` models, which reject it, and asks for `b64_json` for the rest.
@@ -142,9 +144,8 @@ and saves no files. The caller needs `Permission.GENERATE_IMAGE`.
 8. `frontend-packet-names` **Frontend packet names do not match the backend
    names.** The web enum calls the finished-image packet
    `IMAGE_GENERATION_TOOL_DELTA`, but its value is `"image_generation_final"`
-   (`web/src/app/app/services/streamingModels.ts`). The frontend has no type for
-   `image_generation_heartbeat`. The renderer treats "start with no end" as
-   running. Match packets by their string value.
+   (`web/src/app/app/services/streamingModels.ts`). The renderer treats "start
+   with no end" as running. Match packets by their string value.
 9. `one-image-per-chat-call` **The chat tool makes one image per call.**
    `ImageGenerationTool._generate_image` passes `n=1`. Only the standalone
    endpoint accepts `n`, up to `server/features/image_generation/api.py:_MAX_IMAGES`.
@@ -178,7 +179,7 @@ and saves no files. The caller needs `Permission.GENERATE_IMAGE`.
 - [[llm-providers]]: `LLMProvider` rows hold the encrypted credentials.
 - [[tools-framework]]: the tool interface, `is_available` and construction.
 - [[file-store-and-user-files]]: `save_files` and `load_chat_file_by_id`.
-- [[streaming-protocol]]: start, heartbeat and final packets.
+- [[streaming-protocol]]: the start and final packets.
 - [[observability]]: `traced_llm_call` around each provider call.
 
 ---
