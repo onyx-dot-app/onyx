@@ -109,6 +109,48 @@ class AppPosition {
     this.go({ location: "new-session" }, options);
   }
 
+  // ## Linking somewhere
+  //
+  // A link to a position: its `href` (so a new tab or a copied link still
+  // works) and a click handler that sends a plain click through `go`, so it
+  // switches at once instead of waiting on a server render. Spread both onto
+  // the link; a caller with its own click handling calls `onClick` first.
+
+  linkToChat(chatSessionId: string): AppLinkProps {
+    return this.linkTo({ location: "chat", id: chatSessionId });
+  }
+
+  linkToAgent(agentId: number): AppLinkProps {
+    return this.linkTo({ location: "agent", id: agentId });
+  }
+
+  linkToProject(projectId: number): AppLinkProps {
+    return this.linkTo({ location: "project", id: projectId });
+  }
+
+  linkToNewSession(): AppLinkProps {
+    return this.linkTo({ location: "new-session" });
+  }
+
+  private linkTo(value: AppPositionType): AppLinkProps {
+    return {
+      href: hrefFor(value),
+      onClick: (event) => {
+        // A modified or middle click keeps the link's own behavior, e.g.
+        // opening a new tab.
+        const plainClick =
+          event.button === 0 &&
+          !event.metaKey &&
+          !event.ctrlKey &&
+          !event.shiftKey &&
+          !event.altKey;
+        if (event.defaultPrevented || !plainClick) return;
+        event.preventDefault();
+        this.go(value);
+      },
+    };
+  }
+
   private go(
     value: AppPositionType,
     { replace = false }: NavigationOptions = {}
@@ -224,6 +266,12 @@ class AppPosition {
       this.isSharedChat()
     );
   }
+}
+
+/** Props for a link to an app position; see `AppPosition.linkToChat`. */
+export interface AppLinkProps {
+  href: Route;
+  onClick: (event: React.MouseEvent<HTMLElement>) => void;
 }
 
 export function useAppPosition(): AppPosition {

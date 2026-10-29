@@ -1043,7 +1043,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                                     : sessionFetchError.detail
                               }
                             />
-                            <Button href="/app" prominence="secondary">
+                            <Button
+                              {...appPosition.linkToNewSession()}
+                              prominence="secondary"
+                            >
                               {t("newChatButton.label")}
                             </Button>
                           </Section>

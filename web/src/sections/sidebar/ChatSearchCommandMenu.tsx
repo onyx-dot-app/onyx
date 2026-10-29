@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useMemo, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import type { Route } from "next";
 import { useAppPosition } from "@/lib/position/hooks";
@@ -78,7 +77,6 @@ export default function ChatSearchCommandMenu({
     string | undefined
   >();
   const appPosition = useAppPosition();
-  const router = useRouter();
 
   // Data hooks
   const { projects } = useProjects();
@@ -157,9 +155,9 @@ export default function ChatSearchCommandMenu({
 
   // Navigation handlers
   const handleNewSession = useCallback(() => {
-    router.push("/app");
+    appPosition.openNewSession();
     setOpen(false);
-  }, [router]);
+  }, [appPosition]);
 
   const handleChatSelect = useCallback(
     (chatId: string) => {
