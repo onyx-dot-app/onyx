@@ -13,7 +13,7 @@ import {
   getLatestMessageChain,
   getMessageByMessageId,
   setMessageAsLatest,
-  upsertMessages,
+  restoreIncognitoMessages,
 } from "@/app/app/services/messageTree";
 import {
   BackendChatSession,
@@ -287,33 +287,11 @@ export default function useChatSessionController({
       let newMessageMap = savedMessages;
       if (recovering && localMessages?.size) {
         if (isIncognito) {
-          // Saved incognito rows omit content; retain local nodes and their UI IDs.
-          const localNodeIds = new Map(
-            Array.from(localMessages.values())
-              .filter((message) => message.messageId !== undefined)
-              .map((message) => [message.messageId, message.nodeId])
+          newMessageMap = restoreIncognitoMessages(
+            savedMessages,
+            localMessages,
+            chatSession.current_stream?.stream_id
           );
-          const missingMessages: Message[] = [];
-          for (const message of savedMessages.values()) {
-            if (localNodeIds.has(message.messageId)) continue;
-            missingMessages.push({
-              ...message,
-              parentNodeId:
-                message.parentNodeId === null
-                  ? null
-                  : (localNodeIds.get(message.parentNodeId) ??
-                    message.parentNodeId),
-              childrenNodeIds: message.childrenNodeIds?.map(
-                (id) => localNodeIds.get(id) ?? id
-              ),
-              latestChildNodeId:
-                message.latestChildNodeId == null
-                  ? message.latestChildNodeId
-                  : (localNodeIds.get(message.latestChildNodeId) ??
-                    message.latestChildNodeId),
-            });
-          }
-          newMessageMap = upsertMessages(localMessages, missingMessages);
         } else {
           newMessageMap = preserveFailedMessages(savedMessages, localMessages);
         }

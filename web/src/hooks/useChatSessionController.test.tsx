@@ -424,40 +424,60 @@ test.each([
   }
 );
 
-test.each([false, true])(
-  "incognito replay reconciles saved IDs with local nodes (retained response: %s)",
-  async (hasLocalResponse) => {
+test.each([
+  { hasLocalResponse: false, knownIds: true },
+  { hasLocalResponse: true, knownIds: true },
+  { hasLocalResponse: false, knownIds: false },
+  { hasLocalResponse: true, knownIds: false },
+])(
+  "incognito replay reconciles saved IDs with local nodes (retained response: $hasLocalResponse, known IDs: $knownIds)",
+  async ({ hasLocalResponse, knownIds }) => {
     const finish = deferred<void>();
     const question: Message = {
       nodeId: -101,
-      messageId: 1,
+      messageId: knownIds ? 1 : undefined,
       type: "user",
       message: "Private question",
       files: [],
       packets: [],
       toolCall: null,
-      parentNodeId: null,
+      parentNodeId: -3,
       childrenNodeIds: hasLocalResponse ? [-142] : [],
       latestChildNodeId: hasLocalResponse ? -142 : null,
     };
     const answer: Message = {
       ...question,
       nodeId: -142,
-      messageId: 42,
+      messageId: knownIds ? 42 : undefined,
       type: "assistant",
       message: "Private partial answer",
       parentNodeId: question.nodeId,
       childrenNodeIds: [],
       latestChildNodeId: null,
-      packets: [
-        {
-          placement: { turn_index: 0, tab_index: 0 },
-          obj: { type: "message_delta", content: "Private partial answer" },
-        },
-      ],
-      replayCursor: 1,
+      packets: knownIds
+        ? [
+            {
+              placement: { turn_index: 0, tab_index: 0 },
+              obj: { type: "message_delta", content: "Private partial answer" },
+            },
+          ]
+        : [],
+      replayCursor: knownIds ? 1 : undefined,
     };
-    const localMessages = new Map([[question.nodeId, question]]);
+    const root: Message = {
+      ...question,
+      nodeId: -3,
+      messageId: -3,
+      type: "system",
+      message: "",
+      parentNodeId: null,
+      childrenNodeIds: [question.nodeId],
+      latestChildNodeId: question.nodeId,
+    };
+    const localMessages = new Map([
+      [root.nodeId, root],
+      [question.nodeId, question],
+    ]);
     if (hasLocalResponse) localMessages.set(answer.nodeId, answer);
     const store = useChatSessionStore.getState();
     store.createSession("session", { incognito: true });
@@ -476,10 +496,22 @@ test.each([false, true])(
     jest.mocked(processRawChatHistory).mockReturnValue(
       new Map([
         [
+          30,
+          {
+            ...root,
+            nodeId: 30,
+            messageId: 30,
+            childrenNodeIds: [1],
+            latestChildNodeId: 1,
+          },
+        ],
+        [
           1,
           {
             ...question,
             nodeId: 1,
+            messageId: 1,
+            parentNodeId: 30,
             message: "",
             childrenNodeIds: [42],
             latestChildNodeId: 42,
@@ -490,6 +522,7 @@ test.each([false, true])(
           {
             ...answer,
             nodeId: 42,
+            messageId: 42,
             parentNodeId: 1,
             message: "",
             packets: [],
@@ -513,14 +546,14 @@ test.each([false, true])(
         expect(resumeStream).toHaveBeenCalledWith(
           "session",
           42,
-          hasLocalResponse ? 1 : 0,
+          hasLocalResponse && knownIds ? 1 : 0,
           expect.any(AbortSignal)
         )
       );
       const messages = useChatSessionStore
         .getState()
         .sessions.get("session")!.messageTree;
-      expect(messages.size).toBe(2);
+      expect(messages.size).toBe(3);
       const chain = getLatestMessageChain(messages);
       expect(chain.map((message) => message.nodeId)).toEqual([
         -101,
@@ -530,14 +563,14 @@ test.each([false, true])(
       expect(chain[1]).toMatchObject({
         messageId: 42,
         replayCursor: 2,
-        packetCount: hasLocalResponse ? 2 : 1,
+        packetCount: hasLocalResponse && knownIds ? 2 : 1,
       });
       expect(chain[1]?.packets.at(-1)?.obj).toEqual({
         type: "message_delta",
         content: " recovered",
       });
-      expect(answer.replayCursor).toBe(1);
-      expect(answer.packets).toHaveLength(1);
+      expect(answer.replayCursor).toBe(knownIds ? 1 : undefined);
+      expect(answer.packets).toHaveLength(knownIds ? 1 : 0);
     } finally {
       await act(async () => finish.resolve());
       mounted.unmount();

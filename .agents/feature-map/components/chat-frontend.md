@@ -606,6 +606,8 @@ contain only usage metadata. This also applies when a streaming reader was abort
 Recovery keeps local content while adding any saved rows needed to replay the accepted stream.
 Recovery matches rows by message ID and preserves local UI node IDs and tree links.
 Replay targets the message ID and writes updates under the matching UI node ID.
+If reservation IDs have not reached the local reader, incognito recovery connects the active saved turn to unidentified local nodes on the same parent branch.
+It also connects the saved system root to the local root, preserving the visible conversation tree.
 Server readiness still gates the next send.
 
 `AgentMessage` reports when its final content has finished rendering. For multi-model turns,
