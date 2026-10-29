@@ -4,6 +4,10 @@ Separate from the api_server because the endpoint is unauthenticated, and
 because the api_server resolves a tenant from a session, a bearer token or
 the OAuth provider — none of which a provider's POST carries.
 
+Single tenant only for now: `webhook_server_main` refuses to start under
+MULTI_TENANT, because nothing here resolves a tenant. Supporting cloud
+means reading it from the payload, where the routing key lives.
+
 It serves no event route yet; a source adds one in a later change.
 """
 
@@ -17,7 +21,6 @@ from onyx.server.metrics.prometheus_setup import (
     expose_prometheus_metrics,
 )
 from onyx.utils.variable_functionality import set_is_ee_if_available
-from onyx.webhook_server.middleware import add_webhook_tenant_middleware
 
 
 def create_webhook_app() -> FastAPI:
@@ -40,8 +43,6 @@ def create_webhook_app() -> FastAPI:
         if request.url.path.rstrip("/") == "/health":
             return JSONResponse({"status": "healthy", "service": "webhook_server"})
         return await call_next(request)
-
-    add_webhook_tenant_middleware(app)
 
     expose_prometheus_metrics(app, create_prometheus_instrumentator())
     return app

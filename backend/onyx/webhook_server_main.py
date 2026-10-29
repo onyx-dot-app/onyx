@@ -14,6 +14,7 @@ from onyx.db.engine.sql_engine import SqlEngine
 from onyx.tracing.setup import setup_tracing
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import set_is_ee_if_available
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -25,6 +26,14 @@ WEBHOOK_SERVER_PORT = 8091
 
 
 def main() -> None:
+    if MULTI_TENANT:
+        raise ValueError(
+            "The webhook server does not support multi-tenant deployments. "
+            "Nothing resolves a tenant for an unauthenticated request, so a "
+            "route would read and write the public schema. Leave "
+            "webhookServer.enabled false, or drop the webhook Compose profile."
+        )
+
     set_is_ee_if_available()
     setup_tracing()
 

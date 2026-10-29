@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from prometheus_client import CollectorRegistry
 from prometheus_fastapi_instrumentator import Instrumentator
 
+from onyx import webhook_server_main
 from onyx.webhook_server.api import create_webhook_app
 
 
@@ -51,3 +52,10 @@ def test_metrics_is_not_open(client: TestClient) -> None:
 def test_serves_no_event_route_yet(client: TestClient) -> None:
     """Guards the slice boundary: receipt routes land in a later change."""
     assert client.post("/connector/events/mock_connector").status_code == 404
+
+
+def test_refuses_to_start_in_multi_tenant() -> None:
+    """Nothing resolves a tenant here, so cloud must not run this process."""
+    with patch("onyx.webhook_server_main.MULTI_TENANT", True):
+        with pytest.raises(ValueError, match="does not support multi-tenant"):
+            webhook_server_main.main()
