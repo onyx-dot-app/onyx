@@ -244,3 +244,7 @@ lifecycle guarantees.
 | `runtime.py` | Agent state, run lifecycle, model steps, and restoration. |
 | `tool_execution.py` | Tool scheduling, pending input, and ordered completion. |
 | `agent_coordination.py` | Child execution, application adapters, and ownership. |
+
+Trailing user messages stay together until an assistant response follows them.
+This protects attachment text, request context, and the question during summarization and fallback truncation.
+If that unread input cannot fit, the run fails with a context-limit error.

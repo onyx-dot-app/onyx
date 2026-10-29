@@ -121,7 +121,7 @@ def checkpoint_boundary(
             boundary = index + 1
             if boundary not in history_boundaries(messages):
                 raise CheckpointMismatchError(
-                    "Compaction cutoff splits a tool call from its result"
+                    "Compaction cutoff splits a tool exchange or covers unanswered input"
                 )
             return boundary
     raise CheckpointMismatchError(
@@ -155,17 +155,25 @@ def working_messages(
 
 
 def history_boundaries(messages: list[Message]) -> list[int]:
+    """Cutoffs that preserve tool exchanges and trailing unanswered input."""
     boundaries: list[int] = []
     pending: set[str] = set()
+    unanswered_input_start: int | None = None
     for index, message in enumerate(messages):
         if isinstance(message, AssistantMessage):
+            unanswered_input_start = None
             pending = {
                 call.id for call in message.tool_calls
             } & completed_tool_call_ids(messages, index)
         elif isinstance(message, ToolResultMessage):
             pending.discard(message.tool_call_id)
+        elif isinstance(message, UserMessage) and unanswered_input_start is None:
+            unanswered_input_start = index
         if not pending:
             boundaries.append(index + 1)
+    # Files and request context can precede the question as separate user messages.
+    if unanswered_input_start is not None:
+        return [end for end in boundaries if end <= unanswered_input_start]
     return boundaries
 
 
