@@ -9,6 +9,7 @@ import requests
 from onyx.configs.app_configs import INDEX_BATCH_SIZE, REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import (
+    ConnectorValidationError,
     CredentialExpiredError,
     InsufficientPermissionsError,
     UnexpectedValidationError,
@@ -137,6 +138,10 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
             raise ConnectorMissingCredentialError(
                 "Jira Service Management base URL (`jsm_base_url` or `jira_base_url`) is required"
             )
+        if not normalized_url.lower().startswith("https://"):
+            raise ConnectorValidationError(
+                "Jira Service Management base URL must use https://"
+            )
         if not bearer_token and not (user_email and api_token):
             raise ConnectorMissingCredentialError(
                 "Jira Service Management requires either (`jsm_user_email` + `jsm_api_token`) or `jsm_bearer_token`"
@@ -172,14 +177,18 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
                 auth=auth,
                 params=params,
                 timeout=REQUEST_TIMEOUT_SECONDS,
+                allow_redirects=False,
             )
             response.raise_for_status()
+            if response.is_redirect:
+                raise UnexpectedValidationError(
+                    "Jira Service Management API responded with a redirect "
+                    f"(status={response.status_code}); refusing to follow it with credentials."
+                )
         except requests.exceptions.HTTPError as e:
-            status = (
-                e.response.status_code
-                if getattr(e, "response", None)  # ods: ignore[getattr]
-                else None
-            )
+            error_response = e.response
+            status = error_response.status_code if error_response is not None else None
+            body = error_response.text[:500] if error_response is not None else ""
             if status == 401:
                 raise CredentialExpiredError(
                     "Invalid or expired Jira Service Management credentials (HTTP 401)."
@@ -189,7 +198,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
                     "Insufficient permissions to access Jira Service Management (HTTP 403)."
                 ) from e
             raise UnexpectedValidationError(
-                f"Unexpected Jira Service Management HTTP error (status={status})."
+                f"Unexpected Jira Service Management HTTP error (status={status}): {body}"
             ) from e
         except requests.exceptions.RequestException as e:
             raise UnexpectedValidationError(
@@ -242,19 +251,21 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
 
     def validate_connector_settings(self) -> None:
         desks = self._list_service_desks()
+        if not desks and (
+            self.service_desk_ids is not None or self.project_key is not None
+        ):
+            raise InsufficientPermissionsError(
+                "Jira Service Management: the configured service desks or project key "
+                "are not visible to this credential."
+            )
         if not desks:
             logger.warning(
                 "Jira Service Management: no matching service desks visible to this credential."
             )
 
     def _fetch_request_comments(self, issue_key: str) -> list[dict[str, Any]]:
-        try:
-            comments = list(self._paginate(f"request/{issue_key}/comment"))
-        except Exception as e:
-            logger.warning(
-                "Failed to fetch comments for JSM request %s: %s", issue_key, e
-            )
-            return []
+        # Let failures propagate so a request is never indexed without its comments.
+        comments = list(self._paginate(f"request/{issue_key}/comment"))
 
         if self.include_internal_comments:
             return comments

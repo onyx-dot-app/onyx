@@ -1,15 +1,13 @@
 import os
 import time
-import pytest
 
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.jira_service_management.connector import (
     JiraServiceManagementConnector,
 )
+from onyx.connectors.models import Document
 
 
-@pytest.mark.xfail(
-    reason="Requires live Jira Service Management credentials in environment"
-)
 def test_jira_service_management_connector_basic() -> None:
     base_url = os.environ["JSM_BASE_URL"]
     user_email = os.environ["JSM_USER_EMAIL"]
@@ -27,4 +25,8 @@ def test_jira_service_management_connector_basic() -> None:
 
     now = time.time()
     batches = list(connector.poll_source(0, now))
-    assert len(batches) >= 0
+    docs = [doc for batch in batches for doc in batch]
+    assert docs, "Expected at least one Jira Service Management document"
+    for doc in docs:
+        assert isinstance(doc, Document)
+        assert doc.source == DocumentSource.JIRA_SERVICE_MANAGEMENT

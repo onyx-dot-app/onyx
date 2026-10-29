@@ -1,10 +1,14 @@
+import json
 import unittest
 from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import requests
+
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import (
+    ConnectorValidationError,
     CredentialExpiredError,
     InsufficientPermissionsError,
 )
@@ -19,18 +23,12 @@ from onyx.connectors.models import ConnectorMissingCredentialError, Document
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 
 
-def _mock_response(status_code: int, json_body: dict[str, Any]) -> MagicMock:
-    resp = MagicMock()
+def _mock_response(status_code: int, json_body: dict[str, Any]) -> requests.Response:
+    resp = requests.Response()
     resp.status_code = status_code
-    resp.json.return_value = json_body
-    if status_code >= 400:
-        import requests
-
-        err = requests.exceptions.HTTPError(f"HTTP {status_code}")
-        err.response = resp
-        resp.raise_for_status.side_effect = err
-    else:
-        resp.raise_for_status = MagicMock()
+    resp._content = json.dumps(json_body).encode("utf-8")
+    resp.headers["Content-Type"] = "application/json"
+    resp.url = "https://acme.atlassian.net/rest/servicedeskapi/test"
     return resp
 
 
@@ -63,7 +61,7 @@ class TestJiraServiceManagementConnector(unittest.TestCase):
 
     @patch("onyx.connectors.jira_service_management.connector.requests.get")
     def test_load_from_state_and_comment_filtering(self, mock_get: MagicMock) -> None:
-        def side_effect(url: str, **kwargs: Any) -> MagicMock:
+        def side_effect(url: str, **kwargs: Any) -> requests.Response:
             if url.endswith("/rest/servicedeskapi/servicedesk"):
                 return _mock_response(
                     200,
@@ -216,6 +214,31 @@ class TestJiraServiceManagementConnector(unittest.TestCase):
             connector.validate_connector_settings()
 
         mock_get.return_value = _mock_response(403, {"message": "Forbidden"})
+        with self.assertRaises(InsufficientPermissionsError):
+            connector.validate_connector_settings()
+
+    def test_non_https_base_url_rejected(self) -> None:
+        connector = JiraServiceManagementConnector()
+        with self.assertRaises(ConnectorValidationError):
+            connector.load_credentials(
+                {
+                    "jsm_base_url": "http://acme.atlassian.net",
+                    "jsm_bearer_token": "pat-token",
+                }
+            )
+
+    @patch("onyx.connectors.jira_service_management.connector.requests.get")
+    def test_configured_desk_not_visible_raises(self, mock_get: MagicMock) -> None:
+        connector = JiraServiceManagementConnector(project_key="MISSING")
+        connector.load_credentials(
+            {
+                "jsm_base_url": "https://acme.atlassian.net",
+                "jsm_bearer_token": "pat-token",
+            }
+        )
+        mock_get.return_value = _mock_response(
+            200, {"values": [{"id": "10", "projectKey": "ITSM"}], "isLastPage": True}
+        )
         with self.assertRaises(InsufficientPermissionsError):
             connector.validate_connector_settings()
 
