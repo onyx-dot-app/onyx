@@ -260,6 +260,12 @@ from **Admin Panel > Export Logs**.
 Click **Export Logs** to collect logs from the API server and background workers into one ZIP file.
 Attach the file to an Onyx support thread.
 
+The page shows one status line for each source of logs.
+A line that starts with the uploaded file count and then says **incomplete** means that Onyx collected only part of the
+logs from that source. The line gives the reason and the fix. For example,
+on Kubernetes the API server can need permission to read pod logs and events. With the Helm chart,
+set `logExport.kubernetes.enabled=true` to give the API server this permission.
+
 ## Notes
 
 - **Secrets are never logged.** Actor objects and `extra` context are scrubbed
