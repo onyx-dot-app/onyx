@@ -35,6 +35,7 @@ from onyx.llm.models import (
     ToolResultMessage,
 )
 from onyx.server.query_and_chat.session_loading import (
+    load_session_tools,
     translate_assistant_message_to_packets,
 )
 from onyx.server.query_and_chat.streaming_models import (
@@ -161,7 +162,9 @@ def test_slack_copy_preserves_sdk_and_legacy_display_content(
         history = capture_chat_history([copied], {}, len)
         assert len(history[0].response_messages) == 1
         assert history[0].response_messages[0].text == display_answer
-        packets = translate_assistant_message_to_packets(copied, db_session)
+        packets = translate_assistant_message_to_packets(
+            copied, load_session_tools([copied], db_session), db_session
+        )
         assert (
             "".join(
                 packet.obj.content
