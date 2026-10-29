@@ -1153,6 +1153,29 @@ def create_index_attempt_error(
     return new_error.id
 
 
+def resolve_index_attempt_errors_for_documents(
+    db_session: Session,
+    cc_pair_id: int,
+    document_ids: Collection[str],
+) -> None:
+    """Mark the pair's open errors for ``document_ids`` resolved in one UPDATE,
+    without loading the pair's open errors into Python. Commits."""
+    if not document_ids:
+        return
+
+    db_session.execute(
+        update(IndexAttemptError)
+        .where(
+            IndexAttemptError.connector_credential_pair_id == cc_pair_id,
+            IndexAttemptError.document_id.in_(document_ids),
+            ~IndexAttemptError.is_resolved,
+        )
+        .values(is_resolved=True)
+        .execution_options(synchronize_session=False)
+    )
+    db_session.commit()
+
+
 def get_index_attempt_errors(
     index_attempt_id: int,
     db_session: Session,
