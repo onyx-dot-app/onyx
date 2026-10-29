@@ -362,16 +362,17 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
   and wake the waiter ([[#approval-single-writer]]).
 - `approval-point` **A new approval point.** Map its target to a `GatedApp`, so the session
   grant in `submit_decision` can cover it.
-- `investigate-app-call-failed` **Investigate "the agent's call to an app failed".** Find the request in the
-  `sandbox-proxy` log. An `egress_block` line carries the `reason`
-  (`policy_denied`, `no_active_session`, `body_too_large` and others;
-  `backend/onyx/sandbox_proxy/errors.py` lists them). An `egress_allow` line carries the credential outcome. No line
-  at all for a host means the request did not reach the proxy; check the
-  lockdown in [[craft-sandboxes]].
+- `investigate-app-call-failed` **Investigate "the agent's call to an app failed".** Read the
+  response the agent got first: a proxy 403 carries the error code from
+  `backend/onyx/sandbox_proxy/errors.py`. A Disabled action returns
+  `policy_denied` and writes no log line (`sandbox_proxy/addons/gate.py:GateAddon._resolve_and_match`).
+  Then find the request in the `sandbox-proxy` log. An `egress_block` line
+  carries the `reason`, and an `egress_allow` line carries the credential
+  outcome. No response from the proxy and no log line means the request did not
+  reach the proxy; check the lockdown in [[craft-sandboxes]].
 - `setup-policy-test` **Set up a policy test.** Set one action to Disabled and one to Ask. The
-  first gives `egress_block ... reason=policy_denied` and no `egress_allow`.
-  The second shows an approval card, and after approval the proxy logs the
-  decision as `APPROVED`.
+  first returns 403 `policy_denied` with no proxy log line. The second shows an
+  approval card, and after approval the proxy logs the decision as `APPROVED`.
 
 ---
 
