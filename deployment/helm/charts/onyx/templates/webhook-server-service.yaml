@@ -1,4 +1,6 @@
-{{- if .Values.webhookServer.enabled }}
+# Always rendered. The nginx ConfigMap names this service, so it must
+# resolve even when no webhook server runs; with no deployment behind it,
+# /webhook returns 502.
 apiVersion: v1
 kind: Service
 metadata:
@@ -20,4 +22,3 @@ spec:
     {{- if .Values.webhookServer.deploymentLabels }}
     {{- toYaml .Values.webhookServer.deploymentLabels | nindent 4 }}
     {{- end }}
-{{- end }}

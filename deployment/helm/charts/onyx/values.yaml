@@ -1249,11 +1249,11 @@ mcpServer:
 
 webhookServer:
   extraEnv: []
-  # Runs the webhook server, which receives connector events from sources that
-  # push them. Creates the deployment and service; the ingress and
-  # servicemonitor also need `ingress.enabled` and
-  # `monitoring.serviceMonitors.enabled`. With ingress.enabled=false the
-  # bundled nginx routes /webhook instead.
+  # Runs the webhook server. It serves health and metrics only; the route that
+  # receives connector events comes later. Creates the deployment; the service
+  # always exists so nginx can name it. The ingress and servicemonitor also
+  # need `ingress.enabled` and `monitoring.serviceMonitors.enabled`. With
+  # ingress.enabled=false the bundled nginx routes /webhook instead.
   enabled: false
   replicaCount: 1
   image:

@@ -27,12 +27,13 @@ data:
         server {{ include "onyx.resourceName" (list . "mcp-server-service") }}:{{ .Values.mcpServer.service.servicePort }} fail_timeout=0;
     }
     {{- end }}
-    {{- if .Values.webhookServer.enabled }}
 
+    # Rendered whether or not the server runs, so toggling
+    # webhookServer.enabled leaves this ConfigMap unchanged and needs no nginx
+    # reload. The service always exists, so the name always resolves.
     upstream webhook_server {
         server {{ include "onyx.resourceName" (list . "webhook-server-service") }}:{{ .Values.webhookServer.service.servicePort }} fail_timeout=0;
     }
-    {{- end }}
 
     # WebSocket support: only set Connection "upgrade" for actual upgrade requests
     map $http_upgrade $connection_upgrade {
@@ -122,7 +123,6 @@ data:
             proxy_pass http://mcp_server;
         }
         {{- end }}
-        {{- if .Values.webhookServer.enabled }}
 
         # Match /webhook, /webhook/ or /webhook/*, but not /webhooks.
         location ~ ^/webhook(/.*)?$ {
@@ -140,7 +140,6 @@ data:
             proxy_read_timeout 60s;
             proxy_pass http://webhook_server;
         }
-        {{- end }}
 
         # SAML lives at the root path (no /api prefix), so proxy it straight
         # through to the API. Without this, /auth/saml/* falls through to the

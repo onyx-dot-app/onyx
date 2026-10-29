@@ -336,7 +336,8 @@ services:
     volumes:
       - mcp_server_logs:/var/log/onyx
 
-  # Receives connector events from sources that push them. Add `webhook` to
+  # Will receive connector events from sources that push them. It serves
+  # health and metrics only; the event route comes later. Add `webhook` to
   # COMPOSE_PROFILES in .env to run it; nginx starts either way.
   webhook_server:
     profiles: ["webhook"]
