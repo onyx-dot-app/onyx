@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import errno
 import socket
 from collections.abc import Callable
 from typing import TYPE_CHECKING
@@ -153,14 +154,25 @@ def test_connection_falls_back_without_resolving_hostname_again(
         await writer.wait_closed()
 
     async def exercise() -> None:
-        upstream: asyncio.Server = await asyncio.start_server(serve, live_host, 0)
-        port: int = upstream.sockets[0].getsockname()[1]
-        # Check the other family's port is free, then close it to get refusal.
-        with socket.socket(
-            socket.AF_INET6 if ":" in refused_host else socket.AF_INET
-        ) as refused:
-            refused.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            refused.bind((refused_host, port))
+        for _ in range(10):
+            upstream: asyncio.Server = await asyncio.start_server(serve, live_host, 0)
+            port: int = upstream.sockets[0].getsockname()[1]
+            try:
+                # Check the other family's port is free, then close it to get refusal.
+                with socket.socket(
+                    socket.AF_INET6 if ":" in refused_host else socket.AF_INET
+                ) as refused:
+                    refused.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                    refused.bind((refused_host, port))
+            except OSError as exc:
+                upstream.close()
+                await upstream.wait_closed()
+                if exc.errno != errno.EADDRINUSE:
+                    raise
+            else:
+                break
+        else:
+            pytest.fail("Could not find a free port on both loopback families")
         try:
             addresses = resolve_destination(
                 parse_destination_policy(f"http://origin.example:{port}"),
