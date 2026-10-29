@@ -776,6 +776,9 @@ class SharepointConnector(
         self.sites = list(sites)
         self.excluded_sites = [s for p in excluded_sites if (s := p.strip())]
         self.excluded_paths = [s for p in excluded_paths if (s := p.strip())]
+        # Delta pages omit parentReference.path, so folder paths are resolved
+        # per parent folder id and cached for the connector's lifetime.
+        self._folder_path_cache: dict[tuple[str, str], str | None] = {}
         self.treat_sharing_link_as_public = treat_sharing_link_as_public
         # Read by EE group sync: also enumerate every Entra group in the tenant.
         self.exhaustive_ad_enumeration = exhaustive_ad_enumeration
@@ -872,8 +875,11 @@ class SharepointConnector(
                     end=end,
                 )
             else:
-                item_iter = self.ops.iter_delta_items(
-                    drive_id=drive.drive_id, start=start, end=end
+                item_iter = self._resolve_delta_item_paths(
+                    drive.drive_id,
+                    self.ops.iter_delta_items(
+                        drive_id=drive.drive_id, start=start, end=end
+                    ),
                 )
 
             for item in item_iter:
@@ -882,6 +888,42 @@ class SharepointConnector(
                     drive=drive,
                     configured_folder=configured_folder,
                 )
+
+    def _resolve_delta_item_paths(
+        self, drive_id: str, items: Iterable[DriveItemData]
+    ) -> Generator[DriveItemData, None, None]:
+        """Fill in parent_reference_path for delta items, which Graph omits."""
+        for item in items:
+            if item.parent_reference_path or not item.parent_id:
+                yield item
+                continue
+            cache_key = (drive_id, item.parent_id)
+            if cache_key not in self._folder_path_cache:
+                parent = self.ops.get_drive_item(
+                    drive_id=drive_id, item_id=item.parent_id
+                )
+                self._folder_path_cache[cache_key] = (
+                    self._folder_path_of(parent) if parent else None
+                )
+            folder_path = self._folder_path_cache[cache_key]
+            if folder_path:
+                item = item.model_copy(
+                    update={
+                        "parent_reference_path": f"/drives/{drive_id}/root:/{folder_path}"
+                    }
+                )
+            yield item
+
+    @staticmethod
+    def _folder_path_of(folder: DriveItemData) -> str | None:
+        """Percent-encoded path of a folder, None for the drive root."""
+        if not folder.parent_reference_path:
+            return None
+        parent_folder = extract_folder_path_from_parent_reference(
+            folder.parent_reference_path
+        )
+        name = quote(folder.name, safe="")
+        return f"{parent_folder}/{name}" if parent_folder else name
 
     def _is_driveitem_excluded(self, driveitem: DriveItemData) -> bool:
         """Check if a drive item should be excluded based on excluded_paths patterns."""
@@ -1876,7 +1918,10 @@ class SharepointConnector(
 
                 if result.resync_after_410:
                     checkpoint.current_drive_delta_resync_attempted = True
-                driveitems = iter_delta_page_files(result.page, start_dt, end_dt)
+                driveitems = self._resolve_delta_item_paths(
+                    current_drive.drive_id,
+                    iter_delta_page_files(result.page, start_dt, end_dt),
+                )
                 has_more_delta_pages = result.next_checkpoint_url is not None
                 checkpoint.current_drive_delta_next_link = result.next_checkpoint_url
             else:
