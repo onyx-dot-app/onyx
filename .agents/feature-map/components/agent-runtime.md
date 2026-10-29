@@ -119,6 +119,8 @@ Production chat does not call this module yet.
 - Feature state is stored as JSON; restoration validates it into a feature model.
 - Tool-facing child waits observe saved completion; parent records are detached.
 - Restored parents can wait for authorized remote children without treating them as completed.
+- A retried remote-completion observation gets a new wake-up subscription; subscriptions follow futures, not only run IDs.
+  Healthy subscriptions are reused without loading saved run content again.
 - Completing an older remote run does not replace a newer latest run for that agent.
 - Handoff requires suspended, idle execution and terminal foreground children.
 - A failed handoff save leaves the existing local owner intact.

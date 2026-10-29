@@ -3385,9 +3385,21 @@ def test_remote_dependency_recovers_after_observation_timeout(
     view = owner.view()
     monkeypatch.setattr("onyx.agents.agent_coordination.OPERATION_TIMEOUT_SECONDS", 0)
     try:
+        parent = suspended_agent(agent_id="root").start(
+            max_steps=2,
+            background=False,
+            messages=[UserMessage(content="Wait")],
+            coordinator=owner,
+        )
         expired = owner.child_completion(terminal.run_id, "root")
         with pytest.raises(TimeoutError, match="Remote run did not complete"):
             expired.result(timeout=3)
+        with (
+            patch.object(owner, "child_completion", return_value=expired),
+            patch.object(parent, "_wake_execution") as wake,
+        ):
+            parent.watch_children([terminal.run_id])
+            wake.assert_called_once()
         monkeypatch.undo()
         if next_state == "closed":
             assert owner.close(3)
@@ -3409,11 +3421,19 @@ def test_remote_dependency_recovers_after_observation_timeout(
         recovered = first.result(timeout=3)
         assert second.result(timeout=3) is recovered
         assert recovered is not expired
-        if next_state == "active":
-            assert observing.wait(3)
-            assert not recovered.done()
-            complete.set()
-        assert recovered.result(timeout=3) == terminal
+        woke = threading.Event()
+        with patch.object(parent, "_wake_execution", side_effect=woke.set) as wake:
+            parent.watch_children([terminal.run_id])
+            with patch.object(directory, "read_run", wraps=directory.read_run) as read:
+                parent.watch_children([terminal.run_id])
+                read.assert_not_called()
+            if next_state == "active":
+                assert observing.wait(3)
+                assert not recovered.done()
+                complete.set()
+            assert recovered.result(timeout=3) == terminal
+            assert woke.wait(3)
+            wake.assert_called_once()
         assert owner.child_completion(terminal.run_id, "root") is recovered
         assert expired.exception(timeout=0) is not None
     finally:
