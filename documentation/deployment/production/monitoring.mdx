@@ -38,7 +38,9 @@ Each background worker serves its metrics on its own port:
   <Tab title="Kubernetes (Helm)">
     <Steps>
       <Step title="Set the metrics token">
-        Enable `auth.metricsAuth` and set `metrics_auth_token`. Generate a value with `openssl rand -hex 32`.
+        Set `auth.metricsAuth.enabled: true` and set `auth.metricsAuth.values.metrics_auth_token`.
+        Generate a value with `openssl rand -hex 32`. Helm install and upgrade fail if the token is empty.
+        To use a secret that you manage, set `auth.metricsAuth.existingSecret` instead.
         See [Security Hardening](/deployment/production/security#credentials).
       </Step>
 
@@ -119,11 +121,17 @@ sum by (engine) (rate(onyx_db_pool_checkout_timeout_total[5m])) > 0
 sum by (task_name) (rate(onyx_celery_task_completed_total{outcome="failure"}[5m]))
   / sum by (task_name) (rate(onyx_celery_task_completed_total[5m]))
 
+# A task failed for the first time since the worker started.
+# The failure series starts at the first failure, so the rate above does not show that failure.
+onyx_celery_task_completed_total{outcome="failure"}
+  unless onyx_celery_task_completed_total{outcome="failure"} offset 5m
+
 # Tasks wait in a queue
 onyx_queue_depth > 100
 
-# A worker stopped sending heartbeats
-onyx_celery_worker_up == 0
+# Fewer workers send heartbeats than you run.
+# Replace 8 with your worker count. A worker that stops is removed from onyx_celery_worker_up.
+max(onyx_celery_active_worker_count) < 8
 
 # The connector state read failed or timed out
 onyx_connector_state_collection_success == 0

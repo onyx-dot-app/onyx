@@ -643,9 +643,11 @@ is marked as such.
    removed owner) and on every token use.
 12. **The UI capability projection equals write-side enforcement.**
    `auth/permission_projection.py` stamps a per-resource `permissions` map
-   (`edit`, `delete`, `share`, and so on) on resource DTOs. Each key comes from
-   the same `can_*` predicate the write guard calls (for example
-   `db/persona.py:can_delete_persona`, `db/tools.py:can_manage_own_tool`), so the
+   (`edit`, `delete`, `share`, and so on) on resource DTOs. Each key mirrors the
+   full write-side decision: the resource predicate the guard calls plus any
+   route-level gate. For example, persona `delete` is
+   `db/persona.py:can_delete_persona` and `ADD_AGENTS`, and document-set `delete`
+   is global `MANAGE_DOCUMENT_SETS` or the creator of a groupless set. So the
    client does not derive policy itself. `/me` returns `admin_capabilities`
    (effective permissions plus the scoped manager bundle) for admin navigation,
    and `effective_permissions` stays global-only. Both are hints to show or

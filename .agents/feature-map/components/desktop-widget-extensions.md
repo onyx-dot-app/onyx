@@ -40,7 +40,7 @@ passthrough mode, the host page assigns a `tokenProvider` function that returns
 the visitor's own identity-provider token, so each visitor acts as their own
 Onyx user. Passthrough works on single-tenant deployments only: a multi-tenant
 deployment reads the tenant from the credential
-(`ee/onyx/server/middleware/tenant_tracking.py:_get_tenant_id_from_request`), and
+(`backend/ee/onyx/server/middleware/tenant_tracking.py:_get_tenant_id_from_request`), and
 an external IdP token carries none. The admin setup is in
 `documentation/deployment/configuration/website_widget.mdx` and
 `documentation/deployment/authentication/jwt.mdx`.

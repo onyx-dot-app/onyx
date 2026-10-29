@@ -48,10 +48,15 @@ The report is a ZIP file with these files:
 | File                  | Contents                                                                                     |
 | --------------------- | -------------------------------------------------------------------------------------------- |
 | `usage_report.pdf`    | A summary to share: active people, spend over time, top models and users, and unused seats.  |
-| `chat_messages.csv`   | One row per message: session, user, time, Agent, tokens, and model.                         |
+| `chat_messages.csv`   | One row per user message and model reply: session, user, time, Agent, tokens, and model.     |
 | `users.csv`           | Each user ID and whether the user is active.                                                 |
 | `usage_by_user.csv`   | Tokens and cost for each user, day, model, and feature.                                      |
 | `usage_by_system.csv` | Tokens and cost for background features that are not tied to one user, by day and model.     |
+
+`chat_messages.csv` has rows for user messages only.
+A message with replies from more than one model has one row for each model.
+It includes all messages from chat sessions that started in the period,
+so the row count is not the number of messages sent in the period.
 
 Days in the report are in UTC. If the PDF cannot be built, the ZIP still contains the CSV files.
 

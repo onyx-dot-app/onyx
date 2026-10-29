@@ -106,6 +106,6 @@ Observability and metrics collections:
 
 ## Prometheus Metrics
 
-Each worker exposes Prometheus metrics on its own standalone HTTP server. The docfetching, docprocessing, heavy, light, primary, and scheduled_tasks workers emit push-based task lifecycle metrics; docfetching and docprocessing also emit per-connector indexing metrics. The monitoring worker runs pull-based collectors for queue depth, worker heartbeats, and Redis health.
+The docfetching, docprocessing, heavy, light, monitoring, primary, and scheduled_tasks workers each expose Prometheus metrics on a standalone HTTP server. The user_file_processing worker and beat do not. The docfetching, docprocessing, heavy, light, primary, and scheduled_tasks workers emit push-based task lifecycle metrics; docfetching and docprocessing also emit per-connector indexing metrics. The monitoring worker runs pull-based collectors for queue depth, worker heartbeats, and Redis health.
 
 To add a metric or wire a new worker, see [`onyx/server/metrics/README.md`](../server/metrics/README.md). For ports, settings, and example alerts, see the [Monitoring docs](https://docs.onyx.app/deployment/production/monitoring).

@@ -231,8 +231,12 @@ The widget calls `tokenProvider` again for each retry, so a token that expires d
 The widget does not retry a `401` response.
 
 The widget stores the conversation in the browser tab and links it to the token subject (the `sub` claim).
-If a different person signs in on the same tab, the widget starts a new conversation.
-To clear the conversation on demand, for example on sign-out, call `widget.resetConversation()`.
+If the token has no `sub` claim, the widget uses the `email` claim. Put a unique `sub` in each token.
+If a token has neither claim, all users of that tab share one stored conversation.
+
+The widget checks the user only when it loads a stored conversation, for example after a page reload.
+If a different person signs in without a page reload, the previous conversation stays visible.
+Call `widget.resetConversation()` when a user signs out or changes accounts.
 
 <Warning>
   Each visitor who opens the widget becomes an Onyx user and can use a seat.
@@ -245,8 +249,9 @@ For the full list of token checks and server log messages, see [JWT Header Auth]
 
 <Steps>
   <Step title="Send a message as a signed-in visitor">
-    Open the host page as a signed-in user and send a message in the widget.
-    The answer cites only documents that this user can read.
+    Add the `include-citations` attribute to the widget. Without it, the widget shows no citations.
+    Open the host page as a signed-in user. Ask about a document that this user can read,
+    and about one that this user cannot read. The answers cite only documents that this user can read.
   </Step>
 
   <Step title="Check the user list">

@@ -28,10 +28,11 @@ docker volume create sandbox_proxy_ca
 ## Full stack in Compose
 
 This is closest to a self-hosted Craft install. Use it for end-to-end smoke tests.
+Craft requires a Business or Enterprise license.
 
 ```bash
 cd deployment/docker_compose
-SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:dev \
+ENABLE_CRAFT=true SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:dev \
 docker compose -f docker-compose.yml -f docker-compose.craft.yml --env-file env.template up -d --wait
 docker compose -f docker-compose.yml -f docker-compose.craft.yml logs -f sandbox-proxy
 ```
@@ -59,20 +60,33 @@ Otherwise Compose can try to build from a context path that does not resolve.
 2. Run the proxy on port 8888, because the local API server uses 8080.
    Its health port stays 8081. The CA store path `/var/lib/sandbox-proxy/ca` is
    fixed (`SANDBOX_PROXY_CA_VOLUME_PATH`), so create it and make it writable first.
+   The default mitmproxy directory is under `/var/run`, so set a writable one.
 
    ```bash
    sudo mkdir -p /var/lib/sandbox-proxy/ca && sudo chown "$USER" /var/lib/sandbox-proxy/ca
    PYTHONPATH=./backend SANDBOX_BACKEND=docker SANDBOX_PROXY_LISTEN_PORT=8888 \
-     .venv/bin/python -m onyx.sandbox_proxy.server
+   SANDBOX_PROXY_MITM_CONFDIR=/tmp/sandbox-proxy-mitm \
+     uv run --env-file .vscode/.env python -m onyx.sandbox_proxy.server
+   ```
+
+   Sandboxes read the CA from the `sandbox_proxy_ca` volume, not from the host
+   directory. After the proxy logs `Persisted proxy CA`, copy only the certificate
+   into the volume. This replaces the CA of the Compose stack, so remove the volume
+   before you use the Compose stack again.
+
+   ```bash
+   docker run --rm -i -v sandbox_proxy_ca:/sandbox-ca alpine \
+     sh -c 'rm -f /sandbox-ca/ca.key && cat > /sandbox-ca/ca.crt && chmod 644 /sandbox-ca/ca.crt' \
+     < /var/lib/sandbox-proxy/ca/ca.crt
    ```
 
 3. Run the API server against that proxy:
 
    ```bash
-   PYTHONPATH=./backend SANDBOX_BACKEND=docker \
+   PYTHONPATH=./backend ENABLE_CRAFT=true SANDBOX_BACKEND=docker \
    SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:dev \
    SANDBOX_PROXY_HOST=host.docker.internal SANDBOX_PROXY_PORT=8888 \
-     .venv/bin/uvicorn onyx.main:app --host 0.0.0.0 --port 8080
+     uv run --env-file .vscode/.env uvicorn onyx.main:app --host 0.0.0.0 --port 8080
    ```
 
    `host.docker.internal` works on Docker Desktop. Linux sandboxes do not get a

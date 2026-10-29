@@ -299,10 +299,12 @@ Persistence matches web:
 
 - `disabled_tool_ids` is saved on the server per agent (`hooks/useAgentPreferences.ts`,
   `api/chat/agentPreferences.ts`), so a tool disabled on mobile is also disabled on web.
-- The forced tool, the source selection, and the deep-research flag are local. They reset
-  on a change of agent or conversation (`useForcedTools`, `useDeepResearchToggle`,
-  `useSourceSelection`). They do not reset on the `null` → new-session change, because
-  that change is the send itself.
+- The forced tool and the deep-research flag are local. They reset on a change of agent
+  or conversation (`useForcedTools`, `useDeepResearchToggle`). They do not reset on the
+  `null` → new-session change, because that change is the send itself.
+- The source selection is a local preference saved per server URL (`useSourceSelection`).
+  It does not reset on a change of conversation. When the agent's source list changes, the
+  hook restores the saved preference for only the sources that agent can reach.
 - Sources are coupled to the search tool (`toggleSource`, `toggleToolEnabled`): turning a
   source on forces search; turning the last one off releases it; disabling search clears
   the sources and re-enabling it restores the previous selection.

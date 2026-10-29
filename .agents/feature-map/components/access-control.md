@@ -131,10 +131,16 @@ which stays global-only. The rules, as the code enforces them:
 - **Only a global `MANAGE_USER_GROUPS` holder creates or deletes a group.** Those
   routes omit `allow_scope`. A manager may assign or remove managers only in a
   group they manage (`set_group_manager` → `assert_manages_group`).
-- **Managers do not delete resources that only sit in a managed group.** They
-  edit, share, and attach, but delete and publish follow ownership: owner or
-  global admin (`can_delete_persona`). Being a manager never removes a right
-  the user holds as an owner, so a manager may delete what they created.
+- **Delete and publish rights differ by resource type.** Managers edit, share,
+  and attach in their groups. Delete and publish follow these rules (`auth/permission_projection.py`):
+  - Agents: owner or global admin (`can_delete_persona`). Being a manager never
+    removes a right the user holds as an owner, so a manager may delete what
+    they created.
+  - Connectors: a manager whose group has `ConnectorManageRole.EDITOR` may
+    delete the connector (`/admin/deletion-attempt` needs
+    `CCPairAccessLevel.EDIT`). Publish is global `MANAGE_CONNECTORS` only.
+  - Document sets: delete is global `MANAGE_DOCUMENT_SETS`, or the creator of a
+    private set with no groups (`delete_document_set`). Publish is global only.
 - **Custom actions and MCP servers are owner-or-admin, not agent-scoped.**
   A scoped `MANAGE_ACTIONS` holder may create actions and manage the ones they
   created (`db/tools.py:can_manage_own_tool`,

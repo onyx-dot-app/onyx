@@ -260,8 +260,10 @@ cluster. Connector-state metrics take a different approach for the same
 reason: `connector_state_metrics.py` skips collection entirely under
 `MULTI_TENANT`, to avoid a cross-tenant snapshot read. On a timeout or error it
 returns no connector samples (not stale ones) and sets
-`onyx_connector_state_collection_success` to 0. Connector display names appear
-only on the `onyx_connector_info` series, so a rename churns one series.
+`onyx_connector_state_collection_success` to 0. In this collector, connector
+display names appear only on the `onyx_connector_info` series. Other connector
+metrics also carry `connector_name` (`connector_health_metrics.py`), so a
+rename can change more than one series.
 
 ### 4.3 Tracing framework
 

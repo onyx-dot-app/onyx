@@ -382,8 +382,8 @@ Notes:
 
 ### Onyx Craft on EKS
 
-Terraform creates only AWS resources. Helm creates all Kubernetes objects. With
-`ENABLE_CRAFT=true`, the chart creates the `onyx-sandboxes` namespace, the `sandbox`
+Terraform creates the AWS resources for Craft. Helm creates the Craft Kubernetes
+objects. With `ENABLE_CRAFT=true`, the chart creates the `onyx-sandboxes` namespace, the `sandbox`
 ServiceAccount, the sandbox RBAC, the sandbox proxy, and the sandbox NetworkPolicies.
 
 - **Sandbox nodes.** `enable_craft = true` adds a node group labeled
