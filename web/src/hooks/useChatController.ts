@@ -101,7 +101,10 @@ import { useIncognito } from "@/providers/IncognitoProvider";
 import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
 import { useAvailableSources } from "@/lib/connectors/hooks";
 import { settleChatSession } from "@/lib/chat/settleChatSession";
-import { stopChatSession } from "@/lib/chat/stopChatSession";
+import {
+  stopChatSession,
+  STOP_BEFORE_DISPATCH,
+} from "@/lib/chat/stopChatSession";
 
 const SYSTEM_MESSAGE_ID = -3;
 
@@ -822,6 +825,20 @@ export default function useChatController({
         chatSessionId: frozenSessionId,
       });
       resetInputBar();
+      const restoreStoppedDraft = () => {
+        const store = useChatSessionStore.getState();
+        if (
+          controller.signal.reason === STOP_BEFORE_DISPATCH &&
+          store.currentSessionId === frozenSessionId &&
+          store.sessions.get(frozenSessionId)?.abortController === controller &&
+          !regenerationRequest
+        ) {
+          restoreInputBar(message, currentMessageFiles);
+        }
+      };
+      controller.signal.addEventListener("abort", restoreStoppedDraft, {
+        once: true,
+      });
 
       let answer = "";
 
@@ -1540,6 +1557,7 @@ export default function useChatController({
             });
           }
         } finally {
+          controller.signal.removeEventListener("abort", restoreStoppedDraft);
           resolveReaderFinished();
         }
       }

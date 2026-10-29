@@ -1,6 +1,8 @@
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { settleChatSession } from "@/lib/chat/settleChatSession";
 
+export const STOP_BEFORE_DISPATCH = Symbol("stop-before-dispatch");
+
 /** Stop only after a dispatched send has reached backend admission. */
 export async function stopChatSession(
   sessionId: string,
@@ -25,7 +27,7 @@ export async function stopChatSession(
   };
   store.updateChatState(sessionId, "cancelling");
   // Abort local preparation; a dispatched send must acknowledge before Stop.
-  if (!sendAcknowledged) controller.abort();
+  if (!sendAcknowledged) controller.abort(STOP_BEFORE_DISPATCH);
 
   let streamId: number | null | undefined;
   try {

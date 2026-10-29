@@ -340,9 +340,14 @@ test.each([false, true])(
   }
 );
 
-test.each([false, true])(
-  "incognito recovery preserves successful local content while confirming readiness (busy: %s)",
-  async (busy) => {
+test.each([
+  { busy: false, aborted: false },
+  { busy: true, aborted: false },
+  { busy: false, aborted: true },
+  { busy: true, aborted: true },
+])(
+  "incognito recovery preserves local content (busy: $busy, aborted: $aborted)",
+  async ({ busy, aborted }) => {
     const idle = deferred<void>();
     const question: Message = {
       nodeId: 1,
@@ -370,8 +375,13 @@ test.each([false, true])(
     ]);
     const store = useChatSessionStore.getState();
     store.createSession("session", { incognito: true });
+    if (aborted)
+      useChatSessionStore
+        .getState()
+        .sessions.get("session")!
+        .abortController.abort();
     store.updateSessionData("session", {
-      chatState: "unconfirmed",
+      chatState: aborted ? "streaming" : "unconfirmed",
       messageTree: localMessages,
     });
     jest.mocked(global.fetch).mockResolvedValue({
@@ -391,7 +401,7 @@ test.each([false, true])(
     );
     expect(
       useChatSessionStore.getState().sessions.get("session")?.messageTree
-    ).toBe(localMessages);
+    ).toEqual(localMessages);
     await act(async () => idle.resolve());
     const recovered = useChatSessionStore.getState().sessions.get("session")!;
     expect(recovered.chatState).toBe("input");
@@ -961,5 +971,48 @@ test.each([false, true])(
       await act(async () => idle.resolve());
       view.unmount();
     }
+  }
+);
+
+test.each([false, true])(
+  "old initial history cannot adopt a new send owner (body pending: %s)",
+  async (bodyPending) => {
+    const response = deferred<Response>();
+    const body = deferred<BackendChatSession>();
+    jest.mocked(global.fetch).mockReturnValue(response.promise);
+    mountController();
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    if (bodyPending) {
+      await act(async () =>
+        response.resolve({ ok: true, json: () => body.promise } as Response)
+      );
+    }
+    const controller = new AbortController();
+    const acknowledgement = Promise.resolve(99);
+    const reader = Promise.resolve();
+    const tree = new Map<number, Message>();
+    act(() =>
+      useChatSessionStore.getState().updateSessionData("session", {
+        abortController: controller,
+        chatState: "streaming",
+        sendAcknowledged: acknowledgement,
+        readerFinished: reader,
+        messageTree: tree,
+      })
+    );
+    const stale = {
+      ...backendSession(true),
+      current_stream: { stream_id: 42 },
+    } as BackendChatSession;
+    await act(async () => {
+      if (bodyPending) body.resolve(stale);
+      else response.resolve({ ok: true, json: async () => stale } as Response);
+    });
+    const current = useChatSessionStore.getState().sessions.get("session")!;
+    expect(current.sendAcknowledged).toBe(acknowledgement);
+    expect(current.readerFinished).toBe(reader);
+    expect(current.messageTree).toBe(tree);
+    expect(resumeStream).not.toHaveBeenCalled();
+    expect(processRawChatHistory).not.toHaveBeenCalled();
   }
 );

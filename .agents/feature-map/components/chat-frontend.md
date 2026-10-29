@@ -333,6 +333,7 @@ all, because the mode is pinned at session creation and cannot be changed mid-se
   The reader stays open to receive final packets. Settlement waits for reader completion,
   confirms server idleness, and reloads saved history before enabling input.
   Stop aborts local preparation only when no send has been dispatched.
+  That Stop restores the draft and attachments in the same focused session; navigation aborts do not restore them.
 - **Feedback** goes through `useFeedbackController.ts:handleFeedbackChange`: it
   optimistically calls `updateCurrentMessageFeedback` before the request, and rolls back
   to the previous feedback value if the request fails or throws.
@@ -595,12 +596,15 @@ That owner covers preparation, execution, saving, and cleanup.
 
 `stopChatSession.ts` waits for the send acknowledgement before stopping its stream ID.
 A late acknowledgement or history refresh cannot change a newer request.
+Initial history loads capture controller ownership before fetching and check it again after reading the response.
 Failed status checks leave the session unconfirmed and pause queued messages.
 The input bar offers recovery without discarding submitted text or error details.
 Background completion updates its own session without changing the selected conversation.
 
 Recovery loading and settlement preserve local incognito messages because saved history can
-contain only usage metadata. Server readiness still gates the next send.
+contain only usage metadata. This also applies when a streaming reader was aborted before reopening.
+Recovery keeps local content while adding any saved rows needed to replay the accepted stream.
+Server readiness still gates the next send.
 
 `AgentMessage` reports when its final content has finished rendering. For multi-model turns,
 `MultiModelResponseView` waits for all visible successful panels before releasing queued
