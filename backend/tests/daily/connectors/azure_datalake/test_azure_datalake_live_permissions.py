@@ -119,20 +119,24 @@ def synced(
     was_ee = global_version.is_ee_version()
     global_version.set_ee()
     fetch_versioned_implementation.cache_clear()
-    connector = AzureDataLakeConnector(account_name=ACCOUNT, container_name=CONTAINER)
-    connector.set_credentials_provider(
-        _provider(_certificate_credentials(test_secrets))
-    )
-    access: dict[str, ExternalAccess] = {}
-    for batch in connector.retrieve_all_slim_docs_perm_sync():
-        for item in batch:
-            if isinstance(item, SlimDocument):
-                assert item.external_access is not None
-                access[item.id.removeprefix(f"{ID_PREFIX}:")] = item.external_access
-    yield access
-    if not was_ee:
-        global_version.unset_ee()
-    fetch_versioned_implementation.cache_clear()
+    try:
+        connector = AzureDataLakeConnector(
+            account_name=ACCOUNT, container_name=CONTAINER
+        )
+        connector.set_credentials_provider(
+            _provider(_certificate_credentials(test_secrets))
+        )
+        access: dict[str, ExternalAccess] = {}
+        for batch in connector.retrieve_all_slim_docs_perm_sync():
+            for item in batch:
+                if isinstance(item, SlimDocument):
+                    assert item.external_access is not None
+                    access[item.id.removeprefix(f"{ID_PREFIX}:")] = item.external_access
+        yield access
+    finally:
+        if not was_ee:
+            global_version.unset_ee()
+        fetch_versioned_implementation.cache_clear()
 
 
 @pytest.mark.parametrize("path", sorted(EXTRA_READERS))

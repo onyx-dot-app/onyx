@@ -86,6 +86,8 @@ Skip this section if you use an account key.
   <Step title="Add the permission sync grants">
     Do this step only if you use permission sync.
 
+    - Give the application the **Storage Blob Data Reader** role on the container, even if indexing uses ACL access.
+    Permission sync reads the container properties and every ACL, and ACL access does not allow that.
     - Give the application the **Reader** role on the storage account. Onyx uses it to find the account
     in Azure Resource Manager and to read the role and deny assignments of the container.
     - Add the Microsoft Graph application permissions **User.Read.All** and **GroupMember.Read.All**.
@@ -165,7 +167,7 @@ Each check that fails shows the action to correct it.
 | Sign in to Azure Storage                                 | Always                   | A correct client ID, directory ID, and secret or certificate, or a correct account key |
 | The container is readable                                | Always                   | The container exists, and the account can list it                            |
 | The path prefix exists                                   | **Path Prefix** is set   | The directory exists in the container                                        |
-| Files are readable                                       | Always                   | **Storage Blob Data Reader**, or read and execute ACL access                 |
+| Files are readable                                       | Always                   | **Storage Blob Data Reader**, or read and execute ACL access. The check reads one file only. |
 | The account is an app registration                       | Permission sync          | A client secret or certificate account. An account key fails.               |
 | ACLs are readable                                        | Permission sync          | **Storage Blob Data Reader** on the container                                |
 | The container's anonymous access level is readable       | Permission sync          | **Storage Blob Data Reader** on the container                                |
@@ -174,12 +176,17 @@ Each check that fails shows the action to correct it.
 | Entra users are readable                                 | Permission sync          | **User.Read.All** with admin consent                                         |
 | Entra group members are readable                         | Permission sync          | **GroupMember.Read.All** with admin consent                                  |
 
+A successful **Files are readable** check does not prove that the account can read every file.
+If some files fail to index, check their ACLs.
+
 The permission sync checks also run before each scheduled sync. If the application lost a role or a Graph permission,
 the sync fails. It does not change the access of the files.
 
 ## Permission sync
 
-With permission sync, an Onyx user finds a file in search only if the user can read the file in Azure.
+With permission sync,
+an Onyx user finds a file in search only if the user could read the file in Azure at the last successful sync.
+A change in Azure, such as a removed role, applies in Onyx after the next sync.
 Onyx matches Entra users to Onyx users by email address: the user principal name, or the mail address for a guest.
 
 <Note>
@@ -204,7 +211,8 @@ A user can read a file when one of the following is true:
 
 - **Azure RBAC.** The user, or a group of the user, has a role at the container scope or above,
   and the role can read blob data. **Storage Blob Data Reader**, **Storage Blob Data Contributor**,
-  and **Storage Blob Data Owner** are such roles. A deny assignment that blocks blob read removes the user.
+  and **Storage Blob Data Owner** are such roles. A deny assignment that blocks blob read removes the user,
+  also from the ACL access below.
 - **POSIX ACL.** The ACL gives the user read on the file, and execute on each directory above it,
   the container root included.
 
@@ -232,6 +240,7 @@ and the files that depend on it stay hidden.
 | Case                                                            | Result                                                                  |
 | --------------------------------------------------------------- | ----------------------------------------------------------------------- |
 | A role assignment has a condition (ABAC)                        | Onyx cannot evaluate the condition and gives no access through it. The **Role and deny assignments are readable** check shows a warning. |
+| A deny assignment has a condition                               | Onyx cannot evaluate the condition and applies the deny everywhere. Users can lose access in Onyx that they still have in Azure.         |
 | A role assignment or ACL entry names a service principal        | Onyx ignores it. Only users and groups get access.                      |
 | One exclusion names more than 50 users and groups               | The file stays private.                                                 |
 | The access of one file needs more than 5,000 individual users   | The file stays private.                                                 |
