@@ -383,7 +383,7 @@ class AgentCoordinator:
                 # Observation failure does not establish the child's final outcome.
                 if snapshot.status.is_terminal:
                     future = None
-                else:
+                elif self._directory is not None:
                     tracked.completion = Future()
                     tracked.completion.set_running_or_notify_cancel()
                     tracked.observer_stop = None

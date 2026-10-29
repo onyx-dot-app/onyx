@@ -3335,6 +3335,43 @@ def test_conflicting_restore_keeps_accepted_result_and_latest_run(
     assert owner.close(2)
 
 
+def test_directoryless_view_preserves_failed_child_observation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = AgentCoordinator()
+    child = suspended_agent(agent_id="child")
+    info = AgentInfo(
+        id=child.id,
+        path="/root/child",
+        parent_id="root",
+        description="",
+        restoration_config=None,
+    )
+    owner.register(info)
+    run = child.start(max_steps=2, coordinator=owner)
+    try:
+        assert run.wait_until_settled(3).status == RunStatus.SUSPENDED
+        assert run.wait_for_idle(3)
+        checkpoint = run.handoff()
+        observer = owner.view(
+            directory=FakeAgentDirectory(
+                lookup_agent=lambda *_: info,
+                read_run=lambda *_: checkpoint.run_state,
+            )
+        )
+        monkeypatch.setattr(
+            "onyx.agents.agent_coordination.OPERATION_TIMEOUT_SECONDS", 0
+        )
+        expired = observer.child_completion(run.id, "root")
+        with pytest.raises(TimeoutError, match="Remote run did not complete"):
+            expired.result(timeout=3)
+        assert owner.child_completion(run.id, "root") is expired
+        assert isinstance(expired.exception(timeout=0), TimeoutError)
+    finally:
+        monkeypatch.undo()
+        assert owner.close(3)
+
+
 @pytest.mark.parametrize("next_state", ["active", "terminal", "closed"])
 def test_remote_dependency_recovers_after_observation_timeout(
     next_state: Literal["active", "terminal", "closed"], monkeypatch: pytest.MonkeyPatch

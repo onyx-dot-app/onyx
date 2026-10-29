@@ -54,6 +54,7 @@ resolves the existing completion future so waiting parents resume. It updates
 latest-run discovery only for that run and rejects conflicting terminal records.
 A later dependency lookup can retry a failed remote observation or load its saved
 terminal result. Local execution and persistence failures remain authoritative.
+Views without a directory preserve observation failures; they cannot start a replacement observer.
 
 Cancelling a suspended child can start another worker.
 `backend/onyx/agents/agent_coordination.py:RunCoordination.finish` tracks its new
