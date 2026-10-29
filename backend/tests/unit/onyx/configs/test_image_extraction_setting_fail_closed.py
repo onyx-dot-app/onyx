@@ -15,7 +15,7 @@ from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 _STORE = "onyx.server.settings.store"
 
 
-def _kv_store(load_result: object | Exception) -> MagicMock:
+def _kv_store(load_result: dict[str, bool] | Exception) -> MagicMock:
     kv_store = MagicMock()
     if isinstance(load_result, Exception):
         kv_store.load.side_effect = load_result
