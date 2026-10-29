@@ -478,6 +478,7 @@ def prepare_chat_turn(
                 message_id=user_message_id,
                 chat_session_id=chat_session_id,
                 persist_content=False,
+                admission=admission,
             )
             history.messages, previous_run_id = history_store.prepare_messages(
                 history.messages, previous_run_id, accepted_text

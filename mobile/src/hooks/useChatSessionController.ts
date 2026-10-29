@@ -203,7 +203,10 @@ async function recoverChatSession(
           errorCode: current.errorCode,
         });
       }
-      store.getState().hydrateSession(sessionId, messages);
+      // A failed send without a saved response must retain its question and error for retry.
+      if (current?.type !== "error" || saved) {
+        store.getState().hydrateSession(sessionId, messages);
+      }
       queryClient.setQueryData(
         QUERY_KEYS.chatSession(serverUrl, sessionId),
         settled,

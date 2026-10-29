@@ -569,7 +569,7 @@ def test_expired_history_preparation_cannot_append_after_new_owner_claims(
         def load_stored(_session_id: UUID) -> IncognitoContext:
             if expiry_stage == "history_load":
                 replace_owner()
-            return IncognitoContext(version=0, messages=[])
+            return IncognitoContext(messages=[])
 
         load_files.side_effect = load
         convert_history.side_effect = lambda **_kwargs: convert()
@@ -593,7 +593,6 @@ def test_incognito_history_retains_summary_checkpoint(
 ) -> None:
     chat_session.incognito_record_mode = IncognitoRecordMode.USAGE_ONLY
     stored = IncognitoContext(
-        version=0,
         messages=[
             UserMessage(id="chat:1", content="Earlier question"),
             UserMessage(id="chat:2", content="Accepted"),
@@ -644,9 +643,13 @@ def test_incognito_history_retains_summary_checkpoint(
         assert isinstance(current_user, UserMessage)
         assert current_user.content == accepted_text
         expected.append(current_user)
-        append_message.assert_called_once_with(chat_session.id, current_user)
+        append_message.assert_called_once_with(
+            chat_session.id, current_user, admission=setup.admission
+        )
     else:
-        append_message.assert_called_once_with(chat_session.id, setup.input_messages[0])
+        append_message.assert_called_once_with(
+            chat_session.id, setup.input_messages[0], admission=setup.admission
+        )
     assert setup.messages + setup.input_messages == expected
     assert setup.checkpoint is not None
     assert setup.checkpoint.summary == "Summary"
@@ -765,7 +768,7 @@ def test_incognito_preparation_rejects_ended_context_before_reserving_response(
         patch("onyx.chat.process_message.incognito_session_ended", return_value=True),
         patch(
             "onyx.chat.history_store.load_incognito_context",
-            return_value=IncognitoContext(version=0, messages=[]),
+            return_value=IncognitoContext(messages=[]),
         ),
         patch("onyx.chat.history_store.save_incognito_user_message"),
         patch(

@@ -9,6 +9,7 @@ from typing import Protocol
 from uuid import UUID
 
 from onyx.agents.models import AgentInfo
+from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.chat.chat_utils import omit_prior_tool_result_content
 from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.incognito_context import (
@@ -126,10 +127,12 @@ class RedisChatHistoryStore(ChatHistoryStore):
         message_id: int,
         chat_session_id: UUID,
         visible_message_ids: Sequence[int],
+        admission: ChatTurnAdmission | None = None,
     ) -> None:
         self.message_id = message_id
         self.chat_session_id = chat_session_id
         self.visible_message_ids = tuple(visible_message_ids)
+        self.admission = admission
 
     def list_agents(self) -> list[AgentInfo]:
         return load_incognito_agent_metadata(
@@ -178,9 +181,15 @@ class RedisChatHistoryStore(ChatHistoryStore):
         raise ValueError("The selected question is no longer in temporary chat history")
 
     def save_user_message(self, message: UserMessage) -> None:
-        save_incognito_user_message(self.chat_session_id, message)
+        if self.admission is None:
+            raise ValueError("Temporary history writes require chat turn admission")
+        save_incognito_user_message(
+            self.chat_session_id, message, admission=self.admission
+        )
 
     def save_response(self, response: ChatResponseSnapshot) -> None:
+        if self.admission is None:
+            raise ValueError("Temporary history writes require chat turn admission")
         answer = save_chat_response_to_db(
             message_id=self.message_id,
             chat_session_id=self.chat_session_id,
@@ -217,6 +226,7 @@ class RedisChatHistoryStore(ChatHistoryStore):
             self.chat_session_id,
             response.response,
             sources_by_run,
+            admission=self.admission,
             message_id=self.message_id,
             messages=messages,
         )
@@ -229,6 +239,7 @@ def get_chat_history_store(
     persist_content: bool,
     visible_message_ids: Sequence[int] = (),
     branch: ChatBranch | None = None,
+    admission: ChatTurnAdmission | None = None,
 ) -> ChatHistoryStore:
     if persist_content:
         return PostgresChatHistoryStore(
@@ -238,4 +249,5 @@ def get_chat_history_store(
         message_id=message_id,
         chat_session_id=chat_session_id,
         visible_message_ids=visible_message_ids,
+        admission=admission,
     )

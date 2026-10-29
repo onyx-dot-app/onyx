@@ -15,7 +15,10 @@ import {
 } from "@/api/chat/stream";
 import { processRawChatHistory } from "@/chat/chatHistory";
 import { BackendChatSession, BackendMessage } from "@/chat/interfaces";
-import { getMessageByMessageId } from "@/chat/messageTree";
+import {
+  getLatestMessageChain,
+  getMessageByMessageId,
+} from "@/chat/messageTree";
 import { Packet, PacketType } from "@/chat/streamingModels";
 import { useChatSessionController } from "@/hooks/useChatSessionController";
 import { useChatSessionStore } from "@/state/chatSessionStore";
@@ -281,6 +284,50 @@ describe("useChatSessionController", () => {
           ? { type: "assistant", message: "Saved answer" }
           : { type: "error", message: "Original failure" },
       );
+    },
+  );
+
+  it.each([undefined, 2])(
+    "preserves an unmatched failed question and response on reopen (message ID: %s)",
+    async (messageId) => {
+      seedLiveSession(null);
+      useChatSessionStore.getState().patchNode("s1", 2, {
+        messageId,
+        type: "error",
+        message: "Connection failed",
+        errorCode: "STREAM_GAP",
+      });
+      useChatSessionStore.getState().updateChatState("s1", "unconfirmed");
+      getSessionMock.mockResolvedValueOnce({
+        chat_session_id: "s1",
+        description: "",
+        persona_id: 0,
+        messages: [],
+        packets: [],
+        time_created: "",
+        current_stream: null,
+      });
+
+      renderHook(() => useChatSessionController("s1"), { wrapper });
+
+      await waitFor(() =>
+        expect(
+          useChatSessionStore.getState().sessions.get("s1")?.chatState,
+        ).toBe("input"),
+      );
+      expect(resumeMock).not.toHaveBeenCalled();
+      expect(getSessionMock).toHaveBeenCalledTimes(1);
+      const tree = useChatSessionStore
+        .getState()
+        .sessions.get("s1")!.messageTree;
+      expect(getLatestMessageChain(tree)).toEqual([
+        expect.objectContaining({ type: "user", message: "hi there" }),
+        expect.objectContaining({
+          type: "error",
+          message: "Connection failed",
+          errorCode: "STREAM_GAP",
+        }),
+      ]);
     },
   );
 

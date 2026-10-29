@@ -22,14 +22,16 @@ from onyx.agents.models import (
     StepRecord,
     ToolExecutionRecord,
 )
+from onyx.cache.factory import get_cache_backend
+from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.chat.incognito import delete_incognito_generated_files
 from onyx.chat.incognito_context import (
     _context_key,
-    append_incognito_message,
     load_incognito_agent_history,
     load_incognito_agent_metadata,
     load_incognito_context,
-    save_incognito_context,
+    save_incognito_response,
+    save_incognito_user_message,
     teardown_incognito_session,
 )
 from onyx.chat.models import PromptMetadata, ResponseRecord, SavedAgentContext
@@ -184,19 +186,28 @@ def test_turn_round_trips_through_the_store() -> None:
     """A turn appends the user message then the answer. The next turn loads both
     in order so the model sees its own context."""
     session_id = uuid4()
+    admission = ChatTurnAdmission(get_cache_backend())
+    admission.claim(session_id)
     try:
-        append_incognito_message(
+        save_incognito_user_message(
             session_id,
             UserMessage(
                 content="what is our runway", metadata=PromptMetadata(token_count=4)
             ),
+            admission=admission,
         )
-        append_incognito_message(
+        save_incognito_response(
             session_id,
-            AssistantMessage(
-                content=[TextContent(text="eighteen months")],
-                metadata=PromptMetadata(token_count=2),
-            ),
+            None,
+            {},
+            message_id=1,
+            messages=[
+                AssistantMessage(
+                    content=[TextContent(text="eighteen months")],
+                    metadata=PromptMetadata(token_count=2),
+                )
+            ],
+            admission=admission,
         )
 
         history = load_incognito_context(session_id).messages
@@ -205,20 +216,26 @@ def test_turn_round_trips_through_the_store() -> None:
             ("assistant", "eighteen months"),
         ]
     finally:
+        admission.release()
         teardown_incognito_session(session_id)
 
 
 def test_teardown_ends_the_session_immediately() -> None:
     session_id = uuid4()
-    append_incognito_message(
+    admission = ChatTurnAdmission(get_cache_backend())
+    admission.claim(session_id)
+    save_incognito_user_message(
         session_id,
         UserMessage(content="secret", metadata=PromptMetadata(token_count=1)),
+        admission=admission,
     )
     assert load_incognito_context(session_id).messages
 
     teardown_incognito_session(session_id)
 
     assert load_incognito_context(session_id).messages == []
+
+    admission.release()
 
 
 def test_teardown_clears_buffered_stream_chunks() -> None:
@@ -363,8 +380,12 @@ def test_temporary_agent_history_sources_and_lifetime() -> None:
     )
     key = _context_key(session_id)
     client = get_redis_client()
+    admission = ChatTurnAdmission(get_cache_backend())
+    admission.claim(session_id)
     try:
-        append_incognito_message(session_id, UserMessage(content="root question"))
+        save_incognito_user_message(
+            session_id, UserMessage(content="root question"), admission=admission
+        )
         assert _load_agent_history(session_id, [1]) == []
         assert child.run_id is not None
         sources = {child.run_id: {1: _search_doc("private-source")}}
@@ -372,6 +393,7 @@ def test_temporary_agent_history_sources_and_lifetime() -> None:
             session_id,
             root,
             sources,
+            admission=admission,
             message_id=1,
             messages=root.messages,
         )
@@ -379,6 +401,7 @@ def test_temporary_agent_history_sources_and_lifetime() -> None:
             session_id,
             root,
             sources,
+            admission=admission,
             message_id=1,
             messages=root.messages,
         )
@@ -419,6 +442,7 @@ def test_temporary_agent_history_sources_and_lifetime() -> None:
             session_id,
             next_root,
             {},
+            admission=admission,
             message_id=2,
             messages=next_root.messages,
         )
@@ -436,7 +460,9 @@ def test_temporary_agent_history_sources_and_lifetime() -> None:
         ]
         assert restored.sources[1].document_id == "private-source"
         client.expire(key, 10)
-        append_incognito_message(session_id, UserMessage(content="keep active"))
+        save_incognito_user_message(
+            session_id, UserMessage(content="keep active"), admission=admission
+        )
         assert client.ttl(key) >= INCOGNITO_CONTEXT_TTL_SECONDS - 2
         teardown_incognito_session(session_id)
         assert _load_agent_history(session_id, [2, 1]) == []
@@ -445,30 +471,13 @@ def test_temporary_agent_history_sources_and_lifetime() -> None:
                 session_id,
                 next_root,
                 {},
+                admission=admission,
                 message_id=3,
                 messages=next_root.messages,
             )
         assert not client.exists(key)
     finally:
-        teardown_incognito_session(session_id)
-
-
-def test_incognito_context_and_predecessor_share_one_write() -> None:
-    session_id = uuid4()
-    try:
-        append_incognito_message(session_id, UserMessage(content="question"))
-        first = load_incognito_context(session_id)
-        stale = load_incognito_context(session_id)
-        first.messages.append(AssistantMessage(content=[TextContent(text="first")]))
-        first.previous_run_id = "first-run"
-        assert save_incognito_context(session_id, first)
-        stale.messages.append(AssistantMessage(content=[TextContent(text="stale")]))
-        stale.previous_run_id = "stale-run"
-        assert not save_incognito_context(session_id, stale)
-        restored = load_incognito_context(session_id)
-        assert restored.messages[-1].text == "first"
-        assert restored.previous_run_id == "first-run"
-    finally:
+        admission.release()
         teardown_incognito_session(session_id)
 
 
@@ -531,15 +540,20 @@ def test_incognito_response_restores_agents_without_database_content(
         ],
     )
     source = _search_doc("private-child-source")
+    admission = ChatTurnAdmission(get_cache_backend())
+    admission.claim(session.id)
     try:
-        append_incognito_message(
-            session.id, UserMessage(content="private root question")
+        save_incognito_user_message(
+            session.id,
+            UserMessage(content="private root question"),
+            admission=admission,
         )
         history_store = get_chat_history_store(
             message_id=assistant.id,
             chat_session_id=session.id,
             persist_content=False,
             visible_message_ids=[assistant.id],
+            admission=admission,
         )
         directory = ChatAgentDirectory(
             history_store=history_store,
@@ -660,6 +674,7 @@ def test_incognito_response_restores_agents_without_database_content(
             == source.document_id
         )
     finally:
+        admission.release()
         teardown_incognito_session(session.id)
 
 
@@ -711,6 +726,8 @@ def test_incognito_sibling_responses_keep_independent_agents_and_history(
         ],
     )
     barrier = Barrier(2)
+    admission = ChatTurnAdmission(get_cache_backend())
+    admission.claim(session_id)
 
     def save_sibling(message_id: int) -> tuple[str, str]:
         root_run_id, child_id, child_run_id = str(uuid4()), str(uuid4()), str(uuid4())
@@ -744,13 +761,16 @@ def test_incognito_sibling_responses_keep_independent_agents_and_history(
             session_id,
             result,
             {child_run_id: {1: _search_doc(f"source-{message_id}")}},
+            admission=admission,
             message_id=message_id,
             messages=result.messages,
         )
         return root_run_id, child_id
 
     try:
-        append_incognito_message(session_id, UserMessage(content="question"))
+        save_incognito_user_message(
+            session_id, UserMessage(content="question"), admission=admission
+        )
         assert ancestor_run.run_id is not None
 
         if ancestor_finishes_first:
@@ -758,6 +778,7 @@ def test_incognito_sibling_responses_keep_independent_agents_and_history(
                 session_id,
                 ancestor_run,
                 {},
+                admission=admission,
                 message_id=ancestor.id,
                 messages=ancestor_run.messages,
             )
@@ -768,6 +789,7 @@ def test_incognito_sibling_responses_keep_independent_agents_and_history(
                 session_id,
                 ancestor_run,
                 {},
+                admission=admission,
                 message_id=ancestor.id,
                 messages=ancestor_run.messages,
             )
@@ -795,4 +817,5 @@ def test_incognito_sibling_responses_keep_independent_agents_and_history(
         assert followup[0].sources[1].document_id == f"source-{sibling_ids[0]}"
         assert _load_agent_history(session_id, ancestor_branch) == []
     finally:
+        admission.release()
         teardown_incognito_session(session_id)

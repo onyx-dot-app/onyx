@@ -330,8 +330,9 @@ whenever you touch this component.
     `backend/onyx/db/enums.py:record_mode_persists_content` decides. A `FULL_HISTORY`
     session writes conversation content to `chat_message` like an ordinary chat.
     A `USAGE_ONLY` session passes `persist_content=False`, which blanks the row.
-    Its content goes to `append_incognito_message`. Any new field written during a
-    turn needs a decision for each mode.
+    Its input and responses go to Redis through `save_incognito_user_message` and
+    `save_incognito_response`. Both require current turn ownership. Any new field
+    written during a turn needs a decision for each mode.
 
 Launch sets the recording context before copying it into workers, then restores
 the caller's context before returning. Initial session and response IDs enter

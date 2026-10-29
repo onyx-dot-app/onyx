@@ -14,6 +14,7 @@ from onyx.agents.models import (
     RunStatus,
     StepRecord,
 )
+from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.chat.citation_utils import message_citation_sources
 from onyx.chat.history_store import (
     PostgresChatHistoryStore,
@@ -63,13 +64,14 @@ def test_temporary_history_preparation_waits_for_explicit_user_message_save(
 ) -> None:
     session_id = uuid4()
     store = RedisChatHistoryStore(
-        message_id=17, chat_session_id=session_id, visible_message_ids=()
+        message_id=17,
+        chat_session_id=session_id,
+        visible_message_ids=(),
+        admission=Mock(spec=ChatTurnAdmission),
     )
     previous = UserMessage(id="chat:17", content="Original question")
     incoming = UserMessage(content="Converted request with attached context")
-    saved = IncognitoContext(
-        version=1, messages=[previous], previous_run_id="saved-run"
-    )
+    saved = IncognitoContext(messages=[previous], previous_run_id="saved-run")
     with (
         patch("onyx.chat.history_store.load_incognito_context", return_value=saved),
         patch("onyx.chat.history_store.save_incognito_user_message") as append,
@@ -86,7 +88,9 @@ def test_temporary_history_preparation_waits_for_explicit_user_message_save(
             current_user = messages[-1]
             assert isinstance(current_user, UserMessage)
             store.save_user_message(current_user)
-            append.assert_called_once_with(session_id, current_user)
+            append.assert_called_once_with(
+                session_id, current_user, admission=store.admission
+            )
         assert incoming.content == "Converted request with attached context"
         assert saved.messages == [previous]
 
@@ -97,7 +101,10 @@ def test_temporary_content_is_saved_only_after_database_success(
 ) -> None:
     session_id = uuid4()
     store = get_chat_history_store(
-        message_id=17, chat_session_id=session_id, persist_content=False
+        message_id=17,
+        chat_session_id=session_id,
+        persist_content=False,
+        admission=Mock(spec=ChatTurnAdmission),
     )
     response = ChatResponseSnapshot(
         answer="private answer",
@@ -235,6 +242,7 @@ def test_temporary_response_restores_file_sources_before_serialization() -> None
         message_id=17,
         chat_session_id=uuid4(),
         visible_message_ids=(),
+        admission=Mock(spec=ChatTurnAdmission),
     )
     with (
         patch(
@@ -311,7 +319,6 @@ def test_incognito_regeneration_uses_selected_question_and_prompt_only_tool_poli
     question = UserMessage(id="chat:17", content="Original question")
     answer = AssistantMessage(content=[TextContent(text="Old answer")])
     cached = IncognitoContext(
-        version=1,
         messages=[search, image, question, answer],
         previous_run_id="old-answer",
     )

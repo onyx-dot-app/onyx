@@ -16,6 +16,7 @@ from onyx.cache.interface import (
     CacheLock,
     CacheLockLostError,
 )
+from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.models import (
     MAX_DISCOVERED_AGENTS,
@@ -98,9 +99,8 @@ def _read_state(cache: CacheBackend, chat_session_id: UUID) -> IncognitoState | 
 
 def _context(state: IncognitoState | None) -> IncognitoContext:
     if state is None:
-        return IncognitoContext(version=0, messages=[])
+        return IncognitoContext(messages=[])
     return IncognitoContext(
-        version=state.version,
         messages=state.messages,
         previous_run_id=state.previous_run_id,
     )
@@ -118,7 +118,6 @@ def _retained_state(
     required_messages: int = 1,
 ) -> IncognitoState:
     state = IncognitoState(
-        version=context.version + 1,
         messages=context.messages[-_MAX_CONTEXT_MESSAGES:],
         previous_run_id=context.previous_run_id,
         responses=dict(responses),
@@ -174,6 +173,7 @@ def _update_incognito_state(
     chat_session_id: UUID,
     update: Callable[[IncognitoState | None], IncognitoState | None],
     *,
+    admission: ChatTurnAdmission,
     max_attempts: int = 1,
 ) -> bool:
     """Retry transformations against fresh state; never retry stale replacements."""
@@ -195,6 +195,8 @@ def _update_incognito_state(
                     raise _IncognitoLockError("Incognito state lock was lost")
                 if cache.exists(_tombstone_key(chat_session_id)):
                     return False
+                # New inputs use this lock too, so a stale answer cannot follow them.
+                admission.check_owner(chat_session_id)
                 cache.set(
                     _context_key(chat_session_id),
                     payload,
@@ -206,19 +208,9 @@ def _update_incognito_state(
     return False
 
 
-def save_incognito_context(chat_session_id: UUID, context: IncognitoContext) -> bool:
-    """Replace only the root context version the caller read."""
-
-    def update(state: IncognitoState | None) -> IncognitoState | None:
-        current = state or IncognitoState()
-        if current.version != context.version:
-            return None
-        return _retained_state(context, current.responses)
-
-    return _update_incognito_state(chat_session_id, update)
-
-
-def save_incognito_user_message(chat_session_id: UUID, message: UserMessage) -> None:
+def save_incognito_user_message(
+    chat_session_id: UUID, message: UserMessage, *, admission: ChatTurnAdmission
+) -> None:
     """Save the turn's input, replacing its old response tail on regeneration."""
 
     def update(state: IncognitoState | None) -> IncognitoState:
@@ -233,36 +225,8 @@ def save_incognito_user_message(chat_session_id: UUID, message: UserMessage) -> 
         context.messages.append(message)
         return _retained_state(context, current.responses)
 
-    if not _update_incognito_state(chat_session_id, update):
+    if not _update_incognito_state(chat_session_id, update, admission=admission):
         raise RuntimeError("Could not save temporary chat input")
-
-
-def append_incognito_message(chat_session_id: UUID, message: Message) -> None:
-    append_incognito_messages(chat_session_id, [message])
-
-
-def append_incognito_messages(
-    chat_session_id: UUID,
-    messages: Sequence[Message],
-    *,
-    previous_run_id: str | None = None,
-) -> None:
-    """A failed temporary save degrades history without failing the turn."""
-    try:
-        context = load_incognito_context(chat_session_id)
-        context.messages.extend(messages)
-        if previous_run_id is not None:
-            context.previous_run_id = previous_run_id
-        if not save_incognito_context(chat_session_id, context):
-            logger.warning(
-                "Incognito context save lost its version for session %s",
-                chat_session_id,
-            )
-    except Exception:
-        # Serialization failures can include private message text in their exceptions.
-        logger.error(
-            "Failed to persist incognito context for session %s", chat_session_id
-        )
 
 
 def incognito_session_torn_down(chat_session_id: UUID) -> bool:
@@ -525,6 +489,7 @@ def save_incognito_response(
     response: ResponseRecord | None,
     sources_by_run: dict[str, CitationMapping],
     *,
+    admission: ChatTurnAdmission,
     message_id: int,
     messages: Sequence[Message],
 ) -> None:
@@ -563,7 +528,10 @@ def save_incognito_response(
 
     if (
         not _update_incognito_state(
-            chat_session_id, update, max_attempts=_MAX_COMMIT_ATTEMPTS
+            chat_session_id,
+            update,
+            max_attempts=_MAX_COMMIT_ATTEMPTS,
+            admission=admission,
         )
         and not already_saved
     ):

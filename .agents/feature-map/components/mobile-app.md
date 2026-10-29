@@ -246,6 +246,7 @@ Rejected sends and newer composer edits keep their drafts.
 Before sending to an existing session, a busy or failed readiness check shows a toast and keeps the draft for retry.
 Resumed streams confirm idle before loading saved history. Status, Stop, and history requests have a 10-second deadline, including credentials and response reads. If history loading fails after confirmed idle, the app preserves local messages, shows an error, and enables Send.
 Saved responses with `response_status` of `complete`, `limit`, or `cancelled` replace local errors. Null, running, or suspended status preserves the local error despite placeholder text. Saved failures remain authoritative. Older servers without this field use nonempty text or files as the completion signal.
+If saved history has no matching response, recovery retains the local failed question and error for retry.
 Navigating away releases the replay reader, so reopening can reconnect during a blocked read or status check.
 Releasing a reader does not mark the server idle. A reopened response with a local error resumes readiness checks without replaying output.
 Reopening also retries an unresolved readiness check when no current stream remains. Permanent access or missing-session errors stop that attempt; they do not trigger an automatic retry loop.

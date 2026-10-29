@@ -27,7 +27,7 @@ def test_liveness_distinguishes_absence_from_teardown(
     cache = FakeCache()
     session_id = uuid4()
     if has_context:
-        cache.set(_context_key(session_id), IncognitoState(version=1).model_dump_json())
+        cache.set(_context_key(session_id), IncognitoState().model_dump_json())
     if torn_down:
         cache.set(_tombstone_key(session_id), 1)
     with patch("onyx.chat.incognito_context._cache", return_value=cache):
@@ -39,7 +39,7 @@ def test_batch_excludes_live_sessions_and_deduplicates_expired_sessions() -> Non
     cache = FakeCache()
     live, expired, ended = uuid4(), uuid4(), uuid4()
     for session in (live, ended):
-        cache.set(_context_key(session), IncognitoState(version=1).model_dump_json())
+        cache.set(_context_key(session), IncognitoState().model_dump_json())
     cache.set(_tombstone_key(ended), 1)
     with patch("onyx.chat.incognito_context._cache", return_value=cache):
         assert incognito_sessions_ended([live, expired, ended, expired]) == {

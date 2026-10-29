@@ -256,6 +256,7 @@ class ChatTurnExecution:
                 history_store=get_chat_history_store(
                     message_id=response.message_id,
                     chat_session_id=self.setup.chat_session_id,
+                    admission=self.setup.admission,
                     persist_content=record_mode_persists_content(
                         self.setup.incognito_record_mode
                     ),

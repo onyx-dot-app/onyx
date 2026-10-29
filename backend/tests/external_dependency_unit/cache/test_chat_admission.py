@@ -42,6 +42,7 @@ def test_concurrent_claim_and_stale_owner_cleanup(cache: CacheBackend) -> None:
         assert sorted(outcomes) == [False, True]
         old = admissions[outcomes.index(True)]
         old.publish(11)
+        old.check_owner(session_id)
         assert is_chat_session_processing(session_id, cache)
         # Remove both expired records before another process claims the session.
         cache.delete(f"chatprocessing_fence_{session_id}")
@@ -50,6 +51,9 @@ def test_concurrent_claim_and_stale_owner_cleanup(cache: CacheBackend) -> None:
         admissions.append(new)
         new.claim(session_id)
         new.publish(12)
+        new.check_owner(session_id)
+        with pytest.raises(CacheLockLostError):
+            old.check_owner(session_id)
         with pytest.raises(CacheLockLostError):
             old.publish(11)
         with pytest.raises(CacheLockLostError):

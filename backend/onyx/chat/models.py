@@ -215,9 +215,8 @@ class ResponseLink(BaseModel):
 
 
 class IncognitoContext(BaseModel):
-    """A session's history plus the version that makes save a compare-and-set."""
+    """Temporary conversation history and its latest saved response."""
 
-    version: int
     messages: list[Message]
     previous_run_id: str | None = None
 
@@ -288,7 +287,6 @@ IncognitoMessage = Annotated[
 
 
 class IncognitoState(BaseModel):
-    version: int = Field(default=0, ge=0, le=999_999_999_999_999)
     messages: list[IncognitoMessage] = Field(default_factory=list)
     previous_run_id: str | None = None
     responses: dict[str, IncognitoAgentResponse] = Field(default_factory=dict)

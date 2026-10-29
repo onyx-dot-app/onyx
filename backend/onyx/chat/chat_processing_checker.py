@@ -141,6 +141,14 @@ class ChatTurnAdmission:
         finally:
             lock.release()
 
+    def check_owner(self, session_id: UUID) -> None:
+        """Validate ownership; callers serialize history writes against newer turns."""
+        if self._session_id != session_id:
+            raise CacheLockLostError("Chat turn does not own this session")
+        self._check_deadline()
+        if self.cache.get(self._owner_key(session_id)) != self._token:
+            raise CacheLockLostError("Chat session admission was lost")
+
     def release(self) -> None:
         session_id = self._session_id
         if session_id is None:

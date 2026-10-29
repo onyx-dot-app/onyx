@@ -628,6 +628,8 @@ recording policy still controls persistence; this projection adds no stored fiel
 Incognito regeneration selects the cached user message by its stable message ID.
 Committing the selected question removes the old response tail once, before response workers start.
 Response saves append output without requiring the question to remain in the retention window.
+Temporary input and response writes check the turn's admission token under the history lock, immediately before saving.
+An expired owner cannot append an answer after a newer question. Usage rows remain independent of temporary history writes.
 An expired question fails explicitly rather than using an old answer as input.
 Later incognito prompts omit prior tool-result content using the same policy as durable chat,
 including the image-generation exception. Stored content remains intact.
