@@ -664,6 +664,27 @@ def test_brief_names_each_key_once_per_session(
     assert "Not mapped" not in second
 
 
+def test_fence_closes_only_on_a_matching_marker() -> None:
+    text = (
+        "````\n"
+        "```python\n"
+        "inside = 1\n"
+        "```\n"
+        "still inside\n"
+        "````\n"
+        "outside\n"
+        "~~~\n"
+        "```\n"
+        "~~~\n"
+        "after\n"
+    )
+    in_fence = {
+        line.text: line.in_fence for line in check_feature_map.parse_lines(text)
+    }
+    assert in_fence["inside = 1"] and in_fence["still inside"]
+    assert not in_fence["outside"] and not in_fence["after"]
+
+
 def test_enclosing_names() -> None:
     python = (
         "LIMIT = 3\n\n"

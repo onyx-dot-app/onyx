@@ -333,6 +333,13 @@ def main() -> int:
             brief = None
     files = sorted(path for path in turn if (repo / path).is_file())
     failure = _pre_commit_failures(repo, files)
+    if brief:
+        # The next stop checks the edits the brief leads to, with or without a
+        # failure now.
+        try:
+            _set_recheck(repo, session, True)
+        except OSError:
+            pass
     if failure:
         print(
             "\n\n".join(message for message in (failure, brief) if message),
@@ -340,10 +347,6 @@ def main() -> int:
         )
         return _BLOCK
     if brief:
-        try:
-            _set_recheck(repo, session, True)
-        except OSError:
-            pass
         print(json.dumps({"decision": "block", "reason": brief}))
     return 0
 

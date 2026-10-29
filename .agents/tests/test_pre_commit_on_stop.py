@@ -240,6 +240,14 @@ def test_brief_follows_a_pre_commit_failure(
     assert result.stdout == ""
     assert result.stderr.index("pre-commit failed") < result.stderr.index("Brief for")
 
+    # The edits that answer the brief are checked on the next stop.
+    (repo / "doc.md").write_text("edit")
+    monkeypatch.setenv("CHECK_EXIT", "0")
+    (repo.parent / "checked.json").unlink()
+    second = _run(repo, "Stop", stop_hook_active=True)
+    assert second.returncode == 0
+    assert _checked(repo) == {"base.txt", "doc.md"}
+
 
 @pytest.mark.parametrize("failure", ["CHECK_EXIT", "REWRITE"])
 def test_failures_and_rewrites_still_block(

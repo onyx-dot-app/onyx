@@ -81,6 +81,7 @@ VERIFIED_LINE = re.compile(
     re.MULTILINE,
 )
 CODE_SPAN = re.compile(r"`([^`\n]+)`")
+FENCE_MARKER = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 # `[[slug]]`, `[[slug#key]]` or `[[#key]]`.
 WIKI_LINK = re.compile(r"\[\[([a-z][a-z0-9-]*)?(?:#([^\]\s]*))?\]\]")
 ANY_LINK = re.compile(r"\[\[[^\]\n]*\]\]")
@@ -167,11 +168,21 @@ def parse_lines(text: str) -> tuple[Line, ...]:
     parsed: list[Line] = []
     section: str | None = None
     key: str | None = None
-    fence = False
+    fence: str | None = None  # the opening marker, such as "```" or "~~~~"
     after_blank = False
     for number, raw in enumerate(text.splitlines(), start=1):
-        is_fence = raw.lstrip().startswith("```")
-        if not fence:
+        marker = FENCE_MARKER.match(raw)
+        # CommonMark: only the same character, at least as long, with nothing
+        # after it, closes a fence.
+        is_fence = bool(marker) and (
+            fence is None
+            or (
+                marker.group(1)[0] == fence[0]
+                and len(marker.group(1)) >= len(fence)
+                and not marker.group(2).strip()
+            )
+        )
+        if fence is None:
             item = ITEM_START[section].match(raw) if section in ITEM_START else None
             if raw.startswith("## "):
                 section, key = raw[3:].strip(), None
@@ -179,9 +190,9 @@ def parse_lines(text: str) -> tuple[Line, ...]:
                 key = item.group(1)
             elif _ends_item(raw, after_blank):
                 key = None
-        if is_fence:
-            fence = not fence
-        parsed.append(Line(number, raw, section, key, fence or is_fence))
+        if is_fence and marker:
+            fence = None if fence else marker.group(1)
+        parsed.append(Line(number, raw, section, key, fence is not None or is_fence))
         after_blank = not raw.strip()
     return tuple(parsed)
 
