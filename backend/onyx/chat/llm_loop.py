@@ -99,7 +99,7 @@ class EmptyLLMResponseError(ClassifiedLLMError):
         *,
         provider: str,
         model: str,
-        tool_choice: ToolChoiceOptions,
+        tool_choice: ToolChoiceOptions | None,
         client_error_msg: str,
         error_code: str = "EMPTY_LLM_RESPONSE",
         is_retryable: bool = True,

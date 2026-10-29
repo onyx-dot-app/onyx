@@ -4,16 +4,18 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, SerializeAsAny
 
 
-class LLMErrorInfo(BaseModel):
-    message: str
-    error_code: str
-    is_retryable: bool
-
-
 class ToolChoiceOptions(str, Enum):
     REQUIRED = "required"
     AUTO = "auto"
     NONE = "none"
+
+
+class LLMErrorInfo(BaseModel):
+    message: str
+    error_code: str
+    is_retryable: bool
+    tool_choice: ToolChoiceOptions | None = None
+    finish_reason: str | None = None
 
 
 class NamedToolChoice(BaseModel):
@@ -128,7 +130,7 @@ class TextContentPart(BaseModel):
     type: Literal["text"] = "text"
     text: str
     # Some providers (e.g. Anthropic/Gemini) support prompt caching controls on content blocks.
-    cache_control: dict | None = None
+    cache_control: dict[str, JsonValue] | None = None
 
 
 class ImageUrlDetail(BaseModel):

@@ -52,6 +52,9 @@ These rules apply to the shared runtime, which has no production chat caller yet
 `backend/onyx/agents/agent_coordination.py:AgentCoordinator.restore_completed`
 resolves the existing completion future so waiting parents resume. It updates
 latest-run discovery only for that run and rejects conflicting terminal records.
+A later dependency lookup can retry a failed remote observation or load its saved
+terminal result. Local execution and persistence failures remain authoritative.
+Views without a directory preserve observation failures; they cannot start a replacement observer.
 
 Cancelling a suspended child can start another worker.
 `backend/onyx/agents/agent_coordination.py:RunCoordination.finish` tracks its new
@@ -117,6 +120,8 @@ Production chat does not call this module yet.
 - Feature state is stored as JSON; restoration validates it into a feature model.
 - Tool-facing child waits observe saved completion; parent records are detached.
 - Restored parents can wait for authorized remote children without treating them as completed.
+- A retried remote-completion observation gets a new wake-up subscription; subscriptions follow futures, not only run IDs.
+  Healthy subscriptions are reused without loading saved run content again.
 - Completing an older remote run does not replace a newer latest run for that agent.
 - Handoff requires suspended, idle execution and terminal foreground children.
 - A failed handoff save leaves the existing local owner intact.

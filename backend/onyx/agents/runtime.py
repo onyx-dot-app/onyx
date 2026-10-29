@@ -96,7 +96,6 @@ from onyx.llm.models import (
     GenerationLifecycleEvent,
     GenerationOptions,
     GenerationRequest,
-    LLMErrorInfo,
     Message,
     SystemMessage,
     ToolCall,
@@ -141,19 +140,12 @@ class RunFailed(RuntimeError):
 def _failure(error: Exception, llm: LLM) -> RunFailure:
     if isinstance(error, RunFailed):
         return error.failure.model_copy(deep=True)
-    if isinstance(error, ClassifiedLLMError):
-        info = LLMErrorInfo(
-            message=llm.redact_error(error.client_error_msg),
-            error_code=error.error_code,
-            is_retryable=error.is_retryable,
-        )
-        return RunFailure(kind=RunFailureKind.LLM, message=info.message, llm_error=info)
     info = litellm_exception_to_safe_error(error, llm, fallback_to_error_msg=False)
     if isinstance(error, LLMTimeoutError):
         kind = RunFailureKind.LLM_TIMEOUT
     elif isinstance(error, LLMRateLimitError):
         kind = RunFailureKind.LLM_RATE_LIMIT
-    elif isinstance(error, LLMContextLimitError):
+    elif isinstance(error, (LLMContextLimitError, ClassifiedLLMError)):
         kind = RunFailureKind.LLM
     else:
         kind = RunFailureKind.EXECUTION
@@ -479,7 +471,7 @@ class Run:
         # Reserve execution through cleanup, even after output becomes terminal.
         self._execution_active = True
         self._execution_request = ExecutionRequest.NONE
-        self._watched_children: set[str] = set()
+        self._watched_children: dict[str, Future[RunState]] = {}
         self._llm: LLM | None = None
         self._defaults = PreparedStep()
         self._generation_context = GenerationContext()
@@ -1051,12 +1043,17 @@ class Run:
         coordinator = self.coordination.coordinator
         for run_id in run_ids:
             with self.execution_lock:
-                if run_id in self._watched_children:
+                watched = self._watched_children.get(run_id)
+                if watched is not None and (
+                    not watched.done() or watched.exception() is None
+                ):
                     continue
-                self._watched_children.add(run_id)
-            coordinator.child_completion(run_id, self.agent_id).add_done_callback(
-                lambda _future: self._wake_execution()
-            )
+            completion = coordinator.child_completion(run_id, self.agent_id)
+            with self.execution_lock:
+                if self._watched_children.get(run_id) is completion:
+                    continue
+                self._watched_children[run_id] = completion
+            completion.add_done_callback(lambda _future: self._wake_execution())
 
     def _suspend(self) -> None:
         if self._restoration is not None:

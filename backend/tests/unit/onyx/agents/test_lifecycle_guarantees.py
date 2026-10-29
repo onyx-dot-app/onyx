@@ -36,6 +36,7 @@ from onyx.llm.models import (
     TextContent,
     TextDeltaEvent,
     ToolCall,
+    ToolChoiceOptions,
     ToolDefinition,
     ToolResult,
     ToolResultMessage,
@@ -198,6 +199,8 @@ def test_failed_handle_releases_agent_and_preserves_error_classification(
             client_error_msg="Unavailable",
             error_code="provider_error",
             is_retryable=True,
+            tool_choice=ToolChoiceOptions.REQUIRED,
+            finish_reason="length",
         )
 
     agent = Agent(
@@ -211,6 +214,8 @@ def test_failed_handle_releases_agent_and_preserves_error_classification(
             run.result()
         assert raised.value.failure.llm_error is not None
         assert raised.value.failure.llm_error.is_retryable
+        assert raised.value.failure.llm_error.tool_choice == ToolChoiceOptions.REQUIRED
+        assert raised.value.failure.llm_error.finish_reason == "length"
     assert run.wait_for_idle(2)
     del agent
     time.sleep(0)

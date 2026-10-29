@@ -11,6 +11,8 @@ from onyx.llm.model_capabilities import (
     model_identity_names,
 )
 
+TOKEN_COUNT_CACHE_SIZE = 1024
+
 
 class TokenBudget(BaseModel):
     model_config = ConfigDict(frozen=True)

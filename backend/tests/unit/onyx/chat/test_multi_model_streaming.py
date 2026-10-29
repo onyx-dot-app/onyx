@@ -558,12 +558,15 @@ class TestRunModels:
         assert errors[0].error_code == "CONTEXT_TOO_LONG"
         assert errors[0].is_retryable is False
 
-    def test_model_refusal_preserves_error_classification(self) -> None:
+    @pytest.mark.parametrize("tool_choice", [ToolChoiceOptions.AUTO, None])
+    def test_model_refusal_preserves_error_classification(
+        self, tool_choice: ToolChoiceOptions | None
+    ) -> None:
         refusal_message = "The selected model declined to respond."
         refusal = EmptyLLMResponseError(
             provider="anthropic",
             model="claude-fable-5",
-            tool_choice=ToolChoiceOptions.AUTO,
+            tool_choice=tool_choice,
             client_error_msg=refusal_message,
             error_code=MODEL_REFUSAL_ERROR_CODE,
             is_retryable=False,
