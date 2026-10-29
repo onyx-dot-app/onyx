@@ -590,8 +590,8 @@ Shared spreadsheet payload validation lives in `web/src/lib/csv.ts`. Invalid CSV
 The browser keeps input busy until the session status endpoint confirms completion.
 Stream closure alone does not confirm that the answer was saved.
 `lib/chat/sessionReadiness.ts` polls status; `settleChatSession.ts` then reloads saved history.
-The existing processing fence supplies status until the runtime ownership change lands.
-It does not cover preparation before that fence is written.
+Status checks the session owner held by `ChatTurnAdmission`.
+That owner covers preparation, execution, saving, and cleanup.
 
 `stopChatSession.ts` waits for the send acknowledgement before stopping its stream ID.
 A late acknowledgement or history refresh cannot change a newer request.
