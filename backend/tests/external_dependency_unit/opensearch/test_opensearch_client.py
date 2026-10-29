@@ -710,8 +710,13 @@ class TestOpenSearchClient:
         # Under test and postcondition.
         # Bulk index the same docs again without update_if_exists - should
         # raise.
-        with pytest.raises(BulkIndexError, match="already exists"):
+        with pytest.raises(BulkIndexError) as exc_info:
             test_client.bulk_index_documents(documents=docs, tenant_state=tenant_state)
+        # The message carries counts by error type; the raw items stay on .errors.
+        assert "5x op=create status=409 type=version_conflict_engine_exception" in str(
+            exc_info.value
+        )
+        assert len(exc_info.value.errors) == 5
 
         # Sanity check: passing update_if_exists=True does not raise.
         test_client.bulk_index_documents(
