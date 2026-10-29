@@ -9,11 +9,10 @@ the Storage Blob Data Reader role; ACLs can grant it per directory instead.
 from collections.abc import Callable
 from typing import TypeVar
 
+from onyx.configs.app_configs import BLOB_STORAGE_SIZE_THRESHOLD
 from onyx.connectors.azure_datalake.config import AzureDataLakeConnectorConfig
-from onyx.connectors.azure_datalake.models import (
-    AzureDataLakePath,
-    AzureDataLakeSignIn,
-)
+from onyx.connectors.azure_datalake.connector import is_indexable_file
+from onyx.connectors.azure_datalake.models import AzureDataLakePath
 from onyx.connectors.azure_datalake.source_operations import (
     AzureDataLakeRequestError,
     AzureDataLakeSourceOperations,
@@ -32,13 +31,19 @@ from onyx.connectors.capability_checks.models import (
     MicrosoftSignIn,
     sign_in_timeout_text,
 )
-from onyx.connectors.exceptions import UnexpectedValidationError
+from onyx.connectors.exceptions import (
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
 from onyx.connectors.microsoft_utils.graph_errors import (
     MicrosoftAuthError,
     MicrosoftGraphError,
     raise_for_auth_error,
 )
-from onyx.connectors.microsoft_utils.models import MicrosoftAccountLabels
+from onyx.connectors.microsoft_utils.models import (
+    MicrosoftAccountLabels,
+    MicrosoftTokenInfo,
+)
 
 T = TypeVar("T")
 
@@ -80,7 +85,7 @@ def _probe(action: Callable[[], T], failed: str) -> T:
         raise UnexpectedValidationError(f"{failed} {error}") from error
 
 
-def _sign_in(gateway: AzureDataLakeSourceOperations) -> AzureDataLakeSignIn:
+def _sign_in(gateway: AzureDataLakeSourceOperations) -> MicrosoftTokenInfo | None:
     try:
         return gateway.check_sign_in()
     except MicrosoftAuthError as error:
@@ -92,7 +97,9 @@ def _sign_in(gateway: AzureDataLakeSourceOperations) -> AzureDataLakeSignIn:
 def _smallest_file(
     gateway: AzureDataLakeSourceOperations, path_prefix: str
 ) -> AzureDataLakePath | None:
-    """The smallest non-empty file in the first few listing pages."""
+    """The smallest non-empty file in the first few listing pages that
+    indexing admits. Images are left out: the check cannot read the image
+    setting."""
     files: list[AzureDataLakePath] = []
     continuation_token: str | None = None
     for _ in range(_FILE_PROBE_MAX_PAGES):
@@ -105,7 +112,10 @@ def _smallest_file(
         files.extend(
             path
             for path in page.paths
-            if not path.is_directory and path.content_length > 0
+            if path.content_length > 0
+            and is_indexable_file(
+                path, allow_images=False, size_threshold=BLOB_STORAGE_SIZE_THRESHOLD
+            )
         )
         continuation_token = page.continuation_token
         if files or continuation_token is None:
@@ -162,12 +172,12 @@ class _SignInCheck(_AzureDataLakeCheck):
         )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
-        signed_in: AzureDataLakeSignIn = _probe(
+        token: MicrosoftTokenInfo | None = _probe(
             lambda: _sign_in(_gateway(context)), "The sign-in could not be checked."
         )
-        if signed_in.token is None:
+        if token is None:
             return CheckOutput(summary="Signed in with the account key")
-        text: MicrosoftSignIn = sign_in_text(signed_in.token, _ACCOUNT_LABELS)
+        text: MicrosoftSignIn = sign_in_text(token, _ACCOUNT_LABELS)
         return CheckOutput(
             summary=text.summary,
             description=text.description,
@@ -182,18 +192,38 @@ class _ContainerCheck(_AzureDataLakeCheck):
             display_name="The container is readable",
             remediation=f"Check the container name. {_ROLE_REMEDIATION}",
             requires_fields=_CONTAINER_FIELDS,
-            config_fields=_CONTAINER_FIELDS,
+            config_fields=_ALL_FIELDS,
             depends_on=(SIGN_IN_CHECK_ID,),
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
         gateway = _gateway(context)
-        _probe(
-            lambda: gateway.list_paths_page(
-                path_prefix="", recursive=False, page_size=1, continuation_token=None
-            ),
-            "The container could not be listed.",
-        )
+        try:
+            _probe(
+                lambda: gateway.list_paths_page(
+                    path_prefix="",
+                    recursive=False,
+                    page_size=1,
+                    continuation_token=None,
+                ),
+                "The container could not be listed.",
+            )
+        except InsufficientPermissionsError:
+            # ACL access can start below the root: execute on the root and
+            # read on the path prefix. The path prefix check lists that.
+            if not self.config(context).path_prefix:
+                raise
+            return CheckOutput(
+                advisories=[
+                    CheckAdvisory(
+                        message=(
+                            "The container root is not readable, so only the "
+                            "path prefix is checked."
+                        )
+                    )
+                ]
+            )
+        return None
 
 
 class _PathPrefixCheck(_AzureDataLakeCheck):

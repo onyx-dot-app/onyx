@@ -14,6 +14,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.azure_datalake import connector as connector_module
 from onyx.connectors.azure_datalake.capability_checks import (
     CONTAINER_CHECK_ID,
+    PATH_PREFIX_CHECK_ID,
     build_azure_datalake_indexing_checks,
 )
 from onyx.connectors.azure_datalake.connector import AzureDataLakeConnector
@@ -212,10 +213,12 @@ def test_the_indexing_checks_pass(
     assert _not_passed(results) == {}
 
 
-def test_an_app_without_a_role_fails_the_container_check(
+def test_an_app_without_a_role_fails_the_path_prefix_check(
     test_secrets: dict[TestSecret, str],
 ) -> None:
     results = _run_checks(_no_role_credentials(test_secrets))
 
     statuses = {result.check_id: result.status for result in results}
-    assert statuses[CONTAINER_CHECK_ID] is CapabilityCheckStatus.FAILED
+    # With a path prefix, a closed root leaves the decision to the prefix.
+    assert statuses[CONTAINER_CHECK_ID] is CapabilityCheckStatus.PASSED
+    assert statuses[PATH_PREFIX_CHECK_ID] is CapabilityCheckStatus.FAILED

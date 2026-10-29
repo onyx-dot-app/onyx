@@ -77,6 +77,37 @@ def _utc(epoch_seconds: SecondsSinceUnixEpoch) -> datetime:
     return datetime.fromtimestamp(epoch_seconds, tz=timezone.utc)
 
 
+def has_indexable_name(path: str, *, allow_images: bool) -> bool:
+    ext: str = get_file_ext(posixpath.basename(path))
+    if ext not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
+        logger.debug("Skipping unsupported file type: %s", path)
+        return False
+    if ext in OnyxFileExtensions.IMAGE_EXTENSIONS and not allow_images:
+        logger.debug("Skipping image file: %s (images are off)", path)
+        return False
+    return True
+
+
+def is_indexable_file(
+    path: AzureDataLakePath, *, allow_images: bool, size_threshold: int
+) -> bool:
+    """Indexing, the slim listing and the file-read check admit the same
+    files."""
+    if path.is_directory or not has_indexable_name(
+        path.name, allow_images=allow_images
+    ):
+        return False
+    if path.content_length > size_threshold:
+        logger.info(
+            "Skipping %s: %s bytes is over the %s byte limit",
+            path.name,
+            path.content_length,
+            size_threshold,
+        )
+        return False
+    return True
+
+
 class AzureDataLakeConnector(
     CheckpointedConnector[AzureDataLakeCheckpoint],
     SlimConnector,
@@ -178,29 +209,10 @@ class AzureDataLakeConnector(
         )
         return nodes
 
-    def _has_indexable_name(self, path: str) -> bool:
-        ext: str = get_file_ext(posixpath.basename(path))
-        if ext not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
-            logger.debug("Skipping unsupported file type: %s", path)
-            return False
-        if ext in OnyxFileExtensions.IMAGE_EXTENSIONS and not self._allow_images:
-            logger.debug("Skipping image file: %s (images are off)", path)
-            return False
-        return True
-
     def _is_indexable(self, path: AzureDataLakePath) -> bool:
-        """Indexing and the slim listing admit the same files."""
-        if path.is_directory or not self._has_indexable_name(path.name):
-            return False
-        if path.content_length > self.size_threshold:
-            logger.info(
-                "Skipping %s: %s bytes is over the %s byte limit",
-                path.name,
-                path.content_length,
-                self.size_threshold,
-            )
-            return False
-        return True
+        return is_indexable_file(
+            path, allow_images=self._allow_images, size_threshold=self.size_threshold
+        )
 
     def _failure(self, path: str, error: Exception) -> ConnectorFailure:
         return ConnectorFailure(
@@ -225,10 +237,7 @@ class AzureDataLakeConnector(
             source=DocumentSource.AZURE_DATALAKE,
             link=self._link(path),
             last_modified=file.last_modified,
-            image_file_id=(
-                f"{DOCUMENT_ID_PREFIX}_{self.account_name}_{self.container_name}_"
-                f"{path.replace('/', '_')}"
-            ),
+            image_file_id=quote(self.document_id(path), safe=""),
             raw_file_callback=self.raw_file_callback,
             include_embedded_images=self._allow_images,
         )
@@ -351,7 +360,7 @@ class AzureDataLakeConnector(
                     ),
                 )
                 continue
-            if not self._has_indexable_name(path):
+            if not has_indexable_name(path, allow_images=self._allow_images):
                 continue
             yield from self._ancestor_nodes(path)
             if (item := self._index_file(path)) is not None:

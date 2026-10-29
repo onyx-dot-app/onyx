@@ -25,14 +25,16 @@ MODULE = "onyx.connectors.azure_datalake.source_operations"
 CONFIG = {"account_name": "onyxtest", "container_name": "docs"}
 
 
-def _gateway(credential_json: dict[str, Any]) -> AzureDataLakeSourceOperations:
+def _gateway(
+    credential_json: dict[str, Any], config: dict[str, Any] = CONFIG
+) -> AzureDataLakeSourceOperations:
     return AzureDataLakeSourceOperations(
         credentials_provider=OnyxStaticCredentialsProvider(
             tenant_id=None,
             connector_name="azure_datalake",
             credential_json=credential_json,
         ),
-        connector_specific_config=CONFIG,
+        connector_specific_config=config,
     )
 
 
@@ -86,18 +88,20 @@ def test_a_missing_container_names_the_container() -> None:
 
 
 def test_an_account_key_signs_requests_itself() -> None:
+    # The sign-in check runs before a container is chosen.
     gateway = _gateway(
         {
             "authentication_method": "account_key",
             "adls_account_name": "onyxtest",
             "adls_account_key": "key",
-        }
+        },
+        config={"account_name": "onyxtest"},
     )
 
     with patch(f"{MODULE}.DataLakeServiceClient") as client_class:
-        signed_in = gateway.check_sign_in()
+        token = gateway.check_sign_in()
 
-    assert signed_in.token is None
+    assert token is None
     assert client_class.call_args.kwargs["credential"] == "key"
     assert client_class.call_args.kwargs["account_url"] == (
         "https://onyxtest.dfs.core.windows.net"

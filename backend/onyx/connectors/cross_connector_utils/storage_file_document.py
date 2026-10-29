@@ -106,7 +106,10 @@ def build_storage_file_document(
         ),
     )
     onyx_metadata, custom_tags = process_onyx_metadata(extraction_result.metadata)
-    link = onyx_metadata.link or link
+    if onyx_metadata.link:
+        # Embedded images were stored before the metadata named the link.
+        link = onyx_metadata.link
+        sections = [section.model_copy(update={"link": link}) for section in sections]
     if text := extraction_result.text_content.strip():
         sections.append(TextSection(link=link, text=text))
     return Document(

@@ -5,7 +5,6 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from onyx.connectors.microsoft_credential import ACCOUNT_KEY_AUTHENTICATION_METHOD
-from onyx.connectors.microsoft_utils.models import MicrosoftTokenInfo
 from onyx.connectors.models import ConnectorCheckpoint
 
 AUTHENTICATION_METHOD_KEY = "authentication_method"
@@ -63,11 +62,6 @@ class AzureDataLakeFile(BaseModel):
     last_modified: datetime
     # None when the file is larger than the caller's limit.
     content: bytes | None
-
-
-class AzureDataLakeSignIn(BaseModel):
-    # None for an account key, which signs requests without a token.
-    token: MicrosoftTokenInfo | None
 
 
 class AzureDataLakeCheckpoint(ConnectorCheckpoint):

@@ -302,3 +302,27 @@ def test_azure_data_lake_account_key_keeps_its_own_shape() -> None:
     assert not is_credential_usable_for_source(
         DocumentSource.AZURE_DATALAKE, stored, DocumentSource.SHAREPOINT
     )
+
+
+def test_an_app_registration_account_cannot_become_an_account_key() -> None:
+    stored = to_stored_credential_json(
+        DocumentSource.AZURE_DATALAKE,
+        {
+            "authentication_method": "client_secret",
+            "adls_client_id": "client",
+            "adls_directory_id": "tenant",
+            "adls_client_secret": "secret",
+        },
+        None,
+    )
+
+    with pytest.raises(ValueError, match="Create a new account"):
+        to_stored_credential_json(
+            DocumentSource.AZURE_DATALAKE,
+            {
+                "authentication_method": "account_key",
+                "adls_account_name": "onyxtest",
+                "adls_account_key": "key",
+            },
+            stored,
+        )

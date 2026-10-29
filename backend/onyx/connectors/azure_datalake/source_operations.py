@@ -26,14 +26,16 @@ from azure.storage.filedatalake import (
 from pydantic import ValidationError
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.azure_datalake.config import AzureDataLakeConnectorConfig
+from onyx.connectors.azure_datalake.config import (
+    AzureDataLakeConnectorConfig,
+    AzureDataLakeCredentialBinding,
+)
 from onyx.connectors.azure_datalake.models import (
     AzureDataLakeAuthMethod,
     AzureDataLakeCredentials,
     AzureDataLakeFile,
     AzureDataLakePath,
     AzureDataLakePathPage,
-    AzureDataLakeSignIn,
 )
 from onyx.connectors.capabilities import CredentialCapability
 from onyx.connectors.exceptions import (
@@ -50,6 +52,7 @@ from onyx.connectors.microsoft_utils.graph_auth import (
     build_graph_auth_context,
     token_info,
 )
+from onyx.connectors.microsoft_utils.models import MicrosoftTokenInfo
 from onyx.connectors.source_operations import (
     OperationConsumes,
     SourceOperations,
@@ -143,6 +146,16 @@ class AzureDataLakeSourceOperations(SourceOperations):
                 "Set a valid storage account and container."
             ) from e
 
+    def _account_name(self) -> str:
+        """The storage account alone, which the account-level client and the
+        sign-in check need before a container is chosen."""
+        try:
+            return AzureDataLakeCredentialBinding.model_validate(
+                self.connector_specific_config or {}
+            ).account_name
+        except ValidationError as e:
+            raise ConnectorValidationError("Set a valid storage account.") from e
+
     def _credentials(self) -> AzureDataLakeCredentials:
         try:
             return AzureDataLakeCredentials.model_validate(
@@ -186,7 +199,7 @@ class AzureDataLakeSourceOperations(SourceOperations):
                         self._auth_context(credentials)
                     )
                 self._service_cache = DataLakeServiceClient(
-                    account_url=f"https://{self._config().account_name}.{DFS_ENDPOINT_SUFFIX}",
+                    account_url=f"https://{self._account_name()}.{DFS_ENDPOINT_SUFFIX}",
                     credential=storage_credential,
                     connection_timeout=_CONNECTION_TIMEOUT_SECONDS,
                     read_timeout=_READ_TIMEOUT_SECONDS,
@@ -215,7 +228,7 @@ class AzureDataLakeSourceOperations(SourceOperations):
         except ServiceRequestError as e:
             raise UnreachableValidationError(
                 f"Onyx cannot reach the storage account "
-                f"'{self._config().account_name}'. Check the account name."
+                f"'{self._account_name()}'. Check the account name."
             ) from e
         except HttpResponseError as e:
             code: str | None = _error_code(e)
@@ -243,23 +256,22 @@ class AzureDataLakeSourceOperations(SourceOperations):
         capabilities=(CredentialCapability.INDEXING,),
         consumes=OperationConsumes.BOTH,
     )
-    def check_sign_in(self) -> AzureDataLakeSignIn:
-        """An app registration gets an Azure Storage token. An account key
-        signs one request for the account's first container."""
+    def check_sign_in(self) -> MicrosoftTokenInfo | None:
+        """An app registration gets an Azure Storage token. An account key,
+        which has no token, signs one request for the account's first
+        container."""
         credentials = self._credentials()
         if credentials.authentication_method is not AzureDataLakeAuthMethod.ACCOUNT_KEY:
             auth_context = self._auth_context(credentials)
-            return AzureDataLakeSignIn(
-                token=token_info(
-                    auth_context, acquire_token_response(auth_context, STORAGE_RESOURCE)
-                )
+            return token_info(
+                auth_context, acquire_token_response(auth_context, STORAGE_RESOURCE)
             )
         service = self._service()
         self._call(
             lambda: next(iter(service.list_file_systems(results_per_page=1)), None),
             "the storage account",
         )
-        return AzureDataLakeSignIn(token=None)
+        return None
 
     @source_operation(
         capabilities=(CredentialCapability.INDEXING,),

@@ -142,6 +142,13 @@ def to_stored_credential_json(
                 f"The {source.value} source cannot write this "
                 f"{current_family.value} credential."
             )
+        # e.g. an app registration account edited into an account key, which
+        # must not land in a shareable family credential.
+        if not codec.stores_in_family(source_json):
+            raise ValueError(
+                f"This {current_family.value} account cannot change to a "
+                f"{source.value}-only method. Create a new account instead."
+            )
     elif (
         codec is None
         or current_stored_json is not None
