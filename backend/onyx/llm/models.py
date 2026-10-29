@@ -130,7 +130,7 @@ class TextContentPart(BaseModel):
     type: Literal["text"] = "text"
     text: str
     # Some providers (e.g. Anthropic/Gemini) support prompt caching controls on content blocks.
-    cache_control: dict | None = None
+    cache_control: dict[str, JsonValue] | None = None
 
 
 class ImageUrlDetail(BaseModel):
