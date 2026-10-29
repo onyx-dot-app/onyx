@@ -130,9 +130,8 @@ var (
 		DestRel:   "data/nginx/mcp_upstream.conf.inc.template",
 		Mode:      0644,
 	}
-	// The webhook routes need no rendering: they name their upstream in a
-	// variable, so both app.conf templates can include this file whether or
-	// not the webhook_server service is running.
+	// Not a template: the routes name their upstream in a variable, so both
+	// app.conf templates include this file unconditionally.
 	NginxWebhookConf = File{
 		EmbedPath: "embedded/data/nginx/webhook.conf.inc",
 		RepoPath:  "deployment/data/nginx/webhook.conf.inc",

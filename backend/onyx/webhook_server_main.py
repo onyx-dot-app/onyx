@@ -1,14 +1,7 @@
 """Entry point for the webhook server, which receives connector events.
 
-Whether this process runs is a deployment decision, not a runtime one:
-`webhookServer.enabled` in the Helm values, or the `webhook` Compose profile.
-Neither needs an Onyx environment variable, and nothing here reads the
-database to decide whether to serve.
-
-The bind address is fixed rather than configurable. Nothing reaches this
-process directly — Kubernetes routes to it through a Service, and Compose
-through nginx — so the container port is an internal detail that both
-deployments already agree on.
+Whether this process runs is a deployment decision: `webhookServer.enabled`
+in the Helm values, or the `webhook` Compose profile.
 """
 
 import uvicorn
@@ -26,8 +19,7 @@ logger = setup_logger()
 
 POSTGRES_WEBHOOK_APP_NAME = "webhook_server"
 
-# Must match the container port in the Helm deployment and the nginx upstream
-# in deployment/data/nginx/webhook.conf.inc.
+# Matches the Helm container port and the nginx upstreams.
 WEBHOOK_SERVER_HOST = "0.0.0.0"  # noqa: S104 — container bind address
 WEBHOOK_SERVER_PORT = 8091
 

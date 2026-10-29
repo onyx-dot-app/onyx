@@ -1,16 +1,10 @@
 """The webhook server: one FastAPI app that receives connector events.
 
-It is a separate app rather than a route on the api_server for two reasons.
-The endpoint is unauthenticated, so it should not share a listener with
-authenticated routes — and this app cannot serve one, whatever an ingress is
-configured to send it. And the api_server's tenant middleware resolves a
-tenant from a session, a bearer token or the OAuth provider, none of which a
-provider's POST carries; hosting the route there would mean an exception in
-`TENANT_RESOLUTION_SKIP_PATHS` plus bespoke resolution inside the handler.
+Separate from the api_server because the endpoint is unauthenticated, and
+because the api_server resolves a tenant from a session, a bearer token or
+the OAuth provider — none of which a provider's POST carries.
 
-The app holds no connector logic of its own. It serves no event route yet:
-this slice is the process and its lifecycle. A source that receives webhooks
-adds its route in a later change.
+It serves no event route yet; a source adds one in a later change.
 """
 
 from fastapi import FastAPI, Request
@@ -32,8 +26,7 @@ def create_webhook_app() -> FastAPI:
     app = FastAPI(
         title="Onyx Webhook Server",
         description="Receives connector events from event-based sources",
-        # No browser reaches this app, so the interactive docs would only
-        # widen the surface.
+        # No browser reaches this app, so interactive docs only widen the surface.
         openapi_url=None,
         docs_url=None,
         redoc_url=None,

@@ -17,7 +17,7 @@ spec:
       {{- include "onyx.selectorLabels" . | nindent 6 }}
       app: {{ .Values.webhookServer.deploymentLabels.app }}
   endpoints:
-    - port: webhook-port
+    - port: {{ .Values.webhookServer.service.portName }}
       path: /metrics
       interval: 30s
       scrapeTimeout: 10s

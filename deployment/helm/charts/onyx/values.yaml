@@ -1249,16 +1249,17 @@ mcpServer:
 
 webhookServer:
   extraEnv: []
-  # Receives connector events from sources that push them. This flag is the
-  # only switch: on creates the deployment, service and ingress, off creates
-  # nothing at all. The server has no environment variables of its own.
+  # Runs the webhook server, which receives connector events from sources that
+  # push them. Creates the deployment and service; the ingress and
+  # servicemonitor also need `ingress.enabled` and
+  # `monitoring.serviceMonitors.enabled`. With ingress.enabled=false the
+  # bundled nginx routes /webhook instead.
   enabled: false
   replicaCount: 1
   image:
     repository: onyxdotapp/onyx-backend
     tag: ""  # Overrides the image tag whose default is the chart appVersion.
-  # Path prefix the ingress routes to this server, stripped before the app
-  # sees it. Each source's router owns the path below it.
+  # Prefix the ingress routes here, stripped before the app sees it.
   ingressPath: /webhook
   podAnnotations: {}
   podLabels:

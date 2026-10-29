@@ -60,9 +60,7 @@ spec:
           command: [{{ include "onyx.customCACerts.commandPrefix" . }}"python", "onyx/webhook_server_main.py"]
           ports:
             - name: webhook-port
-              # Fixed, to match WEBHOOK_SERVER_PORT in
-              # backend/onyx/webhook_server_main.py. The Service below is
-              # where you change the port other things connect to.
+              # Matches WEBHOOK_SERVER_PORT in onyx/webhook_server_main.py.
               containerPort: 8091
               protocol: TCP
           livenessProbe:

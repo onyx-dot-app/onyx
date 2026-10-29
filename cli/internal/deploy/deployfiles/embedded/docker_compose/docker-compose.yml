@@ -294,10 +294,8 @@ services:
     volumes:
       - mcp_server_logs:/var/log/onyx
 
-  # Receives connector events from sources that push them. Not started unless
-  # the `webhook` profile is active: add it to the COMPOSE_PROFILES line in
-  # .env, or pass --profile webhook. Nothing else turns it on, and nginx
-  # starts with or without it (see data/nginx/webhook.conf.inc).
+  # Receives connector events from sources that push them. Add `webhook` to
+  # COMPOSE_PROFILES in .env to run it; nginx starts either way.
   webhook_server:
     profiles: ["webhook"]
     image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
@@ -309,13 +307,12 @@ services:
     env_file:
       - path: .env
         required: false
+    # No `cache`: unused, and the Lite overlay puts it behind a profile.
     depends_on:
       - relational_db
-      - cache
     restart: unless-stopped
     environment:
       - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
-      - REDIS_HOST=${REDIS_HOST:-cache}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     logging:

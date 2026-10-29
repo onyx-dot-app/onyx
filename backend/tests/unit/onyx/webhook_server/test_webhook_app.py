@@ -1,12 +1,8 @@
-"""The webhook server's app builds and answers its probe.
+"""`/health` backs the Helm liveness and readiness probes.
 
-`/health` is what the Helm liveness and readiness probes call, so a
-regression there takes the pod down rather than degrading one route.
-
-The app is built against a throwaway Prometheus registry. The instrumentator
-registers its metrics on the global one when the middleware stack is built,
-so sharing it with whatever else the suite has already instrumented raises on
-duplicate timeseries and makes these tests depend on collection order.
+The app uses a throwaway Prometheus registry: the instrumentator registers on
+the global one when the middleware stack is built, so sharing it with another
+instrumented test raises on duplicate timeseries.
 """
 
 from collections.abc import Generator
@@ -44,8 +40,12 @@ def test_health_tolerates_a_trailing_slash(client: TestClient) -> None:
 
 
 def test_metrics_is_not_open(client: TestClient) -> None:
-    """/metrics must stay shut: the ingress publishes this app's whole path."""
-    assert client.get("/metrics").status_code == 401
+    """The ingress publishes this app's whole path, so /metrics stays shut.
+
+    Pinned so the assertion reads the locked default, not the environment.
+    """
+    with patch("onyx.server.metrics.metrics_auth.DISABLE_METRICS_AUTH", False):
+        assert client.get("/metrics").status_code == 401
 
 
 def test_serves_no_event_route_yet(client: TestClient) -> None:
