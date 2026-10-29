@@ -962,12 +962,19 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       !sessionFetchError &&
                       showFirstOpenLoader
                     }
-                    className="h-full w-full flex flex-col items-center justify-end overflow-hidden px-2 sm:px-4 pb-12"
+                    className="h-full w-full flex flex-col items-center px-2 sm:px-4 pt-6 pb-12"
                   >
                     {/* A conversation's shape in the chat column, from the
-                        bottom up like a real chat. More turns than fit, so it
-                        fills any height; the top ones clip. */}
-                    <div className="w-full md:max-w-chat-message">
+                        top down like a real chat. More turns than fit, so it
+                        fills any height; the ones that overflow are clipped
+                        (not scrollable) and fade out at the bottom. The bottom
+                        keeps clear of the input bar. */}
+                    <ShadowDiv
+                      variant="mask"
+                      shadowDirection="bottom-only"
+                      containerClassName="w-full md:max-w-chat-message flex-1"
+                      className="flex-1 min-h-0 overflow-y-hidden"
+                    >
                       <Section gap={12} height="fit">
                         {Array.from({ length: 8 }, (_, turn) => (
                           <Section key={turn} gap={12} height="fit">
@@ -976,7 +983,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           </Section>
                         ))}
                       </Section>
-                    </div>
+                    </ShadowDiv>
                   </Fade>
 
                   {/* Session fetch error (404 / 403) */}

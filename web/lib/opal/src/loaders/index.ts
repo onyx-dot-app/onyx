@@ -9,6 +9,7 @@ export {
   ChatMessageLoader,
   type ChatMessageLoaderProps,
   type ChatMessageLoaderOrientation,
+  type ChatMessageLoaderBubbleWidth,
 } from "@opal/loaders/chat-message-loader/components";
 
 /* DropdownLoader */

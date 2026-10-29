@@ -31,7 +31,14 @@ Props: `descriptionLines` (default `1`), plus the plain-mode `Card` props it for
 <ChatMessageLoader orientation="start" />  // the reply: plain lines
 ```
 
-Props: `orientation` (`"start" | "end"`, default `"start"`), on the inline sides, so it mirrors in right-to-left text. `"end"` is a bubble shaped and tinted like a user message (`tint-02`), half the column wide, holding a two-line `LineLoader`; its bars are a step darker (`tint-03`) so they stay visible on the bubble. `"start"` is a full-width three-line `LineLoader`. Stack several, alternating, to stand in for a conversation.
+Props:
+
+- `orientation` (`"start" | "end"`, default `"start"`), on the inline sides, so it mirrors in right-to-left text. `"end"` is a bubble shaped and tinted like a user message (`tint-02`); its bars are a step darker (`tint-03`) so they stay visible on it. `"start"` is plain lines.
+- `lines`: lines of text, at least 1. Unset, a random count: 1 to 3 for `"end"`, 1 to 5 for `"start"`.
+- `lastLineWidth`: the last line's width, as on `LineLoader`. Unset, a random width.
+- `bubbleWidth` (`"end"` only): the bubble's share of the column, `"1/3" | "1/2" | "2/3"`. Unset, a random width.
+
+The random shape is seeded from the instance's `useId`, so each loader has its own shape, the same on the server and the client and on every render. Stack several, alternating, to stand in for a conversation.
 
 ## DropdownLoader
 
