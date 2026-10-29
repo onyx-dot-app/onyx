@@ -777,10 +777,12 @@ def get_chat_messages_by_session(
     # This should handle both the top level tool calls and deep research
     # If there are future nested agents, this can be extended.
     if prefetch_top_two_level_tool_calls:
-        # Load tool_calls and their direct children (one level deep)
+        # Load tool_calls, their search docs (the session replay reads them for
+        # every search and fetch call) and their direct children (one level deep)
         stmt = stmt.options(
-            selectinload(ChatMessage.tool_calls).selectinload(
-                ToolCall.tool_call_children
+            selectinload(ChatMessage.tool_calls).options(
+                selectinload(ToolCall.search_docs),
+                selectinload(ToolCall.tool_call_children),
             )
         )
         result = db_session.scalars(stmt).unique().all()
