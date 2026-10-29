@@ -1,10 +1,12 @@
 """Batch error resolution closes only the pair's open errors for the given
-documents: other documents, entity errors and other pairs stay open."""
+documents: other documents, entity errors and other pairs stay open. The
+UPDATE must be able to use the partial index on open errors."""
 
 from collections.abc import Generator
+from typing import Any
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import event, insert, select, text
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import IndexingStatus
@@ -95,3 +97,60 @@ def test_resolves_only_the_pairs_open_errors_for_the_given_documents(
     assert _is_resolved(db_session, repeat)
     for still_open in (other_doc, entity, other_pair_same_doc):
         assert not _is_resolved(db_session, still_open)
+
+
+_PARTIAL_INDEX = "ix_index_attempt_errors_unresolved_cc_pair_document"
+_RESOLVED_BACKLOG = 5000
+
+
+def test_update_uses_the_partial_index_on_open_errors(
+    db_session: Session,
+    pairs: tuple[ConnectorCredentialPair, ConnectorCredentialPair],
+) -> None:
+    """A pair with a long resolved-error history must not make the UPDATE scan
+    that history. The planner uses the partial index only when the predicate
+    implies its ``NOT is_resolved``; ``is_resolved IS false`` does not."""
+    pair, _ = pairs
+    attempt_id = _add_error(db_session, pair, document_id="doc-a").index_attempt_id
+    db_session.execute(
+        insert(IndexAttemptError),
+        [
+            {
+                "index_attempt_id": attempt_id,
+                "connector_credential_pair_id": pair.id,
+                "document_id": f"old-doc-{i}",
+                "failure_message": "boom",
+                "is_resolved": True,
+            }
+            for i in range(_RESOLVED_BACKLOG)
+        ],
+    )
+    db_session.commit()
+    db_session.execute(text("ANALYZE index_attempt_errors"))
+    db_session.commit()
+
+    captured: list[tuple[str, Any]] = []
+
+    def _capture(*args: Any) -> None:
+        _, _, statement, parameters, _, _ = args
+        if statement.lstrip().upper().startswith("UPDATE INDEX_ATTEMPT_ERRORS"):
+            captured.append((statement, parameters))
+
+    engine = db_session.get_bind()
+    event.listen(engine, "before_cursor_execute", _capture)
+    try:
+        resolve_index_attempt_errors_for_documents(
+            db_session=db_session, cc_pair_id=pair.id, document_ids=["doc-a"]
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", _capture)
+    [(statement, parameters)] = captured
+
+    plan = "\n".join(
+        db_session.connection()
+        .exec_driver_sql(f"EXPLAIN {statement}", parameters)
+        .scalars()
+    )
+    db_session.rollback()
+
+    assert _PARTIAL_INDEX in plan, plan

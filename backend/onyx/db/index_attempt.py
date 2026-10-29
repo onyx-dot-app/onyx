@@ -1285,7 +1285,9 @@ def resolve_index_attempt_errors_for_documents(
         .where(
             IndexAttemptError.connector_credential_pair_id == cc_pair_id,
             IndexAttemptError.document_id.in_(document_ids),
-            IndexAttemptError.is_resolved.is_(False),
+            # Must render as NOT is_resolved to match the partial index;
+            # Postgres does not match `IS false` to it.
+            ~IndexAttemptError.is_resolved,
         )
         .values(is_resolved=True)
         .execution_options(synchronize_session=False)
