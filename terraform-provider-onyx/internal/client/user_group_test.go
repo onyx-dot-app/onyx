@@ -3,9 +3,12 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -17,9 +20,15 @@ type routedRequest struct {
 	Body   []byte
 }
 
+// withStatus makes a route answer with a status other than 200.
+func withStatus(status int, body string) string {
+	return fmt.Sprintf("%s%d %s", statusMarker, status, body)
+}
+
+const statusMarker = "status:"
+
 // newRoutingTestServer answers each request from routes, keyed by
-// "METHOD /path". SetUserGroupMembers reads before it writes, so a single
-// canned response is not enough to shape its request.
+// "METHOD /path", so one test can shape a sequence of calls.
 func newRoutingTestServer(t *testing.T, routes map[string]string) (*Client, *[]routedRequest) {
 	t.Helper()
 	seen := &[]routedRequest{}
@@ -33,18 +42,27 @@ func newRoutingTestServer(t *testing.T, routes map[string]string) (*Client, *[]r
 			_, _ = w.Write([]byte(`{"detail": "not routed"}`))
 			return
 		}
+		status := http.StatusOK
+		if rest, ok := strings.CutPrefix(response, statusMarker); ok {
+			code, body, _ := strings.Cut(rest, " ")
+			status, _ = strconv.Atoi(code)
+			response = body
+		}
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(status)
 		_, _ = w.Write([]byte(response))
 	}))
 	t.Cleanup(server.Close)
 	return newFastRetryClient(server.URL), seen
 }
 
-const listPath = "GET /manage/admin/user-group?include_default=true"
+const (
+	listPath = "GET /manage/admin/user-group?include_default=true"
+	getPath  = "GET /manage/admin/user-group/4"
+	notFound = `{"error_code": "NOT_FOUND", "detail": "User group not found"}`
+)
 
-// groupObject renders one group carrying the given connector ids. The write
-// routes answer with a single object; the listing wraps it in an array.
+// groupObject renders one group carrying the given connector ids.
 func groupObject(t *testing.T, ccPairIDs []int64, upToDate bool) string {
 	t.Helper()
 	pairs := make([]map[string]any, 0, len(ccPairIDs))
@@ -70,35 +88,24 @@ func groupObject(t *testing.T, ccPairIDs []int64, upToDate bool) string {
 	return string(body)
 }
 
-func groupListing(t *testing.T, ccPairIDs []int64, upToDate bool) string {
-	t.Helper()
-	return "[" + groupObject(t, ccPairIDs, upToDate) + "]"
-}
-
-// A roster that only gains members goes through add-users, where Onyx keeps
-// the connector links itself inside the transaction that holds the membership
-// lock. That removes this client's read-modify-write, and with it the window
-// where a connector share made at the same moment would be overwritten.
-func TestSetUserGroupMembersAddsThroughTheAddUsersRoute(t *testing.T) {
+// The roster write sends cc_pair_ids as null, which keeps the connector links
+// server-side. Without it, a change that only names people would unshare the
+// group's connectors. One call, no read first.
+func TestSetUserGroupMembersKeepsConnectorLinks(t *testing.T) {
 	c, seen := newRoutingTestServer(t, map[string]string{
-		listPath: groupListing(t, []int64{7}, true),
-		"POST /manage/admin/user-group/4/add-users": groupObject(t, []int64{7}, false),
+		"PATCH /manage/admin/user-group/4": groupObject(t, []int64{7, 9}, false),
 	})
 
-	// u-1 is already a member; u-2 is new. Nobody leaves.
-	if _, err := c.SetUserGroupMembers(context.Background(), 4, []string{"u-1", "u-2"}); err != nil {
+	if _, err := c.SetUserGroupMembers(context.Background(), 4, []string{"u-2", "u-3"}); err != nil {
 		t.Fatal(err)
 	}
-	if len(*seen) != 2 {
-		t.Fatalf("want a read then a write, got %d requests", len(*seen))
+	if len(*seen) != 1 {
+		t.Fatalf("want one write and no read, got %d requests", len(*seen))
 	}
-	if (*seen)[1].Path != "/manage/admin/user-group/4/add-users" {
-		t.Errorf("an additive change must use add-users, got %s", (*seen)[1].Path)
-	}
-
-	body := bodyAsMap(t, (*seen)[1].Body)
-	if _, present := body["cc_pair_ids"]; present {
-		t.Error("add-users must not carry connector ids; Onyx preserves them itself")
+	body := bodyAsMap(t, (*seen)[0].Body)
+	pairs, present := body["cc_pair_ids"]
+	if !present || pairs != nil {
+		t.Errorf("cc_pair_ids must be sent as null, got %s", (*seen)[0].Body)
 	}
 	users, ok := body["user_ids"].([]any)
 	if !ok || len(users) != 2 {
@@ -106,45 +113,19 @@ func TestSetUserGroupMembersAddsThroughTheAddUsersRoute(t *testing.T) {
 	}
 }
 
-// A roster that loses a member has no additive route, so it falls back to the
-// full replace — which replaces connector links along with members. Those links
-// belong to onyx_cc_pair, so they have to be read and sent back. This is the
-// regression guard for that: without the echo-back the pair is silently
-// unshared from the group by a change that only mentioned people.
-func TestSetUserGroupMembersRemovesThroughTheFullReplace(t *testing.T) {
-	c, seen := newRoutingTestServer(t, map[string]string{
-		listPath:                           groupListing(t, []int64{7, 9}, true),
-		"PATCH /manage/admin/user-group/4": groupObject(t, []int64{7, 9}, false),
-	})
-
-	// The listing holds u-1, and the new roster does not.
-	if _, err := c.SetUserGroupMembers(context.Background(), 4, []string{"u-2"}); err != nil {
-		t.Fatal(err)
-	}
-	if (*seen)[1].Method != http.MethodPatch {
-		t.Fatalf("a removal must use the full replace, got %s %s", (*seen)[1].Method, (*seen)[1].Path)
-	}
-	body := bodyAsMap(t, (*seen)[1].Body)
-	pairs, ok := body["cc_pair_ids"].([]any)
-	if !ok || len(pairs) != 2 {
-		t.Errorf("the full replace must still echo the connector ids, got %v", body["cc_pair_ids"])
-	}
-}
-
 // A nil roster clears the group rather than being dropped from the body.
 func TestSetUserGroupMembersSendsAnEmptyRoster(t *testing.T) {
 	c, seen := newRoutingTestServer(t, map[string]string{
-		listPath:                           groupListing(t, nil, true),
 		"PATCH /manage/admin/user-group/4": groupObject(t, nil, false),
 	})
 
 	if _, err := c.SetUserGroupMembers(context.Background(), 4, nil); err != nil {
 		t.Fatal(err)
 	}
-	body := bodyAsMap(t, (*seen)[1].Body)
+	body := bodyAsMap(t, (*seen)[0].Body)
 	users, ok := body["user_ids"].([]any)
 	if !ok {
-		t.Fatalf("user_ids must be sent even when empty: %s", (*seen)[1].Body)
+		t.Fatalf("user_ids must be sent even when empty: %s", (*seen)[0].Body)
 	}
 	if len(users) != 0 {
 		t.Errorf("want an empty roster, got %v", users)
@@ -152,7 +133,9 @@ func TestSetUserGroupMembersSendsAnEmptyRoster(t *testing.T) {
 }
 
 func TestSetUserGroupMembersReportsAMissingGroup(t *testing.T) {
-	c, _ := newRoutingTestServer(t, map[string]string{listPath: `[]`})
+	c, _ := newRoutingTestServer(t, map[string]string{
+		"PATCH /manage/admin/user-group/4": withStatus(http.StatusNotFound, notFound),
+	})
 	_, err := c.SetUserGroupMembers(context.Background(), 4, []string{"u-1"})
 	if !IsNotFound(err) {
 		t.Fatalf("want a not-found error for a group that has gone, got %v", err)
@@ -184,16 +167,55 @@ func TestListUserGroupsAsksForDefaults(t *testing.T) {
 	}
 }
 
-// There is no get-by-id route, so a missing group is an absence from the
-// listing rather than a 404.
+func TestLookupUserGroupReadsOneGroup(t *testing.T) {
+	c, seen := newRoutingTestServer(t, map[string]string{getPath: groupObject(t, []int64{7}, true)})
+	group, found, err := c.LookupUserGroup(context.Background(), 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found || group.ID != 4 || len(group.CCPairIDs()) != 1 {
+		t.Errorf("unexpected group: %+v", group)
+	}
+	if len(*seen) != 1 {
+		t.Errorf("want one get-by-id call, got %d requests", len(*seen))
+	}
+}
+
+// A 404 is an absence, not a failure.
 func TestLookupUserGroupReportsAMissingGroup(t *testing.T) {
-	c, _ := newRoutingTestServer(t, map[string]string{listPath: `[]`})
+	c, _ := newRoutingTestServer(t, map[string]string{getPath: withStatus(http.StatusNotFound, notFound)})
 	group, found, err := c.LookupUserGroup(context.Background(), 4)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if found || group != nil {
 		t.Errorf("want not-found, got %v", group)
+	}
+}
+
+func TestLookupUserGroupReturnsOtherErrors(t *testing.T) {
+	c, _ := newRoutingTestServer(t, map[string]string{
+		getPath: withStatus(http.StatusForbidden, `{"detail": "forbidden"}`),
+	})
+	if _, _, err := c.LookupUserGroup(context.Background(), 4); err == nil {
+		t.Fatal("want the 403 returned, got none")
+	}
+}
+
+// A write on a syncing group answers 409 RESOURCE_SYNCING. A plain conflict
+// is a different error.
+func TestIsSyncing(t *testing.T) {
+	c, _ := newRoutingTestServer(t, map[string]string{
+		"DELETE /manage/admin/user-group/4": withStatus(http.StatusConflict,
+			`{"error_code": "RESOURCE_SYNCING", "detail": "Specified user group is currently syncing."}`),
+		"DELETE /manage/admin/user-group/5": withStatus(http.StatusConflict,
+			`{"error_code": "CONFLICT", "detail": "conflict"}`),
+	})
+	if err := c.DeleteUserGroup(context.Background(), 4); !IsSyncing(err) {
+		t.Errorf("want IsSyncing for RESOURCE_SYNCING, got %v", err)
+	}
+	if err := c.DeleteUserGroup(context.Background(), 5); err == nil || IsSyncing(err) {
+		t.Errorf("a plain conflict is not syncing, got %v", err)
 	}
 }
 
@@ -227,9 +249,9 @@ func TestSetUserGroupPermissionsSendsAnEmptyList(t *testing.T) {
 }
 
 // The delete is asynchronous on a normal deployment and inline when Onyx runs
-// without a vector database. Both end with the group out of the listing.
+// without a vector database. Both end with the group answering 404.
 func TestWaitForUserGroupDeletedAcceptsAnAlreadyGoneGroup(t *testing.T) {
-	c, _ := newRoutingTestServer(t, map[string]string{listPath: `[]`})
+	c, _ := newRoutingTestServer(t, map[string]string{getPath: withStatus(http.StatusNotFound, notFound)})
 	if err := c.WaitForUserGroupDeleted(context.Background(), 4, 5*time.Second); err != nil {
 		t.Fatal(err)
 	}
@@ -238,14 +260,14 @@ func TestWaitForUserGroupDeletedAcceptsAnAlreadyGoneGroup(t *testing.T) {
 // A group that has gone counts as settled, so waiting before a delete does not
 // fail on one that has already finished.
 func TestWaitForUserGroupSettledAcceptsAMissingGroup(t *testing.T) {
-	c, _ := newRoutingTestServer(t, map[string]string{listPath: `[]`})
+	c, _ := newRoutingTestServer(t, map[string]string{getPath: withStatus(http.StatusNotFound, notFound)})
 	if err := c.WaitForUserGroupSettled(context.Background(), 4, 5*time.Second); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestWaitForUserGroupSettledReturnsWhenUpToDate(t *testing.T) {
-	c, _ := newRoutingTestServer(t, map[string]string{listPath: groupListing(t, nil, true)})
+	c, _ := newRoutingTestServer(t, map[string]string{getPath: groupObject(t, nil, true)})
 	if err := c.WaitForUserGroupSettled(context.Background(), 4, 5*time.Second); err != nil {
 		t.Fatal(err)
 	}

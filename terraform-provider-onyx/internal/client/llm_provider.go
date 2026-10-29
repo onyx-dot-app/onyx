@@ -113,23 +113,14 @@ func (c *Client) ListLLMProviders(ctx context.Context) (*LLMProviderList, error)
 	return &list, nil
 }
 
-// GetLLMProvider finds a provider by id. The API has no get-by-id endpoint,
-// so this scans the list; a missing provider returns an *APIError with 404.
+// GetLLMProvider reads one provider, image-generation ones included. A
+// missing provider answers 404.
 func (c *Client) GetLLMProvider(ctx context.Context, id int64) (*LLMProviderView, error) {
-	list, err := c.ListLLMProviders(ctx)
-	if err != nil {
+	var view LLMProviderView
+	if err := c.doJSON(ctx, http.MethodGet, fmt.Sprintf("/admin/llm/provider/%d", id), nil, &view); err != nil {
 		return nil, err
 	}
-	for i := range list.Providers {
-		if list.Providers[i].ID == id {
-			return &list.Providers[i], nil
-		}
-	}
-	return nil, &APIError{
-		StatusCode: http.StatusNotFound,
-		ErrorCode:  "NOT_FOUND",
-		Detail:     fmt.Sprintf("LLM provider with id %d not found", id),
-	}
+	return &view, nil
 }
 
 // DeleteLLMProvider deletes a provider. force allows deleting the provider

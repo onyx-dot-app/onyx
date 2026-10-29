@@ -193,6 +193,17 @@ released Onyx yet, so the provider keeps its workaround and the limitation still
   `onyx_cc_pair`.
 - **An unset `prune_freq` becomes 7 days** on a connector's first update, and the provider
   then keeps that as the value of record.
+- **Most `onyx_cc_pair` access settings force replacement.** Onyx has no update route for
+  `access_type`, `groups`, `auto_sync_options` or `processing_mode`, so a change replaces the
+  pair and re-indexes its documents. Terraform reads them back, so an admin-panel change to one
+  that the configuration sets also plans a replacement. Check the plan before you apply.
+- **`data_access_group_ids` needs Onyx v5.0 and Enterprise Edition.** It is required for
+  `access_type = "sync_restricted"`, which also needs v5.0. On other servers, apply fails
+  instead of leaving the readers unrestricted. Terraform refreshes it only while the
+  configuration sets it. Removing it, or importing a pair, leaves the groups in Onyx as they
+  are.
+- **An unset `access_type` means `public`, also after an import.** Set it to match an
+  imported pair, or the next apply replaces the pair.
 
 ### Agents and actions
 
@@ -202,11 +213,9 @@ released Onyx yet, so the provider keeps its workaround and the limitation still
 - **A deleted agent answers 400, not 404**, so "gone" cannot be read off the status. The
   provider confirms against the agent listing rather than matching error text.
   *Fixed upstream:* the route answers a typed `PERSONA_NOT_FOUND`.
-- **`onyx_agent` does not own every field.** Attached folders and documents are cleared by an
-  omitted list and reject an explicit null, so the provider reads them and writes them back —
-  leaving a one-round-trip window where an attachment added in between is reverted.
-  *Fixed upstream:* both fields are nullable. Separately, `search_start_date` is written but
-  never read back, and avatars are not managed.
+- **`onyx_agent` does not own every field.** The provider does not send attached folders and
+  documents, and Onyx keeps the stored ones. `search_start_date` is written but not refreshed,
+  because Onyx returns it as a full timestamp. Avatars are not managed.
 - **`display_priority` is create-only on the upsert.** Onyx ignores it on later writes, so a
   change costs a second call to the display-priority endpoint. That endpoint can only set a
   number, so the attribute is computed: removing it keeps the last value.
@@ -224,19 +233,14 @@ released Onyx yet, so the provider keeps its workaround and the limitation still
   agents, LLM providers, MCP servers and credentials each carry their own `groups` and own
   that link. The group exposes `cc_pair_ids`, `document_set_ids` and `agent_ids` read-only, so
   the two sides never fight over one edge.
-- **Removing a member can overwrite a concurrent connector share.** Onyx's update endpoint
-  replaces connector links along with members, and there is no removal-only route, so the
-  provider reads the links and writes them back. The window is one round-trip and only opens
-  for a removal; adding members uses an endpoint that preserves the links server-side.
 - **A group's computed links lag one apply.** Terraform creates the group before the
   `onyx_cc_pair` referencing it, so `cc_pair_ids` fills in on the next refresh.
 - **Onyx refuses membership, rename and delete while a group is syncing**, and a new group
-  starts out syncing, so the provider waits before each. Managers, incognito and permissions
-  are not gated.
-- **A syncing group answers 404, not a conflict**, on the membership and delete routes, which
-  map every error to not-found. So a 404 does not prove the group is gone, and destroy
-  confirms against the listing before reporting success. *Fixed upstream:* the gate raises a
-  distinct `RESOURCE_SYNCING` conflict.
+  starts out syncing, so the provider waits before each. A delete that Onyx still refuses with
+  `RESOURCE_SYNCING` is retried. Managers, incognito and permissions are not gated.
+- **A group manager without global `manage:user_groups` cannot read `permissions`.** Onyx
+  refuses that route, so the provider keeps the last known value. After `terraform import` the
+  value reads as empty.
 - **Permissions use Onyx's wire tokens**, such as `manage:connectors`, not the enum names.
   Only toggleable permissions can be set; `basic`, `admin`, `craft_sandbox`, `manage:skills`
   and the implied read tokens are managed by Onyx.

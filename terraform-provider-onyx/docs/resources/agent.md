@@ -104,7 +104,7 @@ resource "onyx_agent" "onboarding" {
 - `replace_base_system_prompt` (Boolean) Use `system_prompt` on its own instead of adding it to Onyx's base prompt. Replacing the base prompt drops the instructions that make citations and search work, so leave it off unless the agent needs full control.
 - `search_start_date` (String) Ignore documents older than this date, as `YYYY-MM-DD` or a full timestamp.
 
-~> Onyx does not return this field, so Terraform cannot detect a change made outside it. The configured value is re-sent on every apply.
+~> Onyx returns this field as a full timestamp, so Terraform keeps the configured value and does not detect a change made outside it. The configured value is re-sent on every apply.
 - `starter_messages` (Attributes List) Suggested opening prompts, shown in the order given. (see [below for nested schema](#nestedatt--starter_messages))
 - `system_prompt` (String) The agent's instructions, added to the system prompt.
 - `task_prompt` (String) Extra instructions appended to each user message.
