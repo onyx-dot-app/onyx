@@ -114,6 +114,20 @@ class AppPosition {
     { replace = false }: NavigationOptions = {}
   ) {
     const href = hrefFor(value);
+    // Within /app only the query changes, and the page renders on the client,
+    // so the URL is written in place: Next keeps useSearchParams in sync with
+    // the history API, and no server round trip holds the switch back (the
+    // sidebar, the URL and the loading view update at once). Leaving or
+    // entering /app is a real navigation.
+    if (
+      typeof window !== "undefined" &&
+      window.location.pathname === "/app" &&
+      new URL(href, window.location.origin).pathname === "/app"
+    ) {
+      if (replace) window.history.replaceState(null, "", href);
+      else window.history.pushState(null, "", href);
+      return;
+    }
     if (replace) this.router.replace(href);
     else this.router.push(href);
   }

@@ -241,7 +241,20 @@ const ChatButton = memo(
     ];
 
     // Pin the chat's agent when clicking on the conversation
-    async function handleClick() {
+    async function handleClick(event: React.MouseEvent<HTMLElement>) {
+      // A plain click switches in place (see AppPosition.openChat), so the tab
+      // and the URL update at once. A modified or middle click keeps the
+      // link's own behavior, e.g. opening the chat in a new tab.
+      const plainClick =
+        event.button === 0 &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.shiftKey &&
+        !event.altKey;
+      if (plainClick) {
+        event.preventDefault();
+        appPosition.openChat(chatSession.id);
+      }
       await pinChatAgent(chatSession);
     }
 
