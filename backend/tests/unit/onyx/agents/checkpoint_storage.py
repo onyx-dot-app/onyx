@@ -7,7 +7,7 @@ from pydantic import BaseModel, JsonValue, TypeAdapter
 
 from onyx.agents.models import AgentState, ExecutionCheckpoint, RunState, RunStatus
 from onyx.chat.checkpoint import (
-    _CheckpointSerializer,
+    CheckpointSerializer,
     deserialize_checkpoint,
     serialize_checkpoint,
 )
@@ -32,7 +32,7 @@ class SavedCheckpoint(BaseModel):
 class CheckpointStorage:
     def __init__(self, payload_types: Mapping[str, type[BaseModel]]) -> None:
         self.payload_types = payload_types
-        self.serializer = _CheckpointSerializer(payload_types)
+        self.serializer = CheckpointSerializer(payload_types)
 
     def save(
         self, run_state: RunState, agent_state: AgentState, binding: CheckpointBinding

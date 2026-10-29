@@ -74,7 +74,7 @@ def _object(value: JsonValue) -> dict[str, JsonValue]:
     return _JSON_OBJECT.validate_python(value)
 
 
-class _CheckpointSerializer:
+class CheckpointSerializer:
     """Serialize execution progress and application models with stable type tags.
 
     Only registered models can be reconstructed from saved data.
@@ -175,7 +175,7 @@ class _CheckpointSerializer:
         return progress
 
 
-def _digest(context: AgentState, serializer: _CheckpointSerializer) -> str:
+def _digest(context: AgentState, serializer: CheckpointSerializer) -> str:
     content = "\n".join(
         # The serializer preserves typed metadata that BaseMessage excludes from JSON.
         json.dumps(
@@ -203,7 +203,7 @@ def _response_digest(response: ResponseRecord) -> str:
 
 
 def _serialized_run_state(
-    state: RunState, serializer: _CheckpointSerializer
+    state: RunState, serializer: CheckpointSerializer
 ) -> dict[str, JsonValue]:
     data = _dump(state, exclude={"input_messages", "steps", "progress"})
     data["steps"] = [
@@ -246,7 +246,7 @@ def serialize_checkpoint(
         raise ValueError("Save each child response independently before checkpointing")
     if snapshot.run_id != response.run_id or binding.response_id != response.run_id:
         raise ValueError("Checkpoint belongs to another response")
-    serializer = _CheckpointSerializer(CHECKPOINT_PAYLOAD_TYPES)
+    serializer = CheckpointSerializer(CHECKPOINT_PAYLOAD_TYPES)
 
     def payload(message: Message) -> MessagePayload:
         return MessagePayload(
@@ -287,7 +287,7 @@ def deserialize_checkpoint(
     binding: CheckpointBinding,
 ) -> ExecutionCheckpoint:
     """Validate saved resume data against the selected history and rebuild execution state."""
-    serializer = _CheckpointSerializer(CHECKPOINT_PAYLOAD_TYPES)
+    serializer = CheckpointSerializer(CHECKPOINT_PAYLOAD_TYPES)
     if _digest(context, serializer) != data.history_digest:
         raise ValueError("Checkpoint history changed")
     if _response_digest(response) != data.response_digest:
@@ -301,7 +301,7 @@ def _restore_checkpoint_state(
     data: ResponseCheckpoint,
     response: ResponseRecord,
     context: AgentState,
-    serializer: _CheckpointSerializer,
+    serializer: CheckpointSerializer,
 ) -> ExecutionCheckpoint:
     snapshot = response_snapshot(response)
     snapshot.status = RunStatus.SUSPENDED
