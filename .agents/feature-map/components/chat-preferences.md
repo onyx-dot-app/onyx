@@ -144,9 +144,9 @@ A schema change here is a KV-blob field addition, not a migration; see root
 ## 4. How it works
 
 Chat Preferences starts with two cards. The chat card holds Default Language,
-Chat Naming Model, Multi-Model Generation, Deep Research and Chat Auto-Scroll.
-The search card holds Search Selection Model, Search Mode and Auto-Detect
-Search Filters. Temperature Control and Reasoning Control are on Language
+Chat Naming Model, Multi-Model Generation, Deep Research, Chat Auto-Scroll,
+Search Mode and Auto-Detect Search Filters. The search card holds Search
+Decision Model. Temperature Control and Reasoning Control are on Language
 Models. `ChatTaskModelSettings` exports one row component for each task model.
 Each row owns its model-provider fetch. Each selector starts with a Global
 Default row above a divider: "Chat Default", since an unset task runs on the
@@ -154,6 +154,14 @@ chat's own model (search selection in the Search UI uses the workspace
 default instead).
 Global Default clears the designation. Each row saves independently from the
 page's workspace settings.
+
+Search Decision Model lists language models and decision models together. A
+model that is both is listed once and counts as a decision model. Picking a
+decision model sets the DECISION default and clears SEARCH_SELECTION, so
+internal search ranks with the decision model (internal-search 4.5.1).
+Picking a language model sets SEARCH_SELECTION and clears DECISION, so search
+keeps LLM selection with that model. Chat Default clears both. The DECISION
+default is the same value the Decision Models page shows.
 CHAT_NAMING controls naming; SEARCH_SELECTION controls document selection and
 relevance checks. Neither changes query rewrites, and neither falls back to
 the other. Language Models retains provider configuration and the default chat

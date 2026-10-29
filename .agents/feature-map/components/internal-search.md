@@ -282,15 +282,17 @@ call. The final answer's evidence allowance remains independent.
 `SearchTool._resolve_decision_client` runs once per search call. It returns a decision
 client only when all of these are true:
 
-- The rollout flag is on. The PostHog flag `onyx-search-decision-rerank-expansion` decides
-  per tenant. When the flag provider is NoOp (self-hosted), the env var
-  `ENABLE_SEARCH_DECISION_RERANK_EXPANSION` decides. It is off by default.
-- A default decision model is configured (`get_decision_client()`).
+- A default decision model is configured (`get_decision_client()`). Admins set
+  it with the Search Decision Model row on Chat Preferences, or on the
+  Decision Models page.
+- Where PostHog is available (cloud), the flag
+  `onyx-search-decision-rerank-expansion` is on for the tenant. With the NoOp
+  provider (self-hosted), the configured model is enough.
 - The turn persists content (`current_turn_persists_content()`). The decision
   client carries no incognito request policy, so content-free turns keep LLM
   selection.
 
-When both are true, LLM selection is replaced:
+When all are true, LLM selection is replaced:
 
 1. The first 100 merged sections are trimmed to
    `RERANK_TOKEN_BUDGET_MULTIPLIER = 4` times the selection budget.

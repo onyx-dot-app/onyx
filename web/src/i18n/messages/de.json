@@ -2222,9 +2222,9 @@
         "description": "Erstellt Sitzungstitel. Ein schnelles, kostengünstiges Modell eignet sich gut.",
         "title": "Modell für Chat-Benennung"
       },
-      "searchSelectionModel": {
-        "description": "Wählt abgerufene Dokumente aus und prüft sie. Ein schnelles, kostengünstiges Modell kann die Suchkosten senken, aber die Antwortqualität beeinträchtigen.",
-        "title": "Modell für Suchauswahl"
+      "searchDecisionModel": {
+        "description": "Wählt gefundene Dokumente aus und entscheidet, wie viel Kontext hinzukommt. Ein Entscheidungsmodell ordnet sie in einem Aufruf. Ein Sprachmodell wählt sie wie bisher aus.",
+        "title": "Such-Entscheidungsmodell"
       },
       "taskModels": {
         "loadFailed": "Aufgabenmodelle konnten nicht geladen werden",
@@ -2405,7 +2405,7 @@
       "toasts": {
         "chatNamingUpdateFailed": "Modell zur Chat-Benennung konnte nicht aktualisiert werden",
         "providerResolveFailed": "Der Anbieter konnte nicht aufgelöst werden",
-        "searchSelectionUpdateFailed": "Modell für die Dokumentauswahl konnte nicht aktualisiert werden",
+        "searchDecisionUpdateFailed": "Such-Entscheidungsmodell konnte nicht aktualisiert werden",
         "settingsUpdateFailed": "Die Einstellungen konnten nicht aktualisiert werden",
         "systemPromptUpdateFailed": "Der System-Prompt konnte nicht aktualisiert werden",
         "toolsUpdateFailed": "Die Tools konnten nicht aktualisiert werden",

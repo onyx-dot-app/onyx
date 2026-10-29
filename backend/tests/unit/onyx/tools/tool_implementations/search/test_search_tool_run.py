@@ -957,16 +957,16 @@ def test_decision_rerank_failure_falls_back_to_llm_selection() -> None:
 
 
 @pytest.mark.parametrize(
-    ("noop", "env_enabled", "flag_enabled", "expect_client"),
+    ("noop", "flag_enabled", "expect_client"),
     [
-        (True, False, False, False),
-        (True, True, False, True),
-        (False, True, False, False),
-        (False, False, True, True),
+        # Without PostHog, a configured decision model is enough.
+        (True, False, True),
+        (False, False, False),
+        (False, True, True),
     ],
 )
-def test_decision_client_requires_the_flag(
-    noop: bool, env_enabled: bool, flag_enabled: bool, expect_client: bool
+def test_decision_client_requires_the_flag_only_with_posthog(
+    noop: bool, flag_enabled: bool, expect_client: bool
 ) -> None:
     posthog = MagicMock()
     posthog.feature_enabled_for_user_tenant.return_value = flag_enabled
@@ -974,13 +974,23 @@ def test_decision_client_requires_the_flag(
     client = MagicMock()
     with (
         patch(f"{MODULE}.get_default_feature_flag_provider", return_value=provider),
-        patch(f"{MODULE}.ENABLE_SEARCH_DECISION_RERANK_EXPANSION", env_enabled),
         patch(f"{MODULE}.get_decision_client", return_value=client) as get_client,
     ):
         resolved = _make_tool()._resolve_decision_client()
 
     assert (resolved is client) is expect_client
     assert get_client.called is expect_client
+
+
+def test_decision_client_is_none_without_a_decision_model() -> None:
+    with (
+        patch(
+            f"{MODULE}.get_default_feature_flag_provider",
+            return_value=NoOpFeatureFlagProvider(),
+        ),
+        patch(f"{MODULE}.get_decision_client", return_value=None),
+    ):
+        assert _make_tool()._resolve_decision_client() is None
 
 
 def test_decision_client_is_none_when_the_model_is_unavailable() -> None:
@@ -1005,7 +1015,6 @@ def test_decision_client_is_none_for_content_free_turns() -> None:
             f"{MODULE}.get_default_feature_flag_provider",
             return_value=NoOpFeatureFlagProvider(),
         ),
-        patch(f"{MODULE}.ENABLE_SEARCH_DECISION_RERANK_EXPANSION", True),
         patch(f"{MODULE}.current_turn_persists_content", return_value=False),
         patch(f"{MODULE}.get_decision_client") as get_client,
     ):

@@ -48,7 +48,6 @@ from onyx.agents.tools import (
 )
 from onyx.chat.incognito import current_turn_persists_content
 from onyx.configs.chat_configs import (
-    ENABLE_SEARCH_DECISION_RERANK_EXPANSION,
     MAX_CHUNKS_FED_TO_CHAT,
     NUM_RETURNED_HITS,
 )
@@ -388,18 +387,18 @@ class SearchTool(Tool):
         self._id = tool_id
 
     def _resolve_decision_client(self) -> DecisionClient | None:
-        """The decision model client when the rollout flag is on, the turn
-        persists content, and a default decision model is configured;
-        otherwise None."""
+        """The decision model client when a default decision model is
+        configured (the Search Decision Model on Chat Preferences), the turn
+        persists content, and, where PostHog is available, the rollout flag is
+        on; otherwise None."""
         flag_provider = get_default_feature_flag_provider()
-        if isinstance(flag_provider, NoOpFeatureFlagProvider):
-            enabled = ENABLE_SEARCH_DECISION_RERANK_EXPANSION
-        else:
-            enabled = flag_provider.feature_enabled_for_user_tenant(
-                SEARCH_DECISION_RERANK_EXPANSION_FLAG,
-                self.user,
-                get_current_tenant_id(),
-            )
+        enabled = isinstance(
+            flag_provider, NoOpFeatureFlagProvider
+        ) or flag_provider.feature_enabled_for_user_tenant(
+            SEARCH_DECISION_RERANK_EXPANSION_FLAG,
+            self.user,
+            get_current_tenant_id(),
+        )
         # The decision client carries no incognito request policy, so turns
         # that must not persist content keep LLM selection.
         if not enabled or not current_turn_persists_content():

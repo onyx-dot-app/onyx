@@ -2222,9 +2222,9 @@
         "description": "セッションのタイトルを生成します。高速で低コストのモデルが適しています。",
         "title": "チャット命名モデル"
       },
-      "searchSelectionModel": {
-        "description": "取得したドキュメントを選択して確認します。高速で低コストのモデルは検索コストを削減できますが、回答の品質に影響する場合があります。",
-        "title": "検索ドキュメント選択モデル"
+      "searchDecisionModel": {
+        "description": "取得したドキュメントを選び、追加するコンテキストの量を決めます。判定モデルは1回の呼び出しで順位付けします。言語モデルは従来どおり選択します。",
+        "title": "検索判定モデル"
       },
       "taskModels": {
         "loadFailed": "タスクモデルを読み込めませんでした",
@@ -2405,7 +2405,7 @@
       "toasts": {
         "chatNamingUpdateFailed": "チャット名の生成モデルの更新に失敗しました",
         "providerResolveFailed": "プロバイダーを解決できませんでした",
-        "searchSelectionUpdateFailed": "検索選択モデルの更新に失敗しました",
+        "searchDecisionUpdateFailed": "検索判定モデルを更新できませんでした",
         "settingsUpdateFailed": "設定の更新に失敗しました",
         "systemPromptUpdateFailed": "システムプロンプトの更新に失敗しました",
         "toolsUpdateFailed": "ツールの更新に失敗しました",
