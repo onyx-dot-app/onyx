@@ -972,7 +972,14 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     <ShadowDiv
                       variant="mask"
                       shadowDirection="bottom-only"
-                      containerClassName="w-full md:max-w-chat-message flex-1"
+                      // The real messages' width, compact or expanded.
+                      containerClassName={cn(
+                        "w-full flex-1",
+                        fullWidthActive
+                          ? "md:max-w-full"
+                          : "md:max-w-chat-message",
+                        FULL_WIDTH_TRANSITION
+                      )}
                       className="flex-1 min-h-0 overflow-y-hidden"
                     >
                       <Section gap={12} height="fit">
