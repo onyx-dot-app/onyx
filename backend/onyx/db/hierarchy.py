@@ -690,13 +690,18 @@ def filter_accessible_hierarchy_node_ids(
 def get_document_parent_hierarchy_node_ids(
     db_session: Session,
     document_ids: list[str],
+    connector_id: int,
+    credential_id: int,
 ) -> dict[str, int | None]:
     """
     Get the parent_hierarchy_node_id for multiple documents in a single query.
+    Only documents linked to the given cc_pair are returned.
 
     Args:
         db_session: SQLAlchemy session
         document_ids: List of document IDs to look up
+        connector_id: Connector of the owning cc_pair
+        credential_id: Credential of the owning cc_pair
 
     Returns:
         Dict mapping document_id -> parent_hierarchy_node_id (or None if not set)
@@ -706,7 +711,12 @@ def get_document_parent_hierarchy_node_ids(
         return {}
 
     stmt = select(Document.id, Document.parent_hierarchy_node_id).where(
-        Document.id.in_(document_ids)
+        Document.id.in_(document_ids),
+        exists().where(
+            DocumentByConnectorCredentialPair.id == Document.id,
+            DocumentByConnectorCredentialPair.connector_id == connector_id,
+            DocumentByConnectorCredentialPair.credential_id == credential_id,
+        ),
     )
     results = db_session.execute(stmt).all()
 
@@ -716,16 +726,20 @@ def get_document_parent_hierarchy_node_ids(
 def update_document_parent_hierarchy_nodes(
     db_session: Session,
     doc_parent_map: dict[str, int | None],
+    connector_id: int,
+    credential_id: int,
     commit: bool = True,
 ) -> int:
     """Bulk-update Document.parent_hierarchy_node_id for multiple documents.
 
     Only updates rows whose current value differs from the desired value to
-    avoid unnecessary writes.
+    avoid unnecessary writes. Documents not linked to the cc_pair are skipped.
 
     Args:
         db_session: SQLAlchemy session
         doc_parent_map: Mapping of document_id → desired parent_hierarchy_node_id
+        connector_id: Connector of the cc_pair that reported the parents
+        credential_id: Credential of the cc_pair that reported the parents
         commit: Whether to commit the transaction
 
     Returns:
@@ -735,7 +749,9 @@ def update_document_parent_hierarchy_nodes(
         return 0
 
     doc_ids = list(doc_parent_map.keys())
-    existing = get_document_parent_hierarchy_node_ids(db_session, doc_ids)
+    existing = get_document_parent_hierarchy_node_ids(
+        db_session, doc_ids, connector_id, credential_id
+    )
 
     by_parent: dict[int | None, list[str]] = defaultdict(list)
     for doc_id, desired_parent_id in doc_parent_map.items():
@@ -764,6 +780,8 @@ def update_hierarchy_node_permissions(
     db_session: Session,
     raw_node_id: str,
     source: DocumentSource,
+    connector_id: int,
+    credential_id: int,
     is_public: bool,
     external_user_emails: list[str] | None,
     external_user_group_ids: list[str] | None,
@@ -773,12 +791,15 @@ def update_hierarchy_node_permissions(
     Update permissions for an existing hierarchy node.
 
     This is used during permission sync to update folder permissions
-    without needing the full Pydantic HierarchyNode model.
+    without needing the full Pydantic HierarchyNode model. A node linked only
+    to other cc_pairs is left unchanged.
 
     Args:
         db_session: SQLAlchemy session
         raw_node_id: Raw node ID from the source system
         source: Document source type
+        connector_id: Connector of the syncing cc_pair
+        credential_id: Credential of the syncing cc_pair
         is_public: Whether the node is public
         external_user_emails: List of user emails with access
         external_user_group_ids: List of group IDs with access
@@ -792,6 +813,23 @@ def update_hierarchy_node_permissions(
     if not existing_node:
         logger.warning(
             "Hierarchy node not found for permission update: raw_node_id=%s, source=%s",
+            raw_node_id,
+            source,
+        )
+        return False
+
+    _M = HierarchyNodeByConnectorCredentialPair
+    owner_pairs = set(
+        db_session.execute(
+            select(_M.connector_id, _M.credential_id).where(
+                _M.hierarchy_node_id == existing_node.id
+            )
+        ).tuples()
+    )
+    if owner_pairs and (connector_id, credential_id) not in owner_pairs:
+        logger.warning(
+            "Skipping permission update for hierarchy node of another cc_pair: "
+            "raw_node_id=%s, source=%s",
             raw_node_id,
             source,
         )
