@@ -209,6 +209,7 @@
                   "admins/connectors/official/airtable",
                   "admins/connectors/official/asana",
                   "admins/connectors/official/axero",
+                  "admins/connectors/official/azure_datalake",
                   "admins/connectors/official/bitbucket",
                   "admins/connectors/official/bookstack",
                   "admins/connectors/official/braintrust",

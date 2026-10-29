@@ -14,6 +14,10 @@
       "src": "logos/axero"
     },
     {
+      "out": "assets/overview/core_features/connectors/azure_datalake.svg",
+      "src": "logos/azure"
+    },
+    {
       "out": "assets/overview/core_features/connectors/bitbucket.svg",
       "src": "logos/bitbucket"
     },

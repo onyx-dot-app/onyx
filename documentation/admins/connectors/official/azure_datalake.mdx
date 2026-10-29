@@ -1,0 +1,290 @@
+---
+title: "Azure Data Lake Storage"
+description: "Index files from a storage container and mirror its Azure access control"
+---
+
+The Azure Data Lake Storage connector indexes the files in one container of an Azure Data Lake Storage Gen2 account.
+With permission sync, it also mirrors who can read each file in Azure.
+
+## What gets indexed
+
+The connector indexes the files in one container. You can limit it to one directory with **Path Prefix**.
+
+- Each file becomes one document. Its link is the blob URL of the file,
+  `https://<account>.blob.core.windows.net/<container>/<path>`.
+- Onyx records the container and the directories above each file as its folders.
+- Each refresh lists every path in scope and reads only the files that changed since the last refresh.
+- The prune job removes the documents of files that you delete in Azure.
+
+### What is not indexed
+
+- Files with an unsupported extension
+- Files larger than 20 MB
+- Image files, when **Extract & Caption Images** is off.
+  See [Image Processing](/admins/advanced_configs/search_configs#image-processing).
+
+<Accordion title="Supported file types">
+  Onyx indexes files with the following extensions:
+
+  | Kind         | Extensions                                                                       |
+  | ------------ | -------------------------------------------------------------------------------- |
+  | Documents    | `.pdf`, `.docx`, `.pptx`, `.eml`, `.epub`, `.html`                               |
+  | Spreadsheets | `.xlsx`, `.xlsm`, `.csv`, `.tsv`                                                 |
+  | Text         | `.txt`, `.md`, `.mdx`, `.conf`, `.log`, `.json`, `.xml`, `.yml`, `.yaml`, `.sql` |
+  | Images       | `.png`, `.jpg`, `.jpeg`, `.webp`                                                 |
+</Accordion>
+
+## Before you begin
+
+You need:
+
+- A storage account with **hierarchical namespace** enabled, and the name of the container to index.
+- An Onyx administrator account.
+- A decision on how the connector authenticates.
+  See [Choose an authentication method](#choose-an-authentication-method).
+
+## Choose an authentication method
+
+The connector accepts three kinds of account:
+
+| Method                         | What you give Onyx                                       | Permission sync |
+| ------------------------------ | -------------------------------------------------------- | --------------- |
+| **Client Secret**              | A Microsoft Entra app registration and a client secret   | Yes             |
+| **Certificate Authentication** | A Microsoft Entra app registration and a `.pfx` file     | Yes             |
+| **Account Key**                | The storage account name and one of its access keys      | **No**          |
+
+An account key opens the storage data only. It cannot read role assignments or Entra users and groups,
+so permission sync needs an app registration.
+
+An account key works only for its own storage account.
+Onyx rejects a connector whose **Storage Account Name** is different from the account of the key.
+
+## Set up the app registration
+
+Skip this section if you use an account key.
+
+<Steps>
+  <Step title="Register the application">
+    Register an application in Microsoft Entra and record its **Application (client) ID** and **Directory (tenant) ID**.
+    See [Register the application](/admins/connectors/official/microsoft-365/setup#register-the-application).
+  </Step>
+
+  <Step title="Create the credential">
+    Create a client secret or a certificate for the application.
+    See [Client secret](/admins/connectors/official/microsoft-365/setup#client-secret)
+    or [Certificate](/admins/connectors/official/microsoft-365/setup#certificate).
+  </Step>
+
+  <Step title="Give the application read access to the files">
+    In the Azure portal, open the container and go to **Access Control (IAM)**.
+    Give the application the **Storage Blob Data Reader** role. A role on the storage account, the resource group,
+    or the subscription also works.
+
+    Instead of a role, you can give the application read and execute ACL access to the files and their directories.
+  </Step>
+
+  <Step title="Add the permission sync grants">
+    Do this step only if you use permission sync.
+
+    - Give the application the **Reader** role on the storage account. Onyx uses it to find the account
+    in Azure Resource Manager and to read the role and deny assignments of the container.
+    - Add the Microsoft Graph application permissions **User.Read.All** and **GroupMember.Read.All**.
+    - Add **Member.Read.Hidden** if groups with hidden membership have access to files.
+    - Grant admin consent. See [Grant permissions](/admins/connectors/official/microsoft-365/setup#grant-permissions).
+  </Step>
+</Steps>
+
+## Get an account key
+
+Skip this section if you use an app registration.
+
+In the Azure portal, open the storage account, then go to **Security + networking → Access keys**.
+Copy one of the two keys.
+
+## Configure the connector in Onyx
+
+<Steps>
+  <Step title="Enter the storage account">
+    In Onyx, go to **Admin Panel → Connectors** and select **Azure Data Lake Storage**. In **Storage Account Name**,
+    enter the name of the storage account, for example `contosodata`. The name has 3 to 24 lowercase letters and digits.
+  </Step>
+
+  <Step title="Select or create an authentication account">
+    Under **Authentication Account**, select **Use Account** on a saved account,
+    or select **New Azure Data Lake Storage Account**. Select the tab for your method:
+
+    - **Client Secret**: enter the client ID, the directory ID, and the secret value.
+    - **Certificate Authentication**: enter the client ID and the directory ID.
+    Upload the `.pfx` file in **Azure Data Lake Private Key**,
+    and enter its password in **Azure Data Lake Certificate Password**.
+    - **Account Key**: enter the storage account name and the key.
+
+    <img className="rounded-image" src="/assets/admins/connectors/azure_datalake/credential_methods.webp" alt="Azure Data Lake Storage connector form with the Client Secret, Certificate Authentication, and Account Key tabs"/>
+
+    An app registration account is shared with the Microsoft 365 connectors.
+    An account created on one of their forms is also listed here.
+  </Step>
+
+  <Step title="Choose the content">
+    Under **Index Configurations**, enter the **Container Name**. To index only one directory,
+    enter its path in **Path Prefix**, for example `reports/2026`.
+    Leave **Path Prefix** empty to index the whole container.
+
+    To skip old files, set **Index Documents After**. Onyx skips files last modified before this date.
+  </Step>
+
+  <Step title="Choose the document access">
+    Under **Document Access**, **Sync with Azure Data Lake Storage** mirrors the Azure access of each file.
+    See [Permission sync](#permission-sync). This option is not available with an account key.
+
+    **Everyone in Your Organization** shows every indexed file to all Onyx users.
+    **Specific Groups** limits the files to selected Onyx user groups.
+  </Step>
+
+  <Step title="Run the checks">
+    Under **Test Connection**, select **Start Checks**.
+    Onyx tests the account against the container and shows the result of each check.
+    See [Connector checks](#connector-checks).
+  </Step>
+
+  <Step title="Create and verify">
+    Select **Create Connector**. Then go to **Admin Panel → Indexing Status**, select the connector,
+    and make sure that the first indexing attempt completes.
+  </Step>
+</Steps>
+
+## Connector checks
+
+The checks show which Azure permission is missing before you create the connector.
+Each check that fails shows the action to correct it.
+
+<img className="rounded-image" src="/assets/admins/connectors/azure_datalake/connector_checks.webp" alt="Connector Checks card with every Azure Data Lake Storage check successful"/>
+
+| Check                                                    | When                     | What it needs                                                                 |
+| -------------------------------------------------------- | ------------------------ | ----------------------------------------------------------------------------- |
+| Sign in to Azure Storage                                 | Always                   | A correct client ID, directory ID, and secret or certificate, or a correct account key |
+| The container is readable                                | Always                   | The container exists, and the account can list it                            |
+| The path prefix exists                                   | **Path Prefix** is set   | The directory exists in the container                                        |
+| Files are readable                                       | Always                   | **Storage Blob Data Reader**, or read and execute ACL access                 |
+| The account is an app registration                       | Permission sync          | A client secret or certificate account. An account key fails.               |
+| ACLs are readable                                        | Permission sync          | **Storage Blob Data Reader** on the container                                |
+| The container's anonymous access level is readable       | Permission sync          | **Storage Blob Data Reader** on the container                                |
+| The storage account is visible in Azure Resource Manager | Permission sync          | **Reader** on the storage account                                            |
+| Role and deny assignments are readable                   | Permission sync          | **Reader** on the storage account                                            |
+| Entra users are readable                                 | Permission sync          | **User.Read.All** with admin consent                                         |
+| Entra group members are readable                         | Permission sync          | **GroupMember.Read.All** with admin consent                                  |
+
+The permission sync checks also run before each scheduled sync. If the application lost a role or a Graph permission,
+the sync fails. It does not change the access of the files.
+
+## Permission sync
+
+With permission sync, an Onyx user finds a file in search only if the user can read the file in Azure.
+Onyx matches Entra users to Onyx users by email address: the user principal name, or the mail address for a guest.
+
+<Note>
+  Permission sync is a paid feature: the Business and Enterprise tiers on Onyx Cloud,
+  and the Enterprise Edition when self-hosted. It needs an app registration account.
+</Note>
+
+<img className="rounded-image" src="/assets/admins/connectors/azure_datalake/connector_status.webp" alt="Azure Data Lake Storage connector page with the indexing, permissions sync, and group membership sync status"/>
+
+Onyx runs two syncs on their own schedules, separate from indexing:
+
+| Sync      | Every      | What it does                                                                                       |
+| --------- | ---------- | -------------------------------------------------------------------------------------------------- |
+| Documents | 1 hour     | Reads the role assignments of the container and the ACL of each file and directory in scope.       |
+| Groups    | 30 minutes | Reads the members of each Entra group, nested groups included, and the list of users in the tenant. |
+
+A newly indexed file is private until the next document sync gives it its access.
+
+### Who can read a file
+
+A user can read a file when one of the following is true:
+
+- **Azure RBAC.** The user, or a group of the user, has a role at the container scope or above,
+  and the role can read blob data. **Storage Blob Data Reader**, **Storage Blob Data Contributor**,
+  and **Storage Blob Data Owner** are such roles. A deny assignment that blocks blob read removes the user.
+- **POSIX ACL.** The ACL gives the user read on the file, and execute on each directory above it,
+  the container root included.
+
+Onyx applies the ACL in the same order as Azure: the owning user, named users, then the owning group and named groups,
+then `other`. The `mask` limits named users and all groups. `default:` entries apply only to new children,
+so Onyx does not use them.
+
+### Public files and the `other` class
+
+- The ACL class `other` gives access to every enabled user in the Entra tenant of the app registration.
+  Onyx keeps this as one synced group.
+- A file is public to all Onyx users only when the container allows anonymous read access
+  (level **Blob** or **Container**) and the storage account allows anonymous access.
+
+### Access that excludes some users
+
+An ACL can give access to "everyone except" some users or groups. For example, `other` has read,
+but a named group has no read. Onyx makes a synced group for each such case.
+
+Onyx fills a new group of this kind at the next group sync. Until then, the group has no members,
+and the files that depend on it stay hidden.
+
+### Limits of permission sync
+
+| Case                                                            | Result                                                                  |
+| --------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| A role assignment has a condition (ABAC)                        | Onyx cannot evaluate the condition and gives no access through it. The **Role and deny assignments are readable** check shows a warning. |
+| A role assignment or ACL entry names a service principal        | Onyx ignores it. Only users and groups get access.                      |
+| One exclusion names more than 50 users and groups               | The file stays private.                                                 |
+| The access of one file needs more than 5,000 individual users   | The file stays private.                                                 |
+| Onyx cannot read the members of a group that a file depends on  | The file stays private. Grant **Member.Read.Hidden** for groups with hidden membership. |
+| An Entra account is disabled                                    | The user gets no access.                                                |
+
+## Environment variables
+
+Self-hosted deployments can change these values:
+
+| Variable                                         | Default            | Purpose                                                    |
+| ------------------------------------------------ | ------------------ | ---------------------------------------------------------- |
+| `BLOB_STORAGE_SIZE_THRESHOLD`                    | `20971520` (20 MB) | The largest file, in bytes, that Onyx indexes.              |
+| `AZURE_DATALAKE_PERMISSION_DOC_SYNC_FREQUENCY`   | `3600`             | Seconds between document syncs.                            |
+| `AZURE_DATALAKE_PERMISSION_GROUP_SYNC_FREQUENCY` | `1800`             | Seconds between group syncs.                               |
+| `AZURE_DATALAKE_ACL_READ_CONCURRENCY`            | `16`               | ACL reads that the document sync sends in parallel.        |
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Onyx cannot reach the storage account">
+    Onyx cannot connect to `<account>.dfs.core.windows.net`. Check the **Storage Account Name**.
+  </Accordion>
+
+  <Accordion title="The container does not exist in the storage account">
+    Check the **Container Name**. The name has 3 to 63 lowercase letters, digits, and single hyphens.
+  </Accordion>
+
+  <Accordion title="This account key belongs to a different storage account">
+    The account key opens only its own storage account. Use a key of the storage account in **Storage Account Name**,
+    or use an app registration.
+  </Accordion>
+
+  <Accordion title="The credential cannot read a path">
+    Give the application the **Storage Blob Data Reader** role on the container,
+    or read and execute ACL access to the files and their directories.
+  </Accordion>
+
+  <Accordion title="The app registration cannot see the storage account in Azure Resource Manager">
+    Give the application the **Reader** role on the storage account.
+  </Accordion>
+
+  <Accordion title="Microsoft Graph shows no user addresses to this app">
+    Add the Microsoft Graph application permission **User.Read.All**, then grant admin consent again.
+  </Accordion>
+
+  <Accordion title="Permission sync is not offered on the connector form">
+    The account uses an account key, or the deployment is not on a paid tier.
+  </Accordion>
+
+  <Accordion title="A file that users can read in Azure is not in their search results">
+    Wait for the next document sync and group sync.
+    Then make sure that the user has an Onyx account with the same email address as the Entra account.
+    See [Limits of permission sync](#limits-of-permission-sync).
+  </Accordion>
+</AccordionGroup>
