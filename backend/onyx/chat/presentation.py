@@ -16,16 +16,9 @@ from onyx.agents.events import (
 )
 from onyx.agents.models import AgentInfo, ExecutionStatus, RunState, RunStatus
 from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
-from onyx.chat.citation_utils import update_citation_processor_from_tool_result
+from onyx.chat.citation_utils import message_citation_sources
 from onyx.chat.emitter import Emitter
-from onyx.chat.renderer import (
-    HIDDEN_TOOLS,
-    MessageRenderer,
-    ResponseLayout,
-    ToolRenderer,
-)
-from onyx.chat.response import response_record, tool_arguments_for_display
-from onyx.chat.response_models import (
+from onyx.chat.models import (
     ChatMessageMetadata,
     ChatResponseSnapshot,
     CitationMode,
@@ -35,19 +28,29 @@ from onyx.chat.response_models import (
     ToolHistorySnapshot,
     ToolReplayData,
 )
+from onyx.chat.renderer import (
+    HIDDEN_TOOLS,
+    MessageRenderer,
+    ResponseLayout,
+    ToolRenderer,
+)
+from onyx.chat.response import response_record, tool_arguments_for_display
 from onyx.coding_agent.tool_definitions import CODING_AGENT_TOOL_NAME
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
-from onyx.deep_research.models import ResearchMessageMetadata, ResearchPhase
+from onyx.deep_research.models import (
+    ResearchAgentCallResult,
+    ResearchMessageMetadata,
+    ResearchPhase,
+)
 from onyx.deep_research.tool_definitions import THINK_TOOL_NAME
 from onyx.llm.models import AssistantMessage, ToolCall, ToolResultMessage
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
-from onyx.tools.records import RecordedToolCallInfo
-from onyx.tools.results import (
+from onyx.tools.models import (
     CustomToolCallSummary,
     CustomToolUserFileSnapshot,
     LlmPythonExecutionResult,
-    ResearchAgentCallResult,
+    ToolCallInfo,
 )
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.utils.logger import setup_logger
@@ -67,7 +70,7 @@ def _collect_tool_history(
     initial_citations: CitationMapping | None = None,
 ) -> ToolHistorySnapshot:
     """Project completed and interrupted operations from one execution tree."""
-    records: list[RecordedToolCallInfo] = []
+    records: list[ToolCallInfo] = []
     documents: dict[str, SearchDoc] = {}
     citations = DynamicCitationProcessor(citation_mode=CitationMode.HYPERLINK)
     citations.update_citation_mapping(initial_citations or {})
@@ -103,7 +106,7 @@ def _collect_tool_history(
             if isinstance(result.details, ResearchAgentCallResult):
                 for document in result.details.citation_mapping.values():
                     documents.setdefault(document.document_id, document)
-            update_citation_processor_from_tool_result(result, citations)
+            citations.update_citation_mapping(message_citation_sources(result))
     for child in snapshot.child_runs:
         child_history = _collect_tool_history(child, tool_ids)
         records.extend(child_history.tool_calls)
@@ -123,7 +126,7 @@ def _tool_record(
     snapshot: RunState,
     turn: int,
     index: int,
-) -> RecordedToolCallInfo:
+) -> ToolCallInfo:
     data = tool_response.details if tool_response else None
     search_docs = data.search_docs if isinstance(data, SearchDocsResponse) else None
     displayed_docs = (
@@ -144,7 +147,7 @@ def _tool_record(
     ):
         generated_file_ids = data.tool_result.file_ids or None
 
-    return RecordedToolCallInfo(
+    return ToolCallInfo(
         message_id=_message_identity(output),
         parent_message_id=snapshot.parent_message_id,
         parent_tool_call_id=snapshot.parent_tool_call_id,

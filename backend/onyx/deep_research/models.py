@@ -1,10 +1,12 @@
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
 from onyx.context.search.models import SearchDoc
+from onyx.file_store.models import FileToolMetadata
 from onyx.llm.models import ReasoningEffort
-from onyx.tools.models import ToolCallKickoff
+from onyx.tools.tool_implementations.search.models import SearchContext
 
 
 class ResearchConfiguration(BaseModel):
@@ -14,19 +16,9 @@ class ResearchConfiguration(BaseModel):
     reasoning_effort: ReasoningEffort
 
 
-class SpecialToolCalls(BaseModel):
-    think_tool_call: ToolCallKickoff | None = None
-    generate_report_tool_call: ToolCallKickoff | None = None
-
-
-class ResearchAgentCallFailure(BaseModel):
-    # LLM-facing explanation sent back as the failed call's tool response
-    message: str
-
-
-class CombinedResearchAgentCallResult(BaseModel):
-    # One entry per research agent call, in call order
-    intermediate_reports: list[str | ResearchAgentCallFailure]
+class ResearchAgentCallResult(BaseModel):
+    type: Literal["research_result"] = "research_result"
+    intermediate_report: str
     citation_mapping: dict[int, SearchDoc]
 
 
@@ -45,3 +37,26 @@ class ResearchMessageMetadata(BaseModel):
     is_reasoning_model: bool
     sources: dict[int, SearchDoc] = Field(default_factory=dict)
     elapsed_seconds: float = 0
+
+
+class ResearchTask(BaseModel):
+    task: str
+
+
+class DeepResearchFeatureState(BaseModel):
+    kind: Literal["deep_research.state.v1"] = "deep_research.state.v1"
+    language_section: str
+    reasoning_effort: ReasoningEffort
+    file_metadata: dict[str, FileToolMetadata] | None
+    skip_clarification: bool
+    elapsed_seconds: float
+    citation_mapping: dict[int, SearchDoc]
+
+
+class ResearchFeatureState(BaseModel):
+    kind: Literal["research.state.v1"] = "research.state.v1"
+    elapsed_seconds: float = 0.0
+    configuration: ResearchConfiguration
+    citation_sources: dict[int, SearchDoc]
+    citation_mapping: dict[int, str]
+    search_context: SearchContext

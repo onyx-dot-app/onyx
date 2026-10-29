@@ -15,21 +15,35 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.agents.agent_coordination import AgentCoordinator
+from onyx.agents.models import (
+    AgentInfo,
+    ExecutionStatus,
+    StepRecord,
+    ToolExecutionRecord,
+)
+from onyx.cache.factory import get_cache_backend
+from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.chat.incognito import delete_incognito_generated_files
 from onyx.chat.incognito_context import (
-    append_incognito_message,
+    _context_key,
+    load_incognito_agent_history,
+    load_incognito_agent_metadata,
     load_incognito_context,
+    save_incognito_response,
+    save_incognito_user_message,
     teardown_incognito_session,
 )
-from onyx.chat.models import ChatMessageSimple
-from onyx.chat.save_chat import save_chat_turn
-from onyx.configs.constants import DocumentSource, FileOrigin, MessageType
+from onyx.chat.models import PromptMetadata, ResponseRecord, SavedAgentContext
+from onyx.chat.subagents import ChatAgentDirectory
+from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import (
     create_chat_session,
     get_or_create_root_message,
-    reserve_message_id,
+    reserve_chat_response_ids,
 )
+from onyx.db.chat_response import save_chat_turn
 from onyx.db.file_record import (
     FileRecordNotFoundError,
     get_incognito_file_ids,
@@ -37,8 +51,18 @@ from onyx.db.file_record import (
 )
 from onyx.db.models import ChatMessage, ChatSession, User
 from onyx.file_store.file_store import get_default_file_store
+from onyx.llm.interfaces import GenerationContext
+from onyx.llm.models import (
+    AssistantMessage,
+    TextContent,
+    ToolCall,
+    ToolDefinition,
+    ToolResultMessage,
+    UserMessage,
+)
 from onyx.redis.redis_pool import get_redis_client
-from onyx.tools.records import ToolCallInfo
+from onyx.tools.models import CustomToolCallSummary, ToolCallInfo
+from onyx.tracing.flows import LLMFlow
 from shared_configs.contextvars import CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR
 from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 
@@ -64,11 +88,15 @@ def _new_session(db_session: Session, user_id: UUID) -> ChatSession:
 
 def _reserve_assistant(db_session: Session, session_id: UUID) -> ChatMessage:
     root = get_or_create_root_message(chat_session_id=session_id, db_session=db_session)
-    return reserve_message_id(
+    [message_id] = reserve_chat_response_ids(
         db_session=db_session,
         chat_session_id=session_id,
-        parent_message=root.id,
+        parent_message_id=root.id,
+        model_display_names=["test"],
     )
+    message = db_session.get(ChatMessage, message_id)
+    assert message is not None
+    return message
 
 
 def _search_doc(document_id: str) -> SearchDoc:
@@ -97,6 +125,7 @@ def test_save_chat_turn_keeps_the_row_but_writes_no_text(
         reasoning_tokens="secret reasoning",
         tool_calls=[
             ToolCallInfo(
+                message_id="test-run:0",
                 parent_tool_call_id=None,
                 turn_index=0,
                 tab_index=0,
@@ -157,46 +186,56 @@ def test_turn_round_trips_through_the_store() -> None:
     """A turn appends the user message then the answer. The next turn loads both
     in order so the model sees its own context."""
     session_id = uuid4()
+    admission = ChatTurnAdmission(get_cache_backend())
+    admission.claim(session_id)
     try:
-        append_incognito_message(
+        save_incognito_user_message(
             session_id,
-            ChatMessageSimple(
-                message="what is our runway",
-                token_count=4,
-                message_type=MessageType.USER,
+            UserMessage(
+                content="what is our runway", metadata=PromptMetadata(token_count=4)
             ),
+            admission=admission,
         )
-        append_incognito_message(
+        save_incognito_response(
             session_id,
-            ChatMessageSimple(
-                message="eighteen months",
-                token_count=2,
-                message_type=MessageType.ASSISTANT,
-            ),
+            None,
+            {},
+            message_id=1,
+            messages=[
+                AssistantMessage(
+                    content=[TextContent(text="eighteen months")],
+                    metadata=PromptMetadata(token_count=2),
+                )
+            ],
+            admission=admission,
         )
 
         history = load_incognito_context(session_id).messages
-        assert [(m.message_type, m.message) for m in history] == [
-            (MessageType.USER, "what is our runway"),
-            (MessageType.ASSISTANT, "eighteen months"),
+        assert [(m.role, m.text) for m in history] == [
+            ("user", "what is our runway"),
+            ("assistant", "eighteen months"),
         ]
     finally:
+        admission.release()
         teardown_incognito_session(session_id)
 
 
 def test_teardown_ends_the_session_immediately() -> None:
     session_id = uuid4()
-    append_incognito_message(
+    admission = ChatTurnAdmission(get_cache_backend())
+    admission.claim(session_id)
+    save_incognito_user_message(
         session_id,
-        ChatMessageSimple(
-            message="secret", token_count=1, message_type=MessageType.USER
-        ),
+        UserMessage(content="secret", metadata=PromptMetadata(token_count=1)),
+        admission=admission,
     )
     assert load_incognito_context(session_id).messages
 
     teardown_incognito_session(session_id)
 
     assert load_incognito_context(session_id).messages == []
+
+    admission.release()
 
 
 def test_teardown_clears_buffered_stream_chunks() -> None:
@@ -276,3 +315,507 @@ def test_the_sweep_lookup_samples_under_a_limit(db_session: Session) -> None:
     assert len(get_session_ids_with_incognito_files(db_session, limit=1)) == 1
 
     assert delete_incognito_generated_files(session_id, db_session)
+
+
+def _load_agent_history(
+    session_id: UUID, message_ids: list[int]
+) -> list[SavedAgentContext]:
+    return [
+        load_incognito_agent_history(session_id, message_ids, agent.id)
+        for agent in load_incognito_agent_metadata(session_id, message_ids)
+    ]
+
+
+def test_temporary_agent_history_sources_and_lifetime() -> None:
+    from onyx.agents.models import RunStatus
+    from onyx.chat.incognito_context import (
+        INCOGNITO_CONTEXT_TTL_SECONDS,
+        save_incognito_response,
+    )
+
+    session_id = uuid4()
+    root_id, child_id = str(session_id), str(uuid4())
+    tool_result = ToolResultMessage(
+        tool_call_id="lookup",
+        tool_name="lookup",
+        content="private tool output",
+        details=CustomToolCallSummary(
+            tool_name="lookup",
+            response_type="json",
+            tool_result={"display_only": "private tool details"},
+        ),
+    )
+    child = ResponseRecord(
+        agent_id=child_id,
+        agent_path="/root/research",
+        agent_description="Private task",
+        run_id=str(uuid4()),
+        status=RunStatus.COMPLETE,
+        input_messages=[UserMessage(content="private question")],
+        steps=[
+            StepRecord(
+                message=AssistantMessage(
+                    content=[ToolCall(id="lookup", name="lookup", arguments={})]
+                ),
+                generation_status=ExecutionStatus.COMPLETE,
+                tools={
+                    "lookup": ToolExecutionRecord(
+                        status=ExecutionStatus.COMPLETE, result=tool_result
+                    )
+                },
+            ),
+            StepRecord(
+                message=AssistantMessage(content=[TextContent(text="private answer")]),
+                generation_status=ExecutionStatus.COMPLETE,
+                tools={},
+            ),
+        ],
+    )
+    root = ResponseRecord(
+        agent_id=root_id,
+        run_id=str(uuid4()),
+        status=RunStatus.COMPLETE,
+        steps=[],
+        child_runs=[child],
+    )
+    key = _context_key(session_id)
+    client = get_redis_client()
+    admission = ChatTurnAdmission(get_cache_backend())
+    admission.claim(session_id)
+    try:
+        save_incognito_user_message(
+            session_id, UserMessage(content="root question"), admission=admission
+        )
+        assert _load_agent_history(session_id, [1]) == []
+        assert child.run_id is not None
+        sources = {child.run_id: {1: _search_doc("private-source")}}
+        save_incognito_response(
+            session_id,
+            root,
+            sources,
+            admission=admission,
+            message_id=1,
+            messages=root.messages,
+        )
+        save_incognito_response(
+            session_id,
+            root,
+            sources,
+            admission=admission,
+            message_id=1,
+            messages=root.messages,
+        )
+        restored = _load_agent_history(session_id, [1])[0]
+        assert restored.previous_run_id == child.run_id
+        assert [message.text for message in restored.messages] == [
+            "private question",
+            "",
+            "private tool output",
+            "private answer",
+        ]
+        restored_result = restored.messages[2]
+        assert isinstance(restored_result, ToolResultMessage)
+        assert restored_result.details is None
+        assert tool_result.details is not None
+        saved = client.get(key)
+        assert saved is not None
+        assert b"private tool details" not in saved
+        assert restored.sources[1].document_id == "private-source"
+
+        next_child = child.model_copy(
+            deep=True,
+            update={
+                "run_id": str(uuid4()),
+                "previous_run_id": child.run_id,
+                "input_messages": [UserMessage(content="next question")],
+            },
+        )
+        next_root = root.model_copy(
+            deep=True,
+            update={
+                "run_id": str(uuid4()),
+                "previous_run_id": root.run_id,
+                "child_runs": [next_child],
+            },
+        )
+        save_incognito_response(
+            session_id,
+            next_root,
+            {},
+            admission=admission,
+            message_id=2,
+            messages=next_root.messages,
+        )
+        restored = _load_agent_history(session_id, [2, 1])[0]
+        assert restored.previous_run_id == next_child.run_id
+        assert [message.text for message in restored.messages] == [
+            "private question",
+            "",
+            "private tool output",
+            "private answer",
+            "next question",
+            "",
+            "private tool output",
+            "private answer",
+        ]
+        assert restored.sources[1].document_id == "private-source"
+        client.expire(key, 10)
+        save_incognito_user_message(
+            session_id, UserMessage(content="keep active"), admission=admission
+        )
+        assert client.ttl(key) >= INCOGNITO_CONTEXT_TTL_SECONDS - 2
+        teardown_incognito_session(session_id)
+        assert _load_agent_history(session_id, [2, 1]) == []
+        with pytest.raises(RuntimeError, match="session ended"):
+            save_incognito_response(
+                session_id,
+                next_root,
+                {},
+                admission=admission,
+                message_id=3,
+                messages=next_root.messages,
+            )
+        assert not client.exists(key)
+    finally:
+        admission.release()
+        teardown_incognito_session(session_id)
+
+
+@pytest.mark.parametrize("history_full", [False, True])
+def test_incognito_response_restores_agents_without_database_content(
+    db_session: Session, owner: User, history_full: bool
+) -> None:
+    from sqlalchemy import select
+
+    from onyx.agents.runtime import Agent
+    from onyx.agents.tools import AgentTool, ToolInvocation
+    from onyx.chat.history_store import get_chat_history_store
+    from onyx.chat.models import ChatResponseSnapshot, MessageRendering
+    from onyx.db.enums import IncognitoRecordMode
+    from onyx.db.models import ChatResponseItem
+    from onyx.llm.interfaces import LLMUserIdentity
+    from onyx.llm.models import ToolCall, ToolResult
+    from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
+
+    session = _new_session(db_session, owner.id)
+    session.incognito_record_mode = IncognitoRecordMode.USAGE_ONLY
+    assistant = _reserve_assistant(db_session, session.id)
+    db_session.commit()
+    replies = iter(
+        [
+            AssistantMessage(
+                content=[ToolCall(id="delegate", name="delegate", arguments={})]
+            ),
+            AssistantMessage(content=[TextContent(text="private child answer")]),
+            AssistantMessage(content=[TextContent(text="private root answer")]),
+        ]
+    )
+    llm = FakeModelClient(lambda *_: next(replies))
+    identity = LLMUserIdentity(user_id=str(owner.id), session_id=str(session.id))
+    child = Agent(llm, generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE))
+
+    def delegate(invocation: ToolInvocation) -> ToolResult:
+        spawned = invocation.agents.spawn_agent(
+            child,
+            name="research",
+            description="private child task",
+            messages=[UserMessage(content="private child question")],
+            max_steps=1,
+        )
+        result = invocation.agents.wait_run(spawned.run_id, timeout=3)
+        assert result is not None
+        return ToolResult(content=result.output.text)
+
+    root = Agent(
+        llm,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        agent_id=str(session.id),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name="delegate", description="", parameters={}
+                ),
+                execute=delegate,
+            )
+        ],
+    )
+    source = _search_doc("private-child-source")
+    admission = ChatTurnAdmission(get_cache_backend())
+    admission.claim(session.id)
+    try:
+        save_incognito_user_message(
+            session.id,
+            UserMessage(content="private root question"),
+            admission=admission,
+        )
+        history_store = get_chat_history_store(
+            message_id=assistant.id,
+            chat_session_id=session.id,
+            persist_content=False,
+            visible_message_ids=[assistant.id],
+            admission=admission,
+        )
+        directory = ChatAgentDirectory(
+            history_store=history_store,
+            llm=llm,
+            tools=[],
+            user_identity=identity,
+            store=None,
+        )
+        coordinator = AgentCoordinator(directory=directory)
+        coordinator.register(
+            AgentInfo(
+                id=root.id,
+                path="/root",
+                parent_id=None,
+                description="",
+                restoration_config=None,
+            )
+        )
+        handles = []
+        run_agent(
+            root,
+            messages=[UserMessage(content="private root question")],
+            max_steps=2,
+            coordinator=coordinator,
+            runs=handles,
+        )
+        snapshot = handles[0].snapshot()
+        from onyx.chat.presentation import project_response
+
+        transcript = project_response(
+            snapshot,
+            tool_ids={},
+            registrations=coordinator.registrations(),
+        ).response
+        assert transcript is not None
+        child_run_id = transcript.child_runs[0].run_id
+        assert child_run_id is not None
+        child_message = transcript.child_runs[0].messages[0]
+        assert (
+            isinstance(child_message, AssistantMessage) and child_message.id is not None
+        )
+        response_snapshot = ChatResponseSnapshot(
+            answer="private root answer",
+            reasoning=None,
+            request_params=None,
+            citation_to_doc={},
+            tool_calls=[],
+            is_clarification=False,
+            all_search_docs={source.document_id: source},
+            pre_answer_processing_time=None,
+            response=transcript,
+            presentation={
+                child_message.id: MessageRendering(
+                    citation_documents={1: source.document_id},
+                )
+            },
+            cancelled=False,
+        )
+        if history_full:
+            before = load_incognito_context(session.id)
+            with patch("onyx.chat.incognito_context._MAX_CONTEXT_BYTES", 1):
+                with pytest.raises(ValueError, match="storage limit"):
+                    history_store.save_response(response_snapshot)
+            after = load_incognito_context(session.id)
+            assert after.messages == before.messages
+            assert after.previous_run_id == before.previous_run_id
+            assert load_incognito_agent_metadata(session.id, [assistant.id]) == []
+            return
+        history_store.save_response(response_snapshot)
+        assert load_incognito_context(session.id).previous_run_id == transcript.run_id
+        db_session.expire_all()
+        assert assistant.message == "" and not assistant.response_items
+        assert (
+            db_session.scalars(
+                select(ChatSession)
+                .join(ChatMessage, ChatMessage.id == ChatSession.spawned_by_message_id)
+                .where(ChatMessage.chat_session_id == session.id)
+            ).all()
+            == []
+        )
+        assert (
+            db_session.scalars(
+                select(ChatResponseItem).where(
+                    ChatResponseItem.chat_message_id == assistant.id
+                )
+            ).all()
+            == []
+        )
+
+        restored_root = Agent(
+            llm,
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            agent_id=root.id,
+        )
+        restored_coordinator = AgentCoordinator(directory=directory)
+        for info in history_store.list_agents():
+            restored_coordinator.register(info)
+        restored_coordinator.register(
+            AgentInfo(
+                id=restored_root.id,
+                path="/root",
+                parent_id=None,
+                description="",
+                restoration_config=None,
+                latest_run_id=transcript.run_id,
+            )
+        )
+        assert restored_root.id == root.id
+        saved_run = restored_coordinator.saved_run(child_run_id, restored_root.id)
+        assert saved_run is not None
+        assert saved_run.agent_id == child.id
+        assert [message.text for message in saved_run.messages] == [
+            "private child answer"
+        ]
+
+        assert (
+            _load_agent_history(session.id, [assistant.id])[0].sources[1].document_id
+            == source.document_id
+        )
+    finally:
+        admission.release()
+        teardown_incognito_session(session.id)
+
+
+@pytest.mark.parametrize("ancestor_finishes_first", [True, False])
+def test_incognito_sibling_responses_keep_independent_agents_and_history(
+    db_session: Session, owner: User, ancestor_finishes_first: bool
+) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    from onyx.agents.models import RunStatus
+    from onyx.chat.incognito_context import (
+        save_incognito_response,
+    )
+    from onyx.db.chat_subagents import load_chat_branch
+
+    session = _new_session(db_session, owner.id)
+    ancestor = _reserve_assistant(db_session, session.id)
+    sibling_ids = reserve_chat_response_ids(
+        db_session=db_session,
+        chat_session_id=session.id,
+        parent_message_id=ancestor.id,
+        model_display_names=["model-a", "model-b"],
+    )
+    [followup_id] = reserve_chat_response_ids(
+        db_session=db_session,
+        chat_session_id=session.id,
+        parent_message_id=sibling_ids[0],
+        model_display_names=["followup-a"],
+    )
+    db_session.commit()
+    session_id = session.id
+    ancestor_branch = load_chat_branch(ancestor.id).message_ids
+    branches = {
+        message_id: load_chat_branch(message_id).message_ids
+        for message_id in sibling_ids
+    }
+    root_id = str(session_id)
+    ancestor_run = ResponseRecord(
+        agent_id=root_id,
+        run_id=str(uuid4()),
+        status=RunStatus.COMPLETE,
+        steps=[
+            StepRecord(
+                message=AssistantMessage(content=[TextContent(text="shared ancestor")]),
+                generation_status=ExecutionStatus.COMPLETE,
+                tools={},
+            )
+        ],
+    )
+    barrier = Barrier(2)
+    admission = ChatTurnAdmission(get_cache_backend())
+    admission.claim(session_id)
+
+    def save_sibling(message_id: int) -> tuple[str, str]:
+        root_run_id, child_id, child_run_id = str(uuid4()), str(uuid4()), str(uuid4())
+
+        barrier.wait(timeout=5)
+
+        child = ResponseRecord(
+            agent_id=child_id,
+            agent_path="/root/research",
+            run_id=child_run_id,
+            status=RunStatus.COMPLETE,
+            steps=[
+                StepRecord(
+                    message=AssistantMessage(
+                        content=[TextContent(text=f"answer {message_id}")]
+                    ),
+                    generation_status=ExecutionStatus.COMPLETE,
+                    tools={},
+                )
+            ],
+        )
+        result = ResponseRecord(
+            agent_id=root_id,
+            run_id=root_run_id,
+            previous_run_id=ancestor_run.run_id if ancestor_finishes_first else None,
+            status=RunStatus.COMPLETE,
+            steps=[],
+            child_runs=[child],
+        )
+        save_incognito_response(
+            session_id,
+            result,
+            {child_run_id: {1: _search_doc(f"source-{message_id}")}},
+            admission=admission,
+            message_id=message_id,
+            messages=result.messages,
+        )
+        return root_run_id, child_id
+
+    try:
+        save_incognito_user_message(
+            session_id, UserMessage(content="question"), admission=admission
+        )
+        assert ancestor_run.run_id is not None
+
+        if ancestor_finishes_first:
+            save_incognito_response(
+                session_id,
+                ancestor_run,
+                {},
+                admission=admission,
+                message_id=ancestor.id,
+                messages=ancestor_run.messages,
+            )
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            results = list(executor.map(save_sibling, sibling_ids))
+        if not ancestor_finishes_first:
+            save_incognito_response(
+                session_id,
+                ancestor_run,
+                {},
+                admission=admission,
+                message_id=ancestor.id,
+                messages=ancestor_run.messages,
+            )
+        assert results[0][1] != results[1][1]
+        for message_id, (_, child_id) in zip(sibling_ids, results, strict=True):
+            agents = {
+                info.path: load_incognito_agent_history(
+                    session_id, branches[message_id], info.id
+                )
+                for info in load_incognito_agent_metadata(
+                    session_id, branches[message_id]
+                )
+            }
+            assert "/root" not in agents
+            child = agents["/root/research"]
+            assert child.agent_id == child_id
+            assert [message.text for message in child.messages] == [
+                f"answer {message_id}"
+            ]
+            assert child.sources[1].document_id == f"source-{message_id}"
+        followup = _load_agent_history(
+            session_id, load_chat_branch(followup_id).message_ids
+        )
+        assert followup[0].agent_id == results[0][1]
+        assert followup[0].sources[1].document_id == f"source-{sibling_ids[0]}"
+        assert _load_agent_history(session_id, ancestor_branch) == []
+    finally:
+        admission.release()
+        teardown_incognito_session(session_id)

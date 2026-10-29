@@ -1288,6 +1288,11 @@ class TenantRedisPipeline:
         self._p.delete(*(_prefix_key(self._prefix, n) for n in names))
         return self
 
+    def exists(self, name: KeyArg) -> TenantRedisPipeline:
+        """Queue EXISTS for a tenant-prefixed key."""
+        self._p.exists(_prefix_key(self._prefix, name))
+        return self
+
     def incr(self, name: KeyArg, amount: int = 1) -> TenantRedisPipeline:
         """Queues an INCRBY against a tenant-prefixed counter key.
 

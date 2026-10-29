@@ -1,6 +1,9 @@
 """Lazy file content contracts without database or object storage."""
 
-from onyx.file_store.models import ChatFileType, ChatLoadedFile
+from unittest.mock import patch
+
+from onyx.chat.files import load_chat_files
+from onyx.file_store.models import ChatFileInput, ChatFileType, ChatLoadedFile
 from onyx.tools.models import ChatFile
 
 
@@ -142,3 +145,24 @@ class TestLazyShimContract:
         assert cf.content == b"csv-bytes"
         assert cf.content == b"csv-bytes"
         assert calls["n"] == 1
+
+
+def test_many_files_keep_the_parallel_load_limit() -> None:
+    inputs = [
+        ChatFileInput(
+            descriptor={
+                "id": f"file-{index}",
+                "type": ChatFileType.PLAIN_TEXT,
+                "name": f"file-{index}.txt",
+            },
+            token_count=0,
+            content_pending=False,
+        )
+        for index in range(200)
+    ]
+    with patch(
+        "onyx.chat.files.run_functions_tuples_in_parallel", return_value=[]
+    ) as run:
+        load_chat_files(inputs)
+    assert len(run.call_args.args[0]) == 200
+    assert run.call_args.kwargs["max_workers"] == 16

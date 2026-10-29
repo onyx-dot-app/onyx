@@ -256,7 +256,7 @@ listener's sender.
 
 It passes
 `slack_context=message_info.slack_context` (drives federated Slack search,
-[[internal-search]], `_should_enable_slack_search`,
+[[internal-search]], `execution.py:create_chat_agent`,
 `context/search/federated/slack_search.py`) and
 `additional_context=slack_context_str` (prior thread messages, formatted by
 `build_slack_context_str`, injected as extra LLM context, never persisted to the
@@ -291,6 +291,10 @@ the clicking user, re-resolving the persona through that user's own access via
 `{WEB_DOMAIN}/chat?chatId=...`. Both DB functions read the source Slack chat
 session with `user_id=None` / `skip_permission_check=True`, since the reader at
 that point is not the message's original asker.
+
+The copy retains displayed answers and final thinking, without tool execution history.
+SDK sources read thinking from response items; legacy sources read the existing thinking column.
+The copied messages use the legacy display format, with no execution records or provider signatures.
 
 ---
 
@@ -376,7 +380,7 @@ that point is not the message's original asker.
 **Distinct from (do not conflate)**
 - Slack as a **search source**: `backend/onyx/context/search/federated/slack_search.py`
   lets the chat loop's search tool query live Slack messages/channels as a
-  retrieval source, gated by `_should_enable_slack_search` and
+  retrieval source, gated by `execution.py:create_chat_agent` and
   `SearchTool`'s `slack_context`. This runs for *any* chat turn (web, API, or Slack bot) whose
   persona/filters select the Slack source, and requires a **federated Slack
   connector**, a separate config from `SlackBot`/`SlackChannelConfig`. The Slack
@@ -505,3 +509,6 @@ See `backend/AGENTS.md` for required env and secrets.
   standard answer can be given again in a different Slack thread even if a user
   already saw it elsewhere, because `used_standard_answer_ids` is computed from
   `get_chat_sessions_by_slack_thread_id` for the current thread only.
+
+Slack's collected answer retains all root response text sections and their citations,
+including text separated by tool execution. Child-agent packets are not part of that answer.

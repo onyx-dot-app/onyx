@@ -5,6 +5,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Generator, Iterator
+from contextvars import ContextVar
 from enum import Enum
 from functools import wraps
 from typing import TYPE_CHECKING, Any, TypeVar, cast
@@ -15,9 +16,9 @@ from onyx.utils.fleet_telemetry import emit_telemetry, error_category, fingerpri
 from shared_configs.contextvars import get_current_tenant_id
 
 if TYPE_CHECKING:
-    from onyx.chat.models import AnswerStreamPart, StreamingError
+    from onyx.chat.models import AnswerStreamPart
     from onyx.server.query_and_chat.models import MessageOrigin
-    from onyx.server.query_and_chat.streaming_models import Packet
+    from onyx.server.query_and_chat.streaming_models import Packet, StreamingError
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -153,8 +154,11 @@ class QueryObservation:
         )
 
     def observe_packet(self, packet: "AnswerStreamPart") -> None:
-        from onyx.chat.models import StreamingError
-        from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
+        from onyx.server.query_and_chat.streaming_models import (
+            OverallStop,
+            Packet,
+            StreamingError,
+        )
 
         if isinstance(packet, Packet):
             if _is_answer_text(packet):
@@ -334,3 +338,9 @@ def emit_feedback(
             "channel": _origin_channel(origin),
         },
     )
+
+
+# Copied into agent and tool workers; never serialized into saved run state.
+CURRENT_QUERY_OBSERVATION: ContextVar[QueryObservation | None] = ContextVar(
+    "current_query_observation", default=None
+)

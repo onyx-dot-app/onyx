@@ -23,14 +23,14 @@ def _answer(model_idx: int = 0) -> Packet:
 
 
 # The emitter's queue type; the stream writer reads it.
-StreamQueue = Queue[tuple[int, Packet | Exception | object]]
+StreamQueue = Queue[Packet]
 
 
 def _observe_queued(
     queue: StreamQueue, observation: telemetry.QueryObservation
 ) -> None:
     while not queue.empty():
-        _, packet = queue.get_nowait()
+        packet = queue.get_nowait()
         assert isinstance(packet, Packet)
         observation.observe_packet(packet)
 
@@ -64,7 +64,7 @@ def test_cycles_stop_at_the_first_answer_token(
     observation = telemetry.QueryObservation(
         channel="web", mode=telemetry.QueryMode.CHAT
     )
-    emitter = Emitter(queue, query_observation=observation)
+    emitter = Emitter(queue.put_nowait, query_observation=observation)
     for _ in range(calls_before_answer):
         emitter.llm_step_started()
     emitter.emit(_answer())
@@ -86,7 +86,7 @@ def test_unanswered_queries_report_every_cycle_until_finish(sink: Mock) -> None:
     observation = telemetry.QueryObservation(
         channel="api", mode=telemetry.QueryMode.CHAT
     )
-    emitter = Emitter(Queue(), query_observation=observation)
+    emitter = Emitter(Queue[Packet]().put_nowait, query_observation=observation)
     for _ in range(3):
         emitter.llm_step_started()
     observation.failed(RuntimeError("private failure"))
@@ -105,7 +105,8 @@ def test_model_comparisons_report_the_first_answering_model(sink: Mock) -> None:
         channel="web", mode=telemetry.QueryMode.CHAT
     )
     slow, fast = (
-        Emitter(queue, model_idx=i, query_observation=observation) for i in range(2)
+        Emitter(queue.put_nowait, model_idx=i, query_observation=observation)
+        for i in range(2)
     )
     for _ in range(4):
         slow.llm_step_started()

@@ -1,7 +1,7 @@
 """Context pressure preserves the task, tool effects, and recorded history."""
 
 import threading
-from collections.abc import Generator, Sequence
+from collections.abc import Callable, Generator, Sequence
 from contextlib import nullcontext
 from unittest.mock import Mock, patch
 
@@ -9,11 +9,14 @@ import pytest
 import tiktoken
 
 from onyx.agents.compaction import (
+    IMAGE_TOKEN_ESTIMATE,
+    MESSAGE_OVERHEAD_TOKENS,
     SUMMARY_TIMEOUT_SECONDS,
     CheckpointMismatchError,
     ContextLimitError,
     compact_history,
     context_budget,
+    count_tokens,
     history_boundaries,
     request_tokens,
     working_messages,
@@ -22,7 +25,6 @@ from onyx.agents.events import AgentEvent
 from onyx.agents.models import (
     AgentState,
     CompactionCheckpoint,
-    ExecutionCheckpoint,
     ExecutionStatus,
     PreparedStep,
     RunState,
@@ -44,8 +46,16 @@ from onyx.agents.tools import (
     PendingToolInput,
     ToolInvocation,
 )
+from onyx.chat.chat_utils import convert_chat_history
+from onyx.chat.files import build_file_context
+from onyx.chat.models import ChatHistoryMessage, CheckpointBinding
+from onyx.chat.prompt_formatting import prompt_metadata
+from onyx.chat.prompt_utils import prepare_prompt
+from onyx.configs.constants import MessageType
+from onyx.file_store.models import ChatFileType, ChatLoadedFile
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.exceptions import LLMContextLimitError
+from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM, GenerationContext, LLMConfig, LLMUserIdentity
 from onyx.llm.models import (
     AssistantMessage,
@@ -53,6 +63,7 @@ from onyx.llm.models import (
     GenerationEvent,
     GenerationOptions,
     GenerationRequest,
+    ImageContentPart,
     Message,
     SystemMessage,
     TextContent,
@@ -66,6 +77,7 @@ from onyx.llm.models import (
 from onyx.llm.token_budget import TokenBudget, resolve_token_budget
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.traces import TraceContentMode
+from tests.unit.onyx.agents.checkpoint_storage import CheckpointStorage, SavedCheckpoint
 from tests.unit.onyx.agents.fakes import FakeModelClient, message_events
 
 TASK = "Compare the evidence and preserve citations."
@@ -131,6 +143,394 @@ class ContextModel(LLM):
             yield GenerationErrorEvent(error_message="Too much context")
             raise
         yield from message_events(message)
+
+
+def test_rebuilt_prompts_reuse_counts_and_recount_changed_content() -> None:
+    evidence = "Retrieved evidence from search. " * 20
+    revised_evidence = evidence + "New information. " * 10
+    system = "Use the evidence to answer."
+    tokenizer = tiktoken.get_encoding("cl100k_base")
+    sdk_encoder = Mock(wraps=tokenizer)
+    provider_inputs: list[str] = []
+
+    def encode(text: str) -> list[int]:
+        provider_inputs.append(text)
+        return tokenizer.encode(text)
+
+    with (
+        patch("onyx.agents.compaction._encoder", return_value=sdk_encoder),
+        patch(
+            "onyx.llm.factory.get_llm_tokenizer_encode_func",
+            return_value=encode,
+        ),
+    ):
+        # Each run and model counter must own its cache independently.
+        for _ in range(2):
+            model = ContextModel(tool_rounds=2)
+            token_counter = get_llm_token_counter(model)
+
+            tool = AgentTool(
+                definition=ToolDefinition(
+                    name="lookup", description="Search", parameters={}
+                ),
+                execute=lambda _: ToolResult(content=evidence),
+            )
+
+            def prepare(
+                state: StepInput,
+                token_counter: Callable[[str], int] = token_counter,
+                llm_config: LLMConfig = model.config,
+                tool: AgentTool = tool,
+            ) -> PreparedStep:
+                tool.definition = tool.definition.model_copy(
+                    update={
+                        "description": "Search updated sources"
+                        if state.step.index == 2
+                        else "Search"
+                    }
+                )
+
+                def assemble(messages: Sequence[Message]) -> list[Message]:
+                    updated_messages = [
+                        message.model_copy(update={"content": revised_evidence})
+                        if isinstance(message, ToolResultMessage)
+                        and state.step.index == 2
+                        else message
+                        for message in messages
+                    ]
+                    return prepare_prompt(
+                        updated_messages,
+                        system_prompt=SystemMessage(content=system),
+                        custom_agent_prompt=None,
+                        reminder_message=None,
+                        context_files=None,
+                        token_counter=token_counter,
+                        llm_config=llm_config,
+                    )
+
+                return PreparedStep(tools=[tool], assemble_messages=assemble)
+
+            agent = Agent(
+                model,
+                generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+                state=AgentState(messages=[UserMessage(content=TASK)]),
+                tools=[tool],
+                prepare_step=prepare,
+            )
+            run = agent.start(background=False, max_steps=3)
+            assert run.result().output.text == "Evidence supports the conclusion [1]."
+            assert run.wait_for_idle(timeout=5)
+            assert len(model.generations) == 3
+            assert not model.summaries
+            assert not run._token_counts
+            assert [
+                message.content
+                for message in model.generations[-1].messages
+                if isinstance(message, ToolResultMessage)
+            ] == [revised_evidence, revised_evidence]
+            assert [
+                message.content
+                for message in agent.state.messages
+                if isinstance(message, ToolResultMessage)
+            ] == [evidence, evidence]
+
+    sdk_inputs = [call.args[0] for call in sdk_encoder.encode.call_args_list]
+    # Each text is encoded once per counter, even across copied prompt messages.
+    for text in (TASK, system, evidence, revised_evidence):
+        assert sdk_inputs.count(text) == 2
+        assert provider_inputs.count(text) == 2
+    for request in model.generations:
+        assert sdk_inputs.count(request.tools[0].model_dump_json()) == 2
+
+
+def test_long_requests_reuse_counts_and_release_removed_history() -> None:
+    class LargeContextModel(ContextModel):
+        @property
+        def config(self) -> LLMConfig:
+            return super().config.model_copy(update={"max_input_tokens": 128000})
+
+    source: list[Message] = [UserMessage(content="Compare these sources.")]
+    for index in range(350):
+        source.extend(
+            [
+                AssistantMessage(
+                    content=[
+                        TextContent(text=f"Checking source {index}."),
+                        ToolCall(
+                            id=f"call-{index}",
+                            name="search",
+                            arguments={"query": f"source {index}"},
+                        ),
+                    ]
+                ),
+                ToolResultMessage(
+                    tool_call_id=f"call-{index}",
+                    tool_name="search",
+                    content=f"Source {index} contains useful evidence.",
+                ),
+            ]
+        )
+    source.append(UserMessage(content=TASK))
+    run = Run(
+        RunState(run_id="run", agent_id="agent", status=RunStatus.RUNNING),
+        CancellationSignal(),
+    )
+    model = LargeContextModel()
+    encoder = Mock(wraps=tiktoken.get_encoding("cl100k_base"))
+    with patch("onyx.agents.compaction._encoder", return_value=encoder):
+        for _ in range(2):
+            request = _compact_context(
+                run,
+                model,
+                [message.model_copy(deep=True) for message in source],
+                PreparedStep(),
+                GenerationContext(),
+            )
+            assert len(request.messages) == len(source)
+            assert len(run._token_counts) > 1024
+            assert encoder.encode.call_count == len(run._token_counts)
+
+        encoded = encoder.encode.call_count
+        _compact_context(run, model, source[-3:], PreparedStep(), GenerationContext())
+        assert encoder.encode.call_count == encoded
+        last_message = source[-3]
+        assert isinstance(last_message, AssistantMessage)
+        assert set(run._token_counts) == {
+            "",
+            last_message.text,
+            last_message.tool_calls[0].model_dump_json(),
+            source[-2].text,
+            TASK,
+        }
+
+
+@pytest.mark.parametrize(
+    "scenario", ["proactive", "summary_failure", "provider_retry", "oversized"]
+)
+def test_current_attachments_survive_context_fitting(scenario: str) -> None:
+    model = ContextModel(reject_first=scenario == "provider_retry")
+    body = "Read this unique attachment detail. " * (
+        200 if scenario == "oversized" else 80
+    )
+    files = [
+        ChatLoadedFile(
+            file_id=f"attachment-{index}",
+            file_type=ChatFileType.PLAIN_TEXT,
+            filename=f"report-{index}.txt",
+            content=body.encode(),
+            content_text=body,
+            token_count=count_tokens(body),
+        )
+        for index in range(2)
+    ]
+    old_text = "Old findings. " * (1000 if scenario == "summary_failure" else 20)
+    history = convert_chat_history(
+        [
+            ChatHistoryMessage(
+                id=1,
+                message_type=MessageType.ASSISTANT,
+                message=old_text,
+                token_count=count_tokens(old_text),
+                files=[],
+                is_clarification=False,
+                response_messages=[
+                    AssistantMessage(
+                        id="old-answer", content=[TextContent(text=old_text)]
+                    )
+                ],
+            ),
+            ChatHistoryMessage(
+                id=2,
+                message_type=MessageType.USER,
+                message="Compare both attached reports.",
+                token_count=6,
+                is_clarification=False,
+                files=[{"id": file.file_id, "type": file.file_type} for file in files],
+                response_messages=[],
+            ),
+        ],
+        files=files,
+        context_image_files=[],
+        additional_context="Include the supporting evidence.",
+        token_counter=count_tokens,
+    )
+
+    def assemble(messages: Sequence[Message]) -> list[Message]:
+        return prepare_prompt(
+            messages,
+            system_prompt=None,
+            custom_agent_prompt=None,
+            reminder_message=None,
+            context_files=None,
+            token_counter=count_tokens,
+            all_injected_file_metadata=history.all_injected_file_metadata,
+            available_tool_names=set(),
+        )
+
+    original_request = GenerationRequest(messages=assemble(history.messages))
+    budget = context_budget(model)
+    if scenario in {"proactive", "provider_retry"}:
+        assert budget.trigger < request_tokens(original_request) <= budget.input_limit
+    else:
+        assert request_tokens(original_request) > budget.input_limit
+    agent = Agent(
+        model,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        state=AgentState(messages=history.messages[: history.input_start]),
+        prepare_step=lambda _: PreparedStep(assemble_messages=assemble),
+    )
+    with (
+        patch(
+            "onyx.agents.runtime.compact_history", side_effect=RuntimeError("Offline")
+        )
+        if scenario in {"summary_failure", "provider_retry"}
+        else nullcontext()
+    ):
+        run = agent.start(
+            messages=history.messages[history.input_start :],
+            background=False,
+            max_steps=1,
+        )
+        if scenario == "oversized":
+            with pytest.raises(RunFailed):
+                run.result()
+            assert not model.generations
+        else:
+            run.result()
+            assert len(model.generations) == (2 if scenario == "provider_retry" else 1)
+            for request in model.generations:
+                assert [message.text for message in request.messages[-4:]] == [
+                    message.text for message in original_request.messages[-4:]
+                ]
+                assert not request.tools
+                assert body in request.messages[-4].text
+                assert body in request.messages[-3].text
+                assert request_tokens(request) <= budget.input_limit
+    assert agent.state.messages[: len(history.messages)] == history.messages
+    if scenario == "proactive":
+        assert agent.state.checkpoint is not None
+        assert agent.state.checkpoint.covered_through_message_id == "old-answer"
+
+
+def test_compaction_replaces_attachment_body_with_file_reference() -> None:
+    model = ContextModel()
+    body = "Attachment-only detail. " * 2000
+    file = build_file_context(
+        tool_file_id="attachment-id",
+        filename="report.txt",
+        file_type=ChatFileType.PLAIN_TEXT,
+        content_text=body,
+    )
+    findings = "The report supports option A; the user chose option B."
+
+    def assemble(messages: Sequence[Message]) -> list[Message]:
+        return prepare_prompt(
+            messages,
+            system_prompt=None,
+            custom_agent_prompt=None,
+            reminder_message=None,
+            context_files=None,
+            token_counter=len,
+            all_injected_file_metadata={"attachment-id": file.tool_metadata},
+            available_tool_names=set(),
+        )
+
+    agent = Agent(
+        model,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        state=AgentState(
+            messages=[
+                file.message,
+                UserMessage(content="Compare the options in the attachment."),
+                AssistantMessage(content=[TextContent(text=findings)]),
+            ]
+        ),
+        prepare_step=lambda _: PreparedStep(assemble_messages=assemble),
+    )
+    run = agent.start(messages=[UserMessage(content="Continue. " * 160)], max_steps=1)
+    run.result()
+    assert run.wait_for_idle(2)
+
+    assert len(model.summaries) == 1
+    summary_input = model.summaries[0].messages[0].text
+    assert "report.txt" in summary_input
+    assert "attachment-id" in summary_input
+    assert findings in summary_input
+    assert "Attachment-only detail" not in summary_input
+    generation_input = "\n".join(m.text for m in model.generations[0].messages)
+    assert "report.txt" in generation_input
+    assert "no tool here can read them" in generation_input
+    assert "Attachment-only detail" not in generation_input
+    assert body in file.message.text
+    assert body in agent.state.messages[0].text
+
+
+@pytest.mark.parametrize("long_question", [False, True])
+def test_summary_cutoff_survives_request_context_removal(long_question: bool) -> None:
+    model = ContextModel()
+    old_answer = ChatHistoryMessage(
+        id=1,
+        message_type=MessageType.ASSISTANT,
+        message="Old findings. " * 600,
+        token_count=1800,
+        files=[],
+        is_clarification=False,
+        response_messages=[
+            AssistantMessage(
+                id="old-answer", content=[TextContent(text="Old findings. " * 600)]
+            )
+        ],
+    )
+    question = ChatHistoryMessage(
+        id=2,
+        message_type=MessageType.USER,
+        message="Current question. " * (160 if long_question else 1),
+        token_count=0,
+        files=[],
+        is_clarification=False,
+        response_messages=[],
+    )
+    source = convert_chat_history(
+        [old_answer, question],
+        files=[],
+        context_image_files=[],
+        additional_context="Temporary request detail. " * 160,
+        token_counter=len,
+    ).messages
+    checkpoint = compact_history(model, source, None, GenerationContext())
+    assert checkpoint.covered_through_message_id == "old-answer"
+    summary_input = "\n".join(request.messages[0].text for request in model.summaries)
+    assert "Temporary request detail" not in summary_input
+
+    next_question = question.model_copy(update={"id": 3, "message": "Next question"})
+    reloaded = convert_chat_history(
+        [old_answer, question, next_question],
+        files=[],
+        context_image_files=[],
+        additional_context=None,
+        token_counter=len,
+    ).messages
+    restored_checkpoint = CompactionCheckpoint.model_validate_json(
+        checkpoint.model_dump_json()
+    )
+    remaining = working_messages(reloaded, restored_checkpoint)
+    assert remaining[0].text == f"Conversation summary:\n{checkpoint.summary}"
+    assert remaining[-1].text == "Next question"
+    assert [message.id for message in remaining[1:]] == ["chat:2", "chat:3"]
+
+
+def test_compaction_rejects_missing_cutoff_identity_before_model_work() -> None:
+    model = ContextModel()
+    history: list[Message] = [
+        AssistantMessage(content=[TextContent(text="Old evidence. " * 600)]),
+        UserMessage(id="question", content="Continue"),
+    ]
+
+    with pytest.raises(ContextLimitError, match="source message has no identity"):
+        compact_history(model, history, None, GenerationContext())
+
+    assert model.summaries == []
+    assert model.generations == []
 
 
 def test_compaction_uses_configured_input_safety_margin() -> None:
@@ -261,7 +661,7 @@ def test_provider_context_rejection_preserves_execution_settings(
             stall_timeout_s=23,
             total_timeout_s=71,
             user_identity=identity,
-            flow=LLMFlow.CHAT_RESPONSE,
+            flow=LLMFlow.RESEARCH_AGENT,
             content_mode=TraceContentMode.METADATA_ONLY,
         ),
         prepare_step=prepare,
@@ -281,9 +681,9 @@ def test_provider_context_rejection_preserves_execution_settings(
     assert ends[0].message.thinking == ""
     assert prepared == [0]
     assert [context.flow for context in model.contexts] == [
-        LLMFlow.CHAT_RESPONSE,
+        LLMFlow.RESEARCH_AGENT,
         LLMFlow.CHAT_HISTORY_SUMMARIZATION,
-        LLMFlow.CHAT_RESPONSE,
+        LLMFlow.RESEARCH_AGENT,
     ]
     for context in model.contexts:
         assert context.cancellation is run.cancellation_signal
@@ -303,7 +703,7 @@ def test_provider_context_rejection_preserves_execution_settings(
 
     assert agent.generation_context.cancellation is default_signal
     assert agent.generation_context.stall_timeout_s == 23
-    assert agent.generation_context.flow == LLMFlow.CHAT_RESPONSE
+    assert agent.generation_context.flow == LLMFlow.RESEARCH_AGENT
 
 
 def test_step_timeout_override_does_not_change_later_steps() -> None:
@@ -350,6 +750,37 @@ def test_oversized_required_instruction_fails_without_losing_snapshot() -> None:
     assert agent.state.messages[0].text == "mandatory " * 2000
     snapshot = run.snapshot()
     assert snapshot is not None and snapshot.status == "error"
+
+
+@pytest.mark.parametrize("summary_fails", [False, True])
+def test_new_input_can_recover_after_oversized_input(summary_fails: bool) -> None:
+    model = ContextModel(tool_rounds=0)
+    agent = Agent(
+        model, generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE)
+    )
+    oversized = UserMessage(content="Oversized input. " * 2000)
+    failed = agent.start(messages=[oversized], max_steps=1, background=False)
+    with pytest.raises(RunFailed):
+        failed.result()
+    assert failed.wait_for_idle(2)
+    assert not model.generations
+
+    with (
+        patch(
+            "onyx.agents.runtime.compact_history",
+            side_effect=RuntimeError("Unavailable"),
+        )
+        if summary_fails
+        else nullcontext()
+    ):
+        retry = agent.start(
+            messages=[UserMessage(content="Say hello")], max_steps=1, background=False
+        )
+    retry.result()
+    assert model.generations[-1].messages[-1].text == "Say hello"
+    assert request_tokens(model.generations[-1]) <= context_budget(model).input_limit
+    assert failed.snapshot().input_messages[0].text == oversized.text
+    assert agent.state.messages[0].text == oversized.text
 
 
 def test_context_fitting_reuses_checkpoint_after_content_changes() -> None:
@@ -406,7 +837,6 @@ def test_output_budget_is_recalculated_after_compaction(
     monkeypatch: pytest.MonkeyPatch, max_tokens: int | None
 ) -> None:
     budget = TokenBudget(
-        input_tokens=1000,
         max_output_tokens=4096,
         context_tokens=4300,
         safety_tokens=120,
@@ -439,6 +869,140 @@ def test_output_budget_is_recalculated_after_compaction(
         after = model.generations[1].options.max_tokens
         assert before is not None and after is not None
         assert after > before
+
+
+@pytest.mark.parametrize("supports_images", [False, True])
+@pytest.mark.parametrize("stored_image_tokens", [0, 20000])
+@pytest.mark.parametrize("configured_input_limit", [1200, 8000, 24000])
+def test_image_replay_cost_controls_compaction_and_output_allowance(
+    monkeypatch: pytest.MonkeyPatch,
+    supports_images: bool,
+    stored_image_tokens: int,
+    configured_input_limit: int,
+) -> None:
+    class ImageBudgetModel(ContextModel):
+        @property
+        def config(self) -> LLMConfig:
+            return super().config.model_copy(
+                update={
+                    "model_name": "image-budget-test",
+                    "max_input_tokens": configured_input_limit,
+                    "supports_images": supports_images,
+                }
+            )
+
+    monkeypatch.setattr("onyx.agents.compaction.GEN_AI_INPUT_TOKEN_SAFETY_MARGIN", 0.05)
+    monkeypatch.setattr("onyx.llm.token_budget.GEN_AI_INPUT_TOKEN_SAFETY_MARGIN", 0.05)
+    monkeypatch.setattr(
+        "onyx.llm.token_budget.get_model_map",
+        lambda: {
+            "openai/image-budget-test": {
+                "max_input_tokens": 24000,
+                "max_output_tokens": 16000,
+            }
+        },
+    )
+    older_text = "Look at this image."
+    if configured_input_limit > 1200:
+        older_text += " Earlier evidence" * 4000
+    image = ChatLoadedFile(
+        file_id="old-image",
+        content=b"\x89PNG\r\n\x1a\n" + b"\x00" * 16,
+        file_type=ChatFileType.IMAGE,
+        filename="old-image.png",
+        content_text=None,
+        token_count=stored_image_tokens,
+    )
+    question = ChatHistoryMessage(
+        id=1,
+        message_type=MessageType.USER,
+        message=older_text,
+        token_count=count_tokens(older_text),
+        files=[{"id": image.file_id, "type": ChatFileType.IMAGE}],
+        is_clarification=False,
+        response_messages=[],
+    )
+    history = convert_chat_history(
+        [
+            question,
+            question.model_copy(
+                update={
+                    "id": 2,
+                    "message_type": MessageType.ASSISTANT,
+                    "files": [],
+                    "response_messages": [
+                        AssistantMessage(
+                            id="old-answer", content=[TextContent(text="Old answer")]
+                        )
+                    ],
+                }
+            ),
+            question.model_copy(
+                update={"id": 3, "message": "Follow-up question", "files": []}
+            ),
+        ],
+        files=[image],
+        context_image_files=[],
+        additional_context=None,
+        token_counter=count_tokens,
+    ).messages
+    original = [message.model_copy(deep=True) for message in history]
+    model = ImageBudgetModel()
+
+    def prepare(_: StepInput) -> PreparedStep:
+        return PreparedStep(
+            assemble_messages=lambda messages: prepare_prompt(
+                messages,
+                system_prompt=None,
+                custom_agent_prompt=None,
+                reminder_message=None,
+                context_files=None,
+                token_counter=count_tokens,
+                llm_config=model.config,
+            )
+        )
+
+    agent = Agent(
+        model,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        state=AgentState(messages=history),
+        prepare_step=prepare,
+    )
+    agent.start(background=False, max_steps=1).result()
+    request = model.generations[0]
+    compacted = configured_input_limit == 8000 or (
+        configured_input_limit == 1200 and supports_images
+    )
+    assert bool(model.summaries) == compacted
+    assert (agent.state.checkpoint is not None) == compacted
+    assert any(message.text == "Follow-up question" for message in request.messages)
+    image_count = sum(
+        isinstance(part, ImageContentPart)
+        for message in request.messages
+        if isinstance(message, UserMessage) and isinstance(message.content, list)
+        for part in message.content
+    )
+    assert image_count == int(supports_images and not compacted)
+    if not compacted:
+        assert older_text in request.messages[0].text
+        if not supports_images:
+            assert "old-image" in request.messages[0].text
+            assert "does not support image input" in request.messages[0].text
+    else:
+        assert all(older_text not in message.text for message in request.messages)
+
+    expected_input = (
+        sum(
+            count_tokens(message.text) + MESSAGE_OVERHEAD_TOKENS
+            for message in request.messages
+        )
+        + image_count * IMAGE_TOKEN_ESTIMATE
+    )
+    assert request.options.max_tokens == min(
+        16000, 24000 - int(configured_input_limit * 0.05) - expected_input
+    )
+    assert history == original
+    assert prompt_metadata(history[0]).image_token_count == stored_image_tokens
 
 
 @pytest.mark.parametrize("reject_first", [False, True])
@@ -500,6 +1064,63 @@ def test_failed_summary_truncates_old_turns_without_changing_history(
     reloaded.start(background=False, max_steps=1).result()
     assert model.generations[-1].messages[: len(request.messages)] == request.messages
     assert reloaded.state.messages[: len(history)] == history
+
+
+def test_truncation_validates_boundaries_once_across_candidates() -> None:
+    history: list[Message] = [
+        SystemMessage(id="system", content="Keep the system instructions."),
+        UserMessage(id="old-user", content="Old question " * 300),
+        AssistantMessage(
+            id="old-answer", content=[TextContent(text="Old answer " * 300)]
+        ),
+        SystemMessage(id="later-system", content="Keep these instructions too."),
+        UserMessage(id="middle-user", content="Middle question " * 300),
+        AssistantMessage(
+            id="middle-answer", content=[TextContent(text="Middle answer " * 300)]
+        ),
+        UserMessage(id="current-user", content=TASK),
+        AssistantMessage(
+            id="current-tool-call",
+            content=[ToolCall(id="current", name="lookup", arguments={})],
+        ),
+        ToolResultMessage(
+            id="current-tool-result",
+            tool_call_id="current",
+            tool_name="lookup",
+            content="Current evidence",
+        ),
+    ]
+    original = [message.model_copy(deep=True) for message in history]
+    candidates: list[list[Message]] = []
+
+    def assemble(messages: Sequence[Message]) -> list[Message]:
+        candidates.append(list(messages))
+        return list(messages)
+
+    prepared = PreparedStep(assemble_messages=assemble)
+    expected = [history[0], history[3], *history[6:]]
+    input_limit = request_tokens(GenerationRequest(messages=expected))
+    boundary_scan = Mock(wraps=history_boundaries)
+    with (
+        patch("onyx.agents.runtime.history_boundaries", boundary_scan),
+        patch("onyx.agents.compaction.history_boundaries", boundary_scan),
+    ):
+        checkpoint, request, size = _truncate_context(
+            CancellationSignal(),
+            history,
+            prepared,
+            token_counts={},
+            input_limit=input_limit,
+            original_size=request_tokens(GenerationRequest(messages=history)),
+        )
+    assert boundary_scan.call_count == 1
+    assert len(candidates) == 3
+    assert checkpoint.summary == ""
+    assert checkpoint.covered_through_message_id == "middle-answer"
+    assert request.messages == expected
+    assert request.messages == working_messages(history, checkpoint)
+    assert size <= input_limit
+    assert history == original
 
 
 @pytest.mark.parametrize("total_timeout", [None, 71, 500])
@@ -598,6 +1219,27 @@ def test_failed_summary_does_not_swallow_cancellation() -> None:
             )
 
 
+def test_checkpoint_cannot_cover_unanswered_input_across_system_messages() -> None:
+    messages: list[Message] = [
+        UserMessage(id="file", content="New attachment contents"),
+        SystemMessage(content="Use the supplied evidence."),
+        UserMessage(id="question", content="Read the attachment."),
+    ]
+    checkpoint = CompactionCheckpoint(
+        summary="File reference", covered_through_message_id="file"
+    )
+    with pytest.raises(CheckpointMismatchError, match="unanswered input"):
+        working_messages(messages, checkpoint)
+
+    messages.append(
+        AssistantMessage(id="answer", content=[TextContent(text="Findings")])
+    )
+    assert working_messages(messages, checkpoint) == [
+        SystemMessage(content="Conversation summary:\nFile reference"),
+        *messages[1:],
+    ]
+
+
 def test_checkpoint_cannot_split_completed_tool_calls() -> None:
     messages: list[Message] = [
         AssistantMessage(
@@ -671,16 +1313,35 @@ def test_compaction_identity_survives_suspension_and_resume(
     )
     assert run.status == RunStatus.SUSPENDED
     assert run.wait_for_idle(2)
-    captured = run.handoff()
-    saved = ExecutionCheckpoint.model_validate_json(captured.model_dump_json())
+    captured = run.capture()
+    storage = CheckpointStorage({})
+    stored = SavedCheckpoint.model_validate_json(
+        storage.save(
+            captured.run_state,
+            captured.agent_state,
+            CheckpointBinding(
+                tenant_id="tenant", response_id=captured.run_state.run_id
+            ),
+        )
+    )
+    # SQL history can carry an older summary or omit a transient truncation cutoff.
+    stored.response.checkpoint = (
+        CompactionCheckpoint(
+            summary="Outdated", covered_through_message_id="old-question"
+        )
+        if not summary
+        else None
+    )
+    stored.context.checkpoint = None
+    saved = storage.load(stored.model_dump_json())
     input_id = f"run:{run.id}:input:0" if parent_run_id else "supplied-id"
     assert saved.run_state.input_messages[0].id == input_id
     restored = Agent(
         model,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=tools,
         state=saved.agent_state,
         agent_id=agent.id,
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
     )
     resumed = restored.resume(saved.run_state)
     resumed.submit(
@@ -697,195 +1358,6 @@ def test_compaction_identity_survives_suspension_and_resume(
     assert model.generations[-1].messages[0].text == (
         f"Conversation summary:\n{summary}" if summary else TASK
     )
-
-
-def test_long_requests_reuse_counts_and_release_removed_history() -> None:
-    class LargeContextModel(ContextModel):
-        @property
-        def config(self) -> LLMConfig:
-            return super().config.model_copy(update={"max_input_tokens": 128000})
-
-    source: list[Message] = [UserMessage(content="Compare these sources.")]
-    for index in range(350):
-        source.extend(
-            [
-                AssistantMessage(
-                    content=[
-                        TextContent(text=f"Checking source {index}."),
-                        ToolCall(
-                            id=f"call-{index}",
-                            name="search",
-                            arguments={"query": f"source {index}"},
-                        ),
-                    ]
-                ),
-                ToolResultMessage(
-                    tool_call_id=f"call-{index}",
-                    tool_name="search",
-                    content=f"Source {index} contains useful evidence.",
-                ),
-            ]
-        )
-    source.append(UserMessage(content=TASK))
-    run = Run(
-        RunState(run_id="run", agent_id="agent", status=RunStatus.RUNNING),
-        CancellationSignal(),
-    )
-    model = LargeContextModel()
-    encoder = Mock(wraps=tiktoken.get_encoding("cl100k_base"))
-    with patch("onyx.agents.compaction._encoder", return_value=encoder):
-        for _ in range(2):
-            request = _compact_context(
-                run,
-                model,
-                [message.model_copy(deep=True) for message in source],
-                PreparedStep(),
-                GenerationContext(),
-            )
-            assert len(request.messages) == len(source)
-            assert len(run._token_counts) > 1024
-            assert encoder.encode.call_count == len(run._token_counts)
-
-        encoded = encoder.encode.call_count
-        _compact_context(run, model, source[-3:], PreparedStep(), GenerationContext())
-        assert encoder.encode.call_count == encoded
-        last_message = source[-3]
-        assert isinstance(last_message, AssistantMessage)
-        assert set(run._token_counts) == {
-            "",
-            last_message.text,
-            last_message.tool_calls[0].model_dump_json(),
-            source[-2].text,
-            TASK,
-        }
-
-
-def test_rebuilt_prompts_reuse_counts_and_recount_changed_content() -> None:
-    evidence = "Retrieved evidence from search. " * 20
-    revised_evidence = evidence + "New information. " * 10
-    system = "Use the evidence to answer."
-    tokenizer = tiktoken.get_encoding("cl100k_base")
-    sdk_encoder = Mock(wraps=tokenizer)
-    with patch("onyx.agents.compaction._encoder", return_value=sdk_encoder):
-        # Each run and model counter must own its cache independently.
-        for _ in range(2):
-            model = ContextModel(tool_rounds=2)
-
-            tool = AgentTool(
-                definition=ToolDefinition(
-                    name="lookup", description="Search", parameters={}
-                ),
-                execute=lambda _: ToolResult(content=evidence),
-            )
-
-            def prepare(state: StepInput, tool: AgentTool = tool) -> PreparedStep:
-                tool.definition = tool.definition.model_copy(
-                    update={
-                        "description": "Search updated sources"
-                        if state.step.index == 2
-                        else "Search"
-                    }
-                )
-
-                def assemble(messages: Sequence[Message]) -> list[Message]:
-                    updated_messages = [
-                        message.model_copy(update={"content": revised_evidence})
-                        if isinstance(message, ToolResultMessage)
-                        and state.step.index == 2
-                        else message
-                        for message in messages
-                    ]
-                    return [SystemMessage(content=system), *updated_messages]
-
-                return PreparedStep(tools=[tool], assemble_messages=assemble)
-
-            agent = Agent(
-                model,
-                generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-                state=AgentState(messages=[UserMessage(content=TASK)]),
-                tools=[tool],
-                prepare_step=prepare,
-            )
-            run = agent.start(background=False, max_steps=3)
-            assert run.result().output.text == "Evidence supports the conclusion [1]."
-            assert run.wait_for_idle(timeout=5)
-            assert len(model.generations) == 3
-            assert not model.summaries
-            assert not run._token_counts
-            assert [
-                message.content
-                for message in model.generations[-1].messages
-                if isinstance(message, ToolResultMessage)
-            ] == [revised_evidence, revised_evidence]
-            assert [
-                message.content
-                for message in agent.state.messages
-                if isinstance(message, ToolResultMessage)
-            ] == [evidence, evidence]
-
-    sdk_inputs = [call.args[0] for call in sdk_encoder.encode.call_args_list]
-    # Each text is encoded once per counter, even across copied prompt messages.
-    for text in (TASK, system, evidence, revised_evidence):
-        assert sdk_inputs.count(text) == 2
-    for request in model.generations:
-        assert sdk_inputs.count(request.tools[0].model_dump_json()) == 2
-
-
-def test_truncation_validates_boundaries_once_across_candidates() -> None:
-    history: list[Message] = [
-        SystemMessage(id="system", content="Keep the system instructions."),
-        UserMessage(id="old-user", content="Old question " * 300),
-        AssistantMessage(
-            id="old-answer", content=[TextContent(text="Old answer " * 300)]
-        ),
-        SystemMessage(id="later-system", content="Keep these instructions too."),
-        UserMessage(id="middle-user", content="Middle question " * 300),
-        AssistantMessage(
-            id="middle-answer", content=[TextContent(text="Middle answer " * 300)]
-        ),
-        UserMessage(id="current-user", content=TASK),
-        AssistantMessage(
-            id="current-tool-call",
-            content=[ToolCall(id="current", name="lookup", arguments={})],
-        ),
-        ToolResultMessage(
-            id="current-tool-result",
-            tool_call_id="current",
-            tool_name="lookup",
-            content="Current evidence",
-        ),
-    ]
-    original = [message.model_copy(deep=True) for message in history]
-    candidates: list[list[Message]] = []
-
-    def assemble(messages: Sequence[Message]) -> list[Message]:
-        candidates.append(list(messages))
-        return list(messages)
-
-    prepared = PreparedStep(assemble_messages=assemble)
-    expected = [history[0], history[3], *history[6:]]
-    input_limit = request_tokens(GenerationRequest(messages=expected))
-    boundary_scan = Mock(wraps=history_boundaries)
-    with (
-        patch("onyx.agents.runtime.history_boundaries", boundary_scan),
-        patch("onyx.agents.compaction.history_boundaries", boundary_scan),
-    ):
-        checkpoint, request, size = _truncate_context(
-            CancellationSignal(),
-            history,
-            prepared,
-            token_counts={},
-            input_limit=input_limit,
-            original_size=request_tokens(GenerationRequest(messages=history)),
-        )
-    assert boundary_scan.call_count == 1
-    assert len(candidates) == 3
-    assert checkpoint.summary == ""
-    assert checkpoint.covered_through_message_id == "middle-answer"
-    assert request.messages == expected
-    assert request.messages == working_messages(history, checkpoint)
-    assert size <= input_limit
-    assert history == original
 
 
 def test_context_rejection_after_thinking_does_not_restart_generation() -> None:
@@ -922,67 +1394,3 @@ def test_context_rejection_after_thinking_does_not_restart_generation() -> None:
     ends = [e for e in events if e.type == "message_end"]
     assert len(ends) == 1
     assert ends[0].message == state.steps[0].message
-
-
-def test_compaction_rejects_missing_cutoff_identity_before_model_work() -> None:
-    model = ContextModel()
-    history: list[Message] = [
-        AssistantMessage(content=[TextContent(text="Old evidence. " * 600)]),
-        UserMessage(id="question", content="Continue"),
-    ]
-    with pytest.raises(ContextLimitError, match="source message has no identity"):
-        compact_history(model, history, None, GenerationContext())
-    assert model.summaries == []
-    assert model.generations == []
-
-
-def test_checkpoint_cannot_cover_unanswered_input_across_system_messages() -> None:
-    messages: list[Message] = [
-        UserMessage(id="file", content="New attachment contents"),
-        SystemMessage(content="Use the supplied evidence."),
-        UserMessage(id="question", content="Read the attachment."),
-    ]
-    checkpoint = CompactionCheckpoint(
-        summary="File reference", covered_through_message_id="file"
-    )
-    with pytest.raises(CheckpointMismatchError, match="unanswered input"):
-        working_messages(messages, checkpoint)
-
-    messages.append(
-        AssistantMessage(id="answer", content=[TextContent(text="Findings")])
-    )
-    assert working_messages(messages, checkpoint) == [
-        SystemMessage(content="Conversation summary:\nFile reference"),
-        *messages[1:],
-    ]
-
-
-@pytest.mark.parametrize("summary_fails", [False, True])
-def test_new_input_can_recover_after_oversized_input(summary_fails: bool) -> None:
-    model = ContextModel(tool_rounds=0)
-    agent = Agent(
-        model, generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE)
-    )
-    oversized = UserMessage(content="Oversized input. " * 2000)
-    failed = agent.start(messages=[oversized], max_steps=1, background=False)
-    with pytest.raises(RunFailed):
-        failed.result()
-    assert failed.wait_for_idle(2)
-    assert not model.generations
-
-    with (
-        patch(
-            "onyx.agents.runtime.compact_history",
-            side_effect=RuntimeError("Unavailable"),
-        )
-        if summary_fails
-        else nullcontext()
-    ):
-        retry = agent.start(
-            messages=[UserMessage(content="Say hello")], max_steps=1, background=False
-        )
-    retry.result()
-    assert model.generations[-1].messages[-1].text == "Say hello"
-    assert request_tokens(model.generations[-1]) <= context_budget(model).input_limit
-    assert failed.snapshot().input_messages[0].text == oversized.text
-    assert agent.state.messages[0].text == oversized.text

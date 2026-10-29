@@ -10,7 +10,7 @@ from sqlalchemy import event
 from sqlalchemy.orm import Session
 
 from onyx.agents.models import RunStatus
-from onyx.chat.response_models import CheckpointBinding, ResponseCheckpoint
+from onyx.chat.models import CheckpointBinding, ResponseCheckpoint
 from onyx.configs.constants import MessageType
 from onyx.db.chat_checkpoint import (
     check_checkpoint_owner__no_commit,

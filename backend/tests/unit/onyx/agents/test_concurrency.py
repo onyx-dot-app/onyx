@@ -20,6 +20,7 @@ from onyx.agents.events import (
 from onyx.agents.models import RunStatus, ToolCallContext
 from onyx.agents.runtime import Agent, RunFailed
 from onyx.agents.tools import AgentTool, ToolInvocation, ToolProgress
+from onyx.context.search.models import SearchDocsResponse
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
@@ -40,10 +41,6 @@ from onyx.llm.models import (
 from onyx.tracing.flows import LLMFlow
 from onyx.utils.threadpool_concurrency import start_thread_future
 from tests.unit.onyx.agents.fakes import FakeModelClient
-
-
-class MutableDetails(BaseModel):
-    queries: list[str]
 
 
 def test_distinct_jobs_start_independently_and_preserve_context() -> None:
@@ -625,13 +622,13 @@ def test_progress_delivery_isolates_producer_and_listeners() -> None:
             assert release.wait(3)
         if isinstance(event, ToolUpdateEvent):
             details = event.progress.details
-            assert isinstance(details, MutableDetails)
+            assert isinstance(details, SearchDocsResponse)
             details.queries.append("listener mutation")
 
     def observe(event: AgentEvent) -> None:
         if isinstance(event, ToolUpdateEvent):
             details = event.progress.details
-            assert isinstance(details, MutableDetails)
+            assert isinstance(details, SearchDocsResponse)
             received.append(list(details.queries))
 
     delivery.subscribe(mutate)
@@ -639,7 +636,9 @@ def test_progress_delivery_isolates_producer_and_listeners() -> None:
     try:
         delivery.publish(AgentStartEvent(run_id="run"))
         assert entered.wait(2)
-        details = MutableDetails(queries=["first"])
+        details = SearchDocsResponse(
+            search_docs=[], citation_mapping={}, queries=["first"]
+        )
         delivery.publish(
             ToolUpdateEvent(
                 run_id="run",

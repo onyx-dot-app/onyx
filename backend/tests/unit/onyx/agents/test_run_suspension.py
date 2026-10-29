@@ -30,6 +30,7 @@ from onyx.agents.tools import (
     PendingToolInput,
     ToolInvocation,
 )
+from onyx.chat.models import CheckpointBinding
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
@@ -43,6 +44,7 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.tracing.flows import LLMFlow
+from tests.unit.onyx.agents.checkpoint_storage import CheckpointStorage
 from tests.unit.onyx.agents.fakes import FakeModelClient, FakeRunOwnership, FakeRunStore
 
 
@@ -360,6 +362,151 @@ def test_identical_answer_retry_restarts_after_thread_start_failure(
         assert run.wait_for_idle(3)
 
 
+def test_cold_question_resume_uses_answer_without_repeating_tool() -> None:
+    question_calls: list[str] = []
+
+    def make_agent(context: AgentState) -> Agent:
+        def question(_invocation: ToolInvocation) -> PendingToolInput:
+            question_calls.append("asked")
+            return PendingToolInput(
+                request_id="question", prompt="Which?", mode=InputMode.RESULT
+            )
+
+        return Agent(
+            _model([ToolCall(id="question", name="question", arguments={})]),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            agent_id="question-agent",
+            state=context,
+            tools=[
+                AgentTool(
+                    definition=ToolDefinition(
+                        name="question", description="", parameters={}
+                    ),
+                    execute=question,
+                )
+            ],
+        )
+
+    agent = make_agent(AgentState())
+    run = agent.start(max_steps=2)
+    assert run.wait_until_settled(3).status == RunStatus.SUSPENDED
+    assert run.wait_for_idle(3)
+    captured = run.capture()
+    serialized = CheckpointStorage({}).save(
+        captured.run_state,
+        captured.agent_state,
+        CheckpointBinding(tenant_id="tenant", response_id=captured.run_state.run_id),
+    )
+    del captured, run, agent
+    restored = CheckpointStorage({}).load(serialized)
+    agent = make_agent(restored.agent_state)
+    resumed = agent.resume(restored.run_state)
+    assert resumed.wait_until_settled(3).status == RunStatus.SUSPENDED
+    try:
+        resumed.submit(
+            HumanToolAnswer(
+                request_id="question",
+                decision=InputDecision.RESULT,
+                result=ToolResult(content="selected"),
+            )
+        )
+        assert resumed.result(timeout=3).output.text == "done"
+        assert question_calls == ["asked"]
+    finally:
+        resumed.cancel()
+        assert resumed.wait_for_idle(3)
+
+
+def test_cold_resume_retains_consumed_answer_identity_and_rejects_conflict() -> None:
+    effects: list[str] = []
+
+    def make_agent(context: AgentState) -> Agent:
+        def generate(
+            request: GenerationRequest, _signal: CancellationSignal
+        ) -> AssistantMessage:
+            results = [
+                message
+                for message in request.messages
+                if isinstance(message, ToolResultMessage)
+            ]
+            if not results:
+                return AssistantMessage(
+                    content=[ToolCall(id="effect", name="effect", arguments={})]
+                )
+            if len(results) == 1:
+                return AssistantMessage(
+                    content=[ToolCall(id="question", name="question", arguments={})]
+                )
+            return AssistantMessage(content=[TextContent(text="done")])
+
+        def effect(_invocation: ToolInvocation) -> ToolResult:
+            effects.append("sent")
+            return ToolResult(content="sent")
+
+        def question(_invocation: ToolInvocation) -> PendingToolInput:
+            return PendingToolInput(
+                request_id="question", prompt="Which?", mode=InputMode.RESULT
+            )
+
+        return Agent(
+            FakeModelClient(generate),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            agent_id="agent",
+            state=context,
+            tools=[
+                AgentTool(
+                    definition=ToolDefinition(
+                        name="effect", description="", parameters={}
+                    ),
+                    execute=effect,
+                ),
+                AgentTool(
+                    definition=ToolDefinition(
+                        name="question", description="", parameters={}
+                    ),
+                    execute=question,
+                ),
+            ],
+            before_tool_call=_gate,
+        )
+
+    agent = make_agent(AgentState())
+    run = agent.start(max_steps=3)
+    assert run.wait_until_settled(3).status == RunStatus.SUSPENDED
+    run.submit(_approve())
+    assert run.wait_until_settled(3).status == RunStatus.SUSPENDED
+    assert run.wait_for_idle(3)
+    captured = run.capture()
+    serialized = CheckpointStorage({}).save(
+        captured.run_state,
+        captured.agent_state,
+        CheckpointBinding(tenant_id="tenant", response_id=captured.run_state.run_id),
+    )
+    del captured, run, agent
+    restored = CheckpointStorage({}).load(serialized)
+    agent = make_agent(restored.agent_state)
+    resumed = agent.resume(restored.run_state)
+    assert resumed.wait_until_settled(3).status == RunStatus.SUSPENDED
+    try:
+        resumed.submit(_approve())
+        with pytest.raises(ValueError, match="Conflicting"):
+            resumed.submit(
+                HumanToolAnswer(request_id="permission", decision=InputDecision.DENY)
+            )
+        resumed.submit(
+            HumanToolAnswer(
+                request_id="question",
+                decision=InputDecision.RESULT,
+                result=ToolResult(content="selected"),
+            )
+        )
+        assert resumed.result(timeout=3).output.text == "done"
+        assert effects == ["sent"]
+    finally:
+        resumed.cancel()
+        assert resumed.wait_for_idle(3)
+
+
 class _FailingRestoration(RestorableFeature):
     def capture_state(self) -> BaseModel:
         raise RuntimeError("Feature state could not be captured")
@@ -484,6 +631,58 @@ def test_feature_capture_failure_finishes_run_and_releases_work() -> None:
     with pytest.raises(RunFailed):
         run.result(timeout=3)
     assert run.wait_for_idle(3)
+
+
+def test_resume_after_completed_step_does_not_repeat_completion_callback() -> None:
+    entered = threading.Event()
+    release = threading.Event()
+    completed_steps: list[int] = []
+
+    def complete(result: StepResult) -> bool:
+        completed_steps.append(result.step.index)
+        entered.set()
+        assert release.wait(2)
+        return False
+
+    agent = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(content=[TextContent(text="finished")])
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        after_step=complete,
+    )
+    run = agent.start(max_steps=1)
+    try:
+        assert entered.wait(2)
+        run.suspend()
+        release.set()
+        assert run.wait_until_settled(2).status == RunStatus.SUSPENDED
+        captured = run.handoff()
+        serialized = CheckpointStorage({}).save(
+            captured.run_state,
+            captured.agent_state,
+            CheckpointBinding(
+                tenant_id="tenant", response_id=captured.run_state.run_id
+            ),
+        )
+        restored = CheckpointStorage({}).load(serialized)
+        replacement = Agent(
+            FakeModelClient(
+                lambda *_: pytest.fail("Completed generation must not repeat")
+            ),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            state=restored.agent_state,
+            agent_id=restored.run_state.agent_id,
+            after_step=lambda _: pytest.fail("Completed callback must not repeat"),
+        )
+        resumed = replacement.resume(restored.run_state)
+        assert resumed.result(2).output.text == "finished"
+        assert resumed.wait_for_idle(2)
+        assert completed_steps == [0]
+    finally:
+        release.set()
+        run.cancel()
+        assert run.wait_for_idle(2)
 
 
 def test_current_thread_start_returns_on_suspension_and_resumes_on_worker() -> None:
@@ -683,186 +882,3 @@ def test_run_can_capture_and_release_without_its_creating_agent() -> None:
     finally:
         run.cancel()
         assert run.wait_for_idle(3)
-
-
-def test_cold_question_resume_uses_answer_without_repeating_tool() -> None:
-    question_calls: list[str] = []
-
-    def make_agent(context: AgentState) -> Agent:
-        def question(_invocation: ToolInvocation) -> PendingToolInput:
-            question_calls.append("asked")
-            return PendingToolInput(
-                request_id="question", prompt="Which?", mode=InputMode.RESULT
-            )
-
-        return Agent(
-            _model([ToolCall(id="question", name="question", arguments={})]),
-            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-            agent_id="question-agent",
-            state=context,
-            tools=[
-                AgentTool(
-                    definition=ToolDefinition(
-                        name="question", description="", parameters={}
-                    ),
-                    execute=question,
-                )
-            ],
-        )
-
-    agent = make_agent(AgentState())
-    run = agent.start(max_steps=2)
-    assert run.wait_until_settled(3).status == RunStatus.SUSPENDED
-    assert run.wait_for_idle(3)
-    captured = run.handoff()
-    serialized = captured.model_dump_json()
-    del captured, run, agent
-    restored = ExecutionCheckpoint.model_validate_json(serialized)
-    agent = make_agent(restored.agent_state)
-    resumed = agent.resume(restored.run_state)
-    assert resumed.wait_until_settled(3).status == RunStatus.SUSPENDED
-    try:
-        resumed.submit(
-            HumanToolAnswer(
-                request_id="question",
-                decision=InputDecision.RESULT,
-                result=ToolResult(content="selected"),
-            )
-        )
-        assert resumed.result(timeout=3).output.text == "done"
-        assert question_calls == ["asked"]
-    finally:
-        resumed.cancel()
-        assert resumed.wait_for_idle(3)
-
-
-def test_cold_resume_retains_consumed_answer_identity_and_rejects_conflict() -> None:
-    effects: list[str] = []
-
-    def make_agent(context: AgentState) -> Agent:
-        def generate(
-            request: GenerationRequest, _signal: CancellationSignal
-        ) -> AssistantMessage:
-            results = [
-                message
-                for message in request.messages
-                if isinstance(message, ToolResultMessage)
-            ]
-            if not results:
-                return AssistantMessage(
-                    content=[ToolCall(id="effect", name="effect", arguments={})]
-                )
-            if len(results) == 1:
-                return AssistantMessage(
-                    content=[ToolCall(id="question", name="question", arguments={})]
-                )
-            return AssistantMessage(content=[TextContent(text="done")])
-
-        def effect(_invocation: ToolInvocation) -> ToolResult:
-            effects.append("sent")
-            return ToolResult(content="sent")
-
-        def question(_invocation: ToolInvocation) -> PendingToolInput:
-            return PendingToolInput(
-                request_id="question", prompt="Which?", mode=InputMode.RESULT
-            )
-
-        return Agent(
-            FakeModelClient(generate),
-            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-            agent_id="agent",
-            state=context,
-            tools=[
-                AgentTool(
-                    definition=ToolDefinition(
-                        name="effect", description="", parameters={}
-                    ),
-                    execute=effect,
-                ),
-                AgentTool(
-                    definition=ToolDefinition(
-                        name="question", description="", parameters={}
-                    ),
-                    execute=question,
-                ),
-            ],
-            before_tool_call=_gate,
-        )
-
-    agent = make_agent(AgentState())
-    run = agent.start(max_steps=3)
-    assert run.wait_until_settled(3).status == RunStatus.SUSPENDED
-    run.submit(_approve())
-    assert run.wait_until_settled(3).status == RunStatus.SUSPENDED
-    assert run.wait_for_idle(3)
-    captured = run.handoff()
-    serialized = captured.model_dump_json()
-    del captured, run, agent
-    restored = ExecutionCheckpoint.model_validate_json(serialized)
-    agent = make_agent(restored.agent_state)
-    resumed = agent.resume(restored.run_state)
-    assert resumed.wait_until_settled(3).status == RunStatus.SUSPENDED
-    try:
-        resumed.submit(_approve())
-        with pytest.raises(ValueError, match="Conflicting"):
-            resumed.submit(
-                HumanToolAnswer(request_id="permission", decision=InputDecision.DENY)
-            )
-        resumed.submit(
-            HumanToolAnswer(
-                request_id="question",
-                decision=InputDecision.RESULT,
-                result=ToolResult(content="selected"),
-            )
-        )
-        assert resumed.result(timeout=3).output.text == "done"
-        assert effects == ["sent"]
-    finally:
-        resumed.cancel()
-        assert resumed.wait_for_idle(3)
-
-
-def test_resume_after_completed_step_does_not_repeat_completion_callback() -> None:
-    entered = threading.Event()
-    release = threading.Event()
-    completed_steps: list[int] = []
-
-    def complete(result: StepResult) -> bool:
-        completed_steps.append(result.step.index)
-        entered.set()
-        assert release.wait(2)
-        return False
-
-    agent = Agent(
-        FakeModelClient(
-            lambda *_: AssistantMessage(content=[TextContent(text="finished")])
-        ),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        after_step=complete,
-    )
-    run = agent.start(max_steps=1)
-    try:
-        assert entered.wait(2)
-        run.suspend()
-        release.set()
-        assert run.wait_until_settled(2).status == RunStatus.SUSPENDED
-        captured = run.handoff()
-        serialized = captured.model_dump_json()
-        restored = ExecutionCheckpoint.model_validate_json(serialized)
-        replacement = Agent(
-            FakeModelClient(
-                lambda *_: pytest.fail("Completed generation must not repeat")
-            ),
-            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-            state=restored.agent_state,
-            agent_id=restored.run_state.agent_id,
-            after_step=lambda _: pytest.fail("Completed callback must not repeat"),
-        )
-        resumed = replacement.resume(restored.run_state)
-        assert resumed.result(2).output.text == "finished"
-        assert resumed.wait_for_idle(2)
-        assert completed_steps == [0]
-    finally:
-        release.set()
-        run.cancel()
-        assert run.wait_for_idle(2)
