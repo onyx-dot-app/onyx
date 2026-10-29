@@ -221,7 +221,6 @@ function MessageCard({
       size="md"
       onClick={onClose}
       aria-label={strings.close}
-      data-message-card-close=""
     />
   ) : (
     rightChildren
