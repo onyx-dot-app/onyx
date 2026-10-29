@@ -265,3 +265,43 @@ def test_tool_execution_error_keeps_explicit_display_choice(
         assert result.details.message == "Provider rejected request"
     else:
         assert result.details is None
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        ToolCallException("invalid memory", "Please provide a memory"),
+        RuntimeError("invalid runtime state"),
+    ],
+)
+def test_tool_failure_marks_span_with_diagnostics(
+    error: Exception, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    span = MagicMock()
+    span_context = MagicMock()
+    span_context.__enter__.return_value = span
+    monkeypatch.setattr(
+        "onyx.tools.interface.function_span", MagicMock(return_value=span_context)
+    )
+    tool = MemoryTool(tool_id=1, llm=MagicMock(spec=LLM))
+    monkeypatch.setattr(tool, "_run", MagicMock(side_effect=error))
+
+    result = tool.bind(lambda: ToolContext()).execute(
+        ToolInvocation(
+            call_id="memory-call",
+            arguments={},
+            cancellation=CancellationSignal(),
+            update=lambda _progress: None,
+        )
+    )
+
+    assert isinstance(result, ToolResult)
+    assert result.is_error
+    span.set_error.assert_called_once()
+    span_error = span.set_error.call_args.args[0]
+    assert span_error["message"] == str(error)
+    data = span_error["data"]
+    assert data["tool_name"] == tool.name
+    assert data["tool_call_id"] == "memory-call"
+    assert data["error_type"] == type(error).__name__
+    assert type(error).__name__ in data["stack_trace"]

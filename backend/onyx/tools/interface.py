@@ -1,4 +1,5 @@
 import abc
+import traceback
 from collections.abc import Callable
 from functools import partial
 from typing import TYPE_CHECKING, final
@@ -18,6 +19,7 @@ from onyx.tools.models import (
     ToolExecutionException,
 )
 from onyx.tracing.framework.create import function_span
+from onyx.tracing.framework.spans import SpanError
 from onyx.utils.fleet_query_telemetry import CURRENT_QUERY_OBSERVATION
 from onyx.utils.logger import setup_logger
 
@@ -92,6 +94,20 @@ def merge_tool_arguments(
     return merged_args
 
 
+def _tool_span_error(
+    name: str, invocation: ToolInvocation, error: Exception
+) -> SpanError:
+    return {
+        "message": str(error),
+        "data": {
+            "tool_name": name,
+            "tool_call_id": invocation.call_id,
+            "error_type": type(error).__name__,
+            "stack_trace": traceback.format_exc(),
+        },
+    }
+
+
 def _invoke_tool[T: ToolOutcome](
     name: str, invocation: ToolInvocation, execute: Callable[[], T]
 ) -> T | ToolResult:
@@ -103,10 +119,11 @@ def _invoke_tool[T: ToolOutcome](
             result = execute()
         except ToolCallException as error:
             logger.warning("Tool call rejected by %s: %s", name, error)
+            span.set_error(_tool_span_error(name, invocation, error))
             result = ToolResult(content=error.llm_facing_message, is_error=True)
         except Exception as error:
             logger.exception("Tool execution failed for %s", name)
-            span.set_error({"message": str(error), "data": {"tool_name": name}})
+            span.set_error(_tool_span_error(name, invocation, error))
             result = ToolResult(
                 content=f"Tool failed with error: {error}",
                 is_error=True,
