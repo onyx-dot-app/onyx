@@ -165,7 +165,14 @@ def test_expired_reflog_does_not_check_imported_files(repo: Path) -> None:
 def _add_brief(repo: Path) -> None:
     script = repo / ".agents/feature-map/stale_docs.py"
     script.parent.mkdir(parents=True)
-    script.write_text("import sys\nprint('Brief for', *sys.argv[3:])\n")
+    script.write_text(
+        "import os, sys\n"
+        "from pathlib import Path\n"
+        "args = sys.argv[1:]\n"
+        "base = args[args.index('--base') + 1] if '--base' in args else ''\n"
+        "Path(os.environ['CHECKED_FILES']).with_name('base.txt').write_text(base)\n"
+        "print('Brief for', *args[args.index('--') + 1 :])\n"
+    )
     _git(repo, "add", ".agents")
     _git(repo, "commit", "-qm", "Add brief")
 
@@ -390,3 +397,14 @@ def test_linked_worktree_uses_its_own_reflog(repo: Path) -> None:
     _commit(linked, "local.txt")
     _stop(linked)
     assert _checked(linked) == {"local.txt"}
+
+
+def test_brief_measures_changes_from_the_turn_start(repo: Path) -> None:
+    _add_brief(repo)
+    start = _git(repo, "rev-parse", "HEAD")
+    _start(repo)
+    _commit(repo, "base.txt", "committed\n")
+    (repo / "base.txt").write_text("edited again\n")
+    result = _run(repo, "Stop")
+    assert json.loads(result.stdout)["reason"] == "Brief for base.txt"
+    assert (repo.parent / "base.txt").read_text() == start

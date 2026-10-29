@@ -94,8 +94,9 @@ ITEM_START = {
 }
 DEPENDENCY_ITEM = re.compile(r"^- \[\[([a-z][a-z0-9-]*)\]\]: \S")
 # A component may sit in a subdirectory, such as `components/connectors/outlook.md`.
+# Group 1 is the document's path relative to the map directory.
 COMPONENT_LINK = re.compile(
-    r"\(components/(?:[a-z0-9-]+/)?([a-z0-9-]+)\.md(?:#([a-z0-9-]+))?\)"
+    r"\((components/(?:[a-z0-9-]+/)?[a-z0-9-]+\.md)(?:#([a-z0-9-]+))?\)"
 )
 INDEX_ROW = re.compile(
     r"^\|\s*\[[^\]]+\]\(components/(?:[a-z0-9-]+/)?([a-z0-9-]+)\.md\)\s*\|(.*)\|\s*$"
@@ -594,6 +595,7 @@ def _check_links(
     keys: dict[str, set[str]],
     anchors: dict[str, set[str]],
 ) -> list[str]:
+    """`anchors` maps each component's path, such as `components/citations.md`."""
     errors: list[str] = []
     for line in doc.lines:
         if line.in_fence:
@@ -622,14 +624,14 @@ def _check_links(
                     f"{doc.rel}:{line.number}: {link}: `{target}` has no contract "
                     f"or recipe with the key `{key}`"
                 )
-        for name, anchor in COMPONENT_LINK.findall(prose):
-            if name not in anchors:
+        for rel, anchor in COMPONENT_LINK.findall(prose):
+            if rel not in anchors:
                 errors.append(
-                    f"{doc.rel}:{line.number}: links to missing component `{name}`"
+                    f"{doc.rel}:{line.number}: links to missing component `{rel}`"
                 )
-            elif anchor and anchor not in anchors[name]:
+            elif anchor and anchor not in anchors[rel]:
                 errors.append(
-                    f"{doc.rel}:{line.number}: `{name}` has no heading `#{anchor}`"
+                    f"{doc.rel}:{line.number}: `{rel}` has no heading `#{anchor}`"
                 )
     return errors
 
@@ -748,7 +750,7 @@ def _check_ancestry(components: list[Doc], repo: Repo) -> list[str]:
     return warnings
 
 
-def _legacy_names(map_dir: Path) -> set[str]:
+def legacy_names(map_dir: Path) -> set[str]:
     path = map_dir / "legacy-schema.txt"
     if not path.exists():
         return set()
@@ -781,7 +783,7 @@ def check(
     # Components listed in legacy-schema.txt keep the numbered format until the
     # rewrite lands. While any are listed, the check skips them and the map-wide
     # INDEX, PATHS and link checks, which assume the current format.
-    legacy = _legacy_names(map_dir)
+    legacy = legacy_names(map_dir)
     if legacy:
         components = [doc for doc in components if doc.name not in legacy]
         top_level = []
@@ -807,7 +809,7 @@ def check(
     errors.extend(_check_paths(map_dir, names, repo))
 
     keys = {doc.name: link_keys(doc) for doc in components}
-    anchors = {doc.name: _heading_anchors(doc.text) for doc in components}
+    anchors = {doc.rel: _heading_anchors(doc.text) for doc in components}
     for path in sorted(map_dir.rglob("*.md")):
         doc = load_doc(map_dir, path)
         errors.extend(_check_links(doc, keys, anchors))

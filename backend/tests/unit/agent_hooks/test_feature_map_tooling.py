@@ -645,7 +645,10 @@ def test_brief_names_each_key_once_per_session(
         "`backend/onyx/tools/tool_runner.py:ToolRunner.stop` keeps it, and it keeps",
     )
     runner = fmap.root / "backend/onyx/tools/tool_runner.py"
-    runner.write_text(_RUN_CHANGED)
+    stop = "\n    def stop(self):\n        pass\n"
+    runner.write_text(_CODE["backend/onyx/tools/tool_runner.py"] + stop)
+    _git(fmap.root, "commit", "-qam", "add stop")
+    runner.write_text(_RUN_CHANGED + stop)
     changed = ["backend/onyx/tools/tool_runner.py", "backend/scripts/dev.py"]
     first = stale_docs.reminder_text(changed, "s1", fmap.map_dir, fmap.root)
     assert "Read: Architecture" in _entry(first, "tools-framework")
@@ -653,7 +656,7 @@ def test_brief_names_each_key_once_per_session(
     assert stale_docs.reminder_text(changed, "s1", fmap.map_dir, fmap.root) == ""
 
     # A later change to another contract of the same document is still briefed.
-    runner.write_text(_RUN_CHANGED + "\n    def stop(self):\n        pass\n")
+    runner.write_text(_RUN_CHANGED + stop.replace("pass", "return 2"))
     second = stale_docs.reminder_text(changed, "s1", fmap.map_dir, fmap.root)
     entry = _entry(second, "tools-framework")
     assert "Read: Contracts and traps: `tool-key`" in entry
@@ -692,7 +695,10 @@ def test_enclosing_names() -> None:
         "}\n"
     )
     assert names(typescript, {4}, "typescript") == {"Store", "Store.load"}
-    assert names(typescript, {11}, "typescript") == {"useThing"}
+    # A function-valued local is a definition; a multiline signature opens one.
+    assert names(typescript, {11}, "typescript") == {"useThing", "useThing.local"}
+    multiline = "class A {\n  run(\n    id: string,\n  ): void {\n    go();\n  }\n}\n"
+    assert names(multiline, {5}, "typescript") == {"A", "A.run"}
     assert stale_docs.symbol_matches("run", {"Model", "Model.run"})
     assert not stale_docs.symbol_matches("Model.column", {"Model", "Model.run"})
 
@@ -728,3 +734,156 @@ def test_queue_orders_by_cited_code_churn(fmap: FixtureMap) -> None:
     rows = stale_docs.queue(fmap.map_dir, fmap.root)
     assert [row.split()[1] for row in rows] == ["tools-framework", "citations"]
     assert "1 of 1 cited files changed since" in rows[0]
+
+
+def test_brief_shows_every_key_and_file_and_records_only_those(
+    fmap: FixtureMap, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(stale_docs.tempfile, "gettempdir", lambda: str(tmp_path))
+    extra = "".join(
+        f"{n}. `rule-{n}` **Rule {n}.** `chat/citation_utils.py` holds it.\n"
+        for n in range(3, 11)
+    )
+    fmap.edit(
+        _CIT, "See [[#unresolved-silent]].\n", "See [[#unresolved-silent]].\n" + extra
+    )
+    (fmap.root / "backend/onyx/chat/citation_utils.py").write_text(
+        "def update_mapping():\n    return 0\n"
+    )
+    new_files = [f"backend/onyx/server/new_{n}.py" for n in range(5)]
+    for path in new_files:
+        (fmap.root / path).write_text("")
+    changed = ["backend/onyx/chat/citation_utils.py", *new_files]
+    first = stale_docs.reminder_text(changed, "s1", fmap.map_dir, fmap.root)
+    entry = _entry(first, "citations")
+    assert all(f"`rule-{n}`" in entry for n in range(3, 11)), entry
+    assert "more)" not in first
+    assert all(path in first for path in new_files)
+    # Everything was printed, so nothing is left to name again.
+    assert stale_docs.reminder_text(changed, "s1", fmap.map_dir, fmap.root) == ""
+
+
+_HOOK_TS = (
+    "export function useChatController() {\n"
+    "  const stop = useCallback(() => {\n"
+    "    abort();\n"
+    "  }, []);\n"
+    "  const limit = 1;\n"
+    "}\n\n"
+    "export interface LogoProps {\n"
+    "  onyxBranded?: boolean;\n"
+    "  size: number;\n"
+    "}\n\n"
+    "export class Store {\n"
+    "  async load(\n"
+    "    id: string,\n"
+    "  ): Promise<void> {\n"
+    "    go(id);\n"
+    "  }\n"
+    "}\n"
+)
+
+
+@pytest.mark.parametrize(
+    ("symbol", "old", "new", "matched"),
+    [
+        ("stop", "abort();", "abort(1);", True),
+        ("stop", "limit = 1", "limit = 2", False),
+        ("Store.load", "go(id);", "go(id, 1);", True),
+        ("Store.load", "limit = 1", "limit = 2", False),
+        # The parser cannot locate an interface member, so any change counts.
+        ("LogoProps.onyxBranded", "size: number", "size: string", True),
+        ("LogoProps.onyxBranded", "limit = 1", "limit = 2", True),
+    ],
+)
+def test_symbol_citation_falls_back_to_the_file_when_not_located(
+    fmap: FixtureMap, symbol: str, old: str, new: str, matched: bool
+) -> None:
+    rel = "web/src/hooks/useChatController.ts"
+    source = fmap.root / rel
+    source.parent.mkdir(parents=True)
+    source.write_text(_HOOK_TS)
+    _git(fmap.root, "add", rel)
+    _git(fmap.root, "commit", "-qm", "hook")
+    fmap.edit(
+        _CIT,
+        "**The first mapping wins.**",
+        f"**The first mapping wins.** `{rel}:{symbol}`",
+    )
+    source.write_text(_HOOK_TS.replace(old, new))
+    text = _reminder(fmap, [rel])
+    assert ("`first-wins`" in text) is matched, text
+
+
+def test_symbols_compare_with_the_turn_base(fmap: FixtureMap) -> None:
+    runner = "backend/onyx/tools/tool_runner.py"
+    fmap.edit(
+        _CIT,
+        "**The first mapping wins.**",
+        f"**The first mapping wins.** `{runner}:ToolRunner.run`",
+    )
+    _git(fmap.root, "add", ".")
+    _git(fmap.root, "commit", "-qm", "map")
+    turn_base = _git(fmap.root, "rev-parse", "HEAD")
+    (fmap.root / runner).write_text(_RUN_CHANGED)
+    _git(fmap.root, "commit", "-qam", "change run")
+    (fmap.root / runner).write_text("import os\n\n" + _RUN_CHANGED)
+    # Without the turn base, only the uncommitted edit outside `run` counts.
+    assert "- citations " not in _reminder(fmap, [runner])
+    text = stale_docs.reminder_text(
+        [runner], None, fmap.map_dir, fmap.root, base=turn_base
+    )
+    assert "`first-wins`" in _entry(text, "citations")
+
+
+@pytest.mark.parametrize("new", [None, ""])
+def test_package_marker_that_had_code_is_relevant(
+    fmap: FixtureMap, new: str | None
+) -> None:
+    rel = "backend/onyx/server/__init__.py"
+    (fmap.root / rel).write_text("from .app import create\n")
+    fmap.edit(
+        _CIT, "**The first mapping wins.**", f"**The first mapping wins.** `{rel}`"
+    )
+    _git(fmap.root, "add", ".")
+    _git(fmap.root, "commit", "-qm", "package")
+    if new is None:
+        (fmap.root / rel).unlink()
+    else:
+        (fmap.root / rel).write_text(new)
+    assert "`first-wins`" in _reminder(fmap, [rel])
+
+
+def test_queue_reads_citations_in_fenced_diagrams(fmap: FixtureMap) -> None:
+    fmap.edit(
+        _CIT,
+        "The processor maps numbers to documents.",
+        "The processor maps numbers to documents.\n\n```\n"
+        "loop --> server/new_api.py --> done\n```",
+    )
+    (fmap.root / "backend/onyx/server/new_api.py").write_text("X = 1\n")
+    _git(fmap.root, "commit", "-qam", "churn")
+    rows = stale_docs.queue(fmap.map_dir, fmap.root)
+    assert any("citations (1 of 2 cited files" in row for row in rows), rows
+
+
+def test_component_link_must_name_the_documents_path(fmap: FixtureMap) -> None:
+    fmap.edit("INDEX.md", "(components/citations.md)", "(components/old/citations.md)")
+    errors, _ = fmap.check()
+    assert any("components/old/citations.md" in error for error in errors), errors
+
+    fmap.edit("INDEX.md", "(components/old/citations.md)", "(components/citations.md)")
+    moved = fmap.doc("components/tools/tools-framework.md")
+    moved.parent.mkdir()
+    fmap.doc(_TOOL).rename(moved)
+    fmap.edit(
+        "INDEX.md",
+        "(components/tools-framework.md)",
+        "(components/tools/tools-framework.md)",
+    )
+    assert fmap.check() == ([], [])
+
+
+def test_legacy_map_does_not_ask_for_paths_rows(fmap: FixtureMap) -> None:
+    (fmap.map_dir / "legacy-schema.txt").write_text("# Old format.\ncitations\n")
+    assert _reminder(fmap, ["backend/onyx/server/new_api.py"]) == ""

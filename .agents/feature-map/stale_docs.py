@@ -5,26 +5,31 @@ Given the files a turn changed, this prints a short editing brief. For each map
 document that cites a changed file, and that the turn did not change, it names the
 sections and contract or recipe keys that cite the changed code. A document cites a
 file through a backticked path, or through a path or `path:symbol` token inside a
-fenced block such as a diagram. A `path:symbol` citation matches only when the
-change touches that symbol: a changed line sits in it, by the `def` and `class`
-names (Python) or the function, class and top-level declaration names (TypeScript)
-around the line. A bare path matches any change to the file, and so does every
-citation of a new, deleted or other file.
+fenced block such as a diagram. A `path:symbol` citation is skipped only when
+the parser finds the symbol's definition in the old or new file and no changed
+line sits in it. Definitions are the `def`, `class` and assignment names (Python)
+and the function, class, method, declaration and function-valued `const` or `let`
+names (TypeScript). A symbol the parser cannot find, such as an interface member,
+matches any change to the file, as does a bare path and every citation of a new,
+deleted or other file. The change is the diff from `--base` (the commit at the
+start of the agent's turn) to the working tree. Without `--base`, it is the
+uncommitted diff, or the branch diff for a file with no uncommitted edits.
 
 A component that owns a changed file through PATHS.md (longest prefix wins) but
 cites none of the changed code does not cause a brief. When a brief is shown, it
 lists those components on one line. The brief also names changed files that no
 PATHS.md row covers, and gives the reason of the `## Not mapped` row that covers a
 changed file; such a reason alone prints nothing. The brief asks the questions in
-README.md "Editing judgment"; no update is a normal answer. The agent Stop hook
-(`.agents/hooks/pre_commit_on_stop.py`) runs this; with `--session`, each section
-or key of a document, and each file, is named at most once per session.
+README.md "Editing judgment"; no update is a normal answer. The brief names every
+match. The agent Stop hook (`.agents/hooks/pre_commit_on_stop.py`) runs this; with
+`--session`, each section or key of a document, and each file, is named at most
+once per session.
 
 `--cited` prints the documents and keys that cite the given files, for step 4 of
 VERIFYING.md. `--queue` lists the components by how much of their cited code
 changed since their Verified-against commit, as a queue for verify passes.
 
-Usage: stale_docs.py [--session ID] FILE [FILE ...]
+Usage: stale_docs.py [--session ID] [--base COMMIT] FILE [FILE ...]
        stale_docs.py --cited FILE [FILE ...]
        stale_docs.py --queue
 """
@@ -49,6 +54,7 @@ from check_feature_map import (
     Line,
     Repo,
     cited_files,
+    legacy_names,
     load_components,
     load_top_level,
     parent_dirs,
@@ -57,7 +63,6 @@ from check_feature_map import (
     resolve_token,
 )
 
-_MAX_SHOWN = 6
 # Changes here never alter what a map document states.
 _IGNORED_PREFIXES = (".agents/", "backend/tests/", "web/tests/", "mobile/e2e/")
 _IGNORED_MARKERS = ("/tests/", "/__tests__/", ".test.", ".spec.")
@@ -110,9 +115,14 @@ _TS_DEF = re.compile(
     r"(?:async\s+)?(?:function\*?|class|interface|type|enum|const|let|var)\s+"
     r"([A-Za-z_$][\w$]*)"
 )
+# A method whose signature ends on this line with `{`, or continues on later lines.
 _TS_METHOD = re.compile(
     r"^(\s+)(?:(?:public|private|protected|static|readonly|async|override|get|set)"
-    r"\s+)*([A-Za-z_$][\w$]*)\s*(?:<[^>]*>)?\(.*\)\s*(?::[^{]*)?\{\s*$"
+    r"\s+)*([A-Za-z_$][\w$]*)\s*(?:<[^>]*>)?\((?:.*\)\s*(?::[^{]*)?\{|[^)]*)\s*$"
+)
+# The value of a local `const` or `let` that names a function.
+_TS_FUNCTION_VALUE = re.compile(
+    r"=\s*(?:async\s+)?(?:function\b|\(|[A-Za-z_$][\w$]*\s*=>|useCallback\s*\()"
 )
 _TS_KEYWORDS = frozenset(
     {"if", "for", "while", "switch", "catch", "return", "function", "with", "do"}
@@ -139,8 +149,13 @@ def _definition(line: str, language: str, parent: str | None) -> tuple[int, str]
             match = _PY_ASSIGN.match(line)
     else:
         match = _TS_DEF.match(line)
-        if match and match.group(1) and line.split()[0] in ("const", "let", "var"):
-            match = None  # A local variable.
+        if (
+            match
+            and match.group(1)
+            and line.split()[0] in ("const", "let", "var")
+            and not _TS_FUNCTION_VALUE.search(line, match.end())
+        ):
+            match = None  # A local variable that is not a function.
         if match is None and parent == "class":
             match = _TS_METHOD.match(line)
             if match and match.group(2) in _TS_KEYWORDS:
@@ -216,55 +231,87 @@ def branch_base(repo_root: Path) -> str | None:
     return None
 
 
-def changed_symbols(repo_root: Path, base: str | None, path: str) -> set[str] | None:
-    """The names the change to a file touches, or None when the whole file counts.
+@dataclass(frozen=True)
+class SymbolChange:
+    changed: frozenset[str]
+    """The names whose definitions hold a changed line."""
+    defined: frozenset[str]
+    """Every name the parser found in the old or new file."""
 
-    Uncommitted edits are compared with HEAD, so earlier commits on the branch do
-    not count. A file with no uncommitted edits, such as one the turn committed,
-    is compared with the branch base.
-    """
+
+def _all_names(text: str, language: str) -> set[str]:
+    return enclosing_names(text, set(range(1, text.count("\n") + 2)), language)
+
+
+def _old_text(repo_root: Path, ref: str, path: str) -> str | None:
+    """The file at `ref`; None when it is not there."""
+    old = _run_git(repo_root, "show", f"{ref}:{path}")
+    return old.stdout if old.returncode == 0 else None
+
+
+def changed_symbols(repo_root: Path, ref: str | None, path: str) -> SymbolChange | None:
+    """The names the change to a file touches, or None when the whole file counts."""
     language = _LANGUAGES.get(Path(path).suffix)
     current = repo_root / path
-    if language is None or not current.is_file():
+    if language is None or ref is None or not current.is_file():
         return None
-    dirty = _run_git(repo_root, "diff", "--quiet", "HEAD", "--", path).returncode
-    ref = "HEAD" if dirty == 1 else base
-    if ref is None:
-        return None
-    old = _run_git(repo_root, "show", f"{ref}:{path}")
-    if old.returncode != 0:
+    old_text = _old_text(repo_root, ref, path)
+    if old_text is None:
         return None  # A new file.
     diff = _run_git(repo_root, "diff", "-U0", ref, "--", path)
     if diff.returncode != 0:
         return None
     old_lines, new_lines = _hunk_lines(diff.stdout)
     new_text = current.read_text(errors="ignore")
-    return enclosing_names(old.stdout, old_lines, language) | enclosing_names(
-        new_text, new_lines, language
+    return SymbolChange(
+        frozenset(
+            enclosing_names(old_text, old_lines, language)
+            | enclosing_names(new_text, new_lines, language)
+        ),
+        frozenset(_all_names(old_text, language) | _all_names(new_text, language)),
     )
 
 
-def symbol_matches(symbol: str, changed: set[str]) -> bool:
-    """`ToolRunner.run` and `run` both match a change inside `ToolRunner.run`."""
-    return any(name == symbol or name.endswith("." + symbol) for name in changed)
+def diff_ref(
+    repo_root: Path, path: str, base: str | None, fork: str | None
+) -> str | None:
+    """The commit a file's change is measured from.
+
+    With a turn base, that base. Otherwise HEAD for a file with uncommitted edits,
+    so earlier commits on the branch do not count, and the branch fork point for a
+    file with none.
+    """
+    if base is not None:
+        return base
+    dirty = _run_git(repo_root, "diff", "--quiet", "HEAD", "--", path).returncode
+    return "HEAD" if dirty == 1 else fork
+
+
+def symbol_matches(symbol: str, names: Iterable[str]) -> bool:
+    """`ToolRunner.run` and `run` both match the name `ToolRunner.run`."""
+    return any(name == symbol or name.endswith("." + symbol) for name in names)
 
 
 # --- ownership and citations -----------------------------------------------
 
 
-def is_ignored(path: str, repo_root: Path) -> bool:
+def _has_code(text: str) -> bool:
+    return any(
+        line.strip() and not line.lstrip().startswith("#") for line in text.splitlines()
+    )
+
+
+def is_ignored(path: str, repo_root: Path, base: str | None = None) -> bool:
     if path.startswith(_IGNORED_PREFIXES) or any(m in path for m in _IGNORED_MARKERS):
         return True
     if _NO_BEHAVIOUR.search(path):
         return True
-    # A package marker: an `__init__.py` with no code.
+    # A package marker: an `__init__.py` with no code before or after the change.
     if Path(path).name == "__init__.py":
         file = repo_root / path
-        text = file.read_text(errors="ignore") if file.is_file() else ""
-        return all(
-            not line.strip() or line.lstrip().startswith("#")
-            for line in text.splitlines()
-        )
+        new = file.read_text(errors="ignore") if file.is_file() else ""
+        old = _old_text(repo_root, base or "HEAD", path) or ""
+        return not _has_code(old) and not _has_code(new)
     return False
 
 
@@ -364,9 +411,15 @@ def _add_place(reminder: Reminder, citation: Citation, by_symbol: bool) -> Remin
 
 
 def find(
-    changed: list[str], map_dir: Path = MAP_DIR, repo_root: Path = REPO_ROOT
+    changed: list[str],
+    map_dir: Path = MAP_DIR,
+    repo_root: Path = REPO_ROOT,
+    base: str | None = None,
 ) -> Findings:
-    """The documents the changed files touch, except documents in `changed`."""
+    """The documents the changed files touch, except documents in `changed`.
+
+    `base` is the commit the change is measured from, such as the turn's start.
+    """
     components, top_level = _docs(map_dir)
     repo = _with_changed(repo_paths(repo_root), changed)
     owned = ownership(map_dir, {doc.name for doc in components}, repo)
@@ -374,16 +427,19 @@ def find(
     map_prefix = map_dir.relative_to(repo_root).as_posix() + "/"
     updated = {p.removeprefix(map_prefix) for p in changed if p.startswith(map_prefix)}
     by_name = {doc.name: doc for doc in components}
-    base = branch_base(repo_root)
+    fork = None if base else branch_base(repo_root)
+    # Legacy PATHS.md rows abbreviate paths that only the old resolver read, so
+    # mapped files look unmapped. This goes away with legacy-schema.txt.
+    check_unmapped = not legacy_names(map_dir)
 
     found: dict[str, Reminder] = {}
     result = Findings()
     for path in changed:
-        if is_ignored(path, repo_root):
+        if is_ignored(path, repo_root, base):
             continue
         owner = owner_of(path, owned)
         # A deleted file needs no row.
-        if owner is None and (repo_root / path).is_file():
+        if owner is None and check_unmapped and (repo_root / path).is_file():
             result.unmapped.append(path)
         elif owner is not None and not owner.components:
             result.not_mapped[owner.prefix] = owner.reason
@@ -393,13 +449,16 @@ def find(
             found[doc.rel] = replace(current, owned=current.owned + (path,))
         if not cited.get(path):
             continue
-        symbols = changed_symbols(repo_root, base, path)
+        symbols = changed_symbols(
+            repo_root, diff_ref(repo_root, path, base, fork), path
+        )
         for citation in cited[path]:
-            by_symbol = citation.symbol is not None and symbols is not None
-            if by_symbol and not symbol_matches(
-                citation.symbol or "", symbols or set()
-            ):
-                continue
+            by_symbol = False
+            if citation.symbol and symbols is not None:
+                if symbol_matches(citation.symbol, symbols.changed):
+                    by_symbol = True
+                elif symbol_matches(citation.symbol, symbols.defined):
+                    continue  # The parser found the symbol; the change is outside it.
             current = found.get(citation.doc.rel, Reminder(citation.doc))
             found[citation.doc.rel] = _add_place(current, citation, by_symbol)
     kept = [r for rel, r in sorted(found.items()) if rel not in updated]
@@ -411,11 +470,6 @@ def find(
 
 
 # --- output ----------------------------------------------------------------
-
-
-def _shown(items: list[str], limit: int = _MAX_SHOWN) -> str:
-    more = len(items) - limit
-    return ", ".join(items[:limit]) + (f" (+{more} more)" if more > 0 else "")
 
 
 def branch_growth(repo_root: Path, base: str | None, scope: str) -> dict[str, int]:
@@ -443,7 +497,7 @@ def format_reminder(reminder: Reminder, repo_rel: str, growth: int) -> str:
     size = reminder.doc.text.count("\n")
     head = f"- {reminder.doc.name} ({repo_rel}; {size} lines"
     head += f", {growth:+d} on this branch)" if growth else ")"
-    # Symbol matches first, so truncation keeps the most relevant places.
+    # Symbol matches first: they are the most likely to need an edit.
     places = sorted(reminder.places, key=lambda p: not p[2])
     by_section: dict[str, list[str]] = {}
     for place, section, _ in places:
@@ -452,14 +506,14 @@ def format_reminder(reminder: Reminder, repo_rel: str, growth: int) -> str:
         if place != label:
             entries.append(place)
     parts = [
-        f"{section}: {_shown(keys)}" if keys else section
+        f"{section}: {', '.join(keys)}" if keys else section
         for section, keys in by_section.items()
     ]
     lines = [head]
     if parts:
-        lines.append(f"  Read: {'; '.join(parts[:_MAX_SHOWN])}")
+        lines.append(f"  Read: {'; '.join(parts)}")
     if reminder.owned:
-        lines.append(f"  Owns: {_shown(list(reminder.owned), 3)}")
+        lines.append(f"  Owns: {', '.join(reminder.owned)}")
     return "\n".join(lines)
 
 
@@ -525,6 +579,7 @@ def _filter_session(findings: Findings, reminded: set[str]) -> Findings:
 
 
 def _record_session(findings: Findings, session: str) -> None:
+    """Record what the brief named. The brief prints every entry of `findings`."""
     record, reminded = _already_reminded(session)
     named = (
         {_place_key(r, p[0]) for r in findings.reminders for p in r.places}
@@ -541,9 +596,10 @@ def reminder_text(
     session: str | None,
     map_dir: Path = MAP_DIR,
     repo_root: Path = REPO_ROOT,
+    base: str | None = None,
 ) -> str:
     """The editing brief for the changed files; empty when nothing applies."""
-    findings = find(changed, map_dir, repo_root)
+    findings = find(changed, map_dir, repo_root, base)
     if session:
         findings = _filter_session(findings, _already_reminded(session)[1])
     cited = [r for r in findings.reminders if r.places]
@@ -583,11 +639,11 @@ def reminder_text(
     if owners:
         lines.append(
             "These components also own changed code, but no part cites it: "
-            f"{_shown(owners)}."
+            f"{', '.join(owners)}."
         )
     if findings.unmapped:
         lines.append(
-            f"No PATHS.md row covers {_shown(findings.unmapped, 3)}. Add a row for "
+            f"No PATHS.md row covers {', '.join(findings.unmapped)}. Add a row for "
             "the component that owns it, or a `## Not mapped` row with the reason."
         )
     lines.extend(
@@ -609,16 +665,14 @@ def queue(map_dir: Path = MAP_DIR, repo_root: Path = REPO_ROOT) -> list[str]:
         == 0
         else "HEAD"
     )
+    cited_by: dict[str, set[str]] = {}
+    for path, entries in citations(components, repo).items():
+        for entry in entries:
+            cited_by.setdefault(entry.doc.rel, set()).add(path)
     rows: list[tuple[int, str]] = []
     for doc in components:
         match = VERIFIED_LINE.search(doc.text)
-        files = sorted(
-            {
-                path
-                for token in CODE_SPAN.findall(doc.text)
-                for path in cited_files(token, repo)
-            }
-        )
+        files = sorted(cited_by.get(doc.rel, set()))
         if not match or not files:
             continue
         sha = match.group(1)
@@ -641,6 +695,9 @@ def queue(map_dir: Path = MAP_DIR, repo_root: Path = REPO_ROOT) -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--session")
+    parser.add_argument(
+        "--base", help="measure the change from this commit, such as the turn's start"
+    )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
         "--cited",
@@ -661,7 +718,7 @@ def main() -> int:
     if args.queue:
         print("\n".join(queue()))
         return 0
-    text = reminder_text(args.files, args.session)
+    text = reminder_text(args.files, args.session, base=args.base)
     if text:
         print(text)
     return 0

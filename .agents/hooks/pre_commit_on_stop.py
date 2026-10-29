@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Turn hooks for coding agents (Claude Code and Codex).
 
-On `UserPromptSubmit` the hook records the HEAD reflog and every dirty file.
+On `UserPromptSubmit` the hook records HEAD, the HEAD reflog and every dirty file.
 On `Stop` it compares against that record, so it only looks at the files this turn
 changed (edited, created or committed), never scratch files or older edits. For
 those files it:
@@ -11,6 +11,8 @@ those files it:
   the feature-map documents that cite the changed code, and the questions that
   decide whether they need an edit. `stale_docs.py` prints nothing when no part
   cites the code and every changed file is mapped, so ownership alone never blocks.
+  It measures each change from the HEAD of the turn's start, so edits the turn
+  committed count too.
 
 A pre-commit failure exits with code 2 and prints to stderr, with the brief after
 it. A brief alone blocks the stop once with `{"decision": "block", "reason": ...}`,
@@ -143,6 +145,17 @@ def _committed_files(repo: Path, offset: int, digest: str) -> set[str]:
     return files
 
 
+def _head(repo: Path) -> str | None:
+    """The HEAD commit; None in a repository with no commits."""
+    result = subprocess.run(
+        ["git", "rev-parse", "-q", "--verify", "HEAD^{commit}"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip() or None
+
+
 def _record_turn_start(repo: Path, session: str) -> None:
     snapshot = _snapshot_path(repo, session)
     snapshot.parent.mkdir(exist_ok=True)
@@ -150,6 +163,7 @@ def _record_turn_start(repo: Path, session: str) -> None:
     snapshot.write_text(
         json.dumps(
             {
+                "head": _head(repo),
                 "reflog_offset": len(reflog),
                 "reflog_digest": hashlib.sha256(reflog).hexdigest(),
                 "files": _digests(repo, sorted(_dirty_files(repo))),
@@ -252,14 +266,20 @@ def _pre_commit_failures(repo: Path, files: list[str]) -> str | None:
     )
 
 
-def _editing_brief(repo: Path, session: str, turn: set[str]) -> str | None:
-    """The feature-map parts that cite the turn's code; documents it edited are skipped."""
+def _editing_brief(
+    repo: Path, session: str, turn: set[str], base: str | None
+) -> str | None:
+    """The feature-map parts that cite the turn's code; documents it edited are skipped.
+
+    `base` is HEAD at the turn's start; the brief measures each change from it.
+    """
     script = repo / _STALE_DOCS
     if not script.is_file() or not turn:
         return None
+    options = ["--session", session] + (["--base", base] if base else [])
     try:
         result = subprocess.run(
-            [sys.executable, str(script), "--session", session, *sorted(turn)],
+            [sys.executable, str(script), *options, "--", *sorted(turn)],
             cwd=repo,
             capture_output=True,
             text=True,
@@ -297,14 +317,18 @@ def main() -> int:
                 return 0
             _set_recheck(repo, session, False)
         turn = _turn_changes(repo, session)
+        start = _read_turn_start(repo, session) or {}
     except (subprocess.CalledProcessError, OSError):
         return 0
     if not turn:
         return 0
     brief = None
     if not continued:
+        head = start.get("head")
         try:
-            brief = _editing_brief(repo, session, turn)
+            brief = _editing_brief(
+                repo, session, turn, head if isinstance(head, str) else None
+            )
         except (subprocess.CalledProcessError, OSError):
             brief = None
     files = sorted(path for path in turn if (repo / path).is_file())

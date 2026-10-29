@@ -272,17 +272,20 @@ read, the document's size and its growth on the branch (a renamed document count
 only its edits), and the questions in "Editing judgment".
 
 - A `path:symbol` citation matches when a changed line sits in that symbol:
-  inside the Python `def` or `class`, or the TypeScript function, class or
-  top-level declaration, of that name. Uncommitted edits are compared with HEAD;
-  a file with none is compared with the branch base. A bare file path matches any
-  change to the file. A directory path does not match.
+  inside the Python `def`, `class` or assignment, or the TypeScript function,
+  class, method, declaration or function-valued `const`, of that name. When the
+  parser cannot find the symbol, such as an interface member, any change to the
+  file matches. Changes are measured from HEAD at the start of the agent's turn,
+  so a commit in the turn counts. A bare file path matches any change to the
+  file. A directory path does not match.
 - A component that owns a changed file through PATHS.md (longest prefix wins),
   but has no part that cites the changed code, does not block the stop. When a
   brief is shown, one line lists these components.
 - The brief also names changed files that no PATHS.md row covers, and gives the
   reason of the `## Not mapped` row that covers a changed file. A Not-mapped
-  reason alone does not block the stop. Tests, empty `__init__.py` files and
-  license files are skipped.
+  reason alone does not block the stop. Tests, license files and
+  `__init__.py` files with no code before or after the change are skipped.
+- The brief names every matching section, key and file.
 - Each section or key of a document, and each file, is named once per session.
   A later change that a different contract of the same document cites is
   briefed again.
