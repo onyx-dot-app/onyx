@@ -163,6 +163,8 @@ class ToolInvocation:
 
 
 class ToolExecutionMode(str, Enum):
+    """SEQUENTIAL orders calls to the same tool name within a model step."""
+
     PARALLEL = "parallel"
     SEQUENTIAL = "sequential"
 

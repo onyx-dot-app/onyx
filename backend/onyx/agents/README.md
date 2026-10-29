@@ -54,6 +54,9 @@ result = run.result(timeout=60)
 print(result.output.text)
 ```
 
+Pass the current question, attachments, and request context together to `start(messages=...)`.
+Compaction protects that input group until the model responds. Earlier failed input remains recorded but can be compacted for a new request.
+
 `start()` uses a background thread by default. `background=False` executes on the
 calling thread until the run suspends or finishes. Register `on_event` during
 startup to observe the first event; later subscriptions receive subsequent events.
@@ -93,10 +96,14 @@ Tools return `ToolResult`. Ordinary tool exceptions become error results that th
 model can inspect. Cancellation propagates. Errors in coordination or tool hooks
 can fail the run.
 
-Tools run in parallel unless a called tool declares `SEQUENTIAL`; then the entire
-step runs sequentially. Results and final callbacks follow model-call order,
-regardless of worker completion order. A tool can provide `merge_arguments` to
-combine compatible calls. Each original call retains its identity and result.
+Tools run in parallel by default. `SEQUENTIAL` orders calls to the same registered tool name within one step.
+The next call waits for the previous call and its completion hook, including waits for input or children.
+Other tool names can run concurrently. This setting does not coordinate separate runs or API requests.
+Model history retains tool-call order. Final callbacks run as results become ready,
+serially on the execution thread. A slow tool does not delay another tool's completion event. A tool can provide `merge_arguments` to
+combine compatible calls. Merging can skip unrelated tool names. For a sequential tool,
+merging stops at the first incompatible or blocked call to that tool.
+Each original call retains its identity and result.
 
 | Callback | Responsibility |
 | --- | --- |
@@ -240,3 +247,7 @@ lifecycle guarantees.
 | `runtime.py` | Agent state, run lifecycle, model steps, and restoration. |
 | `tool_execution.py` | Tool scheduling, pending input, and ordered completion. |
 | `agent_coordination.py` | Child execution, application adapters, and ownership. |
+
+Trailing user messages stay together until an assistant response follows them.
+This protects attachment text, request context, and the question during summarization and fallback truncation.
+If that unread input cannot fit, the run fails with a context-limit error.

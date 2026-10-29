@@ -416,6 +416,23 @@ class Agent:
             raise ValueError("Only a suspended execution snapshot can resume")
         if snapshot.agent_id != self.id:
             raise ValueError("Snapshot belongs to another agent")
+        progress = snapshot.progress
+        if progress.finalized_tool_call_ids:
+            if not 0 <= progress.step_index < len(snapshot.steps):
+                raise ValueError("Finalized tools require a recorded current step")
+            step = snapshot.steps[progress.step_index]
+            call_ids = {call.id for call in step.message.tool_calls}
+            for call_id in progress.finalized_tool_call_ids:
+                execution = step.tools.get(call_id)
+                if (
+                    call_id not in call_ids
+                    or execution is None
+                    or execution.result is None
+                    or execution.result.tool_call_id != call_id
+                ):
+                    raise ValueError(
+                        "Finalized tool must have a call and result in the current step"
+                    )
         return self.start(
             max_steps=snapshot.progress.step_limit,
             coordinator=coordinator,
@@ -475,7 +492,7 @@ class Run:
             Callable[[ToolCallContext, ToolResult], ToolResult] | None
         ) = None
         self._restoration: RestorableFeature | None = None
-        self._prepared_step: PreparedStep | None = None
+        self._step_tools: list[AgentTool] | None = None
         self.work = ExecutionWork()
         self.coordination: RunCoordination | None = None
         self._thread_context = copy_context()
@@ -760,9 +777,25 @@ class Run:
             del self._progress.pending_tool_calls[call.id]
             self._state.revision += 1
 
-    def finish_tool(
-        self, result: ToolResult, call: ToolCall, context: ToolCallContext | None
-    ) -> None:
+    def finish_tool(self, call: ToolCall, context: ToolCallContext | None) -> None:
+        with self.execution_lock:
+            record = self._state.steps[self._progress.step_index]
+            execution = record.tools[call.id]
+            result_message = execution.result
+            if result_message is None:
+                raise RuntimeError("Completed tool result is missing from history")
+            message_id = record.message.id
+            if message_id is None:
+                raise RuntimeError("Tool execution requires a message ID")
+            result = ToolResult(
+                content=result_message.content,
+                metadata=result_message.metadata,
+                cacheable=result_message.cacheable,
+                details=result_message.details,
+                is_error=result_message.is_error,
+                terminate=result_message.terminate,
+            )
+        finalized = False
         try:
             if self.after_tool_call is not None:
                 if context is None:
@@ -770,19 +803,11 @@ class Run:
                 self.cancellation_signal.check()
                 result = self.after_tool_call(context, result.model_copy(deep=True))
                 self.cancellation_signal.check()
+            finalized = True
         finally:
             with self.execution_lock:
                 if self.is_accepting and not self.cancellation_signal.cancelled:
-                    record = self._state.steps[self._progress.step_index]
-                    execution = record.tools[call.id]
-                    if execution.result is None:
-                        raise RuntimeError(
-                            "Completed tool result is missing from history"
-                        )
-                    message_id = record.message.id
-                    if message_id is None:
-                        raise RuntimeError("Tool execution requires a message ID")
-                    if self.after_tool_call is not None:
+                    if finalized and self.after_tool_call is not None:
                         execution.result = _tool_result_message(
                             result, call, message_id
                         )
@@ -791,6 +816,9 @@ class Run:
                             if result.is_error
                             else ExecutionStatus.COMPLETE
                         )
+                    if finalized:
+                        self._progress.finalized_tool_call_ids.add(call.id)
+                        self._state.revision += 1
                     self.publish_event(
                         ToolEndEvent(
                             **self.event_context,
@@ -802,9 +830,6 @@ class Run:
                     )
                 else:
                     logger.debug("Ignoring late tool finalization: %s", call.id)
-        with self.execution_lock:
-            self._progress.finalized_tools += 1
-            self._state.revision += 1
 
     @property
     def is_accepting(self) -> bool:
@@ -1160,7 +1185,7 @@ class Run:
     def _clear_execution_config(self) -> None:
         self._token_counts.clear()
         self._llm = None
-        self._prepared_step = None
+        self._step_tools = None
         self._defaults = PreparedStep()
         self._generation_context = GenerationContext()
         self._prepare_step = None
@@ -1341,7 +1366,7 @@ def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -
             else None,
         }
     )
-    run._prepared_step = prepared
+    run._step_tools = prepared.tools
     generation_context = run._generation_context.model_copy(
         update={
             "stall_timeout_s": prepared.stall_timeout_s
@@ -1465,8 +1490,9 @@ def _compact_context(
 ) -> GenerationRequest:
     cancellation_signal = run.cancellation_signal
     previous = run._state.checkpoint
+    input_start = len(run._history.messages) if run._state.input_messages else None
     try:
-        messages = working_messages(source, previous)
+        messages = working_messages(source, previous, input_start=input_start)
     except CheckpointMismatchError as error:
         logger.info("Ignoring compaction checkpoint: %s", error)
         previous = None
@@ -1489,6 +1515,7 @@ def _compact_context(
             previous,
             generation_context,
             partial(count_tokens, cached_counts=run._token_counts),
+            input_start=input_start,
         )
         cancellation_signal.check()
     except Exception:
@@ -1506,7 +1533,7 @@ def _compact_context(
     if selected_checkpoint is not None:
         cancellation_signal.check()
         candidate_request = prepared.generation_request(
-            working_messages(source, selected_checkpoint)
+            working_messages(source, selected_checkpoint, input_start=input_start)
         )
         cancellation_signal.check()
         candidate_size = request_tokens(candidate_request, run._token_counts)
@@ -1519,6 +1546,7 @@ def _compact_context(
             token_counts=run._token_counts,
             input_limit=budget.input_limit,
             original_size=original_size,
+            input_start=input_start,
         )
 
     with run.execution_lock:
@@ -1535,9 +1563,10 @@ def _truncate_context(
     token_counts: dict[str, int],
     input_limit: int,
     original_size: int,
+    input_start: int | None = None,
 ) -> tuple[CompactionCheckpoint, GenerationRequest, int]:
     """Find the first smaller request that fits after removing older turns."""
-    boundaries = set(history_boundaries(source))
+    boundaries = set(history_boundaries(source, input_start=input_start))
     system_messages: list[Message] = []
     for index, message in enumerate(source):
         if isinstance(message, SystemMessage):
@@ -1580,9 +1609,7 @@ def _limit_output(
 
 def _execute_tools(run: Run) -> bool:
     progress = run._progress
-    if run._prepared_step is None:
-        if progress.options is None:
-            raise ValueError("Saved step is missing generation options")
+    if run._step_tools is None:
         available = {tool.name: tool for tool in run._defaults.tools}
         tools: list[AgentTool] = []
         for declaration in progress.tools:
@@ -1590,10 +1617,10 @@ def _execute_tools(run: Run) -> bool:
             if tool is None or tool.definition != declaration:
                 raise ValueError("Restored tools do not match the saved step")
             tools.append(tool)
-        run._prepared_step = PreparedStep(tools=tools, options=progress.options)
+        run._step_tools = tools
     batch = ToolBatch(
         run,
-        prepared=run._prepared_step,
+        tools=run._step_tools,
         progress=progress,
         record=run._state.steps[progress.step_index],
         history=working_messages(
@@ -1603,6 +1630,9 @@ def _execute_tools(run: Run) -> bool:
                 *messages_from_steps(run._state.steps[: progress.step_index]),
             ],
             run._state.checkpoint,
+            input_start=len(run._history.messages)
+            if run._state.input_messages
+            else None,
         ),
     )
     if not batch.execute():
@@ -1649,7 +1679,7 @@ def _complete_step(run: Run) -> None:
         else:
             progress.step_index += 1
             progress.action = RunAction.PREPARE
-            progress.finalized_tools = 0
+            progress.finalized_tool_call_ids.clear()
             progress.pending_tool_calls = {}
             progress.options = None
             progress.tools = []

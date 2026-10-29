@@ -32,7 +32,13 @@ models; this package adds no database writes or schema changes.
 
 `Agent.start` reserves conversation ownership and starts a `Run`. The run prepares
 model requests, accepts streaming output, executes tools, and decides whether to
-continue. `ToolBatch` preserves model-call order while tools complete concurrently.
+continue. `ToolBatch` schedules the selected tools and identifies completed calls.
+`Run` reads their recorded results, invokes finalization hooks, and emits completion
+events. Recorded results retain model-call order while tools complete concurrently.
+
+`ToolExecutionMode.SEQUENTIAL` orders calls to the same registered tool name within a step.
+An earlier call holds that place until finalization, including waits for input or children.
+Unrelated tools can run concurrently. This mode does not coordinate separate runs.
 
 `AgentCoordinator` controls children and application storage callbacks. Foreground
 children delay parent completion. A parent can suspend while waiting for input or
@@ -98,7 +104,9 @@ Production chat does not call this module yet.
 - Model events recheck cancellation under the execution lock before changing recorded state.
 - Result readiness, saved completion, suspension, and idle state have distinct meanings.
 - Recorded partial output survives even when replay excludes incomplete exchanges or thinking without replayable provider blocks.
-- Tool results and completion callbacks follow the original model-call order.
+- Model history retains original tool-call order. Completion callbacks and events follow result readiness.
+  A slow call does not delay another call's completion. Callbacks remain serial on the execution thread.
+  Saved progress identifies finalized callbacks by call ID and rejects old counter-based snapshots.
 - Run owns recorded mutations; tool scheduling receives explicit borrowed step data.
 - Collaborators lock borrowed step data with execution_lock and use recording methods for changes.
 - Step callback inputs and public snapshots do not share mutable recorded state.
@@ -158,3 +166,7 @@ behavior, not database durability or production chat adoption.
 - A checkpoint cannot serialize Python callbacks or external resources.
 - Local ownership does not exclude another process; the application must supply that guarantee.
 - A suspended run can be idle while still reserving its Agent.
+
+Compaction preserves the current run's unanswered input as one group, including attachment text and request context.
+The boundary comes from the run's history and input lists. Earlier failed input remains recorded but can be compacted for a new request.
+Oversized current input fails instead of silently removing its contents. Without an explicit run input, compaction preserves the entire trailing unanswered group.

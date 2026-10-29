@@ -2,6 +2,7 @@
 
 import threading
 from collections.abc import Generator, Sequence
+from contextlib import nullcontext
 from unittest.mock import Mock, patch
 
 import pytest
@@ -352,7 +353,11 @@ def test_oversized_required_instruction_fails_without_losing_snapshot() -> None:
 
 
 def test_context_fitting_reuses_checkpoint_after_content_changes() -> None:
-    source: list[Message] = [UserMessage(id="user", content="Updated file contents")]
+    source: list[Message] = [
+        UserMessage(id="user", content="Updated file contents"),
+        AssistantMessage(id="answer", content=[TextContent(text="Saved answer")]),
+        UserMessage(id="follow-up", content="Continue"),
+    ]
     checkpoint = CompactionCheckpoint(
         summary="Summary", covered_through_message_id="user"
     )
@@ -604,7 +609,7 @@ def test_checkpoint_cannot_split_completed_tool_calls() -> None:
         ),
         UserMessage(id="next", content="Continue"),
     ]
-    with pytest.raises(CheckpointMismatchError, match="splits a tool call"):
+    with pytest.raises(CheckpointMismatchError, match="splits a tool exchange"):
         working_messages(
             messages,
             CompactionCheckpoint(
@@ -922,10 +927,62 @@ def test_context_rejection_after_thinking_does_not_restart_generation() -> None:
 def test_compaction_rejects_missing_cutoff_identity_before_model_work() -> None:
     model = ContextModel()
     history: list[Message] = [
-        UserMessage(content="Old evidence. " * 600),
+        AssistantMessage(content=[TextContent(text="Old evidence. " * 600)]),
         UserMessage(id="question", content="Continue"),
     ]
     with pytest.raises(ContextLimitError, match="source message has no identity"):
         compact_history(model, history, None, GenerationContext())
     assert model.summaries == []
     assert model.generations == []
+
+
+def test_checkpoint_cannot_cover_unanswered_input_across_system_messages() -> None:
+    messages: list[Message] = [
+        UserMessage(id="file", content="New attachment contents"),
+        SystemMessage(content="Use the supplied evidence."),
+        UserMessage(id="question", content="Read the attachment."),
+    ]
+    checkpoint = CompactionCheckpoint(
+        summary="File reference", covered_through_message_id="file"
+    )
+    with pytest.raises(CheckpointMismatchError, match="unanswered input"):
+        working_messages(messages, checkpoint)
+
+    messages.append(
+        AssistantMessage(id="answer", content=[TextContent(text="Findings")])
+    )
+    assert working_messages(messages, checkpoint) == [
+        SystemMessage(content="Conversation summary:\nFile reference"),
+        *messages[1:],
+    ]
+
+
+@pytest.mark.parametrize("summary_fails", [False, True])
+def test_new_input_can_recover_after_oversized_input(summary_fails: bool) -> None:
+    model = ContextModel(tool_rounds=0)
+    agent = Agent(
+        model, generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE)
+    )
+    oversized = UserMessage(content="Oversized input. " * 2000)
+    failed = agent.start(messages=[oversized], max_steps=1, background=False)
+    with pytest.raises(RunFailed):
+        failed.result()
+    assert failed.wait_for_idle(2)
+    assert not model.generations
+
+    with (
+        patch(
+            "onyx.agents.runtime.compact_history",
+            side_effect=RuntimeError("Unavailable"),
+        )
+        if summary_fails
+        else nullcontext()
+    ):
+        retry = agent.start(
+            messages=[UserMessage(content="Say hello")], max_steps=1, background=False
+        )
+    retry.result()
+    assert model.generations[-1].messages[-1].text == "Say hello"
+    assert request_tokens(model.generations[-1]) <= context_budget(model).input_limit
+    assert failed.snapshot().input_messages[0].text == oversized.text
+    assert agent.state.messages[0].text == oversized.text
