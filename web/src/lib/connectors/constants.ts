@@ -334,6 +334,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     icon: SvgAzure,
     displayName: "Azure Data Lake Storage",
     category: SourceCategory.Storage,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/azure_datalake`,
   },
   google_cloud_storage: {
     icon: SvgGoogleCloud,
