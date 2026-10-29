@@ -1,12 +1,11 @@
 import type { FunctionComponent } from "react";
 import { useTranslations } from "next-intl";
-import { Button, Text } from "@opal/components";
+import { Button, OverflowText, Text } from "@opal/components";
 import { cn, clickOnKeyDown } from "@opal/utils";
 import { SvgMaximize2, SvgTextLines, SvgX } from "@opal/icons";
 import type { IconProps } from "@opal/types";
 import { Hoverable } from "@opal/core";
 import { noProp } from "@/lib/utils";
-import Truncated from "../texts/Truncated";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -118,16 +117,16 @@ export default function FileTile({
           {isMuted ? (
             <div className="flex flex-col min-w-0">
               {title && (
-                <Truncated
-                  secondaryAction
-                  text02
+                <div
                   className={cn(
-                    "truncate",
+                    "text-text-02",
                     state === "processing" && "hover:text-text-03"
                   )}
                 >
-                  {title}
-                </Truncated>
+                  <OverflowText as="p" font="secondary-action" color="inherit">
+                    {title}
+                  </OverflowText>
+                </div>
               )}
               {description && (
                 <div
@@ -145,9 +144,9 @@ export default function FileTile({
           ) : (
             <div className="flex flex-col min-w-0">
               {title && (
-                <Truncated secondaryAction text04 className="truncate">
+                <OverflowText as="p" font="secondary-action" color="text-04">
                   {title}
-                </Truncated>
+                </OverflowText>
               )}
               {description && (
                 <Text font="secondary-body" color="text-03" maxLines={2}>

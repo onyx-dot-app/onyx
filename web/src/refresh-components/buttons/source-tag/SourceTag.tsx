@@ -9,8 +9,12 @@ import {
   useLayoutEffect,
 } from "react";
 import { cn } from "@opal/utils";
-import Truncated from "@/refresh-components/texts/Truncated";
-import { Text, Tooltip as OpalTooltip, type TextFont } from "@opal/components";
+import {
+  OverflowText,
+  Text,
+  Tooltip as OpalTooltip,
+  type TextFont,
+} from "@opal/components";
 import {
   Tooltip,
   TooltipContent,
@@ -179,45 +183,12 @@ const IconStack = ({
 );
 
 /**
- * Shared text styling props passed to Text and Truncated components.
- * Computed based on `inlineCitation` and `isOpen` state.
+ * Shared text styling, computed from `inlineCitation` and `isOpen`. The color
+ * is a class on a wrapper so that hover classes on the wrapper can override it.
  */
-interface TextStyleProps {
-  figureSmallValue?: boolean;
-  secondaryBody?: boolean;
-  text05?: boolean;
-  text03?: boolean;
-  text04?: boolean;
-  inverted?: boolean;
-}
-
-/**
- * Opal font plus a text color class. The color goes on a wrapper so that
- * hover classes on the wrapper can override it.
- */
-interface OpalTextStyle {
+interface TextStyle {
   font: TextFont;
   colorClass: string;
-}
-
-function toOpalTextStyle(props: TextStyleProps): OpalTextStyle {
-  const font: TextFont = props.secondaryBody
-    ? "secondary-body"
-    : props.figureSmallValue
-      ? "figure-small-value"
-      : "main-ui-body";
-  const colorClass = props.text03
-    ? props.inverted
-      ? "text-text-inverted-03"
-      : "text-text-03"
-    : props.text04
-      ? props.inverted
-        ? "text-text-inverted-04"
-        : "text-text-04"
-      : props.inverted
-        ? "text-text-inverted-05"
-        : "text-text-05";
-  return { font, colorClass };
 }
 
 /**
@@ -229,7 +200,7 @@ interface QueryTextProps {
   tooltipText?: string;
   isTruncated: boolean;
   textRef: React.RefObject<HTMLSpanElement | null>;
-  textStyleProps: TextStyleProps;
+  textStyle: TextStyle;
 }
 
 /**
@@ -241,7 +212,7 @@ interface QueryTextProps {
  * - Clicking expands to full width
  *
  * **Expanded mode**:
- * - Text displays at full width using `Truncated` component
+ * - Text displays at full width using `OverflowText`
  * - Provides its own overflow handling with tooltip
  *
  * @param props.expanded - Whether text is in expanded (full-width) mode
@@ -249,7 +220,7 @@ interface QueryTextProps {
  * @param props.tooltipText - Custom tooltip text (defaults to displayName)
  * @param props.isTruncated - Whether the collapsed text is currently truncated
  * @param props.textRef - Ref for measuring text truncation in collapsed mode
- * @param props.textStyleProps - Shared text styling props (colors, typography)
+ * @param props.textStyle - Shared text styling (font and color class)
  */
 const QueryText = ({
   expanded,
@@ -257,20 +228,24 @@ const QueryText = ({
   tooltipText,
   isTruncated,
   textRef,
-  textStyleProps,
+  textStyle,
 }: QueryTextProps) => {
+  const { font, colorClass } = textStyle;
+
   if (expanded) {
     return (
-      <Truncated
-        {...textStyleProps}
-        className="max-w-full transition-colors duration-150"
+      <div
+        className={cn(
+          "grow overflow-hidden w-full max-w-full min-w-0 transition-colors duration-150",
+          colorClass
+        )}
       >
-        {displayName}
-      </Truncated>
+        <OverflowText as="p" font={font} color="inherit">
+          {displayName}
+        </OverflowText>
+      </div>
     );
   }
-
-  const { font, colorClass } = toOpalTextStyle(textStyleProps);
 
   return (
     <OpalTooltip
@@ -318,7 +293,7 @@ export interface SourceTagProps {
   /** Additional CSS classes */
   className?: string;
 
-  /** When true, removes icon background and wraps displayName with Truncated */
+  /** When true, removes icon background and wraps displayName with OverflowText */
   isQuery?: boolean;
 
   /** When true, hides icon, removes background, shows bg-background-tint-02 on hover */
@@ -415,18 +390,17 @@ const SourceTagInner = ({
   const styles = sizeClasses[size];
 
   // Shared text styling props
-  const textStyleProps = useMemo<TextStyleProps>(
+  const textStyle = useMemo<TextStyle>(
     () => ({
-      figureSmallValue: inlineCitation,
-      secondaryBody: !inlineCitation,
-      text05: isOpen,
-      text03: !isOpen && inlineCitation,
-      text04: !isOpen && !inlineCitation,
-      inverted: isOpen,
+      font: inlineCitation ? "figure-small-value" : "secondary-body",
+      colorClass: isOpen
+        ? "text-text-inverted-05"
+        : inlineCitation
+          ? "text-text-03"
+          : "text-text-04",
     }),
     [inlineCitation, isOpen]
   );
-  const opalTextStyle = toOpalTextStyle(textStyleProps);
 
   // Cursor class based on mode and state
   const cursorClass = useMemo(() => {
@@ -477,7 +451,7 @@ const SourceTagInner = ({
         backgroundClass,
         styles.container,
         isQuery && "gap-0",
-        isQuery && expanded && "w-fit",
+        isQuery && expanded && "w-full max-w-full min-w-0",
         cursorClass,
         className
       )}
@@ -497,7 +471,7 @@ const SourceTagInner = ({
         className={cn(
           "flex items-baseline",
           !inlineCitation && "pe-0.5",
-          isQuery && expanded && "w-fit"
+          isQuery && expanded && "w-full max-w-full min-w-0"
         )}
       >
         {isQuery ? (
@@ -507,19 +481,19 @@ const SourceTagInner = ({
             tooltipText={tooltipText}
             isTruncated={isTruncated}
             textRef={textRef}
-            textStyleProps={textStyleProps}
+            textStyle={textStyle}
           />
         ) : (
           <span
             className={cn(
               "max-w-40 truncate transition-colors duration-150",
-              opalTextStyle.colorClass,
+              textStyle.colorClass,
               !showDetailsCard &&
                 !isQuery &&
                 "group-hover:text-text-inverted-05"
             )}
           >
-            <Text font={opalTextStyle.font} color="inherit">
+            <Text font={textStyle.font} color="inherit">
               {displayName}
             </Text>
           </span>

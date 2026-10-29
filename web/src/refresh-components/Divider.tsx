@@ -3,9 +3,8 @@
 import React from "react";
 import { cn, clickOnKeyDown } from "@opal/utils";
 import { SvgChevronRight, SvgChevronDown, SvgInfoSmall } from "@opal/icons";
-import { Text } from "@opal/components";
+import { OverflowText, Text } from "@opal/components";
 import type { IconProps } from "@opal/types";
-import Truncated from "./texts/Truncated";
 
 export interface DividerProps extends Omit<
   React.HTMLAttributes<HTMLDivElement>,
@@ -238,9 +237,9 @@ export default function Divider({
       {/* Description line */}
       {showDescription && description && (
         <div className="flex items-center py-1 ps-2">
-          <Truncated secondaryBody text03>
+          <OverflowText as="p" font="secondary-body" color="text-03">
             {description}
-          </Truncated>
+          </OverflowText>
         </div>
       )}
     </>

@@ -11,9 +11,9 @@ function overflows(element: HTMLElement): boolean {
 
 /**
  * Whether `element`'s content overflows its box, as with a title clamped to
- * one line with an ellipsis. Re-measures whenever the element resizes, and
- * when a webfont finishes loading: a late font can widen the text without
- * resizing the clamped box.
+ * one line with an ellipsis. Re-measures whenever the element resizes, when
+ * its content changes, and when a webfont finishes loading: new text or a late
+ * font can widen the content without resizing the clamped box.
  *
  * Takes the element rather than a ref so the caller can hand over one it
  * found after mount (e.g. by querying inside a component it does not own);
@@ -31,12 +31,19 @@ export default function useOverflow(element: HTMLElement | null): boolean {
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(element);
+    const mutations = new MutationObserver(measure);
+    mutations.observe(element, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
     // Absent without the Font Loading API (e.g. jsdom in tests); the
     // resize observer still measures.
     const fonts: FontFaceSet | undefined = document.fonts;
     fonts?.addEventListener("loadingdone", measure);
     return () => {
       observer.disconnect();
+      mutations.disconnect();
       fonts?.removeEventListener("loadingdone", measure);
     };
   }, [element]);

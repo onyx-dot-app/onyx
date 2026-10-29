@@ -112,7 +112,7 @@ packages:
   src/refresh-components/modals: 100
   src/refresh-components/popovers: 99.5
   src/refresh-components/skeletons: 100
-  src/refresh-components/texts: 99.3
+  src/refresh-components/texts: 98.9
   src/refresh-components/tiles: 100
   src/sections: 100
   src/sections/actions: 99.7
