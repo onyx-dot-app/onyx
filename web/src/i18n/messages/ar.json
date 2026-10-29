@@ -3594,6 +3594,9 @@
         },
         "uploaded": {
           "label": "{count, plural, one {تم رفع # ملف} other {تم رفع # ملفات}}"
+        },
+        "uploadedWithWarning": {
+          "label": "{count, plural, one {تم رفع # ملف} other {تم رفع # ملفات}}, غير مكتمل: {error}"
         }
       },
       "sensitiveWarning": {

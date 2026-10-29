@@ -23,6 +23,7 @@ from ee.onyx.server.log_export.kubernetes_collection import (
     collect_kubernetes_logs_into_file_store,
 )
 from ee.onyx.server.log_export.models import (
+    KubernetesLogStream,
     LogExportReceipt,
     LogExportReceiptStatus,
 )
@@ -143,8 +144,8 @@ class _FakeLogResponse:
 
 
 class _FakeCoreV1Api(client.CoreV1Api):
-    """Serves fixed pods, logs, and events; ignores ``limit_bytes`` so the
-    collector's own byte bound is exercised."""
+    """Serves fixed pods, logs, and events; honors ``tail_lines`` but ignores
+    ``limit_bytes``, so the collector's own byte bound is exercised."""
 
     def __init__(
         self,
@@ -168,6 +169,7 @@ class _FakeCoreV1Api(client.CoreV1Api):
         self.label_selectors: list[str] = []
         self.request_timeouts: list[Any] = []
         self.responses: list[_FakeLogResponse] = []
+        self.tail_lines_requested: list[int] = []
 
     def read_namespaced_pod(self, name: str, namespace: str, **kwargs: Any) -> Any:
         assert namespace == _NAMESPACE
@@ -190,8 +192,11 @@ class _FakeCoreV1Api(client.CoreV1Api):
             raise self._open_errors[key]
         if key not in self._logs:
             raise ApiException(status=400, reason="Bad Request")
+        tail_lines: int = kwargs["tail_lines"]
+        self.tail_lines_requested.append(tail_lines)
+        window = b"".join(self._logs[key].splitlines(keepends=True)[-tail_lines:])
         response = _FakeLogResponse(
-            self._logs[key], self._chunk_delay_seconds, self._read_errors.get(key)
+            window, self._chunk_delay_seconds, self._read_errors.get(key)
         )
         self.responses.append(response)
         return response
@@ -347,6 +352,110 @@ def test_stream_byte_cap_truncates_a_log(monkeypatch: pytest.MonkeyPatch) -> Non
         "(10 bytes, incomplete: truncated at the per-log byte cap)"
         in files["README.txt"].decode()
     )
+
+
+def _numbered_lines(count: int) -> list[bytes]:
+    return [f"line-{i:02d}\n".encode() for i in range(count)]
+
+
+def test_capped_log_is_reread_with_a_shorter_window_to_keep_the_newest_lines(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Precondition.
+    # 30 lines of 8 bytes against a 100-byte per-log cap: the first read keeps
+    # 12 whole lines from the start of the window.
+    monkeypatch.setattr(
+        kubernetes_collection, "LOG_EXPORT_KUBERNETES_MAX_BYTES_PER_STREAM", 100
+    )
+    lines = _numbered_lines(30)
+    api = _FakeCoreV1Api(
+        pods=[_pod(_API_POD, "api-server")],
+        logs={(_API_POD, False): b"".join(lines)},
+        events=[],
+    )
+
+    # Under test.
+    built, _ = build_kubernetes_log_zip(api, _NAMESPACE, _API_POD, _deadline(30.0))
+
+    # Postcondition.
+    # The re-read asks for 80% of the 12 lines that fit, which fits the cap, so
+    # the zip ends with the newest line.
+    files = _read_zip(built.zip_buffer)
+    built.zip_buffer.close()
+    assert api.tail_lines_requested == [
+        kubernetes_collection.LOG_EXPORT_KUBERNETES_TAIL_LINES,
+        9,
+    ]
+    assert files[f"logs/{_API_POD}/api-server.log"] == b"".join(lines[-9:])
+    assert (
+        "(72 bytes, incomplete: shortened to the last 9 lines to fit the cap)"
+        in files["README.txt"].decode()
+    )
+
+
+def test_window_rereads_stop_after_the_retry_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Precondition.
+    # Short old lines and long new lines: every shorter window still passes the
+    # 100-byte per-log cap.
+    monkeypatch.setattr(
+        kubernetes_collection, "LOG_EXPORT_KUBERNETES_MAX_BYTES_PER_STREAM", 100
+    )
+    log = b"".join(
+        [f"s-{i:02d}\n".encode() for i in range(20)] + [b"L" * 59 + b"\n"] * 5
+    )
+    api = _FakeCoreV1Api(
+        pods=[_pod(_API_POD, "api-server")],
+        logs={(_API_POD, False): log},
+        events=[],
+    )
+
+    # Under test.
+    built, _ = build_kubernetes_log_zip(api, _NAMESPACE, _API_POD, _deadline(30.0))
+
+    # Postcondition.
+    # One read plus two re-reads, then the last read is kept at the cap and
+    # marked.
+    files = _read_zip(built.zip_buffer)
+    built.zip_buffer.close()
+    assert len(api.tail_lines_requested) == 3
+    assert len(files[f"logs/{_API_POD}/api-server.log"]) == 100
+    assert (
+        "(100 bytes, incomplete: truncated at the per-log byte cap)"
+        in files["README.txt"].decode()
+    )
+
+
+def test_window_reread_returns_unused_bytes_to_the_total_budget() -> None:
+    # Precondition.
+    # The export budget (100 bytes) runs out partway through a 240-byte log.
+    lines = _numbered_lines(30)
+    api = _FakeCoreV1Api(
+        pods=[_pod(_API_POD, "api-server")],
+        logs={(_API_POD, False): b"".join(lines)},
+        events=[],
+    )
+    budget = kubernetes_collection._ByteBudget(100)
+
+    # Under test.
+    fetched = kubernetes_collection._fetch_stream(
+        api,
+        _NAMESPACE,
+        KubernetesLogStream(
+            pod_name=_API_POD, container_name="api-server", previous=False
+        ),
+        budget,
+        _deadline(30.0),
+    )
+
+    # Postcondition.
+    # The shorter window keeps the newest 9 lines (72 bytes) and gives the
+    # other 28 reserved bytes back for the remaining logs.
+    assert fetched.buffer is not None
+    assert fetched.buffer.read() == b"".join(lines[-9:])
+    fetched.buffer.close()
+    assert budget.reserve(1000) == 28
 
 
 def test_total_budget_runs_out_mid_stream_across_parallel_reads(
