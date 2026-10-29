@@ -242,7 +242,8 @@ METRICS_AUTH_TOKEN="<random-secret>"   # scrapers send: Authorization: Bearer <r
 ```
 
 If `METRICS_AUTH_TOKEN` is unset, the endpoint rejects every request.
-Set `DISABLE_METRICS_AUTH=true` only on networks where the API server is not reachable from outside.
+Set `DISABLE_METRICS_AUTH=true` only on networks where the API server is not reachable from outside. For the metrics,
+the worker ports, and example alerts, see [Monitoring](/deployment/production/monitoring).
 
 ### Craft
 

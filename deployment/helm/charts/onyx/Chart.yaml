@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.9.26
+version: 0.9.27
 appVersion: latest
 annotations:
   category: Productivity
@@ -20,18 +20,9 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: added
-      description: Add logExport.kubernetes.enabled (default false). When on,
-        the api-server runs as its own service account with read access to
-        pods, pod logs, and events in the release namespace, so the admin log
-        export collects stdout from every pod. Other pods get no such access.
     - kind: changed
-      description: Add the release labels to the inference model server pods
-        (pod template only), so the log export finds them. The pods restart
-        once on upgrade.
-    - kind: security
-      description: Bump the code-interpreter subchart to 0.4.10, which updates
-        Pillow, pypdf, cryptography, fpdf2, and certifi in its images.
+      description: Update template comments to describe the sandbox image
+        prepuller and sandbox network policy in place. No functional changes.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

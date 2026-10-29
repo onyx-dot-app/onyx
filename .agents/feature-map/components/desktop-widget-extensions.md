@@ -38,8 +38,12 @@ is no login screen. The site owner pre-authorizes the widget in one of two
 ways. In API-key mode, the owner embeds a shared key in the page. In JWT
 passthrough mode, the host page assigns a `tokenProvider` function that returns
 the visitor's own identity-provider token, so each visitor acts as their own
-Onyx user. Passthrough works on single-tenant deployments only
-(`docs/WIDGET_JWT_PASSTHROUGH.md`).
+Onyx user. Passthrough works on single-tenant deployments only: a multi-tenant
+deployment reads the tenant from the credential
+(`backend/ee/onyx/server/middleware/tenant_tracking.py:_get_tenant_id_from_request`), and
+an external IdP token carries none. The admin setup is in
+`documentation/deployment/configuration/website_widget.mdx` and
+`documentation/deployment/authentication/jwt.mdx`.
 
 **Chrome extension.** A user installs it from the Chrome Web Store, sees a
 welcome page on first install (`extensions/chrome/src/pages/welcome.html`),

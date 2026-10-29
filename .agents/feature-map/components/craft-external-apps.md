@@ -26,10 +26,8 @@
 `backend/onyx/server/features/build/db/action_approval.py`
 
 **Read first:** `[[craft-admin]]` for the admin surface that configures what
-this document enforces, then
-`docs/craft/features/egress-proxy-and-approvals/README.md` for the design
-rationale, and `docs/craft/features/external-apps/action-policies.md` and
-`oauth-token-refresh.md` for the policy and refresh contracts.
+this document enforces. §5 lists the contracts; §4.5 and §4.6 cover the
+approval and token-refresh flows.
 
 ---
 
@@ -356,8 +354,8 @@ safely by racing on `Secret`/file creation; the loser reloads the winner's CA
 (`CAStoreConflictError`).
 
 The sandbox trusts this CA at boot
-(`docs/craft/features/egress-proxy-and-approvals/README.md`: `firewall-init.sh`
-installs it into the OS trust store and several SDK-specific CA env vars:
+(`sandbox/image/firewall-init.sh` installs it into the OS trust store, and the
+sandbox env points SDK-specific CA variables at it:
 `NODE_EXTRA_CA_CERTS`, `REQUESTS_CA_BUNDLE`, `SSL_CERT_FILE`,
 `AWS_CA_BUNDLE`, `CURL_CA_BUNDLE`, `GIT_SSL_CAINFO`). This is what lets
 mitmproxy MITM every HTTPS connection the sandbox makes: it terminates the
@@ -413,14 +411,16 @@ closed (`session_missing`/`session_malformed`/`session_unverified` ->
 
 Sandboxes are issued placeholders, never real secrets
 (`ONYX_PAT=replaced_by_egress_proxy`, an opencode LLM `api_key` placeholder,
-`GH_TOKEN=replaced_by_egress_proxy`, per
-`docs/craft/features/egress-proxy-and-approvals/README.md`). The three
+`GH_TOKEN=replaced_by_egress_proxy`; the value is
+`configs.py:SANDBOX_PROXY_INJECTED_PLACEHOLDER`). The three
 resolvers registered in `sandbox_proxy/server.py:build_resolvers` each claim
 requests by host, not by the placeholder value:
 
 - `OnyxPatResolver` (`resolvers/onyx_pat.py`): claims requests to the
   `ONYX_SERVER_URL` host+port, decrypts `Sandbox.encrypted_pat`, and injects
-  it as both `API_KEY_HEADER_NAME` and its alternative name. See
+  it as both `API_KEY_HEADER_NAME` and its alternative name. Craft search
+  uses this path: the sandbox's `onyx-cli` (`company-search` skill) calls the
+  Onyx API through the proxy, so the real PAT never enters the sandbox. See
   `[[auth-and-identity]]` for what a sandbox PAT is scoped to do.
 - `MCPServerResolver` (`resolvers/mcp_server.py`): claims a craft-enabled MCP
   server's host (+ path prefix), resolves the sandbox owner's stored MCP
@@ -557,14 +557,11 @@ staleness under the lock, POSTs the refresh off any DB connection, and
 persists the result. A terminal refresh failure (revoked grant) **clears**
 the stored credential rather than raising, so the app reads as disconnected
 on the next request rather than the proxy silently forwarding a dead token.
-See `docs/craft/features/external-apps/oauth-token-refresh.md` for the full
-design rationale (single-flighting, why lazy over background).
 
 ### 4.7 Cloud-managed vs. self-hosted credentials
 
 On Onyx Cloud, Onyx owns the OAuth client credentials for the built-in
-providers (`OnyxManagedExtApp` subclasses,
-`docs/craft/features/external-apps/cloud-managed-app-credentials.md`);
+providers (`OnyxManagedExtApp` subclasses);
 tenants are seeded with these apps disabled at tenant creation
 (`AUTO_PROVISION_DEFAULT_EXTERNAL_APPS`). An admin on Cloud can only toggle
 enablement and edit action policies for these; credentials, `auth_template`,
@@ -695,6 +692,11 @@ they can never disagree about which server owns a request; see
     recheck policies and the original run before forwarding. Scheduled sessions
     without a running task cannot fall back to personal settings. Rebuild batch order
     after policy resolution so the strictest current action governs.
+12. **No addon exception can let a request through.** mitmproxy forwards the
+    original request when an addon raises. `GateAddon` therefore catches
+    errors around approval handling and returns `internal_error`. If the
+    approval row is already committed, `_terminalize_after_unhandled_error`
+    claims `EXPIRED` (or reads the winning decision) and wakes the waiter.
 
 ---
 

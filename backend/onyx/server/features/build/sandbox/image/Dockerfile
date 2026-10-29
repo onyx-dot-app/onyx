@@ -2,7 +2,7 @@
 # Sandbox Container Image
 #
 # User-shared sandbox: one pod per user, sessions created via kubectl exec.
-# See docs/craft/sandbox/image-and-spinup.md for image-layer rationale.
+# See ../README.md, "Sandbox Image Design Notes", for image-layer rationale.
 
 # Registry prefix for base images. Defaults to Docker Hub; CI overrides this to
 # the ECR pull-through cache

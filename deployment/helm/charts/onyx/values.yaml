@@ -5,7 +5,7 @@
 # Overlays:
 #   - values-lite.yaml: minimal deployment without vector DB, Redis, or model servers.
 #   - ../../dev/values-localdev.yaml: local Kubernetes development (source repository only).
-#     See /docs/craft/dev/local-kubernetes.md.
+#     See deployment/helm/dev/README.md.
 
 global:
   # Global version for all Onyx components (overrides .Chart.AppVersion)

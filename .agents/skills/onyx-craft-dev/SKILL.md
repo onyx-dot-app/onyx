@@ -8,8 +8,8 @@ description: Start, debug, refresh images, run migrations, and clean up the loca
 Run commands from the checkout being tested. Use the existing Make targets and VS Code tasks.
 The implementation lives in [dev.py](../../../deployment/helm/dev/dev.py); do not replace it with ad hoc lifecycle scripts.
 
-Read [the local Kubernetes guide](../../../docs/craft/dev/local-kubernetes.md) for setup, environment variables, and recovery.
-For `SANDBOX_BACKEND=docker`, follow [the Compose guide](../../../docs/craft/dev/local-compose-craft.md) instead.
+Read [the local Kubernetes guide](../../../deployment/helm/dev/README.md) for setup, environment variables, and recovery.
+For `SANDBOX_BACKEND=docker`, follow [the Docker backend guide](../../../backend/onyx/server/features/build/sandbox/docker/README.md) instead.
 For ordinary development without Kubernetes sandboxes, use the `onyx-dev-stack` skill.
 
 ## Inspect and start
