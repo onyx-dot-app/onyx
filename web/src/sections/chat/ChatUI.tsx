@@ -72,7 +72,11 @@ export interface ChatUIProps {
   /** Currently selected models for multi-model comparison. */
   selectedModels?: SelectedModel[];
 
-  /** When on, messages drop the reading-width cap and fill the window. */
+  /**
+   * When on, the chat is in full-width mode: messages use its padding layout.
+   * Their width comes from the page's `--app-chat-column-width`, not from
+   * this prop.
+   */
   fullWidthChat?: boolean;
 }
 
