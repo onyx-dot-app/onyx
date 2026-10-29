@@ -69,7 +69,7 @@ jobs:
         id: list-changed
         env:
           TARGET_BRANCH: ${{ github.base_ref || github.event.repository.default_branch }}
-          FORCE_CHECK: ${{ github.event_name != 'pull_request' || steps.controls.outputs.config == 'true' }}
+          FORCE_CHECK: ${{ github.event_name == 'pull_request' && steps.controls.outputs.config == 'true' }}
         run: |
           if [ "$FORCE_CHECK" = "true" ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"

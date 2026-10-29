@@ -37,6 +37,12 @@ jobs:
           ref: ${{ github.event.merge_group.head_sha || github.sha }}
           filters: |
             python:
+              - 'web/src/lib/agents/userPlaceholders.ts'
+              - 'web/src/app/ee/admin/theme/page.tsx'
+              - 'deployment/docker_compose/docker-compose.template.yml'
+              - 'deployment/docker_compose/docker-compose.craft.yml'
+              - 'web/public/slackbot-source-icons/**'
+              - 'cli/internal/deploy/deployfiles/embedded/docker_compose/docker-compose.craft.yml'
               - 'backend/**'
               - 'web/src/lib/searchSettings/constants.ts'
               - '.agents/hooks/**'
@@ -47,7 +53,7 @@ jobs:
 
   backend-check:
     needs: changes
-    if: needs.changes.outputs.python == 'true'
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.python == 'true') }}
     # See https://runs-on.com/runners/linux/
     runs-on: [runs-on, runner=4cpu-linux-arm64, "run-id=${{ github.run_id }}-backend-check"]
     timeout-minutes: 10
@@ -59,6 +65,10 @@ jobs:
       DISABLE_TELEMETRY: "true"
 
     steps:
+    - name: Require successful change detection
+      if: needs.changes.result != 'success'
+      run: exit 1
+
     - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
     - name: Checkout code

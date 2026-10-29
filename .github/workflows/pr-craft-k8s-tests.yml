@@ -21,6 +21,13 @@ on:
     - cron: "0 7 * * *"   # 07:00 UTC nightly
   pull_request:
     paths:
+      - "backend/onyx/background/celery/apps/heavy.py"
+      - "deployment/helm/charts/onyx/templates/configmap.yaml"
+      - "deployment/helm/charts/onyx/templates/_helpers.tpl"
+      - "backend/tests/conftest.py"
+      - "backend/tests/common/craft/**"
+      - "backend/tests/common/models.py"
+      - "backend/pytest.ini"
       - "backend/onyx/background/celery/tasks/build/**"
       - "backend/onyx/db/external_app.py"
       - "backend/onyx/external_apps/**"
@@ -43,7 +50,6 @@ on:
       - "deployment/helm/charts/onyx/values-ci.yaml"
       - "backend/tests/integration/tests/craft/*.py"
       - "backend/tests/integration/tests/craft/k8s/**"
-      - "backend/tests/common/craft/**"
       - "backend/tests/integration/conftest.py"
       - "backend/tests/integration/common_utils/**"
       - ".github/workflows/pr-craft-k8s-tests.yml"
@@ -134,6 +140,13 @@ jobs:
         with:
           filters: |
             craft_k8s:
+              - 'backend/onyx/background/celery/apps/heavy.py'
+              - 'deployment/helm/charts/onyx/templates/configmap.yaml'
+              - 'deployment/helm/charts/onyx/templates/_helpers.tpl'
+              - 'backend/tests/conftest.py'
+              - 'backend/tests/common/craft/**'
+              - 'backend/tests/common/models.py'
+              - 'backend/pytest.ini'
               - 'backend/onyx/background/celery/tasks/build/**'
               - 'backend/onyx/db/external_app.py'
               - 'backend/onyx/external_apps/**'
@@ -160,7 +173,6 @@ jobs:
               - 'deployment/helm/charts/onyx/values-ci.yaml'
               - 'backend/tests/integration/tests/craft/*.py'
               - 'backend/tests/integration/tests/craft/k8s/**'
-              - 'backend/tests/common/craft/**'
               - 'backend/tests/integration/conftest.py'
               - 'backend/tests/integration/common_utils/**'
               - '.github/workflows/pr-craft-k8s-tests.yml'

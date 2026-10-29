@@ -18,12 +18,19 @@ on:
     - cron: "0 7 * * *"   # 07:00 UTC nightly
   pull_request:
     paths:
+      - "backend/onyx/background/celery/apps/heavy.py"
+      - "backend/onyx/db/scheduled_task.py"
+      - "backend/onyx/background/celery/tasks/scheduled_tasks/**"
+      - "backend/tests/conftest.py"
+      - "backend/tests/common/craft/**"
+      - "backend/tests/common/models.py"
+      - "backend/pytest.ini"
+      - "deployment/docker_compose/env.template"
       - "backend/onyx/background/celery/tasks/build/**"
       - "backend/onyx/db/external_app.py"
       - "backend/onyx/external_apps/**"
       - "backend/requirements/**"
       - "backend/shared_configs/**"
-      - "backend/tests/common/craft/**"
       - "pyproject.toml"
       - "uv.lock"
       - "deployment/docker_compose/docker-compose.template.yml"
@@ -95,12 +102,19 @@ jobs:
         with:
           filters: |
             craft_compose:
+              - 'backend/onyx/background/celery/apps/heavy.py'
+              - 'backend/onyx/db/scheduled_task.py'
+              - 'backend/onyx/background/celery/tasks/scheduled_tasks/**'
+              - 'backend/tests/conftest.py'
+              - 'backend/tests/common/craft/**'
+              - 'backend/tests/common/models.py'
+              - 'backend/pytest.ini'
+              - 'deployment/docker_compose/env.template'
               - 'backend/onyx/background/celery/tasks/build/**'
               - 'backend/onyx/db/external_app.py'
               - 'backend/onyx/external_apps/**'
               - 'backend/requirements/**'
               - 'backend/shared_configs/**'
-              - 'backend/tests/common/craft/**'
               - 'pyproject.toml'
               - 'uv.lock'
               - 'deployment/docker_compose/docker-compose.template.yml'
