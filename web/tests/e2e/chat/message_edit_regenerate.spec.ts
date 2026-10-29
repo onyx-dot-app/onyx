@@ -142,7 +142,7 @@ test.describe("Message Edit and Regenerate Tests", () => {
   test("Message regeneration with model selection", async ({ page }) => {
     // make sure we're using something other than GPT-4o Mini, otherwise the below
     // will fail since we need to switch to a different model for the test
-    await switchModel(page, "GPT-4.1");
+    await switchModel(page, "GPT-4o");
 
     // Send initial message
     await sendMessage(page, "hi! Respond with no more than a sentence");
