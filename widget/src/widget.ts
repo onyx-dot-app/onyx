@@ -391,6 +391,11 @@ export class OnyxChatWidget extends LitElement {
     };
     this.messages = [...this.messages, userMessage];
 
+    // Created before the first await so resetConversation() can cancel this
+    // send at any stage, not only once streaming starts.
+    const controller = new AbortController();
+    this.abortController = controller;
+
     try {
       this.isStreaming = true;
       this.error = undefined;
@@ -398,15 +403,18 @@ export class OnyxChatWidget extends LitElement {
       // Create session if needed
       if (!this.chatSessionId) {
         this.isLoading = true;
-        this.chatSessionId = await this.apiService.createChatSession(
+        const chatSessionId = await this.apiService.createChatSession(
           this.config.agentId
         );
+        if (controller.signal.aborted) return;
+        this.chatSessionId = chatSessionId;
         this.isLoading = false;
       }
 
       // Resolved once per send, so every persisted transcript is tagged with
       // the user who actually produced it.
       const identity = await this.currentIdentity();
+      if (controller.signal.aborted) return;
 
       // Get parent message ID (last assistant message with a numeric ID from backend)
       const parentMessage = [...this.messages]
@@ -418,7 +426,6 @@ export class OnyxChatWidget extends LitElement {
           : null;
 
       // Stream response
-      this.abortController = new AbortController();
       let currentMessage: ChatMessage | null = null;
       let assistantMessageId: number | null = null;
 
@@ -426,9 +433,10 @@ export class OnyxChatWidget extends LitElement {
         message,
         chatSessionId: this.chatSessionId,
         parentMessageId,
-        signal: this.abortController.signal,
+        signal: controller.signal,
         includeCitations: this.config.includeCitations,
       })) {
+        if (controller.signal.aborted) return;
         const result = processPacket(packet, currentMessage);
 
         // Capture message IDs from backend and update local messages
@@ -535,14 +543,17 @@ export class OnyxChatWidget extends LitElement {
       }
     } catch (err: any) {
       console.error("Failed to send message:", err);
-      if (err.name !== "AbortError") {
+      if (err.name !== "AbortError" && !controller.signal.aborted) {
         this.error = err.message || "Failed to send message";
       }
     } finally {
-      this.isStreaming = false;
-      this.isLoading = false;
-      this.streamingStatus = "";
-      this.abortController = undefined;
+      // A reset may have handed this state to a newer send.
+      if (this.abortController === controller) {
+        this.isStreaming = false;
+        this.isLoading = false;
+        this.streamingStatus = "";
+        this.abortController = undefined;
+      }
     }
   }
 
