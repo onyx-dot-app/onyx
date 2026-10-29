@@ -1019,3 +1019,79 @@ def test_branch_emptied_package_marker_is_relevant_without_a_base(
     (fmap.root / rel).write_text("")
     _git(fmap.root, "commit", "-qam", "empty the package marker")
     assert "`first-wins`" in _reminder(fmap, [rel])
+
+
+_DYNAMIC_ROUTE = "web/src/app/tasks/[id]/page.tsx"
+
+
+def _cite_dynamic_route(fmap: FixtureMap, cited: str) -> None:
+    (fmap.root / _DYNAMIC_ROUTE).parent.mkdir(parents=True)
+    (fmap.root / _DYNAMIC_ROUTE).write_text("export default function Page() {}\n")
+    _git(fmap.root, "add", "-A")
+    _git(fmap.root, "commit", "-qm", "route")
+    fmap.edit(
+        _CIT, "**The first mapping wins.**", f"**The first mapping wins.** `{cited}`"
+    )
+
+
+def test_cited_resolves_a_dynamic_route(fmap: FixtureMap) -> None:
+    _cite_dynamic_route(fmap, _DYNAMIC_ROUTE)
+    output = stale_docs.format_cited([_DYNAMIC_ROUTE], fmap.map_dir, fmap.root)
+    assert output == f"{_DYNAMIC_ROUTE}: [[citations#first-wins]]"
+
+
+@pytest.mark.parametrize(
+    ("cited", "error"),
+    [
+        (_DYNAMIC_ROUTE, False),
+        ("app/tasks/[id]/", False),
+        ("web/src/app/tasks/[idd]/page.tsx", True),
+        ("web/src/app/[...path]/route.ts", True),
+        # Placeholders that match nothing are not paths.
+        ("connectors/<source>/", False),
+        ("web/src/app/{slug}/page.tsx", False),
+        ("backend/onyx/...", False),
+    ],
+)
+def test_dynamic_route_citation_must_exist(
+    fmap: FixtureMap, cited: str, error: bool
+) -> None:
+    _cite_dynamic_route(fmap, cited)
+    errors, _ = fmap.check()
+    missing = f"`{cited}` does not exist in the repo"
+    assert any(missing in e for e in errors) is error, errors
+
+
+_TWO_FUNCTIONS = "def update_mapping():\n    pass\n\n\ndef other():\n    pass\n"
+
+
+@pytest.mark.parametrize("dirty_at_start", [False, True])
+def test_start_blob_excludes_edits_made_before_the_turn(
+    fmap: FixtureMap, dirty_at_start: bool
+) -> None:
+    rel = "backend/onyx/chat/citation_utils.py"
+    source = fmap.root / rel
+    source.write_text(_TWO_FUNCTIONS)
+    _git(fmap.root, "add", ".")
+    _git(fmap.root, "commit", "-qm", "two functions")
+    base = _git(fmap.root, "rev-parse", "HEAD")
+    # Before the turn: an edit to the cited `update_mapping`.
+    source.write_text(_TWO_FUNCTIONS.replace("pass", "return 1", 1))
+    blob = _git(fmap.root, "hash-object", "-w", "--", rel)
+    # The turn edits `other` only.
+    source.write_text(source.read_text().replace("    pass\n", "    return 2\n"))
+    start_blobs = {rel: blob} if dirty_at_start else {}
+    text = stale_docs.reminder_text(
+        [rel], None, fmap.map_dir, fmap.root, base=base, start_blobs=start_blobs
+    )
+    assert ("`unresolved-silent`" in text) is not dirty_at_start, text
+
+
+def test_empty_start_blob_counts_the_whole_file(fmap: FixtureMap) -> None:
+    rel = "backend/onyx/chat/citation_utils.py"
+    base = _git(fmap.root, "rev-parse", "HEAD")
+    (fmap.root / rel).write_text("def update_mapping():\n    return 1\n")
+    text = stale_docs.reminder_text(
+        [rel], None, fmap.map_dir, fmap.root, base=base, start_blobs={rel: ""}
+    )
+    assert "`unresolved-silent`" in text

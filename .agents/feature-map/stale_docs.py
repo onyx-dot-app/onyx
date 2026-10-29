@@ -15,7 +15,10 @@ patterns. A symbol the parser cannot find, such as an interface member,
 matches any change to the file, as does a bare path and every citation of a new,
 deleted or other file. The change is the diff from `--base` (the commit at the
 start of the agent's turn) to the working tree. Without `--base`, it is the
-uncommitted diff, or the branch diff for a file with no uncommitted edits.
+uncommitted diff, or the branch diff for a file with no uncommitted edits. A
+file with a `--start-blob` (its content at the start of the turn, when it was
+already dirty then) is measured from that content instead, so edits made before
+the turn do not count.
 
 A component that owns a changed file through PATHS.md (longest prefix wins) but
 cites none of the changed code does not cause a brief. When a brief is shown, it
@@ -31,19 +34,21 @@ once per session.
 VERIFYING.md. `--queue` lists the components by how much of their cited code
 changed since their Verified-against commit, as a queue for verify passes.
 
-Usage: stale_docs.py [--session ID] [--base COMMIT] FILE [FILE ...]
+Usage: stale_docs.py [--session ID] [--base COMMIT] [--start-blob PATH=BLOB ...]
+                      FILE [FILE ...]
        stale_docs.py --cited FILE [FILE ...]
        stale_docs.py --queue
 """
 
 import argparse
 import ast
+import difflib
 import fnmatch
 import json
 import re
 import subprocess
 import tempfile
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -301,6 +306,20 @@ def _hunk_lines(diff: str) -> tuple[set[int], set[int]]:
     return old, new
 
 
+def _diff_lines(old_text: str, new_text: str) -> tuple[set[int], set[int]]:
+    """`_hunk_lines` for two texts: the old and new lines a line diff changes."""
+    old: set[int] = set()
+    new: set[int] = set()
+    matcher = difflib.SequenceMatcher(
+        None, old_text.splitlines(), new_text.splitlines(), autojunk=False
+    )
+    for tag, old_start, old_end, new_start, new_end in matcher.get_opcodes():
+        if tag != "equal":
+            old.update(range(old_start + 1, old_end + 1))
+            new.update(range(new_start + 1, new_end + 1))
+    return old, new
+
+
 def _run_git(repo_root: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["git", *args], cwd=repo_root, capture_output=True, text=True)
 
@@ -332,20 +351,42 @@ def _old_text(repo_root: Path, ref: str, path: str) -> str | None:
     return old.stdout if old.returncode == 0 else None
 
 
-def changed_symbols(repo_root: Path, ref: str | None, path: str) -> SymbolChange | None:
-    """The names the change to a file touches, or None when the whole file counts."""
+def _blob_text(repo_root: Path, blob: str) -> str | None:
+    """The text of a start blob; empty for a file that did not exist; None if lost."""
+    if not blob:
+        return ""
+    old = _run_git(repo_root, "cat-file", "blob", blob)
+    return old.stdout if old.returncode == 0 else None
+
+
+def changed_symbols(
+    repo_root: Path, ref: str | None, path: str, start_blob: str | None = None
+) -> SymbolChange | None:
+    """The names the change to a file touches, or None when the whole file counts.
+
+    With a start blob (the file's content at the turn's start, or "" when the file
+    did not exist), the change is measured from that content instead of `ref`.
+    """
     language = _LANGUAGES.get(Path(path).suffix)
     current = repo_root / path
-    if language is None or ref is None or not current.is_file():
+    if language is None or not current.is_file():
         return None
-    old_text = _old_text(repo_root, ref, path)
-    if old_text is None:
-        return None  # A new file.
-    diff = _run_git(repo_root, "diff", "-U0", ref, "--", path)
-    if diff.returncode != 0:
-        return None
-    old_lines, new_lines = _hunk_lines(diff.stdout)
     new_text = current.read_text(errors="ignore")
+    if start_blob is not None:
+        old_text = _blob_text(repo_root, start_blob)
+        if old_text is None:
+            return None
+        old_lines, new_lines = _diff_lines(old_text, new_text)
+    else:
+        if ref is None:
+            return None
+        old_text = _old_text(repo_root, ref, path)
+        if old_text is None:
+            return None  # A new file.
+        diff = _run_git(repo_root, "diff", "-U0", ref, "--", path)
+        if diff.returncode != 0:
+            return None
+        old_lines, new_lines = _hunk_lines(diff.stdout)
     return SymbolChange(
         frozenset(
             enclosing_names(old_text, old_lines, language)
@@ -384,10 +425,13 @@ def _has_code(text: str) -> bool:
     )
 
 
-def is_ignored(path: str, repo_root: Path, ref: str | None) -> bool:
+def is_ignored(
+    path: str, repo_root: Path, ref: str | None, start_blob: str | None = None
+) -> bool:
     """True when the change cannot alter what the map states.
 
-    `ref` is the commit the change is measured from, as `diff_ref` gives it.
+    `ref` is the commit the change is measured from, as `diff_ref` gives it; a
+    start blob, as `changed_symbols` takes it, replaces it.
     """
     if path.startswith(_IGNORED_PREFIXES) or any(m in path for m in _IGNORED_MARKERS):
         return True
@@ -397,7 +441,10 @@ def is_ignored(path: str, repo_root: Path, ref: str | None) -> bool:
     if Path(path).name == "__init__.py":
         file = repo_root / path
         new = file.read_text(errors="ignore") if file.is_file() else ""
-        old = (_old_text(repo_root, ref, path) if ref else None) or ""
+        if start_blob is not None:
+            old = _blob_text(repo_root, start_blob) or ""
+        else:
+            old = (_old_text(repo_root, ref, path) if ref else None) or ""
         return not _has_code(old) and not _has_code(new)
     return False
 
@@ -503,11 +550,16 @@ def find(
     map_dir: Path = MAP_DIR,
     repo_root: Path = REPO_ROOT,
     base: str | None = None,
+    start_blobs: Mapping[str, str] | None = None,
 ) -> Findings:
     """The documents the changed files touch, except documents in `changed`.
 
     `base` is the commit the change is measured from, such as the turn's start.
+    `start_blobs` maps a file that was dirty at the turn's start to the blob of
+    its content then ("" when it did not exist); its change is measured from that
+    content, so edits made before the turn do not count.
     """
+    start_blobs = start_blobs or {}
     components, top_level = _docs(map_dir)
     repo = _with_changed(repo_paths(repo_root), changed)
     owned = ownership(map_dir, {doc.name for doc in components}, repo)
@@ -524,7 +576,8 @@ def find(
     result = Findings()
     for path in changed:
         ref = diff_ref(repo_root, path, base, fork)
-        if is_ignored(path, repo_root, ref):
+        start_blob = start_blobs.get(path)
+        if is_ignored(path, repo_root, ref, start_blob):
             continue
         owner = owner_of(path, owned)
         # A deleted file needs no row.
@@ -538,7 +591,7 @@ def find(
             found[doc.rel] = replace(current, owned=current.owned + (path,))
         if not cited.get(path):
             continue
-        symbols = changed_symbols(repo_root, ref, path)
+        symbols = changed_symbols(repo_root, ref, path, start_blob)
         for citation in cited[path]:
             by_symbol = False
             if citation.symbol and symbols is not None:
@@ -684,9 +737,10 @@ def reminder_text(
     map_dir: Path = MAP_DIR,
     repo_root: Path = REPO_ROOT,
     base: str | None = None,
+    start_blobs: Mapping[str, str] | None = None,
 ) -> str:
     """The editing brief for the changed files; empty when nothing applies."""
-    findings = find(changed, map_dir, repo_root, base)
+    findings = find(changed, map_dir, repo_root, base, start_blobs)
     if session:
         findings = _filter_session(findings, _already_reminded(session)[1])
     cited = [r for r in findings.reminders if r.places]
@@ -785,6 +839,14 @@ def main() -> int:
     parser.add_argument(
         "--base", help="measure the change from this commit, such as the turn's start"
     )
+    parser.add_argument(
+        "--start-blob",
+        action="append",
+        default=[],
+        metavar="PATH=BLOB",
+        help="measure the file's change from this blob, its content at the turn's "
+        "start; an empty BLOB means the file did not exist",
+    )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
         "--cited",
@@ -805,7 +867,13 @@ def main() -> int:
     if args.queue:
         print("\n".join(queue()))
         return 0
-    text = reminder_text(args.files, args.session, base=args.base)
+    start_blobs = {
+        path: blob
+        for path, _, blob in (entry.rpartition("=") for entry in args.start_blob)
+    }
+    text = reminder_text(
+        args.files, args.session, base=args.base, start_blobs=start_blobs
+    )
     if text:
         print(text)
     return 0

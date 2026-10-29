@@ -12,7 +12,9 @@ those files it:
   decide whether they need an edit. `stale_docs.py` prints nothing when no part
   cites the code and every changed file is mapped, so ownership alone never blocks.
   It measures each change from the HEAD of the turn's start, so edits the turn
-  committed count too.
+  committed count too. A file that was already dirty is measured from its content
+  at the turn's start, stored as a git blob, so edits made before the turn do not
+  count.
 
 A pre-commit failure exits with code 2 and prints to stderr, with the brief after
 it. A brief alone blocks the stop once with `{"decision": "block", "reason": ...}`,
@@ -69,6 +71,26 @@ def _digests(repo: Path, files: list[str]) -> dict[str, str]:
         )
         for path in files
     }
+
+
+def _blobs(repo: Path, files: list[str]) -> dict[str, str]:
+    """Store each file's content as a git blob; an empty id for a missing file."""
+    present = [path for path in files if (repo / path).is_file()]
+    ids = (
+        subprocess.run(
+            ["git", "hash-object", "-w", "--no-filters", "--stdin-paths"],
+            cwd=repo,
+            input="".join(f"{path}\n" for path in present),
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split()
+        if present
+        else []
+    )
+    blobs = dict.fromkeys(files, "")
+    blobs.update(zip(present, ids, strict=True))
+    return blobs
 
 
 def _snapshot_path(repo: Path, session: str) -> Path:
@@ -160,13 +182,16 @@ def _record_turn_start(repo: Path, session: str) -> None:
     snapshot = _snapshot_path(repo, session)
     snapshot.parent.mkdir(exist_ok=True)
     reflog = _head_reflog(repo)
+    dirty = sorted(_dirty_files(repo))
     snapshot.write_text(
         json.dumps(
             {
                 "head": _head(repo),
                 "reflog_offset": len(reflog),
                 "reflog_digest": hashlib.sha256(reflog).hexdigest(),
-                "files": _digests(repo, sorted(_dirty_files(repo))),
+                "files": _digests(repo, dirty),
+                # The content before the turn, so the brief skips older edits.
+                "blobs": _blobs(repo, dirty),
             }
         )
     )
@@ -267,16 +292,26 @@ def _pre_commit_failures(repo: Path, files: list[str]) -> str | None:
 
 
 def _editing_brief(
-    repo: Path, session: str, turn: set[str], base: str | None
+    repo: Path,
+    session: str,
+    turn: set[str],
+    base: str | None,
+    start_blobs: dict[str, str],
 ) -> str | None:
     """The feature-map parts that cite the turn's code; documents it edited are skipped.
 
-    `base` is HEAD at the turn's start; the brief measures each change from it.
+    `base` is HEAD at the turn's start; the brief measures each change from it. A
+    file that was dirty then is measured from its blob in `start_blobs` instead.
     """
     script = repo / _STALE_DOCS
     if not script.is_file() or not turn:
         return None
     options = ["--session", session] + (["--base", base] if base else [])
+    options += [
+        f"--start-blob={path}={start_blobs[path]}"
+        for path in sorted(turn)
+        if path in start_blobs
+    ]
     try:
         result = subprocess.run(
             [sys.executable, str(script), *options, "--", *sorted(turn)],
@@ -325,9 +360,23 @@ def main() -> int:
     brief = None
     if not continued:
         head = start.get("head")
+        blobs = start.get("blobs")
+        start_blobs = (
+            {
+                path: blob
+                for path, blob in blobs.items()
+                if isinstance(path, str) and isinstance(blob, str)
+            }
+            if isinstance(blobs, dict)
+            else {}
+        )
         try:
             brief = _editing_brief(
-                repo, session, turn, head if isinstance(head, str) else None
+                repo,
+                session,
+                turn,
+                head if isinstance(head, str) else None,
+                start_blobs,
             )
         except (subprocess.CalledProcessError, OSError):
             brief = None

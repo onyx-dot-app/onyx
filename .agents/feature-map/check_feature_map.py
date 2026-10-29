@@ -102,6 +102,9 @@ COMPONENT_LINK = re.compile(
 INDEX_ROW = re.compile(
     r"^\|\s*\[[^\]]+\]\(components/(?:[a-z0-9-]+/)?([a-z0-9-]+)\.md\)\s*\|(.*)\|\s*$"
 )
+# A Next.js dynamic route segment: `[id]`, `[...path]` or `[[...path]]`.
+DYNAMIC_SEGMENT = re.compile(r"\[\[\.\.\.[\w-]+\]\]|\[(?:\.\.\.)?[\w-]+\]")
+DYNAMIC_FILE = re.compile(rf"(?:{DYNAMIC_SEGMENT.pattern})(?:\.\w+)*")
 PATH_SUFFIX = re.compile(
     r"(\.(py|ts|tsx|js|mjs|json|md|yaml|yml|toml|go|rs|sh|txt|html|css|template|conf)|(^|/)Dockerfile)$"
 )
@@ -242,8 +245,14 @@ def candidates(path: str, repo: Repo) -> list[str]:
     return list(dict.fromkeys(found))
 
 
-def looks_like_path(token: str, top_dirs: Iterable[str]) -> str | None:
-    """The repo path a code span names, or None when it is not a path."""
+def looks_like_path(token: str, repo: Repo) -> str | None:
+    """The repo path a code span names, or None when it is not a path.
+
+    A token that names a tracked file or directory is a path, whatever characters
+    it holds. Otherwise placeholder text such as `connectors/<source>/` is not a
+    path; a Next.js dynamic segment such as `[id]` or `[...path]` is not a
+    placeholder, so a mistyped route still fails the existence check.
+    """
     if any(c.isspace() for c in token):
         return None
     path = token.split(":")[0].rstrip("/").rstrip(",")
@@ -257,19 +266,27 @@ def looks_like_path(token: str, top_dirs: Iterable[str]) -> str | None:
     # A bare extension such as `.py` names a file type, not a file.
     if "/" not in path and "." not in path.lstrip(".") and path != "Dockerfile":
         return None
-    if any(c in path for c in "{*<$[") or "..." in path:
+    if candidates(path, repo):
+        return path
+    if any(c in path for c in "{*<$") or "..." in DYNAMIC_SEGMENT.sub("", path):
         return None
+    if "[" in path or "]" in path:
+        segments = path.split("/")
+        if segments[0] not in repo.top_dirs or any(
+            ("[" in s or "]" in s) and not DYNAMIC_FILE.fullmatch(s) for s in segments
+        ):
+            return None
     if PATH_SUFFIX.search(path) or token.endswith("/"):
         return path
     # Log files are runtime output, never tracked.
-    if path.split("/")[0] in top_dirs and not path.endswith(".log"):
+    if path.split("/")[0] in repo.top_dirs and not path.endswith(".log"):
         return path
     return None
 
 
 def cited_files(token: str, repo: Repo) -> list[str]:
     """The tracked files a code span cites, by path or by `path:symbol`."""
-    path = looks_like_path(token, repo.top_dirs)
+    path = looks_like_path(token, repo)
     if path is None:
         return []
     return [c for c in candidates(path, repo) if c in repo.files]
@@ -557,7 +574,7 @@ def _check_scope(doc: Doc, repo: Repo, allowed: set[tuple[str, str]]) -> list[st
         for token in CODE_SPAN.findall(line.text):
             if ":" in token or (doc.rel, token) in allowed:
                 continue
-            if looks_like_path(token, repo.top_dirs) is not None:
+            if looks_like_path(token, repo) is not None:
                 errors.append(
                     f"{doc.rel}:{line.number}: Scope lists the path `{token}`. "
                     "PATHS.md is the only ownership record; state responsibilities."
@@ -720,7 +737,7 @@ def _check_paths_exist(
         if line.in_fence:
             continue
         for token in CODE_SPAN.findall(line.text):
-            path = looks_like_path(token, repo.top_dirs)
+            path = looks_like_path(token, repo)
             if path is None or (doc.rel, token) in allowed:
                 continue
             if not candidates(path, repo):

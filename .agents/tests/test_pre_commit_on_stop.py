@@ -416,3 +416,49 @@ def test_brief_measures_changes_from_the_turn_start(repo: Path) -> None:
     result = _run(repo, "Stop")
     assert json.loads(result.stdout)["reason"] == "Brief for base.txt"
     assert (repo.parent / "base.txt").read_text() == start
+
+
+_COMPONENT = """# App
+
+> Runs the app.
+
+## Architecture
+
+The app has two steps.
+
+## Contracts and traps
+
+1. `a-key` **Step A runs first.** `app.py:step_a` starts the run.
+2. `b-key` **Step B runs last.** `app.py:step_b` ends the run.
+"""
+_APP = "def step_a():\n    return 1\n\n\ndef step_b():\n    return 2\n"
+
+
+def test_brief_skips_edits_made_before_the_turn(
+    repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # stale_docs keeps its per-session record in the temporary directory.
+    monkeypatch.setenv("TMPDIR", str(tmp_path))
+    map_dir = repo / ".agents/feature-map"
+    (map_dir / "components").mkdir(parents=True)
+    for name in ("stale_docs.py", "check_feature_map.py"):
+        (map_dir / name).write_text(
+            (_HOOK.parents[1] / "feature-map" / name).read_text()
+        )
+    (map_dir / "components/app.md").write_text(_COMPONENT)
+    (map_dir / "PATHS.md").write_text(
+        "# Paths\n\n| Path | Component(s) |\n|---|---|\n| `app.py` | app |\n"
+    )
+    _commit(repo, "app.py", _APP)
+    _git(repo, "add", ".agents")
+    _git(repo, "commit", "-qm", "Add map")
+
+    (repo / "app.py").write_text(_APP.replace("return 1", "return 10"))
+    _start(repo)
+    (repo / "app.py").write_text(
+        (repo / "app.py").read_text().replace("return 2", "return 20")
+    )
+    result = _run(repo, "Stop")
+    reason = json.loads(result.stdout)["reason"]
+    assert "`b-key`" in reason
+    assert "`a-key`" not in reason
