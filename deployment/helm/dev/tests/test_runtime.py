@@ -295,6 +295,36 @@ class RuntimeTests(unittest.TestCase):
         ) as kube:
             self.assertTrue(Cluster(Path.cwd()).agent_session_rejected(since))
         self.assertIn("--since-time=2026-01-01T12:00:05Z", kube.call_args.args)
+        # kubectl reads only 10 lines per pod for a selector unless --tail is set.
+        self.assertIn("--tail=-1", kube.call_args.args)
+
+    def test_failed_stale_agent_query_does_not_block_the_intercept(self) -> None:
+        """Proceed to the intercept when the stale-agent pre-check cannot query the cluster."""
+        for failure in (
+            subprocess.CalledProcessError(1, ["telepresence", "list"]),
+            subprocess.TimeoutExpired(["telepresence", "list"], 30),
+            json.JSONDecodeError("bad", "", 0),
+        ):
+            with (
+                self.subTest(failure=type(failure).__name__),
+                patch.object(Cluster, "connect"),
+                patch.object(
+                    Cluster, "api_workload", return_value={"metadata": {"name": "api"}}
+                ),
+                patch.object(Cluster, "intercept_active", return_value=False),
+                patch.object(Cluster, "telepresence_workloads", side_effect=failure),
+                patch.object(Cluster, "command") as command,
+                patch.object(Cluster, "kube", return_value="") as kube,
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                Cluster(Path.cwd()).intercept()
+                self.assertEqual(
+                    command.call_args_list[0].args[:2], ("telepresence", "intercept")
+                )
+                self.assertNotIn(
+                    ("rollout", "restart"),
+                    [call.args[:2] for call in kube.call_args_list],
+                )
 
     def test_intercept_restarts_a_stale_agent_before_intercepting(self) -> None:
         """Replace a stale agent up front, and do not restart again if intercept still fails."""

@@ -399,6 +399,7 @@ class Cluster:
                 "-c",
                 "traffic-agent",
                 f"--since-time={since.astimezone(timezone.utc):%Y-%m-%dT%H:%M:%SZ}",
+                "--tail=-1",
                 "--prefix=true",
             )
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
@@ -409,6 +410,22 @@ class Cluster:
                 logs,
             )
         )
+
+    def api_agent_stale(self, name: str) -> bool:
+        """Check for a stale API traffic agent; a failed query defers to the intercept's own recovery."""
+        try:
+            return agent_stale(
+                name,
+                self.telepresence_workloads(),
+                self.api_pods(),
+                datetime.now(timezone.utc),
+            )
+        except (
+            subprocess.CalledProcessError,
+            subprocess.TimeoutExpired,
+            json.JSONDecodeError,
+        ):
+            return False
 
     def restart_api(self, name: str) -> None:
         """Restart the API deployment so Telepresence injects a fresh traffic agent."""
@@ -453,12 +470,7 @@ class Cluster:
             print(f"Reusing API intercept {name}", flush=True)
         else:
             restarted = False
-            if agent_stale(
-                name,
-                self.telepresence_workloads(),
-                self.api_pods(),
-                datetime.now(timezone.utc),
-            ):
+            if self.api_agent_stale(name):
                 print(
                     f"Restarting {name}: its traffic agent is unknown to the traffic manager",
                     flush=True,
