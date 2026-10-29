@@ -3,12 +3,13 @@
 import { forwardRef, type ButtonHTMLAttributes } from "react";
 import { cn } from "@opal/utils";
 import { Text } from "@opal/components";
+import type { RichStr } from "@opal/types";
 
 export interface BigButtonProps extends Omit<
   ButtonHTMLAttributes<HTMLButtonElement>,
   "children"
 > {
-  children: string;
+  children: string | RichStr;
 
   // Subvariants
   primary?: boolean;

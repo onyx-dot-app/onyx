@@ -22,11 +22,11 @@ const NRF_FOOTER_HEIGHT_VAR = "--nrf-footer-height";
 
 const footerMarkdownComponents = {
   p: ({ children }: { children?: React.ReactNode }) => (
-    <div className="text-center">
+    <p className="my-0! text-center">
       <Text font="secondary-action" color="text-03">
         {richNodes(children)}
       </Text>
-    </div>
+    </p>
   ),
   a: ({
     href,

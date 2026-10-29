@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 import { getSourceMetadata } from "@/lib/connectors/utils";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import type { ConnectedSource } from "@/lib/hierarchy/types";
 import type { ValidSources } from "@/lib/connectors/types/source";
@@ -33,6 +33,7 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
   vectorDbEnabled,
 }: KnowledgeAddViewProps) {
   const t = useTranslations("knowledge");
+  const format = useFormatter();
   return (
     <GeneralLayouts.Section
       gap={2}
@@ -63,7 +64,7 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
             rightChildren={
               selectedDocumentSetIds.length > 0 ? (
                 <Text font="main-ui-action" color="action-selection-05">
-                  {String(selectedDocumentSetIds.length)}
+                  {format.number(selectedDocumentSetIds.length)}
                 </Text>
               ) : undefined
             }
@@ -84,7 +85,7 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
           rightChildren={
             selectedFileIds.length > 0 ? (
               <Text font="main-ui-action" color="action-selection-05">
-                {String(selectedFileIds.length)}
+                {format.number(selectedFileIds.length)}
               </Text>
             ) : undefined
           }
@@ -118,7 +119,7 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
                 rightChildren={
                   selectionCount > 0 ? (
                     <Text font="main-ui-action" color="action-selection-05">
-                      {String(selectionCount)}
+                      {format.number(selectionCount)}
                     </Text>
                   ) : undefined
                 }

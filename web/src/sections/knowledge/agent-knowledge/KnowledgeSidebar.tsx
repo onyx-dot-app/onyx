@@ -1,6 +1,6 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import { getSourceMetadata } from "@/lib/connectors/utils";
 import * as TableLayouts from "@/layouts/table-layouts";
 import type { ConnectedSource } from "@/lib/hierarchy/types";
@@ -38,6 +38,7 @@ export function KnowledgeSidebar({
   vectorDbEnabled,
 }: KnowledgeSidebarProps) {
   const t = useTranslations("knowledge");
+  const format = useFormatter();
   return (
     <TableLayouts.SidebarLayout aria-label="knowledge-sidebar">
       <LineItemButton
@@ -56,7 +57,7 @@ export function KnowledgeSidebar({
         rightChildren={
           selectedFileIds.length > 0 ? (
             <Text font="main-ui-action" color="action-selection-05">
-              {String(selectedFileIds.length)}
+              {format.number(selectedFileIds.length)}
             </Text>
           ) : undefined
         }
@@ -81,7 +82,7 @@ export function KnowledgeSidebar({
             rightChildren={
               selectedDocumentSetIds.length > 0 ? (
                 <Text font="main-ui-action" color="action-selection-05">
-                  {String(selectedDocumentSetIds.length)}
+                  {format.number(selectedDocumentSetIds.length)}
                 </Text>
               ) : undefined
             }
@@ -116,7 +117,7 @@ export function KnowledgeSidebar({
                 rightChildren={
                   selectionCount > 0 ? (
                     <Text font="main-ui-action" color="action-selection-05">
-                      {String(selectionCount)}
+                      {format.number(selectionCount)}
                     </Text>
                   ) : undefined
                 }

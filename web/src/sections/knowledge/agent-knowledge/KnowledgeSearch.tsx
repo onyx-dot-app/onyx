@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import { getSourceMetadata } from "@/lib/connectors/utils";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
@@ -122,6 +122,7 @@ export function KnowledgeSearchSidebar({
   vectorDbEnabled,
 }: KnowledgeSearchSidebarProps) {
   const t = useTranslations("knowledge");
+  const format = useFormatter();
   const totalCount = Array.from(resultCountBySource.values()).reduce(
     (a, b) => a + b,
     0
@@ -138,7 +139,7 @@ export function KnowledgeSearchSidebar({
         rightChildren={
           totalCount > 0 ? (
             <Text font="main-ui-action" color="action-selection-05">
-              {String(totalCount)}
+              {format.number(totalCount)}
             </Text>
           ) : undefined
         }
@@ -160,7 +161,7 @@ export function KnowledgeSearchSidebar({
               rightChildren={
                 count > 0 ? (
                   <Text font="main-ui-action" color="action-selection-05">
-                    {String(count)}
+                    {format.number(count)}
                   </Text>
                 ) : undefined
               }

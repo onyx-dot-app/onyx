@@ -3,7 +3,7 @@
 import { IconLoader } from "@opal/loaders";
 import { getSourceMetadata } from "@/lib/connectors/utils";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import { BaseFilters, MinimalOnyxDocument } from "@/lib/search/types";
 import SearchCard from "@/ee/sections/SearchCard";
 import { Divider, Pagination, Text } from "@opal/components";
@@ -42,6 +42,7 @@ const RESULTS_PER_PAGE = 20;
 
 export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
   const t = useTranslations("admin.search");
+  const format = useFormatter();
 
   const timeFilterOptions: { value: TimeFilter; label: string }[] = [
     { value: "day", label: t("timeFilter.day.label") },
@@ -346,7 +347,9 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
                   selectVariant="select-heavy"
                   sizePreset="main-ui"
                   variant="section"
-                  rightChildren={<Text color="text-03">{String(count)}</Text>}
+                  rightChildren={
+                    <Text color="text-03">{format.number(count)}</Text>
+                  }
                 />
               ))}
             </Section>
