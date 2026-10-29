@@ -10,6 +10,8 @@ concurrency:
 on:
   pull_request:
     paths:
+      - ".github/actions/setup-python-and-install-dependencies/**"
+      - ".github/actions/login-ecr-pullthrough-cache/**"
       - "backend/onyx/prompts/filter_extration.py"
       - "backend/onyx/secondary_llm_flows/source_filter.py"
       - "backend/tests/evals/connector_filter_eval/**"

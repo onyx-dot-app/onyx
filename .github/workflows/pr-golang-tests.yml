@@ -5,8 +5,13 @@ concurrency:
 
 on:
   pull_request:
-    paths-ignore:
-      - "documentation/**"
+    paths:
+      - "cli/**"
+      - "tools/ods/**"
+      - "terraform-provider-onyx/**"
+      - "deployment/docker_compose/**"
+      - "deployment/data/nginx/**"
+      - ".github/workflows/pr-golang-tests.yml"
   push:
     paths-ignore:
       - "documentation/**"
@@ -32,17 +37,48 @@ jobs:
   detect-modules:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       modules: ${{ steps.set-modules.outputs.modules }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
+        id: changes
+        if: github.event_name == 'pull_request'
+        with:
+          filters: |
+            cli:
+              - 'cli/**'
+              - 'deployment/docker_compose/**'
+              - 'deployment/data/nginx/**'
+              - 'tools/ods/**'
+              - '.github/workflows/pr-golang-tests.yml'
+            tools/ods:
+              - 'tools/ods/**'
+              - 'deployment/docker_compose/**'
+              - '.github/workflows/pr-golang-tests.yml'
+            terraform-provider-onyx:
+              - 'terraform-provider-onyx/**'
+              - 'tools/ods/**'
+              - '.github/workflows/pr-golang-tests.yml'
       - id: set-modules
-        run: echo "modules=$(find . -name 'go.mod' -exec dirname {} \; | jq -Rc '[.,inputs]')" >> "$GITHUB_OUTPUT"
+        env:
+          CHANGED_MODULES: ${{ steps.changes.outputs.changes }}
+        run: |
+          if [ -n "$CHANGED_MODULES" ]; then
+            modules=$(jq -c 'map("./" + .)' <<< "$CHANGED_MODULES")
+          else
+            modules=$(find . -name 'go.mod' -exec dirname {} \; | jq -Rc '[.,inputs]')
+          fi
+          echo "modules=$modules" >> "$GITHUB_OUTPUT"
 
   golang:
     needs: detect-modules
+    if: needs.detect-modules.outputs.modules != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

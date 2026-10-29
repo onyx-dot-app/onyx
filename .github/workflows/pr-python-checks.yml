@@ -33,10 +33,13 @@ jobs:
         id: filter
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         with:
+          base: ${{ github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
+          ref: ${{ github.event.merge_group.head_sha || github.sha }}
           filters: |
             python:
               - 'backend/**'
               - 'pyproject.toml'
+              - 'uv.lock'
               - '.github/workflows/pr-python-checks.yml'
               - '.github/actions/setup-python-and-install-dependencies/**'
 

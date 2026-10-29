@@ -424,6 +424,7 @@ repos:
       - id: oxlint
         name: oxlint
         entry: bash -c 'cd web && bun run oxlint'
+        files: ^web/
         language: system
         pass_filenames: false
         types_or: [javascript, ts, tsx]

@@ -7,14 +7,6 @@ on:
   pull_request:
     paths:
       - "documentation/**"
-      - "web/lib/opal/src/logos/**"
-      - "web/lib/opal/src/icons/**"
-      - "web/lib/opal/scripts/export-svgs.tsx"
-      - "backend/scripts/onyx_openapi_schema.py"
-      - "backend/scripts/transform_openapi_for_docs.py"
-      # Routes feed the generated API reference.
-      - "backend/onyx/server/**"
-      - "backend/ee/onyx/server/**"
       - ".github/workflows/docs-check.yml"
 
 permissions:

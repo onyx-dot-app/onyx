@@ -14,6 +14,11 @@ concurrency:
 on:
   pull_request:
     paths:
+      - ".github/actions/build-devcontainer-image/**"
+      - ".github/actions/build-model-server-image/**"
+      - ".github/actions/dhi-base-images/**"
+      - ".github/actions/install-python-deps/**"
+      - ".github/actions/login-ecr-pullthrough-cache/**"
       - "backend/onyx/llm/well_known_providers/recommended-models.json"
       - ".github/workflows/pr-recommended-models-chat-test.yml"
       - ".github/workflows/reusable-nightly-llm-provider-chat.yml"

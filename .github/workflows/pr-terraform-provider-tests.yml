@@ -31,8 +31,23 @@ on:
   schedule:
     - cron: "0 8 * * *" # 08:00 UTC nightly
   pull_request:
-    paths-ignore:
-      - "documentation/**"
+    paths:
+      - "backend/requirements/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "deployment/docker_compose/docker-compose.template.yml"
+      - "terraform-provider-onyx/**"
+      - "backend/onyx/server/**"
+      - "backend/ee/onyx/server/**"
+      - "backend/onyx/utils/encryption.py"
+      - "backend/onyx/configs/constants.py"
+      - "backend/Dockerfile"
+      - "deployment/docker_compose/docker-compose.yml"
+      - "deployment/docker_compose/docker-compose.dev.yml"
+      - "deployment/docker_compose/env.template"
+      - ".github/workflows/pr-terraform-provider-tests.yml"
+      - ".github/actions/login-ecr-pullthrough-cache/**"
+      - ".github/actions/setup-test-license/**"
     # Not a required check, so docs-only PRs skip it entirely.
   push:
     tags:
@@ -77,6 +92,10 @@ jobs:
         with:
           filters: |
             provider:
+              - 'backend/requirements/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - 'deployment/docker_compose/docker-compose.template.yml'
               - 'terraform-provider-onyx/**'
               # The suite drives live API routes end to end, so server-side
               # changes must run it: a tool-API masking change once slipped

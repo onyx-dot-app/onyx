@@ -95,6 +95,8 @@ jobs:
           list-files: json
           filters: |
             integration:
+              - '.github/actions/build-model-server-image/**'
+              - '.github/actions/dhi-base-images/**'
               - 'backend/**'
               - 'cli/**'
               - 'deployment/docker_compose/**'

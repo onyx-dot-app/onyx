@@ -113,6 +113,7 @@ jobs:
         with:
           filters: |
             playwright:
+              - '.github/actions/build-model-server-image/**'
               - 'backend/**'
               - 'web/**'
               - 'deployment/docker_compose/**'

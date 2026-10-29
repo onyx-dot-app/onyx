@@ -5,8 +5,10 @@ concurrency:
 
 on:
   pull_request:
-    paths-ignore:
-      - "documentation/**"
+    paths:
+      - "deployment/helm/charts/**"
+      - "ct.yaml"
+      - ".github/workflows/pr-helm-chart-testing.yml"
   push:
     tags:
       - "v*.*.*"
@@ -17,6 +19,9 @@ permissions:
 
 jobs:
   helm-chart-check:
+    permissions:
+      contents: read
+      pull-requests: read
     # See https://runs-on.com/runners/linux/
     runs-on:
       [
@@ -36,6 +41,16 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Detect chart test configuration changes
+        id: controls
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
+        with:
+          filters: |
+            config:
+              - 'ct.yaml'
+              - '.github/workflows/pr-helm-chart-testing.yml'
+
       - name: Set up Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # ratchet:azure/setup-helm@v5.0.1
         with:
@@ -54,7 +69,12 @@ jobs:
         id: list-changed
         env:
           TARGET_BRANCH: ${{ github.base_ref || github.event.repository.default_branch }}
+          FORCE_CHECK: ${{ github.event_name != 'pull_request' || steps.controls.outputs.config == 'true' }}
         run: |
+          if [ "$FORCE_CHECK" = "true" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           echo "target_branch: ${TARGET_BRANCH}"
           changed=$(ct list-changed --remote origin --target-branch "${TARGET_BRANCH}" --chart-dirs deployment/helm/charts)
           echo "list-changed output: $changed"

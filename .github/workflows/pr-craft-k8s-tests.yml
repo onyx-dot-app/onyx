@@ -20,8 +20,36 @@ on:
   schedule:
     - cron: "0 7 * * *"   # 07:00 UTC nightly
   pull_request:
-    paths-ignore:
-      - "documentation/**"
+    paths:
+      - "backend/onyx/background/celery/tasks/build/**"
+      - "backend/onyx/db/external_app.py"
+      - "backend/onyx/external_apps/**"
+      - "deployment/helm/charts/onyx/templates/celery-worker-heavy.yaml"
+      - "backend/requirements/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "backend/Dockerfile"
+      - "backend/onyx/sandbox_proxy/**"
+      - "backend/onyx/server/features/build/**"
+      - "backend/onyx/server/features/skill/**"
+      - "backend/onyx/skills/**"
+      - "backend/shared_configs/**"
+      - "deployment/helm/charts/onyx/templates/sandbox-*"
+      - "deployment/helm/charts/onyx/templates/sandbox-proxy/**"
+      - "deployment/helm/charts/onyx/templates/network-policy-sandbox-*"
+      - "deployment/helm/charts/onyx/templates/craft-*"
+      - "deployment/helm/charts/onyx/templates/celery-worker-scheduled-tasks*"
+      - "deployment/helm/charts/onyx/charts/code-interpreter-*"
+      - "deployment/helm/charts/onyx/values-ci.yaml"
+      - "backend/tests/integration/tests/craft/*.py"
+      - "backend/tests/integration/tests/craft/k8s/**"
+      - "backend/tests/common/craft/**"
+      - "backend/tests/integration/conftest.py"
+      - "backend/tests/integration/common_utils/**"
+      - ".github/workflows/pr-craft-k8s-tests.yml"
+      - ".github/actions/setup-python-and-install-dependencies/**"
+      - ".github/actions/setup-test-license/**"
+      - ".github/actions/login-ecr-pullthrough-cache/**"
     # Not a required check, so docs-only PRs skip it entirely.
   push:
     tags:
@@ -106,6 +134,13 @@ jobs:
         with:
           filters: |
             craft_k8s:
+              - 'backend/onyx/background/celery/tasks/build/**'
+              - 'backend/onyx/db/external_app.py'
+              - 'backend/onyx/external_apps/**'
+              - 'deployment/helm/charts/onyx/templates/celery-worker-heavy.yaml'
+              - 'backend/requirements/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
               - 'backend/Dockerfile'
               - 'backend/onyx/sandbox_proxy/**'
               - 'backend/onyx/server/features/build/**'

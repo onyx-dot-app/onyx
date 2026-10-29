@@ -6,11 +6,6 @@
 #
 # Images are built once and pushed to ECR; the lane shards per test file, each
 # shard pulling the prebuilt images onto its own compose stack.
-#
-# Always triggers on PRs so the `craft-compose-integration-required` job below
-# reports one stable status. The `changes` job gates the heavy test job, which
-# is a no-op when no relevant paths changed. Also runs nightly, on release
-# tags, and on demand.
 
 name: Craft Docker-Compose Integration
 
@@ -22,8 +17,31 @@ on:
   schedule:
     - cron: "0 7 * * *"   # 07:00 UTC nightly
   pull_request:
-    paths-ignore:
-      - "documentation/**"
+    paths:
+      - "backend/onyx/background/celery/tasks/build/**"
+      - "backend/onyx/db/external_app.py"
+      - "backend/onyx/external_apps/**"
+      - "backend/requirements/**"
+      - "backend/shared_configs/**"
+      - "backend/tests/common/craft/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "deployment/docker_compose/docker-compose.template.yml"
+      - "backend/Dockerfile"
+      - "backend/onyx/sandbox_proxy/**"
+      - "backend/onyx/server/features/build/**"
+      - "backend/onyx/skills/**"
+      - "deployment/docker_compose/docker-compose.yml"
+      - "deployment/docker_compose/docker-compose.dev.yml"
+      - "deployment/docker_compose/docker-compose.craft.yml"
+      - "backend/tests/integration/conftest.py"
+      - "backend/tests/integration/common_utils/**"
+      - "backend/tests/integration/tests/craft/*.py"
+      - "backend/tests/integration/tests/craft/docker_e2e/**"
+      - ".github/workflows/pr-craft-compose-integration.yml"
+      - ".github/actions/setup-test-license/**"
+      - ".github/actions/setup-python-and-install-dependencies/**"
+      - ".github/actions/login-ecr-pullthrough-cache/**"
     # Not a required check, so docs-only PRs skip it entirely.
   push:
     tags:
@@ -77,6 +95,15 @@ jobs:
         with:
           filters: |
             craft_compose:
+              - 'backend/onyx/background/celery/tasks/build/**'
+              - 'backend/onyx/db/external_app.py'
+              - 'backend/onyx/external_apps/**'
+              - 'backend/requirements/**'
+              - 'backend/shared_configs/**'
+              - 'backend/tests/common/craft/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - 'deployment/docker_compose/docker-compose.template.yml'
               - 'backend/Dockerfile'
               - 'backend/onyx/sandbox_proxy/**'
               - 'backend/onyx/server/features/build/**'

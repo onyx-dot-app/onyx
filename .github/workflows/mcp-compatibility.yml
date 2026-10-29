@@ -2,8 +2,19 @@ name: MCP Compatibility
 
 on:
   pull_request:
-    paths-ignore:
-      - "documentation/**"
+    paths:
+      - "backend/**"
+      - "deployment/docker_compose/**"
+      - "deployment/data/**"
+      - "deployment/helm/charts/**"
+      - "deployment/tests/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "web/next.config.js"
+      - ".github/scripts/check-mcp-compatibility.py"
+      - ".github/workflows/mcp-compatibility.yml"
+      - ".github/actions/setup-python-and-install-dependencies/**"
+      - ".github/actions/login-ecr-pullthrough-cache/**"
   workflow_dispatch:
     inputs:
       test_alert:
