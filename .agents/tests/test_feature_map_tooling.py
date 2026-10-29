@@ -1046,6 +1046,8 @@ def test_cited_resolves_a_dynamic_route(fmap: FixtureMap) -> None:
         (_DYNAMIC_ROUTE, False),
         ("app/tasks/[id]/", False),
         ("web/src/app/tasks/[idd]/page.tsx", True),
+        # A shortened path under a documented root is checked too.
+        ("app/tasks/[idd]/page.tsx", True),
         ("web/src/app/[...path]/route.ts", True),
         # Placeholders that match nothing are not paths.
         ("connectors/<source>/", False),

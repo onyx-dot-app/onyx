@@ -272,7 +272,7 @@ def looks_like_path(token: str, repo: Repo) -> str | None:
         return None
     if "[" in path or "]" in path:
         segments = path.split("/")
-        if segments[0] not in repo.top_dirs or any(
+        if not any(root + segments[0] in repo.dirs for root in PATH_ROOTS) or any(
             ("[" in s or "]" in s) and not DYNAMIC_FILE.fullmatch(s) for s in segments
         ):
             return None

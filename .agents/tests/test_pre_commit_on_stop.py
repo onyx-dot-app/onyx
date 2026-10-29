@@ -462,3 +462,26 @@ def test_brief_skips_edits_made_before_the_turn(
     reason = json.loads(result.stdout)["reason"]
     assert "`b-key`" in reason
     assert "`a-key`" not in reason
+
+
+def test_turn_start_records_files_with_unusual_names(repo: Path) -> None:
+    odd = 'quote"d\nname.txt'
+    (repo / odd).write_text("dirty before the turn")
+    _start(repo)
+    git_dir = subprocess.run(
+        ["git", "rev-parse", "--absolute-git-dir"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    snapshot = json.loads((Path(git_dir) / "agent-turns" / "test.json").read_text())
+    blob = snapshot["blobs"][odd]
+    content = subprocess.run(
+        ["git", "cat-file", "blob", blob],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert content == "dirty before the turn"

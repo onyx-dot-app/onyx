@@ -74,21 +74,26 @@ def _digests(repo: Path, files: list[str]) -> dict[str, str]:
 
 
 def _blobs(repo: Path, files: list[str]) -> dict[str, str]:
-    """Store each file's content as a git blob; an empty id for a missing file."""
+    """Store each file's content as a git blob; an empty id for a missing file.
+
+    Paths go as arguments, which need no quoting, so any file name works. A
+    failure leaves the files without a blob, and the brief then compares them
+    with the turn's starting commit.
+    """
     present = [path for path in files if (repo / path).is_file()]
-    ids = (
-        subprocess.run(
-            ["git", "hash-object", "-w", "--no-filters", "--stdin-paths"],
+    blobs = dict.fromkeys(files, "")
+    if not present:
+        return blobs
+    try:
+        ids = subprocess.run(
+            ["git", "hash-object", "-w", "--no-filters", "--", *present],
             cwd=repo,
-            input="".join(f"{path}\n" for path in present),
             capture_output=True,
             text=True,
             check=True,
         ).stdout.split()
-        if present
-        else []
-    )
-    blobs = dict.fromkeys(files, "")
+    except (subprocess.CalledProcessError, OSError):
+        return {path: blob for path, blob in blobs.items() if path not in present}
     blobs.update(zip(present, ids, strict=True))
     return blobs
 
