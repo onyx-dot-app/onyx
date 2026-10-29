@@ -43,57 +43,31 @@ The proxy is mandatory for the Docker backend. Every sandbox runs
 The overlay uses `${SANDBOX_PROXY_HOST-sandbox-proxy}` (single dash) so an explicit
 empty value reaches that check instead of the default.
 
-To test only the API server with an unreleased backend, set `ONYX_BACKEND_IMAGE`.
-Do not set `IMAGE_TAG` to a local tag: it applies to every service image.
-When you recreate services that use a local-only image, add `--no-build`.
-Otherwise Compose can try to build from a context path that does not resolve.
+## Change the proxy
 
-## Debug the proxy locally
+Run the proxy in Compose, not on the host. The proxy identifies each sandbox by
+the request source IP, which must be the container IP on `onyx_craft_sandbox`
+(`backend/onyx/sandbox_proxy/sandbox_identity/docker.py`). A proxy on the host
+gets the Docker gateway address instead, so every request fails with
+`403 unidentified_sandbox`.
 
-1. Start the infrastructure and write its ports to `.vscode/.env`:
+To test local backend or proxy code, build a backend image and start the stack
+with it. `ONYX_BACKEND_IMAGE` applies to every backend service, including
+`sandbox-proxy`. Do not set `IMAGE_TAG` to a local tag: it also applies to the
+web server and other images. Add `--no-build`, because Compose otherwise
+rebuilds the services that have a `build` section.
 
-   ```bash
-   ods compose dev --infra
-   ods env
-   ```
+```bash
+docker build -t onyxdotapp/onyx-backend:dev backend
+cd deployment/docker_compose
+ONYX_BACKEND_IMAGE=onyxdotapp/onyx-backend:dev ENABLE_CRAFT=true \
+SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:dev \
+docker compose -f docker-compose.yml -f docker-compose.craft.yml --env-file env.template up -d --no-build --wait
+```
 
-2. Run the proxy on port 8888, because the local API server uses 8080.
-   Its health port stays 8081. The CA store path `/var/lib/sandbox-proxy/ca` is
-   fixed (`SANDBOX_PROXY_CA_VOLUME_PATH`), so create it and make it writable first.
-   The default mitmproxy directory is under `/var/run`, so set a writable one.
-
-   ```bash
-   sudo mkdir -p /var/lib/sandbox-proxy/ca && sudo chown "$USER" /var/lib/sandbox-proxy/ca
-   PYTHONPATH=./backend SANDBOX_BACKEND=docker SANDBOX_PROXY_LISTEN_PORT=8888 \
-   SANDBOX_PROXY_MITM_CONFDIR=/tmp/sandbox-proxy-mitm \
-     uv run --env-file .vscode/.env python -m onyx.sandbox_proxy.server
-   ```
-
-   Sandboxes read the CA from the `sandbox_proxy_ca` volume, not from the host
-   directory. After the proxy logs `Persisted proxy CA`, copy only the certificate
-   into the volume. This replaces the CA of the Compose stack, so remove the volume
-   before you use the Compose stack again.
-
-   ```bash
-   docker run --rm -i -v sandbox_proxy_ca:/sandbox-ca alpine \
-     sh -c 'rm -f /sandbox-ca/ca.key && cat > /sandbox-ca/ca.crt && chmod 644 /sandbox-ca/ca.crt' \
-     < /var/lib/sandbox-proxy/ca/ca.crt
-   ```
-
-3. Run the API server against that proxy:
-
-   ```bash
-   PYTHONPATH=./backend ENABLE_CRAFT=true SANDBOX_BACKEND=docker \
-   SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:dev \
-   SANDBOX_PROXY_HOST=host.docker.internal SANDBOX_PROXY_PORT=8888 \
-     uv run --env-file .vscode/.env uvicorn onyx.main:app --host 0.0.0.0 --port 8080
-   ```
-
-   `host.docker.internal` works on Docker Desktop. Linux sandboxes do not get a
-   `host-gateway` alias, so use the full Compose stack on Linux.
-
-4. Start a Craft session and trigger a gated action. Set breakpoints in the proxy
-   (`addons/gate.py`, `request_evaluator.py`, `sandbox_identity/docker.py`).
+A recreated proxy can get a new bridge IP, so provision sandboxes again after
+each restart. The gate logs each identity failure as `identity_unknown_sandbox`
+or `identity_missing_src_ip` (`backend/onyx/sandbox_proxy/addons/gate.py`).
 
 ## Smoke checks inside a sandbox
 
@@ -118,7 +92,7 @@ docker volume ls --filter "name=onyx-craft-sandbox-" -q | xargs -r docker volume
 
 | Symptom | Cause and fix |
 | --- | --- |
-| `firewall-init.sh: FATAL: CA source ... not present` | The proxy has not written its CA yet. Wait for the proxy to log `Persisted proxy CA`, then provision again. |
+| `firewall-init.sh: FATAL: CA source ... not present` | The proxy has not written its CA yet. Wait for the proxy to log `CA bootstrapped`, then provision again. |
 | `could not resolve proxy host sandbox-proxy` | The sandbox or proxy is not on `onyx_craft_sandbox`. Check with `docker inspect sandbox-<id8>`. |
 | All egress returns 403 `unidentified_sandbox` | The proxy cannot see the sandbox's `onyx.app/*` labels. The manager did not run with `SANDBOX_BACKEND=docker`. |
 | `No such volume: sandbox_proxy_ca` | Run `docker volume create sandbox_proxy_ca`. |

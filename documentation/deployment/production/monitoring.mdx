@@ -121,10 +121,12 @@ sum by (engine) (rate(onyx_db_pool_checkout_timeout_total[5m])) > 0
 sum by (task_name) (rate(onyx_celery_task_completed_total{outcome="failure"}[5m]))
   / sum by (task_name) (rate(onyx_celery_task_completed_total[5m]))
 
-# A task failed for the first time since the worker started.
-# The failure series starts at the first failure, so the rate above does not show that failure.
-onyx_celery_task_completed_total{outcome="failure"}
-  unless onyx_celery_task_completed_total{outcome="failure"} offset 5m
+# A task failed in the last 5 minutes.
+# The failure series starts at the first failure, so increase() alone misses that failure.
+# The second part catches it. increase() also catches a failure after a worker restart.
+increase(onyx_celery_task_completed_total{outcome="failure"}[5m]) > 0
+  or (onyx_celery_task_completed_total{outcome="failure"}
+    unless onyx_celery_task_completed_total{outcome="failure"} offset 5m)
 
 # Tasks wait in a queue
 onyx_queue_depth > 100
@@ -132,6 +134,10 @@ onyx_queue_depth > 100
 # Fewer workers send heartbeats than you run.
 # Replace 8 with your worker count. A worker that stops is removed from onyx_celery_worker_up.
 max(onyx_celery_active_worker_count) < 8
+
+# The monitoring worker is down or Prometheus cannot scrape it.
+# The worker and queue alerts above then have no data and cannot fire.
+absent(onyx_celery_active_worker_count)
 
 # The connector state read failed or timed out
 onyx_connector_state_collection_success == 0
