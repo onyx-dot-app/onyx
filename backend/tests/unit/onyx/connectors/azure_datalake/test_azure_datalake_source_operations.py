@@ -232,6 +232,40 @@ def test_account_key_cannot_read_resource_manager() -> None:
         gateway.list_subscriptions()
 
 
+class _Pager:
+    """A page iterator that hands back the cursor it was given."""
+
+    def __init__(self, continuation_token: str | None) -> None:
+        self.continuation_token = continuation_token
+
+    def __iter__(self) -> "_Pager":
+        return self
+
+    def __next__(self) -> list[Any]:
+        return []
+
+
+def test_a_listing_cursor_that_does_not_advance_raises() -> None:
+    gateway = _gateway(
+        {
+            "authentication_method": "account_key",
+            "adls_account_name": "onyxtest",
+            "adls_account_key": "key",
+        }
+    )
+
+    with patch(f"{MODULE}.DataLakeServiceClient") as client_class:
+        file_system = client_class.return_value.get_file_system_client.return_value
+        file_system.get_paths.return_value.by_page.side_effect = _Pager
+        with pytest.raises(RuntimeError, match="same listing cursor"):
+            gateway.list_paths_page(
+                path_prefix="",
+                recursive=True,
+                page_size=10,
+                continuation_token="cursor",
+            )
+
+
 @pytest.mark.parametrize(("size", "expected"), [(3, b"raw"), (11, None)])
 def test_read_file_reads_stored_bytes_up_to_the_limit(
     size: int, expected: bytes | None

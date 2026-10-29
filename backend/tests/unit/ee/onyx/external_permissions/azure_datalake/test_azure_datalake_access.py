@@ -2,6 +2,8 @@
 its ACLs let read it and traverse every directory above it. The cases mirror
 the adls-perm-fixture matrix of the live test container."""
 
+from unittest.mock import patch
+
 import pytest
 
 from ee.onyx.external_permissions.azure_datalake.access import (
@@ -21,7 +23,12 @@ from ee.onyx.external_permissions.azure_datalake.principals import (
     user_term,
 )
 from onyx.access.models import ExternalAccess
-from onyx.connectors.azure_datalake.models import AzureDataLakeAccessControl
+from onyx.connectors.azure_datalake.models import (
+    AzureDataLakeAccessControl,
+    AzureDenyAssignment,
+    AzurePrincipal,
+    AzureRolePermission,
+)
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from tests.unit.ee.onyx.external_permissions.azure_datalake.azure_datalake_fakes import (
     ACCOUNT,
@@ -39,6 +46,7 @@ from tests.unit.ee.onyx.external_permissions.azure_datalake.azure_datalake_fakes
     file,
 )
 
+PRINCIPALS_MODULE = "ee.onyx.external_permissions.azure_datalake.principals"
 EVERYONE_GROUP = f"entra_tenant_everyone:{TENANT}"
 ROOT_ACL = access("user::rwx,group::---,other::--x")
 PRIVATE_FILE = "user::rw-,group::r--,other::---"
@@ -395,3 +403,47 @@ def test_an_exclusion_group_id_names_its_term_in_its_tenant_only() -> None:
 
     assert parse_exclusion_group_id(group_id, TENANT) == term
     assert parse_exclusion_group_id(group_id, "other-tenant") is None
+
+
+def test_a_deny_assignment_also_overrides_acl_access() -> None:
+    acls = _matrix()
+    deny = AzureDenyAssignment(
+        id="deny",
+        scope="/",
+        permissions=[AzureRolePermission(data_actions=["*"])],
+        principals=[AzurePrincipal(id=RAUNAK, type="User")],
+    )
+    resolver = AzureDataLakeAccessResolver(
+        fake_ops(acls, denies=[deny]),
+        ACCOUNT,
+        CONTAINER,
+        max_users=ExternalAccess.MAX_NUM_ENTRIES,
+    )
+    paths = [
+        directory(name) if not name.endswith(".txt") else file(name)
+        for name in sorted(acls)
+        if name
+    ]
+
+    result = resolver.page_access(paths)["10-named-user/named-user.txt"]
+
+    # Raunak's named-user ACL entry grants read, but the deny wins.
+    assert result.external_user_emails == BASE_EMAILS
+
+
+def test_a_group_intersection_over_the_entry_limit_fails_closed() -> None:
+    acls = _matrix()
+    # Raunak is in both groups, so any shared member is over a limit of 0.
+    resolver = AzureDataLakeAccessResolver(
+        fake_ops(acls), ACCOUNT, CONTAINER, max_users=ExternalAccess.MAX_NUM_ENTRIES
+    )
+    paths = [
+        directory(name) if not name.endswith(".txt") else file(name)
+        for name in sorted(acls)
+        if name
+    ]
+
+    with patch(f"{PRINCIPALS_MODULE}._MAX_SHARED_MEMBERS", 0):
+        result = resolver.page_access(paths)["30-cross-group/cross-group.txt"]
+
+    assert result == ExternalAccess.empty()

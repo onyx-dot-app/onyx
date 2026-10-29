@@ -316,8 +316,11 @@ class _GraphUsersCheck(_PermSyncCheck):
             "The app cannot list Entra users.",
         )
         # An app without User.Read.All sees users with no address, and every
-        # user then maps to nobody.
-        if users and not any(user_email(user) for user in users):
+        # user then maps to nobody. A disabled user has no address either way.
+        enabled: list[EntraUser] = [
+            user for user in users if user.account_enabled is not False
+        ]
+        if enabled and not any(user_email(user) for user in enabled):
             raise InsufficientPermissionsError(
                 "Microsoft Graph shows no user addresses to this app. Grant "
                 "User.Read.All."

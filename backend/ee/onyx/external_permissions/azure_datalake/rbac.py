@@ -3,8 +3,9 @@
 A role assignment at the container scope or above grants read to all files
 when its role's data actions include the blob read action and its not-data
 actions do not take it away. ACLs are not checked for such a principal. Deny
-assignments override role assignments. Assignments with an ABAC condition are
-left out and reported, since Onyx cannot evaluate the condition.
+assignments override role assignments and, to fail closed, ACL entries too.
+Assignments with an ABAC condition are left out and reported, since Onyx cannot
+evaluate the condition.
 """
 
 import re
@@ -53,6 +54,9 @@ class RbacReaders(BaseModel):
     conditioned_assignment_ids: list[str]
     # Readers that are not users or groups, e.g. service principals.
     skipped_principal_ids: list[str]
+    # Deny assignments that block blob reads under the scope. Already applied
+    # to ``principals``; the ACL readers need them too.
+    read_denies: list[AzureDenyAssignment]
 
 
 def _pattern_matches(pattern: str, action: str) -> bool:
@@ -159,6 +163,16 @@ def _apply_deny(
     return union(narrowed, kept)
 
 
+def apply_denies(
+    readers: PrincipalSet,
+    denies: list[AzureDenyAssignment],
+    directory: EntraDirectory,
+) -> PrincipalSet:
+    for deny in denies:
+        readers = _apply_deny(readers, deny, directory)
+    return readers
+
+
 def rbac_readers(
     ops: AzureDataLakeSourceOperations,
     scope: str,
@@ -189,13 +203,14 @@ def rbac_readers(
             skipped.append(assignment.principal_id)
             continue
         terms.append(term)
-    readers: PrincipalSet = simplify(terms)
-    if readers:
-        for deny in ops.list_deny_assignments(scope=scope):
-            if _denies_read(deny, scope):
-                readers = _apply_deny(readers, deny, directory)
+    read_denies: list[AzureDenyAssignment] = [
+        deny
+        for deny in ops.list_deny_assignments(scope=scope)
+        if _denies_read(deny, scope)
+    ]
     return RbacReaders(
-        principals=readers,
+        principals=apply_denies(simplify(terms), read_denies, directory),
         conditioned_assignment_ids=conditioned,
         skipped_principal_ids=skipped,
+        read_denies=read_denies,
     )

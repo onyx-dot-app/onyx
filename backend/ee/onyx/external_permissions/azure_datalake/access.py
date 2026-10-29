@@ -31,6 +31,7 @@ from ee.onyx.external_permissions.azure_datalake.principals import (
 )
 from ee.onyx.external_permissions.azure_datalake.rbac import (
     RbacReaders,
+    apply_denies,
     container_scope,
     find_storage_account,
     rbac_readers,
@@ -85,7 +86,7 @@ class AzureDataLakeAccessResolver(AzureDataLakeAccessWalker):
         self._tenant_id: str | None = None
         self._everyone_group_id: str | None = None
         self._account: AzureStorageAccountResource | None = None
-        self._rbac: PrincipalSet | None = None
+        self._rbac: RbacReaders | None = None
         self._public: bool | None = None
         # Directory path -> who may reach its children. Holds only the
         # directories on the walk's current path.
@@ -96,7 +97,7 @@ class AzureDataLakeAccessResolver(AzureDataLakeAccessWalker):
             self._account = find_storage_account(self._ops, self._account_name)
         return self._account
 
-    def _rbac_readers(self) -> PrincipalSet:
+    def _rbac_readers(self) -> RbacReaders:
         if self._rbac is None:
             readers: RbacReaders = rbac_readers(
                 self._ops,
@@ -111,7 +112,7 @@ class AzureDataLakeAccessResolver(AzureDataLakeAccessWalker):
                     self._container_name,
                     readers.conditioned_assignment_ids,
                 )
-            self._rbac = readers.principals
+            self._rbac = readers
         return self._rbac
 
     def _is_public(self) -> bool:
@@ -141,10 +142,14 @@ class AzureDataLakeAccessResolver(AzureDataLakeAccessWalker):
             return ExternalAccess.public()
         # Outside the fallback below: RBAC is read once, and an error in it
         # fails the sync rather than every document.
-        rbac: PrincipalSet = self._rbac_readers()
+        rbac: RbacReaders = self._rbac_readers()
         try:
+            # A deny assignment also overrides ACL access.
+            acl: PrincipalSet = apply_denies(
+                acl_readers(), rbac.read_denies, self._directory
+            )
             resolved: ResolvedPrincipals = resolve(
-                union(rbac, acl_readers()), self._directory, self._max_users
+                union(rbac.principals, acl), self._directory, self._max_users
             )
             group_ids: set[str] = resolved.group_ids | {
                 exclusion_group_id(term, self._tenant())

@@ -1,13 +1,16 @@
 """Azure Data Lake permission sync: the slim walk, the group sync, and the
 named checks."""
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from ee.onyx.external_permissions.azure_datalake.capability_checks import (
     build_azure_datalake_doc_permission_sync_checks,
     build_azure_datalake_group_sync_checks,
+)
+from ee.onyx.external_permissions.azure_datalake.connector import (
+    azure_datalake_connector,
 )
 from ee.onyx.external_permissions.azure_datalake.group_sync import tenant_groups
 from onyx.access.models import ExternalAccess
@@ -21,6 +24,7 @@ from onyx.connectors.capability_checks.models import (
     CheckOutput,
 )
 from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.microsoft_utils.entra import EntraPage, EntraUser
 from onyx.connectors.models import HierarchyNode, SlimDocument
 from tests.unit.ee.onyx.external_permissions.azure_datalake.azure_datalake_fakes import (
     ACCOUNT,
@@ -99,6 +103,9 @@ def test_slim_walk_stops_on_signal() -> None:
         list(connector.retrieve_all_slim_docs_perm_sync(callback=callback))
 
 
+SYNC_CONNECTOR_MODULE = "ee.onyx.external_permissions.azure_datalake.connector"
+
+
 def test_group_sync_yields_the_tenant_and_every_group() -> None:
     groups = {group.id: group for group in tenant_groups(fake_ops({}), set())}
 
@@ -167,3 +174,41 @@ def test_conditioned_role_assignment_is_an_advisory() -> None:
 
     assert isinstance(output, CheckOutput)
     assert len(output.advisories) == 1
+
+
+def test_a_sample_of_disabled_users_does_not_fail_the_users_check() -> None:
+    ops = fake_ops({})
+    ops.list_users.return_value = EntraPage[EntraUser](
+        items=[
+            EntraUser.model_validate(
+                {
+                    "id": RAUNAK,
+                    "userPrincipalName": "raunak@onyx.app",
+                    "accountEnabled": False,
+                }
+            )
+        ]
+    )
+
+    _checks()["adls_graph_users"].run(
+        _context(ops, {"authentication_method": "client_secret"})
+    )
+
+
+def test_the_sync_connector_admits_images_like_indexing() -> None:
+    cc_pair = MagicMock()
+    cc_pair.connector.source = DocumentSource.AZURE_DATALAKE
+    cc_pair.connector.connector_specific_config = {
+        "account_name": ACCOUNT,
+        "container_name": CONTAINER,
+    }
+    with (
+        patch(
+            f"{SYNC_CONNECTOR_MODULE}.get_image_extraction_and_analysis_enabled",
+            return_value=True,
+        ),
+        patch(f"{SYNC_CONNECTOR_MODULE}.build_db_credentials_provider"),
+    ):
+        connector = azure_datalake_connector(cc_pair)
+
+    assert connector._is_indexable(file("images/square.png"))

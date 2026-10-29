@@ -49,13 +49,22 @@ def _emails(directory: GraphDirectory, user_ids: frozenset[str]) -> list[str]:
     )
 
 
+def _check_deadline(deadline: float) -> None:
+    if time.monotonic() > deadline:
+        raise RuntimeError(
+            f"Azure Data Lake group sync passed its {PERMISSION_SYNC_TIMEOUT}s timeout"
+        )
+
+
 def _exclusion_groups(
     ops: AzureDataLakeSourceOperations,
     directory: GraphDirectory,
     exclusion_group_ids: set[str],
+    deadline: float,
 ) -> Generator[ExternalUserGroup, None, None]:
     tenant_id: str = entra_tenant_id(ops)
     for group_id in sorted(exclusion_group_ids):
+        _check_deadline(deadline)
         term = parse_exclusion_group_id(group_id, tenant_id)
         if term is None:
             logger.warning("Azure Data Lake exclusion group %s is unknown", group_id)
@@ -73,24 +82,21 @@ def tenant_groups(
     ops: AzureDataLakeSourceOperations,
     exclusion_group_ids: set[str],
 ) -> Generator[ExternalUserGroup, None, None]:
+    # The caller checks its deadline only per yielded group, and one large
+    # group's member pages can take long, so the walk checks it too.
+    deadline: float = time.monotonic() + PERMISSION_SYNC_TIMEOUT
     directory = GraphDirectory(ops)
-    yield from _exclusion_groups(ops, directory, exclusion_group_ids)
+    yield from _exclusion_groups(ops, directory, exclusion_group_ids, deadline)
+    _check_deadline(deadline)
     yield ExternalUserGroup(
         id=everyone_group_id(ops),
         user_emails=_emails(directory, directory.all_users()),
     )
-    # The caller checks its deadline only per yielded group, and one large
-    # group's member pages can take long, so the walk checks it too.
-    deadline: float = time.monotonic() + PERMISSION_SYNC_TIMEOUT
     for group in iter_entra_items(
         lambda next_link: ops.list_groups(next_link=next_link),
         "Entra group listing",
     ):
-        if time.monotonic() > deadline:
-            raise RuntimeError(
-                f"Azure Data Lake group sync passed its {PERMISSION_SYNC_TIMEOUT}s "
-                "timeout"
-            )
+        _check_deadline(deadline)
         try:
             members: frozenset[str] = directory.group_members(group.id)
         except GroupMembersUnreadableError as e:

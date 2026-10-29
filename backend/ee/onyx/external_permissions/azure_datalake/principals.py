@@ -17,6 +17,8 @@ from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict
 
+from onyx.access.models import ExternalAccess
+
 
 class PrincipalKind(str, Enum):
     USER = "user"
@@ -67,6 +69,10 @@ class EntraDirectory(Protocol):
 
 class ExpansionLimitError(Exception):
     """Exact access needs more entries than one document can hold."""
+
+
+# No document can list more users, so a larger group intersection fails early.
+_MAX_SHARED_MEMBERS = ExternalAccess.MAX_NUM_ENTRIES
 
 
 class ResolvedPrincipals(BaseModel):
@@ -148,6 +154,11 @@ def _intersect_terms(
         shared: frozenset[str] = directory.group_members(
             a.principal_id
         ) & directory.group_members(b.principal_id)
+        if len(shared) > _MAX_SHARED_MEMBERS:
+            raise ExpansionLimitError(
+                f"Groups {a.principal_id} and {b.principal_id} share more than "
+                f"{_MAX_SHARED_MEMBERS} members."
+            )
         return [
             term
             for user_id in sorted(shared)
