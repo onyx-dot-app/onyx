@@ -148,7 +148,8 @@ export async function switchModel(page: Page, modelName: string) {
   const modelButton = page
     .locator('[role="dialog"]')
     .getByRole("button")
-    .filter({ hasText: modelName })
+    // Exact, so "GPT-4o" does not pick "GPT-4o Mini".
+    .filter({ has: page.getByText(modelName, { exact: true }) })
     .first();
 
   await modelButton.click();
