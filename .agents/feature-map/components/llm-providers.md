@@ -158,7 +158,9 @@ search lives in Chat Preferences.
 row (chat card) and the Search Decision Model row (search card). That row
 writes SEARCH_SELECTION for a language model or DECISION for a decision model,
 and clears the other (chat-preferences, section 4).
-Neither selector offers hidden models; a hidden current value stays listed.
+Neither selector offers hidden language models; a hidden current value stays
+listed. Search Decision Model lists every selected decision model, whether or
+not it is visible in chat.
 Each starts
 with a "Chat Default" row (in the Search UI, unset selection uses the workspace
 default); picking it

@@ -283,6 +283,8 @@ export function SearchDecisionModelSetting() {
           ? error.message
           : t("toasts.searchDecisionUpdateFailed")
       );
+      // An earlier write may have succeeded; show what is stored.
+      await Promise.allSettled([refetch(), decision.refetch()]);
     } finally {
       setIsPending(false);
     }

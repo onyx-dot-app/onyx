@@ -225,7 +225,8 @@ There is **no reranking model in this path**. `RerankingModel`
 its only instantiation in the codebase is inside `warm_up_cross_encoder`, itself
 marked `# No longer used` and called from nowhere
 (`grep -rn "warm_up_cross_encoder" backend/` returns only its own definition).
-The functional replacement for a reranker is the LLM selection stage in 4.5.
+The functional replacement for a reranker is the LLM selection stage in 4.5,
+or, when a Search Decision Model is set, the decision-model rerank in 4.5.1.
 
 ### 4.4 Rank fusion and chunk merge
 

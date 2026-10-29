@@ -472,4 +472,32 @@ describe("ChatTaskModelSettings", () => {
     );
     await waitFor(() => expect(decisionModel).toBeNull());
   });
+
+  test("shows the stored model when the second write of a search pick fails", async () => {
+    defaultSearchSelection = { provider_id: 8, model_name: "search-mini" };
+    searchMutationResponse = async () =>
+      new Response(JSON.stringify({ detail: "Clear failed" }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
+    const user = setupUser();
+    await renderTaskModels();
+    await screen.findByDisplayValue("Search Mini");
+
+    await user.click(taskSelector(1));
+    await user.type(
+      screen.getByRole("textbox", { name: "Search" }),
+      "Decision Model A"
+    );
+    await user.click(screen.getByRole("option", { name: /Decision Model A/ }));
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("Clear failed")
+    );
+    // The decision model was stored before the failure, so it is shown.
+    expect(
+      await screen.findByDisplayValue("Decision Model A")
+    ).toBeInTheDocument();
+    expect(taskSelector(1)).toBeEnabled();
+  });
 });
