@@ -338,10 +338,9 @@ config serde defaults in `config.rs`, and alt-menu/shortcut logic in
 `expect_used`/`panic`, so most failure paths are required to return
 `Result` rather than panic.
 
-**Widget** has no test files under `widget/` (`find
-widget/src -iname '*.test.*' -o -iname '*spec*'` returns nothing). The
-closest to a check is `bun run type-check` (`tsc --noEmit`,
-`widget/package.json`).
+**Widget** tests cover session readiness and failed drafts:
+`cd widget && bun test tests/readiness.test.ts`.
+Run `bun run type-check` for TypeScript checks (`widget/package.json`).
 
 **Chrome extension** has no test files or build tooling at all; it is loaded
 unpacked directly from source. There is no `type-check` or lint script in
@@ -457,13 +456,30 @@ repository. Verification below is manual.
   issues"). A backend change that emits one packet type the widget doesn't
   recognize as `Packet`-shaped will end the entire stream for every widget
   user, not just log a warning.
-- **There is no test coverage at all for the widget or the extension.** A
-  regression in either is only caught by the manual steps in §8, and the
-  extension has no type-checking step either, since it ships plain
-  unbundled JavaScript.
+- **Widget readiness has automated coverage** in `widget/tests/readiness.test.ts`,
+  including cleanup delays, failed status checks, stale requests, and failed drafts.
+  Other widget behavior and extension behavior still require the manual checks in §8.
+  The extension has no type-checking step; it ships plain, unbundled JavaScript.
 
 ---
 
 Cross-links: [[chat-frontend]], [[core-chat-loop]], [[streaming-protocol]],
 [[auth-and-identity]], [[onyx-api]], [[whitelabelling-and-theme]],
 [[mobile-app]]
+
+### Widget session readiness
+
+The widget keeps Send disabled after a STOP packet and after delivery ends.
+`widget/src/services/api-service.ts:ApiService.waitForSessionIdle` confirms server idle
+through the authenticated session status endpoint. Transient failures retry without enabling
+Send. A 403 or 404 ends the wait and asks the user to start a new conversation.
+A 405 reports an unsupported server. Three consecutive 401 responses report an
+authentication failure. Neither response is treated as confirmed idle.
+Each request has a ten-second deadline, including credential resolution; the wait has no overall deadline.
+Each poll owns an abort controller and timer, including on supported browsers without `AbortSignal.any` or `AbortSignal.timeout`.
+Each poll resolves the current credential. Reset aborts and clears the request controller;
+the next send creates a new controller. An old callback cannot change the new conversation.
+Readiness status does not replace a failed send's error message. Before acknowledgement, a failed
+send removes its optimistic message and restores the draft if the input is empty.
+After acknowledgement, the widget keeps the accepted message without restoring a duplicate draft.
+Inline mode keeps the full conversation panel open while an error is present, even with no messages.
