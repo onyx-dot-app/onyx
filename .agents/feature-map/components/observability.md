@@ -70,8 +70,9 @@ push, or query processing) and waits on for a response, configurable at
 
 By default, every installation also sends fleet telemetry to the Onyx fleet
 service. It sends approved health, version, connector, indexing, query-timing,
-license-presence, and signup-domain values. It never sends document content,
-names, credentials, or full email addresses. The operator does not need to
+license-presence, signup-domain, user-count, and answer-vote values. It never
+sends document content, names, credentials, user identities, or full email
+addresses. The operator does not need to
 configure it, and one deployment setting turns it off (see §2). Onyx continues to
 operate when the fleet service is not available.
 
@@ -435,6 +436,13 @@ every five minutes.
   calls `Emitter.llm_step_started` before each LLM call, and `Emitter.emit` records
   each model's count when it queues its first answer text. Deep research reports
   the `deep_research` mode and no cycle count.
+- Answer votes: `db/feedback.py:create_chat_message_feedback` calls
+  `utils/fleet_query_telemetry.py:emit_feedback` after it stores a thumbs up or
+  down. The event carries the vote, a digest of the message id, and the channel
+  of the `MessageOrigin` the caller passes: the Slack buttons
+  (`onyxbot/slack/handlers/handle_buttons.py`) pass `SLACKBOT`, the web endpoint
+  keeps the default `WEBAPP`. Text-only feedback and follow-up requests send
+  nothing.
 - Indexing counters: the fetch, embed, and write steps call `emit_stage_counter`
   ([[indexing-pipeline]] §4.10). The sender thread sums the deltas for one
   attempt and stage over at most 30 seconds.
@@ -445,13 +453,14 @@ every five minutes.
 
 **Collection.** `utils/fleet_telemetry_collector.py:collect_snapshots` runs every
 five minutes for each tenant. It reads connectors, signup email domains, license
-presence, index attempts, stage summaries, and background jobs through the
+presence, the user count, index attempts, stage summaries, and background jobs through the
 statement-limited queries in `db/fleet_telemetry.py`. It reads only the rows that
 changed since its previous pass, plus work that is still running. Each read
 returns the oldest changes first. When the sender refuses a row (a full queue or
 a closed sender), the next pass resumes at that row. When a read reaches
 `ROW_LIMIT`, the next pass resumes at the time of its last row, and always moves
-forward (`_send_in_order`). The inventory (connectors, domains, license) goes out after
+forward (`_send_in_order`). The inventory (connectors, domains, license, user
+count) goes out after
 the work, when it changes and at least every six hours. Event IDs come from the
 row identity and update time, so the fleet service drops repeated events. Index attempt and job state reach the fleet only from these
 reads. The intervals are constants in `utils/fleet_telemetry.py`

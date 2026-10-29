@@ -117,6 +117,7 @@ class _Source:
             {"domain": "localhost", "first_signup_at": _NOW},
         ]
         self.license: dict[str, Any] = {"license_present": False, "first_set_at": None}
+        self.users: int = 3
         self.attempts: list[dict[str, Any]] = [_attempt_row()]
         self.stages: list[dict[str, Any]] = [_stage_row()]
         self.jobs: list[dict[str, Any]] = [_job_row()]
@@ -146,6 +147,9 @@ class _Source:
             collector, "email_domain_rows", lambda _session: self.domains
         )
         monkeypatch.setattr(collector, "license_row", lambda _session: self.license)
+        monkeypatch.setattr(
+            collector, "standard_user_count", lambda _session: self.users
+        )
         monkeypatch.setattr(collector, "attempt_rows", attempts)
         monkeypatch.setattr(
             collector, "stage_rows", lambda _session, _ids, _since: self.stages
@@ -330,8 +334,10 @@ def test_first_run_sends_work_then_inventory_and_sets_the_cursor(
         "connector",
         "tenant_domain",
         "license",
+        "users",
     ]
     assert events[5]["data"]["domain"] == "example.com"
+    assert events[7]["data"] == {"total": 3}
     stage: dict[str, Any] = events[1]
     # The service requires a stage event at the time of its last update.
     assert stage["occurred_at"] == (_NOW - timedelta(minutes=1)).isoformat()
@@ -362,7 +368,7 @@ def test_repeated_runs_repeat_event_ids_and_skip_unchanged_inventory(
     third: dict[str, str] = _event_ids(sender)
     # A running job's progress and a changed inventory go out again.
     assert third["job"] != first["job"] and third["attempt"] == first["attempt"]
-    assert {"connector", "tenant_domain", "license"} <= third.keys()
+    assert {"connector", "tenant_domain", "license", "users"} <= third.keys()
 
 
 def test_a_finished_job_replaces_its_running_state(
