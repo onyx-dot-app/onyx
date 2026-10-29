@@ -7,6 +7,8 @@ concurrency:
 # no app services and live outside backend/, so app test workflows do not run
 # for agent-tooling changes.
 on:
+  # Merge groups take no path filter, so every merge candidate runs these.
+  merge_group:
   pull_request:
     paths:
       - ".agents/hooks/**"
