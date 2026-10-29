@@ -5808,6 +5808,9 @@
         },
         "uploaded": {
           "label": "{count, plural, one {subió # archivo} other {subió # archivos}}"
+        },
+        "uploadedWithWarning": {
+          "label": "{count, plural, one {subió # archivo} other {subió # archivos}}, incompleto: {error}"
         }
       },
       "sensitiveWarning": {
