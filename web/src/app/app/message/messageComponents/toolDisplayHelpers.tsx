@@ -1,4 +1,3 @@
-import { FiList } from "react-icons/fi";
 import type { useTranslations } from "next-intl";
 import type { IconFunctionComponent } from "@opal/types";
 import {
@@ -6,8 +5,9 @@ import {
   PacketType,
   SearchToolPacket,
 } from "@/app/app/services/streamingModels";
-import { constructCurrentSearchState } from "./timeline/renderers/search/searchStateUtils";
+import { constructCurrentSearchState } from "@/app/app/message/messageComponents/timeline/renderers/search/searchStateUtils";
 import {
+  SvgListCheck,
   SvgGlobe,
   SvgSearchMenu,
   SvgTerminal,
@@ -75,7 +75,7 @@ export function getToolErrorIcon(): React.ReactNode {
   return <SvgXCircle className="w-3.5 h-3.5 text-error" />;
 }
 
-export function getToolKey(turn_index: number, tab_index: number): string {
+export function getToolKey(turn_index: number, tab_index: number = 0): string {
   return `${turn_index}-${tab_index}`;
 }
 
@@ -154,7 +154,7 @@ export function getToolIcon(packets: Packet[]): IconFunctionComponent {
     case PacketType.IMAGE_GENERATION_TOOL_START:
       return SvgImage;
     case PacketType.DEEP_RESEARCH_PLAN_START:
-      return FiList;
+      return SvgListCheck;
     case PacketType.RESEARCH_AGENT_START:
       return SvgUser;
     case PacketType.CODING_AGENT_START:

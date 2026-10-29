@@ -19,7 +19,10 @@ import {
   isToolPacket,
   isDisplayPacket,
 } from "@/app/app/services/packetUtils";
-import { parseToolKey } from "@/app/app/message/messageComponents/toolDisplayHelpers";
+import {
+  getToolKey,
+  parseToolKey,
+} from "@/app/app/message/messageComponents/toolDisplayHelpers";
 
 // Re-export parseToolKey for consumers that import from this module
 export { parseToolKey };
@@ -103,12 +106,6 @@ export function createInitialState(nodeId: number): ProcessorState {
 // ============================================================================
 // Helper Functions
 // ============================================================================
-
-function getGroupKey(packet: Packet): string {
-  const turnIndex = packet.placement.turn_index;
-  const tabIndex = packet.placement.tab_index ?? 0;
-  return `${turnIndex}-${tabIndex}`;
-}
 
 function injectSectionEnd(state: ProcessorState, groupKey: string): void {
   if (state.groupKeysWithSectionEnd.has(groupKey)) {
@@ -315,7 +312,10 @@ function processPacket(state: ProcessorState, packet: Packet): void {
   handleTurnTransition(state, packet);
 
   // Track group key
-  const groupKey = getGroupKey(packet);
+  const groupKey = getToolKey(
+    packet.placement.turn_index,
+    packet.placement.tab_index
+  );
   state.seenGroupKeys.add(groupKey);
 
   // Track SECTION_END and ERROR packets (both indicate completion)
@@ -326,15 +326,14 @@ function processPacket(state: ProcessorState, packet: Packet): void {
     state.groupKeysWithSectionEnd.add(groupKey);
   }
 
-  // Check if this is the first packet in the group (before adding)
-  const existingGroup = state.groupedPacketsMap.get(groupKey);
-  const isFirstPacket = !existingGroup;
-
   // Add packet to group
   addPacketToGroup(state, packet, groupKey);
 
-  // Categorize on first packet of each group
-  if (isFirstPacket) {
+  // Debug and control packets can precede the first rendered packet.
+  if (
+    !state.toolGroupKeys.has(groupKey) &&
+    !state.displayGroupKeys.has(groupKey)
+  ) {
     if (isToolPacket(packet, false)) {
       state.toolGroupKeys.add(groupKey);
     }
