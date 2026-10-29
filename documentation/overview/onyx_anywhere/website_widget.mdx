@@ -227,6 +227,20 @@ Use this when your page already signs the visitor in with the same identity prov
 The widget talks directly to your Onyx server. It creates a chat session, sends each message,
 and streams the answer back in real time. Answers render with full Markdown support.
 
+### Sending another message
+
+The widget keeps **Send** disabled until Onyx finishes the current turn, including saving the response.
+The answer can stop streaming before this check completes.
+Temporary connection failures keep **Send** disabled while the widget checks again.
+
+If Onyx rejects a question before accepting it, the widget restores the draft for retry.
+An accepted question stays in the conversation. The widget does not restore that question as a new draft.
+
+If the widget reports an authentication failure, reload the page and sign in again.
+If the server does not support readiness checks, contact your administrator. If the conversation is no longer available,
+use **Reset conversation** to start a new one. Reset clears the local conversation and disconnects its stream;
+it does not send a server stop command.
+
 ## Browser Support
 
 - Chrome/Edge 90+ (Chromium)
