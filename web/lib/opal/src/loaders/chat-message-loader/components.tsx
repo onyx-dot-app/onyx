@@ -86,6 +86,10 @@ interface ChatMessageLoaderProps {
  * A chat message that has not loaded: shimmering lines in the shape of a
  * user message or a reply. Each one picks its own shape unless told one, so a
  * stack of them reads as a conversation.
+ *
+ * It is decorative: it is hidden from assistive technology, so a stack of
+ * them does not announce "loading" once per line. Give the stack one
+ * `role="status"` with a label.
  */
 function ChatMessageLoader({
   orientation = "start",
@@ -104,7 +108,7 @@ function ChatMessageLoader({
   if (orientation === "end") {
     const width = bubbleWidth ?? pick(BUBBLE_WIDTHS, random);
     return (
-      <div className="flex w-full justify-end">
+      <div aria-hidden className="flex w-full justify-end">
         {/* The bubble matches a user message: its shape and its tint. */}
         <div
           className={cn(
@@ -119,7 +123,7 @@ function ChatMessageLoader({
   }
 
   return (
-    <div className="w-full">
+    <div aria-hidden className="w-full">
       <LineLoader lines={lineCount} width={lastWidth} />
     </div>
   );

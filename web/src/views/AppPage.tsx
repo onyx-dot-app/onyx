@@ -970,6 +970,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         (not scrollable) and fade out at the bottom. The bottom
                         keeps clear of the input bar. */}
                     <ShadowDiv
+                      role="status"
+                      aria-label={t("firstOpenLoader.ariaLabel")}
                       variant="mask"
                       shadowDirection="bottom-only"
                       // The real messages' width, compact or expanded.

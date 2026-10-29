@@ -38,7 +38,7 @@ Props:
 - `lastLineWidth`: the last line's width, as on `LineLoader`. Unset, a random width.
 - `bubbleWidth` (`"end"` only): the bubble's share of the column, `"1/3" | "1/2" | "2/3"`. Unset, a random width.
 
-The random shape is seeded from the instance's `useId`, so each loader has its own shape, the same on the server and the client and on every render. Stack several, alternating, to stand in for a conversation.
+The random shape is seeded from the instance's `useId`, so each loader has its own shape, the same on the server and the client and on every render. Stack several, alternating, to stand in for a conversation. Each loader is hidden from assistive technology (`aria-hidden`), so a stack does not announce "loading" once per line; give the stack one `role="status"` with a label.
 
 ## DropdownLoader
 

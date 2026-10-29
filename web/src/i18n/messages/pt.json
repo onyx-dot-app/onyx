@@ -12097,6 +12097,9 @@
       "failedFiles": {
         "toast": "{count, plural, one {Um arquivo falhou e foi removido: {names}} other {Alguns arquivos falharam e foram removidos: {names}}}"
       },
+      "firstOpenLoader": {
+        "ariaLabel": "Carregando o chat"
+      },
       "newChatButton": {
         "label": "Iniciar um novo chat"
       },

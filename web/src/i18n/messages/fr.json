@@ -12097,6 +12097,9 @@
       "failedFiles": {
         "toast": "{count, plural, one {Un fichier a échoué et a été supprimé : {names}} other {Des fichiers ont échoué et ont été supprimés : {names}}}"
       },
+      "firstOpenLoader": {
+        "ariaLabel": "Chargement de la discussion"
+      },
       "newChatButton": {
         "label": "Démarrer une nouvelle discussion"
       },
