@@ -12,10 +12,12 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.utils.fleet_telemetry import emit_telemetry, error_category
+from onyx.utils.fleet_telemetry import emit_telemetry, error_category, fingerprint
+from shared_configs.contextvars import get_current_tenant_id
 
 if TYPE_CHECKING:
     from onyx.chat.models import AnswerStreamPart
+    from onyx.server.query_and_chat.models import MessageOrigin
     from onyx.server.query_and_chat.streaming_models import Packet, StreamingError
 
 F = TypeVar("F", bound=Callable[..., Any])
@@ -52,12 +54,16 @@ class QueryMode(str, Enum):
     DEEP_RESEARCH = "deep_research"
 
 
+def _origin_channel(origin: "MessageOrigin") -> str:
+    # The origin enum is set by the caller, not user text.
+    return _ORIGIN_CHANNELS.get(origin.value.lower(), "web")
+
+
 def _channel(kwargs: dict[str, Any]) -> str:
     request = kwargs.get("new_msg_req")
     if request is None:
         return "web"
-    # The origin enum is part of SendMessageRequest, not user text.
-    return _ORIGIN_CHANNELS.get(request.origin.value.lower(), "web")
+    return _origin_channel(request.origin)
 
 
 def _mode(kwargs: dict[str, Any]) -> QueryMode:
@@ -323,3 +329,18 @@ def telemetry_query(*, mode: QueryMode) -> Callable[[F], F]:
 CURRENT_QUERY_OBSERVATION: ContextVar[QueryObservation | None] = ContextVar(
     "current_query_observation", default=None
 )
+
+
+def emit_feedback(
+    chat_message_id: int, positive: bool, *, origin: "MessageOrigin"
+) -> None:
+    """Report one thumbs up or down. The id is a digest of the message id: stable
+    across re-votes on one answer, never the answer itself."""
+    emit_telemetry(
+        "feedback",
+        {
+            "feedback_id": fingerprint(f"{get_current_tenant_id()}:{chat_message_id}"),
+            "positive": positive,
+            "channel": _origin_channel(origin),
+        },
+    )

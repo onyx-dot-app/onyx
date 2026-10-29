@@ -4880,7 +4880,7 @@ class SlackChannelConfig(Base):
             "slack_bot_id",
             "is_default",
             unique=True,
-            postgresql_where=(is_default is True),
+            postgresql_where=text("is_default IS TRUE"),
         ),
     )
 

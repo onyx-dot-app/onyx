@@ -494,6 +494,16 @@ def email_domain_rows(db_session: Session) -> list[dict[str, Any]]:
     return [dict(row) for row in db_session.execute(statement).mappings()]
 
 
+def standard_user_count(db_session: Session) -> int:
+    """How many standard accounts exist. Never who they are."""
+    statement = (
+        select(func.count())
+        .select_from(User)
+        .where(User.account_type == AccountType.STANDARD)
+    )
+    return db_session.execute(statement).scalar_one()
+
+
 def license_row(db_session: Session) -> dict[str, Any]:
     """Whether a license is stored, and since when. Never the license itself."""
     present = func.length(License.license_data) > 0
