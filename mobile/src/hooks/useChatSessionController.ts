@@ -213,10 +213,12 @@ async function recoverChatSession(
       );
     } catch (error) {
       console.warn("resume-stream could not load saved history", error);
-      if (stillOpen())
-        toast.error(
-          "Could not refresh saved messages. Reopen this conversation to retry.",
-        );
+      if (!stillOpen()) return;
+      store.getState().updateChatState(sessionId, "unconfirmed");
+      toast.error(
+        "Could not refresh saved messages. Reopen this conversation to retry.",
+      );
+      return;
     }
     if (!stillOpen()) return;
     store.getState().updateChatState(sessionId, "input");

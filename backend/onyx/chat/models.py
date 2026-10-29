@@ -680,6 +680,7 @@ class CheckpointBinding(BaseModel):
 
 
 class MessagePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     metadata: JsonValue = None
     details: JsonValue = None
     cacheable: bool = False

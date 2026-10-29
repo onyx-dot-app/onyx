@@ -141,6 +141,7 @@ Checkpoint bindings identify the tenant and response. Saved progress uses the ru
 Finalized IDs let a resumed step skip completed finalizers even when an earlier call still awaits input.
 Checkpoint format version 1 retains feature-owned search context and typed search-planning metadata.
 Restoration rejects other format versions.
+Checkpoint message payloads reject unknown fields instead of silently discarding them.
 Feature state is a JSON object validated by its owning feature during restoration.
 Chat's `kind` discriminator selects the feature schema; message metadata and tool details retain their tagged codec.
 Prompt image metadata saves file IDs and token counts; restoration loads image bytes only when needed.

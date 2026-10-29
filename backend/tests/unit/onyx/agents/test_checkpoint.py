@@ -208,6 +208,20 @@ def test_coding_rendering_survives_checkpoint_round_trip(
     assert restored == captured
 
 
+@pytest.mark.parametrize("payload_field", ["message_payloads", "input_payloads"])
+def test_checkpoint_rejects_unknown_message_payload_fields(payload_field: str) -> None:
+    captured = checkpoint()
+    serialized = codec().save(
+        captured.run_state,
+        captured.agent_state,
+        CheckpointBinding(tenant_id="tenant", response_id=captured.run_state.run_id),
+    )
+    payload = json.loads(serialized)
+    payload["checkpoint"][payload_field][0]["detials"] = {"source": "document"}
+    with pytest.raises(ValidationError, match="extra_forbidden"):
+        codec().load(json.dumps(payload))
+
+
 def test_unknown_payload_types_and_versions_fail_before_execution() -> None:
     captured = checkpoint()
     with pytest.raises(ValueError, match="unregistered"):
