@@ -312,6 +312,9 @@ When all are true, LLM selection is replaced:
 The client uses `DECISION_TIMEOUT_S = 5`. If the client cannot be built
 (for example, on a cost limit) or the ranking call fails, the same search runs
 LLM selection (4.5) and expands with the LLM.
+The decision client is resolved before the primary model's cost check. If the
+primary budget is exhausted, search still ranks and expands with the decision
+model, without LLM fallbacks; a failed rerank then raises the budget error.
 
 ### 4.6 Context expansion
 

@@ -1088,3 +1088,39 @@ def test_failed_background_expansion_costs_no_llm_call() -> None:
     picked = [s.center_chunk.document_id for s in merge.call_args.args[0]]
     assert "doc-8" not in picked and "doc-9" not in picked
     assert sorted(with_llm) == sorted(picked)
+
+
+def test_decision_model_searches_when_the_primary_budget_is_exhausted() -> None:
+    tool = _make_tool(primary_llm_cost_checked=False)
+    sections = [_section(f"doc-{index}") for index in range(3)]
+    budget = OnyxError(OnyxErrorCode.RATE_LIMITED, "Provider budget exceeded")
+    with patch(f"{MODULE}.check_llm_cost_limit_for_provider", side_effect=budget):
+        select, expand, merge, _ = _run_selection(
+            tool, sections, MagicMock(return_value=[0.9, 0.5, 0.1]), MagicMock()
+        )
+
+    select.assert_not_called()
+    assert [s.center_chunk.document_id for s in merge.call_args.args[0]] == [
+        "doc-0",
+        "doc-1",
+        "doc-2",
+    ]
+    # Expansion may not fall back to the over-budget primary model.
+    assert all(call.kwargs.get("llm_fallback") is False for call in expand.mock_calls)
+
+
+def test_failed_rerank_stops_at_the_primary_budget() -> None:
+    tool = _make_tool(primary_llm_cost_checked=False)
+    sections = [_section(f"doc-{index}") for index in range(3)]
+    budget = OnyxError(OnyxErrorCode.RATE_LIMITED, "Provider budget exceeded")
+    with patch(f"{MODULE}.check_llm_cost_limit_for_provider", side_effect=budget):
+        select, _, merge, _ = _run_selection(
+            tool,
+            sections,
+            MagicMock(side_effect=RuntimeError("decision model down")),
+            MagicMock(),
+        )
+
+    # The budget error ends the search before the over-budget LLM selects.
+    select.assert_not_called()
+    merge.assert_not_called()

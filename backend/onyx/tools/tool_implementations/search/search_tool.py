@@ -1291,11 +1291,19 @@ class SearchTool(Tool):
                     "Search selection model unavailable, using the primary model",
                     exc_info=True,
                 )
-        if selection_llm is self.llm:
-            check_primary_llm_cost()
-        enforce_selection_input_budget = selection_llm is not self.llm
-
         decision_client = self._resolve_decision_client()
+        # With a decision model, search can rank and expand without the primary
+        # model, so an exhausted primary budget only rules out LLM fallbacks.
+        llm_allowed = True
+        if selection_llm is self.llm:
+            if decision_client is None:
+                check_primary_llm_cost()
+            else:
+                try:
+                    check_primary_llm_cost()
+                except OnyxError:
+                    llm_allowed = False
+        enforce_selection_input_budget = selection_llm is not self.llm
         # The decision model ranks a wider pool than the sections shown today.
         candidates = (
             all_sections[:RERANK_POOL_SIZE] if decision_client else top_sections
@@ -1358,6 +1366,7 @@ class SearchTool(Tool):
                     expand_override=expand_override,
                     enforce_llm_input_budget=enforce_selection_input_budget,
                     decision_client=expansion_decision_client,
+                    llm_fallback=llm_allowed,
                 )
                 # Return expanded section if not None, otherwise original
                 return expanded_section if expanded_section is not None else section
@@ -1420,6 +1429,9 @@ class SearchTool(Tool):
         else:
             # The decision model failed or is off; it should not slow expansion.
             decision_client = None
+            if not llm_allowed:
+                # Raises the primary model's budget error.
+                check_primary_llm_cost()
             # Use LLM to select the most relevant sections for expansion
             selected_sections, best_doc_ids = select_sections_for_expansion(
                 sections=sections_for_selection,
