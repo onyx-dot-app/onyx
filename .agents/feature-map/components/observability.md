@@ -145,7 +145,10 @@ runs as its own service account, bound to the Role in
 `deployment/helm/charts/onyx/templates/log-export-rbac.yaml`, so no other Onyx
 pod can read pods, pod logs, or events. Without access to pods the receipt is `failed`; without access to pod logs or
 events it is `uploaded` with a partial piece. Both name the fix in the
-receipt's error, and the rest of the bundle is unchanged.
+receipt's error, and the rest of the bundle is unchanged. The Export Logs page
+shows that error on an `uploaded` receipt too. The API cuts a log at its byte
+cap from the start of the tail window. So a capped log is read again, at most
+twice, with fewer lines, to keep the newest lines.
 
 ### Fleet telemetry
 

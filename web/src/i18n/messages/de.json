@@ -5808,6 +5808,9 @@
         },
         "uploaded": {
           "label": "{count, plural, one {# Datei hochgeladen} other {# Dateien hochgeladen}}"
+        },
+        "uploadedWithWarning": {
+          "label": "{count, plural, one {# Datei hochgeladen} other {# Dateien hochgeladen}}, unvollständig: {error}"
         }
       },
       "sensitiveWarning": {
