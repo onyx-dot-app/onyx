@@ -9,12 +9,14 @@ import sys
 import tempfile
 import threading
 import unittest
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
-from runtime import Cluster, application_ready  # noqa: E402
+from runtime import Cluster, agent_stale, application_ready  # noqa: E402
 
 
 class RuntimeTests(unittest.TestCase):
@@ -238,6 +240,136 @@ class RuntimeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "HTTP"):
             application_ready("file:///etc/passwd")
 
+    def test_agent_stale_requires_an_established_agent_unknown_to_the_manager(
+        self,
+    ) -> None:
+        """Flag only agents past their registration grace that the traffic manager does not list."""
+        now = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+
+        def pod(started: str | None, deleting: bool = False) -> dict[str, Any]:
+            state = {"running": {"startedAt": started}} if started else {"waiting": {}}
+            return {
+                "metadata": {"deletionTimestamp": "now"} if deleting else {},
+                "status": {
+                    "containerStatuses": [
+                        {"name": "api-server", "state": {"running": {}}},
+                        {"name": "traffic-agent", "state": state},
+                    ]
+                },
+            }
+
+        established = [pod("2026-01-01T11:50:00Z")]
+        known = [{"name": "api", "agent_version": "v2.31.2"}]
+        unknown = [{"name": "api"}]
+        self.assertTrue(agent_stale("api", unknown, established, now))
+        self.assertTrue(agent_stale("api", [], established, now))
+        self.assertTrue(
+            agent_stale(
+                "api", [{"name": "other", "agent_version": "v2"}], established, now
+            )
+        )
+        self.assertFalse(agent_stale("api", known, established, now))
+        self.assertFalse(
+            agent_stale("api", unknown, [pod("2026-01-01T11:59:50Z")], now)
+        )
+        self.assertFalse(agent_stale("api", unknown, [pod(None)], now))
+        self.assertFalse(
+            agent_stale("api", unknown, [pod("2026-01-01T11:50:00Z", True)], now)
+        )
+        self.assertFalse(
+            agent_stale(
+                "api",
+                unknown,
+                [{"status": {"containerStatuses": [{"name": "api-server"}]}}],
+                now,
+            )
+        )
+
+    def test_agent_session_rejection_reads_only_logs_since_the_attempt(self) -> None:
+        """Bound the log search to the current attempt so earlier rejections do not restart a recovered agent."""
+        since = datetime(2026, 1, 1, 4, 0, 5, tzinfo=timezone(timedelta(hours=-8)))
+        with patch.object(
+            Cluster,
+            "kube",
+            return_value='code = NotFound desc = Session "agent:stale" not found',
+        ) as kube:
+            self.assertTrue(Cluster(Path.cwd()).agent_session_rejected(since))
+        self.assertIn("--since-time=2026-01-01T12:00:05Z", kube.call_args.args)
+        # kubectl reads only 10 lines per pod for a selector unless --tail is set.
+        self.assertIn("--tail=-1", kube.call_args.args)
+
+    def test_failed_stale_agent_query_does_not_block_the_intercept(self) -> None:
+        """Proceed to the intercept when the stale-agent pre-check cannot query the cluster."""
+        for failure in (
+            subprocess.CalledProcessError(1, ["telepresence", "list"]),
+            subprocess.TimeoutExpired(["telepresence", "list"], 30),
+            json.JSONDecodeError("bad", "", 0),
+        ):
+            with (
+                self.subTest(failure=type(failure).__name__),
+                patch.object(Cluster, "connect"),
+                patch.object(
+                    Cluster, "api_workload", return_value={"metadata": {"name": "api"}}
+                ),
+                patch.object(Cluster, "intercept_active", return_value=False),
+                patch.object(Cluster, "telepresence_workloads", side_effect=failure),
+                patch.object(Cluster, "command") as command,
+                patch.object(Cluster, "kube", return_value="") as kube,
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                Cluster(Path.cwd()).intercept()
+                self.assertEqual(
+                    command.call_args_list[0].args[:2], ("telepresence", "intercept")
+                )
+                self.assertNotIn(
+                    ("rollout", "restart"),
+                    [call.args[:2] for call in kube.call_args_list],
+                )
+
+    def test_intercept_restarts_a_stale_agent_before_intercepting(self) -> None:
+        """Replace a stale agent up front, and do not restart again if intercept still fails."""
+        for failure in (
+            None,
+            subprocess.TimeoutExpired(["telepresence", "intercept"], 150),
+        ):
+            with (
+                self.subTest(failure=failure),
+                patch.object(Cluster, "connect"),
+                patch.object(
+                    Cluster, "api_workload", return_value={"metadata": {"name": "api"}}
+                ),
+                patch.object(Cluster, "intercept_active", return_value=False),
+                patch.object(
+                    Cluster, "telepresence_workloads", return_value=[{"name": "api"}]
+                ),
+                patch.object(Cluster, "api_pods", return_value=[]),
+                patch("runtime.agent_stale", return_value=True),
+                patch.object(Cluster, "agent_session_rejected", return_value=True),
+                patch.object(Cluster, "command", side_effect=failure) as command,
+                patch.object(Cluster, "kube", return_value="") as kube,
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                if failure is None:
+                    Cluster(Path.cwd()).intercept()
+                else:
+                    with self.assertRaises(subprocess.TimeoutExpired):
+                        Cluster(Path.cwd()).intercept()
+                self.assertEqual(
+                    kube.call_args_list[0].args[:2], ("rollout", "restart")
+                )
+                restarts = [
+                    call
+                    for call in kube.call_args_list
+                    if call.args[:2] == ("rollout", "restart")
+                ]
+                self.assertEqual(len(restarts), 1)
+                intercepts = [
+                    call
+                    for call in command.call_args_list
+                    if call.args[:2] == ("telepresence", "intercept")
+                ]
+                self.assertEqual(len(intercepts), 1)
+
     def test_intercept_recovers_known_stale_agents_after_failure_or_timeout(
         self,
     ) -> None:
@@ -261,6 +393,8 @@ class RuntimeTests(unittest.TestCase):
                         return_value={"metadata": {"name": "api"}},
                     ),
                     patch.object(Cluster, "intercept_active", return_value=False),
+                    patch.object(Cluster, "telepresence_workloads", return_value=[]),
+                    patch.object(Cluster, "api_pods", return_value=[]),
                     patch.object(
                         Cluster, "command", side_effect=[failure, ""]
                     ) as command,
@@ -288,6 +422,8 @@ class RuntimeTests(unittest.TestCase):
                 Cluster, "api_workload", return_value={"metadata": {"name": "api"}}
             ),
             patch.object(Cluster, "intercept_active", return_value=False),
+            patch.object(Cluster, "telepresence_workloads", return_value=[]),
+            patch.object(Cluster, "api_pods", return_value=[]),
             patch.object(
                 Cluster,
                 "command",
@@ -319,6 +455,8 @@ class RuntimeTests(unittest.TestCase):
                     Cluster, "api_workload", return_value={"metadata": {"name": "api"}}
                 ),
                 patch.object(Cluster, "intercept_active", return_value=False),
+                patch.object(Cluster, "telepresence_workloads", return_value=[]),
+                patch.object(Cluster, "api_pods", return_value=[]),
                 patch.object(Cluster, "command", side_effect=original) as command,
                 patch.object(Cluster, "kube", side_effect=probe_failure) as kube,
             ):
@@ -361,6 +499,8 @@ class RuntimeTests(unittest.TestCase):
                         return_value={"metadata": {"name": "api"}},
                     ),
                     patch.object(Cluster, "intercept_active", return_value=reused),
+                    patch.object(Cluster, "telepresence_workloads", return_value=[]),
+                    patch.object(Cluster, "api_pods", return_value=[]),
                     patch.object(Cluster, "command") as command,
                     patch.object(
                         Cluster,
