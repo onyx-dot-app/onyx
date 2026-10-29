@@ -103,6 +103,23 @@ Its `ownership_version` changes when a checkpoint is published or claimed, preve
 The runtime revision inside `state` tracks execution changes and serves a separate purpose.
 Current application writers do not use checkpoints yet.
 
+`chat/checkpoint.py` encodes suspended execution as typed JSON alongside the saved response.
+It retains completed tool results, pending input, progress, and compaction state.
+Stable payload tags restore application types without importing classes named in stored data.
+Prompt images store file references. Restoration loads their bytes only when requested.
+History and response digests reject changed inputs or outputs during reconstruction.
+The tenant and response binding checks identity; callers must still authorize access.
+`chat/response_models.py:ResponseCheckpoint` defines this stored payload.
+
+`db/chat_checkpoint.py` publishes and claims checkpoints under a response row lock.
+Publication rejects content-free incognito sessions and mismatched response bindings before writing checkpoint content.
+A claim increments the ownership version and changes SUSPENDED to RUNNING.
+Competing claimers cannot both acquire the checkpoint.
+A failed reconstruction can release its claim while its ownership version still matches.
+Finalization removes checkpoint state. Each caller owns its database transaction.
+These APIs prepare later runtime adoption; no production endpoint resumes computation yet.
+
+
 Migration `9d8f310ac672` adds nullable execution metadata to existing chat tables.
 It adds child-session links, response status and failures, and tool results.
 Current writers keep their existing behavior.
@@ -585,3 +602,9 @@ Database modules import those models instead of defining separate data contracts
 
 Replay includes sources linked only to a tool. Root-selected document versions
 take precedence for answer citations; tool cards retain their own saved versions.
+
+Checkpoint format version 1 stores finalized tool-call IDs instead of a completed-tool count.
+This preserves independent completion when parallel calls finish out of order. Older formats are rejected.
+Checkpoint message payloads reject unknown fields instead of silently discarding them.
+
+Checkpoints retain the full current input group, including attachments and request-only context, for resume.

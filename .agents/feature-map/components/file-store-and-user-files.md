@@ -411,6 +411,19 @@ access-control consequence of this.
 
 ---
 
+### Checkpoint file snapshots
+
+`backend/onyx/tools/file_snapshot.py` captures files for later execution restoration.
+`SavedChatFile` keeps a stored file ID without reading its bytes.
+Inline snapshots encode binary content as base64 for JSON round trips.
+`SavedContextFiles` preserves context metadata and restores image bytes lazily from the file store.
+`ChatSearchResult` in `chat/response_models.py` uses these snapshots for staged files.
+Existing tools can still construct eager files without an ID.
+
+These values do not authorize file access or persist new blobs.
+Application integration must authorize references and store large files before publishing a checkpoint.
+The current chat engines do not use checkpoint restoration yet.
+
 ## 5. Contracts and invariants
 
 1. **A file read must be authorized against the acting user.**

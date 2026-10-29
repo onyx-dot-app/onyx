@@ -37,7 +37,8 @@ here. Read the component that documents the setting in its env table.
 | Path | Component(s) |
 |---|---|
 | `backend/onyx/chat/renderer.py`, `backend/onyx/chat/presentation.py`, `backend/onyx/chat/response.py` | streaming-protocol, chat-persistence |
-| `backend/onyx/chat/response_models.py` | chat-persistence |
+| `backend/onyx/chat/response_models.py`, `backend/onyx/chat/checkpoint.py`, `backend/onyx/db/chat_checkpoint.py` | chat-persistence |
+| `backend/onyx/tools/file_snapshot.py` | file-store-and-user-files, chat-persistence |
 | `backend/onyx/chat/files.py`, `backend/onyx/chat/prompt_formatting.py` | context-assembly |
 | `backend/onyx/chat/llm_loop.py`, `backend/onyx/chat/llm_step.py`, `backend/onyx/chat/process_message.py`, `backend/onyx/chat/chat_state.py`, `backend/onyx/chat/chat_processing_checker.py`, `backend/onyx/chat/stop_signal_checker.py` | core-chat-loop |
 | `backend/onyx/chat/emitter.py`, `stream_buffer.py` | core-chat-loop, streaming-protocol |
