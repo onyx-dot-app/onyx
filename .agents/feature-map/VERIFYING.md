@@ -74,7 +74,8 @@ verdict on a contract that neither cites the diff nor governs what it changes.
 ## Step 5: Check what else the change must touch
 
 Each contract names what else to check when its code changes. **Recipes** list
-every place a common addition must reach. Check each item. Most
+every place a common addition must reach, and the Common tasks table in
+[INDEX.md](INDEX.md) gives the order across components. Check each item. Most
 real defects in a review live here, in the file the author did not think to open.
 
 Pay particular attention to contracts that the code mirrors by hand, because
@@ -113,6 +114,7 @@ Independent of the map, check the change against the rules in these files:
 - `AGENTS.md` at the repo root, and the `AGENTS.md` of each area the diff touches:
   `backend/AGENTS.md`, `web/AGENTS.md`, `mobile/AGENTS.md`. Mobile does not follow
   the web rules.
+- [CROSS-CUTTING.md](CROSS-CUTTING.md), for the rules every component follows.
 - `CONTRIBUTING.md`, "Engineering Best Practices".
 - `pre-commit run --files <changed paths>`.
 
