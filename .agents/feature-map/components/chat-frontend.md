@@ -237,6 +237,13 @@ Automatic settlement requires the send acknowledgement. Explicit recovery can pr
 that acknowledgement rejects, but still waits for a pending acknowledgement. Recovery uses
 the original controller identity so it cannot overwrite a newer request's state.
 
+Initial history loads capture controller ownership before fetching and check it again after reading the response.
+An older fetch cannot replace a newer send or its accepted stream ID.
+When an incognito reader was aborted, recovery preserves local content over blank saved history
+while adding any saved rows needed to replay the accepted stream.
+Recovery matches rows by message ID and preserves local UI node IDs and tree links.
+Replay targets the message ID and writes updates under the matching UI node ID.
+
 ### 4.4 Rendering: packets to components
 
 `RendererComponent` (`message/messageComponents/renderMessageComponent.tsx`) is the
@@ -338,6 +345,7 @@ all, because the mode is pinned at session creation and cannot be changed mid-se
   The reader stays open to receive final packets. Settlement waits for reader completion,
   confirms server idleness, and reloads saved history before enabling input.
   Stop aborts local preparation only when no send has been dispatched.
+  That Stop restores the draft and attachments in the same focused session; navigation aborts do not restore them.
 - **Feedback** goes through `useFeedbackController.ts:handleFeedbackChange`: it
   optimistically calls `updateCurrentMessageFeedback` before the request, and rolls back
   to the previous feedback value if the request fails or throws.

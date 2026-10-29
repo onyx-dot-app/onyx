@@ -172,3 +172,6 @@ durability and chat integration through the [[chat-persistence]] and
 - A checkpoint cannot serialize Python callbacks or external resources.
 - Local ownership does not exclude another process; the application must supply that guarantee.
 - A suspended run can be idle while still reserving its Agent.
+
+Compaction preserves trailing unanswered user messages as one group. This includes attachment text and request context.
+Oversized unread input fails instead of silently removing its contents. An assistant response makes the preceding input eligible for compaction.

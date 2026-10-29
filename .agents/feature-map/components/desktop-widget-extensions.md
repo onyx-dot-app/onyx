@@ -483,3 +483,6 @@ Readiness status does not replace a failed send's error message. Before acknowle
 send removes its optimistic message and restores the draft if the input is empty.
 After acknowledgement, the widget keeps the accepted message without restoring a duplicate draft.
 Inline mode keeps the full conversation panel open while an error is present, even with no messages.
+
+The required quality-check workflow runs `bun run test` from `widget/` after installing
+the root workspace dependencies. This runs widget readiness regressions on pull requests and merge groups.

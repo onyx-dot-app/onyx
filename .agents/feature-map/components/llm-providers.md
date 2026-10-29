@@ -458,6 +458,14 @@ estimates are excluded from serialization. ToolResult adds typed details and err
 flags; raw message dumps include their defaults. Provider serialization forwards only the
 existing provider message fields, not execution identities or result details.
 
+Generic provider `APIError` failures use a concise public message and the `API_ERROR`
+code. The public message excludes raw provider JSON. Specific error classifications
+and configured error mappings retain their behavior. Runtime logs and tracing retain
+the underlying exception for diagnosis under their existing redaction rules.
+
+Streamed tool-call fragments may have a null `type` in LiteLLM. The response adapter
+normalizes null to `function`; unsupported non-null types still fail validation.
+
 ### 4.7 Tracing
 
 Cancellation listeners use the same exception handling before and after cancellation.
@@ -697,12 +705,3 @@ See `backend/AGENTS.md` for authoritative commands and required env
 Related: [[core-chat-loop]], [[agents-personas]], [[observability]],
 [[llm-gateway]], [[rate-and-usage-limits]], [[auth-and-identity]],
 [[document-index]].
-
-
-Generic provider `APIError` failures use a concise public message and the `API_ERROR`
-code. The public message excludes raw provider JSON. Specific error classifications
-and configured error mappings retain their behavior. Runtime logs and tracing retain
-the underlying exception for diagnosis under their existing redaction rules.
-
-Streamed tool-call fragments may have a null `type` in LiteLLM. The response adapter
-normalizes null to `function`; unsupported non-null types still fail validation.

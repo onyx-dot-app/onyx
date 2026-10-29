@@ -124,9 +124,13 @@ function createLlmManager(): LlmManager {
   };
 }
 
-test.each([false, true])(
-  "Stop during preference persistence prevents a pending send (new session: %s)",
-  async (isNewSession) => {
+test.each([
+  { isNewSession: false, stop: true },
+  { isNewSession: true, stop: true },
+  { isNewSession: false, stop: false },
+])(
+  "abort during preparation preserves drafts only for Stop ($isNewSession, $stop)",
+  async ({ isNewSession, stop }) => {
     const preferences = Promise.withResolvers<void>();
     const llmManager = createLlmManager();
     llmManager.persistOverrides = jest.fn(() => preferences.promise);
@@ -137,7 +141,8 @@ test.each([false, true])(
     });
     if (!isNewSession) useChatSessionStore.getState().createSession("session");
     jest.mocked(createChatSession).mockResolvedValue("session");
-    const { result } = renderHook(() =>
+    const restoreInputBar = jest.fn();
+    const { result, unmount } = renderHook(() =>
       useChatController({
         llmManager,
         toolConfiguration,
@@ -147,7 +152,7 @@ test.each([false, true])(
         selectedDocuments: [],
         searchParams: new ReadonlyURLSearchParams(),
         resetInputBar: jest.fn(),
-        restoreInputBar: jest.fn(),
+        restoreInputBar,
       })
     );
 
@@ -170,20 +175,31 @@ test.each([false, true])(
     expect(
       useChatSessionStore.getState().sessions.get("session")?.chatState
     ).toBe("loading");
-    await act(async () => result.current.stopGenerating());
+    if (stop) {
+      await act(async () => result.current.stopGenerating());
+      expect(restoreInputBar).toHaveBeenCalledWith(
+        "Do not send this after Stop",
+        []
+      );
+    } else {
+      useChatSessionStore
+        .getState()
+        .sessions.get("session")!
+        .abortController.abort();
+      unmount();
+      expect(restoreInputBar).not.toHaveBeenCalled();
+    }
     expect(global.fetch).not.toHaveBeenCalled();
     expect(
       useChatSessionStore.getState().sessions.get("session")?.chatState
-    ).toBe("input");
+    ).toBe(stop ? "input" : "loading");
 
     await act(async () => {
       preferences.resolve();
       await pendingSend;
     });
     expect(sendMessage).not.toHaveBeenCalled();
-    expect(
-      useChatSessionStore.getState().sessions.get("session")?.chatState
-    ).toBe("input");
+    expect(restoreInputBar).toHaveBeenCalledTimes(stop ? 1 : 0);
   }
 );
 

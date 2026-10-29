@@ -232,8 +232,8 @@ persistence threads can keep publishing while a cache write blocks.
 `StreamBufferWriter` compresses lines into cache chunks, flushing at 32 KiB or
 when the delivery worker requests a flush. `mark_done` finalizes replay retention
 or deletes content-free incognito buffers.
-If the event worker cannot start during completion, the caller performs the same
-cleanup and marks replay incomplete before releasing delivery ownership.
+If the event worker cannot start during completion, `ChatDelivery.finish` reports a stream gap and finalizes replay.
+It marks normal replay incomplete and deletes content-free incognito buffers before resolving completion.
 
 Replay overflow, cache errors, and storage limits make the stream non-resumable;
 they do not fail live delivery. `STREAM_GAP` reports missing live output, such as
