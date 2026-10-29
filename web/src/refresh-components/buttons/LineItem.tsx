@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useState } from "react";
 import { cn, richNodes } from "@opal/utils";
 import type { IconProps } from "@opal/types";
-import { OverflowText, Text } from "@opal/components";
+import { OverflowText, Text, Tooltip, type TextFont } from "@opal/components";
+import { useOverflow } from "@opal/hooks";
 import Link from "next/link";
 import type { Route } from "next";
 import { Section } from "@/layouts/general-layouts";
@@ -47,6 +48,17 @@ const textClassNames = {
   muted: "line-item-text-muted",
   skeleton: "line-item-text-skeleton",
 } as const;
+
+// Label fonts per variant. The variant classes above only set the color.
+const textFonts: Record<keyof typeof textClassNames, TextFont> = {
+  main: "main-ui-muted",
+  strikethrough: "main-ui-muted",
+  disabled: "main-ui-muted",
+  danger: "main-ui-muted",
+  action: "main-ui-action",
+  muted: "main-ui-body",
+  skeleton: "secondary-body",
+};
 
 const iconClassNames = {
   main: "line-item-icon-main",
@@ -184,6 +196,10 @@ export default function LineItem({
 
   const emphasisKey = emphasized ? "emphasized" : "normal";
 
+  // OverflowText takes only strings, so rich labels measure their own clamp.
+  const [richLabel, setRichLabel] = useState<HTMLElement | null>(null);
+  const richLabelOverflowing = useOverflow(richLabel);
+
   const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (disabled) {
       e.preventDefault();
@@ -265,18 +281,30 @@ export default function LineItem({
                   so it sits on a wrapper and the text inherits it. */}
               <div className={cn("w-full min-w-0", textClassNames[variant])}>
                 {typeof children === "string" ? (
-                  <OverflowText as="p" font="main-ui-muted" color="inherit">
+                  <OverflowText
+                    as="p"
+                    font={textFonts[variant]}
+                    color="inherit"
+                  >
                     {children}
                   </OverflowText>
                 ) : (
-                  <Text
-                    as="p"
-                    font="main-ui-muted"
-                    color="inherit"
-                    maxLines={1}
+                  <Tooltip
+                    tooltip={children}
+                    suppressed={!richLabelOverflowing}
+                    side="top"
+                    align="start"
                   >
-                    {richNodes(children)}
-                  </Text>
+                    <Text
+                      as="p"
+                      font={textFonts[variant]}
+                      color="inherit"
+                      maxLines={1}
+                      ref={setRichLabel}
+                    >
+                      {richNodes(children)}
+                    </Text>
+                  </Tooltip>
                 )}
               </div>
               {rightChildren && (

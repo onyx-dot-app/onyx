@@ -236,7 +236,7 @@ const QueryText = ({
     return (
       <div
         className={cn(
-          "max-w-full min-w-0 transition-colors duration-150",
+          "grow overflow-hidden w-full max-w-full min-w-0 transition-colors duration-150",
           colorClass
         )}
       >
@@ -451,7 +451,7 @@ const SourceTagInner = ({
         backgroundClass,
         styles.container,
         isQuery && "gap-0",
-        isQuery && expanded && "w-fit",
+        isQuery && expanded && "w-full max-w-full min-w-0",
         cursorClass,
         className
       )}
@@ -471,7 +471,7 @@ const SourceTagInner = ({
         className={cn(
           "flex items-baseline",
           !inlineCitation && "pe-0.5",
-          isQuery && expanded && "w-fit"
+          isQuery && expanded && "w-full max-w-full min-w-0"
         )}
       >
         {isQuery ? (
