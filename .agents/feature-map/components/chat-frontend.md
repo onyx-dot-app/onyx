@@ -97,7 +97,7 @@ example nginx); this file is not on that path.
 |---|---|
 | `POST /api/chat/send-chat-message` | `services/lib.tsx:sendMessage` |
 | `GET /api/chat/chat-session/{id}/status` | `lib/chat/sessionReadiness.ts:waitForChatSessionIdle` |
-| `GET /api/chat/chat-session/{id}/resume-stream?cursor=N` | `services/lib.tsx:resumeStream`, from `useChatSessionController.ts` |
+| `GET /api/chat/chat-session/{id}/resume-stream?stream_id=ID&cursor=N` | `services/lib.tsx:resumeStream`, from `useChatSessionController.ts` |
 | `POST /api/chat/stop-chat-session/{id}?stream_id=N` | `lib/chat/stopChatSession.ts`. `stream_id` comes from the accepted assistant message ID, or the user message ID in multi-model mode. |
 | `POST /api/chat/create-chat-session` | `services/lib.tsx:createChatSession` |
 | `PUT /api/chat/rename-chat-session` | `services/lib.tsx:renameChatSession`, `nameChatSession` |
