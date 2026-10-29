@@ -27,17 +27,18 @@ jobs:
         with:
           persist-credentials: false
 
-      # Jest Tests is a required check, so it must still report on docs-only
-      # changes; skip the work instead of the job.
-      - name: Detect non-docs changes
+      # Jest Tests is a required check, so it must still report when nothing in
+      # web/ changed; skip the work instead of the job. Every Jest input lives
+      # under web/, including the vendored packages in web/lib/.
+      - name: Detect web changes
         id: filter
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
         with:
-          predicate-quantifier: every
           filters: |
             code:
-              - '!documentation/**'
+              - 'web/**'
+              - '.github/workflows/pr-jest-tests.yml'
 
       - name: Setup bun
         if: steps.filter.outputs.code != 'false'
