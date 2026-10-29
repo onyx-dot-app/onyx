@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from typing import Any, Literal, cast
 
 from pydantic import ValidationError
@@ -19,10 +20,8 @@ from onyx.db.chat import (
     translate_db_search_doc_to_saved_search_doc,
 )
 from onyx.db.chat_response import read_chat_execution, read_response_replay_data
-from onyx.db.models import ChatMessage
-from onyx.db.tools import (
-    get_tool_by_id,
-)
+from onyx.db.models import ChatMessage, Tool
+from onyx.db.tools import get_tools_by_ids
 from onyx.deep_research.tool_definitions import (
     RESEARCH_AGENT_IN_CODE_ID,
     RESEARCH_AGENT_TASK_KEY,
@@ -531,14 +530,31 @@ def create_search_packets(
     return packets
 
 
+def load_session_tools(
+    messages: Sequence[ChatMessage], db_session: Session
+) -> dict[int, Tool]:
+    """The tools that the messages' tool calls used, by id, in one query."""
+    tool_ids = {
+        tool_call.tool_id
+        for message in messages
+        for tool_call in message.tool_calls or []
+        if tool_call.tool_id is not None
+    }
+    return {tool.id: tool for tool in get_tools_by_ids(list(tool_ids), db_session)}
+
+
 def translate_assistant_message_to_packets(
     chat_message: ChatMessage,
+    tools_by_id: Mapping[int, Tool],
     db_session: Session,
 ) -> list[Packet]:
     """
     Translates an assistant message and tool calls to packet format.
     It needs to be a list of list of packets combined into indices for "steps".
     The final answer and citations are also a "step".
+
+    `tools_by_id` holds the tools of the message's tool calls (see
+    `load_session_tools`), so replay does not query a tool per call.
     """
     execution = read_chat_execution(chat_message)
     if execution is not None:
@@ -591,7 +607,14 @@ def translate_assistant_message_to_packets(
             for tool_call in tool_calls_in_turn:
                 # Here we do a try because some tools may get deleted before the session is reloaded.
                 try:
-                    tool = get_tool_by_id(tool_call.tool_id, db_session)
+                    tool = (
+                        tools_by_id.get(tool_call.tool_id)
+                        if tool_call.tool_id is not None
+                        else None
+                    )
+                    if tool is None:
+                        raise ValueError("Tool by specified id does not exist")
+
                     # Handle different tool types
                     if tool.in_code_tool_id in [
                         SearchTool.__name__,
@@ -813,8 +836,13 @@ def translate_assistant_message_to_packets(
     citation_info_list: list[CitationInfo] = []
 
     if citations:
+        # A citation points at one of the answer's own search docs, which are
+        # already loaded; only a doc outside them needs a query.
+        loaded_docs_by_id = {doc.id: doc for doc in chat_message.search_docs}
         for citation_num, search_doc_id in citations.items():
-            search_doc = get_db_search_doc_by_id(search_doc_id, db_session)
+            search_doc = loaded_docs_by_id.get(
+                search_doc_id
+            ) or get_db_search_doc_by_id(search_doc_id, db_session)
             if search_doc:
                 citation_info_list.append(
                     CitationInfo(

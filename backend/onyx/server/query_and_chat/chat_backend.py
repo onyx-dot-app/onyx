@@ -146,6 +146,7 @@ from onyx.server.query_and_chat.models import (
     UpdateChatSessionThreadRequest,
 )
 from onyx.server.query_and_chat.session_loading import (
+    load_session_tools,
     translate_assistant_message_to_packets,
 )
 from onyx.server.query_and_chat.streaming_models import (
@@ -454,8 +455,11 @@ def get_chat_session(
 
     # Every assistant message might have a set of tool calls associated with it, these need to be replayed back for the frontend
     # Each list is the set of tool calls for the given assistant message.
+    tools_by_id = load_session_tools(session_messages, db_session)
     replay_packet_lists: list[list[Packet]] = [
-        translate_assistant_message_to_packets(chat_message=msg, db_session=db_session)
+        translate_assistant_message_to_packets(
+            chat_message=msg, tools_by_id=tools_by_id, db_session=db_session
+        )
         for msg in session_messages
         if msg.message_type == MessageType.ASSISTANT
     ]
