@@ -3845,6 +3845,9 @@
         },
         "uploaded": {
           "label": "{count, plural, one {已上传 # 个文件} other {已上传 # 个文件}}"
+        },
+        "uploadedWithWarning": {
+          "label": "{count, plural, one {已上传 # 个文件} other {已上传 # 个文件}}，不完整：{error}"
         }
       },
       "sensitiveWarning": {

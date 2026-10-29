@@ -3845,6 +3845,9 @@
         },
         "uploaded": {
           "label": "{count, plural, one {enviou # arquivo} other {enviou # arquivos}}"
+        },
+        "uploadedWithWarning": {
+          "label": "{count, plural, one {enviou # arquivo} other {enviou # arquivos}}, incompleto: {error}"
         }
       },
       "sensitiveWarning": {
