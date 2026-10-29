@@ -84,6 +84,22 @@ Other tool errors remain available to the model for recovery.
 These APIs prepare the shared runtime transition. Production chat, research,
 coding, and session reload still use their existing execution and loading paths.
 
+### Independent delivery primitives
+
+`ChatDelivery` owns packet publication and replay writes. Its `ChatStream` reader
+can detach without stopping delivery. A shared publication lock keeps live packets
+and replay batches in the same order. Cache writes run outside that lock, so slow
+storage does not block control packets.
+
+Closing delivery drains accepted events before sealing publication. Replay backlog
+limits and cache failures mark the buffer incomplete. Readers must reload saved
+history when replay has a gap. These primitives are additive; production chat
+still uses its existing worker and reader lifecycle.
+
+If the delivery worker cannot start during completion, `ChatDelivery.finish` reports a stream gap and finalizes replay.
+It marks normal replay incomplete and deletes content-free incognito buffers before resolving completion.
+The closed event dispatcher rejects later events.
+
 ## 3. Data model
 
 This component has no tables. Packets are never written to Postgres; the chat
@@ -412,3 +428,14 @@ Tool-card ownership includes the run ID, so child completion does not close a
 parent's cards. Completed coding tools emit final-answer packets without repeating
 the answer as thinking. Research reports emit once, whether supplied through
 progress or directly at completion.
+
+A failed stream metadata write does not permanently hide truncation. Later flushes retry
+the truncation marker at bounded intervals, so readers can fall back to saved history.
+Chunk reads expose the total published chunk count alongside the next cursor.
+
+`ChatDelivery` accepts every `AnswerStreamPart`, including initial session and response IDs.
+Those IDs use the same ordered live and replay delivery path as response packets.
+The response owner starts the delivery event worker directly.
+
+A live `STREAM_GAP` error also records a query-telemetry failure. It does not change
+the model or tool execution outcome.
