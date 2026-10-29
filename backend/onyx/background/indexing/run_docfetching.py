@@ -639,18 +639,16 @@ def connector_document_extraction(
                     and most_recent_attempt.total_batches is not None
                     and not checkpoint.has_more
                 ):
-                    reissued_batch_count, completed_batches = reissue_old_batches(
+                    last_batch_num = reissue_old_batches(
                         batch_storage,
-                        index_attempt_id,
+                        db_session,
+                        index_attempt,
                         cc_pair_id,
                         tenant_id,
                         app,
-                        most_recent_attempt,
+                        most_recent_attempt.id if most_recent_attempt else None,
                         docprocessing_priority,
                     )
-                    last_batch_num = reissued_batch_count + completed_batches
-                    index_attempt.completed_batches = completed_batches
-                    db_session.commit()
                 else:
                     logger.info(
                         "Cleaning up all batches for index attempt %s before starting new run",
@@ -1049,50 +1047,76 @@ def cache_and_upsert_hierarchy_nodes(
 
 def reissue_old_batches(
     batch_storage: DocumentBatchStorage,
-    index_attempt_id: int,
+    db_session: Session,
+    index_attempt: IndexAttempt,
     cc_pair_id: int,
     tenant_id: str,
     app: Celery,
-    most_recent_attempt: IndexAttempt | None,
+    most_recent_attempt_id: int | None,
     priority: OnyxCeleryPriority,
-) -> tuple[int, int]:
-    # When loading from a checkpoint, we need to start new docprocessing tasks
-    # tied to the new index attempt for any batches left over in the file store
-    old_batches = batch_storage.get_all_batches_for_cc_pair()
-    batch_storage.update_old_batches_to_new_index_attempt(old_batches)
-    for batch_id in old_batches:
+) -> int:
+    """Moves the batches a previous attempt left in the file store to this
+    attempt and sends a docprocessing task for each. Returns the number for this
+    attempt's next new batch.
+
+    The previous attempt's docprocessing tasks can still run. Each one counts
+    its batch in completed_batches before it deletes the batch. So after the
+    move, a fresh read of the count covers every batch that was not moved. A
+    batch can be in both, which only leaves an unused batch number. The count
+    can also come from a later attempt than the one that stored the batches
+    (one that failed before it fetched anything), so the next number is also
+    kept above every moved batch.
+    """
+    moved_batches = batch_storage.update_old_batches_to_new_index_attempt(
+        batch_storage.get_all_batches_for_cc_pair()
+    )
+    moved_batch_nums: list[int] = []
+    for batch_id in moved_batches:
+        path_info = batch_storage.extract_path_info(batch_id)
+        if path_info is None:
+            raise RuntimeError(f"Could not extract path info from batch {batch_id}")
+        moved_batch_nums.append(path_info.batch_num)
+
+    old_completed_batches = (
+        IndexingCoordination.get_completed_batches(db_session, most_recent_attempt_id)
+        if most_recent_attempt_id is not None
+        else 0
+    )
+    next_batch_num = max(
+        [old_completed_batches + len(moved_batch_nums)]
+        + [batch_num + 1 for batch_num in moved_batch_nums]
+    )
+    # Completion needs completed_batches to reach the final batch number, so
+    # the batch numbers this attempt never processes count as completed. Set
+    # before the tasks go out, so their increments are not overwritten.
+    index_attempt.completed_batches = next_batch_num - len(moved_batch_nums)
+    db_session.commit()
+
+    for batch_id, batch_num in zip(moved_batches, moved_batch_nums, strict=True):
         logger.info(
             "Re-issuing docprocessing task for batch %s for index attempt %s",
             batch_id,
-            index_attempt_id,
+            index_attempt.id,
         )
-        path_info = batch_storage.extract_path_info(batch_id)
-        if path_info is None:
-            logger.warning(
-                "Could not extract path info from batch %s, skipping", batch_id
-            )
-            continue
-        if path_info.cc_pair_id != cc_pair_id:
-            raise RuntimeError(f"Batch {batch_id} is not for cc pair {cc_pair_id}")
 
         try:
             RedisDocprocessing(
-                index_attempt_id,
+                index_attempt.id,
                 get_redis_client(),
             ).incr_pending()
         except Exception:
             logger.debug(
                 "Failed to increment pending counter for attempt %s",
-                index_attempt_id,
+                index_attempt.id,
                 exc_info=True,
             )
         app.send_task(
             OnyxCeleryTask.DOCPROCESSING_TASK,
             kwargs={
-                "index_attempt_id": index_attempt_id,
+                "index_attempt_id": index_attempt.id,
                 "cc_pair_id": cc_pair_id,
                 "tenant_id": tenant_id,
-                "batch_num": path_info.batch_num,  # use same batch num as previously
+                "batch_num": batch_num,  # use same batch num as previously
                 # Use current time (not the original send time) so QUEUE_WAIT
                 # measures wait time for *this* reissue, not stale latency from
                 # the prior attempt.
@@ -1101,15 +1125,11 @@ def reissue_old_batches(
             queue=OnyxCeleryQueues.DOCPROCESSING,
             priority=priority,
         )
-    recent_batches = most_recent_attempt.completed_batches if most_recent_attempt else 0
-    # resume from the batch num of the last attempt. This should be one more
-    # than the last batch created by docfetching regardless of whether the batch
-    # is still in the filestore waiting for processing or not.
-    last_batch_num = len(old_batches) + recent_batches
+
     logger.info(
         "Starting from batch %s due to re-issued batches: %s, completed batches: %s",
-        last_batch_num,
-        old_batches,
-        recent_batches,
+        next_batch_num,
+        moved_batches,
+        old_completed_batches,
     )
-    return len(old_batches), recent_batches
+    return next_batch_num
