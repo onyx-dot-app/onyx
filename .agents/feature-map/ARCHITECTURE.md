@@ -22,7 +22,7 @@ that applies to every new route, table, task or LLM call, read
 | Code interpreter | `code-interpreter` service in `deployment/docker_compose/docker-compose.yml` | Runs the Python tool's code. | [[code-execution]] |
 | Craft sandbox pods | `deployment/helm/charts/onyx/templates/sandbox-podtemplate.yaml` | One pod per Craft user, or one container with the Docker backend, running `opencode serve`. | [[craft-sandboxes]] |
 | Sandbox egress proxy | `backend/onyx/sandbox_proxy/` | Every outbound request from a sandbox. | [[craft-external-apps]] |
-| Nginx | `deployment/data/nginx/` | Routes `/api`, SAML and SCIM to the API server, `/mcp` to the MCP server, the rest to the web server. | None ([PATHS.md](PATHS.md#not-mapped)). [[mcp-server]] owns the `/mcp` routing. |
+| Nginx | `deployment/data/nginx/` | Routes `/api`, SAML and SCIM to the API server, `/mcp` to the MCP server, the rest to the web server. `/mcp/oauth/callback` is an exact match that goes to the web server (`deployment/data/nginx/mcp.conf.inc.template`). | None ([PATHS.md](PATHS.md#not-mapped)). [[mcp-server]] owns the `/mcp` routing. |
 
 `backend/AGENTS.md` lists the Celery workers and their roles. The `-Q` flags in
 `backend/supervisord.conf` and the Helm worker templates decide which worker
@@ -80,7 +80,8 @@ states what they see.
   reset time. Read [[chat-frontend]], [[core-chat-loop]], [[citations]] and
   [[rate-and-usage-limits]]; the trace is Flow 2.
 - **A user asks the bot in a Slack channel.** A public channel post answers
-  from public documents only. A DM, a slash command or an ephemeral reply uses
+  from public indexed documents only. Federated Slack results follow the
+  Slack token instead ([[federated-search#slack-results-have-no-acl]]). A DM, a slash command or an ephemeral reply uses
   the asker's own access when their email matches an Onyx user. Read
   [[slack-bot]] and [[federated-search]], and the acting-user table in
   [CROSS-CUTTING.md](CROSS-CUTTING.md).

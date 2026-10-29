@@ -18,8 +18,10 @@ for the usage report, log export, query history and workspace analytics.
   auth off on purpose. The customer reference is
   `documentation/deployment/production/monitoring.mdx`.
 - **A self-hosted admin** connects Braintrust or Langfuse at Admin > Tracing.
-  Each LLM call then shows as a trace with model, tokens, prompt and response,
-  with secrets masked. An incognito turn never shows. On cloud, env vars set
+  Each LLM call then shows as a trace with model and tokens. A call in full
+  content mode, such as a chat turn, also shows the prompt and response, with
+  secrets masked. Indexing calls, such as contextual RAG and image
+  summarization, use `TraceContentMode.METADATA_ONLY` and show no content. An incognito turn never shows. On cloud, env vars set
   tracing, and the admin page refuses changes.
 - **A user** sees their own token and cost usage, and their budget, in
   Settings > Usage. **An admin** sees usage per user and for system work such

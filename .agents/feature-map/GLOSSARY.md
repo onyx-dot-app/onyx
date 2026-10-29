@@ -88,7 +88,7 @@ in general.
 
 **"Public" (API)** means two unrelated things. `PUBLIC_API_TAGS` marks a route that
 is documented for integrators; it still needs authentication. `PUBLIC_ENDPOINT_SPECS`
-marks a route that needs no authentication. See [[onyx-api#two-meanings-of-public]].
+exempts a route from the startup auth check; its handler does its own check, if any. See [[onyx-api#two-meanings-of-public]].
 
 **"Hook"** in [[hooks]] means a hook extension: a customer HTTPS endpoint that Onyx
 calls at a `HookPoint`. It is not a React hook, an agent hook or a Celery signal.

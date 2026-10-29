@@ -35,7 +35,8 @@ backends.
 - **On cloud**, adding a user past the seat count bills one more seat through
   Stripe. A declined card blocks the add. A trial tenant can end its trial early
   once it has a payment method. A tenant whose subscription lapsed gets 402
-  `SUBSCRIPTION_INACTIVE` outside the billing and auth routes.
+  `SUBSCRIPTION_INACTIVE` outside the allowed prefixes: auth, health, `/me`,
+  settings and billing ([[#recovery-paths-reachable]]).
 - **When a self-hosted instance cannot reach Stripe**, the page shows a "Connect
   to Stripe" retry. The page stops fetching billing information for an hour, or
   until the admin clicks the retry.

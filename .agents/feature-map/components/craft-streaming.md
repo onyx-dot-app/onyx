@@ -16,12 +16,13 @@ The interface has two sides. On the server, the sandbox manager's
 `send_message` yields translated Craft events from
 `server/features/build/sandbox/opencode/serve_client.py:OpencodeServeClient`,
 and `server/features/build/session/streaming.py:persist_sandbox_event` saves
-them. To a client,
+the subset that history needs (Architecture, What gets saved). To a client,
 `GET /build/sessions/{id}/turns/{turn_id}/events`
 (`server/features/build/interactive_turns/api.py:get_interactive_turn_events`)
 sends the same events as SSE, framed by `event_to_sse`.
 
-- The turn runner in [[craft-sessions]] drives the turn and saves each event.
+- The turn runner in [[craft-sessions]] drives the turn and passes each event
+  to `persist_sandbox_event`.
   It keeps [[#turn-ends-on-idle]] and [[#two-error-types]].
 - The browser ([[craft-frontend]]) attaches and renders. It keeps
   [[#completion-is-turn-completed]], [[#no-replay-buffer]] and
@@ -62,7 +63,7 @@ opencode serve (in pod)          GET /event?directory=...   raw SSE
   PodEventBus._dispatch          fan out by opencode session id, and to every ancestor
     subscriber queue (max 500)
       runner: OpencodeServeClient.send_message -> translate_opencode_event
-              -> executor saves each event ([[craft-sessions]])
+              -> executor persists the saved subset ([[craft-sessions]])
       attach: subscribe_to_opencode_session -> translate_opencode_event
               -> merge_events_with_announces -> event_to_sse
               -> get_interactive_turn_events -> browser

@@ -78,8 +78,9 @@ handler -> db/engine/sql_engine.py:get_session
   -> connection with schema_translate_map={None: tenant_id}
 ```
 
-Every source is signed or server-issued, so a caller cannot name a tenant it
-has not authenticated to. A tenant read from a token only selects the schema.
+Every source is signed or server-issued, so a caller cannot forge a tenant
+ID. A valid anonymous-user cookie takes precedence over the session token, so
+a browser that holds both goes to the cookie's tenant. A tenant read from a token only selects the schema.
 The credential lookup then runs in that schema, so a forged prefix fails
 authentication. Paths in `TENANT_RESOLUTION_SKIP_PATHS`, such as health checks
 and the OAuth-provider protocol routes, get the default schema.
@@ -149,21 +150,26 @@ migrates only the catalog tables (`PublicBase`) in `public`.
    each thread: one `Context` object cannot be entered by two threads at once.
    `chat/process_message.py:_run_models` copies it for each model worker and
    again for the writer thread.
-4. `celery-task-tenant-kwarg` **Every Celery task needs a `tenant_id` kwarg.**
+4. `celery-task-tenant-kwarg` **Every tenant-scoped Celery task needs a
+   `tenant_id` kwarg.**
    `background/celery/apps/app_base.py:TenantAwareTask` falls back to `POSTGRES_DEFAULT_SCHEMA` when it is
    missing. On cloud that schema has no tenant data, so the task fails or does
-   nothing, with no error that names the cause. Beat adds the kwarg; a direct
-   send must pass it.
+   nothing, with no error that names the cause. Beat adds the kwarg to each
+   per-tenant entry; a direct send must pass it. Cloud-wide beat entries
+   (`backend/onyx/background/celery/tasks/beat_schedule.py:get_cloud_tasks_to_schedule`)
+   carry no tenant on purpose.
 5. `read-tenant-with-getter` **Read the tenant with `get_current_tenant_id()`,
    not the raw variable.** `shared_configs/contextvars.py:get_current_tenant_id`
    raises on cloud when the tenant is unset, so a lost context fails loudly.
    Do not treat `None` from `.get()` as a schema.
-6. `tenant-in-cache-keys` **Every cache key and Redis key needs the tenant.**
+6. `tenant-in-cache-keys` **A tenant-scoped cache or Redis key needs the
+   tenant; a cross-tenant key uses the shared client.**
    `redis/redis_pool.py:get_redis_client` returns a `TenantRedisClient` that
    prefixes every key (`redis/tenant_redis_client.py:_prefix_key`).
    `redis/redis_pool.py:get_shared_redis_client` and
    `cache/factory.py:get_shared_cache_backend` are cross-tenant;
-   use them only for data that is the same for every tenant. A module-level
+   use them only for data or coordination that spans tenants, such as the
+   locks in `cache/locks.py`. A module-level
    `lru_cache` or dict that holds tenant data must include the tenant in its
    key ([[rate-and-usage-limits#any-rate-limit-exists-fast-path]] is an
    example).

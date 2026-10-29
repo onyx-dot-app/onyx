@@ -109,7 +109,9 @@ Postgres.
    `backend/onyx/configs/constants.py:PUBLIC_API_TAGS` marks a route as
    documented for integrators. The route still
    needs authentication. `backend/onyx/server/auth_check.py:PUBLIC_ENDPOINT_SPECS`
-   marks a route that needs no authentication.
+   exempts a route from the startup auth check. Its handler does its own
+   credential check, if any: `/me` returns 401, and the Craft webapp proxy
+   checks session sharing.
    `backend/onyx/server/auth_check.py:check_router_auth` never reads
    the tag. A route with no auth dependency fails the startup check unless
    `PUBLIC_ENDPOINT_SPECS` lists it, tagged or not. Some routes, such as `/health`

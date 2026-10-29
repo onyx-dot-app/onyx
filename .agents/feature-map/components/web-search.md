@@ -118,7 +118,10 @@ the cited ones.
 
 **Runtime API.** `server/features/web_search/api.py` builds clients from the
 active rows with the same factories, but it does not use the tool classes.
-Its behaviour differs from the tools in three ways. `/open-urls` and `/search`
+Its behaviour differs from the tools in four ways.
+`_get_active_search_provider` refuses an active provider that has no API key,
+so a SearXNG provider with only a base URL works in chat but fails these routes
+with `INVALID_INPUT`. `/open-urls` and `/search`
 only crawl, so they have no indexed lookup and no ACL path. The routes run the
 queries one after another, and one failed query fails the whole request with
 `BAD_GATEWAY` (`_run_web_search`). An error from the content provider also

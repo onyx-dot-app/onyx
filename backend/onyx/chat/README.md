@@ -46,19 +46,24 @@ the system can RAG over the project files.
 
 ## How documents are represented
 
-Documents from search or uploaded Project files are represented as a json so that the LLM can easily understand it. It is represented with a prefix string to
-make the context clearer to the LLM. Note that for search results (whether web or internal, it will just be the json) and it will be a Tool Call type of
-message rather than a user message.
+Documents from search or uploaded Project files are represented as a json so that the LLM can easily understand it.
+
+Project files go in a user message with a prefix string to make the context clearer to the LLM
+(`chat/llm_loop.py:_create_context_files_message`):
 
 ```
 Here are some documents provided for context, they may not all be relevant:
 {
     "documents": [
-        {"document": 1, "title": "Hello", "content": "Foo", "metadata": "{\"status\": \"closed\"}"},
-        {"document": 2, "title": "World", "content": "Bar"}
+        {"document": 1, "title": "Hello", "contents": "Foo"},
+        {"document": 2, "title": "World", "contents": "Bar"}
     ]
 }
 ```
+
+Search results (web or internal) go in a Tool Call response with no prefix
+(`tools/tool_implementations/utils.py:convert_inference_sections_to_llm_string`). They use a `"results"` wrapper,
+the `content` key, and an optional JSON-string `metadata` field after `content`.
 
 Documents are represented with the `document` key so that the LLM can easily cite them with a single number. The tool returns have to be richer to be able to
 translate this into links and other UI elements. What the LLM sees is far simpler to reduce noise/hallucinations.
@@ -82,7 +87,7 @@ string saying it is no longer available. Tool Call details like the search query
 rich and generally very few tokens.
 
 > Note: in the Internal Search flow with query expansion, the Tool Call which was actually run differs from what the LLM provided as arguments.
-> What the LLM sees in the history (to be most informative for future calls) is the full set of expanded queries.
+> The history keeps only the arguments the LLM provided. The expanded queries go to the client in the `SearchToolQueriesDelta` packet and are not saved.
 
 **Possible Future Extension**:
 Instead of dropping the Tool Call response, we might summarize it using an LLM so that it is just 1-2 sentences and captures the main points. That said,

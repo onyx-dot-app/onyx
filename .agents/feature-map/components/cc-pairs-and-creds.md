@@ -85,8 +85,8 @@ manage groups (`authorize_pairing`; the mock route calls `assert_within_scope`
 itself), `connectors/pairing_access.py:validate_pairing_access` (access-type
 rules, [[permission-sync]]), `connectors/factory.py:validate_ccpair_for_user`
 (the credential use rule, then the pairing checks of
-[[connector-capability-checks]]), then `add_credential_to_connector`. Each then
-sends `CHECK_FOR_INDEXING` at once so the first attempt does not wait for the
+[[connector-capability-checks]]), then `add_credential_to_connector`. Each then,
+unless the pair is `PAUSED`, sends `CHECK_FOR_INDEXING` at once so the first attempt does not wait for the
 beat. Craft's user library calls `add_credential_to_connector` directly for its
 own private pair ([[craft-sessions]]).
 

@@ -140,8 +140,9 @@ sends cleanup tasks in batches of `DOCUMENT_INDEX_SYNC_MAX_TASKS`, and
 fails the deletion when a batch does not lower the linked count.
 For a File connector, the route that starts the deletion
 (`server/manage/administrative.py:create_deletion_attempt_for_connector_id`)
-deletes the uploaded files from the file store at once, before any cleanup task
-runs.
+deletes the uploaded files from the file store after it sends
+`CHECK_FOR_CONNECTOR_DELETION`. The two are not ordered, so cleanup can start
+before the files are gone.
 
 **The cleanup task.** `background/celery/tasks/shared/tasks.py:document_by_cc_pair_cleanup_task`
 serves both flows. If this pair is the document's last owner and no other

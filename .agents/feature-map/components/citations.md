@@ -135,8 +135,8 @@ reports merge.
    search results use `content` with `metadata` last
    (`tools/tool_implementations/utils.py:convert_inference_sections_to_llm_string`),
    and project files use `contents`
-   (`chat/llm_loop.py:_create_context_files_message`). The example in
-   `backend/onyx/chat/README.md` matches neither.
+   (`chat/llm_loop.py:_create_context_files_message`).
+   `backend/onyx/chat/README.md` shows both formats.
 6. `guidance-in-reminder` **Citation guidance lives only in the reminder.**
    The reminder is the last message, where the model attends most, and the
    system prompt must stay byte-stable for the prompt cache.

@@ -283,8 +283,10 @@ owns the chunking of the sections.
   `FieldPolicy` ([[#field-policy-required]]), and a registry entry. Implement
   `CheckpointedConnector` and a slim listing that raises on auth failure
   ([[#slim-listing-raises-on-auth-failure]], [[#slim-and-index-same-ids]]).
-  Override `validate_connector_settings`, or the source gets no check at
-  creation. To find every registration point, run
+  Register named capability checks ([[connector-capability-checks]]) or
+  override `validate_connector_settings`; a source with neither gets no check
+  at creation. With named checks, pairing does not run the settings probe
+  (`connectors/factory.py:validate_proposed_pairing`). To find every registration point, run
   `git grep -il youtrack -- backend web` and repeat each hit that is not in the
   source's own package. A config with a `CredentialBinding` also needs
   `backend/scripts/generate_credential_bound_fields.py` run again. For

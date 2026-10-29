@@ -219,10 +219,13 @@ to the no-op when no PostHog client is configured.
     The settings write gate for `llm_gateway_enabled` writes `Tier.BUSINESS`
     itself instead of reading `LLM_GATEWAY_MIN_TIER`. It must agree with the
     gateway prefix in `PATH_PREFIX_MIN_TIER`.
-12. `flags-off-self-hosted` **Feature flags are always off on self-hosted.** The
+12. `flags-off-self-hosted` **Feature flags are off on self-hosted unless
+    `DEV_MODE` is set.**
+    `backend/onyx/feature_flags/factory.py:get_default_feature_flag_provider`
+    returns the PostHog provider on cloud or with `DEV_MODE`, and otherwise the
     no-op provider
-    (`backend/onyx/feature_flags/interface.py:NoOpFeatureFlagProvider`) answers
-    `False` for every flag. A flagged feature that must
+    (`backend/onyx/feature_flags/interface.py:NoOpFeatureFlagProvider`), which
+    answers `False` for every flag. A flagged feature that must
     work self-hosted checks for `NoOpFeatureFlagProvider` and reads an env var
     instead, as `backend/onyx/server/features/build/utils.py` does with
     `ENABLE_CRAFT`.

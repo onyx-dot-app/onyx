@@ -17,8 +17,9 @@ preferences such as organization instructions and the Craft default model.
 **Access.** The admin sets a workspace default (Craft on or off for everyone;
 on until an admin changes it) and overrides it for single users or in bulk. A
 user whose effective access is off cannot open Craft. Every route on the Craft
-user router returns 403, not only a hidden link. The shared-webapp preview and
-static previews do not check Craft access ([[#preview-routes-skip-access-gate]]). When the admin turns access off for the owner of a scheduled
+user router returns 403, not only a hidden link. The shared-webapp preview does
+not check Craft access, and a static preview checks the owner's access, not
+the viewer's ([[#preview-routes-skip-access-gate]]). When the admin turns access off for the owner of a scheduled
 task, the next fire records a skipped run instead of running
 ([[craft-scheduled-tasks]]).
 
@@ -204,10 +205,13 @@ then the chat default.
 12. `preview-routes-skip-access-gate` **The preview routes are outside the
     access gate.** `server/features/build/webapp_proxy.py:public_build_router`
     and `server/features/build/static_preview.py:public_router` sit under
-    `/build` but do not use `require_onyx_craft_enabled`. They check session
-    sharing or a preview token instead
-    ([[craft-webapp-proxy#public-router-checks-access]]). A user whose Craft
-    access is off can still open a webapp that another user shares. Do not
+    `/build` but do not use `require_onyx_craft_enabled`. The webapp proxy
+    checks session sharing instead
+    ([[craft-webapp-proxy#public-router-checks-access]]), so a user whose Craft
+    access is off can still open a webapp that another user shares.
+    `server/features/build/static_preview.py:read_static_preview` checks the preview token, then
+    refuses with 404 when the token's owner is inactive or has lost
+    `BASIC_ACCESS` or Craft access. It does not check the viewer. Do not
     assume that a path under `/build` implies the Craft gate.
 
 ---

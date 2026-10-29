@@ -21,8 +21,9 @@ sit in.
   (`backend/onyx/auth/users.py:_scoped_pat_permitted_on_route`).
   [[authorization#every-route-has-auth-dependency]],
   [[authorization#scoped-pat-fails-closed]].
-- **`PUBLIC_ENDPOINT_SPECS` means no authentication at all.** EE adds to it in
-  `ee/onyx/server/auth_check.py`. A new entry needs a security review.
+- **`PUBLIC_ENDPOINT_SPECS` only skips the startup check.** The handler must
+  check credentials itself ([[onyx-api#two-meanings-of-public]]). EE adds to
+  it in `ee/onyx/server/auth_check.py`. A new entry needs a security review.
 - **`allow_scope=True` (GATE 1) needs a GATE 2 check in the handler.** Use
   `auth/scoped_permissions.py:assert_within_scope` for writes, with the current
   groups read from the database, `assert_manages_group` for group edits, and
@@ -84,13 +85,13 @@ sit in.
   or `start_thread_with_context`, which copy the context. Copy once per thread
   ([[multi-tenancy#threads-copy-context]],
   [[core-chat-loop#threads-copy-context]]).
-- **A task needs a `tenant_id` kwarg.** Without it, `TenantAwareTask` runs in
+- **A tenant-scoped task needs a `tenant_id` kwarg.** Without it, `TenantAwareTask` runs in
   the default schema with no error ([[multi-tenancy#celery-task-tenant-kwarg]]).
 - **Every new send needs `expires=`** ([[background-jobs#send-expires]]).
 - **A new task kwarg needs a default,** because old and new workers and senders
   mix during a rolling deploy ([[background-jobs#task-kwargs-defaults]]).
-- **Every Redis and cache key needs the tenant**
-  ([[multi-tenancy#tenant-in-cache-keys]]).
+- **A tenant-scoped Redis or cache key needs the tenant; a cross-tenant key
+  uses the shared client** ([[multi-tenancy#tenant-in-cache-keys]]).
 - Read the other task rules in [[background-jobs]]: the decorator, the queue,
   the ack mode, sessions across external calls, fences and idempotency.
 
