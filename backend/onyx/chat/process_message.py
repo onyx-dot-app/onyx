@@ -480,8 +480,19 @@ def prepare_chat_turn(
                 persist_content=False,
                 admission=admission,
             )
+            input_ids = {
+                message.id for message in history.messages[history.input_start :]
+            }
             history.messages, previous_run_id = history_store.prepare_messages(
                 history.messages, previous_run_id, accepted_text
+            )
+            history.input_start = next(
+                (
+                    index
+                    for index, message in enumerate(history.messages)
+                    if message.id in input_ids
+                ),
+                len(history.messages) - 1,
             )
             selected_user_message = history.messages[-1] if history.messages else None
             if not isinstance(selected_user_message, UserMessage):
@@ -534,8 +545,8 @@ def prepare_chat_turn(
                 session_id=str(chat_session_id),
             ),
             responses=models,
-            messages=history.messages[:-1],
-            input_messages=history.messages[-1:],
+            messages=history.messages[: history.input_start],
+            input_messages=history.messages[history.input_start :],
             previous_run_id=previous_run_id,
             extracted_context_files=extracted_files,
             stream_id=user_message_id if is_multi else models[0].message_id,

@@ -418,6 +418,7 @@ class ChatHistoryResult(BaseModel):
     """
 
     messages: list[Message]
+    input_start: int
     all_injected_file_metadata: dict[str, FileToolMetadata]
 
 

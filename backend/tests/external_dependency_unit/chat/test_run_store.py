@@ -238,7 +238,10 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
     context = AgentState()
     if scenario == "compaction":
         context.messages = [
-            UserMessage(id="earlier-question", content="earlier question")
+            UserMessage(id="earlier-question", content="earlier question"),
+            AssistantMessage(
+                id="earlier-answer", content=[TextContent(text="earlier answer")]
+            ),
         ]
         context.checkpoint = CompactionCheckpoint(
             summary="earlier context",

@@ -546,7 +546,9 @@ def test_expired_history_preparation_cannot_append_after_new_owner_claims(
         next_admission.claim(chat_session.id)
 
     converted = ChatHistoryResult(
-        messages=[UserMessage(content="Accepted")], all_injected_file_metadata={}
+        messages=[UserMessage(content="Accepted")],
+        input_start=0,
+        all_injected_file_metadata={},
     )
     with (
         patch("onyx.chat.process_message.ChatTurnAdmission", return_value=admission),
@@ -595,7 +597,11 @@ def test_incognito_history_retains_summary_checkpoint(
     stored = IncognitoContext(
         messages=[
             UserMessage(id="chat:1", content="Earlier question"),
-            UserMessage(id="chat:2", content="Accepted"),
+            *(
+                [UserMessage(id="chat:2", content="Accepted")]
+                if accepted_text is None
+                else []
+            ),
         ],
         previous_run_id="previous-run",
     )
@@ -634,10 +640,7 @@ def test_incognito_history_retains_summary_checkpoint(
             User(id=uuid4(), email="reader@example.com"),
             llm_overrides=None,
         )
-    expected = [
-        UserMessage(id="chat:1", content="Earlier question"),
-        UserMessage(id="chat:2", content="Accepted"),
-    ]
+    expected = list(stored.messages)
     if accepted_text is not None:
         current_user = setup.input_messages[0]
         assert isinstance(current_user, UserMessage)
@@ -672,6 +675,7 @@ def test_storage_saves_its_resolved_input(
         messages=[UserMessage(content="Prompt with attachments")]
         if source_has_user_message
         else [],
+        input_start=0,
         all_injected_file_metadata={},
     )
     stored_user = UserMessage(content="Backend-normalized input")

@@ -381,6 +381,7 @@ def convert_chat_history(
     """Load canonical assistant output and attach user files to message history."""
     messages: list[Message] = []
     all_injected_file_metadata: dict[str, FileToolMetadata] = {}
+    input_start = 0
 
     # Create a mapping of file IDs to loaded files for quick lookup
     file_map = {str(f.file_id): f for f in files}
@@ -397,6 +398,7 @@ def convert_chat_history(
 
     for idx, chat_message in enumerate(chat_history):
         if chat_message.message_type == MessageType.USER:
+            input_start = len(messages)
             # Process files attached to this message
             text_files: list[tuple[ChatLoadedFile, FileDescriptor]] = []
             image_files: list[ChatLoadedFile] = []
@@ -480,6 +482,7 @@ def convert_chat_history(
 
     return ChatHistoryResult(
         messages=messages,
+        input_start=input_start,
         all_injected_file_metadata=all_injected_file_metadata,
     )
 
