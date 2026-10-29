@@ -410,13 +410,14 @@ class ChatDelivery:
             self._replay_unavailable.set()
             self._pending_replay.clear()
             self._pending_replay_bytes = 0
-            self.reader.publish(
-                StreamingError(
-                    error="The live stream is incomplete. Reload this conversation.",
-                    error_code="STREAM_GAP",
-                    is_retryable=True,
-                )
+            error = StreamingError(
+                error="The live stream is incomplete. Reload this conversation.",
+                error_code="STREAM_GAP",
+                is_retryable=True,
             )
+            if self._query_observation is not None:
+                self._query_observation.observe_packet(error)
+            self.reader.publish(error)
 
     def finish(self) -> None:
         with self._publish_lock:
