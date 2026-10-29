@@ -274,8 +274,10 @@ const ChatScrollContainer = React.memo(
         };
       }, [updateScrollState, scrollToBottom]);
 
-      // Handle session changes and anchor changes
-      useEffect(() => {
+      // Handle session changes and anchor changes. A layout effect: opening a
+      // chat whose messages are already rendered scrolls it into place before
+      // the browser paints, so switching to a cached chat shows no blank frame.
+      useLayoutEffect(() => {
         const container = scrollContainerRef.current;
         if (!container) return;
 
@@ -319,8 +321,7 @@ const ChatScrollContainer = React.memo(
           ? "instant"
           : "smooth";
 
-        // Defer scroll to next tick for layout to settle
-        const timeoutId = setTimeout(() => {
+        const scrollIntoPlace = () => {
           let targetScrollTop: number;
 
           // When loading an existing conversation, scroll to bottom
@@ -349,8 +350,17 @@ const ChatScrollContainer = React.memo(
           setIsScrollReady(true);
           scrolledForSessionRef.current = sessionId ?? null;
           prevAnchorSelectorRef.current = anchorSelector ?? null;
-        }, 0);
+        };
 
+        // Opening a chat: its messages are laid out already, so scroll now,
+        // before paint. The content is never painted hidden or out of place.
+        if (isLoadingExistingContent) {
+          scrollIntoPlace();
+          return;
+        }
+
+        // A new anchor within the chat: defer a tick so layout can settle.
+        const timeoutId = setTimeout(scrollIntoPlace, 0);
         return () => clearTimeout(timeoutId);
       }, [sessionId, anchorSelector, anchorOffsetPx, updateScrollState]);
 
