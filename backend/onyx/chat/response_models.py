@@ -283,7 +283,7 @@ class MessagePayload(BaseModel):
 
 class ResponseCheckpoint(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    version: Literal[2] = 2
+    version: Literal[1] = 1
     history_digest: str
     response_digest: str
     binding: CheckpointBinding

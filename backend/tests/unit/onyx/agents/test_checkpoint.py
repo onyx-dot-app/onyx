@@ -226,9 +226,11 @@ def test_unknown_payload_types_and_versions_fail_before_execution() -> None:
     with pytest.raises(ValueError, match="Unknown checkpoint payload"):
         CheckpointStorage({}).load(serialized)
     payload = json.loads(serialized)
-    payload["checkpoint"]["version"] = 999
-    with pytest.raises(ValidationError):
-        codec().load(json.dumps(payload))
+    assert payload["checkpoint"]["version"] == 1
+    for unsupported_version in (2, 999):
+        payload["checkpoint"]["version"] = unsupported_version
+        with pytest.raises(ValidationError):
+            codec().load(json.dumps(payload))
     with pytest.raises(ValueError, match="selected context"):
         codec().load(
             serialized,
