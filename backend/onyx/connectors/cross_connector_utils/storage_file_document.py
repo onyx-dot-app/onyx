@@ -42,7 +42,7 @@ def build_storage_file_document(
     errors, so the caller decides how a failed file is reported.
     """
     if get_file_ext(file_name) in OnyxFileExtensions.IMAGE_EXTENSIONS:
-        # TODO: Refactor to avoid direct DB access in connector
+        # TODO(evan-onyx): Refactor to avoid direct DB access in connector
         # This will require broader refactoring across the codebase
         image_section, _ = store_image_and_create_section(
             image_data=file_bytes,
