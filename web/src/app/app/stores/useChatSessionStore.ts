@@ -648,12 +648,13 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
       }
 
       // Only idle sessions are evicted: the open one, one that is streaming or
-      // otherwise busy, one with queued messages, and one still fetching stay.
+      // otherwise busy, and one with queued messages stay. A session still
+      // fetching can go: its fetch no longer owns the session and discards
+      // the result.
       const isEvictable = (sessionId: string, session: ChatSessionData) =>
         sessionId !== state.currentSessionId &&
         session.chatState === "input" &&
-        session.queuedMessages.length === 0 &&
-        !session.isFetchingChatMessages;
+        session.queuedMessages.length === 0;
 
       const evictable = Array.from(state.sessions.entries())
         .filter(([sessionId, session]) => isEvictable(sessionId, session))
