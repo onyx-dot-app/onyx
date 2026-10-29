@@ -121,12 +121,8 @@ sum by (engine) (rate(onyx_db_pool_checkout_timeout_total[5m])) > 0
 sum by (task_name) (rate(onyx_celery_task_completed_total{outcome="failure"}[5m]))
   / sum by (task_name) (rate(onyx_celery_task_completed_total[5m]))
 
-# A task failed in the last 5 minutes.
-# The failure series starts at the first failure, so increase() alone misses that failure.
-# The second part catches it. increase() also catches a failure after a worker restart.
+# A task failed in the last 5 minutes
 increase(onyx_celery_task_completed_total{outcome="failure"}[5m]) > 0
-  or (onyx_celery_task_completed_total{outcome="failure"}
-    unless onyx_celery_task_completed_total{outcome="failure"} offset 5m)
 
 # Tasks wait in a queue
 onyx_queue_depth > 100

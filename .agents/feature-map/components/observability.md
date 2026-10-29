@@ -233,7 +233,9 @@ inside the cluster network, not exposed externally). Generic per-task lifecycle
 metrics come from `celery_task_metrics.py:on_celery_task_prerun` /
 `on_celery_task_postrun` / `on_celery_task_retry` / `on_celery_task_revoked` /
 `on_celery_task_rejected`, wired manually into each worker's own Celery signal
-handlers. `docfetching`, `docprocessing`, `heavy`, `light`, `primary`, and
+handlers. Prerun creates both `onyx_celery_task_completed_total` outcomes at 0,
+so the first failure of a task is an increase that `rate()` and `increase()`
+see. `docfetching`, `docprocessing`, `heavy`, `light`, `primary`, and
 `scheduled_tasks` do this; `user_file_processing` does not start a metrics
 server. `docfetching` and `docprocessing` add per-connector labels through
 `indexing_task_metrics.py` and push connector health through
