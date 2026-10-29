@@ -476,6 +476,10 @@ launching Playwright ad hoc.
   then fits and compacts its prompt against its own model context budget.
 - **Compaction belongs to each SDK run.** The saved summary is tied to its response
   branch. A later turn must use the summary from its selected ancestry.
+  Summarization and fallback truncation retain trailing unanswered user messages together,
+  including attachment contents and request context. Oversized unread input fails rather
+  than silently losing an attachment. Once an assistant response follows the input,
+  that history becomes eligible for compaction.
 - **Anonymous access is allowed** on several of these endpoints
   (`allow_anonymous=True`). A change that assumes a logged-in user will break the
   anonymous flow.
