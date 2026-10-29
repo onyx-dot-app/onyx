@@ -125,7 +125,7 @@ SCOPED_MANAGER_PERMISSIONS: frozenset[Permission] = frozenset(
         Permission.MANAGE_AGENTS,
         Permission.ADD_AGENTS,
         Permission.MANAGE_USER_GROUPS,
-        Permission.MANAGE_ACTIONS,  # scoped via its agents at GATE 2
+        Permission.MANAGE_ACTIONS,  # owner-only; see can_manage_tool in db/tools.py
         Permission.MANAGE_SKILLS,  # scoped via Skill__UserGroup at GATE 2
     }
 )
