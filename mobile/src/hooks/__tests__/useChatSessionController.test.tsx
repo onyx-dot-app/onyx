@@ -175,26 +175,56 @@ describe("useChatSessionController", () => {
     });
   });
 
-  it("preserves live output and enables input when the final history request fails after idle", async () => {
-    seedLiveSession(2);
-    resumeMock.mockReturnValue(
-      scripted([startPacket("Live answer"), endPacket()]),
-    );
-    getSessionMock.mockRejectedValueOnce(new Error("Request cancelled"));
-    renderHook(() => useChatSessionController("s1"), { wrapper });
-    await waitFor(() =>
+  it.each([2, null])(
+    "retries failed history loading on reopen with stream ID %s",
+    async (streamId) => {
+      seedLiveSession(streamId);
+      useChatSessionStore.getState().updateChatState("s1", "settling");
+      resumeMock.mockImplementation(() =>
+        scripted([startPacket("Live answer"), endPacket()]),
+      );
+      getSessionMock.mockRejectedValueOnce(new Error("History unavailable"));
+      const { rerender } = renderHook(
+        ({ sessionId }: { sessionId: string | null }) =>
+          useChatSessionController(sessionId),
+        { initialProps: { sessionId: "s1" }, wrapper },
+      );
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith(
+          "Could not refresh saved messages. Reopen this conversation to retry.",
+        ),
+      );
       expect(useChatSessionStore.getState().sessions.get("s1")?.chatState).toBe(
-        "input",
-      ),
-    );
-    expect(assistantText("s1", 2)).toBe("Live answer");
-    expect(
-      useChatSessionStore.getState().sessions.get("s1")?.abortController,
-    ).toBeNull();
-    expect(toast.error).toHaveBeenCalledWith(
-      "Could not refresh saved messages. Reopen this conversation to retry.",
-    );
-  });
+        "unconfirmed",
+      );
+      if (streamId !== null) {
+        expect(assistantText("s1", 2)).toBe("Live answer");
+      }
+      expect(
+        useChatSessionStore.getState().sessions.get("s1")?.abortController,
+      ).toBeNull();
+      expect(getSessionMock).toHaveBeenCalledTimes(1);
+
+      rerender({ sessionId: null });
+      getSessionMock.mockResolvedValueOnce({
+        chat_session_id: "s1",
+        description: "",
+        persona_id: 0,
+        messages: backendMessages("Saved answer"),
+        packets: [[historyPacket("Saved answer")]],
+        time_created: "",
+        current_stream: null,
+      });
+      rerender({ sessionId: "s1" });
+      await waitFor(() =>
+        expect(
+          useChatSessionStore.getState().sessions.get("s1")?.chatState,
+        ).toBe("input"),
+      );
+      expect(getSessionMock).toHaveBeenCalledTimes(2);
+      expect(assistantText("s1", 2)).toBe("Saved answer");
+    },
+  );
 
   it("stops recovery when the session is unavailable without claiming it is idle", async () => {
     seedLiveSession(2);
