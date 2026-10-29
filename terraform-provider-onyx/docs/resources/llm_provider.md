@@ -83,8 +83,11 @@ Optional:
 - `display_name` (String) Source-API display name (dynamic providers such as OpenRouter/Ollama).
 - `is_visible` (Boolean) Whether the model is selectable in the UI.
 - `max_input_tokens` (Number) Override for the model's max input tokens; unset uses the model's known default.
+- `reasoning_effort_default` (String) Reasoning effort for this model when the user does not select one. Must not be higher than `reasoning_effort_max`. Same values. Unset, Onyx keeps the stored value.
+- `reasoning_effort_max` (String) Highest reasoning effort users can select for this model: `off`, `low`, `medium`, `high`, or `xhigh`. Unset, Onyx keeps the stored value.
 - `supports_image_input` (Boolean) Override for image-input support; unset lets Onyx infer it.
 - `supports_reasoning` (Boolean) Override for reasoning-model classification; unset lets Onyx infer it.
+- `temperature_default` (Number) Temperature for this model when the user does not set one, 0 to 2. Unset, Onyx keeps the stored value.
 
 ## Import
 

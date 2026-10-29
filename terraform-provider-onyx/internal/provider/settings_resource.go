@@ -3,6 +3,8 @@ package provider
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -47,12 +49,15 @@ type settingsResourceModel struct {
 	CompanyDescription                types.String  `tfsdk:"company_description"`
 	QueryHistoryType                  types.String  `tfsdk:"query_history_type"`
 	CraftInstructions                 types.String  `tfsdk:"craft_instructions"`
+	DefaultLanguage                   types.String  `tfsdk:"default_language"`
 	ApplicationStatus                 types.String  `tfsdk:"application_status"`
 	Tier                              types.String  `tfsdk:"tier"`
 	MaximumChatRetentionDays          types.Float64 `tfsdk:"maximum_chat_retention_days"`
 	ImageAnalysisMaxSizeMB            types.Int64   `tfsdk:"image_analysis_max_size_mb"`
 	UserFileMaxUploadSizeMB           types.Int64   `tfsdk:"user_file_max_upload_size_mb"`
 	FileTokenCountThresholdK          types.Int64   `tfsdk:"file_token_count_threshold_k"`
+	EmbeddingRateLimitRequests        types.Int64   `tfsdk:"embedding_rate_limit_requests"`
+	EmbeddingRateLimitPeriodSeconds   types.Int64   `tfsdk:"embedding_rate_limit_period_seconds"`
 	SeatCount                         types.Int64   `tfsdk:"seat_count"`
 	UsedSeats                         types.Int64   `tfsdk:"used_seats"`
 	AnonymousUserEnabled              types.Bool    `tfsdk:"anonymous_user_enabled"`
@@ -62,6 +67,9 @@ type settingsResourceModel struct {
 	SearchUIEnabled                   types.Bool    `tfsdk:"search_ui_enabled"`
 	AutoDetectSearchFilters           types.Bool    `tfsdk:"auto_detect_search_filters"`
 	TemperatureOverrideEnabled        types.Bool    `tfsdk:"temperature_override_enabled"`
+	ReasoningOverrideEnabled          types.Bool    `tfsdk:"reasoning_override_enabled"`
+	HideProviderGrouping              types.Bool    `tfsdk:"hide_provider_grouping"`
+	LLMGatewayEnabled                 types.Bool    `tfsdk:"llm_gateway_enabled"`
 	AutoScroll                        types.Bool    `tfsdk:"auto_scroll"`
 	ImageExtractionAndAnalysisEnabled types.Bool    `tfsdk:"image_extraction_and_analysis_enabled"`
 	UserKnowledgeEnabled              types.Bool    `tfsdk:"user_knowledge_enabled"`
@@ -129,6 +137,45 @@ func (r *settingsResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"temperature_override_enabled": schema.BoolAttribute{
 				Optional:            true,
 				MarkdownDescription: "Let users override model temperature.",
+			},
+			"reasoning_override_enabled": schema.BoolAttribute{
+				Optional:            true,
+				MarkdownDescription: "Let users change the reasoning effort of reasoning models.",
+			},
+			"hide_provider_grouping": schema.BoolAttribute{
+				Optional:            true,
+				MarkdownDescription: "Show one flat model list in the model selector, without groups for each provider.",
+			},
+			"default_language": schema.StringAttribute{
+				Optional: true,
+				MarkdownDescription: "UI language for users who did not select a language: `en`, `es`, " +
+					"`pt`, `fr`, `de`, `ja`, `zh`, `ko`, or `ar`. Needs Onyx v5.0.0 or later.",
+				Validators: []validator.String{
+					stringvalidator.OneOf(supportedLanguages...),
+				},
+			},
+			"llm_gateway_enabled": schema.BoolAttribute{
+				Optional: true,
+				MarkdownDescription: "Allow direct model API access through the LLM gateway (`/api/gateway`) " +
+					"for external tools. A change needs the Business or Enterprise tier. Needs Onyx v5.0.0 or later.",
+			},
+			"embedding_rate_limit_requests": schema.Int64Attribute{
+				Optional: true,
+				MarkdownDescription: "Maximum number of indexing embedding requests in each " +
+					"`embedding_rate_limit_period_seconds` window, for the whole deployment (1 to 100000). " +
+					"Onyx has no limit by default. Removing the attribute does not remove the limit. " +
+					"Needs Onyx v5.0.0 or later.",
+				Validators: []validator.Int64{
+					int64validator.Between(1, 100000),
+				},
+			},
+			"embedding_rate_limit_period_seconds": schema.Int64Attribute{
+				Optional: true,
+				MarkdownDescription: "Length of the window for `embedding_rate_limit_requests`, in seconds " +
+					"(1 to 86400). Onyx uses 60 by default. Needs Onyx v5.0.0 or later.",
+				Validators: []validator.Int64{
+					int64validator.Between(1, 86400),
+				},
 			},
 			"auto_scroll": schema.BoolAttribute{
 				Optional:            true,
@@ -263,6 +310,24 @@ func patchBodyFromPlan(plan settingsResourceModel) map[string]any {
 	if !plan.TemperatureOverrideEnabled.IsNull() {
 		body["temperature_override_enabled"] = plan.TemperatureOverrideEnabled.ValueBool()
 	}
+	if !plan.ReasoningOverrideEnabled.IsNull() {
+		body["reasoning_override_enabled"] = plan.ReasoningOverrideEnabled.ValueBool()
+	}
+	if !plan.HideProviderGrouping.IsNull() {
+		body["hide_provider_grouping"] = plan.HideProviderGrouping.ValueBool()
+	}
+	if !plan.DefaultLanguage.IsNull() {
+		body["default_language"] = plan.DefaultLanguage.ValueString()
+	}
+	if !plan.LLMGatewayEnabled.IsNull() {
+		body["llm_gateway_enabled"] = plan.LLMGatewayEnabled.ValueBool()
+	}
+	if !plan.EmbeddingRateLimitRequests.IsNull() {
+		body["embedding_rate_limit_requests"] = plan.EmbeddingRateLimitRequests.ValueInt64()
+	}
+	if !plan.EmbeddingRateLimitPeriodSeconds.IsNull() {
+		body["embedding_rate_limit_period_seconds"] = plan.EmbeddingRateLimitPeriodSeconds.ValueInt64()
+	}
 	if !plan.AutoScroll.IsNull() {
 		body["auto_scroll"] = plan.AutoScroll.ValueBool()
 	}
@@ -325,6 +390,24 @@ func refreshSettingsModel(model *settingsResourceModel, server *client.Settings)
 	}
 	if !model.TemperatureOverrideEnabled.IsNull() {
 		model.TemperatureOverrideEnabled = types.BoolPointerValue(server.TemperatureOverrideEnabled)
+	}
+	if !model.ReasoningOverrideEnabled.IsNull() {
+		model.ReasoningOverrideEnabled = types.BoolPointerValue(server.ReasoningOverrideEnabled)
+	}
+	if !model.HideProviderGrouping.IsNull() {
+		model.HideProviderGrouping = types.BoolPointerValue(server.HideProviderGrouping)
+	}
+	if !model.DefaultLanguage.IsNull() {
+		model.DefaultLanguage = types.StringPointerValue(server.DefaultLanguage)
+	}
+	if !model.LLMGatewayEnabled.IsNull() {
+		model.LLMGatewayEnabled = types.BoolPointerValue(server.LLMGatewayEnabled)
+	}
+	if !model.EmbeddingRateLimitRequests.IsNull() {
+		model.EmbeddingRateLimitRequests = types.Int64PointerValue(server.EmbeddingRateLimitRequests)
+	}
+	if !model.EmbeddingRateLimitPeriodSeconds.IsNull() {
+		model.EmbeddingRateLimitPeriodSeconds = types.Int64PointerValue(server.EmbeddingRateLimitPeriodSeconds)
 	}
 	if !model.AutoScroll.IsNull() {
 		model.AutoScroll = types.BoolPointerValue(server.AutoScroll)
@@ -391,8 +474,36 @@ func (r *settingsResource) apply(ctx context.Context, plan settingsResourceModel
 		plan.OpenSearchIndexingEnabled = types.BoolNull()
 		return plan, true, err
 	}
+	if missing := settingsMissingOnServer(plan, applied); len(missing) > 0 {
+		refreshSettingsModel(&plan, applied)
+		return plan, true, fmt.Errorf("this Onyx server does not support %s; "+
+			"these settings need Onyx v5.0.0 or later", strings.Join(missing, ", "))
+	}
 	refreshSettingsModel(&plan, applied)
 	return plan, true, nil
+}
+
+// supportedLanguages mirrors SupportedLanguage (backend/onyx/db/enums.py).
+var supportedLanguages = []string{"en", "es", "pt", "fr", "de", "ja", "zh", "ko", "ar"}
+
+// settingsMissingOnServer lists the managed settings that the server did not
+// return. Older servers ignore unknown PATCH fields, so this is how a
+// setting that is too new for the server shows.
+func settingsMissingOnServer(plan settingsResourceModel, server *client.Settings) []string {
+	var missing []string
+	if !plan.DefaultLanguage.IsNull() && server.DefaultLanguage == nil {
+		missing = append(missing, "default_language")
+	}
+	if !plan.LLMGatewayEnabled.IsNull() && server.LLMGatewayEnabled == nil {
+		missing = append(missing, "llm_gateway_enabled")
+	}
+	if !plan.EmbeddingRateLimitRequests.IsNull() && server.EmbeddingRateLimitRequests == nil {
+		missing = append(missing, "embedding_rate_limit_requests")
+	}
+	if !plan.EmbeddingRateLimitPeriodSeconds.IsNull() && server.EmbeddingRateLimitPeriodSeconds == nil {
+		missing = append(missing, "embedding_rate_limit_period_seconds")
+	}
+	return missing
 }
 
 // settingsErrorDetail augments tier-gating errors with an actionable hint.

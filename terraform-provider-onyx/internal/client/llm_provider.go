@@ -16,6 +16,10 @@ type ModelConfigurationUpsert struct {
 	SupportsReasoning  *bool   `json:"supports_reasoning"`
 	DisplayName        *string `json:"display_name"`
 	CustomDisplayName  *string `json:"custom_display_name"`
+	// Omitted when unset: Onyx then keeps the stored value.
+	ReasoningEffortMax     *string  `json:"reasoning_effort_max,omitempty"`
+	ReasoningEffortDefault *string  `json:"reasoning_effort_default,omitempty"`
+	TemperatureDefault     *float64 `json:"temperature_default,omitempty"`
 }
 
 // ModelConfigurationView mirrors ModelConfigurationView. Only fields the
@@ -29,6 +33,10 @@ type ModelConfigurationView struct {
 	IsVisible          bool    `json:"is_visible"`
 	SupportsImageInput bool    `json:"supports_image_input"`
 	SupportsReasoning  bool    `json:"supports_reasoning"`
+
+	ReasoningEffortMax     *string  `json:"reasoning_effort_max"`
+	ReasoningEffortDefault *string  `json:"reasoning_effort_default"`
+	TemperatureDefault     *float64 `json:"temperature_default"`
 }
 
 // LLMProviderUpsertRequest mirrors the backend model. No omitempty: the PUT
@@ -81,6 +89,9 @@ type LLMProviderList struct {
 	DefaultText       *DefaultModel     `json:"default_text"`
 	DefaultVision     *DefaultModel     `json:"default_vision"`
 	DefaultChatNaming *DefaultModel     `json:"default_chat_naming"`
+	DefaultCraft      *DefaultModel     `json:"default_craft"`
+	// Onyx v5.0.0 and later.
+	DefaultSearchSelection *DefaultModel `json:"default_search_selection"`
 }
 
 // UpsertLLMProvider creates (isCreation=true) or updates an LLM provider.
@@ -149,4 +160,27 @@ func (c *Client) SetDefaultChatNamingModel(ctx context.Context, req DefaultModel
 // vision defaults have no equivalent unset endpoint.
 func (c *Client) ClearDefaultChatNamingModel(ctx context.Context) error {
 	return c.doJSON(ctx, http.MethodDelete, "/admin/llm/default-chat-naming", nil, nil)
+}
+
+// SetDefaultCraftModel sets the default model for Onyx Craft sessions.
+func (c *Client) SetDefaultCraftModel(ctx context.Context, req DefaultModel) error {
+	return c.doJSON(ctx, http.MethodPost, "/admin/llm/default-craft", req, nil)
+}
+
+// ClearDefaultCraftModel clears the Craft default. Craft then uses the text
+// default.
+func (c *Client) ClearDefaultCraftModel(ctx context.Context) error {
+	return c.doJSON(ctx, http.MethodDelete, "/admin/llm/default-craft", nil, nil)
+}
+
+// SetDefaultSearchSelectionModel sets the model that selects search results.
+// Onyx v5.0.0 and later.
+func (c *Client) SetDefaultSearchSelectionModel(ctx context.Context, req DefaultModel) error {
+	return c.doJSON(ctx, http.MethodPost, "/admin/llm/default-search-selection", req, nil)
+}
+
+// ClearDefaultSearchSelectionModel clears the search selection default. The
+// session's model then selects search results.
+func (c *Client) ClearDefaultSearchSelectionModel(ctx context.Context) error {
+	return c.doJSON(ctx, http.MethodDelete, "/admin/llm/default-search-selection", nil, nil)
 }
