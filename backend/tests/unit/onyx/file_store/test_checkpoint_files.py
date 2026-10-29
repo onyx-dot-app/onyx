@@ -2,7 +2,7 @@
 
 import pytest
 
-from onyx.chat.response_models import ChatSearchResult
+from onyx.chat.models import ChatSearchResult
 from onyx.file_store.models import ChatFileType, ChatLoadedFile, ExtractedContextFiles
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles
 from onyx.tools.models import ChatFile

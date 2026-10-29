@@ -224,7 +224,7 @@ and `_extract_text_and_images`).
 text-extracted; `_extract_text_and_images` returns empty text for image
 extensions and the model receives the raw image bytes directly as a vision
 input (`ChatFileType.IMAGE`, consumed in
-`files.py:extract_context_files`). Embedded images inside a PDF or
+`process_message.py:extract_context_files`). Embedded images inside a PDF or
 DOCX, by contrast, are decoded and sent through a **vision LLM** captioning
 pipeline, `file_processing/image_summarization.py:summarize_image_with_error_handling`
 → `summarize_image_pipeline` → `_summarize_image`, gated by
@@ -244,7 +244,7 @@ empty text, except for a PDF or DOCX that has detected embedded images (see §5)
 ### 4.4 The two consumption paths
 
 Every project/context file goes through
-`files.py:extract_context_files`, which decides per-turn whether the
+`process_message.py:extract_context_files`, which decides per-turn whether the
 aggregate token count of eligible files fits under
 `(llm_max_context_window - reserved_token_count) * 0.6`
 ([[context-assembly]] §4.3 owns this ceiling and the reasoning behind 60%).
@@ -417,7 +417,7 @@ access-control consequence of this.
 `SavedChatFile` keeps a stored file ID without reading its bytes.
 Inline snapshots encode binary content as base64 for JSON round trips.
 `SavedContextFiles` preserves context metadata and restores image bytes lazily from the file store.
-`ChatSearchResult` in `chat/response_models.py` uses these snapshots for staged files.
+`ChatSearchResult` in `chat/models.py` uses these snapshots for staged files.
 Existing tools can still construct eager files without an ID.
 
 These values do not authorize file access or persist new blobs.

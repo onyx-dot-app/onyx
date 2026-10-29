@@ -16,7 +16,7 @@ from collections.abc import Generator
 from dataclasses import dataclass
 from typing import TypeAlias
 
-from onyx.chat.response_models import CitationMode
+from onyx.chat.models import CitationMode
 from onyx.configs.chat_configs import STOP_STREAM_PAT
 from onyx.context.search.models import SearchDoc
 from onyx.server.query_and_chat.streaming_models import CitationInfo
@@ -380,8 +380,8 @@ class DynamicCitationProcessor:
         if token is None:
             self.code_fence_tracker.flush()
             if self.curr_segment:
-                yield self.curr_segment
-                self.curr_segment = ""
+                segment, self.curr_segment = self.curr_segment, ""
+                yield segment
             return
 
         # Handle stop stream token

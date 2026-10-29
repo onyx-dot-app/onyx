@@ -16,6 +16,7 @@ from fastapi.routing import APIRoute
 from httpx_oauth.clients.google import GoogleOAuth2
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
+from starlette.concurrency import run_in_threadpool
 from starlette.types import Lifespan
 
 from onyx import __version__
@@ -29,6 +30,7 @@ from onyx.auth.users import (
     verify_user_auth_secret,
 )
 from onyx.cache.interface import CacheBackendType
+from onyx.chat.execution import chat_turn_work
 from onyx.configs.app_configs import (
     API_SERVER_THREADPOOL_SIZE,
     APP_API_PREFIX,
@@ -52,6 +54,7 @@ from onyx.configs.app_configs import (
     USER_AUTH_SECRET,
     WEB_DOMAIN,
 )
+from onyx.configs.chat_configs import CHAT_EXECUTION_TIMEOUT_S
 from onyx.configs.constants import POSTGRES_WEB_APP_NAME
 from onyx.db.engine.async_sql_engine import (
     get_sqlalchemy_async_engine,
@@ -452,6 +455,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
     try:
         yield
     finally:
+        try:
+            # Chat may outlive its HTTP reader and still need DB and tracing services.
+            if not await run_in_threadpool(
+                chat_turn_work.wait_idle, CHAT_EXECUTION_TIMEOUT_S
+            ):
+                logger.error("Chat turns did not drain before API shutdown")
+        except Exception:
+            logger.exception("Failed to drain chat turns on shutdown")
+
         # Flush buffered per-user usage before disposing the DB engines its drain
         # thread writes through.
         from onyx.tracing.setup import shutdown_tracing

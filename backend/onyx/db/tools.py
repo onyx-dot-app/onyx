@@ -1,15 +1,16 @@
 from collections.abc import Collection
-from typing import TYPE_CHECKING, Any, Type, cast
+from typing import Any, Type, cast
 from uuid import UUID
 
 from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import InstrumentedAttribute, Session
+from sqlalchemy.orm import InstrumentedAttribute, Session, selectinload
 from sqlalchemy.sql.elements import ColumnElement
 
 from onyx.auth.permissions import has_permission
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.context.search.models import PersonaSearchInfo
+from onyx.db.chat import session_descendants
 from onyx.db.constants import UNSET, UnsetType
 from onyx.db.enums import MCPServerStatus, Permission, PermissionAuthority
 from onyx.db.models import (
@@ -27,13 +28,6 @@ from onyx.server.features.tool.models import Header
 from onyx.tools.built_in_tools import BUILT_IN_TOOL_TYPES
 from onyx.tools.models import PersonaToolConfiguration, ToolConfiguration
 from onyx.utils.headers import HeaderItemDict
-from onyx.utils.logger import setup_logger
-from onyx.utils.postgres_sanitization import sanitize_json_like, sanitize_string
-
-if TYPE_CHECKING:
-    pass
-
-logger = setup_logger()
 
 
 def get_tool_user_preferences(
@@ -417,65 +411,22 @@ def get_builtin_tool(
     return db_tool
 
 
-def create_tool_call_no_commit(
-    chat_session_id: UUID,
-    parent_chat_message_id: int | None,
-    turn_number: int,
-    tool_id: int,
-    tool_call_id: str,
-    tool_call_arguments: dict[str, Any],
-    tool_call_response: Any,
-    tool_call_tokens: int,
-    db_session: Session,
-    *,
-    parent_tool_call_id: int | None = None,
-    reasoning_tokens: str | None = None,
-    generated_images: list[dict] | None = None,
-    tab_index: int = 0,
-    add_only: bool = True,
-) -> ToolCall:
-    """
-    Create a ToolCall entry in the database.
-
-    Args:
-        chat_session_id: The chat session ID
-        parent_chat_message_id: The parent chat message ID
-        turn_number: The turn number for this tool call
-        tool_id: The tool ID
-        tool_call_id: The tool call ID (string identifier from LLM)
-        tool_call_arguments: The tool call arguments
-        tool_call_response: The tool call response
-        tool_call_tokens: The number of tokens in the tool call arguments
-        db_session: The database session
-        parent_tool_call_id: Optional parent tool call ID (for nested tool calls)
-        reasoning_tokens: Optional reasoning tokens
-        generated_images: Optional list of generated image metadata for replay
-        tab_index: Index order of tool calls from the LLM for parallel tool calls
-        commit: If True, commit the transaction; if False, flush only
-
-    Returns:
-        The created ToolCall object
-    """
-    tool_call = ToolCall(
-        chat_session_id=chat_session_id,
-        parent_chat_message_id=parent_chat_message_id,
-        parent_tool_call_id=parent_tool_call_id,
-        turn_number=turn_number,
-        tab_index=tab_index,
-        tool_id=tool_id,
-        tool_call_id=tool_call_id,
-        reasoning_tokens=(
-            sanitize_string(reasoning_tokens) if reasoning_tokens else reasoning_tokens
-        ),
-        tool_call_arguments=sanitize_json_like(tool_call_arguments),
-        tool_call_response=sanitize_json_like(tool_call_response),
-        tool_call_tokens=tool_call_tokens,
-        generated_images=sanitize_json_like(generated_images),
+def get_response_tool_records(
+    record_ids: list[int], chat_session_id: UUID, db_session: Session
+) -> list[ToolCall]:
+    """Load artifacts within a root's session tree; the caller owns the transaction."""
+    if not record_ids:
+        return []
+    descendants = session_descendants(chat_session_id)
+    return list(
+        db_session.scalars(
+            select(ToolCall)
+            .where(
+                ToolCall.id.in_(record_ids),
+                ToolCall.chat_session_id.in_(select(descendants.c.id)),
+            )
+            .options(
+                selectinload(ToolCall.search_docs),
+            )
+        ).all()
     )
-
-    db_session.add(tool_call)
-    if not add_only:
-        db_session.add(tool_call)
-    else:
-        db_session.flush()
-    return tool_call

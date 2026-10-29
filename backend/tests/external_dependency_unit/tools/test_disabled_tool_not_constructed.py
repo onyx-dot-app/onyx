@@ -1,6 +1,5 @@
 """Legacy OpenAPI disablement applies to default Chat, not custom agents."""
 
-import queue
 from collections.abc import Generator
 from typing import Any
 from uuid import uuid4
@@ -8,7 +7,6 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.chat.emitter import Emitter
 from onyx.db.models import Persona, Tool, User
 from onyx.db.tools import capture_persona_tool_configuration
 from onyx.llm.factory import get_default_llm
@@ -120,7 +118,6 @@ def test_legacy_openapi_availability(db_session: Session, default_chat: bool) ->
             update={"persona_id": 0 if default_chat else persona.id}
         ),
         db_session=db_session,
-        emitter=Emitter(merged_queue=queue.Queue()),
         user=user,
         llm=get_default_llm(),
     )
@@ -142,7 +139,6 @@ def test_legacy_openapi_availability_when_whitelisted(
             update={"persona_id": 0 if default_chat else persona.id}
         ),
         db_session=db_session,
-        emitter=Emitter(merged_queue=queue.Queue()),
         user=user,
         llm=get_default_llm(),
         allowed_tool_ids=[disabled_tool.id],
@@ -164,7 +160,6 @@ def test_prepared_configuration_survives_persona_edits(db_session: Session) -> N
     tools = construct_tools(
         configuration=configuration,
         db_session=db_session,
-        emitter=Emitter(merged_queue=queue.Queue()),
         user=user,
         llm=get_default_llm(),
     )

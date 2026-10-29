@@ -29,7 +29,7 @@ from onyx.llm.models import (
     ToolResult,
     ToolResultMessage,
 )
-from onyx.tools.results import CustomToolCallSummary
+from onyx.tools.models import CustomToolCallSummary
 from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient
 

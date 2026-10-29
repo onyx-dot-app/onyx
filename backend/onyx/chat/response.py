@@ -1,16 +1,17 @@
 """Project message content and detach SDK state for response persistence."""
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from pydantic import JsonValue, TypeAdapter, ValidationError
 
 from onyx.agents.models import AgentInfo, RunState, StepRecord, ToolExecutionRecord
-from onyx.chat.response_models import ResponseRecord
-from onyx.context.search.models import SearchDocsResponse
+from onyx.chat.models import ChatMessageMetadata, MessageRendering, ResponseRecord
+from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.deep_research.models import ResearchConfiguration
 from onyx.llm.models import (
     AssistantMessage,
     Message,
+    TextContent,
     ThinkingContent,
     ToolCall,
     ToolResultMessage,
@@ -43,12 +44,20 @@ def thinking_tool_text(call: ToolCall) -> str:
         return ""
 
 
-def message_thinking(message: AssistantMessage, think_tool: str | None = None) -> str:
+def message_thinking(
+    message: AssistantMessage,
+    think_tool: str | None = None,
+    *,
+    text_as_thinking: bool = False,
+) -> str:
     """Collect model and configured-tool thinking in accepted content order."""
     return "".join(
-        block.text if isinstance(block, ThinkingContent) else thinking_tool_text(block)
+        block.text
+        if isinstance(block, (ThinkingContent, TextContent))
+        else thinking_tool_text(block)
         for block in message.content
         if isinstance(block, ThinkingContent)
+        or (text_as_thinking and isinstance(block, TextContent))
         or (isinstance(block, ToolCall) and block.name == think_tool)
     )
 
@@ -119,6 +128,46 @@ def response_snapshot(record: ResponseRecord) -> RunState:
         if record.checkpoint
         else None,
     )
+
+
+def restore_response_sources(
+    messages: list[Message],
+    documents: Mapping[str, SearchDoc],
+    presentation: Mapping[str, MessageRendering],
+) -> None:
+    """Attach sources to an owned history list without changing its borrowed messages."""
+    for index, message in enumerate(messages):
+        if isinstance(message, AssistantMessage):
+            rendering = presentation.get(message.id) if message.id is not None else None
+            if rendering is not None and rendering.citation_documents:
+                messages[index] = message.model_copy(
+                    update={
+                        "metadata": ChatMessageMetadata(
+                            sources={
+                                number: documents[document_id]
+                                for number, document_id in rendering.citation_documents.items()
+                                if document_id in documents
+                            }
+                        )
+                    }
+                )
+            continue
+        if not isinstance(message, ToolResultMessage) or not isinstance(
+            message.details, SearchDocsResponse
+        ):
+            continue
+        details = message.details.model_copy(
+            update={
+                "search_docs": [
+                    documents[document_id]
+                    for document_id in dict.fromkeys(
+                        message.details.citation_mapping.values()
+                    )
+                    if document_id in documents
+                ]
+            }
+        )
+        messages[index] = message.model_copy(update={"details": details})
 
 
 def _saved_message[T: Message](message: T) -> T:

@@ -1,57 +1,87 @@
 """Response storage preserves accepted content, branch lineage, and compaction."""
 
+import threading
 from collections.abc import Generator
 from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
+from queue import Queue
 from uuid import UUID, uuid4
 
 import pytest
 from pydantic import BaseModel
-from sqlalchemy import delete, event, func, inspect, select
+from sqlalchemy import delete, event, func, inspect, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.unitofwork import UOWTransaction
 
 from ee.onyx.db.usage_export import get_empty_chat_messages_entries__paginated
 from ee.onyx.server.reporting.usage_export_models import FlowType
 from onyx.agents.compaction import working_messages
+from onyx.agents.events import (
+    MessageEndEvent,
+    MessageStartEvent,
+    ToolEndEvent,
+    ToolStartEvent,
+    ToolUpdateEvent,
+)
 from onyx.agents.models import (
     AgentInfo,
+    AgentState,
     CompactionCheckpoint,
+    ExecutionCheckpoint,
     ExecutionStatus,
+    RunAction,
     RunFailure,
     RunFailureKind,
+    RunProgress,
     RunState,
     RunStatus,
     StepRecord,
     ToolExecutionRecord,
     messages_from_steps,
 )
-from onyx.chat.chat_state import ChatStateContainer
-from onyx.chat.presentation import project_response, replay_response
-from onyx.chat.response import response_snapshot
-from onyx.chat.response_models import (
+from onyx.agents.tools import InputMode, PendingToolInput, ToolProgress
+from onyx.chat.chat_utils import capture_chat_history, convert_chat_history
+from onyx.chat.checkpoint import deserialize_checkpoint, serialize_checkpoint
+from onyx.chat.citation_processor import DynamicCitationProcessor
+from onyx.chat.citation_utils import message_citation_sources
+from onyx.chat.emitter import Emitter
+from onyx.chat.history_store import get_chat_history_store
+from onyx.chat.models import (
     ChatBranch,
     ChatMessageMetadata,
     ChatResponseSnapshot,
+    CheckpointBinding,
     MessageRendering,
+    ResponseCheckpoint,
     ResponseRecord,
 )
-from onyx.chat.save_chat import save_chat_turn as save_legacy_chat_turn
+from onyx.chat.presentation import ResponsePresenter, project_response, replay_response
+from onyx.chat.response import response_record, response_snapshot
+from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SavedSearchDoc, SearchDoc, SearchDocsResponse
 from onyx.db import chat_subagents
 from onyx.db.chat import (
     checkpoint_from_summary,
     delete_chat_session,
+    delete_messages_and_files_from_chat_session,
     find_summary_for_ancestry,
     get_chat_message,
+    get_chat_messages_by_session,
     get_or_create_root_message,
     load_message_branch,
+    reserve_chat_response_ids,
     root_response_id,
+    translate_db_message_to_chat_message_detail,
     visible_message_ids,
+)
+from onyx.db.chat_checkpoint import (
+    check_checkpoint_owner__no_commit,
+    publish_checkpoint__no_commit,
 )
 from onyx.db.chat_response import (
     read_chat_execution,
+    read_response__no_commit,
     read_response_replay_data,
     read_response_steps,
     reserve_child_response__no_commit,
@@ -70,6 +100,7 @@ from onyx.db.enums import IncognitoRecordMode
 from onyx.db.models import (
     ChatMessage,
     ChatMessage__SearchDoc,
+    ChatResponseCheckpoint,
     ChatResponseItem,
     ChatSession,
     Tool,
@@ -77,9 +108,15 @@ from onyx.db.models import (
 )
 from onyx.db.models import SearchDoc as StoredSearchDoc
 from onyx.db.models import ToolCall as StoredToolCall
-from onyx.deep_research.models import ResearchMessageMetadata, ResearchPhase
+from onyx.deep_research.models import (
+    ResearchAgentCallResult,
+    ResearchMessageMetadata,
+    ResearchPhase,
+)
+from onyx.file_store.models import ChatFileType, FileDescriptor
 from onyx.llm.models import (
     AssistantMessage,
+    GenerationOptions,
     ImageContentPart,
     ImageUrlDetail,
     Message,
@@ -87,18 +124,26 @@ from onyx.llm.models import (
     ThinkingBlock,
     ThinkingContent,
     ToolCall,
+    ToolResult,
     ToolResultMessage,
     UserMessage,
+)
+from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
+from onyx.server.query_and_chat.session_loading import (
+    translate_assistant_message_to_packets,
 )
 from onyx.server.query_and_chat.streaming_models import (
     AgentResponseDelta,
     CitationInfo,
+    CodingAgentFinal,
+    ImageGenerationFinal,
     MemoryToolDelta,
+    Packet,
+    PythonToolDelta,
     SearchToolDocumentsDelta,
+    SearchToolQueriesDelta,
 )
-from onyx.tools.records import ToolCallInfo
-from onyx.tools.results import (
-    CodingAgentCallResult,
+from onyx.tools.models import (
     CustomToolCallSummary,
     CustomToolUserFileSnapshot,
     FileReadResult,
@@ -107,10 +152,22 @@ from onyx.tools.results import (
     LlmPythonExecutionResult,
     MemoryOperation,
     MemoryUpdated,
-    ResearchAgentCallResult,
+    PythonExecutionDelta,
+    PythonExecutionFile,
+    ToolCallInfo,
     ToolExecutionError,
 )
+from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
+    CodingAgentTool,
+)
+from onyx.tools.tool_implementations.images.image_generation_tool import (
+    ImageGenerationTool,
+)
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
+from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
+from onyx.tools.tool_implementations.python.python_tool import PythonTool
+from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.utils.threadpool_concurrency import start_thread_future
 
 
 def _steps(
@@ -313,6 +370,188 @@ def _child_record(
     return child
 
 
+@pytest.mark.parametrize("citation_only", [False, True])
+def test_metadata_sources_survive_storage_without_search_results(
+    db_session: Session,
+    conversation: ChatSession,
+    tool_record: Tool,
+    citation_only: bool,
+) -> None:
+    response = _response(db_session, conversation)
+    record = _record(response)
+    child_id = uuid4()
+    _child_record(db_session, record, child_id, "Child source [2].")
+    record.steps.append(
+        StepRecord(
+            message=AssistantMessage(
+                id=f"{record.run_id}:1", content=[TextContent(text="Root source [1].")]
+            ),
+            generation_status=ExecutionStatus.COMPLETE,
+        )
+    )
+    record.answer_step_index = 1
+    snapshot = response_snapshot(record)
+    documents = [
+        SearchDoc(
+            document_id=name,
+            chunk_ind=0,
+            semantic_identifier=name,
+            link=f"https://example.com/{name}",
+            blurb=name,
+            source_type=DocumentSource.GOOGLE_DRIVE,
+            boost=0,
+            hidden=False,
+            metadata={},
+            match_highlights=[],
+        )
+        for name in ("root-source", "child-source", "display-source")
+    ]
+    snapshot.steps[1].message.metadata = ChatMessageMetadata(
+        sources={1: documents[0]}, documents=[documents[2]]
+    )
+    snapshot.child_runs[0].steps[0].message.metadata = ResearchMessageMetadata(
+        phase=ResearchPhase.REPORT,
+        is_reasoning_model=False,
+        sources={2: documents[1]},
+    )
+    projected = project_response(
+        snapshot,
+        tool_ids={"delegate": tool_record.id},
+        registrations=[
+            AgentInfo(
+                id=str(child_id),
+                path="/root/research",
+                parent_id=str(conversation.id),
+                description="Research child",
+                restoration_config=None,
+            )
+        ],
+    )
+    assert set(projected.all_search_docs) == {doc.document_id for doc in documents}
+    assert projected.citation_to_doc == {1: documents[0]}
+    emitted_citations = {
+        citation.citation_number for citation in projected.citation_info
+    }
+    if citation_only:
+        projected.all_search_docs.pop(documents[1].document_id)
+        projected.citation_to_doc[2] = documents[1]
+        emitted_citations.add(2)
+    save_chat_turn(
+        message_text=projected.answer or "",
+        reasoning_tokens=projected.reasoning,
+        tool_calls=projected.tool_calls,
+        citation_to_doc=projected.citation_to_doc,
+        all_search_docs=projected.all_search_docs,
+        db_session=db_session,
+        assistant_message=response,
+        emitted_citations=emitted_citations,
+        response_record=projected.response,
+        presentation=projected.presentation,
+    )
+    db_session.expire_all()
+    assert {doc.document_id for doc in response.search_docs} == {
+        doc.document_id for doc in documents
+    }
+    assert response.citations and set(response.citations) == (
+        {"1", "2"} if citation_only else {"1"}
+    )
+    replay = translate_assistant_message_to_packets(response, db_session)
+    assert {
+        packet.obj.document_id
+        for packet in replay
+        if isinstance(packet.obj, CitationInfo)
+    } == {"root-source", "child-source"}
+    child = db_session.get(ChatSession, child_id)
+    assert child is not None
+    restored = _load_history(
+        db_session,
+        ChatBranch(
+            chat_session_id=conversation.id,
+            message_ids=visible_message_ids(db_session, response),
+        ),
+        child,
+    )
+    assert restored.sources[2].document_id == "child-source"
+    response.search_docs = [
+        doc for doc in response.search_docs if doc.document_id != "child-source"
+    ]
+    db_session.flush()
+    with pytest.raises(ValueError, match="Cited source is unavailable"):
+        _load_history(
+            db_session,
+            ChatBranch(
+                chat_session_id=conversation.id,
+                message_ids=visible_message_ids(db_session, response),
+            ),
+            child,
+        )
+
+
+def test_thinking_preserves_signed_content_and_final_display_text(
+    db_session: Session, conversation: ChatSession, tool_record: Tool
+) -> None:
+    response = _response(db_session, conversation)
+    record = _record(response)
+    pre_tool = ThinkingContent(
+        text="Before tools",
+        blocks=[ThinkingBlock(thinking="Before tools", signature="tool-signature")],
+    )
+    final = ThinkingContent(
+        text="Before answer",
+        blocks=[ThinkingBlock(thinking="Before answer", signature="answer-signature")],
+    )
+    calls = [
+        ToolCall(id=name, name="lookup", arguments={}) for name in ("first", "second")
+    ]
+    record.steps = _steps(
+        record.run_id,
+        [
+            AssistantMessage(content=[pre_tool, *calls]),
+            *[
+                ToolResultMessage(
+                    tool_call_id=call.id, tool_name=call.name, content="Result"
+                )
+                for call in calls
+            ],
+            AssistantMessage(content=[final, TextContent(text="Raw answer")]),
+        ],
+    )
+    record.answer_step_index = 1
+    save_chat_turn(
+        message_text="Formatted answer",
+        reasoning_tokens=final.text,
+        tool_calls=[
+            ToolCallInfo(
+                message_id=f"{record.run_id}:0",
+                parent_tool_call_id=None,
+                turn_index=0,
+                tab_index=index,
+                tool_name=call.name,
+                tool_call_id=call.id,
+                tool_id=tool_record.id,
+                reasoning_tokens=pre_tool.text,
+                tool_call_arguments={},
+                tool_call_response="Result",
+            )
+            for index, call in enumerate(calls)
+        ],
+        citation_to_doc={},
+        all_search_docs={},
+        db_session=db_session,
+        assistant_message=response,
+        response_record=record,
+    )
+    db_session.expire_all()
+
+    assert response.message == "Formatted answer"
+    assert response.reasoning_tokens == final.text
+    assert response.tool_calls is not None
+    assert len(response.tool_calls) == 2
+    steps = read_response_steps(response)
+    assert steps[0].message.content[0] == pre_tool
+    assert steps[1].message.content == [final, TextContent(text="Raw answer")]
+
+
 @pytest.mark.parametrize(
     "details",
     [
@@ -394,10 +633,78 @@ def test_tool_result_details_round_trip_without_legacy_output(
         )
     )
     assert tool is not None
-    assert tool.tool_call_response == ""
-    assert tool.result is not None
-    assert tool.result.content == result.content
+    assert tool.legacy_response == ""
+    assert tool.tool_call_response == result.content
     assert tool.generated_images is None
+
+
+def test_suspended_search_result_restores_after_database_round_trip(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    response = _response(db_session, conversation, text="Search then ask")
+    assert response.parent_message is not None
+    instruction = UserMessage(
+        id=f"chat:{response.parent_message.id}", content=response.parent_message.message
+    )
+    snapshot = RunState(
+        run_id=str(response.id),
+        agent_id=str(conversation.id),
+        status=RunStatus.SUSPENDED,
+        input_messages=[instruction],
+        steps=[
+            StepRecord(
+                message=AssistantMessage(
+                    id="generation",
+                    content=[
+                        ToolCall(id="search", name="search", arguments={}),
+                        ToolCall(id="ask", name="ask", arguments={}),
+                    ],
+                ),
+                generation_status=ExecutionStatus.COMPLETE,
+                tools={
+                    "search": ToolExecutionRecord(
+                        status=ExecutionStatus.COMPLETE,
+                        result=ToolResultMessage(
+                            content="Found",
+                            tool_call_id="search",
+                            tool_name="search",
+                            details=SearchDocsResponse(
+                                queries=["query"],
+                                search_docs=[],
+                                citation_mapping={},
+                                displayed_docs=[],
+                            ),
+                        ),
+                    )
+                },
+            )
+        ],
+        progress=RunProgress(
+            step_limit=3,
+            action=RunAction.TOOLS,
+            options=GenerationOptions(),
+            previous_options=GenerationOptions(),
+            finalized_tool_call_ids={"search"},
+            pending_tool_calls={
+                "ask": PendingToolInput(
+                    request_id="ask-user", prompt="Continue?", mode=InputMode.EXECUTE
+                )
+            },
+        ),
+    )
+    context = AgentState(messages=[instruction])
+    record = response_record(snapshot)
+    binding = CheckpointBinding(tenant_id="public", response_id=str(response.id))
+    checkpoint = serialize_checkpoint(
+        ExecutionCheckpoint(agent_state=context, run_state=snapshot), record, binding
+    )
+    save_response_record__no_commit(db_session, response.id, record)
+    db_session.flush()
+    db_session.expire_all()
+    saved = read_response__no_commit(db_session, int(snapshot.run_id))
+    assert saved is not None
+    restored = deserialize_checkpoint(checkpoint, saved.response, context, binding)
+    assert restored.run_state.model_dump() == snapshot.model_dump()
 
 
 def test_response_tools_flush_together_and_keep_result_identity(
@@ -616,7 +923,7 @@ def test_response_items_preserve_order_provider_metadata_and_tool_identity(
         "First result",
         "Second result",
     }
-    assert all(tool.tool_call_response == "" for tool in tools)
+    assert all(tool.legacy_response == "" for tool in tools)
     assert len(response.response_items) == 3
     assert [message.id for message in restored.messages] == [
         message.id for message in record.messages
@@ -840,6 +1147,74 @@ def test_content_free_response_does_not_write_items(
     )
 
 
+def test_old_rows_keep_the_legacy_reader(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    response = _response(db_session, conversation)
+    response.message = "Existing answer"
+    db_session.execute(
+        update(ChatMessage)
+        .where(ChatMessage.id == response.id)
+        .values(
+            request_params={
+                "model_name": "gpt-5-mini",
+                "model_provider": "openai",
+                "reasoning_effort": "auto",
+                "max_tokens": 1000,
+                "sent_kwargs": {},
+                "stream": True,
+            }
+        )
+    )
+    db_session.commit()
+    db_session.expire_all()
+    detail = translate_db_message_to_chat_message_detail(response)
+    assert detail.message == "Existing answer"
+    assert detail.request_params is not None
+    assert detail.request_params.model_name == "gpt-5-mini"
+    assert "stream" not in detail.request_params.model_dump()
+    assert (
+        execution.response if (execution := read_chat_execution(response)) else None
+    ) is None
+    history = convert_chat_history(
+        chat_history=capture_chat_history([response], {}, len),
+        files=[],
+        context_image_files=[],
+        additional_context=None,
+        token_counter=len,
+    ).messages
+    assert [message.text for message in history] == ["Existing answer"]
+
+
+def test_regeneration_reuses_user_input_and_preserves_attachments(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    response = _response(db_session, conversation)
+    question = response.parent_message
+    assert question is not None
+    question.files = [
+        FileDescriptor(id="attachment", name="source.txt", type=ChatFileType.PLAIN_TEXT)
+    ]
+    alternate = _response(db_session, conversation, question=question)
+    _save(db_session, response, _record(response, "First"))
+    _save(db_session, alternate, _record(alternate, "Second"))
+    assert response.parent_message_id == alternate.parent_message_id
+    assert question.message == "Question"
+    assert question.files is not None
+    assert question.files[0]["id"] == "attachment"
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(ChatMessage)
+            .where(
+                ChatMessage.chat_session_id == conversation.id,
+                ChatMessage.message_type == MessageType.USER,
+            )
+        )
+        == 1
+    )
+
+
 @pytest.mark.parametrize("reverse_save_order", [False, True])
 def test_child_reuse_follows_selected_branch_not_completion_order(
     db_session: Session,
@@ -890,6 +1265,44 @@ def test_child_reuse_follows_selected_branch_not_completion_order(
         ]
 
 
+def test_root_history_and_metadata_do_not_consume_child_history_limit(
+    db_session: Session,
+    conversation: ChatSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("onyx.db.chat_subagents.MAX_AGENT_HISTORY_RUNS", 2)
+    monkeypatch.setattr(
+        "onyx.db.chat_subagents.get_session_with_current_tenant",
+        lambda: nullcontext(db_session),
+    )
+    first = _response(db_session, conversation)
+    record = _record(first)
+    child_id = uuid4()
+    child = _child_record(db_session, record, child_id, "Child answer")
+    _save(db_session, first, record)
+    latest = first
+    for _ in range(6):
+        latest = _response(db_session, conversation, previous=latest)
+        _save(db_session, latest, _record(latest))
+    restored = chat_subagents.load_agent_history(latest.id, str(conversation.id))
+    assert restored.previous_run_id == str(latest.id)
+    assert sum(isinstance(message, UserMessage) for message in restored.messages) == 7
+    assert restored.messages[0].id == f"chat:{first.parent_message_id}"
+    restored_child = chat_subagents.load_agent_history(latest.id, str(child_id))
+    assert restored_child.previous_run_id == child.run_id
+    monkeypatch.setattr("onyx.db.chat_subagents.MAX_AGENT_HISTORY_RUNS", 0)
+    with pytest.raises(ValueError, match="response limit"):
+        chat_subagents.load_agent_history(latest.id, str(child_id))
+    monkeypatch.setattr("onyx.db.chat_subagents.MAX_AGENT_HISTORY_RUNS", 2)
+    metadata = {agent.id: agent for agent in load_session_agent_metadata(latest.id)}
+    assert metadata[str(conversation.id)].latest_run_id == str(latest.id)
+    assert metadata[str(child_id)].latest_run_id == child.run_id
+    assert metadata[str(child_id)].status == RunStatus.COMPLETE
+    assert [
+        agent.id for agent in load_session_agent_metadata(latest.id, include_root=False)
+    ] == [str(child_id)]
+
+
 @pytest.mark.parametrize("reverse_save_order", [False, True])
 def test_nested_child_visibility_and_reuse_follow_root_branch(
     db_session: Session,
@@ -928,10 +1341,13 @@ def test_nested_child_visibility_and_reuse_follow_root_branch(
         (sibling, set()),
     ):
         branch = chat_subagents.load_chat_branch(selected.id)
-        agents = load_session_agent_metadata(
-            selected.id, branch=branch, include_root=False
+        store = get_chat_history_store(
+            message_id=selected.id,
+            chat_session_id=conversation.id,
+            persist_content=True,
+            branch=branch,
         )
-        assert {agent.id for agent in agents} == expected
+        assert {agent.id for agent in store.list_agents()} == expected
     assert (
         lookup_session_agent(base.id, str(grandchild_id), str(conversation.id)) is None
     )
@@ -1150,6 +1566,312 @@ def test_compaction_saves_only_new_output_on_selected_ancestry(
     )
 
 
+def test_response_reservation_preserves_model_order_and_active_branch(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    response = _response(db_session, conversation)
+    question = response.parent_message
+    assert question is not None
+    ids = reserve_chat_response_ids(
+        db_session, conversation.id, question.id, ["first", "second"]
+    )
+    responses = [db_session.get(ChatMessage, message_id) for message_id in ids]
+    assert [row.model_display_name for row in responses if row] == ["first", "second"]
+    assert all(row and row.parent_message_id == question.id for row in responses)
+    db_session.refresh(question)
+    assert question.latest_child_message_id == ids[-1]
+
+
+@pytest.mark.parametrize(
+    "tool_kind", ["python", "coding", "image", "memory", "search", "search_empty"]
+)
+def test_completed_tool_display_matches_reload_without_duplicate_streamed_output(
+    db_session: Session, conversation: ChatSession, tool_record: Tool, tool_kind: str
+) -> None:
+    if tool_kind == "python":
+        call = ToolCall(
+            id="call", name=PythonTool.NAME, arguments={"code": "print('hello')"}
+        )
+        output = LlmPythonExecutionResult(
+            stdout="hello world",
+            stderr="warning",
+            exit_code=0,
+            timed_out=False,
+            generated_files=[
+                PythonExecutionFile(
+                    filename="result.csv", file_link="/api/chat/file/result"
+                )
+            ],
+        )
+        result = ToolResult(content=output.model_dump_json(), details=output)
+        progress = ToolProgress(
+            details=PythonExecutionDelta(stdout="hello world", stderr="warning")
+        )
+        implementation = PythonTool.__name__
+    elif tool_kind == "image":
+        call = ToolCall(
+            id="call", name=ImageGenerationTool.NAME, arguments={"prompt": "a tree"}
+        )
+        result = ToolResult(
+            content="Generated image",
+            details=FinalImageGenerationResponse(
+                generated_images=[
+                    GeneratedImage(
+                        file_id="image-file",
+                        url="/api/chat/file/image-file",
+                        revised_prompt="A tree in a field",
+                        shape="square",
+                    )
+                ]
+            ),
+        )
+        progress = ToolProgress(details=result.details)
+        implementation = ImageGenerationTool.__name__
+    elif tool_kind in {"search", "search_empty"}:
+        call = ToolCall(
+            id="call", name=SearchTool.NAME, arguments={"queries": ["forecast"]}
+        )
+        document = SearchDoc(
+            document_id="forecast-document",
+            chunk_ind=0,
+            semantic_identifier="Forecast",
+            link="https://example.com/forecast",
+            blurb="Revenue is rising.",
+            source_type=DocumentSource.GOOGLE_DRIVE,
+            boost=0,
+            hidden=False,
+            metadata={},
+            match_highlights=[],
+        )
+        result = ToolResult(
+            content="Revenue is rising.",
+            details=SearchDocsResponse(
+                queries=["forecast"],
+                sources=[DocumentSource.GOOGLE_DRIVE.value],
+                search_docs=[document],
+                citation_mapping={1: document.document_id},
+                displayed_docs=[] if tool_kind == "search_empty" else None,
+            ),
+        )
+        progress = ToolProgress(details=result.details)
+        implementation = SearchTool.__name__
+    elif tool_kind == "memory":
+        call = ToolCall(
+            id="call", name=MemoryTool.NAME, arguments={"memory": "Prefers tea"}
+        )
+        memory = MemoryUpdated(
+            memory_text="Prefers tea", operation=MemoryOperation.ADD, memory_id=12
+        )
+        result = ToolResult(content=memory.model_dump_json(), details=memory)
+        progress = ToolProgress(details=result.details)
+        implementation = MemoryTool.__name__
+    else:
+        call = ToolCall(
+            id="call",
+            name=CodingAgentTool.NAME,
+            arguments={"query": "task", "github_repo": "repo"},
+        )
+        result = ToolResult(
+            content="coding answer",
+            details=CodingAgentCallResult(answer="coding answer"),
+        )
+        progress = ToolProgress(details=CodingAgentCallResult(answer="partial answer"))
+        implementation = CodingAgentTool.__name__
+    session = conversation
+    tool = tool_record
+    tool.name = call.name
+    tool.in_code_tool_id = implementation
+    db_session.flush()
+    row = _response(db_session, conversation)
+    agent_id, run_id = str(session.id), str(row.id)
+    snapshot = RunState(
+        agent_id=agent_id,
+        run_id=run_id,
+        status=RunStatus.COMPLETE,
+        input_messages=[UserMessage(content="Question")],
+        answer_step_index=1,
+        steps=[
+            StepRecord(
+                message=AssistantMessage(id="stable-generation", content=[call]),
+                generation_status=ExecutionStatus.COMPLETE,
+                tools={
+                    call.id: ToolExecutionRecord(
+                        status=ExecutionStatus.COMPLETE,
+                        result=ToolResultMessage(
+                            tool_call_id=call.id,
+                            tool_name=call.name,
+                            content=result.content,
+                            details=result.details,
+                        ),
+                    )
+                },
+            ),
+            StepRecord(
+                message=AssistantMessage(
+                    id="final-generation", content=[TextContent(text="done")]
+                ),
+                generation_status=ExecutionStatus.COMPLETE,
+                tools={},
+            ),
+        ],
+    )
+    db_session.commit()
+    queue: Queue[Packet] = Queue()
+    presenter = ResponsePresenter(Emitter(queue.put_nowait))
+    presenter.consume(
+        MessageStartEvent(run_id=run_id, message_id="stable-generation", step_index=0)
+    )
+    presenter.consume(
+        MessageEndEvent(
+            run_id=run_id,
+            message_id="stable-generation",
+            step_index=0,
+            message=snapshot.steps[0].message,
+            status=ExecutionStatus.COMPLETE,
+        )
+    )
+    presenter.consume(
+        ToolStartEvent(
+            run_id=run_id, message_id="stable-generation", step_index=0, tool_call=call
+        )
+    )
+    presenter.consume(
+        ToolUpdateEvent(
+            run_id=run_id,
+            message_id="stable-generation",
+            step_index=0,
+            tool_call=call,
+            progress=progress,
+        )
+    )
+    presenter.consume(
+        ToolEndEvent(
+            run_id=run_id,
+            message_id="stable-generation",
+            step_index=0,
+            tool_call=call,
+            result=result,
+        )
+    )
+    live: list[Packet] = []
+    while not queue.empty():
+        packet = queue.get_nowait()
+        assert isinstance(packet, Packet)
+        live.append(packet)
+    projected = project_response(snapshot, tool_ids={call.name: tool.id})
+    get_chat_history_store(
+        message_id=row.id, chat_session_id=conversation.id, persist_content=True
+    ).save_response(projected)
+    db_session.expire_all()
+    assert read_chat_execution(row) is not None
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(StoredToolCall)
+            .where(StoredToolCall.parent_chat_message_id == row.id)
+        )
+        == 1
+    )
+    db_session.delete(tool)
+    db_session.commit()
+    saved = translate_assistant_message_to_packets(row, db_session)
+    if tool_kind == "python":
+        live_stdout = "".join(
+            packet.obj.stdout
+            for packet in live
+            if isinstance(packet.obj, PythonToolDelta)
+        )
+        saved_stdout = "".join(
+            packet.obj.stdout
+            for packet in saved
+            if isinstance(packet.obj, PythonToolDelta)
+        )
+        assert live_stdout == saved_stdout == "hello world"
+        for packets in (live, saved):
+            assert (
+                "".join(
+                    packet.obj.stderr
+                    for packet in packets
+                    if isinstance(packet.obj, PythonToolDelta)
+                )
+                == "warning"
+            )
+            assert [
+                file_id
+                for packet in packets
+                if isinstance(packet.obj, PythonToolDelta)
+                for file_id in packet.obj.file_ids
+            ] == ["result"]
+    elif tool_kind == "image":
+        for packets in (live, saved):
+            images = [
+                image.model_dump()
+                for packet in packets
+                if isinstance(packet.obj, ImageGenerationFinal)
+                for image in packet.obj.images
+            ]
+            assert images == [
+                {
+                    "file_id": "image-file",
+                    "url": "/api/chat/file/image-file",
+                    "revised_prompt": "A tree in a field",
+                    "shape": "square",
+                }
+            ]
+    elif tool_kind in {"search", "search_empty"}:
+        for packets in (live, saved):
+            documents = [
+                document
+                for packet in packets
+                if isinstance(packet.obj, SearchToolDocumentsDelta)
+                for document in packet.obj.documents
+            ]
+            assert [
+                (document.document_id, document.link, document.blurb)
+                for document in documents
+            ] == (
+                []
+                if tool_kind == "search_empty"
+                else [
+                    (
+                        "forecast-document",
+                        "https://example.com/forecast",
+                        "Revenue is rising.",
+                    )
+                ]
+            )
+            assert [
+                query
+                for packet in packets
+                if isinstance(packet.obj, SearchToolQueriesDelta)
+                for query in packet.obj.queries
+            ] == ["forecast"]
+        assert len(row.search_docs) == 1
+    elif tool_kind == "memory":
+        for packets in (live, saved):
+            memories = [
+                packet.obj
+                for packet in packets
+                if isinstance(packet.obj, MemoryToolDelta)
+            ]
+            assert len(memories) == 1
+            assert memories[0].memory_text == "Prefers tea"
+            assert memories[0].operation == "add"
+            assert memories[0].memory_id == 12
+    else:
+        live_answers = [
+            packet.obj.answer
+            for packet in live
+            if isinstance(packet.obj, CodingAgentFinal)
+        ]
+        saved_answers = [
+            packet.obj.answer
+            for packet in saved
+            if isinstance(packet.obj, CodingAgentFinal)
+        ]
+        assert live_answers[-1] == saved_answers[-1] == "coding answer"
+
+
 def test_truncation_without_summary_does_not_create_summary_message(
     db_session: Session, conversation: ChatSession
 ) -> None:
@@ -1308,9 +2030,12 @@ def test_discovery_batches_response_metadata(
     executed_sql.clear()
 
     if reuse_branch:
-        metadata = load_session_agent_metadata(
-            message_id, branch=branch, include_root=False
-        )
+        metadata = get_chat_history_store(
+            message_id=message_id,
+            chat_session_id=branch.chat_session_id,
+            persist_content=True,
+            branch=branch,
+        ).list_agents()
         assert len(executed_sql) == (3 if child_count else 1)
     else:
         metadata = load_session_agent_metadata(message_id)
@@ -1388,6 +2113,49 @@ def test_nested_reload_reuses_parent_identity(
     )
 
 
+def test_plain_history_reload_query_count_does_not_grow_per_turn(
+    db_session: Session,
+    conversation: ChatSession,
+    executed_sql: list[str],
+) -> None:
+    session_id = conversation.id
+    previous = None
+    answers: list[str] = []
+    query_counts: list[int] = []
+    for turn_count in (1, 10):
+        while len(answers) < turn_count:
+            answer = f"Answer {len(answers)}"
+            response = _response(db_session, conversation, previous=previous)
+            _save(db_session, response, _record(response, answer))
+            answers.append(answer)
+            previous = response
+        db_session.expire_all()
+        executed_sql.clear()
+
+        messages = get_chat_messages_by_session(
+            session_id,
+            None,
+            db_session,
+            skip_permission_check=True,
+            prefetch_message_details=True,
+        )
+        replayed = [
+            "".join(
+                packet.obj.content
+                for packet in translate_assistant_message_to_packets(
+                    message, db_session
+                )
+                if isinstance(packet.obj, AgentResponseDelta)
+            )
+            for message in messages
+            if message.message_type == MessageType.ASSISTANT
+        ]
+        assert replayed == answers
+        query_counts.append(len(executed_sql))
+
+    assert query_counts[0] == query_counts[1]
+
+
 def test_public_message_read_does_not_fetch_response_items(
     db_session: Session,
     conversation: ChatSession,
@@ -1438,6 +2206,10 @@ def test_history_loads_items_only_for_selected_ancestry(
     assert "tool_calls" in inspect(sibling).unloaded
     assert "tool_calls" in inspect(later).unloaded
     assert sum("FROM chat_response_item" in query for query in executed_sql) == 1
+    assert "search_docs" not in inspect(selected).unloaded
+    executed_sql.clear()
+    capture_chat_history(history, {}, len)
+    assert not any("search_doc" in query for query in executed_sql)
 
 
 @pytest.mark.parametrize("invalid_character", ["\x00", "\ud800"])
@@ -1487,6 +2259,131 @@ def test_response_storage_sanitizes_postgres_text_without_mutating_input(
     assert isinstance(result.details, CustomToolCallSummary)
     assert result.details.tool_result == {"text": "beforeafter"}
     assert record == original
+
+
+@pytest.mark.parametrize(
+    "save_order", ["lifecycle_first", "display_first", "concurrent"]
+)
+@pytest.mark.parametrize(
+    "status", [RunStatus.COMPLETE, RunStatus.ERROR, RunStatus.CANCELLED]
+)
+def test_lifecycle_and_display_saves_share_response_content(
+    db_session: Session, conversation: ChatSession, save_order: str, status: RunStatus
+) -> None:
+    response = _response(db_session, conversation)
+    record = _record(response)
+    child_id = uuid4()
+    child = _child_record(db_session, record, child_id, "Child answer")
+    record.status = status
+    child.checkpoint = CompactionCheckpoint(
+        summary="Child summary",
+        covered_through_message_id=f"run:{child.run_id}:input:0",
+    )
+    root_id = response.id
+    root_session_id = conversation.id
+    initial = record.model_copy(
+        update={
+            "answer_step_index": None,
+            "child_runs": [],
+            "status": RunStatus.RUNNING,
+        }
+    )
+    save_response_record__no_commit(db_session, root_id, initial)
+    db_session.commit()
+    try:
+        display = ChatResponseSnapshot(
+            answer="Answer",
+            reasoning=None,
+            request_params=None,
+            citation_to_doc={},
+            tool_calls=[],
+            is_clarification=False,
+            all_search_docs={},
+            pre_answer_processing_time=None,
+            response=record,
+            cancelled=status == RunStatus.CANCELLED,
+        )
+        barrier = threading.Barrier(2) if save_order == "concurrent" else None
+        engine = db_session.get_bind()
+
+        def save_lifecycle() -> None:
+            if barrier is not None:
+                barrier.wait(timeout=10)
+            with Session(engine) as session:
+                check_checkpoint_owner__no_commit(session, root_id, None)
+                save_response_record__no_commit(
+                    session, root_id, record.model_copy(update={"child_runs": []})
+                )
+                save_response_record__no_commit(session, root_id, child)
+                session.commit()
+
+        def save_display() -> None:
+            if barrier is not None:
+                barrier.wait(timeout=10)
+            get_chat_history_store(
+                message_id=root_id,
+                chat_session_id=root_session_id,
+                persist_content=True,
+            ).save_response(display)
+
+        if save_order == "concurrent":
+            lifecycle = start_thread_future(save_lifecycle, name="test-lifecycle-save")
+            presentation = start_thread_future(save_display, name="test-display-save")
+            lifecycle.result(timeout=20)
+            presentation.result(timeout=20)
+        elif save_order == "lifecycle_first":
+            save_lifecycle()
+            save_display()
+        else:
+            save_display()
+            save_lifecycle()
+        db_session.expire_all()
+        saved_root = db_session.get(ChatMessage, root_id)
+        assert saved_root is not None
+        assert saved_root.message == (
+            "Answer ... \n\nGeneration was stopped by the user."
+            if status == RunStatus.CANCELLED
+            else "Answer"
+        )
+        assert saved_root.response_status == status
+        assert read_response_steps(saved_root) == record.steps
+        saved_child = read_response__no_commit(db_session, int(child.run_id))
+        assert saved_child is not None
+        assert saved_child.response.parent_run_id == record.run_id
+        assert saved_child.response.checkpoint == child.checkpoint
+        assert saved_child.response.input_messages == child.input_messages
+        assert saved_child.response.messages == child.messages
+        assert (
+            db_session.scalar(
+                select(func.count())
+                .select_from(ChatSession)
+                .where(ChatSession.spawned_by_message_id == root_id)
+            )
+            == 1
+        )
+        assert (
+            db_session.scalar(
+                select(func.count())
+                .select_from(StoredToolCall)
+                .where(StoredToolCall.chat_session_id == root_session_id)
+            )
+            == 1
+        )
+        assert (
+            db_session.scalar(
+                select(func.count())
+                .select_from(ChatMessage)
+                .where(
+                    ChatMessage.chat_session_id == child_id,
+                    ChatMessage.message_type == MessageType.SUMMARY,
+                )
+            )
+            == 1
+        )
+    finally:
+        db_session.rollback()
+        delete_messages_and_files_from_chat_session(root_session_id, db_session)
+        db_session.commit()
 
 
 @pytest.mark.parametrize("large_field", ["question", "item", "tool"])
@@ -1572,31 +2469,66 @@ def test_response_store_rejects_wrong_session_or_recording_mode_before_writes(
     assert not row.response_items
 
 
-def test_legacy_writer_keeps_tool_results_and_display_text(
+@pytest.mark.parametrize("reserve_child", [False, True])
+def test_content_free_sessions_reject_incremental_content_writes(
+    db_session: Session, conversation: ChatSession, reserve_child: bool
+) -> None:
+    conversation.incognito_record_mode = IncognitoRecordMode.USAGE_ONLY
+    response = _response(db_session, conversation, text="")
+    db_session.commit()
+    record = _record(response, answer="must not be stored")
+    child_id = uuid4()
+    with pytest.raises(ValueError, match="Content-free"):
+        if reserve_child:
+            reserve_child_response__no_commit(
+                db_session,
+                response.id,
+                agent=AgentInfo(
+                    id=str(child_id),
+                    path="/root/child",
+                    parent_id=str(conversation.id),
+                    description="private",
+                    restoration_config=None,
+                ),
+                instruction=UserMessage(content="private instruction"),
+                previous_response_id=None,
+                parent_response_id=response.id,
+                parent_message_id="message",
+                parent_tool_call_id="call",
+            )
+        else:
+            save_response_record__no_commit(db_session, response.id, record)
+    db_session.commit()
+    db_session.expire_all()
+    assert response.message == ""
+    assert not response.response_items
+    assert not response.tool_calls
+    assert response.response_status is None
+    assert db_session.get(ChatSession, child_id) is None
+
+
+def test_legacy_rows_keep_tool_results_and_display_text(
     db_session: Session, conversation: ChatSession, tool_record: Tool
 ) -> None:
     response = _response(db_session, conversation)
-    save_legacy_chat_turn(
-        message_text="Existing answer",
-        reasoning_tokens="Existing thinking",
-        tool_calls=[
-            ToolCallInfo(
-                parent_tool_call_id=None,
-                turn_index=0,
-                tab_index=0,
-                tool_name="lookup",
-                tool_call_id="legacy-call",
-                tool_id=tool_record.id,
-                reasoning_tokens="Tool thinking",
-                tool_call_arguments={"query": "cedar"},
-                tool_call_response="Existing result",
-            )
-        ],
-        citation_to_doc={},
-        all_search_docs={},
-        db_session=db_session,
-        assistant_message=response,
+    response.message = "Existing answer"
+    response.reasoning_tokens = "Existing thinking"
+    db_session.add(
+        StoredToolCall(
+            chat_session_id=conversation.id,
+            parent_chat_message_id=response.id,
+            turn_number=0,
+            tab_index=0,
+            tool_id=tool_record.id,
+            tool_call_id="legacy-call",
+            reasoning_tokens="Tool thinking",
+            tool_call_arguments={"query": "cedar"},
+            legacy_response="Existing result",
+            tool_call_tokens=1,
+            result=None,
+        )
     )
+    db_session.commit()
     db_session.expire_all()
     saved = db_session.get(ChatMessage, response.id)
     assert saved is not None
@@ -1615,9 +2547,7 @@ def test_legacy_writer_keeps_tool_results_and_display_text(
     assert tool.result is None
     assert (
         db_session.scalar(
-            select(StoredToolCall.tool_call_response).where(
-                StoredToolCall.id == tool.id
-            )
+            select(StoredToolCall.legacy_response).where(StoredToolCall.id == tool.id)
         )
         == "Existing result"
     )
@@ -1789,6 +2719,27 @@ def test_search_projection_restores_saved_source_cards(
         )
         == "Cedar is a tree."
     )
+    # Model history must recover uncited evidence as well as displayed citations.
+    assert not stored.citations
+    captured = capture_chat_history([stored], {}, len)
+    restored_result = next(
+        message
+        for entry in captured
+        for message in entry.response_messages
+        if isinstance(message, ToolResultMessage)
+    )
+    processor = DynamicCitationProcessor()
+    processor.update_citation_mapping(message_citation_sources(restored_result))
+    assert processor.get_next_citation_number() == 2
+    assert isinstance(restored_result.details, SearchDocsResponse)
+    assert restored_result.details.search_docs == [saved_document]
+    assert restored_result.details.citation_mapping == {1: document.document_id}
+    assert stored.tool_calls is not None
+    stored_result = stored.tool_calls[0].result
+    assert stored_result is not None
+    assert isinstance(stored_result.details, SearchDocsResponse)
+    assert stored_result.details.search_docs == []
+
     reference = execution.tool_records[0]
     assert (
         replay.tools[(reference.message_id, reference.tool_call_id)].tool_id
@@ -1798,81 +2749,6 @@ def test_search_projection_restores_saved_source_cards(
     invalid.tool_records[0].message_id = "unrelated-message"
     with pytest.raises(ValueError, match="not part of this response"):
         read_response_replay_data(invalid, db_session)
-
-
-@pytest.mark.parametrize("reserve_child", [False, True])
-def test_content_free_sessions_reject_incremental_content_writes(
-    db_session: Session, conversation: ChatSession, reserve_child: bool
-) -> None:
-    conversation.incognito_record_mode = IncognitoRecordMode.USAGE_ONLY
-    response = _response(db_session, conversation, text="")
-    db_session.commit()
-    record = _record(response, answer="must not be stored")
-    child_id = uuid4()
-    with pytest.raises(ValueError, match="Content-free"):
-        if reserve_child:
-            reserve_child_response__no_commit(
-                db_session,
-                response.id,
-                agent=AgentInfo(
-                    id=str(child_id),
-                    path="/root/child",
-                    parent_id=str(conversation.id),
-                    description="private",
-                    restoration_config=None,
-                ),
-                instruction=UserMessage(content="private instruction"),
-                previous_response_id=None,
-                parent_response_id=response.id,
-                parent_message_id="message",
-                parent_tool_call_id="call",
-            )
-        else:
-            save_response_record__no_commit(db_session, response.id, record)
-    db_session.commit()
-    db_session.expire_all()
-    assert response.message == ""
-    assert not response.response_items
-    assert not response.tool_calls
-    assert response.response_status is None
-    assert db_session.get(ChatSession, child_id) is None
-
-
-def test_legacy_save_preserves_distinct_document_version_keys(
-    db_session: Session, conversation: ChatSession
-) -> None:
-    response = _response(db_session, conversation)
-    documents = [
-        SearchDoc(
-            document_id="same-document",
-            chunk_ind=index,
-            semantic_identifier="Guide",
-            blurb=f"Part {index}",
-            source_type=DocumentSource.WEB,
-            boost=1,
-            hidden=False,
-            metadata={},
-            match_highlights=[f"<hi>{index}</hi>"],
-        )
-        for index in range(2)
-    ]
-    save_legacy_chat_turn(
-        message_text="Answer",
-        reasoning_tokens=None,
-        tool_calls=[],
-        citation_to_doc={},
-        all_search_docs={
-            ChatStateContainer.create_search_doc_key(doc, use_simple_key=False): doc
-            for doc in documents
-        },
-        db_session=db_session,
-        assistant_message=response,
-    )
-    db_session.expire_all()
-    assert {
-        (doc.chunk_ind, tuple(doc.match_highlights or []))
-        for doc in response.search_docs or []
-    } == {(doc.chunk_ind, tuple(doc.match_highlights)) for doc in documents}
 
 
 def test_child_usage_is_reported_with_root_attribution(
@@ -1918,164 +2794,66 @@ def test_child_usage_is_reported_with_root_attribution(
         db_session.commit()
 
 
-@pytest.mark.parametrize("citation_only", [False, True])
-def test_metadata_sources_survive_storage_without_search_results(
-    db_session: Session,
-    conversation: ChatSession,
-    tool_record: Tool,
-    citation_only: bool,
+def test_mixed_legacy_and_canonical_history_preserves_each_saved_format(
+    db_session: Session, conversation: ChatSession, tool_record: Tool
 ) -> None:
-    response = _response(db_session, conversation)
-    record = _record(response)
-    child_id = uuid4()
-    _child_record(db_session, record, child_id, "Child source [2].")
-    record.steps.append(
-        StepRecord(
-            message=AssistantMessage(
-                id=f"{record.run_id}:1", content=[TextContent(text="Root source [1].")]
+    legacy = _response(db_session, conversation, text="Old question")
+    legacy.message = "Old answer"
+    legacy_call = StoredToolCall(
+        chat_session_id=conversation.id,
+        parent_chat_message_id=legacy.id,
+        turn_number=0,
+        tab_index=0,
+        tool_id=tool_record.id,
+        tool_call_id="old-call",
+        tool_call_arguments={"query": "old"},
+        legacy_response="Old actual tool output",
+        tool_call_tokens=1,
+        result=None,
+    )
+    db_session.add(legacy_call)
+    current = _response(db_session, conversation, text="New question", previous=legacy)
+    record = _record(current, "New answer")
+    record.steps = _steps(
+        record.run_id,
+        [
+            AssistantMessage(
+                content=[ToolCall(id="new-call", name="lookup", arguments={})]
             ),
-            generation_status=ExecutionStatus.COMPLETE,
-        )
-    )
-    record.answer_step_index = 1
-    snapshot = response_snapshot(record)
-    documents = [
-        SearchDoc(
-            document_id=name,
-            chunk_ind=0,
-            semantic_identifier=name,
-            link=f"https://example.com/{name}",
-            blurb=name,
-            source_type=DocumentSource.GOOGLE_DRIVE,
-            boost=0,
-            hidden=False,
-            metadata={},
-            match_highlights=[],
-        )
-        for name in ("root-source", "child-source", "display-source")
-    ]
-    snapshot.steps[1].message.metadata = ChatMessageMetadata(
-        sources={1: documents[0]}, documents=[documents[2]]
-    )
-    snapshot.child_runs[0].steps[0].message.metadata = ResearchMessageMetadata(
-        phase=ResearchPhase.REPORT,
-        is_reasoning_model=False,
-        sources={2: documents[1]},
-    )
-    projected = project_response(
-        snapshot,
-        tool_ids={"delegate": tool_record.id},
-        registrations=[
-            AgentInfo(
-                id=str(child_id),
-                path="/root/research",
-                parent_id=str(conversation.id),
-                description="Research child",
-                restoration_config=None,
-            )
+            ToolResultMessage(
+                tool_call_id="new-call",
+                tool_name="lookup",
+                content="New actual tool output",
+            ),
+            AssistantMessage(content=[TextContent(text="New answer")]),
         ],
     )
-    assert set(projected.all_search_docs) == {doc.document_id for doc in documents}
-    assert projected.citation_to_doc == {1: documents[0]}
-    emitted_citations = {
-        citation.citation_number for citation in projected.citation_info
-    }
-    if citation_only:
-        projected.all_search_docs.pop(documents[1].document_id)
-        projected.citation_to_doc[2] = documents[1]
-        emitted_citations.add(2)
-    save_chat_turn(
-        message_text=projected.answer or "",
-        reasoning_tokens=projected.reasoning,
-        tool_calls=projected.tool_calls,
-        citation_to_doc=projected.citation_to_doc,
-        all_search_docs=projected.all_search_docs,
-        db_session=db_session,
-        assistant_message=response,
-        emitted_citations=emitted_citations,
-        response_record=projected.response,
-        presentation=projected.presentation,
-    )
+    record.answer_step_index = 1
+    _save(db_session, current, record)
+    db_session.commit()
     db_session.expire_all()
-    assert {doc.document_id for doc in response.search_docs} == {
-        doc.document_id for doc in documents
-    }
-    assert response.citations and set(response.citations) == (
-        {"1", "2"} if citation_only else {"1"}
-    )
-    execution = read_chat_execution(response)
-    assert execution is not None
-    artifacts = read_response_replay_data(execution, db_session)
-    replay = replay_response(
-        execution.response, artifacts.tools, execution.presentation, artifacts.documents
-    )
-    assert {
-        packet.obj.document_id
-        for packet in replay
-        if isinstance(packet.obj, CitationInfo)
-    } == {"root-source", "child-source"}
-    child = db_session.get(ChatSession, child_id)
-    assert child is not None
-    restored = _load_history(
-        db_session,
-        ChatBranch(
-            chat_session_id=conversation.id,
-            message_ids=visible_message_ids(db_session, response),
-        ),
-        child,
-    )
-    assert restored.sources[2].document_id == "child-source"
-    response.search_docs = [
-        doc for doc in response.search_docs if doc.document_id != "child-source"
+
+    history = capture_chat_history([legacy, current], {tool_record.id: "lookup"}, len)
+    old_results = [
+        m for m in history[0].response_messages if isinstance(m, ToolResultMessage)
     ]
-    db_session.flush()
-    with pytest.raises(ValueError, match="Cited source is unavailable"):
-        _load_history(
-            db_session,
-            ChatBranch(
-                chat_session_id=conversation.id,
-                message_ids=visible_message_ids(db_session, response),
-            ),
-            child,
+    new_results = [
+        m for m in history[1].response_messages if isinstance(m, ToolResultMessage)
+    ]
+    assert [m.text for m in old_results] == [TOOL_CALL_RESPONSE_CROSS_MESSAGE]
+    assert [m.text for m in new_results] == ["New actual tool output"]
+    assert legacy_call.result is None
+    assert legacy_call.tool_call_response == "Old actual tool output"
+    assert (
+        db_session.scalar(
+            select(StoredToolCall.legacy_response).where(
+                StoredToolCall.id == legacy_call.id
+            )
         )
-
-
-def test_root_history_and_metadata_do_not_consume_child_history_limit(
-    db_session: Session,
-    conversation: ChatSession,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr("onyx.db.chat_subagents.MAX_AGENT_HISTORY_RUNS", 2)
-    monkeypatch.setattr(
-        "onyx.db.chat_subagents.get_session_with_current_tenant",
-        lambda: nullcontext(db_session),
+        == "Old actual tool output"
     )
-    first = _response(db_session, conversation)
-    record = _record(first)
-    child_id = uuid4()
-    child = _child_record(db_session, record, child_id, "Child answer")
-    _save(db_session, first, record)
-    latest = first
-    for _ in range(6):
-        latest = _response(db_session, conversation, previous=latest)
-        _save(db_session, latest, _record(latest))
-    restored = chat_subagents.load_agent_history(latest.id, str(conversation.id))
-    assert restored.previous_run_id == str(latest.id)
-    assert sum(isinstance(message, UserMessage) for message in restored.messages) == 7
-    assert restored.messages[0].id == f"chat:{first.parent_message_id}"
-    restored_child = chat_subagents.load_agent_history(latest.id, str(child_id))
-    assert restored_child.previous_run_id == child.run_id
-    monkeypatch.setattr("onyx.db.chat_subagents.MAX_AGENT_HISTORY_RUNS", 0)
-    with pytest.raises(ValueError, match="response limit"):
-        chat_subagents.load_agent_history(latest.id, str(child_id))
-    monkeypatch.setattr("onyx.db.chat_subagents.MAX_AGENT_HISTORY_RUNS", 2)
-    metadata = {agent.id: agent for agent in load_session_agent_metadata(latest.id)}
-    assert metadata[str(conversation.id)].latest_run_id == str(latest.id)
-    assert metadata[str(child_id)].latest_run_id == child.run_id
-    assert metadata[str(child_id)].status == RunStatus.COMPLETE
-    assert [
-        agent.id for agent in load_session_agent_metadata(latest.id, include_root=False)
-    ] == [str(child_id)]
+    assert not legacy.response_items
+    assert current.response_items
 
 
 def test_replay_sources_include_tool_documents_and_preserve_root_versions(
@@ -2134,3 +2912,64 @@ def test_replay_sources_include_tool_documents_and_preserve_root_versions(
             (reference.message_id, reference.tool_call_id)
         ].search_docs
     ] == ["tool version", "tool-only source"]
+
+
+@pytest.mark.parametrize("existing_checkpoint", [False, True])
+@pytest.mark.parametrize("rejection", ["content_free", "response_binding"])
+def test_invalid_checkpoint_publication_leaves_state_unchanged(
+    db_session: Session,
+    conversation: ChatSession,
+    executed_sql: list[str],
+    existing_checkpoint: bool,
+    rejection: str,
+) -> None:
+    if rejection == "content_free":
+        conversation.incognito_record_mode = IncognitoRecordMode.USAGE_ONLY
+    response = _response(db_session, conversation, text="")
+    response.response_status = RunStatus.RUNNING
+    if existing_checkpoint:
+        db_session.add(
+            ChatResponseCheckpoint(
+                chat_message_id=response.id, ownership_version=1, state={}
+            )
+        )
+    db_session.commit()
+    checkpoint = ResponseCheckpoint(
+        history_digest="history",
+        response_digest="response",
+        binding=CheckpointBinding(
+            tenant_id="public",
+            response_id=str(
+                response.id if rejection == "content_free" else response.id + 1
+            ),
+        ),
+        revision=1,
+        progress={"private": "answer"},
+        compaction_checkpoint=None,
+        request_params=None,
+        message_payloads=[],
+        input_messages=[],
+        input_payloads=[],
+    )
+    executed_sql.clear()
+    expected_error = "Content-free" if rejection == "content_free" else "binding"
+    with pytest.raises(ValueError, match=expected_error):
+        publish_checkpoint__no_commit(
+            db_session,
+            response.id,
+            checkpoint,
+            expected_ownership_version=1 if existing_checkpoint else None,
+        )
+    db_session.flush()
+    assert not any(
+        statement.lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
+        for statement in executed_sql
+    )
+    assert response.response_status == RunStatus.RUNNING
+    saved = db_session.get(ChatResponseCheckpoint, response.id)
+    if existing_checkpoint:
+        assert saved is not None
+        assert saved.state == {}
+        assert saved.ownership_version == 1
+    else:
+        assert saved is None

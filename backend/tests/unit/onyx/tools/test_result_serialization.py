@@ -1,6 +1,6 @@
 import pytest
 
-from onyx.tools.results import CustomToolCallSummary, CustomToolUserFileSnapshot
+from onyx.tools.models import CustomToolCallSummary, CustomToolUserFileSnapshot
 
 
 @pytest.mark.parametrize("response_type", ["image", "csv", "json"])

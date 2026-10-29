@@ -1068,11 +1068,22 @@ returned as a `ToolResponse` (never a raised exception, per
 `CustomTool.run` (`custom_tool.py`) only classifies HTTP `401`/`403` as an
 auth error (`CustomToolErrorInfo(is_auth_error=True, ...)`). A blocked
 destination (`status_code=None`) or a 3xx redirect returns a failed
-`CustomToolCallSummary` and emits a `CustomToolDelta` with the same error, so
+`CustomToolCallSummary`. The tool renderer emits a `CustomToolDelta` with the same error, so
 the chat step shows a blocked or failed state live and after reload. Any other
 status code or exception surfaces as the raw response body or propagates up to
-`_safe_run_single_tool`'s generic exception handling
+`tools/interface.py:Tool.run`'s generic exception handling
 (`[[tools-framework]]` §4.5 step 6).
+
+
+### 4.8 Saved tool results
+
+SDK responses store model-facing content and `CustomToolCallSummary` details together in
+`tool_call.result`. Reload reads those typed details without looking up the current tool definition.
+Deleting a tool definition therefore does not remove its saved SDK output.
+
+`CustomToolCallSummary.response_type` determines how to interpret `tool_result`.
+Only `image` and `csv` results decode file references. JSON results remain JSON,
+including objects with a `file_ids` key. Legacy responses keep their existing reader.
 
 ---
 
