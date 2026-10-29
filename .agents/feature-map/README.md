@@ -88,9 +88,6 @@ say. Do not write "none" or "not applicable".
 | `## Recipes` | optional | Keyed recipes: how to add common things, investigate a report, or set up state for a test or a reproduction. |
 | `## Verification` | optional | Test directories and harnesses for the component, and checks that only a person can do. |
 
-[citations.md](components/citations.md) and
-[rate-and-usage-limits.md](components/rate-and-usage-limits.md) are examples.
-
 **Contracts and traps.** Each item starts with its number and a key, then the
 rule in bold. The rule names the code it is about and what else to check:
 

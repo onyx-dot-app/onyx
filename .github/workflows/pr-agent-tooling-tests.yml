@@ -17,6 +17,7 @@ on:
       - ".agents/hooks/**"
       - ".agents/feature-map/*.py"
       - ".agents/tests/**"
+      - "backend/requirements/dev.txt"
 
 permissions:
   contents: read
@@ -46,6 +47,7 @@ jobs:
               - '.agents/hooks/**'
               - '.agents/feature-map/*.py'
               - '.agents/tests/**'
+              - 'backend/requirements/dev.txt'
               - '.github/workflows/pr-agent-tooling-tests.yml'
               - '.github/actions/setup-python-and-install-dependencies/**'
 
