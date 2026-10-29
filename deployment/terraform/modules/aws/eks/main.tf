@@ -34,23 +34,41 @@ locals {
 
   # The module's default chart 1.7.1 (controller v2.7.1) strips the native preStop
   # sleep the onyx chart sets, so api and web pods fail admission once the namespace
-  # has the readiness-gate label. Its bundled IAM policy predates the actions below.
+  # has the readiness-gate label. Its bundled IAM policy predates the actions below,
+  # scoped as in the controller's docs/install/iam_policy.json.
   aws_load_balancer_controller_settings = merge(local.addon_iam_role_settings, {
     chart_version = "3.6.2"
     policy_statements = [
       {
-        sid = "ControllerActionsSinceModulePolicy"
+        sid = "ControllerDescribeSinceModulePolicy"
         actions = [
           "ec2:DescribeIpamPools",
           "ec2:DescribeRouteTables",
           "ec2:GetSecurityGroupsForVpc",
           "elasticloadbalancing:DescribeCapacityReservation",
           "elasticloadbalancing:DescribeListenerAttributes",
+        ]
+        resources = ["*"]
+      },
+      {
+        sid = "ControllerModifyOwnedSinceModulePolicy"
+        actions = [
           "elasticloadbalancing:ModifyCapacityReservation",
           "elasticloadbalancing:ModifyIpPools",
           "elasticloadbalancing:ModifyListenerAttributes",
-          "elasticloadbalancing:SetRulePriorities",
         ]
+        resources = ["*"]
+        conditions = [
+          {
+            test     = "Null"
+            variable = "aws:ResourceTag/elbv2.k8s.aws/cluster"
+            values   = ["false"]
+          },
+        ]
+      },
+      {
+        sid       = "ControllerListenerRulesSinceModulePolicy"
+        actions   = ["elasticloadbalancing:SetRulePriorities"]
         resources = ["*"]
       },
     ]
