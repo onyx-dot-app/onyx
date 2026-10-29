@@ -23,13 +23,20 @@ def _commit(repo: Path, name: str, content: str = "new\n") -> None:
     _git(repo, "commit", "-qm", f"Update {name}")
 
 
-def _run(repo: Path, event: str) -> subprocess.CompletedProcess[str]:
+def _run(
+    repo: Path, event: str, stop_hook_active: bool = False
+) -> subprocess.CompletedProcess[str]:
+    payload: dict[str, str | bool] = {
+        "cwd": str(repo),
+        "session_id": "test",
+        "hook_event_name": event,
+    }
+    if stop_hook_active:
+        payload["stop_hook_active"] = True
     return subprocess.run(
         [sys.executable, str(_HOOK)],
         cwd=repo,
-        input=json.dumps(
-            {"cwd": str(repo), "session_id": "test", "hook_event_name": event}
-        ),
+        input=json.dumps(payload),
         text=True,
         capture_output=True,
         timeout=30,
@@ -155,20 +162,76 @@ def test_expired_reflog_does_not_check_imported_files(repo: Path) -> None:
     assert _checked(repo) == {"new.txt"}
 
 
-def test_reminder_is_advisory(repo: Path) -> None:
+def _add_brief(repo: Path) -> None:
     script = repo / ".agents/feature-map/stale_docs.py"
     script.parent.mkdir(parents=True)
-    script.write_text("print('Review feature documentation')\n")
+    script.write_text("import sys\nprint('Brief for', *sys.argv[3:])\n")
     _git(repo, "add", ".agents")
-    _git(repo, "commit", "-qm", "Add reminder")
+    _git(repo, "commit", "-qm", "Add brief")
+
+
+def test_brief_blocks_the_stop_once(repo: Path) -> None:
+    _add_brief(repo)
     _start(repo)
     (repo / "base.txt").write_text("edit")
     result = _run(repo, "Stop")
     assert result.returncode == 0
+    # The turn's files only; the brief script finds the branch's documents itself.
     assert json.loads(result.stdout) == {
-        "systemMessage": "Review feature documentation"
+        "decision": "block",
+        "reason": "Brief for base.txt",
     }
     assert result.stderr == ""
+
+    second = _run(repo, "Stop", stop_hook_active=True)
+    assert (second.returncode, second.stdout, second.stderr) == (0, "", "")
+
+
+def test_stop_after_a_brief_checks_the_edits_once(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _add_brief(repo)
+    _start(repo)
+    (repo / "base.txt").write_text("edit")
+    assert json.loads(_run(repo, "Stop").stdout)["decision"] == "block"
+
+    # The edits the brief led to fail pre-commit on the next stop.
+    (repo / "doc.md").write_text("edit")
+    monkeypatch.setenv("CHECK_EXIT", "1")
+    second = _run(repo, "Stop", stop_hook_active=True)
+    assert second.returncode == 2
+    assert "pre-commit failed" in second.stderr
+    assert "Brief for" not in second.stderr
+    assert _checked(repo) == {"base.txt", "doc.md"}
+
+    third = _run(repo, "Stop", stop_hook_active=True)
+    assert (third.returncode, third.stdout, third.stderr) == (0, "", "")
+
+
+def test_continued_stop_without_a_brief_does_nothing(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _start(repo)
+    (repo / "base.txt").write_text("edit")
+    monkeypatch.setenv("CHECK_EXIT", "1")
+    assert _run(repo, "Stop").returncode == 2
+    (repo.parent / "checked.json").unlink()
+    result = _run(repo, "Stop", stop_hook_active=True)
+    assert (result.returncode, result.stdout, result.stderr) == (0, "", "")
+    assert _checked(repo) == set()
+
+
+def test_brief_follows_a_pre_commit_failure(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _add_brief(repo)
+    _start(repo)
+    (repo / "base.txt").write_text("edit")
+    monkeypatch.setenv("CHECK_EXIT", "1")
+    result = _run(repo, "Stop")
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert result.stderr.index("pre-commit failed") < result.stderr.index("Brief for")
 
 
 @pytest.mark.parametrize("failure", ["CHECK_EXIT", "REWRITE"])

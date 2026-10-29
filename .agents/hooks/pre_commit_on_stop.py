@@ -7,13 +7,18 @@ changed (edited, created or committed), never scratch files or older edits. For
 those files it:
 
 - runs pre-commit;
-- when the feature map has `stale_docs.py`, names the feature-map components whose
-  code the turn changed but whose documents the branch did not.
+- when the feature map has `stale_docs.py`, builds an editing brief: the parts of
+  the feature-map documents that cite the changed code, and the questions that
+  decide whether they need an edit. `stale_docs.py` prints nothing when no part
+  cites the code and every changed file is mapped, so ownership alone never blocks.
 
-Only pre-commit failures exit with code 2 and print to stderr. Documentation
-reminders use a non-blocking UI message. A second stop in the same turn
-(`stop_hook_active`) is let through, so a check the agent cannot fix never loops.
-Without a record for the session, the stop does nothing.
+A pre-commit failure exits with code 2 and prints to stderr, with the brief after
+it. A brief alone blocks the stop once with `{"decision": "block", "reason": ...}`,
+so the model reads it; Claude Code and Codex both accept that output. The next stop
+(`stop_hook_active`) runs pre-commit once more, so the edits the brief led to are
+checked too. Any later stop in the turn is let through, so nothing loops, and
+`stale_docs.py --session` names each section or key of a document once per
+session. Without a record for the session, the stop does nothing.
 """
 
 import hashlib
@@ -32,7 +37,6 @@ _TIMEOUT_SECONDS = 540
 _MAX_OUTPUT_LINES = 80
 _REMINDER_TIMEOUT_SECONDS = 60
 _STALE_DOCS = Path(".agents/feature-map/stale_docs.py")
-_FEATURE_MAP_DIR = ".agents/feature-map/"
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -154,11 +158,26 @@ def _record_turn_start(repo: Path, session: str) -> None:
     )
 
 
+def _read_turn_start(repo: Path, session: str) -> dict[str, Any] | None:
+    try:
+        start = json.loads(_snapshot_path(repo, session).read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    return start if isinstance(start, dict) else None
+
+
+def _set_recheck(repo: Path, session: str, recheck: bool) -> None:
+    """Mark whether the next stop of the turn runs pre-commit again."""
+    start = _read_turn_start(repo, session)
+    if start is not None and start.get("recheck", False) != recheck:
+        start["recheck"] = recheck
+        _snapshot_path(repo, session).write_text(json.dumps(start))
+
+
 def _turn_changes(repo: Path, session: str) -> set[str] | None:
     """Files the turn edited, created, deleted or committed; None without a record."""
-    try:
-        start: dict[str, Any] = json.loads(_snapshot_path(repo, session).read_text())
-    except (OSError, json.JSONDecodeError):
+    start = _read_turn_start(repo, session)
+    if start is None:
         return None
     start_files: dict[str, str] = start.get("files", {})
     changed = {
@@ -233,30 +252,14 @@ def _pre_commit_failures(repo: Path, files: list[str]) -> str | None:
     )
 
 
-def _branch_doc_changes(repo: Path) -> set[str]:
-    """Feature-map files the branch changed, committed or not."""
-    base = "HEAD"
-    for upstream in ("origin/main", "main"):
-        try:
-            base = _git(repo, "merge-base", "HEAD", upstream).strip()
-            break
-        except subprocess.CalledProcessError:
-            continue
-    changed = _git_paths(repo, "diff", "--name-only", base) | _git_paths(
-        repo, "ls-files", "--others", "--exclude-standard"
-    )
-    return {path for path in changed if path.startswith(_FEATURE_MAP_DIR)}
-
-
-def _stale_doc_reminder(repo: Path, session: str, turn: set[str]) -> str | None:
-    """Components the turn's code touched whose documents the branch never updated."""
+def _editing_brief(repo: Path, session: str, turn: set[str]) -> str | None:
+    """The feature-map parts that cite the turn's code; documents it edited are skipped."""
     script = repo / _STALE_DOCS
     if not script.is_file() or not turn:
         return None
-    files = turn | _branch_doc_changes(repo)
     try:
         result = subprocess.run(
-            [sys.executable, str(script), "--session", session, *sorted(files)],
+            [sys.executable, str(script), "--session", session, *sorted(turn)],
             cwd=repo,
             capture_output=True,
             text=True,
@@ -274,8 +277,9 @@ def main() -> int:
     except json.JSONDecodeError:
         payload = {}
     session: str | None = payload.get("session_id")
-    if not session or payload.get("stop_hook_active"):
+    if not session:
         return 0
+    continued = bool(payload.get("stop_hook_active"))
 
     try:
         repo = Path(
@@ -286,25 +290,37 @@ def main() -> int:
         if payload.get("hook_event_name") == "UserPromptSubmit":
             _record_turn_start(repo, session)
             return 0
+        if continued:
+            start = _read_turn_start(repo, session)
+            # Only the stop right after a brief runs again, and only once.
+            if start is None or not start.get("recheck"):
+                return 0
+            _set_recheck(repo, session, False)
         turn = _turn_changes(repo, session)
     except (subprocess.CalledProcessError, OSError):
         return 0
     if not turn:
         return 0
-    try:
-        reminder = _stale_doc_reminder(repo, session, turn)
-    except (subprocess.CalledProcessError, OSError):
-        reminder = None
+    brief = None
+    if not continued:
+        try:
+            brief = _editing_brief(repo, session, turn)
+        except (subprocess.CalledProcessError, OSError):
+            brief = None
     files = sorted(path for path in turn if (repo / path).is_file())
     failure = _pre_commit_failures(repo, files)
     if failure:
         print(
-            "\n\n".join(message for message in (failure, reminder) if message),
+            "\n\n".join(message for message in (failure, brief) if message),
             file=sys.stderr,
         )
         return _BLOCK
-    if reminder:
-        print(json.dumps({"systemMessage": reminder}))
+    if brief:
+        try:
+            _set_recheck(repo, session, True)
+        except OSError:
+            pass
+        print(json.dumps({"decision": "block", "reason": brief}))
     return 0
 
 
