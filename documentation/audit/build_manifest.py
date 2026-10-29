@@ -17,6 +17,49 @@ os.chdir(ROOT)
 
 # docs path prefix -> feature-map components (.agents/feature-map/components/*.md in onyx)
 COMPONENT_MAP = [
+    # Source pages first: the first matching prefix wins.
+    (
+        "admins/connectors/official/google_drive",
+        ["google-drive", "connectors", "cc-pairs-and-creds", "permission-sync"],
+    ),
+    (
+        "admins/connectors/official/confluence",
+        ["confluence", "connectors", "cc-pairs-and-creds", "permission-sync"],
+    ),
+    (
+        "admins/connectors/official/slack",
+        [
+            "slack",
+            "federated-search",
+            "connectors",
+            "cc-pairs-and-creds",
+            "permission-sync",
+        ],
+    ),
+    (
+        "admins/connectors/official/microsoft-365/outlook",
+        [
+            "outlook",
+            "microsoft-graph",
+            "connectors",
+            "cc-pairs-and-creds",
+            "permission-sync",
+        ],
+    ),
+    (
+        "admins/connectors/official/microsoft-365/teams",
+        [
+            "teams",
+            "microsoft-graph",
+            "connectors",
+            "cc-pairs-and-creds",
+            "permission-sync",
+        ],
+    ),
+    (
+        "admins/connectors/official/microsoft-365",
+        ["microsoft-graph", "connectors", "cc-pairs-and-creds", "permission-sync"],
+    ),
     (
         "admins/connectors",
         [

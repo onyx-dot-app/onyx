@@ -1747,10 +1747,9 @@
       "words": 747,
       "last_commit": "2026-09-22",
       "components": [
+        "confluence",
         "connectors",
-        "connector-capability-checks",
         "cc-pairs-and-creds",
-        "indexing-pipeline",
         "permission-sync"
       ],
       "images": [
@@ -1780,10 +1779,9 @@
       "words": 893,
       "last_commit": "2026-09-22",
       "components": [
+        "confluence",
         "connectors",
-        "connector-capability-checks",
         "cc-pairs-and-creds",
-        "indexing-pipeline",
         "permission-sync"
       ],
       "images": [
@@ -1805,10 +1803,9 @@
       "words": 899,
       "last_commit": "2026-09-22",
       "components": [
+        "confluence",
         "connectors",
-        "connector-capability-checks",
         "cc-pairs-and-creds",
-        "indexing-pipeline",
         "permission-sync"
       ],
       "images": [
@@ -2838,10 +2835,10 @@
       "words": 531,
       "last_commit": "2026-09-22",
       "components": [
+        "slack",
+        "federated-search",
         "connectors",
-        "connector-capability-checks",
         "cc-pairs-and-creds",
-        "indexing-pipeline",
         "permission-sync"
       ],
       "images": [
@@ -2871,10 +2868,10 @@
       "words": 978,
       "last_commit": "2026-05-14",
       "components": [
+        "slack",
+        "federated-search",
         "connectors",
-        "connector-capability-checks",
         "cc-pairs-and-creds",
-        "indexing-pipeline",
         "permission-sync"
       ],
       "images": [
@@ -2904,10 +2901,9 @@
       "words": 1095,
       "last_commit": "2026-09-28",
       "components": [
+        "microsoft-graph",
         "connectors",
-        "connector-capability-checks",
         "cc-pairs-and-creds",
-        "indexing-pipeline",
         "permission-sync"
       ],
       "images": []
@@ -2920,10 +2916,10 @@
       "words": 1691,
       "last_commit": "2026-10-07",
       "components": [
+        "outlook",
+        "microsoft-graph",
         "connectors",
-        "connector-capability-checks",
         "cc-pairs-and-creds",
-        "indexing-pipeline",
         "permission-sync"
       ],
       "images": []
@@ -2936,10 +2932,9 @@
       "words": 2582,
       "last_commit": "2026-10-06",
       "components": [
+        "microsoft-graph",
         "connectors",
-        "connector-capability-checks",
         "cc-pairs-and-creds",
-        "indexing-pipeline",
         "permission-sync"
       ],
       "images": []
@@ -2952,10 +2947,9 @@
       "words": 1816,
       "last_commit": "2026-09-28",
       "components": [
+        "microsoft-graph",
         "connectors",
-        "connector-capability-checks",
         "cc-pairs-and-creds",
-        "indexing-pipeline",
         "permission-sync"
       ],
       "images": []
@@ -2968,10 +2962,10 @@
       "words": 2440,
       "last_commit": "2026-09-23",
       "components": [
+        "teams",
+        "microsoft-graph",
         "connectors",
-        "connector-capability-checks",
         "cc-pairs-and-creds",
-        "indexing-pipeline",
         "permission-sync"
       ],
       "images": []
@@ -2984,10 +2978,9 @@
       "words": 885,
       "last_commit": "2026-10-06",
       "components": [
+        "google-drive",
         "connectors",
-        "connector-capability-checks",
         "cc-pairs-and-creds",
-        "indexing-pipeline",
         "permission-sync"
       ],
       "images": [
@@ -3025,10 +3018,9 @@
       "words": 205,
       "last_commit": "2026-07-08",
       "components": [
+        "google-drive",
         "connectors",
-        "connector-capability-checks",
         "cc-pairs-and-creds",
-        "indexing-pipeline",
         "permission-sync"
       ],
       "images": []
@@ -3041,10 +3033,9 @@
       "words": 593,
       "last_commit": "2026-10-06",
       "components": [
+        "google-drive",
         "connectors",
-        "connector-capability-checks",
         "cc-pairs-and-creds",
-        "indexing-pipeline",
         "permission-sync"
       ],
       "images": [

@@ -17,8 +17,9 @@ appear in the text as it streams. Hovering a marker shows a source card with
 the title, source and a snippet. Clicking it opens the document in a preview or
 in the documents sidebar. The "Sources" tag under the message lists every
 document the message cites. A reloaded chat shows the same numbers pointing to
-the same documents. A temporary (incognito) chat saves no citations to the
-database.
+the same documents. A temporary (incognito) chat saves citations like an
+ordinary chat unless it records usage only (`db/enums.py:IncognitoRecordMode`);
+a usage-only chat saves none.
 
 A caller can turn citations off (`include_citations=False`), for example a
 public bot. The answer then has no markers.

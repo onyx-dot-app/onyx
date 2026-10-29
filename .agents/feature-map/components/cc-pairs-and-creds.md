@@ -323,6 +323,7 @@ on the admin routes.
   `backend/tests/integration/tests/permissions_resources/`: deletion, manage
   roles and data access, with `backend/tests/integration/common_utils/managers/cc_pair.py`
   as the harness.
-- By hand: set `MASK_CREDENTIAL_PREFIX=false`, restart the API server, and
-  open a user group or document set that holds a pair. Its credential JSON
-  shows in full, which is what the default protects.
+- By hand, only on a disposable local instance with a test credential: set
+  `MASK_CREDENTIAL_PREFIX=false`, restart the API server, and open a user group
+  or document set that holds a pair. Its credential JSON shows in full, which
+  is what the default protects. Unset the variable and restart afterwards.

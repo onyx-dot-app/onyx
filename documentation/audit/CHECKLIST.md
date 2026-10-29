@@ -2,7 +2,7 @@
 
 Review unit: one MDX page (plus the images it references). Compare against the current Onyx app (running dev stack)
 and the feature map in the onyx repo (`.agents/feature-map/components/<component>.md`,
-listed per page in `audit/manifest.json`).
+or `components/connectors/<component>.md` for a connector source, listed per page in `audit/manifest.json`).
 
 Audience rule: customer-facing. Describe what a user or admin can do and how.
 No internal implementation detail (module names, Celery queues, DB tables)
