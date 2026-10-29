@@ -1,4 +1,4 @@
-"""Tests for the unified context file extraction logic (Phase 5).
+"""Tests for file selection, prompt budgets, and search policy.
 
 Covers:
 - resolve_context_user_files: combined project and custom persona files
@@ -6,15 +6,18 @@ Covers:
 - Search filter / search_usage determination in the caller
 """
 
+from io import BytesIO
 from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
 
 from onyx.chat.files import (
+    _get_or_extract_plaintext,
     collect_available_file_ids,
     determine_search_params,
     extract_context_files,
+    load_chat_files,
     resolve_context_user_files,
 )
 from onyx.chat.models import AvailableFiles, SearchParams
@@ -22,13 +25,64 @@ from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.models import ChatMessage, UserFile
 from onyx.db.user_file import capture_user_file_metadata
 from onyx.file_store.models import (
+    ChatFileInput,
     ChatFileType,
     ExtractedContextFiles,
-    FileToolMetadata,
     InMemoryChatFile,
     UserFileMetadata,
 )
 from onyx.tools.models import SearchToolUsage
+
+
+def test_overflow_metadata_only_stages_tabular_files_for_tools() -> None:
+    files = [
+        UserFileMetadata(
+            id=uuid4(),
+            file_id=str(uuid4()),
+            name=name,
+            file_type=mime,
+            token_count=7000,
+        )
+        for name, mime in (("data.csv", "text/csv"), ("report.pdf", "application/pdf"))
+    ]
+    with (
+        patch("onyx.chat.files.DISABLE_VECTOR_DB", True),
+        patch("onyx.chat.files.load_in_memory_chat_files") as load,
+    ):
+        result = extract_context_files(
+            files, llm_max_context_window=10000, reserved_token_count=0
+        )
+    load.assert_not_called()
+    assert not result.file_texts
+    assert {
+        item.filename: (item.file_id, item.staged_for_tools)
+        for item in result.file_metadata_for_tool
+    } == {
+        "data.csv": (str(files[0].id), True),
+        "report.pdf": (str(files[1].id), False),
+    }
+
+
+def test_attachment_loading_bounds_storage_fanout() -> None:
+    inputs = [
+        ChatFileInput(
+            descriptor={
+                "id": str(index),
+                "type": ChatFileType.PLAIN_TEXT,
+                "name": f"{index}.txt",
+            },
+            token_count=1,
+            content_pending=False,
+        )
+        for index in range(200)
+    ]
+    with patch(
+        "onyx.chat.files.run_functions_tuples_in_parallel", return_value=[]
+    ) as parallel:
+        load_chat_files(inputs)
+    assert len(parallel.call_args.args[0]) == 200
+    assert parallel.call_args.kwargs["max_workers"] == 16
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -132,7 +186,9 @@ class TestResolveContextUserFiles:
                 persona, 99, uuid4(), MagicMock()
             )
         assert selected == [shared_file, persona_file]
-        available: AvailableFiles = collect_available_file_ids(history, selected)
+        available: AvailableFiles = collect_available_file_ids(
+            history, capture_user_file_metadata(selected)
+        )
         assert set(available.user_file_ids) == {shared_file.id, persona_file.id}
         assert available.chat_file_ids == [attachment_id]
 
@@ -632,35 +688,76 @@ class TestSearchFilterDetermination:
         )
 
 
-class TestContextFileStagingFlag:
-    """`staged_for_tools` must mirror what actually reaches PythonTool.
+def test_file_reader_uses_the_same_combined_file_scope_as_prompt() -> None:
+    persona_file = _make_user_file()
+    project_file = _make_user_file()
+    persona = _make_persona(42, [persona_file])
+    with patch(
+        "onyx.chat.files.get_user_files_from_project", return_value=[project_file]
+    ) as project_files:
+        selected = resolve_context_user_files(persona, 99, uuid4(), MagicMock())
+        available = collect_available_file_ids([], capture_user_file_metadata(selected))
+    assert set(available.user_file_ids) == {persona_file.id, project_file.id}
+    project_files.assert_called_once()
 
-    `load_context_user_files_for_tools` loads only metadata-only files into
-    `chat_files_for_tools`, so everything else is listed for the LLM but never
-    staged. The out-of-context file notice reads this flag to decide whether it
-    may name the python tool; getting it wrong sends the model after bytes the
-    tool was never handed.
-    """
 
-    def _metadata_for(self, name: str, file_type: str) -> FileToolMetadata:
-        from onyx.chat.files import _build_tool_metadata
+class TestGetOrExtractPlaintext:
+    """Tests for the plaintext extraction cache used by chat file loading."""
 
-        return _build_tool_metadata(
-            UserFileMetadata(
-                id=uuid4(),
-                file_id=f"user_files/{uuid4()}/{name}",
-                name=name,
-                token_count=100,
-                file_type=file_type,
-            )
-        )
+    def test_cache_hit_skips_extraction(self) -> None:
+        file_store = MagicMock()
+        file_store.read_file.return_value = BytesIO(b"cached text")
+        extract_fn = MagicMock(return_value="should not be called")
 
-    def test_tabular_file_is_staged(self) -> None:
-        """CSV/XLSX are metadata-only, so they are handed to PythonTool."""
-        meta = self._metadata_for("data.csv", "text/csv")
-        assert meta.staged_for_tools is True
+        with (
+            patch(
+                "onyx.chat.files.get_default_file_store",
+                return_value=file_store,
+            ),
+            patch("onyx.chat.files.store_plaintext") as store_plaintext,
+        ):
+            result = _get_or_extract_plaintext("file-1", extract_fn)
 
-    def test_non_metadata_only_file_is_not_staged(self) -> None:
-        """A PDF is listed for the LLM but never loaded into chat_files_for_tools."""
-        meta = self._metadata_for("report.pdf", "application/pdf")
-        assert meta.staged_for_tools is False
+        assert result == "cached text"
+        extract_fn.assert_not_called()
+        store_plaintext.assert_not_called()
+
+    def test_cache_miss_stores_extracted_text(self) -> None:
+        file_store = MagicMock()
+        file_store.read_file.side_effect = RuntimeError("not in store")
+        extract_fn = MagicMock(return_value="extracted text")
+
+        with (
+            patch(
+                "onyx.chat.files.get_default_file_store",
+                return_value=file_store,
+            ),
+            patch("onyx.chat.files.store_plaintext") as store_plaintext,
+        ):
+            result = _get_or_extract_plaintext("file-2", extract_fn)
+
+        assert result == "extracted text"
+        extract_fn.assert_called_once()
+        store_plaintext.assert_called_once_with("file-2", "extracted text")
+
+    def test_cache_miss_caches_empty_extraction(self) -> None:
+        """Files extract_file_text cannot process (e.g. .zip) return "".
+        We must still cache that result so we don't re-fetch the file from
+        object storage on every subsequent chat turn.
+        """
+        file_store = MagicMock()
+        file_store.read_file.side_effect = RuntimeError("not in store")
+        extract_fn = MagicMock(return_value="")
+
+        with (
+            patch(
+                "onyx.chat.files.get_default_file_store",
+                return_value=file_store,
+            ),
+            patch("onyx.chat.files.store_plaintext") as store_plaintext,
+        ):
+            result = _get_or_extract_plaintext("file-3", extract_fn)
+
+        assert result == ""
+        extract_fn.assert_called_once()
+        store_plaintext.assert_called_once_with("file-3", "")

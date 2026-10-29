@@ -32,14 +32,14 @@ from onyx.agents.tools import (
     ToolInvocation,
 )
 from onyx.chat.checkpoint import CHECKPOINT_PAYLOAD_TYPES
-from onyx.chat.models import PromptMetadata
-from onyx.chat.presentation import message_presentation
-from onyx.chat.response_models import (
+from onyx.chat.models import (
     ChatSearchResult,
     CheckpointBinding,
     MessageRendering,
     PresentationMode,
+    PromptMetadata,
 )
+from onyx.chat.presentation import message_presentation
 from onyx.file_store.models import ChatFileType, ChatLoadedFile
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import GenerationContext

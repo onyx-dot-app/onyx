@@ -2,6 +2,7 @@ import datetime
 import json
 import time
 from collections.abc import Generator
+from concurrent.futures import Future
 from datetime import timedelta
 from uuid import UUID
 
@@ -26,10 +27,10 @@ from onyx.auth.users import current_chat_accessible_user
 from onyx.background.task_utils import enqueue_user_file_deletes
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_processing_checker import (
+    ADMISSION_CACHE_TIMEOUT_S,
     get_processing_stream_id,
     is_chat_session_processing,
 )
-from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_utils import (
     convert_chat_history_basic,
     create_chat_session_from_request,
@@ -39,7 +40,7 @@ from onyx.chat.incognito import (
     incognito_allowed_for_user,
 )
 from onyx.chat.incognito_context import teardown_incognito_session
-from onyx.chat.models import ChatFullResponse, CreateChatSessionID
+from onyx.chat.models import ChatFullResponse, ChatResponseOutcome, CreateChatSessionID
 from onyx.chat.process_message import (
     gather_stream_full,
     handle_multi_model_stream,
@@ -130,6 +131,7 @@ from onyx.server.query_and_chat.models import (
     ChatSessionDetailResponse,
     ChatSessionDetails,
     ChatSessionGroup,
+    ChatSessionProcessingStatus,
     ChatSessionsResponse,
     ChatSessionSummary,
     ChatSessionUpdateRequest,
@@ -146,7 +148,11 @@ from onyx.server.query_and_chat.models import (
 from onyx.server.query_and_chat.session_loading import (
     translate_assistant_message_to_packets,
 )
-from onyx.server.query_and_chat.streaming_models import Packet, heartbeat_packet
+from onyx.server.query_and_chat.streaming_models import (
+    Packet,
+    StreamCursor,
+    heartbeat_packet,
+)
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.server.usage_limits import (
     check_llm_cost_limit_for_provider,
@@ -431,11 +437,15 @@ def get_chat_session(
     ]
 
     current_stream: CurrentStreamInfo | None = None
+    is_processing = True
     try:
-        stream_id = get_processing_stream_id(session_id, get_cache_backend())
+        cache = get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
+        is_processing = is_chat_session_processing(session_id, cache)
+        stream_id = get_processing_stream_id(session_id, cache)
         if stream_id is not None:
             current_stream = CurrentStreamInfo(stream_id=stream_id)
     except Exception:
+        is_processing = True
         logger.exception(
             "An error occurred while checking if the chat session is processing"
         )
@@ -465,6 +475,7 @@ def get_chat_session(
         # Packets are now directly serialized as Packet Pydantic models
         packets=replay_packet_lists,
         current_stream=current_stream,
+        is_processing=is_processing,
         incognito=chat_session.incognito_record_mode is not None,
     )
 
@@ -894,7 +905,7 @@ def handle_send_chat_message(
                 )
                 usage_db_session.commit()
 
-        state_container = ChatStateContainer()
+        response_future = Future[ChatResponseOutcome]()
         packets = handle_stream_message_objects(
             new_msg_req=chat_message_req,
             user=user,
@@ -906,9 +917,9 @@ def handle_send_chat_message(
             ),
             mcp_headers=chat_message_req.mcp_headers,
             additional_context=chat_message_req.additional_context,
-            external_state_container=state_container,
+            response_future=response_future,
         )
-        result = gather_stream_full(packets, state_container)
+        result = gather_stream_full(packets, response_future)
         # CreateChatSessionID is only yielded for newly-created sessions, so for
         # follow-up messages on an existing session the aggregated response would
         # otherwise omit chat_session_id. Backfill it from the request so the
@@ -922,7 +933,7 @@ def handle_send_chat_message(
 
     # Streaming path, normal Onyx UI behavior
     def stream_generator() -> Generator[str, None, None]:
-        state_container = ChatStateContainer()
+        response_future = Future[ChatResponseOutcome]()
         try:
             for obj in handle_stream_message_objects(
                 new_msg_req=chat_message_req,
@@ -935,7 +946,7 @@ def handle_send_chat_message(
                 ),
                 mcp_headers=chat_message_req.mcp_headers,
                 additional_context=chat_message_req.additional_context,
-                external_state_container=state_container,
+                response_future=response_future,
             ):
                 yield get_json_line(obj.model_dump())
 
@@ -1293,16 +1304,38 @@ def search_chats(
 _RESUME_MAX_CHUNKS_PER_READ = 32
 
 
+@router.get("/chat-session/{session_id}/status")
+def get_chat_session_processing_status(
+    session_id: UUID,
+    user: User = Depends(
+        require_permission(Permission.READ_CHAT, allow_anonymous=True)
+    ),
+) -> ChatSessionProcessingStatus:
+    with get_session_with_current_tenant() as db_session:
+        try:
+            get_chat_session_by_id(
+                chat_session_id=session_id,
+                user_id=user.id,
+                db_session=db_session,
+            )
+        except ValueError as error:
+            raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND) from error
+    return ChatSessionProcessingStatus(
+        is_processing=is_chat_session_processing(session_id, get_cache_backend())
+    )
+
+
 @router.get("/chat-session/{session_id}/resume-stream")
 def resume_chat_stream(
     session_id: UUID,
     cursor: int = Query(0, ge=0),
+    expected_stream_id: int | None = Query(None, alias="stream_id", gt=0),
     user: User = Depends(
         require_permission(Permission.READ_CHAT, allow_anonymous=True)
     ),
 ) -> StreamingResponse:
-    """Replay an in-flight run's buffered stream from ``cursor`` and tail it
-    live until the run completes. Serves any pod: the buffer lives in the
+    """Replay buffered output from ``cursor`` and tail it while its worker is live.
+    Serves any pod: the buffer lives in the
     shared cache. 404 when the session has no resumable run — the client
     falls back to refetching the session."""
     # Short-lived session: a Depends(get_session) would stay checked out (idle
@@ -1319,13 +1352,19 @@ def resume_chat_stream(
 
     cache = get_cache_backend()
     stream_id = get_processing_stream_id(session_id, cache)
-    if stream_id is None or not has_stream_buffer(cache, session_id, stream_id):
+    if (
+        stream_id is None
+        or (expected_stream_id is not None and expected_stream_id != stream_id)
+        or not has_stream_buffer(cache, session_id, stream_id)
+    ):
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND, "No resumable stream for this chat session"
         )
 
     def stream_buffered_run() -> Generator[str, None, None]:
         chunk_cursor = cursor
+        replay_through: int | None = None
+        writer_stopped = False
         last_emit = time.monotonic()
         while True:
             read = read_stream_chunks(
@@ -1333,37 +1372,41 @@ def resume_chat_stream(
                 session_id,
                 stream_id,
                 chunk_cursor,
-                max_chunks=_RESUME_MAX_CHUNKS_PER_READ,
+                max_chunks=(
+                    min(_RESUME_MAX_CHUNKS_PER_READ, replay_through - chunk_cursor)
+                    if replay_through is not None and chunk_cursor < replay_through
+                    else _RESUME_MAX_CHUNKS_PER_READ
+                ),
             )
             # Buffer expired/evicted or sequence broken: end the stream — the
             # client refetches the session and renders the persisted message.
-            if read is None or read.gap:
+            if read is None or read.gap or chunk_cursor > read.chunk_count:
                 return
-            if read.blocks:
+            initial_read = replay_through is None
+            if replay_through is None:
+                # Freeze the restore boundary so new writes cannot prolong replay.
+                replay_through = read.chunk_count
+            if read.blocks or initial_read:
                 yield "".join(read.blocks)
                 chunk_cursor = read.next_cursor
+                yield get_json_line(
+                    StreamCursor(
+                        stream_id=stream_id,
+                        next_cursor=chunk_cursor,
+                        replay_complete=chunk_cursor >= replay_through,
+                    ).model_dump()
+                )
+            if read.blocks:
                 last_emit = time.monotonic()
                 # Drain the backlog before sleeping; done is only trusted once
                 # a read comes back empty (a capped read can precede the tail).
                 continue
-            if read.done:
+            if read.done or writer_stopped:
                 return
-            # A dead writer never marks done; its fence lapsing is the signal.
-            # A final drain catches anything written between the read above
-            # and this check (including the done marker's last chunks).
+            # Drain once more after ownership ends to catch the writer's last flush.
             if not is_chat_session_processing(session_id, cache):
-                while True:
-                    read = read_stream_chunks(
-                        cache,
-                        session_id,
-                        stream_id,
-                        chunk_cursor,
-                        max_chunks=_RESUME_MAX_CHUNKS_PER_READ,
-                    )
-                    if read is None or read.gap or not read.blocks:
-                        return
-                    yield "".join(read.blocks)
-                    chunk_cursor = read.next_cursor
+                writer_stopped = True
+                continue
             now = time.monotonic()
             if now - last_emit >= CHAT_HEARTBEAT_INTERVAL_S:
                 yield get_json_line(heartbeat_packet().model_dump())

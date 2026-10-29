@@ -16,14 +16,14 @@ from pydantic import BaseModel, ValidationError
 
 from onyx.agents.concurrency import EventDispatcher
 from onyx.cache.interface import CacheBackend
-from onyx.chat.models import AnswerStreamPart, StreamingError
+from onyx.chat.models import AnswerStreamPart
 from onyx.configs.chat_configs import (
     CHAT_HEARTBEAT_INTERVAL_S,
     CHAT_STREAM_BUFFER_DONE_TTL_S,
     CHAT_STREAM_BUFFER_MAX_BYTES,
     CHAT_STREAM_BUFFER_TTL_S,
 )
-from onyx.server.query_and_chat.streaming_models import heartbeat_packet
+from onyx.server.query_and_chat.streaming_models import StreamingError, heartbeat_packet
 from onyx.server.utils import get_json_line
 from onyx.utils.fleet_query_telemetry import QueryObservation
 from onyx.utils.logger import setup_logger

@@ -23,16 +23,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema, DropSchema
 
-from onyx.chat.save_chat import save_chat_turn
 from onyx.configs.constants import MessageType
 from onyx.db.chat import (
     create_chat_session,
     create_new_chat_message,
     get_or_create_root_message,
-    reserve_message_id,
 )
 from onyx.db.models import ChatMessage, ChatSession, ToolCall
-from onyx.db.tools import create_tool_call_no_commit
 
 
 def test_response_items_upgrade_downgrade_upgrade(isolated_engine: Engine) -> None:
@@ -144,10 +141,10 @@ def test_response_items_upgrade_downgrade_upgrade(isolated_engine: Engine) -> No
             connection.commit()
 
 
-def test_current_chat_writers_accept_response_storage_schema(
+def test_legacy_rows_remain_readable_with_response_storage_schema(
     db_session: Session,
 ) -> None:
-    """Schema preparation must not require the SDK ORM or its writers."""
+    """Old saved rows need no canonical response items to remain readable."""
     chat = create_chat_session(
         db_session=db_session,
         description="Response schema compatibility",
@@ -165,27 +162,27 @@ def test_current_chat_writers_accept_response_storage_schema(
             message_type=MessageType.USER,
             db_session=db_session,
         )
-        answer = reserve_message_id(db_session, session_id, question.id)
-        save_chat_turn(
-            message_text="Answer",
-            reasoning_tokens="Reasoning",
-            tool_calls=[],
-            citation_to_doc={},
-            all_search_docs={},
+        answer = create_new_chat_message(
+            chat_session_id=session_id,
+            parent_message=question,
+            message="Answer",
+            token_count=1,
+            message_type=MessageType.ASSISTANT,
             db_session=db_session,
-            assistant_message=answer,
         )
-        call = create_tool_call_no_commit(
+        answer.reasoning_tokens = "Reasoning"
+        call = ToolCall(
             chat_session_id=session_id,
             parent_chat_message_id=answer.id,
             turn_number=0,
             tool_id=1,
             tool_call_id="existing-writer-call",
             tool_call_arguments={"query": "Question"},
-            tool_call_response="Existing result",
+            legacy_response="Existing result",
             tool_call_tokens=1,
-            db_session=db_session,
+            result=None,
         )
+        db_session.add(call)
         db_session.commit()
         answer_id, call_id = answer.id, call.id
         db_session.expire_all()

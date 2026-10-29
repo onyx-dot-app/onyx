@@ -1,4 +1,4 @@
-"""Model and coordinator doubles for standalone runtime tests."""
+"""Run the chat adapter through model streaming, tools, and packet rendering."""
 
 from collections.abc import Callable, Generator, Iterable, Iterator, Sequence
 from typing import Any, override
@@ -13,6 +13,7 @@ from onyx.agents.agent_coordination import (
 from onyx.agents.events import AgentEvent
 from onyx.agents.models import AgentInfo, RunResult, RunState, RunStatus
 from onyx.agents.runtime import Agent, Run
+from onyx.agents.tools import ToolInvocation
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import LLM, GenerationContext, LLMConfig
 from onyx.llm.model_request import ChatCompletionMessage
@@ -30,9 +31,13 @@ from onyx.llm.models import (
     ThinkingDeltaEvent,
     ToolCallEndEvent,
     ToolCallStartEvent,
+    ToolDefinition,
+    ToolResult,
     apply_generation_event,
 )
 from onyx.llm.multi_llm import LitellmLLM
+from onyx.tools.interface import Tool
+from onyx.tools.models import ToolContext
 
 
 class FakeAgentDirectory(AgentDirectory):
@@ -185,6 +190,38 @@ class FakeModelClient(LLM):
         self, request: GenerationRequest, context: GenerationContext | None = None
     ) -> Generator[GenerationEvent, None, None]:
         yield from message_events(self.invoke(request, context))
+
+
+class EchoTool(Tool):
+    @property
+    def id(self) -> int:
+        return 1
+
+    @property
+    def name(self) -> str:
+        return "echo"
+
+    @property
+    def description(self) -> str:
+        return "Return a value."
+
+    @property
+    def display_name(self) -> str:
+        return "Echo"
+
+    def tool_definition(self) -> ToolDefinition:
+        return ToolDefinition(
+            name=self.name,
+            description=self.description,
+            parameters={
+                "type": "object",
+                "properties": {"value": {"type": "string"}},
+            },
+        )
+
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+        invocation.cancellation.check()
+        return ToolResult(content=str(invocation.arguments["value"]))
 
 
 def run_agent(

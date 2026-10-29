@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.agents.models import RunFailure, RunFailureKind, RunStatus
-from onyx.chat.response_models import ResponseCheckpoint, SavedCheckpoint
+from onyx.chat.models import ResponseCheckpoint, SavedCheckpoint
 from onyx.db.chat_response import (
     configure_response_transaction__no_commit,
     finish_checkpoint__no_commit,

@@ -9,8 +9,8 @@ from onyx.agents.models import (
     StepRecord,
     ToolExecutionRecord,
 )
+from onyx.chat.models import ResponseRecord, ToolReplayData
 from onyx.chat.presentation import project_response, replay_response
-from onyx.chat.response_models import ResponseRecord, ToolReplayData
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.llm.models import AssistantMessage, TextContent, ToolCall, ToolResultMessage

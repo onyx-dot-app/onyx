@@ -212,7 +212,7 @@ single DB session opened at the top of `run()`, before any parallel lane starts:
    still raise.
 
 The prefetch runs only when `SearchTool.enable_slack_search` is true or the call has a
-`slack_context`. In chat, `process_message._should_enable_slack_search` sets the flag. It is
+`slack_context`. In chat, `execution.py:create_chat_agent` sets the flag. It is
 true for the default persona with no source filter, or when the source filter includes
 Slack. The `/search` API always sets it true. The lane also drops when the resolved search
 scope excludes `DocumentSource.SLACK`. The sole gate on `_run_slack_search` is then

@@ -25,6 +25,7 @@ from onyx.agents.models import (
 )
 from onyx.agents.runtime import Agent, RunFailed
 from onyx.agents.tools import AgentTool, ToolInvocation
+from onyx.chat.errors import chat_error
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.exceptions import ClassifiedLLMError, LLMRateLimitError, LLMTimeoutError
 from onyx.llm.interfaces import GenerationContext
@@ -565,6 +566,53 @@ def test_observer_cannot_wait_for_its_own_run_to_become_idle() -> None:
     assert set(failures) == {"An observer cannot wait for its own run to become idle"}
 
 
+@pytest.mark.parametrize(
+    "cause,wrapper,code,retryable",
+    [
+        (
+            RateLimitError("rate limit", model="test", llm_provider="openai"),
+            LLMRateLimitError,
+            "RATE_LIMIT",
+            True,
+        ),
+        (
+            RateLimitError("insufficient_quota", model="test", llm_provider="openai"),
+            LLMRateLimitError,
+            "BUDGET_EXCEEDED",
+            False,
+        ),
+        (
+            Timeout("read timeout", model="test", llm_provider="openai"),
+            LLMTimeoutError,
+            "CONNECTION_ERROR",
+            True,
+        ),
+        (None, LLMTimeoutError, "CONNECTION_ERROR", True),
+    ],
+)
+def test_provider_failure_preserves_chat_retry_policy(
+    cause: Exception | None,
+    wrapper: type[LLMRateLimitError] | type[LLMTimeoutError],
+    code: str,
+    retryable: bool,
+) -> None:
+    def fail(
+        _request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        raise wrapper("generation failed") from cause
+
+    llm = FakeModelClient(fail)
+    run = Agent(
+        llm, generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE)
+    ).start(max_steps=1)
+    with pytest.raises(RunFailed) as raised:
+        run.result(2)
+    assert run.wait_for_idle(2)
+    packet = chat_error(raised.value, llm)
+    assert packet.error_code == code
+    assert packet.is_retryable is retryable
+
+
 def test_cancelled_before_tool_callback_cannot_start_the_tool() -> None:
     entered, release = threading.Event(), threading.Event()
     executed: list[str] = []
@@ -611,51 +659,3 @@ def test_cancelled_before_tool_callback_cannot_start_the_tool() -> None:
     assert new.result(timeout=2).output.text == "New answer"
     assert new.wait_for_idle(2)
     assert executed == []
-
-
-@pytest.mark.parametrize(
-    "cause,wrapper,code,retryable",
-    [
-        (
-            RateLimitError("rate limit", model="test", llm_provider="openai"),
-            LLMRateLimitError,
-            "RATE_LIMIT",
-            True,
-        ),
-        (
-            RateLimitError("insufficient_quota", model="test", llm_provider="openai"),
-            LLMRateLimitError,
-            "BUDGET_EXCEEDED",
-            False,
-        ),
-        (
-            Timeout("read timeout", model="test", llm_provider="openai"),
-            LLMTimeoutError,
-            "CONNECTION_ERROR",
-            True,
-        ),
-        (None, LLMTimeoutError, "CONNECTION_ERROR", True),
-    ],
-)
-def test_provider_failure_preserves_retry_classification(
-    cause: Exception | None,
-    wrapper: type[LLMRateLimitError] | type[LLMTimeoutError],
-    code: str,
-    retryable: bool,
-) -> None:
-    def fail(
-        _request: GenerationRequest, _signal: CancellationSignal
-    ) -> AssistantMessage:
-        raise wrapper("generation failed") from cause
-
-    llm = FakeModelClient(fail)
-    run = Agent(
-        llm, generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE)
-    ).start(max_steps=1)
-    with pytest.raises(RunFailed) as raised:
-        run.result(2)
-    assert run.wait_for_idle(2)
-    packet = raised.value.failure.llm_error
-    assert packet is not None
-    assert packet.error_code == code
-    assert packet.is_retryable is retryable

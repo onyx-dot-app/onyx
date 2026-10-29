@@ -2,16 +2,16 @@
 
 > Executes model and tool steps with explicit cancellation, ownership, and restoration boundaries.
 
-**Verified against:** `55a8f75b65` (2026-10-26)
+**Verified against:** `2cbd700b67` (2026-10-27)
 **Domain:** core-loop
 **Edition:** CE
 **Owns:** `backend/onyx/agents/`
 
 ## 1. What the user experiences
 
-This package has no production caller yet. Chat, coding, and research keep their
-existing execution paths. The runtime provides a common engine for later
-integration without changing their current user behavior.
+Chat, coding, and research use this runtime for model and tool execution.
+It retains partial output, coordinates child agents, and propagates Stop to active
+work. Chat owns request admission, durable storage, and browser delivery.
 
 ## 2. Surfaces
 
@@ -48,7 +48,6 @@ See `backend/onyx/agents/README.md` for the public contracts and usage.
 
 ### Child completion and generation retries
 
-These rules apply to the shared runtime, which has no production chat caller yet.
 `backend/onyx/agents/agent_coordination.py:AgentCoordinator.restore_completed`
 resolves the existing completion future so waiting parents resume. It updates
 latest-run discovery only for that run and rejects conflicting terminal records.
@@ -85,6 +84,9 @@ the existing observer reservation, so a late remote read cannot replace the erro
 Tool progress omits failed results' model-facing text. Structured result details
 carry explicit public errors. Recorded results retain the model-facing text.
 
+Saved model failures retain redacted diagnostics, including tool choice and finish reason
+when available. Chat adds the selected model and provider to the client error.
+
 Compaction validates its source message ID before it calls the summary model.
 
 ### Model-history replay
@@ -97,7 +99,7 @@ Signed and redacted blocks remain intact.
 It also removes orphaned or duplicate tool results and copies messages by default.
 Calls with duplicate IDs in one assistant message are ambiguous; replay omits them and their results.
 This helper prepares history without deleting the recorded output.
-Production chat does not call this module yet.
+Chat uses this replay path when restoring saved conversations and preparing model requests.
 
 ## 5. Contracts and invariants
 
@@ -138,8 +140,9 @@ Production chat does not call this module yet.
 - `backend/onyx/utils/threadpool_concurrency.py` starts workers with saved context.
 - `backend/onyx/prompts/compression_prompts.py` supplies the compaction instruction.
 
-Production [[core-chat-loop]], [[tools-framework]], and [[chat-persistence]] do not
-use this runtime yet.
+[[core-chat-loop]] creates feature agents. [[tools-framework]] binds application
+tools to runtime invocations. [[chat-persistence]] implements durable state and
+authorized child-history access through the coordinator interfaces.
 
 ## 7. Blast radius
 
@@ -157,8 +160,9 @@ Run the isolated runtime scenarios under `backend/tests/unit/onyx/agents/`.
 Cover parallel tools, cancellation, child lifetimes, suspension, restoration,
 compaction, and storage failure. Check typing and existing LLM tests as well.
 
-These tests use controlled model and tool implementations. They verify SDK
-behavior, not database durability or production chat adoption.
+These tests use controlled model and tool implementations. Verify database
+durability and chat integration through the [[chat-persistence]] and
+[[core-chat-loop]] test suites.
 
 ## 9. Footguns
 

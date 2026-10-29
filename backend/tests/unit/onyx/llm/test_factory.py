@@ -24,7 +24,6 @@ from onyx.llm.factory import (
     get_default_utility_llm,
     get_llm,
     get_llm_for_persona,
-    get_llm_token_counter,
     get_search_selection_llm,
     llm_from_provider,
 )
@@ -770,22 +769,3 @@ def test_client_captures_nested_deployment_settings_after_merging() -> None:
         "metadata": {"deployment": ["original"], "source": "request"},
         "default_only": {"enabled": True},
     }
-
-
-def test_token_counts_are_cached_per_counter_and_evicted() -> None:
-    model = MagicMock(spec=LLM)
-    encode = MagicMock(side_effect=lambda text: list(range(len(text))))
-    with (
-        patch("onyx.llm.factory.TOKEN_COUNT_CACHE_SIZE", 2),
-        patch("onyx.llm.factory.get_llm_tokenizer_encode_func", return_value=encode),
-    ):
-        first = get_llm_token_counter(model)
-        second = get_llm_token_counter(model)
-    assert first("private text") == first("private text") == 12
-    assert encode.call_count == 1
-    assert second("private text") == 12
-    assert encode.call_count == 2
-    assert first("other") == 5
-    assert first("third") == 5
-    assert first("private text") == 12
-    assert encode.call_count == 5

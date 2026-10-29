@@ -288,13 +288,13 @@ directly via `add_trace_processor`, independent of Braintrust/Langfuse.
 
 A span opened with no trace in scope becomes a `NoOpSpan` and reaches no
 processor (`framework/provider.py:create_span`), so every entry point that runs
-LLM work must open a root trace first. Today those are `chat/llm_loop.py`
-(`run_llm_loop`), `deep_research/dr_loop.py`, `chat/compression.py`,
+LLM work must open a root trace first. Chat opens it in `chat/execution.py`;
+child agents and compaction inherit that trace. Other entry points include
 `server/query_and_chat/chat_backend.py` (`chat_session_naming`),
 `server/features/build/session/naming.py`, `indexing/indexing_pipeline.py`,
 `indexing/port_reembed.py`, `server/gateway/tracing.py:llm_gateway_trace`, and
 `server/features/search/api.py` (`search_api`, with an `internal_search`
-function span around `SearchTool.run` so the trace shape matches chat's). Trace
+function span around `SearchTool.search` so the trace shape matches chat's). Trace
 metadata uses `framework/create.py:ChatTraceMetadata` where a chat session
 exists and `SearchTraceMetadata` (tenant, user, persona) where none does.
 
@@ -478,10 +478,16 @@ every five minutes.
   fails with a 4xx `OnyxError` sends no event. This includes a chat that a
   query-processing hook rejects (`QUERY_REJECTED`): the chat stream sends the
   error as a `StreamingError` packet, and `QueryObservation.error_packet` reads
-  only its code. Chat queries also report `llm_cycles`: `chat/llm_loop.py:run_llm_loop`
-  calls `Emitter.llm_step_started` before each LLM call, and `Emitter.emit` records
-  each model's count when it queues its first answer text. Deep research reports
-  the `deep_research` mode and no cycle count.
+  only its code.
+  `chat/stream_buffer.py:ChatDelivery` observes output and finishes the query
+  after server execution, including after a reader disconnects.
+  `tools/interface.py:Tool.run` records executed tool categories through
+  `utils/fleet_query_telemetry.py:CURRENT_QUERY_OBSERVATION`, copied into workers.
+  Unknown or canceled calls that never run do not count.
+  `chat/presentation.py:ResponsePresenter` counts root LLM message starts through
+  `chat/emitter.py:Emitter`. The first answer packet captures its model’s cycle count
+  before delivery. Child messages do not count. Deep research reports the
+  deep_research mode without a cycle count.
 - Indexing counters: the fetch, embed, and write steps call `emit_stage_counter`
   ([[indexing-pipeline]] §4.10). The sender thread sums the deltas for one
   attempt and stage over at most 30 seconds.

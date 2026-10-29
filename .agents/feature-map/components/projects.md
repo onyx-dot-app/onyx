@@ -120,7 +120,7 @@ ChatSession (chat_session)                 UserFile (user_file)  -- see [[file-s
   exactly one project or to none; it is never itself a member of many.
 - `UserProject.instructions` is a plain `String` column (`db/models.py:UserProject.instructions`),
   read by `db/projects.py:get_project_instructions` and
-  `chat_utils.py:get_custom_agent_prompt` (§4.5).
+  `process_message.py:prepare_chat_turn` (§4.5).
 - No new table belongs to this component beyond the join; a proposal to add
   one is a signal to re-check whether the existing `Project__UserFile` /
   `ChatSession.project_id` shape can express it (root `CLAUDE.md` on avoiding
@@ -168,7 +168,7 @@ across a multi-model turn, `process_message.py:build_chat_turn`).
 
 ### 4.3 Path A: inlined
 
-Below the ceiling, `chat/llm_loop.py:_build_project_message` renders the
+Below the ceiling, `backend/onyx/chat/prompt_utils.py:_create_context_files_message` renders the
 project's files into the same `document`-keyed JSON block
 [[context-assembly]] §4.4 describes, and inserts it as a `MessageType.USER`
 message. Per `context-assembly.md` §4.3 and `backend/onyx/chat/README.md`'s
@@ -207,7 +207,7 @@ own the file at enrichment time (`user_file_id_to_project_ids`, fetched via
 
 ### 4.5 Project instructions and persona precedence
 
-`chat_utils.py:get_custom_agent_prompt(persona, chat_session)` includes project
+`process_message.py:prepare_chat_turn` includes project
 instructions alongside custom-agent instructions. Agent instructions take
 precedence when they conflict. If the agent replaces the base system prompt,
 its instructions stay in the system message and project instructions remain
@@ -383,7 +383,7 @@ the margin with which path a given turn actually takes. See §9.
 |---|---|
 | changes the inline threshold (the 60% ceiling or `reserved_token_count`) | [[context-assembly]] §4.8's reservation ordering; re-verify a project just below the old ceiling does not silently flip to retrieval-only for existing users without a status change they can see |
 | changes project file indexing (`UserFileIndexingAdapter`, `PROCESS_SINGLE_USER_FILE`, project sync) | [[indexing-pipeline]], [[internal-search]]'s `project_id_filter` composition, and citation resolution across the inline/retrieval boundary (contract 2) |
-| changes agent/project context (`get_custom_agent_prompt`, `resolve_context_user_files`) | [[agents-personas]], [[context-assembly]]; verify both instruction sources, combined file selection, tool access, and overflow retrieval |
+| changes agent/project context (`prepare_chat_turn`, `resolve_context_user_files`) | [[agents-personas]], [[context-assembly]]; verify both instruction sources, combined file selection, tool access, and overflow retrieval |
 | changes deletion or unlinking (`delete_project`, `delete_user_file`, `unlink_user_file_from_project`) | [[file-store-and-user-files]] contract 4; re-verify a project delete still never touches a `UserFile` row, and an unlink still triggers `project_sync_user_file_impl` rather than leaving `needs_project_sync=True` unresolved |
 | adds a project-level setting (sharing, a token cap, a new instruction field) | §5 contract 6: there is currently no sharing model at all; decide explicitly whether the new setting is per-user or introduces the first multi-user project state |
 | changes how the frontend resolves the active project (`useActiveProject`, `PARAMS_TO_SKIP`) | `AppPage.tsx`'s deep-research gate, which depends on `activeProject === null`; a resolution bug here can silently enable or disable deep research for the wrong sessions |

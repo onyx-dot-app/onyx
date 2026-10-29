@@ -21,7 +21,6 @@ from onyx.llm.model_capabilities import (
     get_max_input_tokens,
     model_identity_names,
 )
-from onyx.llm.model_response import ModelResponse
 from onyx.llm.models import (
     GenerationOptions,
     GenerationRequest,
@@ -95,13 +94,6 @@ def build_litellm_passthrough_kwargs(
             passthrough_kwargs["metadata"] = metadata
 
     return passthrough_kwargs
-
-
-def llm_response_to_string(message: ModelResponse) -> str:
-    if not isinstance(message.choice.message.content, str):
-        raise RuntimeError("LLM message not in expected format.")
-
-    return message.choice.message.content
 
 
 def check_number_of_tokens(
