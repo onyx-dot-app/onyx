@@ -59,6 +59,9 @@ permissions:
 env:
   PYTHONPATH: ./backend
   DISABLE_TELEMETRY: "true"
+  # The container has no DB, so a stray file-store write fails locally instead
+  # of defaulting to S3 and the production bucket name.
+  FILE_STORE_BACKEND: "postgres"
   R2_ACCOUNT_ID_DAILY_CONNECTOR_TESTS: ${{ vars.R2_ACCOUNT_ID_DAILY_CONNECTOR_TESTS }}
   CONFLUENCE_TEST_SPACE_URL: ${{ vars.CONFLUENCE_TEST_SPACE_URL }}
   CONFLUENCE_TEST_SPACE: ${{ vars.CONFLUENCE_TEST_SPACE }}
@@ -188,6 +191,7 @@ jobs:
             -w /workspace \
             -e PYTHONPATH=./backend \
             -e DISABLE_TELEMETRY \
+            -e FILE_STORE_BACKEND \
             -e AWS_ACCESS_KEY_ID \
             -e AWS_SECRET_ACCESS_KEY \
             -e AWS_SESSION_TOKEN \
