@@ -1,0 +1,23 @@
+{{- if .Values.webhookServer.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "onyx.resourceName" (list . "webhook-server-service") }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    {{- if .Values.webhookServer.deploymentLabels }}
+    {{- toYaml .Values.webhookServer.deploymentLabels | nindent 4 }}
+    {{- end }}
+spec:
+  type: {{ .Values.webhookServer.service.type }}
+  ports:
+    - port: {{ .Values.webhookServer.service.servicePort }}
+      targetPort: {{ .Values.webhookServer.service.targetPort }}
+      protocol: TCP
+      name: {{ .Values.webhookServer.service.portName }}
+  selector:
+    {{- include "onyx.selectorLabels" . | nindent 4 }}
+    {{- if .Values.webhookServer.deploymentLabels }}
+    {{- toYaml .Values.webhookServer.deploymentLabels | nindent 4 }}
+    {{- end }}
+{{- end }}

@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.9.27
+version: 0.9.28
 appVersion: latest
 annotations:
   category: Productivity
@@ -20,6 +20,11 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
+    - kind: added
+      description: Add webhookServer.enabled (default false). When on, a
+        webhook-server deployment, service and ingress receive connector
+        events from sources that push them. This flag is the only switch;
+        the server reads no environment variables of its own.
     - kind: changed
       description: Update template comments to describe the sandbox image
         prepuller and sandbox network policy in place. No functional changes.
