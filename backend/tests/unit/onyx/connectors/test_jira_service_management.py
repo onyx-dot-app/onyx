@@ -138,7 +138,7 @@ def test_load_from_state(sample_requests_response, sample_comments_response):
     # Mock requests endpoint (standard JSM endpoint with serviceDeskId filter)
     responses.add(
         responses.GET,
-        f"{base_url}/rest/servicedeskapi/request",
+        f"{base_url}/rest/servicedeskapi/servicedesk/1/request",
         json=sample_requests_response,
         status=200,
     )

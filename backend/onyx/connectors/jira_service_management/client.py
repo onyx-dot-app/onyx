@@ -126,15 +126,21 @@ class JsmClient:
         request_status: str = "ALL_REQUESTS",
         search_term: str | None = None,
     ) -> dict[str, Any]:
-        endpoint = "/rest/servicedeskapi/request"
-        params: dict[str, Any] = {
-            "start": start,
-            "limit": limit,
-            "requestStatus": request_status,
-            "requestOwnership": "ALL_REQUESTS",
-        }
         if service_desk_id:
-            params["serviceDeskId"] = service_desk_id
+            endpoint = f"/rest/servicedeskapi/servicedesk/{service_desk_id}/request"
+            params: dict[str, Any] = {
+                "start": start,
+                "limit": limit,
+                "requestStatus": request_status,
+            }
+        else:
+            endpoint = "/rest/servicedeskapi/request"
+            params = {
+                "start": start,
+                "limit": limit,
+                "requestStatus": request_status,
+                "requestOwnership": "ALL_REQUESTS",
+            }
         if search_term:
             params["searchTerm"] = search_term
 
