@@ -465,6 +465,64 @@ test("recovery replay does not mutate retained local messages", async () => {
   }
 });
 
+test("Stop targets a reloaded multi-model stream without replay", async () => {
+  const idle = deferred<void>();
+  const question: Message = {
+    nodeId: 41,
+    messageId: 41,
+    type: "user",
+    message: "Compare answers",
+    files: [],
+    packets: [],
+    toolCall: null,
+    parentNodeId: null,
+  };
+  const responses: Message[] = [42, 43].map((id) => ({
+    ...question,
+    nodeId: id,
+    messageId: id,
+    type: "assistant",
+    message: "",
+    parentNodeId: question.nodeId,
+  }));
+  jest
+    .mocked(processRawChatHistory)
+    .mockImplementation(
+      () =>
+        new Map(
+          [question, ...responses].map((message) => [message.nodeId, message])
+        )
+    );
+  jest.mocked(global.fetch).mockResolvedValue({
+    ok: true,
+    json: async () => ({
+      ...backendSession(true),
+      current_stream: { stream_id: question.nodeId },
+    }),
+  } as Response);
+  jest.mocked(waitForChatSessionIdle).mockReturnValue(idle.promise);
+  mountController();
+  await waitFor(() => expect(waitForChatSessionIdle).toHaveBeenCalled());
+  expect(resumeStream).not.toHaveBeenCalled();
+  const stopping = stopChatSession("session", "Check failed");
+  await waitFor(() =>
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/chat/stop-chat-session/session?stream_id=41",
+      expect.objectContaining({ method: "POST" })
+    )
+  );
+  expect(
+    useChatSessionStore.getState().sessions.get("session")?.chatState
+  ).toBe("cancelling");
+  await act(async () => {
+    idle.resolve();
+    await stopping;
+  });
+  expect(
+    useChatSessionStore.getState().sessions.get("session")?.chatState
+  ).toBe("input");
+});
+
 test("Stop targets the replay response and waits for its incognito tail", async () => {
   const finish = deferred<void>();
   jest.spyOn(Promise, "withResolvers").mockImplementation(() => {

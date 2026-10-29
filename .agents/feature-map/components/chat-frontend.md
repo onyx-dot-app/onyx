@@ -334,6 +334,7 @@ all, because the mode is pinned at session creation and cannot be changed mid-se
   `regenerationRequest`).
 - **Stop** uses `lib/chat/stopChatSession.ts`. It waits for send acknowledgement,
   then targets the accepted response through `POST /api/chat/stop-chat-session/{id}?stream_id=`.
+  Session recovery restores this ID from `current_stream` for both single-model and multi-model turns, independently of output replay.
   The reader stays open to receive final packets. Settlement waits for reader completion,
   confirms server idleness, and reloads saved history before enabling input.
   Stop aborts local preparation only when no send has been dispatched.

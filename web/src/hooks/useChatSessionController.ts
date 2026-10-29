@@ -272,6 +272,14 @@ export default function useChatSessionController({
             : preserveFailedMessages(savedMessages, localMessages)
           : savedMessages;
       const currentStream = chatSession.current_stream;
+      if (currentStream) {
+        // Stop targets the accepted stream even when its output cannot be replayed.
+        useChatSessionStore
+          .getState()
+          .updateSessionData(chatSession.chat_session_id, {
+            sendAcknowledged: Promise.resolve(currentStream.stream_id),
+          });
+      }
       const resumedMessage = currentStream
         ? newMessageMap.get(currentStream.stream_id)
         : undefined;
@@ -345,7 +353,6 @@ export default function useChatSessionController({
           resolveReaderFinished = resolve;
         });
         useChatSessionStore.getState().updateSessionData(sessionId, {
-          sendAcknowledged: Promise.resolve(runId),
           readerFinished,
         });
         const accumulated: Packet[] = [...node.packets];
