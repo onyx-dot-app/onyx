@@ -12,6 +12,7 @@ import { getSourceMetadata } from "@/lib/connectors/utils";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
 import {
+  Text,
   Button,
   InputCheckbox,
   CopyButton,
@@ -24,7 +25,6 @@ import {
   SelectButton,
 } from "@opal/components";
 import { Hoverable } from "@opal/core";
-import Text from "@/refresh-components/texts/Text";
 import {
   SvgFolder,
   SvgChevronRight,
@@ -100,14 +100,14 @@ function HierarchyBreadcrumb({
           {sourceMetadata.displayName}
         </Button>
       ) : (
-        <Text text03>{sourceMetadata.displayName}</Text>
+        <Text color="text-03">{sourceMetadata.displayName}</Text>
       )}
 
       {/* Collapsed indicator */}
       {shouldCollapse && (
         <>
           <SvgChevronRight size={12} className="stroke-text-04" />
-          <Text text03 secondaryBody>
+          <Text color="text-03" font="secondary-body">
             ...
           </Text>
         </>
@@ -124,7 +124,7 @@ function HierarchyBreadcrumb({
           <React.Fragment key={node.id}>
             <SvgChevronRight size={12} className="stroke-text-04" />
             {isLast ? (
-              <Text text03>{node.title}</Text>
+              <Text color="text-03">{node.title}</Text>
             ) : (
               <Button
                 prominence="tertiary"
@@ -807,7 +807,7 @@ export default function SourceHierarchyBrowser({
   if (isLoadingNodes) {
     return (
       <GeneralLayouts.Section height="auto" padding={4}>
-        <Text text03 secondaryBody>
+        <Text color="text-03" font="secondary-body">
           {t("browser.loadingFolders.description")}
         </Text>
       </GeneralLayouts.Section>
@@ -818,7 +818,7 @@ export default function SourceHierarchyBrowser({
   if (nodesError) {
     return (
       <GeneralLayouts.Section height="auto" padding={4}>
-        <Text text03 secondaryBody>
+        <Text color="text-03" font="secondary-body">
           {nodesError}
         </Text>
       </GeneralLayouts.Section>
@@ -888,7 +888,7 @@ export default function SourceHierarchyBrowser({
           )}
         </TableLayouts.CheckboxCell>
         <TableLayouts.TableCell flex>
-          <Text secondaryBody text03>
+          <Text font="secondary-body" color="text-03">
             {t("table.columns.name.header")}
           </Text>
         </TableLayouts.TableCell>
@@ -932,7 +932,7 @@ export default function SourceHierarchyBrowser({
       >
         {filteredItems.length === 0 && !isLoadingDocuments ? (
           <GeneralLayouts.Section height="auto" padding={4}>
-            <Text text03 secondaryBody>
+            <Text color="text-03" font="secondary-body">
               {path.length === 0
                 ? t("browser.empty.root.description")
                 : t("browser.empty.folder.description")}
@@ -1022,7 +1022,7 @@ export default function SourceHierarchyBrowser({
                     </Hoverable.Root>
                   </TableLayouts.TableCell>
                   <TableLayouts.TableCell width={8}>
-                    <Text text03 secondaryBody>
+                    <Text color="text-03" font="secondary-body">
                       {isFolder
                         ? "—"
                         : timeAgo(
@@ -1038,7 +1038,7 @@ export default function SourceHierarchyBrowser({
             {/* Loading more indicator */}
             {isLoadingDocuments && documents.length > 0 && (
               <GeneralLayouts.Section height="auto" padding={2}>
-                <Text text03 secondaryBody>
+                <Text color="text-03" font="secondary-body">
                   {t("browser.loadingMore.description")}
                 </Text>
               </GeneralLayouts.Section>
@@ -1058,7 +1058,7 @@ export default function SourceHierarchyBrowser({
             gap={2}
             height="auto"
           >
-            <Text text03 secondaryBody>
+            <Text color="text-03" font="secondary-body">
               {t("browser.selectedCount.label", {
                 count: currentSourceSelectedCount,
               })}

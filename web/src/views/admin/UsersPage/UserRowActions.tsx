@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import {
   Button,
   Dropdown,
+  Text,
   type DropdownMenuItem,
   type DropdownMenuRow,
 } from "@opal/components";
@@ -18,7 +19,6 @@ import {
   SvgKey,
   SvgUserManage,
 } from "@opal/icons";
-import Text from "@/refresh-components/texts/Text";
 import { AccountType, UserStatus } from "@/lib/types";
 import { toast } from "@opal/layouts";
 import { approveRequest, setUserAdminAccess } from "./svc";
@@ -158,9 +158,11 @@ export default function UserRowActions({
               disabled: true,
               render: ({ props }) => (
                 <div {...props}>
-                  <Text as="p" secondaryBody text03 className="px-3 py-1">
-                    {t("rowActions.scimNotice.description")}
-                  </Text>
+                  <div className="px-3 py-1">
+                    <Text as="p" font="secondary-body" color="text-03">
+                      {t("rowActions.scimNotice.description")}
+                    </Text>
+                  </div>
                 </div>
               ),
             },

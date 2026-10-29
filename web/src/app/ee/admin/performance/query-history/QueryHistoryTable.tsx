@@ -10,7 +10,6 @@ import {
   TableCell,
   TableHeader,
 } from "@/components/ui/table";
-import Text from "@/refresh-components/texts/Text";
 import { InputSingleSelect } from "@opal/components";
 import { ChatSessionMinimal } from "@/app/ee/admin/performance/usage/types";
 import { Section } from "@/layouts/general-layouts";
@@ -41,7 +40,7 @@ import {
   humanReadableFormatWithTime,
 } from "@opal/time";
 import { Modal } from "@opal/components";
-import { Button, Divider } from "@opal/components";
+import { Button, Divider, Text } from "@opal/components";
 import { Badge } from "@/components/ui/badge";
 import {
   SvgDownloadCloud,
@@ -64,14 +63,14 @@ function QueryHistoryTableRow({
       className="hover:bg-accent-background cursor-pointer relative select-none"
     >
       <TableCell className="max-w-xs">
-        <Text className="whitespace-normal line-clamp-5">
+        <Text color="text-05" maxLines={5}>
           {chatSessionMinimal.first_user_message ||
             chatSessionMinimal.name ||
             "-"}
         </Text>
       </TableCell>
       <TableCell>
-        <Text className="whitespace-normal line-clamp-5">
+        <Text color="text-05" maxLines={5}>
           {chatSessionMinimal.first_ai_message || "-"}
         </Text>
       </TableCell>
@@ -107,7 +106,7 @@ function SelectFeedbackType({
   const tInputSelect = useTranslations("common.inputSelect");
   return (
     <Section alignItems="start" gap={1}>
-      <Text as="p" className="font-medium">
+      <Text as="p" color="text-05">
         {t("filters.feedbackType.label")}
       </Text>
       <InputSingleSelect

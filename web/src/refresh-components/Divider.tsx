@@ -3,7 +3,7 @@
 import React from "react";
 import { cn, clickOnKeyDown } from "@opal/utils";
 import { SvgChevronRight, SvgChevronDown, SvgInfoSmall } from "@opal/icons";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import type { IconProps } from "@opal/types";
 import Truncated from "./texts/Truncated";
 
@@ -149,8 +149,7 @@ export default function Divider({
           )}
 
           {/* Title text */}
-          <Text
-            secondaryBody
+          <span
             className={cn(
               "leading-4 truncate",
               !foldable && "text-text-03",
@@ -161,8 +160,10 @@ export default function Divider({
               foldable && isHighlighted && "text-text-04"
             )}
           >
-            {text}
-          </Text>
+            <Text font="secondary-body" color="inherit">
+              {text ?? ""}
+            </Text>
+          </span>
 
           {/* Info icon */}
           {showInfo && (
@@ -185,10 +186,9 @@ export default function Divider({
         {/* Info text on right side */}
         {infoText && (
           <>
-            <Text
-              secondaryBody
+            <span
               className={cn(
-                "leading-4 px-0.5",
+                "leading-4",
                 !foldable && "text-text-03",
                 foldable &&
                   !expanded &&
@@ -197,8 +197,10 @@ export default function Divider({
                 foldable && isHighlighted && "text-text-04"
               )}
             >
-              {infoText}
-            </Text>
+              <Text font="secondary-body" color="inherit">
+                {infoText}
+              </Text>
+            </span>
             {/* Right divider line after info text */}
             {dividerLine && (
               <div

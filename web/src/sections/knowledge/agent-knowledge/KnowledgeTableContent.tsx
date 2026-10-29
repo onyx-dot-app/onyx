@@ -5,14 +5,13 @@ import { useLocale, useTranslations } from "next-intl";
 import { getSourceMetadata } from "@/lib/connectors/utils";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
-import Text from "@/refresh-components/texts/Text";
 import { useSettings } from "@/lib/settings/hooks";
 import type { AgentAttachedDocument } from "@/lib/agents/types";
 import type { ProjectFile } from "@/lib/projects/types";
 import type { CCPairSummary, DocumentSetSummary } from "@/lib/types";
 import type { ValidSources } from "@/lib/connectors/types/source";
 import SourceHierarchyBrowser from "@/sections/knowledge/SourceHierarchyBrowser";
-import { Button } from "@opal/components";
+import { Text, Button } from "@opal/components";
 import { Content } from "@opal/layouts";
 import { timeAgo } from "@opal/time";
 import { SvgFiles, SvgFolder, SvgPlusCircle } from "@opal/icons";
@@ -69,8 +68,8 @@ export function DocumentSetsTableContent({
               return <sourceMetadata.icon key={idx} size={16} />;
             })}
           {(ds.cc_pair_summaries?.length ?? 0) > 4 && (
-            <Text text03 secondaryBody>
-              +{(ds.cc_pair_summaries?.length ?? 0) - 4}
+            <Text color="text-03" font="secondary-body">
+              {`+${(ds.cc_pair_summaries?.length ?? 0) - 4}`}
             </Text>
           )}
         </TableLayouts.SourceIconsRow>
@@ -189,8 +188,8 @@ export function RecentFilesTableContent({
       sortable: true,
       width: 8,
       render: (file) => (
-        <Text text03 secondaryBody>
-          {timeAgo(file.last_accessed_at || file.created_at, locale)}
+        <Text color="text-03" font="secondary-body">
+          {timeAgo(file.last_accessed_at || file.created_at, locale) ?? ""}
         </Text>
       ),
     },
@@ -231,7 +230,7 @@ export function RecentFilesTableContent({
 
       {hasProcessingFiles && (
         <GeneralLayouts.Section height="auto" alignItems="start">
-          <Text as="p" text03 secondaryBody>
+          <Text as="p" color="text-03" font="secondary-body">
             {t("recentFiles.processing.description", { appName })}
           </Text>
         </GeneralLayouts.Section>

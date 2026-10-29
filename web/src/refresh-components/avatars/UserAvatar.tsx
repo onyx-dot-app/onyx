@@ -1,7 +1,6 @@
 import { SvgUser } from "@opal/icons";
 import { DEFAULT_AVATAR_SIZE_PX } from "@/lib/constants";
 import { getUserEmail, getUserInitials } from "@/lib/users/svc";
-import Text from "@/refresh-components/texts/Text";
 import type { User } from "@/lib/types";
 
 export interface UserAvatarProps {
@@ -39,15 +38,13 @@ export default function UserAvatar({
       className="flex items-center justify-center rounded-full bg-background-neutral-inverted-00"
       style={{ width: size, height: size }}
     >
-      <Text
-        inverted
-        secondaryAction
-        text05
-        className="select-none"
+      {/* Raw span: the font size scales with the avatar, which Opal Text cannot do. */}
+      <span
+        className="font-secondary-action text-text-inverted-05 select-none"
         style={{ fontSize: size * 0.4 }}
       >
         {userInitials}
-      </Text>
+      </span>
     </div>
   );
 }

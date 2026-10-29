@@ -21,7 +21,7 @@ import {
   toast,
   useSidebarState,
 } from "@opal/layouts";
-import RefreshText from "@/refresh-components/texts/Text";
+import { richNodes } from "@opal/utils";
 import { renderSidebarLogo } from "@/lib/sidebar/utils";
 import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
@@ -233,20 +233,23 @@ function BuildSessionButton({
                   onClose={() => setRenaming(false)}
                 />
               ) : shouldAnimate ? (
-                // Opal Text takes string children only; this wraps <TypewriterText>.
-                <RefreshText
+                <Text
                   as="p"
                   data-state={isActive ? "active" : "inactive"}
-                  className="line-clamp-1 break-all text-start"
-                  mainUiBody
+                  color="text-05"
+                  maxLines={1}
+                  wordWrap="break-all"
+                  textPosition="text-start"
                 >
-                  <TypewriterText
-                    text={historyItem.title}
-                    charSpeed={25}
-                    animateOnMount={true}
-                    onAnimationComplete={() => setShouldAnimate(false)}
-                  />
-                </RefreshText>
+                  {richNodes(
+                    <TypewriterText
+                      text={historyItem.title}
+                      charSpeed={25}
+                      animateOnMount={true}
+                      onAnimationComplete={() => setShouldAnimate(false)}
+                    />
+                  )}
+                </Text>
               ) : (
                 historyItem.title
               )}

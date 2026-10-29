@@ -9,9 +9,8 @@ import {
   useLayoutEffect,
 } from "react";
 import { cn } from "@opal/utils";
-import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
-import { Tooltip as OpalTooltip } from "@opal/components";
+import { Text, Tooltip as OpalTooltip, type TextFont } from "@opal/components";
 import {
   Tooltip,
   TooltipContent,
@@ -193,6 +192,35 @@ interface TextStyleProps {
 }
 
 /**
+ * Opal font plus a text color class. The color goes on a wrapper so that
+ * hover classes on the wrapper can override it.
+ */
+interface OpalTextStyle {
+  font: TextFont;
+  colorClass: string;
+}
+
+function toOpalTextStyle(props: TextStyleProps): OpalTextStyle {
+  const font: TextFont = props.secondaryBody
+    ? "secondary-body"
+    : props.figureSmallValue
+      ? "figure-small-value"
+      : "main-ui-body";
+  const colorClass = props.text03
+    ? props.inverted
+      ? "text-text-inverted-03"
+      : "text-text-03"
+    : props.text04
+      ? props.inverted
+        ? "text-text-inverted-04"
+        : "text-text-04"
+      : props.inverted
+        ? "text-text-inverted-05"
+        : "text-text-05";
+  return { font, colorClass };
+}
+
+/**
  * Props for the QueryText sub-component.
  */
 interface QueryTextProps {
@@ -242,18 +270,22 @@ const QueryText = ({
     );
   }
 
+  const { font, colorClass } = toOpalTextStyle(textStyleProps);
+
   return (
     <OpalTooltip
       tooltip={isTruncated ? (tooltipText ?? displayName) : undefined}
       side="top"
       delayDuration={300}
     >
-      <span ref={textRef} className="max-w-40 truncate block">
-        <Text
-          as="span"
-          {...textStyleProps}
-          className="transition-colors duration-150"
-        >
+      <span
+        ref={textRef}
+        className={cn(
+          "max-w-40 truncate block transition-colors duration-150",
+          colorClass
+        )}
+      >
+        <Text as="span" font={font} color="inherit">
           {displayName}
         </Text>
       </span>
@@ -394,6 +426,7 @@ const SourceTagInner = ({
     }),
     [inlineCitation, isOpen]
   );
+  const opalTextStyle = toOpalTextStyle(textStyleProps);
 
   // Cursor class based on mode and state
   const cursorClass = useMemo(() => {
@@ -477,53 +510,53 @@ const SourceTagInner = ({
             textStyleProps={textStyleProps}
           />
         ) : (
-          <Text
-            {...textStyleProps}
+          <span
             className={cn(
               "max-w-40 truncate transition-colors duration-150",
+              opalTextStyle.colorClass,
               !showDetailsCard &&
                 !isQuery &&
                 "group-hover:text-text-inverted-05"
             )}
           >
-            {displayName}
-          </Text>
+            <Text font={opalTextStyle.font} color="inherit">
+              {displayName}
+            </Text>
+          </span>
         )}
 
         {/* Count - for inline citation */}
         {inlineCitation && sources.length > 1 && (
-          <Text
-            figureSmallValue
-            text05={isOpen}
-            text03={!isOpen}
-            inverted={isOpen}
+          <span
             className={cn(
               "transition-colors duration-150",
+              isOpen ? "text-text-inverted-05" : "text-text-03",
               !showDetailsCard &&
                 !isQuery &&
                 "group-hover:text-text-inverted-05"
             )}
           >
-            +{extraCount}
-          </Text>
+            <Text font="figure-small-value" color="inherit">
+              {`+${extraCount}`}
+            </Text>
+          </span>
         )}
 
         {/* URL - for tag variant */}
         {!inlineCitation && displayUrl && (
-          <Text
-            figureSmallValue
-            text05={isOpen}
-            text02={!isOpen}
-            inverted={isOpen}
+          <span
             className={cn(
               "max-w-40 truncate transition-colors duration-150",
+              isOpen ? "text-text-inverted-05" : "text-text-02",
               !showDetailsCard &&
                 !isQuery &&
                 "group-hover:text-text-inverted-05"
             )}
           >
-            {displayUrl}
-          </Text>
+            <Text font="figure-small-value" color="inherit">
+              {displayUrl}
+            </Text>
+          </span>
         )}
       </div>
     </button>
