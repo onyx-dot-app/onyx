@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 import { SvgDownloadCloud, SvgFold, SvgMaximize2, SvgX } from "@opal/icons";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button, Text } from "@opal/components";
-import { FileDescriptor } from "@/app/app/interfaces";
+import { FileDescriptor } from "@/app/app/types";
 import { cn } from "@opal/utils";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import { MinimalOnyxDocument } from "@/lib/search/types";

@@ -3,7 +3,7 @@
 import React, { RefObject, useState, useCallback, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { Packet, StreamingCitation } from "@/app/app/services/streamingModels";
-import { FeedbackType, Message } from "@/app/app/interfaces";
+import { FeedbackType, Message } from "@/app/app/types";
 import { OnyxDocument } from "@/lib/search/types";
 import { TooltipGroup } from "@/components/tooltip/CustomTooltip";
 import {

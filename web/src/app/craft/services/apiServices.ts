@@ -26,10 +26,7 @@ import {
   ApprovalView,
   ApprovalSubmitDecision,
 } from "@/app/craft/types/approvals";
-import {
-  RATE_LIMITED_ERROR_CODE,
-  RateLimitDetails,
-} from "@/app/app/interfaces";
+import { RATE_LIMITED_ERROR_CODE, RateLimitDetails } from "@/app/app/types";
 import { BUILD_API_BASE } from "@/app/craft/v1/constants";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 import { CRAFT_GATEWAY_PROVIDER } from "@/app/craft/onboarding/constants";

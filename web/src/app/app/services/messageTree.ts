@@ -1,4 +1,4 @@
-import { FileDescriptor, Message } from "../interfaces";
+import { FileDescriptor, Message } from "@/app/app/types";
 
 export const SYSTEM_MESSAGE_ID = -3;
 export const SYSTEM_NODE_ID = -3;

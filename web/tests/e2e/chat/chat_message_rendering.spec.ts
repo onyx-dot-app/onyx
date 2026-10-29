@@ -247,10 +247,12 @@ for (const theme of THEMES) {
 
         await sendMessage(page, "Give me an overview of Onyx features");
 
-        const aiMessage = page.getByTestId("onyx-ai-message").first();
-        await expect(aiMessage).toContainText("Key Features");
-        await expect(aiMessage).toContainText("OnyxClient");
-        await expect(aiMessage).toContainText("Privacy");
+        await chat.expectAnswerHeading("Key Features");
+        await chat.expectAnswerTable(["Feature", "Status", "Notes"], 5);
+        await chat.expectAnswerCode("from onyx import OnyxClient");
+        await chat.expectAnswerListItem(
+          "Privacy: Your data stays within your infrastructure"
+        );
 
         await chat.screenshotContainer(`chat-markdown-code-response-${theme}`);
       });

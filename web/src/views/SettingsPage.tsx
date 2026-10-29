@@ -63,7 +63,7 @@ import { ConfirmationModalLayout } from "@opal/layouts";
 import { BasicModalFooter, Modal } from "@opal/components";
 import { Code, CopyButton } from "@opal/components";
 import CharacterCount from "@/refresh-components/CharacterCount";
-import { InputPrompt } from "@/app/app/interfaces";
+import { InputPrompt } from "@/app/app/types";
 import usePromptShortcuts from "@/hooks/usePromptShortcuts";
 import ColorSwatch from "@/refresh-components/ColorSwatch";
 import { EmptyMessageCard } from "@opal/components";

@@ -12,7 +12,7 @@ import {
   ToolCallArgumentDelta,
   isCodeInterpreterToolType,
 } from "@/app/app/services/streamingModels";
-import { CitationMap } from "@/app/app/interfaces";
+import { CitationMap } from "@/app/app/types";
 import { OnyxDocument } from "@/lib/search/types";
 import {
   isActualToolCallPacket,
