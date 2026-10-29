@@ -348,7 +348,8 @@ def _fetch_stream(
         deadline_monotonic,
     )
     for _ in range(_MAX_WINDOW_RETRIES):
-        tail_lines = int(line_count * _WINDOW_SHRINK_FACTOR)
+        # At least one line when any fit, so a short newest line still gets read.
+        tail_lines = max(int(line_count * _WINDOW_SHRINK_FACTOR), min(line_count, 1))
         if (
             fetched.buffer is None
             or fetched.note not in _CAP_NOTES
@@ -368,11 +369,13 @@ def _fetch_stream(
             fetched.note,
             deadline_monotonic,
         )
-        if retry.buffer is None or (
-            retry.note is not None and retry.note not in _CAP_NOTES
+        if (
+            retry.buffer is None
+            or retry.size_bytes == 0
+            or (retry.note is not None and retry.note not in _CAP_NOTES)
         ):
-            # A failed or late re-read keeps the earlier read, which is whole up
-            # to the cap.
+            # A failed, late, or empty re-read (the log rotated or the container
+            # restarted) keeps the earlier read, which is whole up to the cap.
             if retry.buffer is not None:
                 retry.buffer.close()
             break
