@@ -47,6 +47,8 @@ Each background worker serves its metrics on its own port:
       <Step title="Create the ServiceMonitors">
         Set `monitoring.serviceMonitors.enabled: true`. This needs the Prometheus Operator CRDs.
         Use `monitoring.serviceMonitors.labels` to match the `serviceMonitorSelector` of your Prometheus resource.
+        If Prometheus runs in a different namespace,
+        its `serviceMonitorNamespaceSelector` must also select the Onyx namespace.
         The API and MCP ServiceMonitors send the metrics token automatically.
       </Step>
 
@@ -129,6 +131,9 @@ increase(onyx_celery_task_completed_total{outcome="failure"}[5m]) > 0
     onyx_celery_task_completed_total{outcome="failure"} > 0
       and time() - onyx_celery_task_completed_created{outcome="failure"} < 300
   )
+
+# The worker and queue alerts below need the monitoring worker.
+# Onyx Lite runs no background workers, so skip them there.
 
 # Tasks wait in a queue
 onyx_queue_depth > 100
