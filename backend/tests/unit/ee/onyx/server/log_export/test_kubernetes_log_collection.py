@@ -427,6 +427,71 @@ def test_window_rereads_stop_after_the_retry_limit(
     )
 
 
+def test_window_reread_runs_when_only_one_line_fits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Precondition.
+    # Lines of 60, 60, and 20 bytes against a 100-byte per-log cap: the first
+    # read keeps one whole line, and only the newest line fits on its own.
+    monkeypatch.setattr(
+        kubernetes_collection, "LOG_EXPORT_KUBERNETES_MAX_BYTES_PER_STREAM", 100
+    )
+    newest = b"n" * 19 + b"\n"
+    api = _FakeCoreV1Api(
+        pods=[_pod(_API_POD, "api-server")],
+        logs={(_API_POD, False): b"a" * 59 + b"\n" + b"b" * 59 + b"\n" + newest},
+        events=[],
+    )
+
+    # Under test.
+    built, _ = build_kubernetes_log_zip(api, _NAMESPACE, _API_POD, _deadline(30.0))
+
+    # Postcondition.
+    files = _read_zip(built.zip_buffer)
+    built.zip_buffer.close()
+    assert api.tail_lines_requested[1:] == [1]
+    assert files[f"logs/{_API_POD}/api-server.log"] == newest
+
+
+class _LogEmptiedAfterFirstReadApi(_FakeCoreV1Api):
+    """The log rotates (or the container restarts) after the first read."""
+
+    def read_namespaced_pod_log(self, name: str, namespace: str, **kwargs: Any) -> Any:
+        if self.tail_lines_requested:
+            self._logs = dict.fromkeys(self._logs, b"")
+        return super().read_namespaced_pod_log(name, namespace, **kwargs)
+
+
+def test_empty_window_reread_keeps_the_earlier_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Precondition.
+    # The first read hits the 100-byte cap; the re-read finds an empty log.
+    monkeypatch.setattr(
+        kubernetes_collection, "LOG_EXPORT_KUBERNETES_MAX_BYTES_PER_STREAM", 100
+    )
+    lines = _numbered_lines(30)
+    api = _LogEmptiedAfterFirstReadApi(
+        pods=[_pod(_API_POD, "api-server")],
+        logs={(_API_POD, False): b"".join(lines)},
+        events=[],
+    )
+
+    # Under test.
+    built, _ = build_kubernetes_log_zip(api, _NAMESPACE, _API_POD, _deadline(30.0))
+
+    # Postcondition.
+    # The capped first read stays in the zip, marked as truncated.
+    files = _read_zip(built.zip_buffer)
+    built.zip_buffer.close()
+    assert len(api.tail_lines_requested) == 2
+    assert files[f"logs/{_API_POD}/api-server.log"] == b"".join(lines)[:100]
+    assert (
+        "(100 bytes, incomplete: truncated at the per-log byte cap)"
+        in files["README.txt"].decode()
+    )
+
+
 def test_window_reread_returns_unused_bytes_to_the_total_budget() -> None:
     # Precondition.
     # The export budget (100 bytes) runs out partway through a 240-byte log.
