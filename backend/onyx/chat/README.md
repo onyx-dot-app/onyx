@@ -9,11 +9,14 @@ It is highly recommended for all engineers contributing to this flow to be famil
 
 The system prompt is a default prompt that comes packaged with the system. Users can edit the default prompt and it will be persisted in the database.
 
-Some parts of the system prompt are dynamically updated / inserted:
+Some parts of the system prompt are filled in when the turn starts:
 
-- Datetime of the message sent
-- Tools description of when to use certain tools depending on if the tool is available in that cycle
-- If the user has just called a search related tool, then a section about citations is included
+- The date and time, when the prompt is datetime-aware
+- When to use each tool, for the tools available in the turn
+
+The system prompt does not change between the steps of a turn, so the provider's prompt cache holds. Guidance that
+depends on the step, such as how to cite the documents a tool returned, goes into the reminder message at the end of
+the context instead (see "Reminders").
 
 ## Custom Agent Prompt
 
@@ -49,7 +52,7 @@ the system can RAG over the project files.
 Documents from search or uploaded Project files are represented as a json so that the LLM can easily understand it.
 
 Project files go in a user message with a prefix string to make the context clearer to the LLM
-(`chat/llm_loop.py:_create_context_files_message`):
+(`chat/prompt_utils.py:_create_context_files_message`):
 
 ```
 Here are some documents provided for context, they may not all be relevant:

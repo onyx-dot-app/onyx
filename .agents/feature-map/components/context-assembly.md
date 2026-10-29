@@ -278,12 +278,6 @@ counts what is sent, not the stored token counts.
 
 ## Known issues
 
-- **`chat/README.md` is out of date.** It says citation guidance and per-cycle
-  tool descriptions go into the system prompt
-  ([[#no-citation-guidance-in-system-prompt]], [[#reminder-last-head-stable]]).
-  Its document example does not match the code ([[citations#document-key-prompt-design]]),
-  and it names a file, chat/llm_loop.py, that does not exist. The function it
-  names there is in `chat/prompt_utils.py:_create_context_files_message`.
 - **`COMPRESSION_TRIGGER_RATIO` is a false lead.** `configs/chat_configs.py`
   still reads it, but nothing uses it. The trigger is a constant in
   `agents/compaction.py`. `LOG_ONYX_MODEL_INTERACTIONS` in
