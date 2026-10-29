@@ -4,13 +4,12 @@ from uuid import UUID
 
 from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import InstrumentedAttribute, Session, selectinload
+from sqlalchemy.orm import InstrumentedAttribute, Session
 from sqlalchemy.sql.elements import ColumnElement
 
 from onyx.auth.permissions import has_permission
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.context.search.models import PersonaSearchInfo
-from onyx.db.chat import session_descendants
 from onyx.db.constants import UNSET, UnsetType
 from onyx.db.enums import MCPServerStatus, Permission, PermissionAuthority
 from onyx.db.models import (
@@ -20,7 +19,6 @@ from onyx.db.models import (
     Persona__Tool,
     Persona__UserGroup,
     Tool,
-    ToolCall,
     ToolUserPreference,
     User,
 )
@@ -409,24 +407,3 @@ def get_builtin_tool(
         raise RuntimeError(f"Tool type {tool_type.__name__} not found in the database.")
 
     return db_tool
-
-
-def get_response_tool_records(
-    record_ids: list[int], chat_session_id: UUID, db_session: Session
-) -> list[ToolCall]:
-    """Load artifacts within a root's session tree; the caller owns the transaction."""
-    if not record_ids:
-        return []
-    descendants = session_descendants(chat_session_id)
-    return list(
-        db_session.scalars(
-            select(ToolCall)
-            .where(
-                ToolCall.id.in_(record_ids),
-                ToolCall.chat_session_id.in_(select(descendants.c.id)),
-            )
-            .options(
-                selectinload(ToolCall.search_docs),
-            )
-        ).all()
-    )

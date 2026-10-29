@@ -14,6 +14,7 @@ import tempfile
 import threading
 import time
 import zipfile
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -81,6 +82,11 @@ _SPOOL_MAX_MEMORY_BYTES = 1024 * 1024
 _TIMED_OUT = "timed out"
 _STREAM_CAP_REACHED = "truncated at the per-log byte cap"
 _TOTAL_CAP_REACHED = "total byte cap reached"
+_CAP_NOTES = frozenset({_STREAM_CAP_REACHED, _TOTAL_CAP_REACHED})
+# Re-reads of a capped log with a shorter tail window, after the first read.
+_MAX_WINDOW_RETRIES = 2
+# Share of the complete lines that fit to request next; newer lines can be longer.
+_WINDOW_SHRINK_FACTOR = 0.8
 _HTTP_FORBIDDEN = 403
 _RBAC_HINT = (
     "The Kubernetes API denied access to pods, pods/log, or events. With the Helm "
@@ -134,6 +140,11 @@ class _ByteBudget:
             granted = min(requested_bytes, self._remaining)
             self._remaining -= granted
             return granted
+
+    def release(self, unused_bytes: int) -> None:
+        """Returns reserved bytes that a read no longer keeps."""
+        with self._lock:
+            self._remaining += unused_bytes
 
 
 def _request_timeout(deadline_monotonic: float) -> tuple[float, float]:
@@ -228,26 +239,30 @@ def log_streams_for_pod(pod: client.V1Pod) -> list[KubernetesLogStream]:
     return streams
 
 
-def _fetch_stream(
+def _read_log_window(
     core_api: client.CoreV1Api,
     namespace: str,
     stream: KubernetesLogStream,
-    budget: _ByteBudget,
+    tail_lines: int,
+    limit_bytes: int,
+    reserve: Callable[[int], int],
+    cap_note: str,
     deadline_monotonic: float,
-) -> _FetchedStream:
-    """Reads one log until it ends, hits a byte cap, fails, or passes the
-    deadline. Never raises: whatever was read is kept and marked, so one bad
-    log cannot drop the others."""
-    if time.monotonic() >= deadline_monotonic:
-        return _FetchedStream(stream, None, 0, _TIMED_OUT)
+) -> tuple[_FetchedStream, int]:
+    """Reads the last ``tail_lines`` lines of one log, keeping at most
+    ``limit_bytes``, each chunk charged through ``reserve``. Never raises.
+
+    Returns:
+        The read, and how many complete lines it kept.
+    """
     try:
         response = core_api.read_namespaced_pod_log(
             name=stream.pod_name,
             namespace=namespace,
             container=stream.container_name,
             previous=stream.previous,
-            tail_lines=LOG_EXPORT_KUBERNETES_TAIL_LINES,
-            limit_bytes=LOG_EXPORT_KUBERNETES_MAX_BYTES_PER_STREAM,
+            tail_lines=tail_lines,
+            limit_bytes=limit_bytes,
             _preload_content=False,
             _request_timeout=_request_timeout(deadline_monotonic),
         )
@@ -258,17 +273,18 @@ def _fetch_stream(
             0,
             f"{e.status} {e.reason}",
             denied=e.status == _HTTP_FORBIDDEN,
-        )
+        ), 0
     except Exception as e:
         logger.warning(
             "Log export: opening %s failed: %s", stream.arcname, e, exc_info=True
         )
-        return _FetchedStream(stream, None, 0, str(e))
+        return _FetchedStream(stream, None, 0, str(e)), 0
 
     buffer: tempfile.SpooledTemporaryFile[bytes] = tempfile.SpooledTemporaryFile(
         max_size=_SPOOL_MAX_MEMORY_BYTES
     )
     size_bytes = 0
+    line_count = 0
     note: str | None = None
     try:
         for chunk in response.stream(_STREAM_READ_CHUNK_BYTES):
@@ -277,17 +293,17 @@ def _fetch_stream(
                 break
             # The API honors limit_bytes; this bound guards against one that
             # does not.
-            wanted = min(
-                len(chunk), LOG_EXPORT_KUBERNETES_MAX_BYTES_PER_STREAM - size_bytes
-            )
-            granted = budget.reserve(wanted)
-            buffer.write(chunk[:granted])
+            wanted = min(len(chunk), limit_bytes - size_bytes)
+            granted = reserve(wanted)
+            kept = chunk[:granted]
+            buffer.write(kept)
             size_bytes += granted
+            line_count += kept.count(b"\n")
             if granted < wanted:
                 note = _TOTAL_CAP_REACHED
                 break
-            if size_bytes >= LOG_EXPORT_KUBERNETES_MAX_BYTES_PER_STREAM:
-                note = _STREAM_CAP_REACHED
+            if size_bytes >= limit_bytes:
+                note = cap_note
                 break
     except Exception as e:
         logger.warning(
@@ -299,9 +315,76 @@ def _fetch_stream(
 
     if size_bytes == 0 and note is not None:
         buffer.close()
-        return _FetchedStream(stream, None, 0, note)
+        return _FetchedStream(stream, None, 0, note), 0
     buffer.seek(0)
-    return _FetchedStream(stream, buffer, size_bytes, None, note=note)
+    return _FetchedStream(stream, buffer, size_bytes, None, note=note), line_count
+
+
+def _fetch_stream(
+    core_api: client.CoreV1Api,
+    namespace: str,
+    stream: KubernetesLogStream,
+    budget: _ByteBudget,
+    deadline_monotonic: float,
+) -> _FetchedStream:
+    """Reads one log until it ends, hits a byte cap, fails, or passes the
+    deadline. Never raises: whatever was read is kept and marked, so one bad
+    log cannot drop the others.
+
+    The API cuts a log at ``limit_bytes`` from the start of the tail window,
+    which drops the newest lines. So a capped log is read again with fewer
+    lines, sized from the lines that fit, within the bytes it already holds.
+    """
+    if time.monotonic() >= deadline_monotonic:
+        return _FetchedStream(stream, None, 0, _TIMED_OUT)
+    fetched, line_count = _read_log_window(
+        core_api,
+        namespace,
+        stream,
+        LOG_EXPORT_KUBERNETES_TAIL_LINES,
+        LOG_EXPORT_KUBERNETES_MAX_BYTES_PER_STREAM,
+        budget.reserve,
+        _STREAM_CAP_REACHED,
+        deadline_monotonic,
+    )
+    for _ in range(_MAX_WINDOW_RETRIES):
+        # At least one line when any fit, so a short newest line still gets read.
+        tail_lines = max(int(line_count * _WINDOW_SHRINK_FACTOR), min(line_count, 1))
+        if (
+            fetched.buffer is None
+            or fetched.note not in _CAP_NOTES
+            or tail_lines < 1
+            or time.monotonic() >= deadline_monotonic
+        ):
+            break
+        held_bytes = fetched.size_bytes
+        # The bytes are already reserved, so a re-read never takes more budget.
+        retry, line_count = _read_log_window(
+            core_api,
+            namespace,
+            stream,
+            tail_lines,
+            held_bytes,
+            lambda requested_bytes: requested_bytes,
+            fetched.note,
+            deadline_monotonic,
+        )
+        if (
+            retry.buffer is None
+            or retry.size_bytes == 0
+            or (retry.note is not None and retry.note not in _CAP_NOTES)
+        ):
+            # A failed, late, or empty re-read (the log rotated or the container
+            # restarted) keeps the earlier read, which is whole up to the cap.
+            if retry.buffer is not None:
+                retry.buffer.close()
+            break
+        fetched.buffer.close()
+        budget.release(held_bytes - retry.size_bytes)
+        if retry.note is None:
+            retry.note = f"shortened to the last {tail_lines} lines to fit the cap"
+        fetched = retry
+    return fetched
 
 
 def _event_time(event: client.CoreV1Event) -> datetime:
