@@ -202,7 +202,7 @@ do it on the agent itself, not from chat-preferences.
 ### 4.2 Basic information and organization profile
 
 `db/memory.py:get_memories(user, db_session)` builds one `UserMemoryContext` from `context/models.py`
-per turn (called from `process_message.py:build_chat_turn`, owned by
+per turn (called from `process_message.py:prepare_chat_turn`, owned by
 [[core-chat-loop]]). It reads `user.personal_name`, `user.personal_role`,
 `user.email` for basic info, and calls
 `auth/login_claims_capture.py:get_idp_profile(user.email)` for the
@@ -214,14 +214,14 @@ follows the identity provider.
 
 ### 4.3 `use_memories`: read-gate, not write-gate
 
-`process_message.py:build_chat_turn` strips memories from the assembled prompt
-when `user.use_memories` is `False`, via `user_memory_context.without_memories()`
+`prompt_utils.py:build_chat_prompt` excludes memories from the assembled prompt
+when `user.use_memories` is `False`, via `memory.without_memories()`
 (`context/models.py:UserMemoryContext.without_memories`), while keeping name, role,
-and preferences intact. The **full** context (including memories) is still
-passed into `run_llm_loop` so the `MemoryTool` can still read and update
-existing memories mid-turn (`inject_memories_in_prompt=user.use_memories`,
-`process_message.py`); disabling the toggle stops memories from being *shown*
-to the model, not from being written or read internally.
+and preferences intact. `ChatAgent` retains the full context for tools, so
+`MemoryTool` can still read and update existing memories mid-turn.
+`execution.py:create_chat_agent` passes `user.use_memories` as
+`inject_memories_in_prompt`. Disabling the toggle excludes memories from the
+prompt; it does not prevent tools from reading or writing them.
 
 ### 4.4 Memories: write path and the tool bypass
 
@@ -342,8 +342,8 @@ in §4.4.
   toggles.
 
 **Depended on by**
-- [[core-chat-loop]]: `build_chat_turn` calls `get_memories` and reads
-  `user.use_memories` every turn; `process_message.py` reads
+- [[core-chat-loop]]: `prepare_chat_turn` calls `get_memories` and reads
+  `user.use_memories` every turn; `execution.py` reads
   `auto_detect_search_filters` every turn.
 - [[chat-frontend]]: renders both settings surfaces and the shortcut picker in
   the compose box.

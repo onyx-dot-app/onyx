@@ -224,7 +224,7 @@ and `_extract_text_and_images`).
 text-extracted; `_extract_text_and_images` returns empty text for image
 extensions and the model receives the raw image bytes directly as a vision
 input (`ChatFileType.IMAGE`, consumed in
-`process_message.py:extract_context_files`). Embedded images inside a PDF or
+`files.py:extract_context_files`). Embedded images inside a PDF or
 DOCX, by contrast, are decoded and sent through a **vision LLM** captioning
 pipeline, `file_processing/image_summarization.py:summarize_image_with_error_handling`
 → `summarize_image_pipeline` → `_summarize_image`, gated by
@@ -244,7 +244,7 @@ empty text, except for a PDF or DOCX that has detected embedded images (see §5)
 ### 4.4 The two consumption paths
 
 Every project/context file goes through
-`process_message.py:extract_context_files`, which decides per-turn whether the
+`files.py:extract_context_files`, which decides per-turn whether the
 aggregate token count of eligible files fits under
 `(llm_max_context_window - reserved_token_count) * 0.6`
 ([[context-assembly]] §4.3 owns this ceiling and the reasoning behind 60%).
@@ -422,7 +422,7 @@ Existing tools can still construct eager files without an ID.
 
 These values do not authorize file access or persist new blobs.
 Application integration must authorize references and store large files before publishing a checkpoint.
-The current chat engines do not use checkpoint restoration yet.
+Chat checkpoints use these values to restore execution state.
 
 ## 5. Contracts and invariants
 

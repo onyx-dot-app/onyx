@@ -407,7 +407,8 @@ Shared tool-call events contain incremental content. Starts carry the call ID an
 name; deltas carry only new `arguments_delta` text. Ends carry the finalized
 `ToolCall`. `apply_generation_event` retains unfinished text in `raw_arguments`.
 The accumulator parses arguments at completion. Consumers must wait for completion
-before executing a call. Raw provider streaming and its chat consumers are unchanged.
+before executing a call. Chat consumes these events and decodes partial arguments
+only for live Python code and thinking-tool display.
 
 Both response converters validate provider payloads through `_ProviderResponse` and use
 `model_response.py:_ProviderUsage.to_usage` to normalize
@@ -581,8 +582,8 @@ separate `UserUsageTracingProcessor`, independent of Braintrust/Langfuse.
   gates the group-bypass path in `can_user_access_llm_provider`.
 
 **Depended on by**
-- [[core-chat-loop]]: `get_llm_for_persona` is how `build_chat_turn` resolves
-  the model(s) for a turn.
+- [[core-chat-loop]]: `process_message.py:_select_models` calls `get_llm_for_persona`
+  to resolve models during `prepare_chat_turn`.
 - [[agents-personas]]: `Persona.default_model_configuration_id` and
   provider/persona whitelisting live on the persona.
 - [[llm-gateway]]: the OpenAI-compatible gateway routes external calls through
