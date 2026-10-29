@@ -737,6 +737,15 @@ export const useIsReady = () =>
     return currentSession?.isReady ?? true;
   });
 
+export const useIsFetchingChatMessages = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession?.isFetchingChatMessages ?? false;
+  });
+
 export const useDocumentSidebarVisible = () =>
   useChatSessionStore((state) => {
     const { currentSessionId, sessions } = state;

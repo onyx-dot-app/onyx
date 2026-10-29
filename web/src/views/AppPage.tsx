@@ -66,6 +66,7 @@ import {
 import {
   useCurrentChatState,
   useIsReady,
+  useIsFetchingChatMessages,
   useDocumentSidebarVisible,
   useCurrentIsStreamDraining,
 } from "@/app/app/stores/useChatSessionStore";
@@ -88,6 +89,7 @@ import { STEP_CONFIG } from "@/lib/onboarding/constants";
 import { useShowOnboarding } from "@/lib/onboarding/hooks";
 import { SvgChevronDown, SvgFileText } from "@opal/icons";
 import { Button, ShadowDiv, Spacer } from "@opal/components";
+import { PageLoader } from "@opal/loaders";
 import {
   IllustrationContent,
   RootLayout,
@@ -382,6 +384,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   );
   const messageHistory = useCurrentMessageHistory();
   const messageTree = useCurrentMessageTree();
+  // A chat opened for the first time has nothing to show until its fetch
+  // returns. A cached chat keeps rendering while it refreshes.
+  const isFetchingChatMessages = useIsFetchingChatMessages();
+  const showFirstOpenLoader =
+    isFetchingChatMessages && messageHistory.length === 0;
 
   // The mode pins on creation, so lock the toggle whenever a session exists,
   // even an empty one: submitting would reuse it with its pinned mode.
@@ -914,7 +921,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       appPosition.isChat() &&
                       !!currentChatSessionId &&
                       !!activeAgent &&
-                      !sessionFetchError
+                      !sessionFetchError &&
+                      !showFirstOpenLoader
                     }
                     className="h-full w-full flex flex-col items-center"
                   >
@@ -944,6 +952,19 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         fullWidthChat={fullWidthActive}
                       />
                     </ChatScrollContainer>
+                  </Fade>
+
+                  {/* First open: the chat is loading and nothing is cached yet */}
+                  <Fade
+                    show={
+                      appPosition.isChat() &&
+                      !!currentChatSessionId &&
+                      !sessionFetchError &&
+                      showFirstOpenLoader
+                    }
+                    className="h-full w-full flex flex-col items-center justify-center"
+                  >
+                    <PageLoader />
                   </Fade>
 
                   {/* Session fetch error (404 / 403) */}
