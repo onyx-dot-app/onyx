@@ -36,6 +36,7 @@ refer to by using matching keywords to other parts of the prompt and reminders.
 
 import time
 from collections.abc import Callable, Sequence
+from functools import partial
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -45,7 +46,12 @@ from onyx.agents.tools import (
     ToolProgress,
     ToolUpdate,
 )
-from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT, NUM_RETURNED_HITS
+from onyx.chat.incognito import current_turn_persists_content
+from onyx.configs.chat_configs import (
+    ENABLE_SEARCH_DECISION_RERANK_EXPANSION,
+    MAX_CHUNKS_FED_TO_CHAT,
+    NUM_RETURNED_HITS,
+)
 from onyx.configs.constants import DocumentSource, FederatedConnectorSource, MessageType
 from onyx.context.search.federated.slack_search import slack_retrieval
 from onyx.context.search.models import (
@@ -85,15 +91,22 @@ from onyx.db.slack_bot import fetch_slack_bots
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.feature_flags.factory import get_default_feature_flag_provider
+from onyx.feature_flags.interface import NoOpFeatureFlagProvider
 from onyx.federated_connectors.federated_retrieval import (
     FederatedRetrievalInfo,
     get_federated_retrieval_functions,
 )
-from onyx.llm.factory import get_llm_token_counter
+from onyx.llm.decisions.client import DecisionClient
+from onyx.llm.factory import get_decision_client, get_llm_token_counter
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import ToolDefinition, ToolResult, ToolResultMessage
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.onyxbot.slack.models import SlackContext
+from onyx.secondary_llm_flows.decision_rerank_expansion import (
+    MAX_DECISION_QUESTIONS,
+    rank_sections_listwise,
+)
 from onyx.secondary_llm_flows.document_filter import (
     select_chunks_for_relevance,
     select_sections_for_expansion,
@@ -118,12 +131,17 @@ from onyx.tools.models import (
     ToolContext,
 )
 from onyx.tools.tool_implementations.search.constants import (
+    DECISION_TIMEOUT_S,
     KEYWORD_QUERY_HYBRID_ALPHA,
     LLM_KEYWORD_QUERY_WEIGHT,
     LLM_NON_CUSTOM_QUERY_WEIGHT,
     LLM_SEMANTIC_QUERY_WEIGHT,
     MAX_CHUNKS_FOR_RELEVANCE,
+    MAX_SELECTED_SECTIONS,
     ORIGINAL_QUERY_WEIGHT,
+    RERANK_POOL_SIZE,
+    RERANK_SPECULATIVE_EXPANSIONS,
+    RERANK_TOKEN_BUDGET_MULTIPLIER,
     SELECTION_TOKEN_BUDGET_MULTIPLIER,
 )
 from onyx.tools.tool_implementations.search.models import (
@@ -141,7 +159,11 @@ from onyx.tools.tool_implementations.utils import (
     convert_inference_sections_to_llm_string,
 )
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+from onyx.utils.threadpool_concurrency import (
+    run_functions_tuples_in_parallel,
+    run_in_background,
+    wait_on_background,
+)
 from onyx.utils.timing import log_function_time
 from shared_configs.configs import (
     DOC_EMBEDDING_CONTEXT_SIZE,
@@ -151,6 +173,9 @@ from shared_configs.configs import (
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+# PostHog flag for decision-model rerank and expansion (cloud rollout control).
+SEARCH_DECISION_RERANK_EXPANSION_FLAG = "onyx-search-decision-rerank-expansion"
 
 QUERIES_FIELD = "queries"
 
@@ -361,6 +386,75 @@ class SearchTool(Tool):
         self.include_link = include_link
 
         self._id = tool_id
+
+    def _resolve_decision_client(self) -> DecisionClient | None:
+        """The decision model client when the rollout flag is on, the turn
+        persists content, and a default decision model is configured;
+        otherwise None."""
+        flag_provider = get_default_feature_flag_provider()
+        if isinstance(flag_provider, NoOpFeatureFlagProvider):
+            enabled = ENABLE_SEARCH_DECISION_RERANK_EXPANSION
+        else:
+            enabled = flag_provider.feature_enabled_for_user_tenant(
+                SEARCH_DECISION_RERANK_EXPANSION_FLAG,
+                self.user,
+                get_current_tenant_id(),
+            )
+        # The decision client carries no incognito request policy, so turns
+        # that must not persist content keep LLM selection.
+        if not enabled or not current_turn_persists_content():
+            return None
+        try:
+            return get_decision_client(timeout=DECISION_TIMEOUT_S)
+        except Exception:
+            logger.warning(
+                "Decision model unavailable, using LLM selection", exc_info=True
+            )
+            return None
+
+    @staticmethod
+    def _select_with_decision_model(
+        candidates: list[InferenceSection],
+        user_query: str,
+        decision_client: DecisionClient,
+        max_tokens: int,
+        token_counter: Callable[[str], int],
+        expand: Callable[[InferenceSection], InferenceSection],
+    ) -> tuple[list[InferenceSection], dict[int, InferenceSection]] | None:
+        """Rank the candidates in one decision call and keep the top sections.
+
+        The fused top sections are expanded in the background while the call
+        runs; only selected sections are waited on. Returns the selected
+        sections and the expansions already done, keyed by section id, or None
+        when the ranking call fails."""
+        pool = _trim_sections_by_tokens(
+            sections=candidates,
+            max_tokens=max_tokens,
+            token_counter=token_counter,
+            max_chunks_per_section=MAX_CHUNKS_FOR_RELEVANCE,
+        )[:MAX_DECISION_QUESTIONS]
+        speculative = [
+            (section, run_in_background(expand, section))
+            for section in pool[:RERANK_SPECULATIVE_EXPANSIONS]
+        ]
+        try:
+            scores = rank_sections_listwise(pool, user_query, decision_client)
+        except Exception:
+            # Unselected background expansions finish on their own; nothing waits.
+            logger.warning(
+                "Decision-model rerank failed, using LLM selection", exc_info=True
+            )
+            return None
+        # A stable sort keeps fusion order among equal probabilities.
+        ranked = sorted(zip(pool, scores, strict=True), key=lambda item: -item[1])
+        selected = [section for section, _ in ranked[:MAX_SELECTED_SECTIONS]]
+        selected_ids = {id(section) for section in selected}
+        expanded = {
+            id(section): wait_on_background(task)
+            for section, task in speculative
+            if id(section) in selected_ids
+        }
+        return selected, expanded
 
     @property
     def _is_project_only_search(self) -> bool:
@@ -1164,7 +1258,8 @@ class SearchTool(Tool):
 
         # We can disregard all of the chunks that exceed the num_hits parameter since it's not valid to have
         # documents/contents from things that aren't returned to the user on the frontend
-        top_sections = merge_individual_chunks(top_chunks)[:NUM_RETURNED_HITS]
+        all_sections = merge_individual_chunks(top_chunks)
+        top_sections = all_sections[:NUM_RETURNED_HITS]
 
         if not top_sections:
             logger.info("Search tool - no results found, returning empty response")
@@ -1199,10 +1294,19 @@ class SearchTool(Tool):
             check_primary_llm_cost()
         enforce_selection_input_budget = selection_llm is not self.llm
 
+        decision_client = self._resolve_decision_client()
+        # The decision model ranks a wider pool than the sections shown today.
+        candidates = (
+            all_sections[:RERANK_POOL_SIZE] if decision_client else top_sections
+        )
+
         # Enrich chunks with `Document.file_id` (Postgres-only metadata not
         # stored in the document index).
         with get_session_with_current_tenant() as enrichment_session:
-            populate_file_ids_on_sections(top_sections, enrichment_session)
+            populate_file_ids_on_sections(
+                all_sections[: max(len(top_sections), len(candidates))],
+                enrichment_session,
+            )
 
         # Convert InferenceSections to SearchDocs for emission
         search_docs = convert_inference_sections_to_search_docs(
@@ -1234,24 +1338,87 @@ class SearchTool(Tool):
             max_chunks_per_section=MAX_CHUNKS_FOR_RELEVANCE,
         )
 
+        # Create wrapper function to handle errors gracefully
+        def expand_section_safe(
+            section: InferenceSection,
+            user_query: str,
+            llm: LLM,
+            document_index: DocumentIndex,
+            expand_override: bool,
+            expansion_decision_client: DecisionClient | None,
+        ) -> InferenceSection:
+            """Wrapper that handles exceptions and returns original section on error."""
+            try:
+                expanded_section = expand_section_with_context(
+                    section=section,
+                    user_query=user_query,
+                    llm=llm,
+                    document_index=document_index,
+                    expand_override=expand_override,
+                    enforce_llm_input_budget=enforce_selection_input_budget,
+                    decision_client=expansion_decision_client,
+                )
+                # Return expanded section if not None, otherwise original
+                return expanded_section if expanded_section is not None else section
+            except Exception as e:
+                logger.warning(
+                    "Error processing section context expansion: %s. Using original section.",
+                    e,
+                )
+                return section
+
         # Start timing for LLM document selection
         document_selection_start_time = time.time()
 
-        # Use LLM to select the most relevant sections for expansion
-        selected_sections, best_doc_ids = select_sections_for_expansion(
-            sections=sections_for_selection,
-            user_query=secondary_flows_user_query,
-            llm=selection_llm,
-            max_chunks_per_section=MAX_CHUNKS_FOR_RELEVANCE,
-            enforce_llm_input_budget=enforce_selection_input_budget,
+        decided = (
+            self._select_with_decision_model(
+                candidates=candidates,
+                user_query=secondary_flows_user_query,
+                decision_client=decision_client,
+                max_tokens=max_tokens_for_selection * RERANK_TOKEN_BUDGET_MULTIPLIER,
+                token_counter=token_counter,
+                expand=partial(
+                    expand_section_safe,
+                    user_query=secondary_flows_user_query,
+                    llm=selection_llm,
+                    document_index=self.document_index,
+                    expand_override=False,
+                    expansion_decision_client=decision_client,
+                ),
+            )
+            if decision_client
+            else None
         )
+        pre_expanded: dict[int, InferenceSection] = {}
+        if decided is not None:
+            selected_sections, pre_expanded = decided
+            best_doc_ids = None
+            # Picks from beyond the top hits still need a search doc.
+            top_section_ids = {id(section) for section in top_sections}
+            search_docs += convert_inference_sections_to_search_docs(
+                [s for s in selected_sections if id(s) not in top_section_ids],
+                is_internet=False,
+            )
+        else:
+            # The decision model failed or is off; it should not slow expansion.
+            decision_client = None
+            # Use LLM to select the most relevant sections for expansion
+            selected_sections, best_doc_ids = select_sections_for_expansion(
+                sections=sections_for_selection,
+                user_query=secondary_flows_user_query,
+                llm=selection_llm,
+                max_sections=MAX_SELECTED_SECTIONS,
+                max_chunks_per_section=MAX_CHUNKS_FOR_RELEVANCE,
+                enforce_llm_input_budget=enforce_selection_input_budget,
+            )
 
         # End timing for LLM document selection
         document_selection_elapsed = time.time() - document_selection_start_time
         logger.debug(
-            "Search tool - LLM picking documents took %s seconds (selected %s sections)",
+            "Search tool - picking documents took %s seconds (selected %s sections, decision model: %s)",
             format(document_selection_elapsed, ".3f"),
             len(selected_sections),
+            decided is not None,
         )
 
         # Create a set of best document IDs for quick lookup
@@ -1266,33 +1433,6 @@ class SearchTool(Tool):
         if update is not None:
             update(ToolProgress(details=search_output))
 
-        # Create wrapper function to handle errors gracefully
-        def expand_section_safe(
-            section: InferenceSection,
-            user_query: str,
-            llm: LLM,
-            document_index: DocumentIndex,
-            expand_override: bool,
-        ) -> InferenceSection:
-            """Wrapper that handles exceptions and returns original section on error."""
-            try:
-                expanded_section = expand_section_with_context(
-                    section=section,
-                    user_query=user_query,
-                    llm=llm,
-                    document_index=document_index,
-                    expand_override=expand_override,
-                    enforce_llm_input_budget=enforce_selection_input_budget,
-                )
-                # Return expanded section if not None, otherwise original
-                return expanded_section if expanded_section is not None else section
-            except Exception as e:
-                logger.warning(
-                    "Error processing section context expansion: %s. Using original section.",
-                    e,
-                )
-                return section
-
         # Build parallel function calls for all sections
         expansion_functions: list[tuple[Callable, tuple]] = [
             (
@@ -1303,16 +1443,25 @@ class SearchTool(Tool):
                     selection_llm,
                     self.document_index,
                     section.center_chunk.document_id in best_doc_ids_set,
+                    decision_client,
                 ),
             )
             for section in selected_sections
+            if id(section) not in pre_expanded
         ]
 
         # Start timing for document expansion
         document_expansion_start_time = time.time()
 
         # Run all expansions in parallel
-        expanded_sections = run_functions_tuples_in_parallel(expansion_functions)
+        expanded_by_id = dict(pre_expanded)
+        for (_, args), expanded in zip(
+            expansion_functions,
+            run_functions_tuples_in_parallel(expansion_functions),
+            strict=True,
+        ):
+            expanded_by_id[id(args[0])] = expanded
+        expanded_sections = [expanded_by_id[id(s)] for s in selected_sections]
 
         # End timing for document expansion
         document_expansion_elapsed = time.time() - document_expansion_start_time

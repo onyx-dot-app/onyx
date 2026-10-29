@@ -4,6 +4,12 @@ import os
 CHAT_RESPONSE_WAIT_TIMEOUT_S = 3600
 
 NUM_RETURNED_HITS = 50
+# Self-hosted switch for ranking internal search results with the configured
+# decision model. Where the PostHog flag provider is available, the
+# "onyx-search-decision-rerank-expansion" flag decides instead.
+ENABLE_SEARCH_DECISION_RERANK_EXPANSION = (
+    os.environ.get("ENABLE_SEARCH_DECISION_RERANK_EXPANSION", "false").lower() == "true"
+)
 
 # May be less depending on model
 MAX_CHUNKS_FED_TO_CHAT = int(os.environ.get("MAX_CHUNKS_FED_TO_CHAT") or 25)

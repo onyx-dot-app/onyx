@@ -23,6 +23,18 @@ RRF_K_VALUE = 50
 # below the selection cut; a wider budget lets the selection LLM rescue them.
 SELECTION_TOKEN_BUDGET_MULTIPLIER = 2
 
+# Sections selection passes on to context expansion and the answer.
+MAX_SELECTED_SECTIONS = 10
+
+# Decision-model rerank and expansion: the decision model reads this many fused sections in
+# one request, so sections that fusion ranks low can still be picked. Its token
+# budget is this many times the LLM selection budget, so the pool fits.
+RERANK_POOL_SIZE = 100
+RERANK_TOKEN_BUDGET_MULTIPLIER = 4
+# Sections, in fusion order, expanded while the ranking call runs.
+RERANK_SPECULATIVE_EXPANSIONS = 10
+DECISION_TIMEOUT_S = 5.0
+
 # Context Expansion
 FULL_DOC_NUM_CHUNKS_AROUND = 5
 

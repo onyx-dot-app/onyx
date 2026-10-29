@@ -1,3 +1,6 @@
+import threading
+import time
+from collections.abc import Callable
 from threading import Barrier
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -20,6 +23,7 @@ from onyx.context.search.models import (
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.feature_flags.interface import NoOpFeatureFlagProvider
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import LLM, GenerationContext
 from onyx.llm.models import (
@@ -635,6 +639,7 @@ def test_selected_documents_are_published_before_context_expansion() -> None:
         document_index: DocumentIndex,  # noqa: ARG001
         expand_override: bool,  # noqa: ARG001
         enforce_llm_input_budget: bool = False,  # noqa: ARG001
+        decision_client: object = None,  # noqa: ARG001
     ) -> InferenceSection:
         details = updates[-1].details
         assert isinstance(details, SearchDocsResponse)
@@ -838,3 +843,201 @@ def test_empty_source_selection_and_failed_retrieval_do_not_advance_context() ->
     ):
         _run(tool, context=context, connected_sources=[DocumentSource.GITHUB])
     assert context.search_context == SearchContext()
+
+
+def _section(document_id: str) -> InferenceSection:
+    chunk = InferenceChunk(
+        document_id=document_id,
+        chunk_id=0,
+        content=f"content of {document_id}",
+        source_type=DocumentSource.GITHUB,
+        semantic_identifier=document_id,
+        title=document_id,
+        boost=1,
+        score=0.5,
+        hidden=False,
+        metadata={},
+        match_highlights=[],
+        doc_summary="",
+        chunk_context="",
+        updated_at=None,
+        image_file_id=None,
+        source_links={},
+        section_continuation=False,
+        blurb=document_id,
+    )
+    return InferenceSection(
+        center_chunk=chunk, chunks=[chunk], combined_content=chunk.content
+    )
+
+
+def _run_selection(
+    tool: SearchTool,
+    sections: list[InferenceSection],
+    rank: MagicMock,
+    decision_client: MagicMock | None,
+    expand_effect: Callable[..., InferenceSection] = lambda **kwargs: kwargs["section"],
+) -> tuple[MagicMock, MagicMock, MagicMock, MagicMock]:
+    """Run a search that reaches selection; returns the mocks for LLM selection,
+    expansion, overlap merging and search-doc conversion."""
+    with (
+        patch.object(tool, "_resolve_decision_client", return_value=decision_client),
+        patch(f"{MODULE}.populate_file_ids_on_sections"),
+        patch(
+            f"{MODULE}.convert_inference_sections_to_search_docs", return_value=[]
+        ) as to_docs,
+        patch(f"{MODULE}.get_llm_token_counter", return_value=lambda _: 0),
+        patch(f"{MODULE}.rank_sections_listwise", rank),
+        patch(
+            f"{MODULE}.select_sections_for_expansion",
+            return_value=(sections[:2], None),
+        ) as select,
+        patch(
+            f"{MODULE}.expand_section_with_context", side_effect=expand_effect
+        ) as expand,
+        patch(
+            f"{MODULE}.merge_overlapping_sections", side_effect=lambda found: found
+        ) as merge,
+        patch(
+            f"{MODULE}.convert_inference_sections_to_llm_string",
+            return_value=("evidence", {}),
+        ),
+    ):
+        _run(tool, connected_sources=[DocumentSource.GITHUB], sections=sections)
+    return select, expand, merge, to_docs
+
+
+def test_decision_rerank_selects_by_listwise_probability() -> None:
+    tool = _make_tool()
+    client = MagicMock()
+    sections = [_section(f"doc-{index}") for index in range(60)]
+    # doc-55 sits past the 50 top hits; doc-3 and doc-7 tie and keep fused order.
+    scores = [0.0] * 60
+    scores[55], scores[3], scores[7] = 0.99, 0.5, 0.5
+    rank = MagicMock(return_value=scores)
+
+    select, expand, merge, to_docs = _run_selection(tool, sections, rank, client)
+
+    select.assert_not_called()
+    assert rank.call_args.args[0] == sections
+    picked = [s.center_chunk.document_id for s in merge.call_args.args[0]]
+    assert picked[:3] == ["doc-55", "doc-3", "doc-7"]
+    assert len(picked) == 10
+    assert all(call.kwargs["decision_client"] is client for call in expand.mock_calls)
+    # Each pick is expanded once, whether during the ranking call or after it.
+    expanded = [
+        call.kwargs["section"].center_chunk.document_id for call in expand.mock_calls
+    ]
+    assert all(expanded.count(document_id) == 1 for document_id in picked)
+    # The pick from beyond the top hits gets its own search doc.
+    converted = [
+        [section.center_chunk.document_id for section in call.args[0]]
+        for call in to_docs.mock_calls
+    ]
+    assert ["doc-55"] in converted
+
+
+def test_decision_rerank_failure_falls_back_to_llm_selection() -> None:
+    tool = _make_tool()
+    sections = [_section(f"doc-{index}") for index in range(5)]
+    rank = MagicMock(side_effect=RuntimeError("decision model down"))
+
+    select, expand, merge, _ = _run_selection(tool, sections, rank, MagicMock())
+
+    select.assert_called_once()
+    picked = [s.center_chunk.document_id for s in merge.call_args.args[0]]
+    assert picked == ["doc-0", "doc-1"]
+    # Expansion after the fallback does not wait on the failed model.
+    llm_expanded = {
+        call.kwargs["section"].center_chunk.document_id
+        for call in expand.mock_calls
+        if call.kwargs["decision_client"] is None
+    }
+    assert llm_expanded == {"doc-0", "doc-1"}
+
+
+@pytest.mark.parametrize(
+    ("noop", "env_enabled", "flag_enabled", "expect_client"),
+    [
+        (True, False, False, False),
+        (True, True, False, True),
+        (False, True, False, False),
+        (False, False, True, True),
+    ],
+)
+def test_decision_client_requires_the_flag(
+    noop: bool, env_enabled: bool, flag_enabled: bool, expect_client: bool
+) -> None:
+    posthog = MagicMock()
+    posthog.feature_enabled_for_user_tenant.return_value = flag_enabled
+    provider = NoOpFeatureFlagProvider() if noop else posthog
+    client = MagicMock()
+    with (
+        patch(f"{MODULE}.get_default_feature_flag_provider", return_value=provider),
+        patch(f"{MODULE}.ENABLE_SEARCH_DECISION_RERANK_EXPANSION", env_enabled),
+        patch(f"{MODULE}.get_decision_client", return_value=client) as get_client,
+    ):
+        resolved = _make_tool()._resolve_decision_client()
+
+    assert (resolved is client) is expect_client
+    assert get_client.called is expect_client
+
+
+def test_decision_client_is_none_when_the_model_is_unavailable() -> None:
+    with (
+        patch(
+            f"{MODULE}.get_default_feature_flag_provider",
+            return_value=MagicMock(
+                feature_enabled_for_user_tenant=MagicMock(return_value=True)
+            ),
+        ),
+        patch(
+            f"{MODULE}.get_decision_client",
+            side_effect=OnyxError(OnyxErrorCode.RATE_LIMITED, "over budget"),
+        ),
+    ):
+        assert _make_tool()._resolve_decision_client() is None
+
+
+def test_decision_client_is_none_for_content_free_turns() -> None:
+    with (
+        patch(
+            f"{MODULE}.get_default_feature_flag_provider",
+            return_value=NoOpFeatureFlagProvider(),
+        ),
+        patch(f"{MODULE}.ENABLE_SEARCH_DECISION_RERANK_EXPANSION", True),
+        patch(f"{MODULE}.current_turn_persists_content", return_value=False),
+        patch(f"{MODULE}.get_decision_client") as get_client,
+    ):
+        assert _make_tool()._resolve_decision_client() is None
+    get_client.assert_not_called()
+
+
+def test_decision_rerank_does_not_wait_for_unselected_expansions() -> None:
+    tool = _make_tool()
+    sections = [_section(f"doc-{index}") for index in range(12)]
+    # doc-9 is expanded speculatively but not selected; its expansion hangs.
+    scores = [1.0] * 12
+    scores[9] = 0.0
+    release = threading.Event()
+
+    def expand(**kwargs: Any) -> InferenceSection:
+        if kwargs["section"].center_chunk.document_id == "doc-9":
+            release.wait(timeout=10)
+        return kwargs["section"]
+
+    started = time.monotonic()
+    try:
+        _, _, merge, _ = _run_selection(
+            tool,
+            sections,
+            MagicMock(return_value=scores),
+            MagicMock(),
+            expand_effect=expand,
+        )
+    finally:
+        release.set()
+
+    assert time.monotonic() - started < 5
+    picked = [s.center_chunk.document_id for s in merge.call_args.args[0]]
+    assert "doc-9" not in picked

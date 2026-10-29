@@ -30,6 +30,8 @@ class LLMFlow(StrEnum):
     TIME_FILTER_EXTRACTION = "time_filter_extraction"
     CLASSIFY_SECTION_RELEVANCE = "classify_section_relevance"
     SELECT_SECTIONS_FOR_EXPANSION = "select_sections_for_expansion"
+    SEARCH_SECTION_RERANK = "search_section_rerank"
+    SEARCH_CONTEXT_EXPANSION_DECISION = "search_context_expansion_decision"
     CHAT_SESSION_NAMING = "chat_session_naming"
     MEMORY_UPDATE = "memory_update"
 

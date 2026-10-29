@@ -119,6 +119,7 @@ run()                                              search_tool.py
  5. merge_individual_chunks                          context/search/pipeline.py
  6. _trim_sections_by_tokens                          search_tool.py
     select_sections_for_expansion                     secondary_llm_flows/document_filter.py
+    (or, when enabled, rank_sections_listwise          secondary_llm_flows/decision_rerank_expansion.py)
  7. expand_section_with_context (parallel per doc)    search_utils.py
       └─ _retrieve_adjacent_chunks → document_index.id_based_retrieval
  8. merge_overlapping_sections                        search_utils.py
@@ -237,7 +238,8 @@ first appeared (fixed first-seen order, not round-robin).
 `merge_individual_chunks` (`context/search/pipeline.py`) then joins chunks from
 the same document whose `chunk_id`s differ by exactly 1 into one
 `InferenceSection`, keeping the position of the section's earliest-ranked chunk.
-The merged list is capped to `override_kwargs.num_hits`.
+The merged list is capped to `override_kwargs.num_hits`. Decision-model rerank and expansion
+(4.5.1) reads the first `RERANK_POOL_SIZE = 100` merged sections instead.
 
 ### 4.5 LLM selection
 
@@ -275,6 +277,37 @@ without changing the original evidence. Rewrites retain their primary-model limi
 An oversized fixed prompt takes the flow's local fallback without a provider
 call. The final answer's evidence allowance remains independent.
 
+### 4.5.1 Decision-model rerank and expansion
+
+`SearchTool._resolve_decision_client` runs once per search call. It returns a decision
+client only when all of these are true:
+
+- The rollout flag is on. The PostHog flag `onyx-search-decision-rerank-expansion` decides
+  per tenant. When the flag provider is NoOp (self-hosted), the env var
+  `ENABLE_SEARCH_DECISION_RERANK_EXPANSION` decides. It is off by default.
+- A default decision model is configured (`get_decision_client()`).
+- The turn persists content (`current_turn_persists_content()`). The decision
+  client carries no incognito request policy, so content-free turns keep LLM
+  selection.
+
+When both are true, LLM selection is replaced:
+
+1. The first 100 merged sections are trimmed to
+   `RERANK_TOKEN_BUDGET_MULTIPLIER = 4` times the selection budget.
+2. `rank_sections_listwise` (`secondary_llm_flows/decision_rerank_expansion.py`) sends all
+   of them in one decision request, with one comparative yes/no question per
+   section (`LLMFlow.SEARCH_SECTION_RERANK`). The probabilities are comparable
+   only within one request, so the sections are never split across requests.
+3. The `MAX_SELECTED_SECTIONS = 10` most probable sections are kept. Equal
+   probabilities keep fusion order. Picks from beyond the top hits get search docs.
+4. While the ranking call runs, the first `RERANK_SPECULATIVE_EXPANSIONS = 10`
+   sections in fusion order are expanded in background threads. Search waits
+   only for the selected ones and reuses that work.
+
+The client uses `DECISION_TIMEOUT_S = 5`. If the client cannot be built
+(for example, on a cost limit) or the ranking call fails, the same search runs
+LLM selection (4.5) and expands with the LLM.
+
 ### 4.6 Context expansion
 
 For each selected section, `expand_section_with_context` (`search_utils.py`) runs
@@ -288,6 +321,11 @@ result makes `expand_section_with_context` return `None`, but `expand_section_sa
 then keeps the original section. This stage never drops a selected section. `FULL_DOCUMENT` fetches `FULL_DOC_NUM_CHUNKS_AROUND = 5`
 chunks on each side via `_retrieve_adjacent_chunks`, which calls
 `document_index.id_based_retrieval`.
+
+On the decision-model path, `decide_context_expansion`
+(`secondary_llm_flows/decision_rerank_expansion.py`, `LLMFlow.SEARCH_CONTEXT_EXPANSION_DECISION`)
+classifies first, with the same four levels. If that call fails or the model
+refuses, `classify_section_relevance` classifies instead.
 
 ### 4.7 Final merge and serialization
 

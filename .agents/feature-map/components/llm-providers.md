@@ -32,7 +32,8 @@ Provider configuration rows show a Decision tag for decision-capable models.
 Its tooltip distinguishes decision-only models, which do not appear in chat,
 from models that support both chat and decision tasks.
 **Admin > Decision Models** manages decision providers and an optional model.
-It starts unset and never inherits a chat model. No workflow consumes it yet.
+It starts unset and never inherits a chat model. Internal search uses it to rank
+sections, with a flag turning it on.
 TypeSafe appears only on this page; shared OpenAI and OpenRouter connections
 remain available on Language Models. Dedicated decision-provider saves preserve shared
 chat settings, defaults, visibility, and access. New shared models stay hidden
