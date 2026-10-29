@@ -627,11 +627,8 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
 
     setCreatingConnector(true);
     try {
-      const timeoutPromise = new Promise<{ isTimeout: true }>((resolve) =>
-        setTimeout(
-          () => resolve({ isTimeout: true }),
-          CONNECTOR_CREATION_TIMEOUT_MS
-        )
+      const timeoutPromise = new Promise<"timeout">((resolve) =>
+        setTimeout(() => resolve("timeout"), CONNECTOR_CREATION_TIMEOUT_MS)
       );
 
       const connectorData: ConnectorBase<any> = {
@@ -715,14 +712,12 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
         return;
       })();
 
-      const result = (await Promise.race([
-        connectorCreationPromise,
+      const result = await Promise.race([
+        connectorCreationPromise.then(() => "created" as const),
         timeoutPromise,
-      ])) as {
-        isTimeout?: true;
-      };
+      ]);
 
-      if (result.isTimeout) {
+      if (result === "timeout") {
         timeoutErrorHappenedRef.current = true;
         toast.error(
           t("add.timeout.toast", {
