@@ -71,8 +71,9 @@ Custom groups let you grant specific permissions to the users in that group.
   Community Edition has the **Admin** and **Basic** groups only.
 </Info>
 
-The **Basic** group has one permission you can change: **Create User Access Token**. It is on by default.
-Turn it off on the Basic group's page to stop users from creating personal access tokens.
+The **Basic** group has two permissions you can change: **Create User Access Token** and **Create Agents**.
+**Create User Access Token** is on by default. Turn it off on the Basic group's page to stop users from creating personal access tokens.
+**Create Agents** is off by default. Turn it on to let every user create and edit their own agents.
 
 <Warning>
   Because all access comes from groups, a user who belongs to **no group at all** has no permissions.
@@ -174,11 +175,11 @@ The following permissions can be assigned to custom groups:
 | Manage Groups | Add and update user groups across the workspace. |
 | Manage Service Accounts | Add and update service accounts and their API keys. |
 | Manage Slack/Discord Bots | Add and update Onyx integrations with Slack or Discord. |
-| Create Agents | Create and edit the user's own agents. |
+| Create Agents | Create and edit the user's own agents. You can toggle this permission on the **Basic** group. It is off by default. |
 | Manage Agents | View and update public and shared agents across the workspace. |
 | View Agent Analytics | View analytics for agents the user owns. Users with **Manage Agents** can view analytics for all agents. |
 | View Query History | View query history across the workspace. |
-| Create User Access Token | Create personal access tokens. This is the only permission you can toggle on the **Basic** group. |
+| Create User Access Token | Create personal access tokens. You can toggle this permission on the **Basic** group. It is on by default. |
 
 <Note>
   **View Agent Analytics** is not scoped through Group Manager access. The permission can be granted to a group,

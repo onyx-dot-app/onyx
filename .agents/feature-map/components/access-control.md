@@ -201,7 +201,8 @@ OpenSearch chunk document
   (`onyx/db/user_group.py:assert_group_config_is_editable`,
   `assert_not_shared_with_default_group`). The one write a default group takes
   besides membership is the permission toggle on Basic, limited to
-  `auth/permissions.py:DEFAULT_GROUP_TOGGLEABLE_PERMISSIONS`
+  `auth/permissions.py:DEFAULT_GROUP_TOGGLEABLE_PERMISSIONS` (`CREATE_USER_API_KEYS`,
+  on by default, and `ADD_AGENTS`, off by default)
   (`onyx/db/user_group.py:assert_group_permissions_editable`). Sharing a resource with the Basic
   default group is refused outright: use the resource's own `is_public` flag
   instead, since Basic holds every user. The Community downgrade
