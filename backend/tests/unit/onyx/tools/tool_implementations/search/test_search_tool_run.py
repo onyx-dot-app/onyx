@@ -1050,3 +1050,41 @@ def test_decision_rerank_does_not_wait_for_unselected_expansions() -> None:
     assert time.monotonic() - started < 5
     picked = [s.center_chunk.document_id for s in merge.call_args.args[0]]
     assert "doc-9" not in picked
+
+
+def test_failed_background_expansion_costs_no_llm_call() -> None:
+    tool = _make_tool()
+    sections = [_section(f"doc-{index}") for index in range(12)]
+    # doc-8 and doc-9 are expanded in the background but not selected.
+    scores = [0.9] * 8 + [0.0, 0.0] + [0.9, 0.9]
+
+    def expand(**kwargs: Any) -> InferenceSection:
+        # The decision model is down: decision-only calls fail.
+        if kwargs.get("llm_fallback") is False:
+            raise RuntimeError("decision model down")
+        return kwargs["section"]
+
+    _, expand_mock, merge, _ = _run_selection(
+        tool,
+        sections,
+        MagicMock(return_value=scores),
+        MagicMock(),
+        expand_effect=expand,
+    )
+
+    background = [
+        call
+        for call in expand_mock.mock_calls
+        if call.kwargs.get("llm_fallback") is False
+    ]
+    with_llm = [
+        call.kwargs["section"].center_chunk.document_id
+        for call in expand_mock.mock_calls
+        if call.kwargs.get("llm_fallback") is not False
+    ]
+    # Background expansions ran without an LLM fallback.
+    assert len(background) == 10
+    # Only selected sections are expanded again, with the LLM fallback.
+    picked = [s.center_chunk.document_id for s in merge.call_args.args[0]]
+    assert "doc-8" not in picked and "doc-9" not in picked
+    assert sorted(with_llm) == sorted(picked)

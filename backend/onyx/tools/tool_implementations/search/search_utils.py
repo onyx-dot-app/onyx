@@ -360,6 +360,7 @@ def expand_section_with_context(
     expand_override: bool = False,
     enforce_llm_input_budget: bool = False,
     decision_client: DecisionClient | None = None,
+    llm_fallback: bool = True,
 ) -> InferenceSection | None:
     """Use LLM to classify section relevance and return expanded section with appropriate context.
 
@@ -377,6 +378,8 @@ def expand_section_with_context(
         expand_override: If True, skip LLM classification and use FULL_DOCUMENT expansion
         decision_client: If set, the decision model classifies first; the LLM
             classifies only when that call fails
+        llm_fallback: If False, a failed decision call raises instead of
+            falling back to the LLM
 
     Returns:
         Expanded InferenceSection with appropriate context, or None if NOT_RELEVANT
@@ -421,6 +424,8 @@ def expand_section_with_context(
                     section_below_text=section_below_text,
                 )
             except Exception:
+                if not llm_fallback:
+                    raise
                 logger.warning(
                     "Decision expansion failed, using the LLM", exc_info=True
                 )

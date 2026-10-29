@@ -36,7 +36,6 @@ refer to by using matching keywords to other parts of the prompt and reminders.
 
 import time
 from collections.abc import Callable, Sequence
-from functools import partial
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -418,14 +417,15 @@ class SearchTool(Tool):
         decision_client: DecisionClient,
         max_tokens: int,
         token_counter: Callable[[str], int],
-        expand: Callable[[InferenceSection], InferenceSection],
+        expand: Callable[[InferenceSection], InferenceSection | None],
     ) -> tuple[list[InferenceSection], dict[int, InferenceSection]] | None:
         """Rank the candidates in one decision call and keep the top sections.
 
         The fused top sections are expanded in the background while the call
-        runs; only selected sections are waited on. Returns the selected
-        sections and the expansions already done, keyed by section id, or None
-        when the ranking call fails."""
+        runs; only selected sections are waited on. `expand` returns None when
+        it could not expand a section, so the normal pass expands it later.
+        Returns the selected sections and the expansions already done, keyed by
+        section id, or None when the ranking call fails."""
         pool = _trim_sections_by_tokens(
             sections=candidates,
             max_tokens=max_tokens,
@@ -448,11 +448,13 @@ class SearchTool(Tool):
         ranked = sorted(zip(pool, scores, strict=True), key=lambda item: -item[1])
         selected = [section for section, _ in ranked[:MAX_SELECTED_SECTIONS]]
         selected_ids = {id(section) for section in selected}
-        expanded = {
-            id(section): wait_on_background(task)
-            for section, task in speculative
-            if id(section) in selected_ids
-        }
+        expanded: dict[int, InferenceSection] = {}
+        for section, task in speculative:
+            if id(section) not in selected_ids:
+                continue
+            result = wait_on_background(task)
+            if result is not None:
+                expanded[id(section)] = result
         return selected, expanded
 
     @property
@@ -1366,6 +1368,30 @@ class SearchTool(Tool):
                 )
                 return section
 
+        # Bound once: the fallback below clears `decision_client` while these
+        # background expansions may still be starting.
+        rerank_client = decision_client
+
+        def expand_speculatively(section: InferenceSection) -> InferenceSection | None:
+            """Expand with the decision model only. Most of these sections are
+            not selected, so a failed decision call must not cost an LLM call;
+            None leaves the section to the normal expansion pass."""
+            if rerank_client is None:
+                return None
+            try:
+                expanded_section = expand_section_with_context(
+                    section=section,
+                    user_query=secondary_flows_user_query,
+                    llm=selection_llm,
+                    document_index=self.document_index,
+                    enforce_llm_input_budget=enforce_selection_input_budget,
+                    decision_client=rerank_client,
+                    llm_fallback=False,
+                )
+                return expanded_section if expanded_section is not None else section
+            except Exception:
+                return None
+
         # Start timing for LLM document selection
         document_selection_start_time = time.time()
 
@@ -1376,14 +1402,7 @@ class SearchTool(Tool):
                 decision_client=decision_client,
                 max_tokens=max_tokens_for_selection * RERANK_TOKEN_BUDGET_MULTIPLIER,
                 token_counter=token_counter,
-                expand=partial(
-                    expand_section_safe,
-                    user_query=secondary_flows_user_query,
-                    llm=selection_llm,
-                    document_index=self.document_index,
-                    expand_override=False,
-                    expansion_decision_client=decision_client,
-                ),
+                expand=expand_speculatively,
             )
             if decision_client
             else None

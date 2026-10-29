@@ -304,8 +304,10 @@ When all are true, LLM selection is replaced:
 3. The `MAX_SELECTED_SECTIONS = 10` most probable sections are kept. Equal
    probabilities keep fusion order. Picks from beyond the top hits get search docs.
 4. While the ranking call runs, the first `RERANK_SPECULATIVE_EXPANSIONS = 10`
-   sections in fusion order are expanded in background threads. Search waits
-   only for the selected ones and reuses that work.
+   sections in fusion order are expanded in background threads, with the
+   decision model only. Search waits only for the selected ones and reuses that
+   work. A failed background expansion makes no LLM call; the normal pass
+   expands that section if it is selected.
 
 The client uses `DECISION_TIMEOUT_S = 5`. If the client cannot be built
 (for example, on a cost limit) or the ranking call fails, the same search runs
