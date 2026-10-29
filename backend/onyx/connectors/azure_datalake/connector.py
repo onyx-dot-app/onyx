@@ -35,6 +35,8 @@ from onyx.connectors.interfaces import (
 from onyx.connectors.microsoft_utils.graph_errors import (
     MicrosoftAuthError,
     MicrosoftGraphError,
+    raise_for_auth_error,
+    raise_for_graph_error,
 )
 from onyx.connectors.models import (
     ConnectorFailure,
@@ -153,12 +155,19 @@ class AzureDataLakeConnector(
     def validate_connector_settings(self) -> None:
         """Reads the first entry under the path prefix: the gateway names a
         rejected credential, a missing container or path, or a missing role."""
-        self.ops.list_paths_page(
-            path_prefix=self.path_prefix,
-            recursive=False,
-            page_size=1,
-            continuation_token=None,
-        )
+        try:
+            self.ops.list_paths_page(
+                path_prefix=self.path_prefix,
+                recursive=False,
+                page_size=1,
+                continuation_token=None,
+            )
+        except MicrosoftAuthError as e:
+            raise_for_auth_error(e)
+        except MicrosoftGraphError as e:
+            raise_for_graph_error(
+                e, "Microsoft's token endpoint refused the app registration."
+            )
 
     def document_id(self, path: str) -> str:
         """Account and container names repeat across tenants, so both are in
@@ -300,6 +309,10 @@ class AzureDataLakeConnector(
         end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
+        # Pruning keeps only the hierarchy nodes a full listing yields.
+        yield list(
+            self._ancestor_nodes(f"{self.path_prefix}/" if self.path_prefix else "")
+        )
         continuation_token: str | None = None
         for _ in range(_MAX_PAGES):
             # A partial walk would read as deleted files, so stopping raises.
@@ -316,13 +329,19 @@ class AzureDataLakeConnector(
             files: list[AzureDataLakePath] = [
                 path for path in page.paths if self._is_indexable(path)
             ]
-            yield [
+            batch: list[SlimDocument | HierarchyNode] = [
+                self._directory_node(path.name)
+                for path in page.paths
+                if path.is_directory
+            ]
+            batch.extend(
                 SlimDocument(
                     id=self.document_id(path.name),
                     parent_hierarchy_raw_node_id=self._parent_node_id(path.name),
                 )
                 for path in files
-            ]
+            )
+            yield batch
             if callback is not None:
                 callback.progress("azure_datalake_slim_docs", len(files))
             continuation_token = page.continuation_token

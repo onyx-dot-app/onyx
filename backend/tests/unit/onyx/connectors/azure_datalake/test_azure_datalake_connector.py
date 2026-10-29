@@ -19,6 +19,7 @@ from onyx.connectors.exceptions import (
     CredentialInvalidError,
     InsufficientPermissionsError,
 )
+from onyx.connectors.microsoft_utils.graph_errors import MicrosoftAuthError
 from onyx.connectors.models import (
     ConnectorFailure,
     Document,
@@ -140,6 +141,26 @@ def test_documents_hang_under_their_directory_and_the_prefix() -> None:
     )
 
 
+def test_the_slim_listing_yields_the_nodes_indexing_yields() -> None:
+    # A full prune keeps only the hierarchy nodes the slim listing yields.
+    connector, _ = _connector(
+        {
+            None: AzureDataLakePathPage(
+                paths=[_directory("root/sub"), _file("root/sub/x.md")],
+                continuation_token=None,
+            )
+        },
+        path_prefix="/root/",
+    )
+
+    indexed, _ = _run(connector, connector.build_dummy_checkpoint())
+    slim = [item for batch in connector.retrieve_all_slim_docs() for item in batch]
+
+    assert [item.raw_node_id for item in slim if isinstance(item, HierarchyNode)] == [
+        item.raw_node_id for item in indexed if isinstance(item, HierarchyNode)
+    ]
+
+
 def test_window_type_size_and_image_rules_match_the_slim_listing() -> None:
     paths = [
         _file("new.txt"),
@@ -188,6 +209,16 @@ def test_a_rejected_credential_fails_the_attempt() -> None:
 
     with pytest.raises(CredentialInvalidError):
         _run(connector, connector.build_dummy_checkpoint())
+
+
+def test_validation_maps_a_refused_sign_in_to_the_validation_family() -> None:
+    connector, ops = _connector({})
+    ops.list_paths_page.side_effect = MicrosoftAuthError(
+        "invalid_client", "AADSTS7000215: Invalid client secret provided."
+    )
+
+    with pytest.raises(CredentialInvalidError):
+        connector.validate_connector_settings()
 
 
 def test_a_stopped_slim_walk_raises() -> None:

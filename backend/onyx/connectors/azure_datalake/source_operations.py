@@ -298,6 +298,10 @@ class AzureDataLakeSourceOperations(SourceOperations):
                 ).by_page(continuation_token=continuation_token),
             )
             page = next(pager, None)
+            if continuation_token and pager.continuation_token == continuation_token:
+                raise RuntimeError(
+                    "Azure Storage returned the same listing cursor again."
+                )
             return AzureDataLakePathPage(
                 paths=[_path(properties) for properties in page or []],
                 continuation_token=pager.continuation_token,

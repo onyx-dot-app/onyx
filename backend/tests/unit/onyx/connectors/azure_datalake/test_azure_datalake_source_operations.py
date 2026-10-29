@@ -139,3 +139,37 @@ def test_a_credential_with_an_unknown_method_is_invalid() -> None:
 
     with pytest.raises(CredentialInvalidError):
         gateway.check_sign_in()
+
+
+class _Pager:
+    """A page iterator that hands back the cursor it was given."""
+
+    def __init__(self, continuation_token: str | None) -> None:
+        self.continuation_token = continuation_token
+
+    def __iter__(self) -> "_Pager":
+        return self
+
+    def __next__(self) -> list[Any]:
+        return []
+
+
+def test_a_listing_cursor_that_does_not_advance_raises() -> None:
+    gateway = _gateway(
+        {
+            "authentication_method": "account_key",
+            "adls_account_name": "onyxtest",
+            "adls_account_key": "key",
+        }
+    )
+
+    with patch(f"{MODULE}.DataLakeServiceClient") as client_class:
+        file_system = client_class.return_value.get_file_system_client.return_value
+        file_system.get_paths.return_value.by_page.side_effect = _Pager
+        with pytest.raises(RuntimeError, match="same listing cursor"):
+            gateway.list_paths_page(
+                path_prefix="",
+                recursive=True,
+                page_size=10,
+                continuation_token="cursor",
+            )

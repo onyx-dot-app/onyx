@@ -61,6 +61,7 @@ _KEY_PREFIXES = (
 # Azure Data Lake's storage-account key: not an app registration, so a
 # credential that uses it stays in the Azure Data Lake shape.
 ACCOUNT_KEY_AUTHENTICATION_METHOD = "account_key"
+_ACCOUNT_KEY_FIELDS = ("adls_account_name", "adls_account_key")
 
 
 class MicrosoftCredentialCodec(FamilyCredentialCodec[MicrosoftCredential]):
@@ -71,6 +72,12 @@ class MicrosoftCredentialCodec(FamilyCredentialCodec[MicrosoftCredential]):
         self._key_prefix = key_prefix
 
     def to_family(self, source_json: dict[str, Any]) -> MicrosoftCredential:
+        # The family keeps unknown keys and hands them to every Microsoft
+        # source, so a storage account key must not ride along.
+        if account_keys := [key for key in _ACCOUNT_KEY_FIELDS if source_json.get(key)]:
+            raise ValueError(
+                f"An app registration credential cannot hold {', '.join(account_keys)}."
+            )
         # Another source's key would override the mapped value when the
         # credential is used by that source.
         foreign_keys = sorted(
