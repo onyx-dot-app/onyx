@@ -2,6 +2,7 @@
 
 import threading
 from collections.abc import Callable, Generator, Sequence
+from contextlib import nullcontext
 from unittest.mock import Mock, patch
 
 import pytest
@@ -303,6 +304,110 @@ def test_long_requests_reuse_counts_and_release_removed_history() -> None:
         }
 
 
+@pytest.mark.parametrize(
+    "scenario", ["proactive", "summary_failure", "provider_retry", "oversized"]
+)
+def test_current_attachments_survive_context_fitting(scenario: str) -> None:
+    model = ContextModel(reject_first=scenario == "provider_retry")
+    body = "Read this unique attachment detail. " * (
+        200 if scenario == "oversized" else 80
+    )
+    files = [
+        ChatLoadedFile(
+            file_id=f"attachment-{index}",
+            file_type=ChatFileType.PLAIN_TEXT,
+            filename=f"report-{index}.txt",
+            content=body.encode(),
+            content_text=body,
+            token_count=count_tokens(body),
+        )
+        for index in range(2)
+    ]
+    old_text = "Old findings. " * (1000 if scenario == "summary_failure" else 20)
+    history = convert_chat_history(
+        [
+            ChatHistoryMessage(
+                id=1,
+                message_type=MessageType.ASSISTANT,
+                message=old_text,
+                token_count=count_tokens(old_text),
+                files=[],
+                is_clarification=False,
+                response_messages=[
+                    AssistantMessage(
+                        id="old-answer", content=[TextContent(text=old_text)]
+                    )
+                ],
+            ),
+            ChatHistoryMessage(
+                id=2,
+                message_type=MessageType.USER,
+                message="Compare both attached reports.",
+                token_count=6,
+                is_clarification=False,
+                files=[{"id": file.file_id, "type": file.file_type} for file in files],
+                response_messages=[],
+            ),
+        ],
+        files=files,
+        context_image_files=[],
+        additional_context="Include the supporting evidence.",
+        token_counter=count_tokens,
+    )
+
+    def assemble(messages: Sequence[Message]) -> list[Message]:
+        return prepare_prompt(
+            messages,
+            system_prompt=None,
+            custom_agent_prompt=None,
+            reminder_message=None,
+            context_files=None,
+            token_counter=count_tokens,
+            all_injected_file_metadata=history.all_injected_file_metadata,
+            available_tool_names=set(),
+        )
+
+    original_request = GenerationRequest(messages=assemble(history.messages))
+    budget = context_budget(model)
+    if scenario in {"proactive", "provider_retry"}:
+        assert budget.trigger < request_tokens(original_request) <= budget.input_limit
+    else:
+        assert request_tokens(original_request) > budget.input_limit
+    agent = Agent(
+        model,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        state=AgentState(messages=history.messages[:-1]),
+        prepare_step=lambda _: PreparedStep(assemble_messages=assemble),
+    )
+    with (
+        patch(
+            "onyx.agents.runtime.compact_history", side_effect=RuntimeError("Offline")
+        )
+        if scenario in {"summary_failure", "provider_retry"}
+        else nullcontext()
+    ):
+        run = agent.start(messages=history.messages[-1:], background=False, max_steps=1)
+        if scenario == "oversized":
+            with pytest.raises(RunFailed):
+                run.result()
+            assert not model.generations
+        else:
+            run.result()
+            assert len(model.generations) == (2 if scenario == "provider_retry" else 1)
+            for request in model.generations:
+                assert [message.text for message in request.messages[-4:]] == [
+                    message.text for message in original_request.messages[-4:]
+                ]
+                assert not request.tools
+                assert body in request.messages[-4].text
+                assert body in request.messages[-3].text
+                assert request_tokens(request) <= budget.input_limit
+    assert agent.state.messages[: len(history.messages)] == history.messages
+    if scenario == "proactive":
+        assert agent.state.checkpoint is not None
+        assert agent.state.checkpoint.covered_through_message_id == "old-answer"
+
+
 def test_compaction_replaces_attachment_body_with_file_reference() -> None:
     model = ContextModel()
     body = "Attachment-only detail. " * 2000
@@ -389,10 +494,9 @@ def test_summary_cutoff_survives_request_context_removal(long_question: bool) ->
         token_counter=len,
     ).messages
     checkpoint = compact_history(model, source, None, GenerationContext())
-    expected_cutoff = "chat:2" if long_question else "old-answer"
-    assert checkpoint.covered_through_message_id == expected_cutoff
+    assert checkpoint.covered_through_message_id == "old-answer"
     summary_input = "\n".join(request.messages[0].text for request in model.summaries)
-    assert ("Temporary request detail" in summary_input) == long_question
+    assert "Temporary request detail" not in summary_input
 
     next_question = question.model_copy(update={"id": 3, "message": "Next question"})
     reloaded = convert_chat_history(
@@ -408,15 +512,13 @@ def test_summary_cutoff_survives_request_context_removal(long_question: bool) ->
     remaining = working_messages(reloaded, restored_checkpoint)
     assert remaining[0].text == f"Conversation summary:\n{checkpoint.summary}"
     assert remaining[-1].text == "Next question"
-    assert [message.id for message in remaining[1:]] == (
-        ["chat:3"] if long_question else ["chat:2", "chat:3"]
-    )
+    assert [message.id for message in remaining[1:]] == ["chat:2", "chat:3"]
 
 
 def test_compaction_rejects_missing_cutoff_identity_before_model_work() -> None:
     model = ContextModel()
     history: list[Message] = [
-        UserMessage(content="Old evidence. " * 600),
+        AssistantMessage(content=[TextContent(text="Old evidence. " * 600)]),
         UserMessage(id="question", content="Continue"),
     ]
 
@@ -647,7 +749,11 @@ def test_oversized_required_instruction_fails_without_losing_snapshot() -> None:
 
 
 def test_context_fitting_reuses_checkpoint_after_content_changes() -> None:
-    source: list[Message] = [UserMessage(id="user", content="Updated file contents")]
+    source: list[Message] = [
+        UserMessage(id="user", content="Updated file contents"),
+        AssistantMessage(id="answer", content=[TextContent(text="Saved answer")]),
+        UserMessage(id="follow-up", content="Continue"),
+    ]
     checkpoint = CompactionCheckpoint(
         summary="Summary", covered_through_message_id="user"
     )
@@ -1078,6 +1184,27 @@ def test_failed_summary_does_not_swallow_cancellation() -> None:
             )
 
 
+def test_checkpoint_cannot_cover_unanswered_input_across_system_messages() -> None:
+    messages: list[Message] = [
+        UserMessage(id="file", content="New attachment contents"),
+        SystemMessage(content="Use the supplied evidence."),
+        UserMessage(id="question", content="Read the attachment."),
+    ]
+    checkpoint = CompactionCheckpoint(
+        summary="File reference", covered_through_message_id="file"
+    )
+    with pytest.raises(CheckpointMismatchError, match="unanswered input"):
+        working_messages(messages, checkpoint)
+
+    messages.append(
+        AssistantMessage(id="answer", content=[TextContent(text="Findings")])
+    )
+    assert working_messages(messages, checkpoint) == [
+        SystemMessage(content="Conversation summary:\nFile reference"),
+        *messages[1:],
+    ]
+
+
 def test_checkpoint_cannot_split_completed_tool_calls() -> None:
     messages: list[Message] = [
         AssistantMessage(
@@ -1089,7 +1216,7 @@ def test_checkpoint_cannot_split_completed_tool_calls() -> None:
         ),
         UserMessage(id="next", content="Continue"),
     ]
-    with pytest.raises(CheckpointMismatchError, match="splits a tool call"):
+    with pytest.raises(CheckpointMismatchError, match="splits a tool exchange"):
         working_messages(
             messages,
             CompactionCheckpoint(

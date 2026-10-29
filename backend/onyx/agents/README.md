@@ -508,6 +508,10 @@ Compaction triggers when a request reaches 85% of that budget. The runtime summa
 messages never change — a checkpoint only changes what the model sees: the retained system
 messages, the summary, the latest user message, and the tail.
 
+Trailing user messages stay together until an assistant response follows them.
+This protects attachment text, request context, and the question during summarization and fallback truncation.
+If that unread input cannot fit, the run fails with a context-limit error.
+
 Each checkpoint identifies the last covered message with `covered_through_message_id`.
 The SDK assigns IDs to messages that lack them. Applications must preserve IDs when reloading history.
 Chat assigns stable IDs when loading messages, including file context and tool results.
