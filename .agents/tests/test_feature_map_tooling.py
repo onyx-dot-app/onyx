@@ -869,6 +869,40 @@ def test_queue_reads_citations_in_fenced_diagrams(fmap: FixtureMap) -> None:
     assert any("citations (1 of 2 cited files" in row for row in rows), rows
 
 
+def test_change_in_a_template_literal_matches_its_declaration() -> None:
+    typescript = (
+        "export const PROMPT = `\n"
+        "Answer the question.\n"
+        "Cite every source.\n"
+        "`;\n\n"
+        "export const OTHER = 1;\n"
+    )
+    names = stale_docs.enclosing_names
+    assert names(typescript, {3}, "typescript") == {"PROMPT"}
+    assert names(typescript, {6}, "typescript") == {"OTHER"}
+
+
+def test_fenced_route_group_citation_resolves(fmap: FixtureMap) -> None:
+    route = "mobile/src/app/(app)/_layout.tsx"
+    (fmap.root / route).parent.mkdir(parents=True)
+    (fmap.root / route).write_text("export function AppLayout() {}\n")
+    (fmap.root / "backend/onyx/server/new_api.py").write_text("X = 1\n")
+    _git(fmap.root, "add", "-A")
+    _git(fmap.root, "commit", "-qm", "files")
+    fmap.edit(
+        _CIT,
+        "The processor maps numbers to documents.",
+        "The processor maps numbers to documents.\n\n```\n"
+        f"{route}:AppLayout --> (server/new_api.py)\n```",
+    )
+    components, top_level = stale_docs._docs(fmap.map_dir)
+    cited = stale_docs.citations(
+        components + top_level, check_feature_map.repo_paths(fmap.root)
+    )
+    assert route in cited
+    assert "backend/onyx/server/new_api.py" in cited
+
+
 def test_component_link_must_name_the_documents_path(fmap: FixtureMap) -> None:
     fmap.edit("INDEX.md", "(components/citations.md)", "(components/old/citations.md)")
     errors, _ = fmap.check()

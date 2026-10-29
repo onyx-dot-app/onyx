@@ -139,7 +139,11 @@ _LANGUAGES = {
     ".mjs": "typescript",
 }
 # A path or `path:symbol` token in a fenced block, such as a diagram.
-_FENCE_TOKEN = re.compile(r"[\w./:-]+")
+# Parentheses stay in a token so a route group such as `(app)/` survives; the
+# path reader drops unbalanced ones. The words between parentheses count too.
+_FENCE_TOKEN = re.compile(r"[\w./():-]+")
+_FENCE_WORD = re.compile(r"[\w./:-]+")
+_BACKTICK = re.compile(r"(?<!\\)`")
 _HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@", re.MULTILINE)
 
 
@@ -245,9 +249,14 @@ def _names_by_indent(lines: list[str], wanted: set[int], language: str) -> set[s
     stack: list[tuple[int, str, str]] = []  # (indent, name, kind)
     found: set[str] = set()
     decorated = False
+    # A line inside a multiline template literal is text, not code: it keeps the
+    # enclosing definition open whatever its indent.
+    in_template = False
     for number, line in enumerate(lines, start=1):
         body = line.lstrip()
-        if body and not body.startswith((comment, "*", "/*")):
+        if in_template:
+            pass
+        elif body and not body.startswith((comment, "*", "/*")):
             indent = len(line) - len(body)
             # A closing bracket at the indent of its opener stays inside it.
             closing = body[0] in ")]}"
@@ -267,6 +276,8 @@ def _names_by_indent(lines: list[str], wanted: set[int], language: str) -> set[s
                 decorated = True
         if number in wanted:
             found.update(_prefixes(stack))
+        if language != "python" and len(_BACKTICK.findall(line)) % 2:
+            in_template = not in_template
     return found
 
 
@@ -444,7 +455,8 @@ def _tokens(line: Line) -> list[str]:
     """Code spans; inside a fenced block, every word that could be a path too."""
     if not line.in_fence:
         return CODE_SPAN.findall(line.text)
-    return [token.rstrip(".:-") for token in _FENCE_TOKEN.findall(line.text)]
+    tokens = _FENCE_TOKEN.findall(line.text) + _FENCE_WORD.findall(line.text)
+    return list(dict.fromkeys(token.rstrip(".:-") for token in tokens))
 
 
 def citations(docs: list[Doc], repo: Repo) -> dict[str, list[Citation]]:
