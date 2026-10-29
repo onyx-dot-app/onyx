@@ -90,7 +90,7 @@ string saying it is no longer available. Tool Call details like the search query
 rich and generally very few tokens.
 
 > Note: in the Internal Search flow with query expansion, the Tool Call which was actually run differs from what the LLM provided as arguments.
-> The history keeps only the arguments the LLM provided. The expanded queries go to the client in the `SearchToolQueriesDelta` packet and are not saved.
+> The tool-call arguments keep only the queries the LLM provided, and so does the model's history. The expanded queries are saved in the tool result (`SearchDocsResponse.queries`) and reach the client in `SearchToolQueriesDelta` packets, also on replay.
 
 **Possible Future Extension**:
 Instead of dropping the Tool Call response, we might summarize it using an LLM so that it is just 1-2 sentences and captures the main points. That said,
