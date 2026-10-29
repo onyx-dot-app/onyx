@@ -216,6 +216,10 @@ const createInitialSessionData = (
 
 let nextQueuedMessageId = 0;
 
+// Chats kept in memory per tab. Older idle ones are dropped; opening one
+// again fetches it from the server.
+const MAX_CACHED_SESSIONS = 10;
+
 export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
   // Initial state
   currentSessionId: null,
@@ -251,6 +255,8 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
 
       return { currentSessionId: sessionId };
     });
+    // A long-lived tab would otherwise keep every chat it ever opened.
+    get().cleanupOldSessions();
   },
 
   createSession: (
@@ -635,31 +641,35 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
     }
   },
 
-  cleanupOldSessions: (maxSessions: number = 10) => {
+  cleanupOldSessions: (maxSessions: number = MAX_CACHED_SESSIONS) => {
     set((state) => {
-      const sortedSessions = Array.from(state.sessions.entries()).sort(
-        ([, a], [, b]) => b.lastAccessed.getTime() - a.lastAccessed.getTime()
-      );
-
-      if (sortedSessions.length <= maxSessions) {
+      if (state.sessions.size <= maxSessions) {
         return state;
       }
 
-      const sessionsToKeep = sortedSessions.slice(0, maxSessions);
-      const sessionsToRemove = sortedSessions.slice(maxSessions);
+      // Only idle sessions are evicted: the open one, one that is streaming or
+      // otherwise busy, one with queued messages, and one still fetching stay.
+      const isEvictable = (sessionId: string, session: ChatSessionData) =>
+        sessionId !== state.currentSessionId &&
+        session.chatState === "input" &&
+        session.queuedMessages.length === 0 &&
+        !session.isFetchingChatMessages;
 
-      // Abort controllers for sessions being removed
-      sessionsToRemove.forEach(([, session]) => {
-        if (session.abortController) {
-          session.abortController.abort();
-        }
-      });
+      const evictable = Array.from(state.sessions.entries())
+        .filter(([sessionId, session]) => isEvictable(sessionId, session))
+        .sort(
+          ([, a], [, b]) => b.lastAccessed.getTime() - a.lastAccessed.getTime()
+        );
+      const keptBusy = state.sessions.size - evictable.length;
+      // The most recently used idle sessions fill the room the busy ones leave.
+      const toRemove = evictable.slice(Math.max(maxSessions - keptBusy, 0));
+      if (toRemove.length === 0) {
+        return state;
+      }
 
-      const newSessions = new Map(sessionsToKeep);
-
-      return {
-        sessions: newSessions,
-      };
+      const newSessions = new Map(state.sessions);
+      toRemove.forEach(([sessionId]) => newSessions.delete(sessionId));
+      return { sessions: newSessions };
     });
   },
 }));
