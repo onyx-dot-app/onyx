@@ -6,7 +6,7 @@ import pytest
 from litellm.exceptions import APIConnectionError, InternalServerError
 from litellm.types.utils import ModelResponse as LiteLLMModelResponse
 from litellm.types.utils import ModelResponseStream as LiteLLMModelResponseStream
-from pydantic import JsonValue
+from pydantic import JsonValue, ValidationError
 
 from onyx.llm.exceptions import ClassifiedLLMError
 from onyx.llm.model_request import format_provider_message
@@ -787,3 +787,37 @@ def test_response_conversion_preserves_cached_token_usage(
     assert response.usage.completion_tokens == 20
     assert response.usage.total_tokens == 1020
     assert response.usage.cache_creation_input_tokens == 100
+
+
+@pytest.mark.parametrize("call_type", [None, "function", "unsupported"])
+def test_stream_tool_call_type_normalization(call_type: str | None) -> None:
+    response = LiteLLMModelResponseStream.model_validate(
+        {
+            "id": "tool-stream",
+            "created": 1,
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                "type": call_type,
+                                "function": {"arguments": '{"query":'},
+                            }
+                        ]
+                    },
+                }
+            ],
+        }
+    )
+    if call_type == "unsupported":
+        with pytest.raises(ValidationError):
+            from_litellm_model_response_stream(response)
+        return
+    converted = from_litellm_model_response_stream(response)
+    assert converted.choice.delta.tool_calls == [
+        ChatCompletionDeltaToolCall(
+            function=ResponseFunctionCall(arguments='{"query":')
+        )
+    ]

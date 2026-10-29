@@ -471,7 +471,7 @@ class Run:
         # Reserve execution through cleanup, even after output becomes terminal.
         self._execution_active = True
         self._execution_request = ExecutionRequest.NONE
-        self._watched_children: set[str] = set()
+        self._watched_children: dict[str, Future[RunState]] = {}
         self._llm: LLM | None = None
         self._defaults = PreparedStep()
         self._generation_context = GenerationContext()
@@ -1043,12 +1043,17 @@ class Run:
         coordinator = self.coordination.coordinator
         for run_id in run_ids:
             with self.execution_lock:
-                if run_id in self._watched_children:
+                watched = self._watched_children.get(run_id)
+                if watched is not None and (
+                    not watched.done() or watched.exception() is None
+                ):
                     continue
-                self._watched_children.add(run_id)
-            coordinator.child_completion(run_id, self.agent_id).add_done_callback(
-                lambda _future: self._wake_execution()
-            )
+            completion = coordinator.child_completion(run_id, self.agent_id)
+            with self.execution_lock:
+                if self._watched_children.get(run_id) is completion:
+                    continue
+                self._watched_children[run_id] = completion
+            completion.add_done_callback(lambda _future: self._wake_execution())
 
     def _suspend(self) -> None:
         if self._restoration is not None:

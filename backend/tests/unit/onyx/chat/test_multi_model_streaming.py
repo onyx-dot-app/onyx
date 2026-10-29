@@ -566,13 +566,12 @@ class TestRunModels:
         refusal = EmptyLLMResponseError(
             provider="anthropic",
             model="claude-fable-5",
-            tool_choice=ToolChoiceOptions.AUTO,
+            tool_choice=tool_choice,
             client_error_msg=refusal_message,
             error_code=MODEL_REFUSAL_ERROR_CODE,
             is_retryable=False,
             finish_reason=CONTENT_FILTER_FINISH_REASON,
         )
-        refusal.tool_choice = tool_choice
 
         with (
             patch("onyx.chat.process_message.run_llm_loop", side_effect=refusal),

@@ -709,3 +709,6 @@ Related: [[core-chat-loop]], [[agents-personas]], [[observability]],
 
 Explicitly classified model failures retain safe tool-choice and finish-reason diagnostics across saved runs.
 Generic provider API failures return a fixed public message; raw upstream payloads remain in the exception.
+
+Streamed tool-call fragments may have a null `type` in LiteLLM. The response adapter
+normalizes null to `function`; unsupported non-null types still fail validation.
