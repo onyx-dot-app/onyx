@@ -165,8 +165,12 @@ released Onyx yet, so the provider keeps its workaround and the limitation still
   in the configuration or an update clears the stored key. The active embedding provider
   cannot be deleted.
 - **`model_configurations` is the list of record.** Omitted models are removed server-side,
-  and removing the current deployment default fails — repoint `onyx_llm_provider_default`
-  first, which references order correctly.
+  and removing a model that holds any default fails. For a default that
+  `onyx_llm_provider_default` manages, repoint it there first; references order the change
+  correctly. An admin must change any other default, such as the decision model, in the admin
+  panel.
+- **`force_delete` does not cover the decision model.** A provider that holds the decision
+  model cannot be destroyed until an admin clears it.
 - **The model list read is the API's display view.** It hides obsolete and dated-duplicate
   models, so no write can preserve rows it does not return. The admin UI has the same
   behaviour. *Fixed upstream:* the upsert takes `keep_existing_models`.
@@ -180,6 +184,8 @@ released Onyx yet, so the provider keeps its workaround and the limitation still
   `admin_public = false` from every admin but its creator, which is indistinguishable from
   deletion, so Terraform would drop it and recreate it. Keep the default `admin_public = true`
   for managed credentials, or apply with the key that created them.
+- **Only the owner can update or delete a credential** on Onyx v5.1 and later. Apply with the
+  API key that created it. An imported credential that another user created cannot be changed.
 - **`onyx_connector` does not own its access control.** Onyx applies access when a credential
   is associated, so `access_type` and `groups` live on the connector-credential pair. The
   connector endpoints still require `access_type` in the body and ignore it, so the provider

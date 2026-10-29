@@ -164,7 +164,8 @@ func (r *agentResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				MarkdownDescription: "Sort position in the assistant list. Lower sorts first. " +
 					"Onyx reads this from the agent only when it is created, so a later change is " +
 					"applied through its own endpoint as a second call. Removing the attribute " +
-					"leaves the last value in place rather than clearing it.",
+					"leaves the last value in place rather than clearing it. The second call needs " +
+					"full admin access, so an API key with scoped permissions cannot change it.",
 			},
 			"icon_name": schema.StringAttribute{
 				Optional:            true,

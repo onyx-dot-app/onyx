@@ -8,9 +8,10 @@ import (
 )
 
 // CloudEmbeddingProvider mirrors the backend models, keyed by provider_type.
-// GET masks APIKey and the upsert has no changed-flag guard, so a GET-derived
-// APIKey written back would permanently corrupt the stored key.
+// GET masks APIKey, so a GET-derived APIKey must never be written back.
+// APIKeyChanged is request-only: unset, the server guesses from the mask.
 type CloudEmbeddingProvider struct {
+	APIKeyChanged  *bool   `json:"api_key_changed,omitempty"`
 	ProviderType   string  `json:"provider_type"`
 	APIKey         *string `json:"api_key"`
 	APIURL         *string `json:"api_url"`
