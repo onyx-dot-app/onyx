@@ -447,3 +447,42 @@ def test_a_group_intersection_over_the_entry_limit_fails_closed() -> None:
         result = resolver.page_access(paths)["30-cross-group/cross-group.txt"]
 
     assert result == ExternalAccess.empty()
+
+
+def test_users_and_groups_over_the_entry_limit_fail_closed() -> None:
+    acls = _matrix()
+    # The owner's email and the RBAC group: 2 entries, 1 user.
+    paths = [
+        directory(name) if not name.endswith(".txt") else file(name)
+        for name in sorted(acls)
+        if name
+    ]
+
+    result = _resolver(acls, max_users=1).page_access(paths)["00-private/private.txt"]
+
+    assert result == ExternalAccess.empty()
+
+
+def test_a_deny_principal_without_a_type_denies_users_and_groups() -> None:
+    acls = _matrix()
+    deny = AzureDenyAssignment(
+        id="deny",
+        scope="/",
+        permissions=[AzureRolePermission(data_actions=["*"])],
+        principals=[AzurePrincipal(id=RAUNAK)],
+    )
+    resolver = AzureDataLakeAccessResolver(
+        fake_ops(acls, denies=[deny]),
+        ACCOUNT,
+        CONTAINER,
+        max_users=ExternalAccess.MAX_NUM_ENTRIES,
+    )
+    paths = [
+        directory(name) if not name.endswith(".txt") else file(name)
+        for name in sorted(acls)
+        if name
+    ]
+
+    result = resolver.page_access(paths)["10-named-user/named-user.txt"]
+
+    assert result.external_user_emails == BASE_EMAILS

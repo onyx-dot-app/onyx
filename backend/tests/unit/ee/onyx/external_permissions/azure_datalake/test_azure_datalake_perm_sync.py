@@ -23,8 +23,15 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CheckOutput,
 )
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.microsoft_utils.entra import EntraPage, EntraUser
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    InsufficientPermissionsError,
+)
+from onyx.connectors.microsoft_utils.entra import (
+    EntraDirectoryObject,
+    EntraPage,
+    EntraUser,
+)
 from onyx.connectors.models import HierarchyNode, SlimDocument
 from tests.unit.ee.onyx.external_permissions.azure_datalake.azure_datalake_fakes import (
     ACCOUNT,
@@ -212,3 +219,37 @@ def test_the_sync_connector_admits_images_like_indexing() -> None:
         connector = azure_datalake_connector(cc_pair)
 
     assert connector._is_indexable(file("images/square.png"))
+
+
+def _refusing_group(refused: set[str]) -> MagicMock:
+    ops = fake_ops({})
+    read_members = ops.list_transitive_group_members.side_effect
+
+    def members(
+        *, group_id: str, next_link: str | None = None
+    ) -> EntraPage[EntraDirectoryObject]:
+        if group_id in refused:
+            raise InsufficientPermissionsError("hidden membership")
+        return read_members(group_id=group_id, next_link=next_link)
+
+    ops.list_transitive_group_members.side_effect = members
+    return ops
+
+
+def test_one_group_with_hidden_members_does_not_fail_the_members_check() -> None:
+    first_group = fake_ops({}).list_groups().items[0].id
+    ops = _refusing_group({first_group})
+
+    _checks()["adls_graph_group_members"].run(
+        _context(ops, {"authentication_method": "client_secret"})
+    )
+
+
+def test_a_refusal_for_every_group_fails_the_members_check() -> None:
+    groups = {group.id for group in fake_ops({}).list_groups().items}
+    ops = _refusing_group(groups)
+
+    with pytest.raises(InsufficientPermissionsError):
+        _checks()["adls_graph_group_members"].run(
+            _context(ops, {"authentication_method": "client_secret"})
+        )

@@ -45,6 +45,9 @@ BLOB_READ_DATA_ACTION = (
 # A deny assignment's principal that stands for every principal.
 _ALL_PRINCIPALS_ID = "00000000-0000-0000-0000-000000000000"
 _MAX_SUBSCRIPTION_PAGES = 1_000
+# A deny principal without a type could be either, so it denies both.
+_USER_TYPES = (AzurePrincipalType.USER, None)
+_GROUP_TYPES = (AzurePrincipalType.GROUP, None)
 
 
 class RbacReaders(BaseModel):
@@ -148,14 +151,10 @@ def _apply_deny(
     if any(principal.id == _ALL_PRINCIPALS_ID for principal in deny.principals):
         return kept
     denied_users: frozenset[str] = frozenset(
-        principal.id
-        for principal in deny.principals
-        if principal.type == AzurePrincipalType.USER
+        principal.id for principal in deny.principals if principal.type in _USER_TYPES
     )
     denied_groups: frozenset[str] = frozenset(
-        principal.id
-        for principal in deny.principals
-        if principal.type == AzurePrincipalType.GROUP
+        principal.id for principal in deny.principals if principal.type in _GROUP_TYPES
     )
     narrowed: PrincipalSet = exclude_from_set(
         readers, denied_users, denied_groups, directory

@@ -160,11 +160,22 @@ class AzureDataLakeAccessResolver(AzureDataLakeAccessWalker):
             return ExternalAccess.empty()
         if resolved.everyone:
             group_ids.add(self._everyone())
-        return ExternalAccess(
+        access = ExternalAccess(
             external_user_emails=resolved.user_emails,
             external_user_group_ids=group_ids,
             is_public=False,
         )
+        # The permission writer skips an oversized entry and keeps the old
+        # access, which can be wider than the new one.
+        if access.num_entries > self._max_users:
+            logger.error(
+                "Azure Data Lake path %s stays private: %s entries is over %s",
+                name,
+                access.num_entries,
+                self._max_users,
+            )
+            return ExternalAccess.empty()
+        return access
 
     def _read_acl(self, path: str, is_directory: bool) -> AzureDataLakeAccessControl:
         return self._ops.get_access_control(path=path, is_directory=is_directory)

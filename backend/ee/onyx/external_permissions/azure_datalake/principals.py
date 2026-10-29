@@ -154,21 +154,20 @@ def _intersect_terms(
         shared: frozenset[str] = directory.group_members(
             a.principal_id
         ) & directory.group_members(b.principal_id)
-        if len(shared) > _MAX_SHARED_MEMBERS:
-            raise ExpansionLimitError(
-                f"Groups {a.principal_id} and {b.principal_id} share more than "
-                f"{_MAX_SHARED_MEMBERS} members."
+        kept_users: list[PrincipalTerm] = []
+        for user_id in sorted(shared):
+            term = exclude(
+                user_term(user_id), excluded_users, excluded_groups, directory
             )
-        return [
-            term
-            for user_id in sorted(shared)
-            if (
-                term := exclude(
-                    user_term(user_id), excluded_users, excluded_groups, directory
+            if term is None:
+                continue
+            kept_users.append(term)
+            if len(kept_users) > _MAX_SHARED_MEMBERS:
+                raise ExpansionLimitError(
+                    f"Groups {a.principal_id} and {b.principal_id} share more than "
+                    f"{_MAX_SHARED_MEMBERS} members."
                 )
-            )
-            is not None
-        ]
+        return kept_users
     result = exclude(kept, excluded_users, excluded_groups, directory)
     return [] if result is None else [result]
 

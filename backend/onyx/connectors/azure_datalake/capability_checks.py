@@ -188,7 +188,8 @@ class _SignInCheck(_AzureDataLakeCheck):
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         token: MicrosoftTokenInfo | None = probe(
-            lambda: _sign_in(gateway_from_context(context)), "The sign-in could not be checked."
+            lambda: _sign_in(gateway_from_context(context)),
+            "The sign-in could not be checked.",
         )
         if token is None:
             return CheckOutput(summary="Signed in with the account key")

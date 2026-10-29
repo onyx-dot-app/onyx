@@ -351,14 +351,25 @@ class _GraphGroupMembersCheck(_PermSyncCheck):
                 "The tenant has no Entra group, so no members were read.",
                 summary="No groups found",
             )
-        group: EntraGroup = groups[0]
-        _account_probe(
-            lambda: gateway.list_transitive_group_members(group_id=group.id),
-            "The app cannot read Entra group members.",
-        )
-        return CheckOutput(
-            summary=f"Read the members of {group.display_name or group.id}"
-        )
+        # One group with hidden membership must not fail the check: the group
+        # sync stores such a group empty. Only a refusal for every group does.
+        refusal: InsufficientPermissionsError | None = None
+        for group in groups:
+            try:
+                _account_probe(
+                    lambda group_id=group.id: gateway.list_transitive_group_members(
+                        group_id=group_id
+                    ),
+                    "The app cannot read Entra group members.",
+                )
+            except InsufficientPermissionsError as error:
+                refusal = error
+                continue
+            return CheckOutput(
+                summary=f"Read the members of {group.display_name or group.id}"
+            )
+        assert refusal is not None
+        raise refusal
 
 
 def build_azure_datalake_doc_permission_sync_checks() -> list[CapabilityCheck]:
