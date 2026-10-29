@@ -29,6 +29,7 @@ export enum PacketType {
 
   // Tool call argument delta (streams tool args before tool executes)
   TOOL_CALL_ARGUMENT_DELTA = "tool_call_argument_delta",
+  TOOL_CALL_DEBUG = "tool_call_debug",
 
   // Custom tool packets
   CUSTOM_TOOL_START = "custom_tool_start",
@@ -450,8 +451,16 @@ export type CodingAgentObj =
   | SectionEnd
   | PacketError;
 
+export interface ToolCallDebug extends BaseObj {
+  type: "tool_call_debug";
+  tool_call_id: string;
+  tool_name: string;
+  tool_args: Record<string, unknown>;
+}
+
 // Union type for all possible streaming objects
 export type ObjTypes =
+  | ToolCallDebug
   | ChatObj
   | NewToolObj
   | ReasoningObj
