@@ -3594,6 +3594,9 @@
         },
         "uploaded": {
           "label": "{count, plural, one {uploaded # file} other {uploaded # files}}"
+        },
+        "uploadedWithWarning": {
+          "label": "{count, plural, one {uploaded # file} other {uploaded # files}}, incomplete: {error}"
         }
       },
       "sensitiveWarning": {
