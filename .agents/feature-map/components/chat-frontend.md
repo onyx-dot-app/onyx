@@ -334,6 +334,7 @@ all, because the mode is pinned at session creation and cannot be changed mid-se
   confirms server idleness, and reloads saved history before enabling input.
   Stop aborts local preparation only when no send has been dispatched.
   That Stop restores the draft and attachments in the same focused session; navigation aborts do not restore them.
+  It removes the unsent turn from local history, including incognito, edited, and regenerated turns.
 - **Feedback** goes through `useFeedbackController.ts:handleFeedbackChange`: it
   optimistically calls `updateCurrentMessageFeedback` before the request, and rolls back
   to the previous feedback value if the request fails or throws.

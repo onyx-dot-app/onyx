@@ -3,9 +3,10 @@ import {
   addMockLlmConversation,
   mockLlmNonce,
   getMockLlmConversationRequests,
+  MOCK_LLM_DEFAULT_MODEL,
 } from "@tests/e2e/utils/mockLlm";
 
-test("incognito retains context between turns and removes history on exit @exclusive", async ({
+test("incognito preserves accepted history through Stop and retry, then removes it on exit @exclusive", async ({
   browser,
   page,
   chatPage,
@@ -22,6 +23,8 @@ test("incognito retains context between turns and removes history on exit @exclu
     incognito_record_mode: string;
   } = await settingsResponse.json();
   const nonce = mockLlmNonce();
+  const overrideGate = Promise.withResolvers<void>();
+  const overrideRoute = "**/api/chat/update-chat-session-temperature";
   let sessionId: string | null = null;
   try {
     const enabled = await admin.request.put("/api/admin/security", {
@@ -52,11 +55,34 @@ test("incognito retains context between turns and removes history on exit @exclu
     expect(sessionId).not.toBeNull();
     await chatPage.expectIncognito();
     await chatPage.expectCompleteAnswers(1);
-    await chatPage.inputBar.fill("Use the private context to continue.");
+    await page.route(overrideRoute, async (route) => {
+      await overrideGate.promise;
+      await route.continue();
+    });
+    const overrideStarted = page.waitForRequest(
+      (request) =>
+        request.method() === "PUT" &&
+        request.url().endsWith("/update-chat-session-temperature")
+    );
+    await chatPage.maximizeModelTemperature(MOCK_LLM_DEFAULT_MODEL.displayName);
+
+    const followup = "Use the private context to continue.";
+    await chatPage.inputBar.fill(followup);
+    await chatPage.inputBar.send();
+    await overrideStarted;
+    await expect(chatPage.humanMessages).toHaveCount(2);
+    await chatPage.stop();
+    await chatPage.inputBar.expectText(followup);
+    await expect(chatPage.humanMessages).toHaveCount(1);
+    await expect(chatPage.aiMessages).toHaveCount(1);
+    expect(await getMockLlmConversationRequests(nonce)).toHaveLength(1);
+
+    overrideGate.resolve();
     await expect(chatPage.inputBar.sendButton).toBeEnabled();
     await chatPage.inputBar.send();
     await chatPage.expectCompleteAnswers(2);
     await chatPage.expectAnswerParagraph("Private context is still available.");
+    await expect(chatPage.humanMessages).toHaveCount(2);
     const requests = await getMockLlmConversationRequests(nonce);
     expect(requests).toHaveLength(2);
     expect(requests[1]?.messages).toEqual(
@@ -76,6 +102,8 @@ test("incognito retains context between turns and removes history on exit @exclu
     await chatPage.expectNoSessionLink(sessionId);
     await expect(chatPage.aiMessages).toHaveCount(0);
   } finally {
+    overrideGate.resolve();
+    await page.unrouteAll({ behavior: "wait" });
     if (sessionId) await api.deleteChatSession(sessionId);
     const restored = await admin.request.put("/api/admin/security", {
       data: {

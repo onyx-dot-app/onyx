@@ -184,6 +184,21 @@ export class ChatPage {
     await this.inputBar.sendButton.click();
   }
 
+  async maximizeModelTemperature(modelName: string): Promise<void> {
+    await this.page
+      .getByTestId("model-selector")
+      .locator("button")
+      .last()
+      .click();
+    const dialog = this.page.getByRole("dialog");
+    await dialog.getByText(modelName, { exact: true }).hover();
+    await dialog
+      .getByRole("button", { name: `${modelName} settings`, exact: true })
+      .click();
+    await dialog.getByRole("slider").first().press("End");
+    await this.page.keyboard.press("Escape");
+  }
+
   async editHumanMessage(text: string, index = 0): Promise<void> {
     const message = this.humanMessage(index);
     await message.hover();

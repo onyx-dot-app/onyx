@@ -155,6 +155,8 @@ const AppInputBar = React.memo(
     );
     const isCheckingCompletion =
       currentSessionId !== null && checkingSessions.has(currentSessionId);
+    const canStopGeneration =
+      chatState === "loading" || chatState === "streaming";
     const tReadiness = useTranslations("chat.readiness");
     const queuedMessagesPaused = useChatSessionStore(
       (state) =>
@@ -805,7 +807,7 @@ const AppInputBar = React.memo(
                     ? IconLoader
                     : chatState !== "input" && message.trim()
                       ? SvgArrowUp
-                      : chatState === "streaming" || isVoicePlaybackControllable
+                      : canStopGeneration || isVoicePlaybackControllable
                         ? SvgStop
                         : SvgArrowUp
             }
@@ -843,7 +845,7 @@ const AppInputBar = React.memo(
                   // empty-save.
                   clearChatDraft();
                 }
-              } else if (chatState == "streaming") {
+              } else if (canStopGeneration) {
                 stopTTS({ manual: true });
                 stopGenerating();
               } else if (isVoicePlaybackControllable) {

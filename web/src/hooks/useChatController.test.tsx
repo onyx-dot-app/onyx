@@ -200,6 +200,11 @@ test.each([
     });
     expect(sendMessage).not.toHaveBeenCalled();
     expect(restoreInputBar).toHaveBeenCalledTimes(stop ? 1 : 0);
+    if (stop) {
+      expect(
+        useChatSessionStore.getState().sessions.get("session")?.messageTree.size
+      ).toBe(0);
+    }
   }
 );
 

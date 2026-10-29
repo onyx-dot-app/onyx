@@ -819,24 +819,31 @@ export default function useChatController({
       } else {
         messagesToUpsert = [initialUserNode, initialAgentNode];
       }
+      const historyBeforeSend = currentMessageTreeLocal;
       currentMessageTreeLocal = upsertToCompleteMessageTree({
         messages: messagesToUpsert,
         completeMessageTreeOverride: currentMessageTreeLocal,
         chatSessionId: frozenSessionId,
       });
       resetInputBar();
-      const restoreStoppedDraft = () => {
+      const discardUnsentTurn = () => {
         const store = useChatSessionStore.getState();
         if (
-          controller.signal.reason === STOP_BEFORE_DISPATCH &&
+          controller.signal.reason !== STOP_BEFORE_DISPATCH ||
+          store.sessions.get(frozenSessionId)?.abortController !== controller
+        )
+          return;
+        // No request reached the server; restore the branch before its placeholders.
+        currentMessageTreeLocal = historyBeforeSend;
+        store.updateSessionMessageTree(frozenSessionId, historyBeforeSend);
+        if (
           store.currentSessionId === frozenSessionId &&
-          store.sessions.get(frozenSessionId)?.abortController === controller &&
           !regenerationRequest
         ) {
           restoreInputBar(message, currentMessageFiles);
         }
       };
-      controller.signal.addEventListener("abort", restoreStoppedDraft, {
+      controller.signal.addEventListener("abort", discardUnsentTurn, {
         once: true,
       });
 
@@ -1557,7 +1564,7 @@ export default function useChatController({
             });
           }
         } finally {
-          controller.signal.removeEventListener("abort", restoreStoppedDraft);
+          controller.signal.removeEventListener("abort", discardUnsentTurn);
           resolveReaderFinished();
         }
       }
