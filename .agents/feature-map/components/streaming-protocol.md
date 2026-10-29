@@ -436,3 +436,6 @@ Chunk reads expose the total published chunk count alongside the next cursor.
 `ChatDelivery` accepts every `AnswerStreamPart`, including initial session and response IDs.
 Those IDs use the same ordered live and replay delivery path as response packets.
 The response owner starts the delivery event worker directly.
+
+A live `STREAM_GAP` error also records a query-telemetry failure. It does not change
+the model or tool execution outcome.
