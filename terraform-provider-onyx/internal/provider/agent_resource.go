@@ -174,7 +174,7 @@ func (r *agentResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			"label_ids": schema.SetAttribute{
 				Optional:            true,
 				ElementType:         types.Int64Type,
-				MarkdownDescription: "Ids of the labels the agent is filed under. Labels are created in the admin panel.",
+				MarkdownDescription: "Ids of the labels the agent is filed under. Manage labels with `onyx_agent_label`.",
 			},
 			"default_model_configuration_id": schema.StringAttribute{
 				Optional: true,

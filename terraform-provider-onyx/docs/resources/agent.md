@@ -100,7 +100,7 @@ resource "onyx_agent" "onboarding" {
 - `is_featured` (Boolean) Whether Onyx promotes the agent to users. Requires agent-management permission.
 - `is_listed` (Boolean) Whether the agent appears in the assistant list. A hidden agent still works for anyone holding a link to it. Onyx sets this through its own endpoint, so Terraform applies it as a second call after the agent is written.
 - `is_public` (Boolean) Whether every user can use the agent. When `false`, only `users` and `groups` can.
-- `label_ids` (Set of Number) Ids of the labels the agent is filed under. Labels are created in the admin panel.
+- `label_ids` (Set of Number) Ids of the labels the agent is filed under. Manage labels with `onyx_agent_label`.
 - `replace_base_system_prompt` (Boolean) Use `system_prompt` on its own instead of adding it to Onyx's base prompt. Replacing the base prompt drops the instructions that make citations and search work, so leave it off unless the agent needs full control.
 - `search_start_date` (String) Ignore documents older than this date, as `YYYY-MM-DD` or a full timestamp.
 
