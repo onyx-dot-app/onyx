@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo } from "react";
 import { getSourceDisplayName } from "@/lib/connectors/utils";
 import { useField } from "formik";
 import { useTranslations } from "next-intl";
@@ -58,7 +58,8 @@ export default function DocumentAccessField({
   const tRestriction = useTranslations("admin.connector.groupRestriction");
   const { appName } = useSettings();
   const plans = usePlans();
-  const [accessType, , accessTypeHelpers] = useField<AccessType>("access_type");
+  const [accessType, accessTypeMeta, accessTypeHelpers] =
+    useField<AccessType>("access_type");
   const { isScopedManager } = usePermissionAuthority(
     Permission.MANAGE_CONNECTORS
   );
@@ -146,13 +147,14 @@ export default function DocumentAccessField({
   );
 
   // Sync is the default wherever it is offered and enabled, until the user
-  // picks an option themselves.
-  const userChoseRef = useRef(keepInitialAccess);
+  // picks an option themselves. The pick is kept as the field's Formik
+  // `touched` flag, so it survives a remount of this component.
+  const userChose: boolean = keepInitialAccess || accessTypeMeta.touched;
   const syncAvailable = showAutoSync && !isSyncDisabledByAuth;
   useEffect(() => {
-    if (userChoseRef.current || !syncAvailable) return;
+    if (userChose || !syncAvailable) return;
     if (accessType.value !== "sync") accessTypeHelpers.setValue("sync");
-  }, [syncAvailable, accessType.value, accessTypeHelpers]);
+  }, [userChose, syncAvailable, accessType.value, accessTypeHelpers]);
 
   // Move off an access type the user is not offered, or that is disabled.
   useEffect(() => {
@@ -194,8 +196,8 @@ export default function DocumentAccessField({
             // A re-pick emits "": the pick stands.
             const option = options.find((o) => o.value === value);
             if (!option) return;
-            userChoseRef.current = true;
-            accessTypeHelpers.setValue(option.value as AccessType);
+            void accessTypeHelpers.setTouched(true, false);
+            void accessTypeHelpers.setValue(option.value as AccessType);
           }}
           options={listedOptions}
           placeholder={t("title")}
