@@ -84,7 +84,6 @@ review a diff or PR, and when you need to know what a feature does or what a cha
 can break. The `feature-map` skill (`.agents/skills/feature-map/SKILL.md`) gives the
 procedure.
 
-- For new work, start at the Common tasks table in `.agents/feature-map/INDEX.md`.
 - Look up a code path in `.agents/feature-map/PATHS.md` to find its component.
 - The step-by-step review procedure is `.agents/feature-map/VERIFYING.md`.
 - Onyx overloads words such as Persona, Tool, turn, and SearchDoc. Read
