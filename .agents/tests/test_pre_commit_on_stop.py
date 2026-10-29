@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-_HOOK = Path(__file__).resolve().parents[4] / ".agents/hooks/pre_commit_on_stop.py"
+_HOOK = Path(__file__).resolve().parents[2] / ".agents/hooks/pre_commit_on_stop.py"
 
 
 def _git(repo: Path, *args: str) -> str:

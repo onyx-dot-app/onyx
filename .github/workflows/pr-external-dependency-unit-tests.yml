@@ -7,8 +7,6 @@ on:
   pull_request:
     paths:
       - "backend/**"
-      - ".agents/hooks/**"
-      - ".agents/feature-map/*.py"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/pr-external-dependency-unit-tests.yml"
@@ -64,10 +62,6 @@ jobs:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
     timeout-minutes: 5
-    # paths-filter needs pull-requests:read to list PR files on private repos (no-op on public).
-    permissions:
-      contents: read
-      pull-requests: read
     outputs:
       test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
     steps:
@@ -76,49 +70,11 @@ jobs:
         with:
           persist-credentials: false
 
-      # `relevant` repeats the pull_request paths above. A PR whose relevant
-      # files are all agent-hook files runs only the agent_hooks directory.
-      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
-        id: filter
-        if: github.event_name == 'pull_request'
-        with:
-          list-files: json
-          filters: |
-            relevant:
-              - 'backend/**'
-              - '.agents/hooks/**'
-              - '.agents/feature-map/*.py'
-              - 'pyproject.toml'
-              - 'uv.lock'
-              - '.github/workflows/pr-external-dependency-unit-tests.yml'
-              - '.github/actions/setup-python-and-install-dependencies/**'
-              - '.github/actions/login-ecr-pullthrough-cache/**'
-              - 'deployment/docker_compose/docker-compose.yml'
-              - 'deployment/docker_compose/docker-compose.dev.yml'
-              - 'deployment/helm/**'
-            agent_hooks:
-              - '.agents/hooks/**'
-              - '.agents/feature-map/*.py'
-              - 'backend/tests/external_dependency_unit/agent_hooks/**'
-              - 'backend/tests/unit/agent_hooks/**'
-
       - name: Discover test directories
         id: set-matrix
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          RELEVANT_FILES: ${{ steps.filter.outputs.relevant_files || '[]' }}
-          AGENT_HOOK_FILES: ${{ steps.filter.outputs.agent_hooks_files || '[]' }}
         run: |
-          set -euo pipefail
           # Find all subdirectories in backend/tests/external_dependency_unit
           dirs=$(find backend/tests/external_dependency_unit -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort | jq -R -s -c 'split("\n")[:-1]')
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            app_files=$(jq -n --argjson r "$RELEVANT_FILES" --argjson h "$AGENT_HOOK_FILES" '$r - $h | length')
-            hook_files=$(jq -n --argjson h "$AGENT_HOOK_FILES" '$h | length')
-            if [ "$app_files" -eq 0 ] && [ "$hook_files" -gt 0 ]; then
-              dirs='["agent_hooks"]'
-            fi
-          fi
           echo "test-dirs=$dirs" >> "$GITHUB_OUTPUT"
 
   external-dependency-unit-tests:

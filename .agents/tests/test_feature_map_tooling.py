@@ -13,7 +13,7 @@ from types import ModuleType
 
 import pytest
 
-_MAP_DIR = Path(__file__).resolve().parents[4] / ".agents/feature-map"
+_MAP_DIR = Path(__file__).resolve().parents[2] / ".agents/feature-map"
 
 
 def _load(name: str) -> ModuleType:

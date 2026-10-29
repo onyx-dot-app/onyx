@@ -1,0 +1,48 @@
+name: Agent Tooling Tests
+concurrency:
+  group: Agent-Tooling-Tests-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || github.run_id }}
+  cancel-in-progress: true
+
+# Tests for the agent hooks and the feature-map scripts in .agents/. They need
+# no app services and live outside backend/, so app test workflows do not run
+# for agent-tooling changes.
+on:
+  pull_request:
+    paths:
+      - ".agents/hooks/**"
+      - ".agents/feature-map/*.py"
+      - ".agents/tests/**"
+      - ".github/workflows/pr-agent-tooling-tests.yml"
+      - ".github/actions/setup-python-and-install-dependencies/**"
+  push:
+    branches:
+      - main
+    paths:
+      - ".agents/hooks/**"
+      - ".agents/feature-map/*.py"
+      - ".agents/tests/**"
+
+permissions:
+  contents: read
+
+jobs:
+  agent-tooling-tests:
+    # See https://runs-on.com/runners/linux/
+    runs-on: [runs-on, runner=2cpu-linux-arm64, "run-id=${{ github.run_id }}-agent-tooling-tests"]
+    timeout-minutes: 10
+    steps:
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Setup Python and Install Dependencies
+        uses: ./.github/actions/setup-python-and-install-dependencies
+        with:
+          requirements: |
+            backend/requirements/dev.txt
+
+      - name: Run Tests
+        run: py.test -o junit_family=xunit2 -v -n auto .agents/tests
