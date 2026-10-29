@@ -297,11 +297,11 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.configState != nil {
 			return m.cancelConfigure()
 		}
-		if m.isStreaming {
-			return m.cancelStream()
-		}
 		if m.quitPending {
 			return m, tea.Quit
+		}
+		if m.isStreaming {
+			m, _ = m.cancelStream()
 		}
 		m.quitPending = true
 		m.viewport.addInfo("Press Ctrl+D again to quit.")

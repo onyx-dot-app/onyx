@@ -170,3 +170,28 @@ func TestReopeningActiveSessionPreservesReadinessOwner(t *testing.T) {
 		}
 	}
 }
+
+func TestRepeatedCtrlDExitsWhileReadinessIsUnconfirmed(t *testing.T) {
+	m := NewModel(config.DefaultConfig(), nil)
+	m.isStreaming = true
+	m.readinessUnconfirmed = true
+	cancelled := false
+	m.streamCancel = func() { cancelled = true }
+	key := tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl}
+	updated, cmd := m.handleKey(key)
+	m = updated.(Model)
+	if !cancelled || !m.isStreaming || !m.quitPending || cmd == nil {
+		t.Fatal("first Ctrl+D must request Stop and arm quit without releasing input")
+	}
+	updated, cmd = m.handleKey(key)
+	m = updated.(Model)
+	if cmd == nil {
+		t.Fatal("second Ctrl+D must quit")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatal("second Ctrl+D did not quit")
+	}
+	if !m.isStreaming {
+		t.Fatal("quit must not mark the server idle")
+	}
+}
