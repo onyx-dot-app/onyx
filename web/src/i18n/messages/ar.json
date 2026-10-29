@@ -13784,14 +13784,6 @@
         "text": "آخر تحديث {date}"
       }
     },
-    "dropdown": {
-      "default": {
-        "label": "افتراضي"
-      },
-      "selectOption": {
-        "placeholder": "اختر خيارًا..."
-      }
-    },
     "editable": {
       "edit": {
         "ariaLabel": "تعديل"
