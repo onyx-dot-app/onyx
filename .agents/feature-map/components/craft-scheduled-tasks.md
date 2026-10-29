@@ -366,10 +366,13 @@ needs the `celery_worker_scheduled_tasks` worker; without it the run never
 reaches a terminal state and the spec times out. Its page object
 (`web/tests/e2e/pages/ScheduledTasksPage.ts`) uses test ids such as
 `new-task-button`, `save-and-run-now`, and the `data-run-status` attribute on
-run rows; rename them in lockstep with the frontend. No automated test covers
-`FOR UPDATE SKIP LOCKED` concurrency or the stuck-run sweeper. To check the
-sweeper by hand, stop the worker while a run is `running`; within an hour the
-run becomes `failed` with `error_class="stuck"`.
+run rows; rename them in lockstep with the frontend.
+`backend/tests/external_dependency_unit/craft/test_scheduled_task_executor.py`
+covers `FOR UPDATE SKIP LOCKED` dispatch and both stuck-run sweeps. To check the
+sweeper by hand, stop the worker while a run is `running`. The run is stuck after
+`SCHEDULED_RUN_HARD_CAP_SECONDS + TURN_RECLAIM_SLACK_SECONDS` (75 minutes), and the
+hourly `cleanup_stuck_scheduled_runs` sweep then marks it `failed` with
+`error_class="stuck"`, so allow up to about 2 hours 15 minutes.
 
 ### Manual reproduction
 
