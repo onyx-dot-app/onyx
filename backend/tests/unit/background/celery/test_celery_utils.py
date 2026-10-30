@@ -18,6 +18,7 @@ from onyx.connectors.interfaces import (
     PollConnector,
     SecondsSinceUnixEpoch,
     SlimConnector,
+    SlimConnectorWithPermSync,
     prune_listing_honors_indexing_start,
 )
 from onyx.connectors.models import SlimDocument
@@ -234,6 +235,64 @@ class _LoadConnector(LoadConnector, PollConnector):
         end: SecondsSinceUnixEpoch,  # noqa: ARG002
     ) -> GenerateDocumentsOutput:
         raise AssertionError("A prune of a load connector loads all documents.")
+
+
+class _StoppingSlimConnector(SlimConnector):
+    """Returns normally on a stop, before yielding a document."""
+
+    def __init__(self) -> None:
+        self.callbacks: list[IndexingHeartbeatInterface | None] = []
+
+    def load_credentials(self, credentials: dict[str, Any]) -> None:  # noqa: ARG002
+        return None
+
+    def retrieve_all_slim_docs(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        self.callbacks.append(callback)
+        if callback and callback.should_stop():
+            return
+        yield [SlimDocument(id="doc")]
+
+
+class _StoppingPermSyncConnector(SlimConnectorWithPermSync):
+    """Permission-sync variant that returns normally on a stop."""
+
+    def __init__(self) -> None:
+        self.callbacks: list[IndexingHeartbeatInterface | None] = []
+
+    def load_credentials(self, credentials: dict[str, Any]) -> None:  # noqa: ARG002
+        return None
+
+    def retrieve_all_slim_docs_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        self.callbacks.append(callback)
+        if callback and callback.should_stop():
+            return
+        yield [SlimDocument(id="doc")]
+
+
+@pytest.mark.parametrize(
+    "connector_class", [_StoppingSlimConnector, _StoppingPermSyncConnector]
+)
+def test_a_stopped_listing_that_returns_normally_is_an_error(
+    connector_class: type[_StoppingSlimConnector | _StoppingPermSyncConnector],
+) -> None:
+    connector = connector_class()
+    callback = MagicMock(spec=IndexingHeartbeatInterface)
+    callback.should_stop.return_value = True
+
+    with pytest.raises(RuntimeError, match="after enumeration"):
+        extract_ids_from_runnable_connector(connector, callback=callback)
+
+    assert connector.callbacks == [callback]
 
 
 class TestListingFromIndexingStart:

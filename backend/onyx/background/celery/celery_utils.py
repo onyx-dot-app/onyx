@@ -244,6 +244,15 @@ def extract_ids_from_runnable_connector(
 
             if callback:
                 callback.progress("extract_ids_from_runnable_connector", len(batch_ids))
+
+        # A connector may honor the stop by returning normally, possibly before
+        # yielding anything. Exhaustion alone is not proof of a complete
+        # listing; treating it as one would prune every unlisted document.
+        if callback and callback.should_stop():
+            raise RuntimeError(
+                "extract_ids_from_runnable_connector: Stop signal detected "
+                "after enumeration"
+            )
     except Exception as e:
         # Best-effort rate limit detection via string matching.
         # Connectors surface rate limits inconsistently — some raise HTTP 429,
