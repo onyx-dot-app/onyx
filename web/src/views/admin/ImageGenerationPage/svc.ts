@@ -45,18 +45,6 @@ export interface ImageGenerationCredentials {
   custom_config: Record<string, string> | null;
 }
 
-export interface ImageGenerationConfigCreateOptions {
-  imageProviderId: string;
-  modelName: string;
-  isDefault?: boolean;
-  provider?: string;
-  apiKey?: string;
-  apiBase?: string;
-  apiVersion?: string;
-  deploymentName?: string;
-  customConfig?: Record<string, string>;
-}
-
 // API Endpoints
 const IMAGE_GEN_CONFIG_URL = "/api/admin/image-generation/config";
 const IMAGE_GEN_TEST_URL = "/api/admin/image-generation/test";
@@ -137,37 +125,6 @@ export async function fetchImageGenerationCredentials(
 }
 
 /**
- * Create image generation configuration
- * Backend creates new LLM provider + model config + image config
- */
-export async function createImageGenerationConfig(
-  options: ImageGenerationConfigCreateOptions
-): Promise<ImageGenerationConfigView> {
-  const response = await fetch(IMAGE_GEN_CONFIG_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      image_provider_id: options.imageProviderId,
-      model_name: options.modelName,
-      is_default: options.isDefault ?? false,
-      provider: options.provider,
-      api_key: options.apiKey,
-      api_base: options.apiBase,
-      api_version: options.apiVersion,
-      deployment_name: options.deploymentName,
-      custom_config: options.customConfig,
-    }),
-  });
-
-  if (!response.ok) {
-    const error: ErrorResponseBody = await response.json();
-    throw new Error(error.detail || "Failed to create config");
-  }
-
-  return response.json();
-}
-
-/**
  * Use a model on a connected LLM provider. The config reuses that provider's credentials.
  */
 export async function linkImageGenerationModel(
@@ -193,7 +150,7 @@ export async function linkImageGenerationModel(
   return response.json();
 }
 
-// Update options - same structure but without isDefault
+// Update options
 export interface ImageGenerationConfigUpdateOptions {
   modelName: string;
   provider?: string;

@@ -8,7 +8,6 @@ import { ModelIcon } from "@/lib/languageModels/components";
 import ConnectionProviderIcon from "@/refresh-components/ConnectionProviderIcon";
 import {
   testImageGenerationApiKey,
-  createImageGenerationConfig,
   updateImageGenerationConfig,
   fetchImageGenerationCredentials,
 } from "@/views/admin/ImageGenerationPage/svc";
@@ -125,7 +124,7 @@ export function ImageGenFormWrapper<T extends FormValues>({
       // A masked key contains "****", so if present, user hasn't entered a new key
       const apiKeyChanged = !apiKeyValue?.includes("****");
 
-      // Test the API key first (only if changed or creating new config)
+      // Test the API key first (only if changed)
       if (apiKeyChanged) {
         const result = await testImageGenerationApiKey(payload.modelName, {
           provider: payload.provider,
@@ -146,8 +145,7 @@ export function ImageGenFormWrapper<T extends FormValues>({
         }
       }
 
-      // Create or update config
-      if (isEditMode && existingConfig) {
+      if (existingConfig) {
         await updateImageGenerationConfig(existingConfig.image_provider_id, {
           modelName: payload.modelName,
           provider: payload.provider,
@@ -157,18 +155,6 @@ export function ImageGenFormWrapper<T extends FormValues>({
           deploymentName: payload.deploymentName,
           customConfig: payload.customConfig,
           apiKeyChanged,
-        });
-      } else {
-        await createImageGenerationConfig({
-          imageProviderId: payload.imageProviderId,
-          modelName: payload.modelName,
-          provider: payload.provider,
-          apiKey: payload.apiKey,
-          apiBase: payload.apiBase,
-          apiVersion: payload.apiVersion,
-          deploymentName: payload.deploymentName,
-          customConfig: payload.customConfig,
-          isDefault: true,
         });
       }
 
@@ -228,11 +214,7 @@ export function ImageGenFormWrapper<T extends FormValues>({
             description={description}
             icon={icon}
             onSubmit={formikProps.submitForm}
-            submitDisabled={
-              !formikProps.isValid ||
-              (!isEditMode && !formikProps.dirty) ||
-              isSubmitting
-            }
+            submitDisabled={!formikProps.isValid || isSubmitting}
             isSubmitting={isSubmitting}
           >
             <Form className="flex flex-col gap-0 bg-background-tint-01 w-full">
