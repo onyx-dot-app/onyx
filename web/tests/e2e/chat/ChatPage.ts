@@ -8,6 +8,7 @@
 import { type Page, type Locator, expect } from "@playwright/test";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 import { InputBar } from "@tests/e2e/chat/InputBar";
+import { getModelPills } from "@tests/e2e/utils/chatActions";
 
 export class ChatPage {
   readonly page: Page;
@@ -185,17 +186,13 @@ export class ChatPage {
   }
 
   async maximizeModelTemperature(modelName: string): Promise<void> {
+    // A model's pill opens its settings pane.
+    await getModelPills(this.page).filter({ hasText: modelName }).click();
     await this.page
-      .getByTestId("model-selector")
-      .locator("button")
-      .last()
-      .click();
-    const dialog = this.page.getByRole("dialog");
-    await dialog.getByText(modelName, { exact: true }).hover();
-    await dialog
-      .getByRole("button", { name: `${modelName} settings`, exact: true })
-      .click();
-    await dialog.getByRole("slider").first().press("End");
+      .getByRole("dialog")
+      .getByRole("slider")
+      .first()
+      .press("End");
     await this.page.keyboard.press("Escape");
   }
 

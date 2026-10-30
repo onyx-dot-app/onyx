@@ -1,6 +1,10 @@
 import { test, expect } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
-import { verifyCurrentModel } from "@tests/e2e/utils/chatActions";
+import {
+  chooseModelOption,
+  getModelPills,
+  openModelList,
+} from "@tests/e2e/utils/chatActions";
 import { ensureImageGenerationEnabled } from "@tests/e2e/utils/agentUtils";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
@@ -44,20 +48,17 @@ test.describe("LLM Ordering", () => {
     await page.goto("/app");
     await page.waitForSelector("#onyx-chat-input-textbox", { timeout: 10000 });
 
-    const trigger = page.getByTestId("model-selector").locator("button").last();
-    const originalTriggerText = (await trigger.textContent())?.trim() ?? "";
+    const originalModelText =
+      (await getModelPills(page).first().textContent())?.trim() ?? "";
 
-    await trigger.click();
-    await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
-
-    const dialog = page.locator('[role="dialog"]');
+    const dialog = await openModelList(page);
     const allModelItems = dialog.locator("[data-interactive-state]");
     await expect(allModelItems.first()).toBeVisible({ timeout: 5000 });
 
     const count = await allModelItems.count();
     expect(count).toBeGreaterThan(0);
 
-    // Pick the first non-selected model so the trigger text changes after click
+    // Pick the first non-selected model so the pill text changes after the switch
     const nonSelectedItem = dialog
       .locator('[data-interactive-state="empty"]')
       .first();
@@ -65,14 +66,14 @@ test.describe("LLM Ordering", () => {
     const targetItem = hasNonSelected ? nonSelectedItem : allModelItems.first();
 
     await expect(targetItem).toBeVisible();
-    await targetItem.click();
+    const selectedModelText = await chooseModelOption(page, targetItem);
 
-    // Verify the popover closed and the trigger updated
+    // Verify the popover closed and the sole pill shows the new model
     await expect(dialog).toBeHidden();
+    await expect(getModelPills(page)).toHaveCount(1);
 
     if (hasNonSelected) {
-      const updatedTriggerText = (await trigger.textContent())?.trim() ?? "";
-      expect(updatedTriggerText).not.toBe(originalTriggerText);
+      expect(selectedModelText).not.toBe(originalModelText);
     }
   });
 });
