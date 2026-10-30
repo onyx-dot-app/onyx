@@ -244,8 +244,9 @@ def test_a_delivery_becomes_a_document_on_the_next_run(
             documents.append(item)
 
     assert [document.id for document in documents] == ["doc-1"]
+    # Claimed, not completed: the row settles on this attempt's outcome.
     assert count_events_by_status(db_session, event_pair.id) == {
-        ConnectorEventStatus.COMPLETED: 1
+        ConnectorEventStatus.IN_PROGRESS: 1
     }
 
 
@@ -268,6 +269,7 @@ def test_the_route_refuses_a_spec_with_no_verifier(
     )
     # Reproduce the state the validator forbids.
     object.__setattr__(unsigned, "allow_unsigned", False)
+    _SPECS.pop(SLUG, None)
     register_webhook_source(unsigned)
 
     app = FastAPI()
