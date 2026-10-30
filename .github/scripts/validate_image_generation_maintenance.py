@@ -54,7 +54,12 @@ def _supplement_errors() -> list[str]:
         for model_id in sorted(set(base_models) | set(models)):
             entry = models.get(model_id)
             base_entry = base_models.get(model_id)
-            if entry == base_entry:
+            if model_id in models and not isinstance(entry, dict):
+                errors.append(f"{provider}/{model_id}: model entry must be an object")
+                continue
+            if (model_id in models) == (
+                model_id in base_models
+            ) and entry == base_entry:
                 continue
             if entry != {**(base_entry or {}), "status": "deprecated"}:
                 errors.append(
