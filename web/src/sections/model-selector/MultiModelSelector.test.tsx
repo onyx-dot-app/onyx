@@ -243,7 +243,7 @@ describe("MultiModelSelector settings pane anchoring", () => {
   });
 
   // Guards the remove path: the pane must not linger in an exit animation once its pill is gone.
-  test("removing the model whose settings pane is open unmounts the pane at once and calls onRemove", async () => {
+  test("removing the model whose settings pane is open unmounts the pane at once, calls onRemove, and the picker reopens", async () => {
     mockExitAnimation();
     const user = setupUser();
     const onRemove = jest.fn();
@@ -272,5 +272,8 @@ describe("MultiModelSelector settings pane anchoring", () => {
     expect(onRemove).toHaveBeenCalledWith(1);
     expect(pill).not.toBeInTheDocument();
     expect(popperWrapper()).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Model A" }));
+    await waitFor(() => expect(popperWrapper()).not.toBeNull());
   });
 });
