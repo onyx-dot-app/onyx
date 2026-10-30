@@ -16,7 +16,7 @@ covered by applying the migration, which this repo does not test programmaticall
   failed batch then marks FAILED (cursor left at the prior good batch)
 """
 
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from datetime import datetime, timedelta, timezone
 from typing import cast
 from unittest.mock import MagicMock, patch
@@ -51,6 +51,7 @@ from onyx.context.search.models import SavedSearchSettings
 from onyx.db import port_attempt as port_attempt_db
 from onyx.db.connector_credential_pair import get_last_successful_attempt_poll_range_end
 from onyx.db.document import (
+    PresentSearchSettingsRef,
     document_has_indexable_cc_pair,
     filter_existing_cc_pair_document_ids,
     get_document_ids_for_cc_pair_batch,
@@ -58,6 +59,7 @@ from onyx.db.document import (
     mark_document_as_modified,
     mark_document_as_synced,
     mark_document_synced_secondary_pending,
+    record_reindex_write__no_commit,
 )
 from onyx.db.enums import (
     ConnectorCredentialPairStatus,
@@ -761,6 +763,92 @@ def test_run_port_attempt_happy_path(
     assert row.last_processed_doc_id == doc_ids[-1]
     assert row.docs_ported == len(doc_ids)
     assert row.time_completed is not None
+
+
+def test_run_port_attempt_records_ported_content_hash(
+    db_session: Session, cc_pair_and_port_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """For each doc its copy put in the target, the port records the version the
+    source index holds, copying the PRESENT hash into content_hash first. It records nothing
+    for a doc the create-only write found already there (secondary indexing or an
+    earlier copy wrote it) or a doc deleted mid-batch, and it keeps the record
+    secondary indexing already made for the target."""
+    cc_pair, future_id = cc_pair_and_port_future
+    present = get_current_search_settings(db_session)
+    present_ref = PresentSearchSettingsRef.from_settings(present)
+    secondary, existing, deleted, no_hash, copied, stale = _seed_cc_pair_documents(
+        db_session, cc_pair, 6
+    )
+    for doc_id in (secondary, existing, deleted, copied):
+        doc = db_session.get(DbDocument, doc_id)
+        assert doc is not None
+        doc.content_hash = f"hash-{doc_id}"
+    # swapped to PRESENT at "present-v" and never fetched since: the record, not
+    # content_hash, says what PRESENT holds
+    stale_doc = db_session.get(DbDocument, stale)
+    assert stale_doc is not None
+    stale_doc.content_hash = "old"
+    stale_doc.secondary_content_hash = "present-v"
+    stale_doc.secondary_search_settings_id = present.id
+    db_session.commit()
+    record_reindex_write__no_commit(
+        db_session,
+        {secondary: "secondary-hash"},
+        future_id,
+        present_ref,
+        skip_docs_recorded_for_target=False,
+    )
+    db_session.commit()
+    attempt_id = create_port_attempt(db_session, cc_pair.id, future_id).id
+
+    def copy(
+        ids: list[str],
+        on_docs_already_in_target: Callable[[set[str]], None],
+        **_: object,
+    ) -> tuple[int, bool]:
+        # `secondary` and `existing` already have chunks in FUTURE: benign 409s.
+        on_docs_already_in_target({secondary, existing})
+        # `deleted` loses its cc_pair link mid-batch, so its chunks are dropped.
+        db_session.query(DocumentByConnectorCredentialPair).filter(
+            DocumentByConnectorCredentialPair.id == deleted
+        ).delete(synchronize_session="fetch")
+        db_session.commit()
+        return len(ids), False
+
+    mock_copier = MagicMock()
+    mock_copier.copy_doc_batch.side_effect = copy
+    try:
+        with patch.object(port_task, "PortCopier", return_value=mock_copier):
+            run_port_attempt(attempt_id)
+
+        db_session.expire_all()
+        recorded = {
+            row.id: (
+                row.content_hash,
+                row.secondary_content_hash,
+                row.secondary_search_settings_id,
+            )
+            for row in db_session.query(DbDocument).filter(
+                DbDocument.id.in_(
+                    [secondary, existing, deleted, no_hash, copied, stale]
+                )
+            )
+        }
+        assert recorded == {
+            secondary: (f"hash-{secondary}", "secondary-hash", future_id),
+            existing: (f"hash-{existing}", None, None),
+            deleted: (f"hash-{deleted}", None, None),
+            no_hash: (None, None, future_id),
+            copied: (f"hash-{copied}", f"hash-{copied}", future_id),
+            stale: ("present-v", "present-v", future_id),
+        }
+    finally:
+        # Unlinked, so the fixture cleanup (cc_pair-linked docs only) misses it.
+        db_session.rollback()
+        db_session.query(DbDocument).filter(DbDocument.id == deleted).delete(
+            synchronize_session="fetch"
+        )
+        db_session.commit()
 
 
 def test_run_port_attempt_batch_retry_then_failed(

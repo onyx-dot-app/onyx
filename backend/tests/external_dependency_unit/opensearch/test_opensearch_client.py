@@ -812,11 +812,12 @@ class TestOpenSearchClient:
         # 3) The stale port write lands AFTER, now CREATE-ONLY: the chunk already
         # exists (the forward path owns it), so this is a benign 409 -- no raise,
         # no overwrite. The port yields.
-        test_client.bulk_index_documents(
+        existing = test_client.bulk_index_documents(
             documents=[stale_snapshot],
             tenant_state=tenant_state,
             use_create_only=True,
         )
+        assert existing == {doc_id}
 
         after = test_client.get_document(chunk_id)
         assert after.content == "live-fresh"
@@ -851,25 +852,26 @@ class TestOpenSearchClient:
             max_chunk_size=DEFAULT_MAX_CHUNK_SIZE,
         )
 
-        def port_write(content: str) -> None:
+        def port_write(content: str) -> set[str]:
             chunk = _create_test_document_chunk(
                 document_id=doc_id,
                 chunk_index=0,
                 content=content,
                 tenant_state=tenant_state,
             )
-            test_client.bulk_index_documents(
+            return test_client.bulk_index_documents(
                 documents=[chunk],
                 tenant_state=tenant_state,
                 use_create_only=True,
             )
 
-        # Absent -> created.
-        port_write("ported")
+        # Absent -> created, so no doc is reported as already there.
+        assert port_write("ported") == set()
         assert test_client.get_document(chunk_id).content == "ported"
 
-        # Re-port the same chunk -> benign 409, no raise, no change (idempotent).
-        port_write("ported-again")
+        # Re-port the same chunk -> benign 409, no raise, no change (idempotent),
+        # and the doc is reported as already there.
+        assert port_write("ported-again") == {doc_id}
         assert test_client.get_document(chunk_id).content == "ported"
 
     def test_bulk_update_surface_document_missing(

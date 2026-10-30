@@ -131,9 +131,13 @@ The fleet telemetry collection pass reads the rows of recent attempts that chang
 
 ### `Document`, `DocumentByConnectorCredentialPair`, `Tag` (`onyx/db/models.py`, `onyx/db/document.py`, `onyx/db/tag.py`)
 
-`Document` is the durable Postgres row per source document: `content_hash` (used by
-the dedup gate, §4.3), `doc_updated_at`, `chunk_count`, `boost`, `file_id` (for a
-staged/promoted blob), `parent_hierarchy_node_id`. `DocumentByConnectorCredentialPair`
+`Document` is the durable Postgres row per source document: `content_hash`,
+`secondary_content_hash`, `secondary_search_settings_id`, `doc_updated_at`, `chunk_count`,
+`boost`, `file_id` (for a staged/promoted blob), `parent_hierarchy_node_id`.
+`content_hash` is the version indexing last wrote into PRESENT. The next two fields are
+for reindexing: `secondary_content_hash` is the hash a doc was written with into FUTURE,
+and `secondary_search_settings_id` is FUTURE's search settings id. The dedup gate (§4.3)
+reads all three through `present_index_content_hash`; [[document-index]] explains how. `DocumentByConnectorCredentialPair`
 is the many-to-many join that lets one document be owned by more than one cc-pair;
 pruning and deletion only fully remove a document when its connector count drops to
 zero (`get_document_connector_count`, in `onyx/background/celery/tasks/shared/tasks.py`).

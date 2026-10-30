@@ -23,6 +23,7 @@ from onyx.connectors.models import (
     TabularSection,
     TextSection,
 )
+from onyx.db.document import PresentSearchSettingsRef
 from onyx.document_index.chunk_content_enrichment import (
     generate_enriched_content_for_chunk_embedding,
 )
@@ -354,6 +355,7 @@ def _index_batch_with_handler(
         patch(f"{_PATCH_PREFIX}.sentry_sdk"),
     ):
         return index_doc_batch_with_handler(
+            written_search_settings_id=7,
             chunker=MagicMock(),
             embedder=MagicMock(),
             document_index=MagicMock(),
@@ -440,12 +442,71 @@ def test_index_batch_wraps_a_failed_document_push() -> None:
             f"{_PATCH_PREFIX}.write_chunks_to_vector_db_with_backoff",
             return_value=([MagicMock(document_id="doc", already_existed=False)], []),
         ),
-        patch(f"{_PATCH_PREFIX}.update_docs_content_hash__no_commit"),
+        patch(f"{_PATCH_PREFIX}.record_present_index_write__no_commit"),
         patch(
             f"{_PATCH_PREFIX}._maybe_push_documents",
             side_effect=RuntimeError("sink down"),
         ),
         pytest.raises(DocumentPushFailure, match="sink down"),
+    ):
+        index_doc_batch(
+            written_search_settings_id=7,
+            document_batch=[document],
+            chunker=chunker,
+            embedder=MagicMock(),
+            document_index=MagicMock(),
+            request_id=None,
+            tenant_id="tenant",
+            adapter=adapter,
+        )
+
+
+@pytest.mark.parametrize("index_to_secondary", [False, True])
+def test_index_batch_stamps_or_records_the_index_it_wrote(
+    index_to_secondary: bool,
+) -> None:
+    """A PRESENT write stamps content_hash for the settings it was given. A secondary
+    write records what that index now holds instead (see present_index_content_hash)."""
+    document = _make_doc("doc")
+    adapter = MagicMock()
+    adapter.connector_id = 1
+    adapter.credential_id = 2
+    adapter.index_attempt_metadata = None
+    adapter.prepare.return_value = DocumentBatchPrepareContext(
+        updatable_docs=[document],
+        id_to_boost_map={},
+        doc_id_to_content_hash={"doc": "hash"},
+    )
+    adapter.lock_context.return_value = _make_ctx()
+    adapter.prepare_enrichment.return_value = MagicMock(
+        doc_id_to_previous_chunk_cnt={}, doc_id_to_new_chunk_cnt={}
+    )
+    chunker = MagicMock()
+    chunker.chunk.return_value = []
+    embedding_result = MagicMock(successful_chunk_ids=[], connector_failures=[])
+    chunk_store = MagicMock()
+    chunk_store.stream.return_value = iter([])
+    embed_ctx = _make_ctx()
+    embed_ctx.__enter__ = MagicMock(return_value=(embedding_result, chunk_store))
+    present_settings = MagicMock(id=3, port_backfill_source_id=None)
+
+    with (
+        patch(
+            f"{_PATCH_PREFIX}._apply_document_ingestion_hook",
+            side_effect=lambda documents: documents,
+        ),
+        patch(f"{_PATCH_PREFIX}.embed_and_stream", return_value=embed_ctx),
+        patch(
+            f"{_PATCH_PREFIX}.write_chunks_to_vector_db_with_backoff",
+            return_value=([MagicMock(document_id="doc", already_existed=False)], []),
+        ),
+        patch(
+            f"{_PATCH_PREFIX}.get_current_search_settings",
+            return_value=present_settings,
+        ),
+        patch(f"{_PATCH_PREFIX}.record_present_index_write__no_commit") as stamp,
+        patch(f"{_PATCH_PREFIX}.record_reindex_write__no_commit") as record,
+        patch(f"{_PATCH_PREFIX}._maybe_push_documents"),
     ):
         index_doc_batch(
             document_batch=[document],
@@ -455,7 +516,21 @@ def test_index_batch_wraps_a_failed_document_push() -> None:
             request_id=None,
             tenant_id="tenant",
             adapter=adapter,
+            written_search_settings_id=7,
+            index_to_secondary=index_to_secondary,
         )
+
+    if index_to_secondary:
+        stamp.assert_not_called()
+        assert record.call_args.args[1:] == (
+            {"doc": "hash"},
+            7,
+            PresentSearchSettingsRef(id=3, port_backfill_source_id=None),
+        )
+        assert record.call_args.kwargs == {"skip_docs_recorded_for_target": False}
+    else:
+        record.assert_not_called()
+        assert stamp.call_args.args[1:] == ({"doc": "hash"}, 7, 3)
 
 
 def test_batch_handler_forces_only_the_documents_the_batch_prepared() -> None:
@@ -486,6 +561,7 @@ def test_batch_handler_forces_only_the_documents_the_batch_prepared() -> None:
         patch(f"{_PATCH_PREFIX}.sentry_sdk"),
     ):
         result = index_doc_batch_with_handler(
+            written_search_settings_id=7,
             chunker=chunker,
             embedder=MagicMock(),
             document_index=MagicMock(),
@@ -958,6 +1034,7 @@ def test_run_pipeline_owns_llm_enrichment_trace() -> None:
         patch(f"{_PATCH_PREFIX}.ensure_trace", return_value=nullcontext()) as ensure,
     ):
         result = run_indexing_pipeline(
+            written_search_settings_id=7,
             document_batch=[document],
             request_id=None,
             embedder=MagicMock(),
@@ -1049,6 +1126,7 @@ def test_unavailable_vision_llm_does_not_enable_spend_gate() -> None:
         patch(f"{_PATCH_PREFIX}.ensure_trace") as ensure,
     ):
         result = run_indexing_pipeline(
+            written_search_settings_id=7,
             document_batch=[document],
             request_id=None,
             embedder=MagicMock(),
@@ -1147,6 +1225,7 @@ def test_index_batch_returns_spend_limit_failures_before_contextual_rag() -> Non
         ),
     ):
         result = index_doc_batch(
+            written_search_settings_id=7,
             document_batch=[document],
             chunker=chunker,
             embedder=MagicMock(),
@@ -1202,6 +1281,7 @@ def test_index_batch_skips_tabular_sections_that_reach_it() -> None:
         side_effect=lambda documents: documents,
     ):
         index_doc_batch(
+            written_search_settings_id=7,
             document_batch=[workbook, text_doc],
             chunker=MagicMock(),
             embedder=MagicMock(),
@@ -1603,10 +1683,17 @@ def _make_db_doc(
     return db_doc
 
 
+def _present_index_hashes(db_docs: list[MagicMock]) -> dict[str, str | None]:
+    # no reindex in flight: the PRESENT index holds exactly what each row says
+    return {db_doc.id: db_doc.content_hash for db_doc in db_docs}
+
+
 def test_get_docs_to_update_new_doc_always_included() -> None:
     doc = _doc_with_text("Title", "content")
     doc.id = "new-doc"
-    docs, hashes = get_docs_to_update([doc], db_docs=[])
+    docs, hashes = get_docs_to_update(
+        [doc], db_docs=[], doc_id_to_present_index_hash={}
+    )
     assert len(docs) == 1
     assert "new-doc" in hashes
 
@@ -1619,7 +1706,11 @@ def test_get_docs_to_update_hash_match_skips_doc_without_timestamp() -> None:
     stored_hash = doc.content_hash()
     db_doc = _make_db_doc("doc1", content_hash=stored_hash)
 
-    docs, hashes = get_docs_to_update([doc], db_docs=[db_doc])
+    docs, hashes = get_docs_to_update(
+        [doc],
+        db_docs=[db_doc],
+        doc_id_to_present_index_hash=_present_index_hashes([db_doc]),
+    )
     assert docs == []
     assert hashes == {}
 
@@ -1636,7 +1727,11 @@ def test_get_docs_to_update_hash_not_consulted_when_timestamp_available() -> Non
     stored_hash = doc.content_hash()  # hash matches — text unchanged
     db_doc = _make_db_doc("doc1", content_hash=stored_hash, doc_updated_at=old_time)
 
-    docs, hashes = get_docs_to_update([doc], db_docs=[db_doc])
+    docs, hashes = get_docs_to_update(
+        [doc],
+        db_docs=[db_doc],
+        doc_id_to_present_index_hash=_present_index_hashes([db_doc]),
+    )
     assert len(docs) == 1  # timestamp advanced → must re-index despite hash match
     assert "doc1" in hashes
 
@@ -1646,7 +1741,11 @@ def test_get_docs_to_update_hash_mismatch_includes_doc() -> None:
     doc.id = "doc1"
     db_doc = _make_db_doc("doc1", content_hash="stale_hash_abc123")
 
-    docs, hashes = get_docs_to_update([doc], db_docs=[db_doc])
+    docs, hashes = get_docs_to_update(
+        [doc],
+        db_docs=[db_doc],
+        doc_id_to_present_index_hash=_present_index_hashes([db_doc]),
+    )
     assert len(docs) == 1
     assert docs[0].id == "doc1"
     assert hashes["doc1"] == doc.content_hash()
@@ -1658,7 +1757,11 @@ def test_get_docs_to_update_null_hash_always_included() -> None:
     doc.id = "doc1"
     db_doc = _make_db_doc("doc1", content_hash=None)
 
-    docs, hashes = get_docs_to_update([doc], db_docs=[db_doc])
+    docs, hashes = get_docs_to_update(
+        [doc],
+        db_docs=[db_doc],
+        doc_id_to_present_index_hash=_present_index_hashes([db_doc]),
+    )
     assert len(docs) == 1
     assert "doc1" in hashes
 
@@ -1671,7 +1774,11 @@ def test_get_docs_to_update_time_skip_still_works() -> None:
     doc.doc_updated_at = old_time
     db_doc = _make_db_doc("doc1", content_hash=None, doc_updated_at=old_time)
 
-    docs, hashes = get_docs_to_update([doc], db_docs=[db_doc])
+    docs, hashes = get_docs_to_update(
+        [doc],
+        db_docs=[db_doc],
+        doc_id_to_present_index_hash=_present_index_hashes([db_doc]),
+    )
     assert docs == []
     assert hashes == {}
 
@@ -1694,7 +1801,11 @@ def test_get_docs_to_update_permission_change_bypasses_deduplication() -> None:
     db_doc.external_user_emails = ["former@example.com"]
     db_doc.external_user_group_ids = ["onedrive_former-group"]
 
-    docs, hashes = get_docs_to_update([doc], db_docs=[db_doc])
+    docs, hashes = get_docs_to_update(
+        [doc],
+        db_docs=[db_doc],
+        doc_id_to_present_index_hash=_present_index_hashes([db_doc]),
+    )
 
     assert docs == [doc]
     assert hashes == {"doc1": doc.content_hash()}
@@ -1711,7 +1822,9 @@ def test_get_docs_to_update_mixed_batch() -> None:
     db_changed = _make_db_doc("changed", content_hash="old_hash")
 
     docs, hashes = get_docs_to_update(
-        [doc_unchanged, doc_changed], db_docs=[db_unchanged, db_changed]
+        [doc_unchanged, doc_changed],
+        db_docs=[db_unchanged, db_changed],
+        doc_id_to_present_index_hash=_present_index_hashes([db_unchanged, db_changed]),
     )
     assert len(docs) == 1
     assert docs[0].id == "changed"
@@ -1735,16 +1848,70 @@ def test_get_docs_to_update_secondary_build_ignores_content_hash_gate() -> None:
     db_doc = _make_db_doc("doc1", content_hash=stored_hash)
 
     # Default (PRESENT write): hash matches → skipped, as before.
-    present_docs, _ = get_docs_to_update([doc], db_docs=[db_doc])
+    present_docs, _ = get_docs_to_update(
+        [doc],
+        db_docs=[db_doc],
+        doc_id_to_present_index_hash=_present_index_hashes([db_doc]),
+    )
     assert present_docs == []
 
     # Secondary/FUTURE write: gate bypassed → doc still indexed into FUTURE.
     future_docs, future_hashes = get_docs_to_update(
-        [doc], db_docs=[db_doc], ignore_content_hash_gate=True
+        [doc],
+        db_docs=[db_doc],
+        doc_id_to_present_index_hash=_present_index_hashes([db_doc]),
+        ignore_content_hash_gate=True,
     )
     assert len(future_docs) == 1
     assert future_docs[0].id == "doc1"
     assert "doc1" in future_hashes
+
+
+def test_get_docs_to_update_trusts_the_present_index_hash_over_the_row() -> None:
+    """After a reindex swap the row's content_hash can describe the old index. The
+    gate compares against what the PRESENT index holds (present_index_content_hash)."""
+    doc = _doc_with_text("Title", "content")
+    doc.id = "doc1"
+    doc.doc_updated_at = None
+    fetched = doc.content_hash()
+    db_doc = _make_db_doc("doc1", content_hash=fetched)
+
+    # PRESENT holds an older version: write, although the row matches
+    docs, _ = get_docs_to_update(
+        [doc], db_docs=[db_doc], doc_id_to_present_index_hash={"doc1": "older"}
+    )
+    assert [d.id for d in docs] == ["doc1"]
+    # PRESENT holds nothing: write
+    docs, _ = get_docs_to_update(
+        [doc], db_docs=[db_doc], doc_id_to_present_index_hash={"doc1": None}
+    )
+    assert [d.id for d in docs] == ["doc1"]
+    # PRESENT holds this version while the row is stale: skip
+    db_doc.content_hash = "stale"
+    docs, hashes = get_docs_to_update(
+        [doc], db_docs=[db_doc], doc_id_to_present_index_hash={"doc1": fetched}
+    )
+    assert docs == []
+    assert hashes == {}
+
+
+def test_get_docs_to_update_timestamp_skip_needs_the_row_to_describe_present() -> None:
+    """Gate 1 reads the row's timestamp, stamped together with content_hash. Once the
+    PRESENT index holds something else, that timestamp says nothing about it."""
+    old_time = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    doc = _doc_with_text("Title", "content")
+    doc.id = "doc1"
+    doc.doc_updated_at = old_time
+    db_doc = _make_db_doc("doc1", content_hash="row", doc_updated_at=old_time)
+
+    docs, _ = get_docs_to_update(
+        [doc], db_docs=[db_doc], doc_id_to_present_index_hash={"doc1": "row"}
+    )
+    assert docs == []
+    docs, _ = get_docs_to_update(
+        [doc], db_docs=[db_doc], doc_id_to_present_index_hash={"doc1": "other"}
+    )
+    assert [d.id for d in docs] == ["doc1"]
 
 
 def test_post_index_leaves_chunk_count_alone_for_a_failed_write() -> None:

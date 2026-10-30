@@ -34,7 +34,13 @@ from onyx.configs.constants import DocumentSource
 from onyx.db import swap_index
 from onyx.db.document import (
     PortedScope,
+    PresentSearchSettingsRef,
+    _present_index_content_hash_sql,
+    get_port_source_content_hashes,
     mark_document_synced_secondary_pending,
+    present_index_content_hash,
+    record_present_index_write__no_commit,
+    record_reindex_write__no_commit,
     sample_ported_document_ids,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -1012,3 +1018,257 @@ def test_port_swap_blocks_when_a_ported_user_file_is_missing(
         delete_test_user(db_session, user)
         db_session.commit()
         _clear_verification_backoff(future_id)
+
+
+def _seed_hashed_doc(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    name: str,
+    content_hash: str | None,
+    record: tuple[str | None, int] | None = None,
+) -> str:
+    """A doc of the cc_pair with PRESENT's content_hash and, when given, the record
+    (secondary_content_hash, secondary_search_settings_id)."""
+    doc_id = f"{_PENDING_DOC_PREFIX}{name}"
+    db_session.add(
+        DbDocument(
+            id=doc_id,
+            semantic_id=doc_id,
+            kg_stage=KGStage.NOT_STARTED,
+            content_hash=content_hash,
+            secondary_content_hash=record[0] if record else None,
+            secondary_search_settings_id=record[1] if record else None,
+        )
+    )
+    db_session.flush()
+    db_session.add(
+        DocumentByConnectorCredentialPair(
+            id=doc_id,
+            connector_id=cc_pair.connector_id,
+            credential_id=cc_pair.credential_id,
+            has_been_indexed=True,
+        )
+    )
+    db_session.commit()
+    return doc_id
+
+
+def _columns(
+    db_session: Session, doc_id: str
+) -> tuple[str | None, str | None, int | None]:
+    """(content_hash, secondary_content_hash, secondary_search_settings_id) as stored."""
+    db_session.expire_all()
+    row = db_session.get(DbDocument, doc_id)
+    assert row is not None
+    return (
+        row.content_hash,
+        row.secondary_content_hash,
+        row.secondary_search_settings_id,
+    )
+
+
+def _present_hash(
+    db_session: Session, doc_id: str, present: PresentSearchSettingsRef
+) -> str | None:
+    db_session.expire_all()
+    row = db_session.get(DbDocument, doc_id)
+    assert row is not None
+    return present_index_content_hash(row, present)
+
+
+def test_present_index_content_hash_sql_matches_python(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """The SQL form (_present_index_content_hash_sql) and the Python form agree on
+    every rule."""
+    cc_pair, future_id = cc_pair_and_future
+    present_id = get_current_search_settings(db_session).id
+    older = present_id - 1
+    plain = PresentSearchSettingsRef(id=present_id, port_backfill_source_id=None)
+    pinned = PresentSearchSettingsRef(id=present_id, port_backfill_source_id=older)
+    rows = {
+        "none": _seed_hashed_doc(db_session, cc_pair, "r0", "c"),
+        "present": _seed_hashed_doc(
+            db_session, cc_pair, "r1", "stale", ("r", present_id)
+        ),
+        "pin": _seed_hashed_doc(db_session, cc_pair, "r2", "c", ("r", older)),
+        "newer": _seed_hashed_doc(db_session, cc_pair, "r3", "c", ("r", future_id)),
+        "older": _seed_hashed_doc(db_session, cc_pair, "r4", "c", ("r", older - 1)),
+    }
+    cases = [
+        (
+            plain,
+            {"none": "c", "present": "r", "pin": None, "newer": "c", "older": None},
+        ),
+        (
+            pinned,
+            {"none": "c", "present": "r", "pin": "r", "newer": "c", "older": None},
+        ),
+    ]
+    for present, expected in cases:
+        by_id = {rows[name]: value for name, value in expected.items()}
+        sql_rows = db_session.execute(
+            select(
+                DbDocument.id, _present_index_content_hash_sql(present).label("hash")
+            ).where(DbDocument.id.in_(list(rows.values())))
+        ).all()
+        assert {row.id: row.hash for row in sql_rows} == by_id
+        assert {
+            doc_id: _present_hash(db_session, doc_id, present)
+            for doc_id in rows.values()
+        } == by_id
+
+
+def test_present_index_write_records_unless_a_newer_index_has_the_doc(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    cc_pair, future_id = cc_pair_and_future
+    present_id = get_current_search_settings(db_session).id
+    fresh = _seed_hashed_doc(db_session, cc_pair, "fresh", None)
+    mine = _seed_hashed_doc(db_session, cc_pair, "mine", "v1", ("v1", present_id))
+    taken = _seed_hashed_doc(db_session, cc_pair, "taken", "v1", ("v1", future_id))
+
+    record_present_index_write__no_commit(
+        db_session, {fresh: "v2", mine: "v2", taken: "v2"}, present_id, present_id
+    )
+    db_session.commit()
+    assert _columns(db_session, fresh) == ("v2", "v2", present_id)
+    assert _columns(db_session, mine) == ("v2", "v2", present_id)
+    # FUTURE's record stays; content_hash alone describes PRESENT for this doc
+    assert _columns(db_session, taken) == ("v2", "v1", future_id)
+
+    # A batch that began before a swap wrote into the old index, which search no
+    # longer uses. Nothing changes.
+    record_present_index_write__no_commit(
+        db_session, {mine: "v3"}, present_id - 1, present_id
+    )
+    db_session.commit()
+    assert _columns(db_session, mine) == ("v2", "v2", present_id)
+
+
+def test_reindex_write_copies_the_present_hash_into_content_hash(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """When the record stops describing PRESENT, content_hash must start to. Both the
+    port and secondary indexing replace the record this way."""
+    cc_pair, present_id = cc_pair_and_future  # the fixture's FUTURE plays PRESENT
+    present = PresentSearchSettingsRef(id=present_id, port_backfill_source_id=None)
+    next_id = present_id + 1
+    # swapped to PRESENT with v1, never fetched since: content_hash is the old index's
+    ported = _seed_hashed_doc(
+        db_session, cc_pair, "take-port", "old", ("v1", present_id)
+    )
+    indexed = _seed_hashed_doc(
+        db_session, cc_pair, "take-sec", "old", ("v1", present_id)
+    )
+
+    snapshot = get_port_source_content_hashes(db_session, [ported], present_id)
+    assert snapshot == {ported: "v1"}
+    record_reindex_write__no_commit(
+        db_session, snapshot, next_id, present, skip_docs_recorded_for_target=True
+    )
+    record_reindex_write__no_commit(
+        db_session,
+        {indexed: "v9"},
+        next_id,
+        present,
+        skip_docs_recorded_for_target=False,
+    )
+    db_session.commit()
+    assert _columns(db_session, ported) == ("v1", "v1", next_id)
+    assert _columns(db_session, indexed) == ("v1", "v9", next_id)
+    assert _present_hash(db_session, ported, present) == "v1"
+    assert _present_hash(db_session, indexed, present) == "v1"
+
+    # the port never replaces a record already made for its target
+    record_reindex_write__no_commit(
+        db_session,
+        {indexed: "v1"},
+        next_id,
+        present,
+        skip_docs_recorded_for_target=True,
+    )
+    db_session.commit()
+    assert _columns(db_session, indexed) == ("v1", "v9", next_id)
+
+
+def test_lazy_resolution_through_two_reindexes(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """Port, late PRESENT write, swap, fetch, next reindex. A swap is modelled by the
+    PresentSearchSettingsRef the gate would build for the new PRESENT: the resolver
+    reads only the row and that ref."""
+    cc_pair, b = cc_pair_and_future
+    a = get_current_search_settings(db_session).id
+    c = b + 1
+    present_a = PresentSearchSettingsRef(id=a, port_backfill_source_id=None)
+    present_b = PresentSearchSettingsRef(id=b, port_backfill_source_id=None)
+    present_c = PresentSearchSettingsRef(id=c, port_backfill_source_id=None)
+    d = _seed_hashed_doc(db_session, cc_pair, "walk", "v1", ("v1", a))
+
+    # 1. the port copies v1 into B
+    record_reindex_write__no_commit(
+        db_session,
+        get_port_source_content_hashes(db_session, [d], a),
+        b,
+        present_a,
+        skip_docs_recorded_for_target=True,
+    )
+    db_session.commit()
+    assert _columns(db_session, d) == ("v1", "v1", b)
+    # 2. indexing writes v2 into A: B's record is newer, so it is left alone
+    record_present_index_write__no_commit(db_session, {d: "v2"}, a, a)
+    db_session.commit()
+    assert _columns(db_session, d) == ("v2", "v1", b)
+    assert _present_hash(db_session, d, present_a) == "v2"
+    # 3. swap: B is PRESENT and holds v1, so a fetch at v2 writes, then records for B
+    assert _present_hash(db_session, d, present_b) == "v1"
+    record_present_index_write__no_commit(db_session, {d: "v2"}, b, b)
+    db_session.commit()
+    assert _columns(db_session, d) == ("v2", "v2", b)
+    assert _present_hash(db_session, d, present_b) == "v2"
+    # 4. reindex C: the port replaces the record; content_hash keeps describing B
+    record_reindex_write__no_commit(
+        db_session,
+        get_port_source_content_hashes(db_session, [d], b),
+        c,
+        present_b,
+        skip_docs_recorded_for_target=True,
+    )
+    db_session.commit()
+    assert _columns(db_session, d) == ("v2", "v2", c)
+    assert _present_hash(db_session, d, present_b) == "v2"
+    # 5. indexing writes v3 into B while C is being built
+    record_present_index_write__no_commit(db_session, {d: "v3"}, b, b)
+    db_session.commit()
+    assert _columns(db_session, d) == ("v3", "v2", c)
+    assert _present_hash(db_session, d, present_b) == "v3"
+    # 6. swap to C: it holds v2, so a fetch at v3 writes
+    assert _present_hash(db_session, d, present_c) == "v2"
+
+
+def test_instant_backfill_trusts_the_pinned_source_until_it_records(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    cc_pair, new_present = cc_pair_and_future
+    old = get_current_search_settings(db_session).id
+    pinned = PresentSearchSettingsRef(id=new_present, port_backfill_source_id=old)
+    unpinned = PresentSearchSettingsRef(id=new_present, port_backfill_source_id=None)
+    # swapped INSTANT while content_hash still says "old" from the index before `old`
+    d = _seed_hashed_doc(db_session, cc_pair, "inst", "old", ("v1", old))
+
+    # while pinned the backfill will bring v1; a pin cleared without a backfill record
+    # means the doc never reached the new PRESENT
+    assert _present_hash(db_session, d, pinned) == "v1"
+    assert _present_hash(db_session, d, unpinned) is None
+
+    record_reindex_write__no_commit(
+        db_session,
+        get_port_source_content_hashes(db_session, [d], old),
+        new_present,
+        pinned,
+        skip_docs_recorded_for_target=True,
+    )
+    db_session.commit()
+    assert _columns(db_session, d) == ("v1", "v1", new_present)
+    assert _present_hash(db_session, d, unpinned) == "v1"

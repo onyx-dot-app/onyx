@@ -42,13 +42,17 @@ from onyx.db.connector_credential_pair import (
     get_connector_credential_pair_from_id,
 )
 from onyx.db.document import (
+    PresentSearchSettingsRef,
     filter_existing_cc_pair_document_ids,
     get_document_ids_for_cc_pair_batch,
     get_max_document_id_for_cc_pair,
+    get_port_source_content_hashes,
+    record_reindex_write__no_commit,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     ConnectorCredentialPairStatus,
+    IndexModelStatus,
     PortAttemptStatus,
     SwitchoverType,
 )
@@ -146,6 +150,7 @@ def _copy_batch_with_retry(
     log: logging.LoggerAdapter,
     surviving_doc_ids: Callable[[], set[str]] | None = None,
     should_abort: Callable[[], bool] | None = None,
+    on_docs_already_in_target: Callable[[set[str]], None] | None = None,
 ) -> tuple[int, bool]:
     """Copy one batch, retrying up to _PORT_BATCH_MAX_RETRIES on any failure.
     Returns (chunks written, aborted); aborted=True means should_abort stopped
@@ -168,6 +173,7 @@ def _copy_batch_with_retry(
                 doc_ids,
                 surviving_doc_ids=surviving_doc_ids,
                 should_abort=should_abort,
+                on_docs_already_in_target=on_docs_already_in_target,
             )
         except Exception as e:
             last_error = e
@@ -236,10 +242,10 @@ def _resolve_port_settings(
     """The (source, target) settings for an unclaimed attempt. Returns None after it
     handles an attempt that must not run (it marks or cancels it)."""
     port_attempt_id = attempt.id
-    future_search_settings = get_search_settings_by_id(
+    target_search_settings = get_search_settings_by_id(
         db_session, attempt.search_settings_id
     )
-    if future_search_settings is None:
+    if target_search_settings is None:
         mark_port_terminal(
             db_session,
             port_attempt_id,
@@ -267,11 +273,11 @@ def _resolve_port_settings(
     # Source to copy from: the recorded backfill source when the target was
     # promoted mid-port (INSTANT) — "current" is now the target itself — else
     # the live PRESENT for a normal reindex.
-    if future_search_settings.port_backfill_source_id is not None:
-        present_search_settings = get_search_settings_by_id(
-            db_session, future_search_settings.port_backfill_source_id
+    if target_search_settings.port_backfill_source_id is not None:
+        source_search_settings = get_search_settings_by_id(
+            db_session, target_search_settings.port_backfill_source_id
         )
-        if present_search_settings is None:
+        if source_search_settings is None:
             mark_port_terminal(
                 db_session,
                 port_attempt_id,
@@ -280,8 +286,8 @@ def _resolve_port_settings(
             )
             return None
     else:
-        present_search_settings = get_current_search_settings(db_session)
-    return present_search_settings, future_search_settings
+        source_search_settings = get_current_search_settings(db_session)
+    return source_search_settings, target_search_settings
 
 
 def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) -> None:
@@ -345,7 +351,15 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
             return
         if resolved is None:
             return
-        present_search_settings, future_search_settings = resolved
+        source_search_settings, target_search_settings = resolved
+        # Save the hash of each copied doc, so dedup after the swap knows what the new
+        # index holds. User files have no hash.
+        record_hashes = cc_pair_id is not None
+        present_ref = PresentSearchSettingsRef.from_settings(
+            target_search_settings
+            if target_search_settings.status == IndexModelStatus.PRESENT
+            else source_search_settings
+        )
 
         if not mark_port_in_progress(
             db_session, port_attempt_id, celery_task_id=celery_task_id
@@ -355,7 +369,7 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
             return
 
         try:
-            copier = PortCopier(present_search_settings, future_search_settings)
+            copier = PortCopier(source_search_settings, target_search_settings)
         except Exception as e:
             log.exception("Failed to build port copier; marking FAILED")
             mark_port_terminal(
@@ -448,6 +462,17 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
                     limit=INDEX_BATCH_SIZE,
                     up_to_doc_id=up_to_doc_id,
                 )
+            # Read before the copy reads the source: an indexing write in between
+            # then shows as a mismatch, never as a false match.
+            snapshot_hashes = (
+                get_port_source_content_hashes(
+                    db_session,
+                    doc_ids,
+                    source_search_settings.id,
+                )
+                if record_hashes
+                else {}
+            )
 
         if not doc_ids:
             break
@@ -463,6 +488,9 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
                     db_session, cc_pair_id, _ids
                 )
 
+        # Docs the create-only write found already in FUTURE: secondary indexing or
+        # an earlier copy (a retry, or a resume) owns them, so this copy wrote nothing.
+        docs_already_in_target: set[str] = set()
         try:
             batch_chunks, aborted = _copy_batch_with_retry(
                 copier,
@@ -470,6 +498,7 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
                 log,
                 surviving_doc_ids=_surviving_doc_ids,
                 should_abort=_should_abort,
+                on_docs_already_in_target=docs_already_in_target.update,
             )
         except Exception as e:
             log.exception("Port batch failed after retries; marking FAILED")
@@ -490,7 +519,25 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
 
         cursor = doc_ids[-1]
         docs_ported += len(doc_ids)
+        if record_hashes:
+            # Record only what this copy put in FUTURE: not a doc already there, nor
+            # one deleted mid-batch (its chunks were dropped before the write).
+            copied_ids = _surviving_doc_ids() - docs_already_in_target
+            snapshot_hashes = {
+                doc_id: content_hash
+                for doc_id, content_hash in snapshot_hashes.items()
+                if doc_id in copied_ids
+            }
         with get_session_with_current_tenant() as db_session:
+            if record_hashes:
+                # commits with the cursor, rolled back if the attempt is at rest
+                record_reindex_write__no_commit(
+                    db_session,
+                    snapshot_hashes,
+                    target_search_settings.id,
+                    present_ref,
+                    skip_docs_recorded_for_target=True,
+                )
             if not commit_port_cursor(
                 db_session,
                 port_attempt_id,
@@ -506,7 +553,7 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
     try:
         _sweep_port_orphan_candidates(
             port_attempt_id=port_attempt_id,
-            search_settings_id=future_search_settings.id,
+            search_settings_id=target_search_settings.id,
             cc_pair_id=cc_pair_id,
             port_user_id=port_user_id,
             copier=copier,
