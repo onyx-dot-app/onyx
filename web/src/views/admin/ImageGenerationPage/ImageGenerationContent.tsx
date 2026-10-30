@@ -3,8 +3,6 @@
 import { PageLoader } from "@opal/loaders";
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
-import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -27,7 +25,6 @@ import {
   Divider,
   InputSingleSelect,
   MessageCard,
-  SelectCard,
   Tabs,
   Text,
   useCreateModal,
@@ -43,7 +40,6 @@ import {
   Section,
   toast,
 } from "@opal/layouts";
-import { Hoverable } from "@opal/core";
 import { SvgDisconnected, SvgEmpty } from "@opal/illustrations";
 import {
   SvgArrowExchange,
@@ -76,7 +72,6 @@ interface ConnectedModelCardProps {
   description: string | RichStr;
   ariaLabel: string;
   isDefault: boolean;
-  disconnectModalOpen: boolean;
   onDisconnect: () => void;
   onEdit?: () => void;
 }
@@ -87,73 +82,47 @@ function ConnectedModelCard({
   description,
   ariaLabel,
   isDefault,
-  disconnectModalOpen,
   onDisconnect,
   onEdit,
 }: ConnectedModelCardProps) {
   const t = useTranslations("admin.imageGeneration");
   const ariaTitle = typeof title === "string" ? title : title.raw;
   return (
-    <Hoverable.Root
-      group="ConnectedImageModelCard"
-      interaction={disconnectModalOpen ? "hover" : "rest"}
-    >
-      <SelectCard
-        state="filled"
+    <Card border="solid" padding={2} rounding={4} aria-label={ariaLabel}>
+      <ContentAction
+        icon={icon}
+        title={title}
+        description={description}
+        titleMaxLines={1}
+        descriptionMaxLines={1}
+        sizePreset="main-ui"
+        variant="section"
         padding={2}
-        rounding={4}
-        aria-label={ariaLabel}
-        onClick={onEdit}
-      >
-        <ContentAction
-          icon={icon}
-          title={title}
-          description={description}
-          titleMaxLines={1}
-          descriptionMaxLines={1}
-          sizePreset="main-ui"
-          variant="section"
-          padding={2}
-          tag={
-            isDefault
-              ? { title: t("defaultTag.label"), color: "blue" }
-              : undefined
-          }
-          rightChildren={
-            <Section flexDirection="row" width="fit" height="fit" gap={0}>
-              <Hoverable.Item
-                group="ConnectedImageModelCard"
-                variant="appear-on-hover"
-              >
-                <Button
-                  icon={SvgUnplug}
-                  prominence="tertiary"
-                  aria-label={t("disconnectButton.ariaLabel", {
-                    title: ariaTitle,
-                  })}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDisconnect();
-                  }}
-                />
-              </Hoverable.Item>
-              {onEdit && (
-                <Button
-                  icon={SvgSettings}
-                  prominence="tertiary"
-                  aria-label={t("editButton.ariaLabel", { title: ariaTitle })}
-                  tabIndex={-1}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onEdit();
-                  }}
-                />
-              )}
-            </Section>
-          }
-        />
-      </SelectCard>
-    </Hoverable.Root>
+        tag={
+          isDefault
+            ? { title: t("defaultTag.label"), color: "blue" }
+            : undefined
+        }
+        rightChildren={
+          <Section flexDirection="row" width="fit" height="fit" gap={0}>
+            <Button
+              icon={SvgUnplug}
+              prominence="tertiary"
+              aria-label={t("disconnectButton.ariaLabel", { title: ariaTitle })}
+              onClick={onDisconnect}
+            />
+            {onEdit && (
+              <Button
+                icon={SvgSettings}
+                prominence="tertiary"
+                aria-label={t("editButton.ariaLabel", { title: ariaTitle })}
+                onClick={onEdit}
+              />
+            )}
+          </Section>
+        }
+      />
+    </Card>
   );
 }
 
@@ -222,7 +191,6 @@ function configGroups(
 
 export default function ImageGenerationContent() {
   const t = useTranslations("admin.imageGeneration");
-  const router = useRouter();
   const {
     data: configs = [],
     error: configError,
@@ -540,9 +508,6 @@ export default function ImageGenerationContent() {
                         : `image-gen-model-${config.llm_provider_id}-${config.model_name}`
                     }
                     isDefault={config.is_default}
-                    disconnectModalOpen={
-                      disconnectProvider?.image_provider_id === imageProviderId
-                    }
                     onDisconnect={() =>
                       setDisconnectProvider({
                         image_provider_id: imageProviderId,
@@ -553,9 +518,7 @@ export default function ImageGenerationContent() {
                     onEdit={
                       legacyProvider
                         ? () => handleEdit(legacyProvider)
-                        : config.llm_provider_owned
-                          ? undefined
-                          : () => router.push(ADMIN_ROUTES.LLM_MODELS.path)
+                        : undefined
                     }
                   />
                 );
