@@ -114,7 +114,7 @@ class VertexImageGenerationProvider(ImageGenerationProvider):
         ):
             return image_generation(
                 prompt=prompt,
-                model=model,
+                model=model if model.startswith("vertex_ai/") else f"vertex_ai/{model}",
                 size=size,
                 n=n,
                 quality=quality,
