@@ -4,7 +4,7 @@ import time
 from collections.abc import Callable, Generator
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Any, NoReturn, TypeVar, cast
+from typing import Any, Concatenate, NoReturn, ParamSpec, TypeVar, cast
 
 from pydantic import BaseModel, Field
 from typing_extensions import override
@@ -53,7 +53,8 @@ from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
 
-_F = TypeVar("_F", bound=Callable[..., list[Any]])
+_P = ParamSpec("_P")
+_T = TypeVar("_T")
 
 _SLIM_DOC_SYNC_LABEL = "canvas_retrieve_all_slim_docs_perm_sync"
 _ACTIVE_ENROLLMENT_STATES = {"active", "invited"}
@@ -113,7 +114,12 @@ class CanvasStage(StrEnum):
     ANNOUNCEMENTS = "announcements"
 
 
-def _empty_if_tool_disabled(stage: CanvasStage) -> Callable[[_F], _F]:
+def _empty_if_tool_disabled(
+    stage: CanvasStage,
+) -> Callable[
+    [Callable[Concatenate["CanvasConnector", int, _P], list[_T]]],
+    Callable[Concatenate["CanvasConnector", int, _P], list[_T]],
+]:
     """Make a per-course listing return [] when Canvas says the tool is
     disabled for the course.
 
@@ -123,11 +129,13 @@ def _empty_if_tool_disabled(stage: CanvasStage) -> Callable[[_F], _F]:
     may still exist.
     """
 
-    def decorator(fn: _F) -> _F:
+    def decorator(
+        fn: Callable[Concatenate["CanvasConnector", int, _P], list[_T]],
+    ) -> Callable[Concatenate["CanvasConnector", int, _P], list[_T]]:
         @functools.wraps(fn)
         def wrapper(
-            self: "CanvasConnector", course_id: int, *args: Any, **kwargs: Any
-        ) -> list[Any]:
+            self: "CanvasConnector", course_id: int, *args: _P.args, **kwargs: _P.kwargs
+        ) -> list[_T]:
             try:
                 return fn(self, course_id, *args, **kwargs)
             except OnyxError as e:
@@ -142,7 +150,7 @@ def _empty_if_tool_disabled(stage: CanvasStage) -> Callable[[_F], _F]:
                 )
                 return []
 
-        return cast(_F, wrapper)
+        return wrapper
 
     return decorator
 
