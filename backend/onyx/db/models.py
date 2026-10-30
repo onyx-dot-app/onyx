@@ -67,6 +67,7 @@ from onyx.configs.constants import (
     MilestoneRecordType,
     NotificationType,
     SearchFeedbackType,
+    TokenRateLimitPeriod,
     TokenRateLimitScope,
 )
 from onyx.connectors.models import InputType
@@ -5747,7 +5748,9 @@ class TokenRateLimit(Base):
     cost_budget_cents: Mapped[float | None] = mapped_column(
         Numeric(18, 6, asdecimal=False), nullable=True
     )
-    period_hours: Mapped[int] = mapped_column(Integer, nullable=False)
+    period: Mapped[TokenRateLimitPeriod] = mapped_column(
+        Enum(TokenRateLimitPeriod, native_enum=False), nullable=False
+    )
     scope: Mapped[TokenRateLimitScope] = mapped_column(
         Enum(TokenRateLimitScope, native_enum=False)
     )

@@ -6309,7 +6309,12 @@
         },
         "timeWindow": {
           "header": "Fenêtre de temps",
-          "unit": "(jours UTC)"
+          "placeholder": "Sélectionnez une période",
+          "options": {
+            "DAILY": "Quotidien",
+            "WEEKLY": "Hebdomadaire",
+            "MONTHLY": "Mensuel"
+          }
         },
         "tokenLimit": {
           "header": "Limite de jetons",
@@ -6326,9 +6331,6 @@
           "name": "Basique",
           "description": "Groupe par défaut pour tous les utilisateurs avec des autorisations de base."
         }
-      },
-      "placeholders": {
-        "tokenBudget": "1"
       }
     },
     "hooks": {
@@ -9875,7 +9877,7 @@
           "tokens": "Jusqu'à {tokens} jetons"
         },
         "cadence": {
-          "label": "{days, plural, one {Réinitialisation chaque jour à minuit UTC} other {Réinitialisation tous les # jours à minuit UTC}}"
+          "label": "{period, select, DAILY {Réinitialisation chaque jour à minuit UTC} WEEKLY {Réinitialisation chaque lundi à minuit UTC} other {Réinitialisation le 1er de chaque mois à minuit UTC}}"
         },
         "deleteFailed": {
           "error": "Échec de la suppression de la limite de débit de jetons"
@@ -9919,9 +9921,6 @@
           "costMinCents": "Le budget de coût doit être d'au moins 0,01 $",
           "costMoreThanZero": "Le budget de coût doit être supérieur à 0",
           "groupRequired": "Sélectionnez un groupe d'utilisateurs",
-          "periodInteger": "Saisissez un nombre entier de jours",
-          "periodMin": "Utilisez au moins 1 jour",
-          "periodRequired": "Saisissez une période de réinitialisation",
           "scopeRequired": "La portée cible est un champ obligatoire",
           "tokenIncrement": "Utilisez des incréments de 1 000 jetons",
           "tokenInteger": "Saisissez un nombre entier de jetons",
@@ -9940,7 +9939,11 @@
         "period": {
           "description": "Les budgets sont réinitialisés à minuit UTC",
           "title": "Période de réinitialisation",
-          "unit": "jours"
+          "options": {
+            "DAILY": "Quotidien",
+            "WEEKLY": "Hebdomadaire",
+            "MONTHLY": "Mensuel"
+          }
         },
         "scope": {
           "caption": {
@@ -9970,10 +9973,10 @@
             "both": "{cost} ou {tokens} jetons",
             "tokens": "{tokens} jetons"
           },
-          "global": "{days, plural, one {Tout le monde dans l'espace de travail partage jusqu'à {budget} chaque jour. L'utilisation est bloquée jusqu'à la réinitialisation de la période.} other {Tout le monde dans l'espace de travail partage jusqu'à {budget} tous les # jours. L'utilisation est bloquée jusqu'à la réinitialisation de la période.}}",
-          "group": "{days, plural, one {Les membres de {group} partagent jusqu'à {budget} chaque jour. L'utilisation est bloquée jusqu'à la réinitialisation de la période.} other {Les membres de {group} partagent jusqu'à {budget} tous les # jours. L'utilisation est bloquée jusqu'à la réinitialisation de la période.}}",
-          "groupUnchosen": "{days, plural, one {Les membres du groupe choisi partagent jusqu'à {budget} chaque jour. L'utilisation est bloquée jusqu'à la réinitialisation de la période.} other {Les membres du groupe choisi partagent jusqu'à {budget} tous les # jours. L'utilisation est bloquée jusqu'à la réinitialisation de la période.}}",
-          "user": "{days, plural, one {Chaque utilisateur peut dépenser jusqu'à {budget} chaque jour. L'utilisation est bloquée jusqu'à la réinitialisation de la période.} other {Chaque utilisateur peut dépenser jusqu'à {budget} tous les # jours. L'utilisation est bloquée jusqu'à la réinitialisation de la période.}}"
+          "global": "{period, select, DAILY {Tout le monde dans l'espace de travail partage jusqu'à {budget} chaque jour. L'utilisation est bloquée jusqu'à la réinitialisation de la période.} WEEKLY {Tout le monde dans l'espace de travail partage jusqu'à {budget} chaque semaine. L'utilisation est bloquée jusqu'à la réinitialisation de la période.} other {Tout le monde dans l'espace de travail partage jusqu'à {budget} chaque mois. L'utilisation est bloquée jusqu'à la réinitialisation de la période.}}",
+          "group": "{period, select, DAILY {Les membres de {group} partagent jusqu'à {budget} chaque jour. L'utilisation est bloquée jusqu'à la réinitialisation de la période.} WEEKLY {Les membres de {group} partagent jusqu'à {budget} chaque semaine. L'utilisation est bloquée jusqu'à la réinitialisation de la période.} other {Les membres de {group} partagent jusqu'à {budget} chaque mois. L'utilisation est bloquée jusqu'à la réinitialisation de la période.}}",
+          "groupUnchosen": "{period, select, DAILY {Les membres du groupe choisi partagent jusqu'à {budget} chaque jour. L'utilisation est bloquée jusqu'à la réinitialisation de la période.} WEEKLY {Les membres du groupe choisi partagent jusqu'à {budget} chaque semaine. L'utilisation est bloquée jusqu'à la réinitialisation de la période.} other {Les membres du groupe choisi partagent jusqu'à {budget} chaque mois. L'utilisation est bloquée jusqu'à la réinitialisation de la période.}}",
+          "user": "{period, select, DAILY {Chaque utilisateur peut dépenser jusqu'à {budget} chaque jour. L'utilisation est bloquée jusqu'à la réinitialisation de la période.} WEEKLY {Chaque utilisateur peut dépenser jusqu'à {budget} chaque semaine. L'utilisation est bloquée jusqu'à la réinitialisation de la période.} other {Chaque utilisateur peut dépenser jusqu'à {budget} chaque mois. L'utilisation est bloquée jusqu'à la réinitialisation de la période.}}"
         },
         "tokenBudget": {
           "description": "Nombre maximal de jetons par période de réinitialisation",

@@ -6309,7 +6309,12 @@
         },
         "timeWindow": {
           "header": "Zeitfenster",
-          "unit": "(UTC-Tage)"
+          "placeholder": "Zeitraum auswählen",
+          "options": {
+            "DAILY": "Täglich",
+            "WEEKLY": "Wöchentlich",
+            "MONTHLY": "Monatlich"
+          }
         },
         "tokenLimit": {
           "header": "Token-Limit",
@@ -6326,9 +6331,6 @@
           "name": "Basis",
           "description": "Standardgruppe für alle Benutzer mit Basisberechtigungen."
         }
-      },
-      "placeholders": {
-        "tokenBudget": "1"
       }
     },
     "hooks": {
@@ -9875,7 +9877,7 @@
           "tokens": "Bis zu {tokens} Token"
         },
         "cadence": {
-          "label": "{days, plural, one {Wird jeden Tag um Mitternacht UTC zurückgesetzt} other {Wird alle # Tage um Mitternacht UTC zurückgesetzt}}"
+          "label": "{period, select, DAILY {Wird jeden Tag um Mitternacht UTC zurückgesetzt} WEEKLY {Wird jeden Montag um Mitternacht UTC zurückgesetzt} other {Wird am 1. jedes Monats um Mitternacht UTC zurückgesetzt}}"
         },
         "deleteFailed": {
           "error": "Das Token-Ratenlimit konnte nicht gelöscht werden"
@@ -9919,9 +9921,6 @@
           "costMinCents": "Das Kostenbudget muss mindestens 0,01 $ betragen",
           "costMoreThanZero": "Das Kostenbudget muss größer als 0 sein",
           "groupRequired": "Wählen Sie eine Benutzergruppe aus",
-          "periodInteger": "Geben Sie eine ganze Anzahl von Tagen ein",
-          "periodMin": "Verwenden Sie mindestens 1 Tag",
-          "periodRequired": "Geben Sie einen Zurücksetzungszeitraum ein",
           "scopeRequired": "Der Zielbereich ist ein Pflichtfeld",
           "tokenIncrement": "Verwenden Sie Schritte von 1.000 Token",
           "tokenInteger": "Geben Sie eine ganze Anzahl von Token ein",
@@ -9940,7 +9939,11 @@
         "period": {
           "description": "Budgets werden um Mitternacht UTC zurückgesetzt",
           "title": "Zurücksetzungszeitraum",
-          "unit": "Tage"
+          "options": {
+            "DAILY": "Täglich",
+            "WEEKLY": "Wöchentlich",
+            "MONTHLY": "Monatlich"
+          }
         },
         "scope": {
           "caption": {
@@ -9970,10 +9973,10 @@
             "both": "{cost} oder {tokens} Token",
             "tokens": "{tokens} Token"
           },
-          "global": "{days, plural, one {Alle im Arbeitsbereich teilen sich täglich bis zu {budget}. Die Nutzung wird blockiert, bis der Zeitraum zurückgesetzt wird.} other {Alle im Arbeitsbereich teilen sich alle # Tage bis zu {budget}. Die Nutzung wird blockiert, bis der Zeitraum zurückgesetzt wird.}}",
-          "group": "{days, plural, one {Die Mitglieder von {group} teilen sich täglich bis zu {budget}. Die Nutzung wird blockiert, bis der Zeitraum zurückgesetzt wird.} other {Die Mitglieder von {group} teilen sich alle # Tage bis zu {budget}. Die Nutzung wird blockiert, bis der Zeitraum zurückgesetzt wird.}}",
-          "groupUnchosen": "{days, plural, one {Die Mitglieder der gewählten Gruppe teilen sich täglich bis zu {budget}. Die Nutzung wird blockiert, bis der Zeitraum zurückgesetzt wird.} other {Die Mitglieder der gewählten Gruppe teilen sich alle # Tage bis zu {budget}. Die Nutzung wird blockiert, bis der Zeitraum zurückgesetzt wird.}}",
-          "user": "{days, plural, one {Jeder Benutzer kann täglich bis zu {budget} ausgeben. Die Nutzung wird blockiert, bis der Zeitraum zurückgesetzt wird.} other {Jeder Benutzer kann alle # Tage bis zu {budget} ausgeben. Die Nutzung wird blockiert, bis der Zeitraum zurückgesetzt wird.}}"
+          "global": "{period, select, DAILY {Alle im Arbeitsbereich teilen sich täglich bis zu {budget}. Die Nutzung wird blockiert, bis der Zeitraum zurückgesetzt wird.} WEEKLY {Alle im Arbeitsbereich teilen sich wöchentlich bis zu {budget}. Die Nutzung wird blockiert, bis der Zeitraum zurückgesetzt wird.} other {Alle im Arbeitsbereich teilen sich monatlich bis zu {budget}. Die Nutzung wird blockiert, bis der Zeitraum zurückgesetzt wird.}}",
+          "group": "{period, select, DAILY {Die Mitglieder von {group} teilen sich täglich bis zu {budget}. Die Nutzung wird blockiert, bis der Zeitraum zurückgesetzt wird.} WEEKLY {Die Mitglieder von {group} teilen sich wöchentlich bis zu {budget}. Die Nutzung wird blockiert, bis der Zeitraum zurückgesetzt wird.} other {Die Mitglieder von {group} teilen sich monatlich bis zu {budget}. Die Nutzung wird blockiert, bis der Zeitraum zurückgesetzt wird.}}",
+          "groupUnchosen": "{period, select, DAILY {Die Mitglieder der gewählten Gruppe teilen sich täglich bis zu {budget}. Die Nutzung wird blockiert, bis der Zeitraum zurückgesetzt wird.} WEEKLY {Die Mitglieder der gewählten Gruppe teilen sich wöchentlich bis zu {budget}. Die Nutzung wird blockiert, bis der Zeitraum zurückgesetzt wird.} other {Die Mitglieder der gewählten Gruppe teilen sich monatlich bis zu {budget}. Die Nutzung wird blockiert, bis der Zeitraum zurückgesetzt wird.}}",
+          "user": "{period, select, DAILY {Jeder Benutzer kann täglich bis zu {budget} ausgeben. Die Nutzung wird blockiert, bis der Zeitraum zurückgesetzt wird.} WEEKLY {Jeder Benutzer kann wöchentlich bis zu {budget} ausgeben. Die Nutzung wird blockiert, bis der Zeitraum zurückgesetzt wird.} other {Jeder Benutzer kann monatlich bis zu {budget} ausgeben. Die Nutzung wird blockiert, bis der Zeitraum zurückgesetzt wird.}}"
         },
         "tokenBudget": {
           "description": "Maximale Anzahl an Token pro Zurücksetzungszeitraum",

@@ -6309,7 +6309,12 @@
         },
         "timeWindow": {
           "header": "시간 범위",
-          "unit": "(UTC 기준 일수)"
+          "placeholder": "주기 선택",
+          "options": {
+            "DAILY": "매일",
+            "WEEKLY": "매주",
+            "MONTHLY": "매월"
+          }
         },
         "tokenLimit": {
           "header": "Token 한도",
@@ -6326,9 +6331,6 @@
           "name": "기본",
           "description": "기본 권한을 가진 모든 사용자의 기본 그룹입니다."
         }
-      },
-      "placeholders": {
-        "tokenBudget": "1"
       }
     },
     "hooks": {
@@ -9875,7 +9877,7 @@
           "tokens": "최대 {tokens} tokens"
         },
         "cadence": {
-          "label": "{days, plural, one {매일 UTC 자정에 초기화} other {#일마다 UTC 자정에 초기화}}"
+          "label": "{period, select, DAILY {매일 UTC 자정에 초기화} WEEKLY {매주 월요일 UTC 자정에 초기화} other {매월 1일 UTC 자정에 초기화}}"
         },
         "deleteFailed": {
           "error": "token 사용 한도를 삭제하지 못했습니다"
@@ -9919,9 +9921,6 @@
           "costMinCents": "비용 예산은 최소 $0.01이어야 합니다",
           "costMoreThanZero": "비용 예산은 0보다 커야 합니다",
           "groupRequired": "사용자 그룹을 선택하세요",
-          "periodInteger": "일수를 정수로 입력하세요",
-          "periodMin": "최소 1일 이상이어야 합니다",
-          "periodRequired": "초기화 주기를 입력하세요",
           "scopeRequired": "대상 범위는 필수 항목입니다",
           "tokenIncrement": "1,000 tokens 단위로 입력하세요",
           "tokenInteger": "token 수를 정수로 입력하세요",
@@ -9940,7 +9939,11 @@
         "period": {
           "description": "예산은 UTC 자정에 초기화됩니다",
           "title": "초기화 주기",
-          "unit": "일"
+          "options": {
+            "DAILY": "매일",
+            "WEEKLY": "매주",
+            "MONTHLY": "매월"
+          }
         },
         "scope": {
           "caption": {
@@ -9970,10 +9973,10 @@
             "both": "{cost} 또는 {tokens} tokens",
             "tokens": "{tokens} tokens"
           },
-          "global": "{days, plural, one {워크스페이스의 모든 사용자가 매일 최대 {budget}까지 함께 사용합니다. 주기가 초기화될 때까지 사용이 차단됩니다.} other {워크스페이스의 모든 사용자가 #일마다 최대 {budget}까지 함께 사용합니다. 주기가 초기화될 때까지 사용이 차단됩니다.}}",
-          "group": "{days, plural, one {{group} 그룹의 구성원이 매일 최대 {budget}까지 함께 사용합니다. 주기가 초기화될 때까지 사용이 차단됩니다.} other {{group} 그룹의 구성원이 #일마다 최대 {budget}까지 함께 사용합니다. 주기가 초기화될 때까지 사용이 차단됩니다.}}",
-          "groupUnchosen": "{days, plural, one {선택한 그룹의 구성원이 매일 최대 {budget}까지 함께 사용합니다. 주기가 초기화될 때까지 사용이 차단됩니다.} other {선택한 그룹의 구성원이 #일마다 최대 {budget}까지 함께 사용합니다. 주기가 초기화될 때까지 사용이 차단됩니다.}}",
-          "user": "{days, plural, one {각 사용자가 매일 최대 {budget}까지 사용할 수 있습니다. 주기가 초기화될 때까지 사용이 차단됩니다.} other {각 사용자가 #일마다 최대 {budget}까지 사용할 수 있습니다. 주기가 초기화될 때까지 사용이 차단됩니다.}}"
+          "global": "{period, select, DAILY {워크스페이스의 모든 사용자가 매일 최대 {budget}까지 함께 사용합니다. 주기가 초기화될 때까지 사용이 차단됩니다.} WEEKLY {워크스페이스의 모든 사용자가 매주 최대 {budget}까지 함께 사용합니다. 주기가 초기화될 때까지 사용이 차단됩니다.} other {워크스페이스의 모든 사용자가 매월 최대 {budget}까지 함께 사용합니다. 주기가 초기화될 때까지 사용이 차단됩니다.}}",
+          "group": "{period, select, DAILY {{group} 그룹의 구성원이 매일 최대 {budget}까지 함께 사용합니다. 주기가 초기화될 때까지 사용이 차단됩니다.} WEEKLY {{group} 그룹의 구성원이 매주 최대 {budget}까지 함께 사용합니다. 주기가 초기화될 때까지 사용이 차단됩니다.} other {{group} 그룹의 구성원이 매월 최대 {budget}까지 함께 사용합니다. 주기가 초기화될 때까지 사용이 차단됩니다.}}",
+          "groupUnchosen": "{period, select, DAILY {선택한 그룹의 구성원이 매일 최대 {budget}까지 함께 사용합니다. 주기가 초기화될 때까지 사용이 차단됩니다.} WEEKLY {선택한 그룹의 구성원이 매주 최대 {budget}까지 함께 사용합니다. 주기가 초기화될 때까지 사용이 차단됩니다.} other {선택한 그룹의 구성원이 매월 최대 {budget}까지 함께 사용합니다. 주기가 초기화될 때까지 사용이 차단됩니다.}}",
+          "user": "{period, select, DAILY {각 사용자가 매일 최대 {budget}까지 사용할 수 있습니다. 주기가 초기화될 때까지 사용이 차단됩니다.} WEEKLY {각 사용자가 매주 최대 {budget}까지 사용할 수 있습니다. 주기가 초기화될 때까지 사용이 차단됩니다.} other {각 사용자가 매월 최대 {budget}까지 사용할 수 있습니다. 주기가 초기화될 때까지 사용이 차단됩니다.}}"
         },
         "tokenBudget": {
           "description": "초기화 주기당 최대 token 수",

@@ -4,7 +4,7 @@ from unittest.mock import Mock
 import pytest
 from pydantic import ValidationError
 
-from onyx.configs.constants import TokenRateLimitScope
+from onyx.configs.constants import TokenRateLimitPeriod, TokenRateLimitScope
 from onyx.db.models import TokenRateLimit
 from onyx.db.token_limit import update_token_rate_limit
 from onyx.db.user_usage import TokenUsageBucket
@@ -33,7 +33,7 @@ def _rate_limit(
         enabled=True,
         token_budget=token_budget,
         cost_budget_cents=cost_budget_cents,
-        period_hours=1,
+        period=TokenRateLimitPeriod.DAILY,
         scope=TokenRateLimitScope.GLOBAL,
     )
 
@@ -60,12 +60,14 @@ def test_token_rate_limit_args_requires_a_budget() -> None:
     with pytest.raises(
         ValidationError, match="Either token_budget or cost_budget_cents"
     ):
-        TokenRateLimitArgs(enabled=True, period_hours=24)
+        TokenRateLimitArgs(enabled=True, period=TokenRateLimitPeriod.DAILY)
 
 
-def test_token_rate_limit_args_requires_whole_utc_days() -> None:
-    with pytest.raises(ValidationError, match="whole UTC days"):
-        TokenRateLimitArgs(enabled=True, token_budget=1, period_hours=25)
+def test_token_rate_limit_args_rejects_unknown_period() -> None:
+    with pytest.raises(ValidationError):
+        TokenRateLimitArgs.model_validate(
+            {"enabled": True, "token_budget": 1, "period": "HOURLY"}
+        )
 
 
 def test_token_rate_limit_args_rejects_budgets_above_one_trillion() -> None:
@@ -73,7 +75,7 @@ def test_token_rate_limit_args_rejects_budgets_above_one_trillion() -> None:
         TokenRateLimitArgs(
             enabled=True,
             token_budget=MAX_TOKEN_BUDGET_THOUSANDS + 1,
-            period_hours=24,
+            period=TokenRateLimitPeriod.DAILY,
         )
 
 
@@ -81,7 +83,7 @@ def test_token_rate_limit_update_args_accepts_legacy_budget() -> None:
     args = TokenRateLimitUpdateArgs(
         enabled=False,
         token_budget=MAX_TOKEN_BUDGET_THOUSANDS + 1,
-        period_hours=24,
+        period=TokenRateLimitPeriod.DAILY,
     )
 
     assert args.token_budget == MAX_TOKEN_BUDGET_THOUSANDS + 1
@@ -100,7 +102,7 @@ def test_legacy_budget_can_be_toggled_without_increasing_it() -> None:
         TokenRateLimitUpdateArgs(
             enabled=False,
             token_budget=legacy_budget,
-            period_hours=24,
+            period=TokenRateLimitPeriod.DAILY,
         ),
     )
 
@@ -121,7 +123,7 @@ def test_existing_limit_cannot_be_raised_above_one_trillion() -> None:
             TokenRateLimitUpdateArgs(
                 enabled=True,
                 token_budget=MAX_TOKEN_BUDGET_THOUSANDS + 1,
-                period_hours=24,
+                period=TokenRateLimitPeriod.DAILY,
             ),
         )
 
@@ -149,7 +151,7 @@ def test_token_rate_limit_display_allows_cost_only_limit() -> None:
     assert display.cost_budget_cents == 2.5
 
 
-def test_token_rate_limit_display_normalizes_legacy_period() -> None:
+def test_token_rate_limit_display_returns_period() -> None:
     display = TokenRateLimitDisplay.from_db(_rate_limit(1))
 
-    assert display.period_hours == 24
+    assert display.period == TokenRateLimitPeriod.DAILY

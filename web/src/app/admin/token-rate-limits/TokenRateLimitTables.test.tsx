@@ -1,6 +1,9 @@
 import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import { TokenRateLimitTable } from "@/app/admin/token-rate-limits/TokenRateLimitTables";
-import type { TokenRateLimitDisplay } from "@/app/admin/token-rate-limits/types";
+import {
+  Period,
+  type TokenRateLimitDisplay,
+} from "@/app/admin/token-rate-limits/types";
 
 const mockDelete = jest.fn();
 const mockMutate = jest.fn();
@@ -25,7 +28,7 @@ jest.mock("swr", () => ({
 }));
 
 function tokenRateLimit(
-  periodHours: number,
+  period: Period,
   tokenBudget: number | null,
   costBudgetCents: number | null
 ): TokenRateLimitDisplay {
@@ -33,7 +36,7 @@ function tokenRateLimit(
     token_id: 1,
     enabled: true,
     token_budget: tokenBudget,
-    period_hours: periodHours,
+    period,
     cost_budget_cents: costBudgetCents,
   };
 }
@@ -41,21 +44,21 @@ function tokenRateLimit(
 test.each([
   [
     "token-only",
-    tokenRateLimit(24, 1, null),
+    tokenRateLimit(Period.DAILY, 1, null),
     "Up to 1,000 tokens",
     "Resets every day at midnight UTC",
   ],
   [
     "cost-only",
-    tokenRateLimit(24, null, 100),
+    tokenRateLimit(Period.WEEKLY, null, 100),
     "Up to $1.00",
-    "Resets every day at midnight UTC",
+    "Resets every Monday at midnight UTC",
   ],
   [
     "dual",
-    tokenRateLimit(48, 1, 100),
+    tokenRateLimit(Period.MONTHLY, 1, 100),
     "Up to $1.00 or 1,000 tokens",
-    "Resets every 2 days at midnight UTC",
+    "Resets on the 1st of every month at midnight UTC",
   ],
 ])("%s limits render budget and cadence", (_name, limit, budget, cadence) => {
   render(
@@ -80,7 +83,7 @@ describe("token rate limit mutation failures", () => {
     mockUpdate.mockRejectedValue(new Error("Update failed"));
     render(
       <TokenRateLimitTable
-        tokenRateLimits={[tokenRateLimit(24, 1, null)]}
+        tokenRateLimits={[tokenRateLimit(Period.DAILY, 1, null)]}
         fetchUrl="/api/test-limits"
         isAdmin
       />
@@ -99,7 +102,7 @@ describe("token rate limit mutation failures", () => {
     mockDelete.mockRejectedValue(new Error("Delete failed"));
     render(
       <TokenRateLimitTable
-        tokenRateLimits={[tokenRateLimit(24, 1, null)]}
+        tokenRateLimits={[tokenRateLimit(Period.DAILY, 1, null)]}
         fetchUrl="/api/test-limits"
         isAdmin
       />

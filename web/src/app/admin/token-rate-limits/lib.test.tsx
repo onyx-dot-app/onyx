@@ -5,12 +5,15 @@ import {
   insertUserTokenRateLimit,
   updateTokenRateLimit,
 } from "@/app/admin/token-rate-limits/lib";
-import type { TokenRateLimitArgs } from "@/app/admin/token-rate-limits/types";
+import {
+  Period,
+  type TokenRateLimitArgs,
+} from "@/app/admin/token-rate-limits/types";
 
 const tokenRateLimit: TokenRateLimitArgs = {
   enabled: true,
   token_budget: 1,
-  period_hours: 24,
+  period: Period.DAILY,
   cost_budget_cents: null,
 };
 const ERROR_DETAIL = "Database unavailable";

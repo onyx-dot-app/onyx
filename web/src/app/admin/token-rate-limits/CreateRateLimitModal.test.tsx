@@ -15,13 +15,12 @@ test("requires a cost budget when no token budget is set", async () => {
   );
 
   const modal = screen.getByRole("dialog");
-  const resetPeriod = screen.getByRole("textbox", { name: /Reset period/ });
 
   expect(modal).toHaveAttribute("data-width", "sm");
   expect(modal).toHaveAttribute("data-height", "fit");
-  expect(resetPeriod).toHaveAttribute("type", "text");
-  expect(resetPeriod).toHaveAttribute("inputmode", "numeric");
-  expect(resetPeriod).toHaveValue("30");
+  expect(screen.getByRole("combobox", { name: /Reset period/ })).toHaveValue(
+    "Monthly"
+  );
 
   fireEvent.click(screen.getByRole("button", { name: "Create limit" }));
 
@@ -53,7 +52,7 @@ test("formats and submits a token-only budget", async () => {
   await waitFor(() =>
     expect(onSubmit).toHaveBeenCalledWith(
       "global",
-      720,
+      "MONTHLY",
       1_500_000,
       null,
       undefined

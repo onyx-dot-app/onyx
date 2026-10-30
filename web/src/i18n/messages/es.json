@@ -6309,7 +6309,12 @@
         },
         "timeWindow": {
           "header": "Ventana de tiempo",
-          "unit": "(días UTC)"
+          "placeholder": "Selecciona un periodo",
+          "options": {
+            "DAILY": "Diario",
+            "WEEKLY": "Semanal",
+            "MONTHLY": "Mensual"
+          }
         },
         "tokenLimit": {
           "header": "Límite de tokens",
@@ -6326,9 +6331,6 @@
           "name": "Básico",
           "description": "Grupo predeterminado para todos los usuarios con permisos básicos."
         }
-      },
-      "placeholders": {
-        "tokenBudget": "1"
       }
     },
     "hooks": {
@@ -9875,7 +9877,7 @@
           "tokens": "Hasta {tokens} tokens"
         },
         "cadence": {
-          "label": "{days, plural, one {Se restablece cada día a medianoche UTC} other {Se restablece cada # días a medianoche UTC}}"
+          "label": "{period, select, DAILY {Se restablece cada día a medianoche UTC} WEEKLY {Se restablece cada lunes a medianoche UTC} other {Se restablece el día 1 de cada mes a medianoche UTC}}"
         },
         "deleteFailed": {
           "error": "No se pudo eliminar el límite de frecuencia de tokens"
@@ -9919,9 +9921,6 @@
           "costMinCents": "El presupuesto de coste debe ser de al menos $0.01",
           "costMoreThanZero": "El presupuesto de coste debe ser mayor que 0",
           "groupRequired": "Selecciona un grupo de usuarios",
-          "periodInteger": "Introduce un número entero de días",
-          "periodMin": "Usa al menos 1 día",
-          "periodRequired": "Introduce un periodo de restablecimiento",
           "scopeRequired": "El ámbito de destino es un campo obligatorio",
           "tokenIncrement": "Usa incrementos de 1.000 tokens",
           "tokenInteger": "Introduce un número entero de tokens",
@@ -9940,7 +9939,11 @@
         "period": {
           "description": "Los presupuestos se restablecen a medianoche UTC",
           "title": "Periodo de restablecimiento",
-          "unit": "días"
+          "options": {
+            "DAILY": "Diario",
+            "WEEKLY": "Semanal",
+            "MONTHLY": "Mensual"
+          }
         },
         "scope": {
           "caption": {
@@ -9970,10 +9973,10 @@
             "both": "{cost} o {tokens} tokens",
             "tokens": "{tokens} tokens"
           },
-          "global": "{days, plural, one {Todo el espacio de trabajo comparte hasta {budget} cada día. El uso se bloquea hasta que se restablece el periodo.} other {Todo el espacio de trabajo comparte hasta {budget} cada # días. El uso se bloquea hasta que se restablece el periodo.}}",
-          "group": "{days, plural, one {Los miembros de {group} comparten hasta {budget} cada día. El uso se bloquea hasta que se restablece el periodo.} other {Los miembros de {group} comparten hasta {budget} cada # días. El uso se bloquea hasta que se restablece el periodo.}}",
-          "groupUnchosen": "{days, plural, one {Los miembros del grupo elegido comparten hasta {budget} cada día. El uso se bloquea hasta que se restablece el periodo.} other {Los miembros del grupo elegido comparten hasta {budget} cada # días. El uso se bloquea hasta que se restablece el periodo.}}",
-          "user": "{days, plural, one {Cada usuario puede gastar hasta {budget} cada día. El uso se bloquea hasta que se restablece el periodo.} other {Cada usuario puede gastar hasta {budget} cada # días. El uso se bloquea hasta que se restablece el periodo.}}"
+          "global": "{period, select, DAILY {Todo el espacio de trabajo comparte hasta {budget} cada día. El uso se bloquea hasta que se restablece el periodo.} WEEKLY {Todo el espacio de trabajo comparte hasta {budget} cada semana. El uso se bloquea hasta que se restablece el periodo.} other {Todo el espacio de trabajo comparte hasta {budget} cada mes. El uso se bloquea hasta que se restablece el periodo.}}",
+          "group": "{period, select, DAILY {Los miembros de {group} comparten hasta {budget} cada día. El uso se bloquea hasta que se restablece el periodo.} WEEKLY {Los miembros de {group} comparten hasta {budget} cada semana. El uso se bloquea hasta que se restablece el periodo.} other {Los miembros de {group} comparten hasta {budget} cada mes. El uso se bloquea hasta que se restablece el periodo.}}",
+          "groupUnchosen": "{period, select, DAILY {Los miembros del grupo elegido comparten hasta {budget} cada día. El uso se bloquea hasta que se restablece el periodo.} WEEKLY {Los miembros del grupo elegido comparten hasta {budget} cada semana. El uso se bloquea hasta que se restablece el periodo.} other {Los miembros del grupo elegido comparten hasta {budget} cada mes. El uso se bloquea hasta que se restablece el periodo.}}",
+          "user": "{period, select, DAILY {Cada usuario puede gastar hasta {budget} cada día. El uso se bloquea hasta que se restablece el periodo.} WEEKLY {Cada usuario puede gastar hasta {budget} cada semana. El uso se bloquea hasta que se restablece el periodo.} other {Cada usuario puede gastar hasta {budget} cada mes. El uso se bloquea hasta que se restablece el periodo.}}"
         },
         "tokenBudget": {
           "description": "Tokens máximos por periodo de restablecimiento",
