@@ -140,7 +140,11 @@ keyed `(pair, event_key)` so a redelivery writes nothing, and
 `EventInboxConnector` (`onyx/connectors/event_inbox/connector.py`) drains them
 inside an ordinary docfetching run. The factory returns that drain for an
 `EVENT` pair, so the source's own connector class is never loaded, and the run
-injects the pair and attempt ids because neither is stored config. Single
+injects the pair and attempt ids because neither is stored config. One
+consequence: the probes dispatch on the connector class
+(`ee/onyx/connectors/perm_sync_valid.py:_VALIDATOR_BY_CONNECTOR_CLASS`), so an
+event pair runs neither the source's `validate_perm_sync` nor its
+`validate_connector_settings`. Both pass silently rather than failing. Single
 tenant only; the webhook server refuses to start under `MULTI_TENANT`.
 
 **Source gateways.** A source can put every remote call in one
