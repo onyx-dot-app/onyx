@@ -5,6 +5,7 @@
   const TITLEBAR_ID = "onyx-desktop-titlebar";
   const TITLEBAR_HEIGHT = 36;
   const STYLE_ID = "onyx-desktop-titlebar-style";
+  const HISTORY_NAV_ID = "onyx-desktop-history-nav";
   const VIEWPORT_VAR = "--onyx-desktop-viewport-height";
 
   // Wait for DOM to be ready
@@ -116,6 +117,49 @@
         height: var(--onyx-desktop-titlebar-height);
       }
 
+      #${HISTORY_NAV_ID} {
+        position: absolute;
+        left: 80px;
+        top: 0;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        -webkit-app-region: no-drag;
+      }
+
+      #${HISTORY_NAV_ID} button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 26px;
+        height: 24px;
+        padding: 0;
+        border: none;
+        border-radius: 6px;
+        background: transparent;
+        color: rgba(0, 0, 0, 0.6);
+        cursor: default;
+      }
+
+      #${HISTORY_NAV_ID} button:hover:not(:disabled) {
+        background: rgba(0, 0, 0, 0.06);
+        color: rgba(0, 0, 0, 0.85);
+      }
+
+      #${HISTORY_NAV_ID} button:disabled {
+        opacity: 0.35;
+      }
+
+      .dark #${HISTORY_NAV_ID} button {
+        color: rgba(255, 255, 255, 0.65);
+      }
+
+      .dark #${HISTORY_NAV_ID} button:hover:not(:disabled) {
+        background: rgba(255, 255, 255, 0.08);
+        color: rgba(255, 255, 255, 0.9);
+      }
+
       /* Dark mode support */
       .dark #${TITLEBAR_ID} {
         background: linear-gradient(180deg, rgba(18, 18, 18, 0.82) 0%, rgba(18, 18, 18, 0.72) 100%);
@@ -149,15 +193,8 @@
 
     titleBar.addEventListener("mousedown", (e) => {
       // Only start drag on left click and not on buttons/inputs
-      const nonDraggable = [
-        "BUTTON",
-        "INPUT",
-        "TEXTAREA",
-        "A",
-        "SELECT",
-        "OPTION",
-      ];
-      if (e.button === 0 && !nonDraggable.includes(e.target.tagName)) {
+      const nonDraggable = "button, input, textarea, a, select, option";
+      if (e.button === 0 && !e.target.closest?.(nonDraggable)) {
         e.preventDefault();
         startWindowDrag();
       }
@@ -196,7 +233,42 @@
     // Apply correct theme
     updateTitleBarTheme(isDark);
 
+    titleBar.appendChild(buildHistoryButtons());
+
     return titleBar;
+  }
+
+  function historyButton(label, path, onClick) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.setAttribute("aria-label", label);
+    button.title = label;
+    button.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${path}"/></svg>`;
+    button.addEventListener("click", onClick);
+    return button;
+  }
+
+  // Back/forward for pages without their own way back, such as an OAuth
+  // provider the app navigated to.
+  function buildHistoryButtons() {
+    const nav = document.createElement("div");
+    nav.id = HISTORY_NAV_ID;
+    const back = historyButton("Back", "M10 3L5 8l5 5", () => history.back());
+    const forward = historyButton("Forward", "M6 3l5 5-5 5", () =>
+      history.forward(),
+    );
+    nav.append(back, forward);
+
+    const navigation = window.navigation;
+    if (navigation && "canGoBack" in navigation) {
+      const sync = () => {
+        back.disabled = !navigation.canGoBack;
+        forward.disabled = !navigation.canGoForward;
+      };
+      sync();
+      navigation.addEventListener("currententrychange", sync);
+    }
+    return nav;
   }
 
   function mountTitleBar() {

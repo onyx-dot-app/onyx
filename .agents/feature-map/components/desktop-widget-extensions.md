@@ -15,7 +15,8 @@ deployments only.
 - **A desktop user** installs the app for macOS, Windows or Linux. On first
   launch it asks for the server URL (default `https://cloud.onyx.app`), then
   shows the normal web app in a native window with global shortcuts and a
-  summon shortcut. On macOS the window has a custom titlebar. Links from a
+  summon shortcut. On macOS the window has a custom titlebar with Back and
+  Forward buttons. Links from a
   chat open in the system browser. A server that cannot be reached shows the
   settings page again.
 - **A visitor to a customer's site** sees a chat launcher or an inline chat
