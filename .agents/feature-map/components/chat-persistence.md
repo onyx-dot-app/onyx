@@ -162,14 +162,22 @@ Search documents and `tool_id` come from the `ToolCall` rows and their search-do
 links (`db/chat_response.py:read_response_replay_data`), not from the typed
 result: the saved `SearchDocsResponse` holds no documents. Only
 `save_chat_turn` writes those links, for the calls that
-`chat/presentation.py:project_response` collects. A
+`chat/presentation.py:project_response` collects, through
+`db/chat.py:add_search_docs_to_tool_call`. It stores each document's index in
+the tool's result as `ToolCall__SearchDoc.position`, and `ToolCall.search_docs`
+orders by position, then id. Do not order by id alone: when a later call
+returns a document that an earlier call saved, the save reuses the older
+`SearchDoc` row and id. Links saved before the column existed have no position
+and keep id order. A
 legacy response replays through the builders in
 `server/query_and_chat/session_loading.py:translate_assistant_message_to_packets`:
 tool steps grouped by `turn_number`, the answer as one delta, citations in
 order of first use, and a stop packet. It picks a builder per tool by
 `in_code_tool_id`, with a custom-tool fallback. A runtime answer with tool
-calls adds a child-response query and a tool-replay query to session load; do
-not add more per-message queries. A reload shows a `RUNNING` row as it is, with the steps saved so far.
+calls adds a child-response query and a tool-replay query to session load.
+`get_chat_session` prefetches the tool calls' search docs and loads their tools
+in one query (`server/query_and_chat/session_loading.py:load_session_tools`);
+do not add per-message or per-call queries. A reload shows a `RUNNING` row as it is, with the steps saved so far.
 A failed answer's error comes from `ChatMessage.response_failure` through
 `chat/errors.py:chat_error` (code, retryable flag, model and provider), and
 falls back to `ChatMessage.error` on legacy rows

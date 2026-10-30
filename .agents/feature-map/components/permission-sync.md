@@ -71,7 +71,10 @@ parts. `doc_sync_config` holds the sync function, its frequency, and
 permissions, so doc sync waits for the first successful index.
 `group_sync_config` holds the group function and whether one run serves every
 cc-pair of the source. `censoring_config` filters chunks after retrieval instead
-of syncing (Salesforce). The loaders import each source's code on first use, so
+of syncing (Salesforce). `doc_permission_sync_seconds` and
+`external_group_sync_seconds` in the same module decide whether a pair's sync
+can run now and how often. The beat due checks and fleet telemetry share them
+([[fleet-telemetry#sync-cadence-from-scheduler-rules]]). The loaders import each source's code on first use, so
 importing the registry does not import every SDK. Frequencies live in
 `ee/onyx/configs/app_configs.py`. The doc sync interval is multiplied by a
 runtime value from Redis (`server/runtime/onyx_runtime.py:OnyxRuntime`,

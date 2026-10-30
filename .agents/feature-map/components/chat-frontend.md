@@ -121,6 +121,15 @@ beyond `input`, `loading` and `streaming` include `cancelling` (Stop sent),
 `unconfirmed` (the client could not confirm that the server is idle) and
 `uploading` (attachments upload). `onSubmit` ignores a send unless the state
 is `input`, so the input bar queues a send made during an upload.
+Each `setCurrentSession` runs `cleanupOldSessions`, which keeps at most ten
+sessions in memory. It drops only idle ones: not current, in `input`, with no
+queued messages, and known not to be incognito (or still empty). An incognito chat cannot be
+rebuilt from the server, so the tab holds its only copy. A dropped chat loads
+from the server again when the user opens it, so state kept only in the store
+does not survive it. Within `/app`,
+`web/src/lib/position/hooks.ts:AppPosition` switches views by writing the URL
+with the history API, not a server navigation; in-app links use its `linkTo*`
+props.
 
 **The message tree.** `app/app/services/messageTree.ts` mirrors the server tree:
 nodes keyed by `nodeId`, each with `latestChildNodeId`.

@@ -19,10 +19,11 @@ that applies to every new route, table, task or LLM call, read
 | Slack bot | `backend/onyx/onyxbot/slack/listener.py` | Socket Mode listener. Runs the chat turn in its own process. | [[slack-bot]] |
 | Discord bot | `backend/onyx/onyxbot/discord/client.py` | Gateway listener. Calls the API server over HTTP. | [[discord-bot]] |
 | MCP server | `backend/onyx/mcp_server_main.py` | Onyx as an MCP server. No database; forwards each call to the API server. | [[mcp-server]] |
+| Webhook server | `backend/onyx/webhook_server_main.py` | Receives connector events that sources push, under `/webhook`. It serves only `/health` and `/metrics`; no event route exists. Off unless Helm `webhookServer.enabled` or the Compose `webhook` profile turns it on. It refuses to start under `MULTI_TENANT`, because an unauthenticated request carries no tenant. | [[connectors]] |
 | Code interpreter | `code-interpreter` service in `deployment/docker_compose/docker-compose.yml` | Runs the Python tool's code. | [[code-execution]] |
 | Craft sandbox pods | `deployment/helm/charts/onyx/templates/sandbox-podtemplate.yaml` | One pod per Craft user, or one container with the Docker backend, running `opencode serve`. | [[craft-sandboxes]] |
 | Sandbox egress proxy | `backend/onyx/sandbox_proxy/` | Every outbound request from a sandbox. | [[craft-external-apps]] |
-| Nginx | `deployment/data/nginx/` | Routes `/api`, SAML and SCIM to the API server, `/mcp` to the MCP server, the rest to the web server. `/mcp/oauth/callback` is an exact match that goes to the web server (`deployment/data/nginx/mcp.conf.inc.template`). | None ([PATHS.md](PATHS.md#not-mapped)). [[mcp-server]] owns the `/mcp` routing. |
+| Nginx | `deployment/data/nginx/` | Routes `/api`, SAML and SCIM to the API server, `/mcp` to the MCP server, `/webhook` to the webhook server, the rest to the web server. In Compose, the `/webhook` upstream resolves at request time, so nginx starts when that server is off (`deployment/data/nginx/webhook.conf.inc`). `/mcp/oauth/callback` is an exact match that goes to the web server (`deployment/data/nginx/mcp.conf.inc.template`). | None ([PATHS.md](PATHS.md#not-mapped)). [[mcp-server]] owns the `/mcp` routing. |
 
 `backend/AGENTS.md` lists the Celery workers and their roles. The `-Q` flags in
 `backend/supervisord.conf` and the Helm worker templates decide which worker

@@ -99,11 +99,15 @@ statement timeout (`db/fleet_telemetry.py:limit_statement_time`).
 The cursor lives in the cache backend. `_send_in_order` decides where the next
 pass resumes: at the first row the sender refused, or after a capped read. Work
 goes out before the inventory (connectors, signup domains, license, the count
-of standard user accounts), so a large inventory cannot hold it back. The pass
-sends the whole inventory again when any part of it changes, and at least every
-six hours. Event IDs come from row identity and update
-time, so the fleet service drops repeats. Index attempt and job state reach the
-fleet only from this pass.
+of standard user accounts), so a large inventory cannot hold it back. Each
+inventory item goes out when it changes, and again six hours after its own last
+send; the fleet service relies on that bound to tell a deleted connector from a
+quiet one. Event IDs come from row identity and update
+time, so the fleet service drops repeats. A running attempt or job goes out at
+each pass at revision 0. A finished one goes out at its end time with a higher
+revision, so later passes repeat its ID and the service keeps the final state
+(`utils/fleet_telemetry_collector.py:_send_finished`). Index attempt and job
+state reach the fleet only from this pass.
 
 **Identity.** `utils/fleet_telemetry.py:deployment_key` reads a random key from
 `KVStore` (`db/fleet_enrollment.py:get_or_create_deployment_key`). Under
@@ -125,7 +129,9 @@ event is marked `shared`.
    number, a boolean or one short token with no spaces, slashes or `@`. A new
    key needs an entry in `utils/fleet_telemetry.py:_FIELDS`. Never send names,
    email addresses, URLs, paths, document content or exception text. Use
-   `error_category`, which reads only the exception type name.
+   `error_category`, which reads only the exception type name, or
+   `utils/fleet_telemetry_collector.py:classify_local_error`, which reads
+   bounded error text locally and returns only a fixed category.
 3. `fleet-service-accepts-first` **The fleet service must accept a new field
    before Onyx sends it.** The ingestion contract lives in the fleet service
    repository. Deploy the receiving change first, as
@@ -171,6 +177,14 @@ event is marked `shared`.
     key or PAT reports channel `web`, unlike a query
     ([[#discord-reports-api-channel]]). A new caller that does not pass its
     origin reports `web`, and nothing fails.
+12. `sync-cadence-from-scheduler-rules` **Permission sync cadences come from
+    the schedulers' own rules.**
+    `utils/fleet_telemetry_collector.py:permission_sync_cadence_reader` calls
+    `ee/onyx/external_permissions/sync_params.py:doc_permission_sync_seconds`
+    and `external_group_sync_seconds`, the helpers that the doc and group sync
+    due checks use, and applies the same runtime multiplier. Change when a
+    sync can run in those helpers, not in the collector, or the reported
+    cadence drifts from the real one ([[permission-sync]]).
 
 ---
 

@@ -17,13 +17,14 @@ restricting a provider to groups needs EE.
   Bedrock, Ollama, an OpenAI-compatible endpoint and others), enters
   credentials, and picks which models users can see. They choose the default
   chat model and, optionally, a router model for Auto mode. They set the task
-  models for chat naming and search selection on Chat Preferences, and the
+  models for chat naming and search on Chat Preferences, and the
   image captioning (vision) model on Index Settings.
   When they create a provider or change its key, the page runs a test call
   first. A bad credential or an unknown model fails the test, and nothing is
   saved. The page runs this test, not the save API.
 - **An admin** sets up decision providers at Admin > Decision Models and may
   select one decision model. It starts unset and never inherits the chat model.
+  When it is set, internal search ranks and expands sections with it.
 - **A user** picks a model per chat, or keeps the agent's model, or the
   workspace default. Tokens and, where the model supports it, reasoning stream
   in. A short network failure before the first token retries without notice.
@@ -157,9 +158,10 @@ providers (the `DecisionProvider` enum in `llm/decisions/models.py`) save
 through `db/llm.py:upsert_decision_provider`. Of the flow rows, it adds or
 removes only DECISION rows. It keeps chat settings, defaults, visibility and
 access, and adds new models hidden. The selection is the DECISION default row.
-It is opt-in and never chosen by discovery or provider creation. No product
-code calls `get_decision_client`. Only the admin and Zoom test endpoints build
-a client.
+It is opt-in and never chosen by discovery or provider creation. Internal
+search is the product caller of `get_decision_client`
+([[internal-search#decision-path-gate]]); the admin and Zoom test endpoints
+build their own clients.
 
 ---
 

@@ -28,8 +28,11 @@ chat retention needs Enterprise. The settings API enforces these tiers.
 - **An admin**, at Admin > Chat Preferences, sets workspace chat options. These
   include the team name and context that every prompt includes, the default
   language, the default assistant's system prompt and built-in tools, and the
-  chat naming and search selection models. A change applies to every user on
-  their next request.
+  chat naming and search models. A change applies to every user on their next
+  request. The Search Decision Model row lists language models and decision
+  models. A decision model makes internal search rank and expand with it; a
+  language model keeps LLM selection with that model; Chat Default uses the
+  chat's own model.
 - **An admin who sets a paid option below its tier** gets a 402 and the stored
   value does not change.
 - **In an incognito chat**, a memory request fails openly. The model is told
@@ -56,7 +59,8 @@ It does not own:
 - [[editions-and-gating]]: the tier rules for paid `Settings` fields, and the
   `tier` and `ee_features_enabled` values on the settings read.
 - [[billing]]: the license status that the EE settings read applies.
-- [[llm-providers]]: how the chat naming and search selection models resolve,
+- [[llm-providers]]: how the chat naming, search selection and decision models
+  resolve,
   and the personal default model string.
 - [[tools-framework]]: why the memory tool skips `allowed_tool_ids`.
 - [[auth-and-identity]]: the user routes, the IdP profile snapshot, and the
@@ -200,6 +204,16 @@ paths read it; find them with `git grep -n load_settings backend`.
     `opensearch_indexing_enabled`. The model keeps both, unused, so that those
     clients keep working. Remove such a field only after a provider release
     without it.
+12. `search-model-one-default` **The Search Decision Model row keeps at most
+    one of DECISION and SEARCH_SELECTION set, but only on the client.**
+    `web/src/views/admin/ChatTaskModelSettings.tsx:SearchDecisionModelSetting`
+    sets one default and then clears the other, in two API calls. A model
+    that is both a chat and a decision model counts as a decision model. The
+    Decision Models page and the API set DECISION without clearing
+    SEARCH_SELECTION, so both can be set. Search then takes the decision path,
+    and SEARCH_SELECTION serves only its LLM fallback
+    ([[internal-search#decision-falls-back-to-llm]]). The row shows the DECISION
+    value when both are set.
 
 ---
 

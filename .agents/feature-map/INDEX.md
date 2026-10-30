@@ -38,7 +38,7 @@ Turn a query into ranked context that the user may see.
 
 | Component | Summary |
 |---|---|
-| [internal-search](components/internal-search.md) | The `internal_search` tool: it expands a query into parallel lanes over the document index and federated sources, fuses them, and has an LLM select and expand the best sections. The `/search` API and the EE Search page reuse it. |
+| [internal-search](components/internal-search.md) | The `internal_search` tool: it expands a query into parallel lanes over the document index and federated sources, fuses them, and has an LLM or a decision model select and expand the best sections. The `/search` API and the EE Search page reuse it. |
 | [document-index](components/document-index.md) | The OpenSearch index that stores document chunks with their vectors and metadata, with the query and filter builder, the metadata sync that pushes ACL and document-set changes into chunks, and the reindex that moves search to a new embedding model. |
 | [access-control](components/access-control.md) | Who can retrieve which document. Indexing stores an access control list (ACL) on every chunk, and every query passes through one filter built from the acting user's ACL. |
 | [web-search](components/web-search.md) | Search of the public internet and fetch of web pages: the `web_search` and `open_url` tools, the admin page that picks the active providers, and the `/web-search` API for callers outside the chat loop. |

@@ -240,7 +240,7 @@ it deletes the old one.
   runs a keyword query.
 - **`RerankingModel` is dead code.** Its only constructor call is in
   `natural_language_processing/search_nlp_models.py:warm_up_cross_encoder`,
-  which a comment marks unused. Search runs no reranker ([[internal-search]]).
+  which a comment marks unused. Search runs no cross-encoder ([[internal-search]]).
 - **Disk pressure looks like a connection error.** At the OpenSearch high
   watermark, index creation fails, and startup reports "Could not connect to a
   document index". Check disk and cluster health first. The dev compose file
