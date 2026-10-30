@@ -67,6 +67,12 @@ chosen adapter fails or lacks its API key. The same output validation runs after
 the fallback. Without a fallback, an adapter failure fails the workflow.
 Repair tasks receive the earlier validation logs as untrusted context.
 
+A task can also start from a failure on another run. Pass that run's ID as
+`failure-run-id`. The workflow reads the run's failed job logs into the same
+failure context file, even when the run is still in progress. The nightly LLM
+provider workflow uses this to retire or fix image models after the image
+generation test fails.
+
 ## Use the runner in another workflow
 
 `run-coding-agent` is a composite action. The CVE workflow uses it within its
