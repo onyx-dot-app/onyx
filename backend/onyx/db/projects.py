@@ -61,9 +61,14 @@ def create_user_files(
     link_url: str | None = None,
     temp_id_map: dict[str, str] | None = None,
     incognito_session_id: UUID | None = None,
+    skip_indexing: bool = False,
 ) -> CategorizedFilesResult:
     # Categorize the files
     categorized_files = categorize_uploaded_files(files, db_session)
+    if skip_indexing:
+        categorized_files.skip_indexing.update(
+            file.filename or "" for file in categorized_files.acceptable
+        )
     # NOTE: At the moment, zip metadata is not used for user files.
     # Should revisit to decide whether this should be a feature.
     upload_response = upload_files(categorized_files.acceptable, FileOrigin.USER_FILE)
@@ -125,6 +130,7 @@ def upload_files_to_user_files_with_indexing(
     db_session: Session,
     background_tasks: BackgroundTasks | None = None,
     incognito_session_id: UUID | None = None,
+    skip_indexing: bool = False,
 ) -> CategorizedFilesResult:
     if project_id is not None and user is not None:
         if not check_project_ownership(project_id, user.id, db_session):
@@ -137,6 +143,7 @@ def upload_files_to_user_files_with_indexing(
         db_session,
         temp_id_map=temp_id_map,
         incognito_session_id=incognito_session_id,
+        skip_indexing=skip_indexing,
     )
     user_files = categorized_files_result.user_files
     rejected_files = categorized_files_result.rejected_files
