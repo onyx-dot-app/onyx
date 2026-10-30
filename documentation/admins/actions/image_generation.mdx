@@ -20,7 +20,9 @@ Gemini image (Nano Banana), Imagen, and the Bedrock image models. Turn the switc
 for example a new model or a model name that a gateway such as LiteLLM Proxy or OpenRouter defines.
 
 <Note>
-  Only public LLM providers can serve image generation, because the action is available to all users.
+  Only public LLM providers without agent restrictions can serve image generation,
+  because the action is available to all users and agents.
+  If you make a linked LLM provider private or restrict it to agents, Onyx disconnects its image models.
 </Note>
 
 ## Configuration

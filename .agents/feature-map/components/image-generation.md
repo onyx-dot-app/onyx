@@ -23,8 +23,10 @@ is on (`ee/onyx/server/tenants/provisioning.py`).
   models only" switch, on by default, shows the non-deprecated catalog image
   models; off, it shows every model on the provider. One click links a model
   to its LLM provider with no credentials, and the first linked model becomes
-  the default. Linking a private LLM provider fails, because the tool is
-  available to all users. Configs made with their own credentials before this change
+  the default. Only public providers with no agent restrictions are listed
+  or can be linked, because the tool is available to all users and agents.
+  Making a linked provider private or agent-restricted unlinks its image
+  models. Configs made with their own credentials before this change
   (legacy) show only while connected, and keep their edit form. A legacy model
   that the vendor withdrew shows a warning to switch. Onyx does not switch a
   saved config by itself.
