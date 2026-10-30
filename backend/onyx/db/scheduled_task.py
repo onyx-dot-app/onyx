@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import and_, desc, literal, select
+from sqlalchemy import and_, case, desc, func, literal, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from onyx.db.action_policy import replace_task_action_policies
@@ -376,6 +376,8 @@ def mark_run_status(
     ).scalar_one_or_none()
     if run is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Scheduled task run not found")
+    if status.has_results() and run.status != status:
+        run.version += 1
     run.status = status
     if session_id is not None:
         run.session_id = session_id
@@ -447,6 +449,69 @@ def list_runs_for_task(
         .limit(limit)
     )
     return list(db_session.execute(stmt).scalars())
+
+
+def unread_run_counts_for_user(
+    *,
+    db_session: Session,
+    user_id: UUID,
+) -> dict[UUID, int]:
+    """Count runs with unviewed results per non-deleted task of ``user_id``."""
+    rows = db_session.execute(
+        select(ScheduledTaskRun.task_id, func.count())
+        .join(ScheduledTask, ScheduledTaskRun.task_id == ScheduledTask.id)
+        .where(
+            ScheduledTask.user_id == user_id,
+            ScheduledTask.deleted.is_(False),
+            func.coalesce(ScheduledTaskRun.viewed_revision, 0)
+            < ScheduledTaskRun.version,
+        )
+        .group_by(ScheduledTaskRun.task_id)
+    ).tuples()
+    return dict(rows.all())
+
+
+def mark_runs_viewed(
+    *,
+    db_session: Session,
+    task_id: UUID,
+    user_id: UUID,
+    revisions: dict[UUID, int],
+) -> list[ScheduledTaskRun]:
+    """Acknowledge only supplied revisions; newer results stay unread.
+
+    Raises ``OnyxError(NOT_FOUND)`` for a task the user cannot see and
+    ``ValueError`` when a revision is newer than the run's current version.
+    """
+    get_scheduled_task(db_session=db_session, task_id=task_id, user_id=user_id)
+    if not revisions:
+        return []
+    # Lock before validating so the complete request succeeds or fails together.
+    rows = db_session.execute(
+        select(ScheduledTaskRun.id, ScheduledTaskRun.version)
+        .where(
+            ScheduledTaskRun.task_id == task_id,
+            ScheduledTaskRun.id.in_(revisions),
+        )
+        .order_by(ScheduledTaskRun.id)
+        .with_for_update()
+    ).all()
+    if any(revisions[run_id] > version for run_id, version in rows):
+        raise ValueError("Run revision is newer than the current run")
+    if not rows:
+        return []
+    viewed = case(revisions, value=ScheduledTaskRun.id)
+    return list(
+        db_session.scalars(
+            update(ScheduledTaskRun)
+            .where(ScheduledTaskRun.id.in_([run_id for run_id, _ in rows]))
+            .values(
+                viewed_revision=func.greatest(ScheduledTaskRun.viewed_revision, viewed)
+            )
+            .returning(ScheduledTaskRun)
+            .execution_options(populate_existing=True, synchronize_session=False)
+        )
+    )
 
 
 def find_stuck_runs(
@@ -529,4 +594,6 @@ def get_scheduled_run_context(
         "status": run.status,
         "started_at": run.started_at,
         "finished_at": run.finished_at,
+        "revision": run.version,
+        "viewed_revision": run.viewed_revision,
     }

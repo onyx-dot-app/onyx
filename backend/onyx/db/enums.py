@@ -493,6 +493,14 @@ class ScheduledTaskRunStatus(str, PyEnum):
             ScheduledTaskRunStatus.SKIPPED,
         )
 
+    def has_results(self) -> bool:
+        """Statuses with output for the owner to review."""
+        return self in (
+            ScheduledTaskRunStatus.SUCCEEDED,
+            ScheduledTaskRunStatus.FAILED,
+            ScheduledTaskRunStatus.AWAITING_APPROVAL,
+        )
+
 
 class ScheduledTaskTriggerSource(str, PyEnum):
     SCHEDULED = "SCHEDULED"

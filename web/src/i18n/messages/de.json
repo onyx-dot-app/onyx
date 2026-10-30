@@ -15250,6 +15250,10 @@
         "trigger": {
           "runNow": "Einmal ausführen",
           "schedule": "Zeitplan"
+        },
+        "markAllViewed": {
+          "label": "Alle als angesehen markieren",
+          "error": "Ausführungen konnten nicht als angesehen markiert werden. Versuchen Sie es erneut."
         }
       },
       "scheduleEditor": {
@@ -15281,7 +15285,8 @@
           "tue": "Di",
           "wed": "Mi"
         }
-      }
+      },
+      "unviewedResults": "Neue Ergebnisse"
     },
     "todoList": {
       "empty": {

@@ -15250,6 +15250,10 @@
         "trigger": {
           "runNow": "한 번 실행",
           "schedule": "예약"
+        },
+        "markAllViewed": {
+          "label": "모두 확인한 것으로 표시",
+          "error": "실행을 확인함으로 표시할 수 없습니다. 다시 시도하세요."
         }
       },
       "scheduleEditor": {
@@ -15281,7 +15285,8 @@
           "tue": "화",
           "wed": "수"
         }
-      }
+      },
+      "unviewedResults": "새 결과"
     },
     "todoList": {
       "empty": {

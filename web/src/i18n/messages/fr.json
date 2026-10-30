@@ -15250,6 +15250,10 @@
         "trigger": {
           "runNow": "Exécuter une fois",
           "schedule": "Planification"
+        },
+        "markAllViewed": {
+          "label": "Tout marquer comme vu",
+          "error": "Impossible de marquer les exécutions comme vues. Réessayez."
         }
       },
       "scheduleEditor": {
@@ -15281,7 +15285,8 @@
           "tue": "Mar",
           "wed": "Mer"
         }
-      }
+      },
+      "unviewedResults": "Nouveaux résultats"
     },
     "todoList": {
       "empty": {

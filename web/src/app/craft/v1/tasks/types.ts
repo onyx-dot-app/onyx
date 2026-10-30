@@ -53,6 +53,8 @@ export interface ScheduledRunSummary {
   summary: string | null;
   skip_reason: string | null;
   error_class: string | null;
+  revision: number;
+  viewed_revision: number | null;
 }
 
 export interface ScheduledTaskListItem {
@@ -64,6 +66,7 @@ export interface ScheduledTaskListItem {
   status: ScheduledTaskStatus;
   next_run_at: string | null;
   last_run: ScheduledRunSummary | null;
+  unviewed_run_count: number;
   created_at: string;
   updated_at: string;
 }
@@ -124,4 +127,10 @@ export interface ScheduledRunContextResponse {
   status: ScheduledTaskRunStatus;
   started_at: string;
   finished_at: string | null;
+  revision: number;
+  viewed_revision: number | null;
+}
+
+export interface UnviewedTaskCountResponse {
+  count: number;
 }

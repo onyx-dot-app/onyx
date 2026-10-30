@@ -12,6 +12,7 @@ import type {
   ScheduledTaskCreateBody,
   ScheduledTaskPatchBody,
   ScheduledRunListResponse,
+  ScheduledRunSummary,
   RunNowResponse,
 } from "@/app/craft/v1/tasks/types";
 import { BUILD_API_BASE } from "@/app/craft/v1/constants";
@@ -96,5 +97,34 @@ export async function listScheduledTaskRuns(
     : `${API_BASE}/${taskId}/runs`;
   const res = await fetch(url, { method: "GET" });
   if (!res.ok) await readError(res, "Failed to load runs");
+  return await res.json();
+}
+
+export async function markScheduledRunsViewed(
+  taskId: string,
+  runs: readonly ScheduledRunSummary[]
+): Promise<ScheduledRunListResponse> {
+  const res = await fetch(`${API_BASE}/${taskId}/runs/viewed`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      revisions: Object.fromEntries(runs.map((run) => [run.id, run.revision])),
+    }),
+  });
+  if (!res.ok) await readError(res, "Failed to mark runs viewed");
+  return await res.json();
+}
+
+export async function markScheduledRunViewed(
+  taskId: string,
+  runId: string,
+  revision: number
+): Promise<ScheduledRunSummary> {
+  const res = await fetch(`${API_BASE}/${taskId}/runs/${runId}/viewed`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ revision }),
+  });
+  if (!res.ok) await readError(res, "Failed to mark run viewed");
   return await res.json();
 }

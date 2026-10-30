@@ -447,6 +447,7 @@ export const SWR_KEYS = {
   taskActionPolicies: (taskId: string) =>
     `/api/build/scheduled-tasks/${taskId}/action-policies`,
   scheduledTasks: "/api/build/scheduled-tasks",
+  scheduledTasksUnviewedCount: "/api/build/scheduled-tasks/unviewed-count",
   scheduledTask: (taskId: string) => `/api/build/scheduled-tasks/${taskId}`,
   scheduledTaskRuns: (taskId: string) =>
     `/api/build/scheduled-tasks/${taskId}/runs`,
