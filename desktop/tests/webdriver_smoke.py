@@ -38,6 +38,9 @@ FIXTURE_HTML = b"""<!doctype html>
   window.blankOpened = popup !== null;
   if (popup) popup.location.href = window.location.origin + '/popup';
 ">blank popup</button>
+<button id="same-origin-popup" onclick="
+  window.sameOriginOpened = window.open(window.location.origin + '/popup', '_blank') !== null;
+">same-origin popup</button>
 <button id="closable-popup" onclick="window.closablePopup = window.open('about:blank', '_blank');">
 closable popup</button>
 <button id="external" onclick="
@@ -236,6 +239,39 @@ def main() -> int:
                 lambda: "popup-ready" in driver.execute("return window.popupMessages"),
             )
 
+        def same_origin_popup_opens_in_app() -> None:
+            driver.click("same-origin-popup")
+            assert driver.execute("return window.sameOriginOpened") is True, (
+                "window.open returned null"
+            )
+            wait_for(
+                "the popup to postMessage its opener",
+                lambda: "popup-ready" in driver.execute("return window.popupMessages"),
+            )
+
+        def popup_has_no_native_access() -> None:
+            invoke = (
+                "const done = arguments[arguments.length - 1];"
+                "window.__TAURI_INTERNALS__.invoke('plugin:shell|open', "
+                "{ path: 'https://example.com/ipc-check' })"
+                ".then(() => done('allowed'), () => done('denied'));"
+            )
+            assert driver.execute_async(invoke) == "allowed", (
+                "main window lost native access"
+            )
+            driver.click("closable-popup")
+            wait_for(
+                "the popup window", lambda: len(driver.session("/window/handles")) == 2
+            )
+            popup = next(
+                h for h in driver.session("/window/handles") if h != main_handle
+            )
+            driver.session("/window", "POST", {"handle": popup})
+            wait_for(
+                "the popup to report its IPC access",
+                lambda: driver.execute_async(invoke) == "denied",
+            )
+
         def popup_closes_itself() -> None:
             driver.click("closable-popup")
             wait_for(
@@ -288,6 +324,8 @@ def main() -> int:
             "blank popup navigated later keeps window.opener",
             blank_popup_navigated_later,
         )
+        check("same-origin popup opens in the app", same_origin_popup_opens_in_app)
+        check("popup windows get no native commands", popup_has_no_native_access)
         check("script popup can close itself", popup_closes_itself)
         check(
             "external link opens in the system browser", external_link_opens_in_browser

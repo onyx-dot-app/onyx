@@ -284,10 +284,7 @@ fn classify_new_window(
 }
 
 fn app_url(app: &AppHandle) -> Option<Url> {
-    let config_state = app.state::<ConfigState>();
-    config_state
-        .app_base_url()
-        .or_else(|| config_state.config().server_url.parse().ok())
+    app.state::<ConfigState>().config().server_url.parse().ok()
 }
 
 fn handle_new_window(
@@ -329,7 +326,7 @@ fn build_popup_window(
     app: &AppHandle,
     features: NewWindowFeatures,
 ) -> Result<WebviewWindow, String> {
-    let label = format!("onyx-popup-{}", uuid::Uuid::new_v4());
+    let label = format!("popup-{}", uuid::Uuid::new_v4());
     let blank = "about:blank"
         .parse()
         .map_err(|e| format!("Invalid popup URL: {e}"))?;
