@@ -118,7 +118,10 @@ from onyx.server.gateway.models import (
 )
 from onyx.server.gateway.tracing import llm_gateway_trace
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
-from onyx.server.query_and_chat.token_limit import check_token_rate_limits
+from onyx.server.query_and_chat.token_limit import (
+    check_model_spend_limits,
+    check_token_rate_limits,
+)
 from onyx.server.settings.store import load_settings
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.tracing.flows import LLMFlow
@@ -1429,6 +1432,7 @@ def _resolve_metered_gateway_model(
             tenant_id=get_current_tenant_id(),
             llm_provider_api_key=provider.api_key,
         )
+    check_model_spend_limits(user, model_config.id)
     return provider, model_config
 
 

@@ -34,6 +34,7 @@ def test_search_preserves_history_and_explicit_query(
         "get_current_search_settings",
         "get_default_document_index",
         "check_llm_cost_limit_for_provider",
+        "check_model_spend_limits",
         "load_settings",
     ):
         monkeypatch.setattr(api, name, MagicMock())

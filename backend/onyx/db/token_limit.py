@@ -2,11 +2,11 @@ from collections import defaultdict
 from collections.abc import Sequence
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import Select, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import TokenRateLimitScope
+from onyx.configs.constants import TokenRateLimitAction, TokenRateLimitScope
 from onyx.db.models import TokenRateLimit, User__UserGroup
 from onyx.db.utils import is_unique_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -52,30 +52,74 @@ def fetch_all_user_token_rate_limits(
     return db_session.scalars(query).all()
 
 
-def fetch_user_group_token_rate_limits(
+def _enforced_limits_query(
+    scope: TokenRateLimitScope, model_configuration_id: int | None
+) -> Select[tuple[TokenRateLimit]]:
+    model_filter = (
+        TokenRateLimit.model_configuration_id.is_(None)
+        if model_configuration_id is None
+        else TokenRateLimit.model_configuration_id == model_configuration_id
+    )
+    return select(TokenRateLimit).where(
+        TokenRateLimit.scope == scope,
+        TokenRateLimit.enabled.is_(True),
+        TokenRateLimit.action == TokenRateLimitAction.BLOCK,
+        model_filter,
+    )
+
+
+def fetch_enforced_token_rate_limits(
+    db_session: Session,
+    scope: TokenRateLimitScope,
+    model_configuration_id: int | None = None,
+) -> Sequence[TokenRateLimit]:
+    """Enabled BLOCK limits of a workspace scope, on one model or, for None,
+    on all models."""
+    return db_session.scalars(
+        _enforced_limits_query(scope, model_configuration_id)
+    ).all()
+
+
+def fetch_user_group_enforced_token_rate_limits(
     db_session: Session,
     user_id: UUID,
-    enabled_only: bool = True,
+    scope: TokenRateLimitScope,
+    model_configuration_id: int | None = None,
 ) -> dict[int, list[TokenRateLimit]]:
-    """The group pool limits a user is subject to, keyed by group id."""
+    """Enabled BLOCK limits of a group scope for every group the user is in,
+    keyed by group id."""
     query = (
-        select(TokenRateLimit, User__UserGroup.user_group_id)
+        _enforced_limits_query(scope, model_configuration_id)
+        .add_columns(User__UserGroup.user_group_id)
         .join(
             User__UserGroup,
             User__UserGroup.user_group_id == TokenRateLimit.user_group_id,
         )
-        .where(
-            User__UserGroup.user_id == user_id,
-            TokenRateLimit.scope == TokenRateLimitScope.USER_GROUP,
-        )
+        .where(User__UserGroup.user_id == user_id)
     )
-    if enabled_only:
-        query = query.where(TokenRateLimit.enabled.is_(True))
-
     result: dict[int, list[TokenRateLimit]] = defaultdict(list)
     for limit, group_id in db_session.execute(query).all():
         result[group_id].append(limit)
     return dict(result)
+
+
+def fetch_token_rate_limits_applying_to_user(
+    db_session: Session, user_id: UUID
+) -> Sequence[TokenRateLimit]:
+    """Every enabled limit whose usage includes this user's: workspace limits
+    and the limits of the user's groups, on any model."""
+    user_group_ids = select(User__UserGroup.user_group_id).where(
+        User__UserGroup.user_id == user_id
+    )
+    return db_session.scalars(
+        select(TokenRateLimit).where(
+            TokenRateLimit.enabled.is_(True),
+            or_(
+                TokenRateLimit.user_group_id.is_(None),
+                TokenRateLimit.user_group_id.in_(user_group_ids),
+            ),
+        )
+    ).all()
 
 
 def fetch_all_global_token_rate_limits(
