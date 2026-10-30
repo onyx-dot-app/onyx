@@ -92,9 +92,10 @@ overrides: the logo replaces the stock mark, the name replaces the stock
 wordmark, and each falls back on its own. A custom name adds the "Powered by"
 line unless `hide_onyx_branding` is set. The
 display style can then leave out the logo or the name. Three places implement
-this and must agree: the app sidebar (`web/src/lib/app/components.tsx:SidebarLogoMark`
-and `SidebarWordmark`, split so the name can fade on fold), the admin and Craft
-sidebars (`FoldableLogo`), and the theme page's preview
+this and must agree: the sidebars, which all render `BrandedSidebarHeader` with
+`web/src/lib/app/components.tsx:SidebarLogoMark` and `SidebarWordmark` (split so
+the name can fade on fold); `FoldableLogo`, used outside the sidebars (e.g. the
+welcome and auth pages); and the theme page's preview
 (`web/src/app/ee/admin/theme/Preview.tsx`).
 
 ---

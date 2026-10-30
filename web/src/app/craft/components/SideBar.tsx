@@ -24,8 +24,7 @@ import {
   useSidebarState,
 } from "@opal/layouts";
 import { richNodes } from "@opal/utils";
-import { renderSidebarLogo } from "@/lib/sidebar/utils";
-import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
+import BrandedSidebarHeader from "@/sections/sidebar/BrandedSidebarHeader";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 import { Hoverable } from "@opal/core";
@@ -342,14 +341,9 @@ const MemoizedBuildSidebarInner = memo(() => {
     [requestNavigation, router, returnToMainAgent]
   );
 
-  const showLogoWhenFolded = useShowLogoWhenFolded();
-
   return (
     <SidebarLayouts.Root foldable>
-      <SidebarLayouts.Header
-        renderAppLogo={renderSidebarLogo}
-        showLogoWhenFolded={showLogoWhenFolded}
-      >
+      <BrandedSidebarHeader>
         <div className="flex flex-col gap-0.5">
           <SidebarTab
             icon={SvgEditBig}
@@ -388,7 +382,7 @@ const MemoizedBuildSidebarInner = memo(() => {
             {t("plugins.label")}
           </SidebarTab>
         </div>
-      </SidebarLayouts.Header>
+      </BrandedSidebarHeader>
       <SidebarLayouts.Body scrollKey="build-sidebar">
         {!folded && (
           <>
