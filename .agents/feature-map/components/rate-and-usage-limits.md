@@ -96,6 +96,20 @@ dispatches to the CE or EE `_check_spend_limits` through
 raises at the latest reset among the budgets it exceeds, so a caller who waits
 until then does not trip a budget that clears later.
 
+**Spending limit admin API.** `/admin/spending-limits`
+(`backend/ee/onyx/server/spending_limits/api.py`) is shaped like the admin
+page's cards: the workspace pool, the workspace per-user default, and each
+group's pool and per-member allowance. A `PUT` replaces every row on one card in
+one transaction, so the page sends the rows it can't edit (ALERT_ONLY) back
+unchanged. A scoped `MANAGE_USER_GROUPS` holder can read their group's cards
+and edit its pool. Everything else needs full admin, including a group's
+per-member card: a group allowance beats the workspace default upward, so a
+manager could otherwise lift their own limit. `GET /users/{user_id}/effective` returns each budget a
+user is held to and the group it comes from. Every write calls
+`invalidate_any_rate_limit_exists_cache`. A limit raised inside a chat turn
+reaches the client as a `StreamingError` whose `details` carry the 429's
+`extra` (`backend/onyx/chat/errors.py:chat_error`).
+
 **Tenant usage limits.** These are synchronous counters on `tenant_usage`. Each
 check reads the trial status and a per-tenant override from the control plane
 (`backend/ee/onyx/server/tenant_usage_limits.py`, refreshed every 24 h), then
