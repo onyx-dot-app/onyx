@@ -6613,6 +6613,9 @@
           "description": "Dadurch werden die gespeicherten Anmeldedaten für diesen Anbieter entfernt.",
           "title": "*{title}* trennen"
         },
+        "linkedHeader": {
+          "description": "Der LLM-Anbieter und seine Zugangsdaten bleiben verbunden."
+        },
         "noDefaultOption": {
           "description": "(Bilderzeugung deaktivieren)",
           "label": "Kein Standard"
@@ -6712,12 +6715,25 @@
         "description": "Einstellungen für die Bilderzeugung im Chat.",
         "title": "Bilderzeugung"
       },
+      "linkError": {
+        "message": "Modell konnte nicht verbunden werden"
+      },
+      "linkSuccess": {
+        "message": "{title} verbunden"
+      },
+      "linkedModel": {
+        "description": "Von {provider}"
+      },
       "loadError": {
         "message": "Die Konfiguration konnte nicht geladen werden. Bitte laden Sie die Seite neu."
       },
       "model": {
         "description": "Wählen Sie ein Modell, um Bilder im Chat zu erzeugen.",
         "title": "Modell zur Bilderzeugung"
+      },
+      "noImageModels": {
+        "description": "Verbinden Sie auf der Seite „Sprachmodelle“ einen LLM-Anbieter, der Bildmodelle bereitstellt. Deaktivieren Sie den Filter für empfohlene Modelle, um alle Modelle Ihrer verbundenen Anbieter zu sehen.",
+        "title": "Keine Bildmodelle verfügbar"
       },
       "providers": {
         "azureGptImage1": {
@@ -6759,6 +6775,9 @@
         "openaiGptImage25Sunburst": {
           "description": "Das Premium-Bilderzeugungsmodell von OpenAI für die präzisesten Bearbeitungen."
         }
+      },
+      "recommendedOnly": {
+        "label": "Nur empfohlene Bildmodelle"
       },
       "retiredModelWarning": {
         "description": "Verbinden Sie ein anderes Modell, legen Sie es als Standard fest und trennen Sie dann {title}.",

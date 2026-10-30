@@ -13,12 +13,19 @@ import {
 } from "@/views/admin/ImageGenerationPage/constants";
 import {
   ImageGenerationConfigView,
+  ImageGenerationLLMProvider,
+  ImageGenerationProviderModel,
+  linkImageGenerationModel,
   setDefaultImageGenerationConfig,
   unsetDefaultImageGenerationConfig,
   deleteImageGenerationConfig,
 } from "@/views/admin/ImageGenerationPage/svc";
 import { ConfirmationModalLayout } from "@opal/layouts";
-import { InputSingleSelect, type SelectDivider } from "@opal/components";
+import {
+  InputSingleSelect,
+  InputSwitch,
+  type SelectDivider,
+} from "@opal/components";
 import { Button, MessageCard, Text } from "@opal/components";
 import { Content, toast } from "@opal/layouts";
 import { SvgSlash, SvgUnplug } from "@opal/icons";
@@ -28,6 +35,16 @@ import ProviderCard from "@/sections/admin/ProviderCard";
 import { getModelIcon } from "@/lib/languageModels/utils";
 
 const NO_DEFAULT_VALUE = "__none__";
+
+interface DisconnectTarget {
+  image_provider_id: string;
+  title: string;
+  llmProviderOwned: boolean;
+}
+
+function linkedModelTitle(model: ImageGenerationProviderModel): string {
+  return model.display_name || model.name;
+}
 
 export default function ImageGenerationContent() {
   const t = useTranslations("admin.imageGeneration");
@@ -40,6 +57,17 @@ export default function ImageGenerationContent() {
     errorHandlingFetcher
   );
 
+  const {
+    data: llmProviders = [],
+    error: llmProvidersError,
+    mutate: refetchLlmProviders,
+  } = useSWR<ImageGenerationLLMProvider[]>(
+    SWR_KEYS.imageGenLlmProviders,
+    errorHandlingFetcher
+  );
+  const [showRecommendedOnly, setShowRecommendedOnly] = useState(true);
+  const [linkingModelKey, setLinkingModelKey] = useState<string | null>(null);
+
   const modal = useCreateModal();
   const [activeProvider, setActiveProvider] = useState<ImageProvider | null>(
     null
@@ -47,7 +75,7 @@ export default function ImageGenerationContent() {
   const [editConfig, setEditConfig] =
     useState<ImageGenerationConfigView | null>(null);
   const [disconnectProvider, setDisconnectProvider] =
-    useState<ImageProvider | null>(null);
+    useState<DisconnectTarget | null>(null);
   const [replacementProviderId, setReplacementProviderId] = useState<
     string | null
   >(null);
@@ -56,16 +84,49 @@ export default function ImageGenerationContent() {
     return new Set(configs.map((c) => c.image_provider_id));
   }, [configs]);
 
-  // Deprecated models stay visible only for admins who already connected them,
-  // so they can still disconnect or switch away.
-  const visibleGroups = useMemo(() => {
+  // Own-key configs from before image models came from LLM providers. They
+  // stay until an admin disconnects them.
+  const legacyGroups = useMemo(() => {
+    const ownedIds = new Set(
+      configs
+        .filter((c) => c.llm_provider_owned)
+        .map((c) => c.image_provider_id)
+    );
     return IMAGE_PROVIDER_GROUPS.map((group) => ({
       ...group,
-      providers: group.providers.filter(
-        (p) => !p.deprecated || connectedProviderIds.has(p.image_provider_id)
+      providers: group.providers.filter((p) =>
+        ownedIds.has(p.image_provider_id)
       ),
     })).filter((g) => g.providers.length > 0);
-  }, [connectedProviderIds]);
+  }, [configs]);
+
+  const linkedGroups = useMemo(() => {
+    return llmProviders
+      .map((llmProvider) => ({
+        ...llmProvider,
+        models: llmProvider.models.filter(
+          (m) => !showRecommendedOnly || m.is_recommended || m.image_provider_id
+        ),
+      }))
+      .filter((group) => group.models.length > 0);
+  }, [llmProviders, showRecommendedOnly]);
+
+  const titleByImageProviderId = useMemo(() => {
+    const titles = new Map<string, string>();
+    for (const group of IMAGE_PROVIDER_GROUPS) {
+      for (const p of group.providers) titles.set(p.image_provider_id, p.title);
+    }
+    for (const llmProvider of llmProviders) {
+      for (const m of llmProvider.models) {
+        if (m.image_provider_id)
+          titles.set(m.image_provider_id, linkedModelTitle(m));
+      }
+    }
+    return titles;
+  }, [llmProviders]);
+
+  const configTitle = (config: ImageGenerationConfigView): string =>
+    titleByImageProviderId.get(config.image_provider_id) ?? config.model_name;
 
   const connectedDeprecatedProviders = useMemo(() => {
     return IMAGE_PROVIDER_GROUPS.flatMap((group) => group.providers).filter(
@@ -78,25 +139,46 @@ export default function ImageGenerationContent() {
   }, [configs]);
 
   const getStatus = (
-    provider: ImageProvider
+    imageProviderId: string | null
   ): "disconnected" | "connected" | "selected" => {
-    if (defaultConfig?.image_provider_id === provider.image_provider_id)
-      return "selected";
-    if (connectedProviderIds.has(provider.image_provider_id))
-      return "connected";
+    if (!imageProviderId) return "disconnected";
+    if (defaultConfig?.image_provider_id === imageProviderId) return "selected";
+    if (connectedProviderIds.has(imageProviderId)) return "connected";
     return "disconnected";
   };
 
-  const handleConnect = (provider: ImageProvider) => {
-    setEditConfig(null);
-    setActiveProvider(provider);
-    modal.toggle(true);
+  const refetchAll = () => {
+    refetchConfigs();
+    refetchLlmProviders();
   };
 
-  const handleSelect = async (provider: ImageProvider) => {
-    const config = configs.find(
-      (c) => c.image_provider_id === provider.image_provider_id
-    );
+  const handleLink = async (
+    llmProvider: ImageGenerationLLMProvider,
+    model: ImageGenerationProviderModel
+  ) => {
+    const modelKey = `${llmProvider.llm_provider_id}:${model.name}`;
+    setLinkingModelKey(modelKey);
+    try {
+      await linkImageGenerationModel(
+        llmProvider.llm_provider_id,
+        model.name,
+        !defaultConfig
+      );
+      toast.success(
+        t("linkSuccess.message", { title: linkedModelTitle(model) })
+      );
+      refetchAll();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t("linkError.message")
+      );
+    } finally {
+      setLinkingModelKey(null);
+    }
+  };
+
+  const handleSelect = async (imageProviderId: string | null) => {
+    const config = configs.find((c) => c.image_provider_id === imageProviderId);
     if (config) {
       try {
         await setDefaultImageGenerationConfig(config.image_provider_id);
@@ -109,10 +191,8 @@ export default function ImageGenerationContent() {
     }
   };
 
-  const handleDeselect = async (provider: ImageProvider) => {
-    const config = configs.find(
-      (c) => c.image_provider_id === provider.image_provider_id
-    );
+  const handleDeselect = async (imageProviderId: string | null) => {
+    const config = configs.find((c) => c.image_provider_id === imageProviderId);
     if (config) {
       try {
         await unsetDefaultImageGenerationConfig(config.image_provider_id);
@@ -146,7 +226,7 @@ export default function ImageGenerationContent() {
       toast.success(
         t("disconnectSuccess.message", { title: disconnectProvider.title })
       );
-      refetchConfigs();
+      refetchAll();
     } catch (error) {
       console.error("Failed to disconnect image generation provider:", error);
       toast.error(
@@ -169,18 +249,23 @@ export default function ImageGenerationContent() {
     disconnectProvider &&
     defaultConfig?.image_provider_id === disconnectProvider.image_provider_id;
 
-  // Group connected replacement models by provider (excluding the model being disconnected)
+  // Connected replacement models grouped by LLM provider, without the model being disconnected
   const replacementGroups = useMemo(() => {
     if (!disconnectProvider) return [];
-    return IMAGE_PROVIDER_GROUPS.map((group) => ({
-      ...group,
-      providers: group.providers.filter(
-        (p) =>
-          p.image_provider_id !== disconnectProvider.image_provider_id &&
-          connectedProviderIds.has(p.image_provider_id)
-      ),
-    })).filter((g) => g.providers.length > 0);
-  }, [disconnectProvider, connectedProviderIds]);
+    const groups = new Map<
+      string,
+      { name: string; configs: ImageGenerationConfigView[] }
+    >();
+    for (const config of configs) {
+      if (config.image_provider_id === disconnectProvider.image_provider_id)
+        continue;
+      const name = config.llm_provider_name ?? config.llm_provider_type;
+      const group = groups.get(name) ?? { name, configs: [] };
+      group.configs.push(config);
+      groups.set(name, group);
+    }
+    return Array.from(groups.values());
+  }, [disconnectProvider, configs]);
 
   const needsReplacement = !!isDisconnectingDefault;
   const hasReplacements = replacementGroups.length > 0;
@@ -189,12 +274,12 @@ export default function ImageGenerationContent() {
   useEffect(() => {
     if (needsReplacement && !replacementProviderId && hasReplacements) {
       const firstGroup = replacementGroups[0];
-      const firstModel = firstGroup?.providers[0];
+      const firstModel = firstGroup?.configs[0];
       if (firstModel) setReplacementProviderId(firstModel.image_provider_id);
     }
   }, [disconnectProvider]);
 
-  if (configError) {
+  if (configError || llmProvidersError) {
     return <div className="text-error">{t("loadError.message")}</div>;
   }
 
@@ -208,8 +293,32 @@ export default function ImageGenerationContent() {
           variant="section"
         />
 
+        <Section
+          flexDirection="row"
+          justifyContent="between"
+          alignItems="center"
+          gap={0.75}
+        >
+          <Text font="secondary-body" color="text-03">
+            {t("recommendedOnly.label")}
+          </Text>
+          <InputSwitch
+            aria-label={t("recommendedOnly.label")}
+            checked={showRecommendedOnly}
+            onCheckedChange={setShowRecommendedOnly}
+          />
+        </Section>
+
         {connectedProviderIds.size === 0 && (
           <MessageCard variant="info" title={t("emptyState.title")} />
+        )}
+
+        {linkedGroups.length === 0 && legacyGroups.length === 0 && (
+          <MessageCard
+            variant="info"
+            title={t("noImageModels.title")}
+            description={t("noImageModels.description")}
+          />
         )}
 
         {connectedDeprecatedProviders.map((provider) => (
@@ -223,36 +332,91 @@ export default function ImageGenerationContent() {
           />
         ))}
 
-        {/* Provider Groups */}
-        {visibleGroups.map((group) => (
-          <div key={group.name} className="flex flex-col gap-2">
-            <Content title={group.name} sizePreset="secondary" variant="body" />
-            {group.providers.map((provider) => {
-              const status = getStatus(provider);
-              const isDisconnected = status === "disconnected";
-              const isConnected = status === "connected";
-              const isSelected = status === "selected";
-
+        {linkedGroups.map((llmProvider) => (
+          <Section
+            key={`llm-${llmProvider.llm_provider_id}`}
+            alignItems="stretch"
+            gap={0.5}
+          >
+            <Content
+              title={llmProvider.llm_provider_name ?? llmProvider.provider}
+              sizePreset="secondary"
+              variant="body"
+            />
+            {llmProvider.models.map((model) => {
+              const modelKey = `${llmProvider.llm_provider_id}:${model.name}`;
+              const imageProviderId = model.image_provider_id;
+              const title = linkedModelTitle(model);
               return (
                 <ProviderCard
-                  key={provider.image_provider_id}
-                  icon={getModelIcon(provider.provider_name)}
-                  title={provider.title}
-                  description={t(provider.descriptionKey)}
-                  status={status}
-                  aria-label={`image-gen-provider-${provider.image_provider_id}`}
-                  onConnect={() => handleConnect(provider)}
-                  onSelect={() => handleSelect(provider)}
-                  onDeselect={() => handleDeselect(provider)}
-                  onEdit={() => handleEdit(provider)}
-                  onDisconnect={() => setDisconnectProvider(provider)}
+                  key={modelKey}
+                  icon={getModelIcon(llmProvider.provider, model.name)}
+                  title={title}
+                  description={
+                    title === model.name
+                      ? t("linkedModel.description", {
+                          provider:
+                            llmProvider.llm_provider_name ??
+                            llmProvider.provider,
+                        })
+                      : model.name
+                  }
+                  status={getStatus(imageProviderId)}
+                  aria-label={`image-gen-model-${llmProvider.llm_provider_id}-${model.name}`}
+                  onConnect={
+                    linkingModelKey === modelKey
+                      ? undefined
+                      : () => void handleLink(llmProvider, model)
+                  }
+                  onSelect={() => handleSelect(imageProviderId)}
+                  onDeselect={() => handleDeselect(imageProviderId)}
+                  onDisconnect={
+                    imageProviderId
+                      ? () =>
+                          setDisconnectProvider({
+                            image_provider_id: imageProviderId,
+                            title,
+                            llmProviderOwned: false,
+                          })
+                      : undefined
+                  }
                   disconnectModalOpen={
-                    disconnectProvider?.image_provider_id ===
-                    provider.image_provider_id
+                    !!imageProviderId &&
+                    disconnectProvider?.image_provider_id === imageProviderId
                   }
                 />
               );
             })}
+          </Section>
+        ))}
+
+        {legacyGroups.map((group) => (
+          <div key={group.name} className="flex flex-col gap-2">
+            <Content title={group.name} sizePreset="secondary" variant="body" />
+            {group.providers.map((provider) => (
+              <ProviderCard
+                key={provider.image_provider_id}
+                icon={getModelIcon(provider.provider_name)}
+                title={provider.title}
+                description={t(provider.descriptionKey)}
+                status={getStatus(provider.image_provider_id)}
+                aria-label={`image-gen-provider-${provider.image_provider_id}`}
+                onSelect={() => handleSelect(provider.image_provider_id)}
+                onDeselect={() => handleDeselect(provider.image_provider_id)}
+                onEdit={() => handleEdit(provider)}
+                onDisconnect={() =>
+                  setDisconnectProvider({
+                    image_provider_id: provider.image_provider_id,
+                    title: provider.title,
+                    llmProviderOwned: true,
+                  })
+                }
+                disconnectModalOpen={
+                  disconnectProvider?.image_provider_id ===
+                  provider.image_provider_id
+                }
+              />
+            ))}
           </div>
         ))}
       </div>
@@ -265,7 +429,11 @@ export default function ImageGenerationContent() {
               title: disconnectProvider.title,
             })
           )}
-          description={t("disconnectModal.header.description")}
+          description={
+            disconnectProvider.llmProviderOwned
+              ? t("disconnectModal.header.description")
+              : t("disconnectModal.linkedHeader.description")
+          }
           onClose={() => {
             setDisconnectProvider(null);
             setReplacementProviderId(null);
@@ -304,10 +472,13 @@ export default function ImageGenerationContent() {
                       ...replacementGroups.map(
                         (group): SelectDivider => ({
                           title: group.name,
-                          options: group.providers.map((p) => ({
-                            value: p.image_provider_id,
-                            title: p.title,
-                            icon: getModelIcon(p.provider_name),
+                          options: group.configs.map((c) => ({
+                            value: c.image_provider_id,
+                            title: configTitle(c),
+                            icon: getModelIcon(
+                              c.llm_provider_type,
+                              c.model_name
+                            ),
                           })),
                         })
                       ),

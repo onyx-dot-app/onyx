@@ -3,8 +3,8 @@ provider's credentials and never own or delete it."""
 
 from typing import Any
 
+import httpx
 import pytest
-import requests
 
 from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
@@ -45,13 +45,9 @@ def _provider_entry(admin_user: DATestUser, llm_provider_id: int) -> dict[str, A
 
 
 def _chat_model_names(admin_user: DATestUser, llm_provider_id: int) -> list[str]:
-    response = client.get(
-        f"{API_SERVER_URL}/admin/llm/provider",
-        headers=admin_user.headers,
-    )
-    response.raise_for_status()
-    provider = next(p for p in response.json() if p["id"] == llm_provider_id)
-    return [mc["name"] for mc in provider["model_configurations"]]
+    providers = LLMProviderManager.get_all(user_performing_action=admin_user)
+    provider = next(p for p in providers if p.id == llm_provider_id)
+    return [mc.name for mc in provider.model_configurations]
 
 
 def test_lists_catalog_image_models_for_connected_provider(
@@ -133,7 +129,7 @@ def test_link_rejects_private_provider(admin_user: DATestUser) -> None:
         is_public=False,
         set_as_default=False,
     )
-    with pytest.raises(requests.HTTPError) as exc_info:
+    with pytest.raises(httpx.HTTPStatusError) as exc_info:
         ImageGenerationConfigManager.link(
             llm_provider_id=private_provider.id,
             model_name=IMAGE_MODEL,

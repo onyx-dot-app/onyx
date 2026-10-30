@@ -6613,6 +6613,9 @@
           "description": "سيزيل هذا بيانات الاعتماد المخزنة لهذا الموفر.",
           "title": "قطع الاتصال بـ *{title}*"
         },
+        "linkedHeader": {
+          "description": "يبقى مزوّد LLM وبيانات اعتماده متصلين."
+        },
         "noDefaultOption": {
           "description": "(تعطيل توليد الصور)",
           "label": "بدون افتراضي"
@@ -6712,12 +6715,25 @@
         "description": "إعدادات توليد الصور داخل المحادثة.",
         "title": "توليد الصور"
       },
+      "linkError": {
+        "message": "تعذّر ربط النموذج"
+      },
+      "linkSuccess": {
+        "message": "تم ربط {title}"
+      },
+      "linkedModel": {
+        "description": "من {provider}"
+      },
       "loadError": {
         "message": "فشل تحميل التهيئة. يرجى تحديث الصفحة."
       },
       "model": {
         "description": "اختر نموذجًا لتوليد الصور في المحادثة.",
         "title": "نموذج توليد الصور"
+      },
+      "noImageModels": {
+        "description": "اربط مزوّد LLM يوفّر نماذج صور من صفحة نماذج اللغة. لعرض كل النماذج لدى المزوّدين المتصلين، أوقف عامل تصفية النماذج الموصى بها.",
+        "title": "لا توجد نماذج صور متاحة"
       },
       "providers": {
         "azureGptImage1": {
@@ -6759,6 +6775,9 @@
         "openaiGptImage25Sunburst": {
           "description": "نموذج توليد الصور المتميز من OpenAI لأدق عمليات التعديل."
         }
+      },
+      "recommendedOnly": {
+        "label": "نماذج الصور الموصى بها فقط"
       },
       "retiredModelWarning": {
         "description": "اربط نموذجًا آخر واجعله الافتراضي، ثم افصل {title}.",

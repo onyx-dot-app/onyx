@@ -112,6 +112,7 @@ export const SWR_KEYS = {
 
   // ── Image Generation ──────────────────────────────────────────────────────
   imageGenConfig: "/api/admin/image-generation/config",
+  imageGenLlmProviders: "/api/admin/image-generation/llm-providers",
 
   // ── Documents ─────────────────────────────────────────────────────────────
   documentSets: "/api/manage/document-set",

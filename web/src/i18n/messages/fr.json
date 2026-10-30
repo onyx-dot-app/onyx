@@ -6613,6 +6613,9 @@
           "description": "Cette action supprimera les identifiants enregistrés de ce fournisseur.",
           "title": "Déconnecter *{title}*"
         },
+        "linkedHeader": {
+          "description": "Le fournisseur LLM et ses identifiants restent connectés."
+        },
         "noDefaultOption": {
           "description": "(Désactiver la génération d'images)",
           "label": "Aucun modèle par défaut"
@@ -6712,12 +6715,25 @@
         "description": "Paramètres de la génération d'images dans la discussion.",
         "title": "Génération d'images"
       },
+      "linkError": {
+        "message": "Échec de la connexion du modèle"
+      },
+      "linkSuccess": {
+        "message": "{title} connecté"
+      },
+      "linkedModel": {
+        "description": "Depuis {provider}"
+      },
       "loadError": {
         "message": "Échec du chargement de la configuration. Actualisez la page."
       },
       "model": {
         "description": "Sélectionnez un modèle pour générer des images dans la discussion.",
         "title": "Modèle de génération d'images"
+      },
+      "noImageModels": {
+        "description": "Connectez un fournisseur LLM qui propose des modèles d'image sur la page Modèles de langage. Pour voir tous les modèles de vos fournisseurs connectés, désactivez le filtre des modèles recommandés.",
+        "title": "Aucun modèle d'image disponible"
       },
       "providers": {
         "azureGptImage1": {
@@ -6759,6 +6775,9 @@
         "openaiGptImage25Sunburst": {
           "description": "Modèle premium de génération d'images d'OpenAI, pour les retouches les plus précises."
         }
+      },
+      "recommendedOnly": {
+        "label": "Modèles d'image recommandés uniquement"
       },
       "retiredModelWarning": {
         "description": "Connectez un autre modèle, définissez-le par défaut, puis déconnectez {title}.",

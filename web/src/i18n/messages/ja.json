@@ -6613,6 +6613,9 @@
           "description": "このプロバイダーに保存されている認証情報を削除します。",
           "title": "*{title}* の接続を解除"
         },
+        "linkedHeader": {
+          "description": "LLMプロバイダーとその認証情報は接続されたままです。"
+        },
         "noDefaultOption": {
           "description": "(画像生成を無効にする)",
           "label": "デフォルトなし"
@@ -6712,12 +6715,25 @@
         "description": "チャット内の画像生成に関する設定です。",
         "title": "画像生成"
       },
+      "linkError": {
+        "message": "モデルを接続できませんでした"
+      },
+      "linkSuccess": {
+        "message": "{title} を接続しました"
+      },
+      "linkedModel": {
+        "description": "{provider} から"
+      },
       "loadError": {
         "message": "設定を読み込めませんでした。ページを再読み込みしてください。"
       },
       "model": {
         "description": "チャットで画像を生成するモデルを選択してください。",
         "title": "画像生成モデル"
+      },
+      "noImageModels": {
+        "description": "言語モデルページで、画像モデルを提供するLLMプロバイダーを接続してください。接続済みプロバイダーのすべてのモデルを表示するには、推奨フィルターをオフにしてください。",
+        "title": "利用できる画像モデルがありません"
       },
       "providers": {
         "azureGptImage1": {
@@ -6759,6 +6775,9 @@
         "openaiGptImage25Sunburst": {
           "description": "最も精密な編集に対応する、OpenAI のプレミアム画像生成モデルです。"
         }
+      },
+      "recommendedOnly": {
+        "label": "推奨画像モデルのみ"
       },
       "retiredModelWarning": {
         "description": "別のモデルを接続してデフォルトに設定してから、{title} の接続を解除してください。",

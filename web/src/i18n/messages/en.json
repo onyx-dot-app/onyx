@@ -6613,6 +6613,9 @@
           "description": "This will remove the stored credentials for this provider.",
           "title": "Disconnect *{title}*"
         },
+        "linkedHeader": {
+          "description": "The LLM provider and its credentials stay connected."
+        },
         "noDefaultOption": {
           "description": "(Disable Image Generation)",
           "label": "No Default"
@@ -6712,12 +6715,25 @@
         "description": "Settings for in-chat image generation.",
         "title": "Image Generation"
       },
+      "linkError": {
+        "message": "Failed to connect model"
+      },
+      "linkSuccess": {
+        "message": "{title} connected"
+      },
+      "linkedModel": {
+        "description": "From {provider}"
+      },
       "loadError": {
         "message": "Failed to load configuration. Please refresh the page."
       },
       "model": {
         "description": "Select a model to generate images in chat.",
         "title": "Image Generation Model"
+      },
+      "noImageModels": {
+        "description": "Connect an LLM provider that serves image models on the Language Models page. To see every model on your connected providers, turn off the recommended filter.",
+        "title": "No image models available"
       },
       "providers": {
         "azureGptImage1": {
@@ -6759,6 +6775,9 @@
         "openaiGptImage25Sunburst": {
           "description": "OpenAI's premium Image Generation model for the most precise edits."
         }
+      },
+      "recommendedOnly": {
+        "label": "Recommended image models only"
       },
       "retiredModelWarning": {
         "description": "Connect another model and set it as the default, then disconnect {title}.",

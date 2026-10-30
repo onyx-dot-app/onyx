@@ -6613,6 +6613,9 @@
           "description": "此操作会移除为此提供商存储的凭证。",
           "title": "断开 *{title}* 的连接"
         },
+        "linkedHeader": {
+          "description": "LLM 提供商及其凭据将保持连接。"
+        },
         "noDefaultOption": {
           "description": "（禁用图像生成）",
           "label": "无默认"
@@ -6712,12 +6715,25 @@
         "description": "对话内图像生成的设置。",
         "title": "图像生成"
       },
+      "linkError": {
+        "message": "无法连接模型"
+      },
+      "linkSuccess": {
+        "message": "已连接 {title}"
+      },
+      "linkedModel": {
+        "description": "来自 {provider}"
+      },
       "loadError": {
         "message": "加载配置失败。请刷新页面。"
       },
       "model": {
         "description": "选择用于在对话中生成图像的模型。",
         "title": "图像生成模型"
+      },
+      "noImageModels": {
+        "description": "请在语言模型页面连接提供图像模型的 LLM 提供商。要查看已连接提供商的所有模型，请关闭推荐筛选。",
+        "title": "没有可用的图像模型"
       },
       "providers": {
         "azureGptImage1": {
@@ -6759,6 +6775,9 @@
         "openaiGptImage25Sunburst": {
           "description": "OpenAI 的高级图像生成模型，适用于最精确的编辑。"
         }
+      },
+      "recommendedOnly": {
+        "label": "仅显示推荐的图像模型"
       },
       "retiredModelWarning": {
         "description": "请连接其他模型并将其设为默认，然后断开 {title} 的连接。",

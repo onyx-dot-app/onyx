@@ -6613,6 +6613,9 @@
           "description": "이 제공업체에 저장된 자격 증명을 삭제합니다.",
           "title": "*{title}* 연결 해제"
         },
+        "linkedHeader": {
+          "description": "LLM 공급자와 해당 자격 증명은 연결된 상태로 유지됩니다."
+        },
         "noDefaultOption": {
           "description": "(이미지 생성 비활성화)",
           "label": "기본값 없음"
@@ -6712,12 +6715,25 @@
         "description": "채팅 내 이미지 생성 설정입니다.",
         "title": "이미지 생성"
       },
+      "linkError": {
+        "message": "모델을 연결하지 못했습니다"
+      },
+      "linkSuccess": {
+        "message": "{title} 연결됨"
+      },
+      "linkedModel": {
+        "description": "{provider}에서 제공"
+      },
       "loadError": {
         "message": "구성을 불러오지 못했습니다. 페이지를 새로고침하세요."
       },
       "model": {
         "description": "채팅에서 이미지를 생성할 모델을 선택하세요.",
         "title": "이미지 생성 모델"
+      },
+      "noImageModels": {
+        "description": "언어 모델 페이지에서 이미지 모델을 제공하는 LLM 공급자를 연결하세요. 연결된 공급자의 모든 모델을 보려면 추천 필터를 끄세요.",
+        "title": "사용 가능한 이미지 모델이 없습니다"
       },
       "providers": {
         "azureGptImage1": {
@@ -6759,6 +6775,9 @@
         "openaiGptImage25Sunburst": {
           "description": "가장 정밀한 편집을 위한 OpenAI의 프리미엄 이미지 생성 모델입니다."
         }
+      },
+      "recommendedOnly": {
+        "label": "추천 이미지 모델만"
       },
       "retiredModelWarning": {
         "description": "다른 모델을 연결하고 기본값으로 설정한 다음 {title} 연결을 해제하세요.",

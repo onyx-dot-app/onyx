@@ -6613,6 +6613,9 @@
           "description": "Isso vai remover as credenciais armazenadas deste provedor.",
           "title": "Desconectar *{title}*"
         },
+        "linkedHeader": {
+          "description": "O provedor de LLM e suas credenciais continuam conectados."
+        },
         "noDefaultOption": {
           "description": "(Desativar a geração de imagens)",
           "label": "Sem padrão"
@@ -6712,12 +6715,25 @@
         "description": "Configurações da geração de imagens no chat.",
         "title": "Geração de imagens"
       },
+      "linkError": {
+        "message": "Falha ao conectar o modelo"
+      },
+      "linkSuccess": {
+        "message": "{title} conectado"
+      },
+      "linkedModel": {
+        "description": "De {provider}"
+      },
       "loadError": {
         "message": "Falha ao carregar a configuração. Atualize a página."
       },
       "model": {
         "description": "Selecione um modelo para gerar imagens no chat.",
         "title": "Modelo de geração de imagens"
+      },
+      "noImageModels": {
+        "description": "Conecte um provedor de LLM que ofereça modelos de imagem na página Modelos de linguagem. Para ver todos os modelos dos provedores conectados, desative o filtro de recomendados.",
+        "title": "Nenhum modelo de imagem disponível"
       },
       "providers": {
         "azureGptImage1": {
@@ -6759,6 +6775,9 @@
         "openaiGptImage25Sunburst": {
           "description": "O modelo premium de geração de imagens da OpenAI, para as edições mais precisas."
         }
+      },
+      "recommendedOnly": {
+        "label": "Somente modelos de imagem recomendados"
       },
       "retiredModelWarning": {
         "description": "Conecte outro modelo, defina-o como padrão e depois desconecte {title}.",
