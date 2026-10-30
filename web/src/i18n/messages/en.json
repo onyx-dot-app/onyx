@@ -6777,7 +6777,7 @@
         }
       },
       "recommendedOnly": {
-        "label": "Recommended image models only"
+        "label": "Recommended Image Models Only"
       },
       "retiredModelWarning": {
         "description": "Connect another model and set it as the default, then disconnect {title}.",

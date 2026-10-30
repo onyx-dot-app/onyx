@@ -1,19 +1,21 @@
 import base64
+import io
 from uuid import uuid4
 
-from onyx.server.manage.image_generation.api import _get_test_quality_for_model
-from onyx.utils.b64 import get_image_type_from_bytes
+from PIL import Image
+
+from onyx.llm.model_catalog import iter_image_generation_models
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.tests.llm_workflows.test_nightly_provider_chat_workflow import (
     NightlyProviderConfig,
-    _assert_integration_mode_enabled,
-    _create_provider_payload,
-    _default_api_base_for_provider,
-    _load_provider_config,
-    _skip_or_fail,
-    _validate_provider_config,
+    assert_integration_mode_enabled,
+    create_provider_payload,
+    default_api_base_for_provider,
+    load_provider_config,
+    skip_or_fail,
+    validate_provider_config,
 )
 
 # Azure serves images from per-model deployments, which the chat matrix does not configure.
@@ -23,12 +25,12 @@ _GENERATE_TIMEOUT_S = 300
 
 def _create_llm_provider(admin_user: DATestUser, config: NightlyProviderConfig) -> int:
     model_name = config.model_names[0]
-    payload = _create_provider_payload(
+    payload = create_provider_payload(
         provider=config.provider,
         provider_name=f"nightly-image-{config.provider}-{uuid4().hex[:12]}",
         model_name=model_name,
         api_key=config.api_key,
-        api_base=config.api_base or _default_api_base_for_provider(config.provider),
+        api_base=config.api_base or default_api_base_for_provider(config.provider),
         api_version=config.api_version,
         deployment_name=config.deployment_name,
         custom_config=config.custom_config,
@@ -82,7 +84,7 @@ def _link_and_generate(
             json={
                 "prompt": "A red circle on a white background",
                 "n": 1,
-                "quality": _get_test_quality_for_model(model_name),
+                "quality": "low" if "gpt-image-" in model_name.lower() else None,
             },
             timeout=_GENERATE_TIMEOUT_S,
         )
@@ -94,7 +96,8 @@ def _link_and_generate(
         images = body["images"]
         assert images, "no images returned"
         image_bytes = base64.b64decode(images[0]["data_base64"])
-        get_image_type_from_bytes(image_bytes)
+        with Image.open(io.BytesIO(image_bytes)) as image:
+            image.verify()
     finally:
         client.delete(
             f"{API_SERVER_URL}/admin/image-generation/config/{image_provider_id}",
@@ -104,19 +107,20 @@ def _link_and_generate(
 
 def test_nightly_provider_image_generation(admin_user: DATestUser) -> None:
     """Real generation for every recommended image model on the provider."""
-    _assert_integration_mode_enabled()
-    config = _load_provider_config()
-    _validate_provider_config(config)
+    assert_integration_mode_enabled()
+    config = load_provider_config()
+    validate_provider_config(config)
     if config.provider in _PROVIDERS_WITHOUT_SHARED_IMAGE_ACCESS:
-        _skip_or_fail(False, f"provider={config.provider} has no shared image access")
+        skip_or_fail(False, f"provider={config.provider} has no shared image access")
 
     llm_provider_id = _create_llm_provider(admin_user, config)
     failures: list[str] = []
     try:
         model_names = _recommended_image_models(admin_user, llm_provider_id)
         if not model_names:
-            _skip_or_fail(
-                False, f"provider={config.provider} has no catalog image models"
+            skip_or_fail(
+                config.strict and bool(iter_image_generation_models(config.provider)),
+                f"provider={config.provider} has no catalog image models",
             )
         for model_name in model_names:
             try:
@@ -133,7 +137,7 @@ def test_nightly_provider_image_generation(admin_user: DATestUser) -> None:
         )
 
     if failures:
-        _skip_or_fail(
+        skip_or_fail(
             config.strict,
             "Nightly provider image generation failures:\n" + "\n".join(failures),
         )

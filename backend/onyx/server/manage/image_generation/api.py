@@ -28,7 +28,11 @@ from onyx.db.models import ModelConfiguration, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.image_gen.exceptions import ImageProviderCredentialsError
-from onyx.image_gen.factory import get_image_generation_provider, validate_credentials
+from onyx.image_gen.factory import (
+    get_image_generation_provider,
+    has_dedicated_provider,
+    validate_credentials,
+)
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
 from onyx.llm.exceptions import litellm_exception_to_safe_error
 from onyx.llm.model_capabilities import get_max_input_tokens
@@ -86,6 +90,12 @@ def _build_llm_provider_request(
     """Build the LLM provider request for an image generation config."""
     if not provider:
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, "No provider provided")
+
+    if not has_dedicated_provider(provider):
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"Connect {provider} as an LLM provider to use its image models",
+        )
 
     custom_config = _validate_and_normalize_vertex_auth(provider, custom_config)
 
@@ -311,7 +321,10 @@ def list_llm_provider_image_models(
     ):
         if not is_usable_for_image_generation(llm_provider):
             continue
-        catalog_models = set(iter_image_generation_models(llm_provider.provider))
+        recommended_models = set(iter_image_generation_models(llm_provider.provider))
+        catalog_models = set(
+            iter_image_generation_models(llm_provider.provider, recommended_only=False)
+        )
         stored_by_name = {mc.name: mc for mc in llm_provider.model_configurations}
         models: list[ImageGenerationProviderModel] = []
         for name in sorted(catalog_models | set(stored_by_name)):
@@ -325,8 +338,11 @@ def list_llm_provider_image_models(
                         else None
                     ),
                     is_recommended=(
-                        name in catalog_models
-                        or resolve_model_mode(name) == "image_generation"
+                        name in recommended_models
+                        or (
+                            name not in catalog_models
+                            and resolve_model_mode(name) == "image_generation"
+                        )
                     ),
                     image_provider_id=(
                         connected_by_model_id.get(stored.id) if stored else None

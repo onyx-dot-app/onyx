@@ -264,22 +264,37 @@ def _supplement_only_model_ids() -> dict[str, frozenset[str]]:
     return supplement_only
 
 
-def iter_image_generation_models(provider: str) -> list[str]:
+_PRICING_PREFIX = re.compile(
+    r"^(?:(?:\d+|max)-x-(?:\d+|max)|hd|standard|low|medium|high)$"
+)
+
+
+def _is_pricing_or_provider_prefixed(provider: str, model_id: str) -> bool:
+    prefix, sep, _ = model_id.partition("/")
+    return bool(sep) and (prefix == provider or bool(_PRICING_PREFIX.match(prefix)))
+
+
+def iter_image_generation_models(
+    provider: str, recommended_only: bool = True
+) -> list[str]:
     """Non-deprecated image generation models under a provider.
 
-    Skips pricing keys prefixed with a size or quality (e.g.
-    ``1024-x-1024/dall-e-2``), supplement-only entries (upstream pruned them as
-    deprecated), and dated snapshots whose undated alias is also listed."""
+    Always skips pricing keys prefixed with a size or quality (e.g.
+    ``1024-x-1024/dall-e-2``) and supplement-only entries (upstream pruned
+    them as deprecated). Recommended models also skip dated snapshots whose
+    undated alias is also listed."""
     models = _catalog().get(provider, {}).get("models", {})
     supplement_only = _supplement_only_model_ids().get(provider, frozenset())
     candidates = {
         model_id
         for model_id, entry in models.items()
-        if "/" not in model_id
+        if not _is_pricing_or_provider_prefixed(provider, model_id)
         and model_id not in supplement_only
         and entry.get("status") != "deprecated"
         and _catalog_mode(entry, model_id) == "image_generation"
     }
+    if not recommended_only:
+        return sorted(candidates)
     return sorted(
         model_id
         for model_id in candidates

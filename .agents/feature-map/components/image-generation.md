@@ -90,8 +90,11 @@ edits. Every call is traced with `LLMFlow.IMAGE_GENERATION` or
 
 **Model catalogue.** `llm/model_catalog.py:iter_image_generation_models` gives
 the recommended models: catalog entries with an image mode and no deprecated
-status. `GET /admin/image-generation/llm-providers` adds every stored model of
-the provider for the unfiltered view. A linked config has the ID
+status, without supplement-only entries (upstream pruned them) or dated
+snapshots that have an undated alias. A `status: deprecated` override in
+`llm/price_table/_supplement.json` retires a model that upstream still lists.
+`GET /admin/image-generation/llm-providers` adds the dated snapshots and every
+stored model of the provider for the unfiltered view. A linked config has the ID
 `llm-<llm_provider_id>-<model slug>`. Linked image models get the
 `IMAGE_GENERATION` model flow, so chat model lists skip them.
 `web/src/views/admin/ImageGenerationPage/constants.ts` now only names the

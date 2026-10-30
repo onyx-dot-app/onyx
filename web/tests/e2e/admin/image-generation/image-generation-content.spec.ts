@@ -1,8 +1,6 @@
-import { test, expect, Page, Locator } from "@playwright/test";
-import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import { test, expect, Page } from "@playwright/test";
+import { AdminImageGenerationPage } from "@tests/e2e/pages/AdminImageGenerationPage";
 import { loginAs } from "@tests/e2e/utils/auth";
-
-const IMAGE_GENERATION_URL = `http://localhost:3000${ADMIN_ROUTES.IMAGE_GENERATION.path}`;
 
 const LLM_PROVIDER_ID = 7;
 const LINKED_IMAGE_PROVIDER_ID = `llm-${LLM_PROVIDER_ID}-gpt-image-2`;
@@ -43,12 +41,6 @@ const LINKED_CONFIG = {
   is_default: true,
 };
 
-function getModelCard(page: Page, modelName: string): Locator {
-  return page.getByLabel(`image-gen-model-${LLM_PROVIDER_ID}-${modelName}`, {
-    exact: true,
-  });
-}
-
 async function mockImageGenApis(
   page: Page
 ): Promise<{ linkBodies: unknown[] }> {
@@ -87,37 +79,37 @@ test.describe("Image Generation models from LLM providers", () => {
     page,
   }) => {
     await mockImageGenApis(page);
-    await page.goto(IMAGE_GENERATION_URL);
-    await page.waitForSelector("text=Image Generation Model", {
-      timeout: 20000,
-    });
+    const imageGenPage = new AdminImageGenerationPage(page);
+    await imageGenPage.goto();
 
-    await expect(page.getByText("Team OpenAI", { exact: true })).toBeVisible();
-    await expect(getModelCard(page, "gpt-image-2")).toBeVisible();
-    await expect(getModelCard(page, "gpt-5")).toHaveCount(0);
+    await expect(imageGenPage.providerTitle("Team OpenAI")).toBeVisible();
+    await expect(
+      imageGenPage.modelCard(LLM_PROVIDER_ID, "gpt-image-2")
+    ).toBeVisible();
+    await expect(imageGenPage.modelCard(LLM_PROVIDER_ID, "gpt-5")).toHaveCount(
+      0
+    );
 
-    await page
-      .getByRole("switch", { name: "Recommended image models only" })
-      .click();
-    await expect(getModelCard(page, "gpt-5")).toBeVisible();
+    await imageGenPage.recommendedOnlySwitch.click();
+    await expect(
+      imageGenPage.modelCard(LLM_PROVIDER_ID, "gpt-5")
+    ).toBeVisible();
   });
 
   test("connects a provider model in one click without credentials", async ({
     page,
   }) => {
     const { linkBodies } = await mockImageGenApis(page);
-    await page.goto(IMAGE_GENERATION_URL);
-    await page.waitForSelector("text=Image Generation Model", {
-      timeout: 20000,
+    const imageGenPage = new AdminImageGenerationPage(page);
+    await imageGenPage.goto();
+
+    const card = imageGenPage.modelCard(LLM_PROVIDER_ID, "gpt-image-2");
+    await imageGenPage.connect(card);
+
+    await expect(imageGenPage.currentDefaultBadge(card)).toBeVisible({
+      timeout: 10000,
     });
-
-    const card = getModelCard(page, "gpt-image-2");
-    await card.getByRole("button", { name: "Connect" }).click();
-
-    await expect(
-      card.getByRole("button", { name: "Current Default" })
-    ).toBeVisible({ timeout: 10000 });
-    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(imageGenPage.dialog).toHaveCount(0);
     expect(linkBodies).toEqual([
       {
         llm_provider_id: LLM_PROVIDER_ID,
