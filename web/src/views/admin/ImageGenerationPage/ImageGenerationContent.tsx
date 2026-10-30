@@ -176,7 +176,7 @@ function AvailableModelCard({
 }: AvailableModelCardProps) {
   const t = useTranslations("admin.imageGeneration");
   return (
-    <SelectCard state="empty" padding={2} rounding={4} aria-label={ariaLabel}>
+    <Card border="solid" padding={2} rounding={4} aria-label={ariaLabel}>
       <ContentAction
         icon={icon}
         title={title}
@@ -197,7 +197,7 @@ function AvailableModelCard({
           </Button>
         }
       />
-    </SelectCard>
+    </Card>
   );
 }
 
