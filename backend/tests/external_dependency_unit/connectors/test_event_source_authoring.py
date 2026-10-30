@@ -290,8 +290,9 @@ def test_a_recording_becomes_a_searchable_document(
     assert [document.id for document in documents] == ["zoom-meeting-uuid-1"]
     # The parser's payload survived to the handler.
     assert documents[0].semantic_identifier == "Quarterly review"
+    # Claimed, not completed: the row settles on this attempt's outcome.
     assert count_events_by_status(db_session, pair.id) == {
-        ConnectorEventStatus.COMPLETED: 1
+        ConnectorEventStatus.IN_PROGRESS: 1
     }
 
 
@@ -398,7 +399,9 @@ def test_a_verifier_that_raises_fails_closed(
         raise RuntimeError("the verifier has a bug")
 
     # Register before building: a router captures the specs it was built
-    # from, so a later registration does not reach an existing app.
+    # from, so a later registration does not reach an existing app. The slug
+    # is already claimed, and a registry refuses a duplicate.
+    _SPECS.pop(SLUG, None)
     register_webhook_source(SPEC.model_copy(update={"verifier": exploding_verifier}))
     app = FastAPI()
     register_onyx_exception_handlers(app)
