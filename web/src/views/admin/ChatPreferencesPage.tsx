@@ -76,7 +76,7 @@ import { Disabled, Hoverable } from "@opal/core";
 import { Tier } from "@/lib/tiers/types";
 import {
   ChatNamingModelSetting,
-  SearchSelectionModelSetting,
+  SearchDecisionModelSetting,
 } from "@/views/admin/ChatTaskModelSettings";
 
 import { useDefaultAssistantConfiguration } from "@/lib/agents/hooks";
@@ -798,13 +798,6 @@ export default function ChatPreferencesPage() {
                   }}
                 />
               </InputHorizontal>
-            </Section>
-          </Card>
-
-          {/* Search */}
-          <Card border="solid" rounding={4}>
-            <Section alignItems="stretch">
-              <SearchSelectionModelSetting />
               {/* Below Business, or with no connectors, the row stays as is;
               only its switch is locked. */}
               <InputHorizontal
@@ -847,6 +840,13 @@ export default function ChatPreferencesPage() {
                   }}
                 />
               </InputHorizontal>
+            </Section>
+          </Card>
+
+          {/* Search */}
+          <Card border="solid" rounding={4}>
+            <Section alignItems="stretch">
+              <SearchDecisionModelSetting />
             </Section>
           </Card>
 

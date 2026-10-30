@@ -1254,7 +1254,7 @@
       "decisionModel": {
         "title": "决策模型",
         "openAiDecisionsModelName": "OpenAI 决策 (GPT-6 Luna)",
-        "description": "选择用于未来分类和审核功能的模型。Onyx 尚未使用此模型。",
+        "description": "内部搜索使用此模型对结果排序，并决定添加多少上下文。您也可以在聊天偏好设置中设置它。",
         "clear": "清除",
         "notConfigured": "未配置",
         "saveFailed": "无法更新决策模型"
@@ -2222,9 +2222,9 @@
         "description": "生成会话标题。快速、低成本的模型即可胜任。",
         "title": "聊天命名模型"
       },
-      "searchSelectionModel": {
-        "description": "选择并检查检索到的文档。快速、低成本的模型可以降低搜索成本，但可能影响回答质量。",
-        "title": "搜索选择模型"
+      "searchDecisionModel": {
+        "description": "选择检索到的文档，并决定添加多少上下文。决策模型在一次调用中对其排序。语言模型按原方式进行选择。",
+        "title": "搜索决策模型"
       },
       "taskModels": {
         "loadFailed": "无法加载任务模型",
@@ -2405,7 +2405,7 @@
       "toasts": {
         "chatNamingUpdateFailed": "更新会话命名模型失败",
         "providerResolveFailed": "无法解析提供商",
-        "searchSelectionUpdateFailed": "更新搜索筛选模型失败",
+        "searchDecisionUpdateFailed": "无法更新搜索决策模型",
         "settingsUpdateFailed": "更新设置失败",
         "systemPromptUpdateFailed": "更新系统提示词失败",
         "toolsUpdateFailed": "更新工具失败",
@@ -12096,6 +12096,9 @@
       },
       "failedFiles": {
         "toast": "{count, plural, one {文件处理失败并已移除：{names}} other {文件处理失败并已移除：{names}}}"
+      },
+      "firstOpenLoader": {
+        "ariaLabel": "正在加载聊天"
       },
       "newChatButton": {
         "label": "开始新聊天"

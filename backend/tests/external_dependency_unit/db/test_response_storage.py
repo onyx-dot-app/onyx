@@ -130,6 +130,7 @@ from onyx.llm.models import (
 )
 from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
 from onyx.server.query_and_chat.session_loading import (
+    load_session_tools,
     translate_assistant_message_to_packets,
 )
 from onyx.server.query_and_chat.streaming_models import (
@@ -455,7 +456,9 @@ def test_metadata_sources_survive_storage_without_search_results(
     assert response.citations and set(response.citations) == (
         {"1", "2"} if citation_only else {"1"}
     )
-    replay = translate_assistant_message_to_packets(response, db_session)
+    replay = translate_assistant_message_to_packets(
+        response, load_session_tools([response], db_session), db_session
+    )
     assert {
         packet.obj.document_id
         for packet in replay
@@ -1774,7 +1777,9 @@ def test_completed_tool_display_matches_reload_without_duplicate_streamed_output
     )
     db_session.delete(tool)
     db_session.commit()
-    saved = translate_assistant_message_to_packets(row, db_session)
+    saved = translate_assistant_message_to_packets(
+        row, load_session_tools([row], db_session), db_session
+    )
     if tool_kind == "python":
         live_stdout = "".join(
             packet.obj.stdout
@@ -2143,7 +2148,7 @@ def test_plain_history_reload_query_count_does_not_grow_per_turn(
             "".join(
                 packet.obj.content
                 for packet in translate_assistant_message_to_packets(
-                    message, db_session
+                    message, load_session_tools([message], db_session), db_session
                 )
                 if isinstance(packet.obj, AgentResponseDelta)
             )

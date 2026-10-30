@@ -1254,7 +1254,7 @@
       "decisionModel": {
         "title": "Entscheidungsmodell",
         "openAiDecisionsModelName": "OpenAI-Entscheidungen (GPT-6 Luna)",
-        "description": "Wählen Sie ein Modell für künftige Klassifizierungs- und Prüffunktionen. Onyx verwendet dieses Modell noch nicht.",
+        "description": "Die interne Suche nutzt dieses Modell, um Ergebnisse zu ordnen und den Umfang des Kontexts festzulegen. Sie können es auch in den Chat-Einstellungen festlegen.",
         "clear": "Löschen",
         "notConfigured": "Nicht konfiguriert",
         "saveFailed": "Entscheidungsmodell konnte nicht aktualisiert werden"
@@ -2222,9 +2222,9 @@
         "description": "Erstellt Sitzungstitel. Ein schnelles, kostengünstiges Modell eignet sich gut.",
         "title": "Modell für Chat-Benennung"
       },
-      "searchSelectionModel": {
-        "description": "Wählt abgerufene Dokumente aus und prüft sie. Ein schnelles, kostengünstiges Modell kann die Suchkosten senken, aber die Antwortqualität beeinträchtigen.",
-        "title": "Modell für Suchauswahl"
+      "searchDecisionModel": {
+        "description": "Wählt gefundene Dokumente aus und entscheidet, wie viel Kontext hinzukommt. Ein Entscheidungsmodell ordnet sie in einem Aufruf. Ein Sprachmodell wählt sie wie bisher aus.",
+        "title": "Such-Entscheidungsmodell"
       },
       "taskModels": {
         "loadFailed": "Aufgabenmodelle konnten nicht geladen werden",
@@ -2405,7 +2405,7 @@
       "toasts": {
         "chatNamingUpdateFailed": "Modell zur Chat-Benennung konnte nicht aktualisiert werden",
         "providerResolveFailed": "Der Anbieter konnte nicht aufgelöst werden",
-        "searchSelectionUpdateFailed": "Modell für die Dokumentauswahl konnte nicht aktualisiert werden",
+        "searchDecisionUpdateFailed": "Such-Entscheidungsmodell konnte nicht aktualisiert werden",
         "settingsUpdateFailed": "Die Einstellungen konnten nicht aktualisiert werden",
         "systemPromptUpdateFailed": "Der System-Prompt konnte nicht aktualisiert werden",
         "toolsUpdateFailed": "Die Tools konnten nicht aktualisiert werden",
@@ -12096,6 +12096,9 @@
       },
       "failedFiles": {
         "toast": "{count, plural, one {Eine Datei ist fehlgeschlagen und wurde entfernt: {names}} other {Dateien sind fehlgeschlagen und wurden entfernt: {names}}}"
+      },
+      "firstOpenLoader": {
+        "ariaLabel": "Chat wird geladen"
       },
       "newChatButton": {
         "label": "Neuen Chat starten"

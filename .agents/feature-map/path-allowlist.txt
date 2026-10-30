@@ -21,7 +21,7 @@ components/craft-webapp-proxy.md: start-webapp.sh
 components/skills.md: opencode.json
 
 # Local files that git ignores.
-components/cc-pairs-and-credentials.md: .vscode/.env
+components/cc-pairs-and-creds.md: .vscode/.env
 components/connectors.md: .vscode/.env
 
 # MCP method names.
@@ -30,6 +30,7 @@ components/craft-external-apps.md: tools/call
 
 # Library names.
 components/discord-bot.md: discord.py
+INDEX.md: discord.py
 
 # Build outputs.
 components/desktop-widget-extensions.md: src-tauri/target/release/bundle/

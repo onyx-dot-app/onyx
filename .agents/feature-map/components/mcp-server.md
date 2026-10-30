@@ -1,485 +1,242 @@
 # MCP Server
 
-> Onyx acting as an MCP **server**: an external LLM client (Claude Desktop, the
-> MCP Inspector, any MCP-speaking agent) connects over HTTP and gets one search
-> tool plus three read-only resources backed by Onyx's own retrieval pipeline.
+> Onyx as an MCP server: an external MCP client such as Claude Code or Codex
+> searches the company knowledge base with the user's own access. The server is
+> a separate process with no database that forwards every call, with the
+> caller's token, to the API server.
 
-**Verified against:** `268e4d5a3d` (2026-10-05)
-**Domain:** platform
+**Verified against:** `a4e97fcea1` (2026-10-29)
 **Edition:** CE
-**Owns:**
-`backend/onyx/mcp_server_main.py`, `backend/onyx/mcp_server/api.py`, `auth.py`,
-`utils.py`, `mcp.json.template`, `backend/onyx/mcp_server/tools/search.py`,
-`backend/onyx/mcp_server/resources/agents.py`, `document_sets.py`,
-`indexed_sources.py`, `backend/onyx/server/metrics/mcp_server.py`,
-`mcp_common.py`, `deployment/helm/charts/onyx/templates/mcp-server-deployment.yaml`,
-`mcp-server-service.yaml`, `ingress-mcp.yaml`, `mcp-server-servicemonitor.yaml`
-
-**Read first:** `backend/onyx/mcp_server/README.md`. It is the design
-rationale and the client-facing contract for this component; this document
-maps it to code and adds verification guidance.
-
-**Not this component:** `[[mcp-and-custom-tools]]` covers the opposite
-direction: Onyx acting as an MCP **client**, connecting out to third-party MCP
-servers an admin configures under Admin > Actions. That component's code lives
-in `backend/onyx/server/features/mcp/` and `backend/onyx/tools/tool_implementations/mcp/`.
-This document's code lives in `backend/onyx/mcp_server/` (no `s`, no `features/`
-prefix). If you are unsure which one a change touches, check the direction of
-the connection: who is dialing whom.
 
 ---
 
-## 1. What the user experiences
+## User experience
 
-A user who wants their LLM client (Claude Desktop, or any other MCP-capable
-client) to search their company's Onyx knowledge base adds Onyx as an MCP
-server in that client's configuration, pasting in a Personal Access Token or
-API Key. From then on, the user can ask the client questions that require
-looking things up in company data, and the client decides when to call the
-search tool and reads back ranked, cited-content results, the same
-retrieval quality as asking the same question in the Onyx chat UI.
+- **A user adds Onyx to an MCP client.** The user gives the client the URL
+  `https://<onyx domain>/mcp` and a Personal Access Token or API key as a
+  bearer token. When the deployment has the Onyx OAuth provider (on only when
+  `WEB_DOMAIN` is HTTPS, or HTTP on localhost), the client can instead sign the
+  user in through the browser and get a token scoped to `read:search`. `backend/onyx/mcp_server/mcp.json.template` shows the client
+  configuration.
+- **The client's model** can then call `search_indexed_documents` for ranked
+  results from the knowledge base, and `search_web` and `open_urls` for the
+  web. It can read resources that list the indexed sources, the document sets
+  and the agents that the user can use, so it can narrow a search before it
+  runs one. Results contain only documents the user can see in Onyx.
+- **When it fails**, a bad or expired token gets a 401. A PAT or API key
+  gets a 401 for every rejection, including an API server outage. An OAuth
+  token that the API server refuses for scope gets a 403 `insufficient_scope`
+  challenge, an inactive subscription gets a 402, and an API server outage
+  gets a 503. A tool call with an unknown source, document set or agent
+  returns an error that names the valid values when the list is short. A deployment with no indexed sources, or with no vector database,
+  returns an error from the search tool. With no active web search provider,
+  `search_web` gets `INVALID_INPUT` from `/web-search/search-lite`, and the
+  tool is still listed. `open_urls` falls back to the built-in crawler when no
+  content provider is set.
+- **An operator** gets the server by default in Docker Compose and Helm, and
+  turns it off with `MCP_SERVER_ENABLED=false` (Compose) or
+  `mcpServer.enabled: false` (Helm).
 
-The client can also list what sources are indexed, what Document Sets exist,
-and what Onyx agents (personas) are available, so it can narrow a search
-before running it.
-
----
-
-## 2. Surfaces
-
-### Process entry point
-
-`backend/onyx/mcp_server_main.py:main` is a **separate process**, not a router
-mounted on the main API server. It is a plain `uvicorn.run(mcp_app, ...)` call
-against the FastAPI app built in `onyx/mcp_server/api.py:create_mcp_fastapi_app`.
-It exits immediately, doing nothing, if `MCP_SERVER_ENABLED` is false
-(`mcp_server_main.py:main`). Local development launches it two ways:
-the "MCP Server" configuration in `.vscode/launch.json` (`uvicorn
-onyx.mcp_server.api:mcp_app --reload --port 8090`), or directly via
-`python -m onyx.mcp_server_main`.
-
-### Tools
-
-Three callable tools, registered via `@mcp_server.tool()` in
-`backend/onyx/mcp_server/tools/search.py`. The first is the main one:
-
-| Tool | Function | What it does |
-|---|---|---|
-| `search_indexed_documents` | `search.py:search_indexed_documents` | Runs the full Onyx search pipeline against the company knowledge base. Filters by `source_types`, `document_set_names`, `time_cutoff`, or a named `agent`; `agent` and `document_set_names` are mutually exclusive (`search.py:_resolve_filters`). |
-
-The other two are `search_web` and `open_urls`
-(`search.py:search_web`, `search.py:open_urls`; the README documents both). They proxy to
-`/web-search/search-lite` and `/web-search/open-urls` on the API server and do
-not touch the internal document index or `SearchTool`. This document covers
-all three tools, since they share one auth path and one process, but
-`search_indexed_documents` is the one that reaches the shared retrieval
-pipeline described in §4 and is the tool `[[access-control]]` and
-`[[internal-search]]` care about.
-
-### Resources
-
-Three read-only MCP resources, registered via `@mcp_server.resource(...)` in
-`backend/onyx/mcp_server/resources/`:
-
-| Resource URI | Function | Returns | Why it exists |
-|---|---|---|---|
-| `resource://indexed_sources` | `indexed_sources.py:indexed_sources_resource` | Sorted list of connector source strings currently indexed for the tenant (`utils.py:get_indexed_sources`, backed by `GET /manage/indexed-sources`). | Lets a client discover valid values for the tool's `source_types` filter before calling it. |
-| `resource://document_sets` | `document_sets.py:document_sets_resource` | List of `{name, description}` for Document Sets the user can access (`utils.py:get_accessible_document_sets`, backed by `GET /manage/document-set`, projected through `utils.py:DocumentSetEntry`). | Lets a client discover valid `document_set_names` values. |
-| `resource://agents` | `agents.py:agents_resource` | List of `{id, name, description}` for personas the user can search with (`utils.py:get_accessible_agents`, backed by `GET /persona`, projected through `utils.py:AgentEntry`). | Lets a client discover valid `agent` names, which apply that agent's knowledge scope (document sets, attached documents, start date) and model. |
-
-None of the three resources is strictly required before a search call: the
-tool itself validates `source_types`, `document_set_names`, and `agent`
-against the same backing calls and returns an error naming the available
-values if a supplied value does not resolve (`search.py:_unknown_value_error`,
-`_resolve_source_types`, `_validate_document_sets`, `_resolve_agent`). The
-resources exist so a client can browse and filter proactively rather than
-guess-and-fail.
-
-### Env / config (`backend/onyx/configs/app_configs.py`)
-
-| Variable | Default | Effect |
-|---|---|---|
-| `MCP_SERVER_ENABLED` | `false` | Gate. `mcp_server_main.py:main` exits without binding a port when unset. |
-| `MCP_SERVER_HOST` | `0.0.0.0` | Bind address. |
-| `MCP_SERVER_PORT` | `8090` | Listen port, shares the domain with the API server per the README. |
-| `MCP_SERVER_CORS_ORIGINS` | unset | Comma-separated list; enables `CORSMiddleware` in `api.py:create_mcp_fastapi_app` when set. |
-| `MCP_SERVER_API_REQUEST_TIMEOUT_SECONDS` | 300 | Timeout on the MCP server's outbound calls back to the API server (`search.py:_post_model`). |
-| `API_SERVER_PROTOCOL`, `API_SERVER_HOST` | `http`, `127.0.0.1` | How the MCP process reaches the API server. |
-| `API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS` | unset | Full override, used by the Helm deployment to point at the in-cluster API service, and documented for self-hosting the MCP server against Onyx Cloud as the backend. |
-
-`MCP_SERVER_ALLOW_PRIVATE_NETWORK` and `MCP_SERVER_ALLOW_LOOPBACK`
-(`app_configs.py`, near line 1236) look related by name but are not: they gate
-the SSRF guard for outbound admin-configured MCP client connections, owned by
-`[[mcp-and-custom-tools]]`, not this component.
-
-### Deployment
-
-Self-hosted docker-compose runs the `mcp_server` service **by default** in
-every file generated from `deployment/docker_compose/docker-compose.template.yml`.
-The service and nginx both default `MCP_SERVER_ENABLED` to `true`; an operator
-sets `MCP_SERVER_ENABLED=false` in `.env` to turn it off. Disabled, the container
-idles (`sleep infinity`) and `run-nginx.sh` writes empty MCP includes. The service runs `python -m onyx.mcp_server_main` in the same backend
-image, pointed at `API_SERVER_HOST=api_server`. The `onyx-cli` installer ships
-`mcp.conf.inc.template` and `mcp_upstream.conf.inc.template` so nginx can
-render the MCP routes.
-
-The Helm chart deploys it by default (`mcpServer.enabled: true`; set it to
-`false` to drop the server, its ingresses and its nginx routes)
-(`deployment/helm/charts/onyx/templates/mcp-server-deployment.yaml`): its own
-`Deployment` running `python onyx/mcp_server_main.py`, its own `Service`
-(`mcp-server-service.yaml`), an `Ingress` at path `/mcp` on the API host
-(`ingress-mcp.yaml`), and a `ServiceMonitor`
-(`mcp-server-servicemonitor.yaml`) for its Prometheus metrics. It is wired to
-the in-cluster API service via
-`API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS`, not the protocol/host pair.
-Liveness and readiness probes hit `/health`, the same unauthenticated
-health-check route added in `api.py:create_mcp_fastapi_app`.
+`backend/onyx/mcp_server/README.md` is the client-facing description of the
+tools and resources.
 
 ---
 
-## 3. Data model
+## Scope
 
-None. The README states it directly (`backend/onyx/mcp_server/README.md`:
-"Database: None (all work delegates to the API server)"), and nothing in
-`backend/onyx/mcp_server/` imports a DB session or SQLAlchemy model. Every
-tool and resource call is an outbound HTTP request to the API server using the
-caller's own bearer token (`search.py:_post_model`, `utils.py:get_http_client`).
-The only local state is the shared `httpx.AsyncClient` (`utils.py:_http_client`),
-torn down on shutdown (`utils.py:shutdown_http_client`, wired into
-`api.py:create_mcp_fastapi_app`'s lifespan).
+This component owns the MCP server process, its tools and resources, its token
+verification, its metrics, the deployment routing that sends `/mcp` and the
+protected-resource discovery path to it, the development proxy for `/mcp`, and
+the MCP Compatibility workflow.
+
+Its neighbours own:
+- [[internal-search]]: `POST /search` and the `SearchTool` pipeline behind it.
+- [[auth-and-identity]]: PATs, API keys and the Onyx OAuth provider that
+  issues `onyx_oat_` tokens.
+- [[authorization]]: how `require_permission` caps a scoped token by its scopes.
+- [[web-search]]: the `/web-search/*` routes that `search_web` and `open_urls`
+  call.
+- [[rate-and-usage-limits]]: the budget checks on `/search`.
+- [[mcp-and-custom-tools]]: the opposite direction, Onyx as an MCP client.
+  Check who connects to whom before you change "MCP" code.
 
 ---
 
-## 4. How it works
-
-### 4.1 Connecting a client
-
-A client (Claude Desktop, or the MCP Inspector) is configured with a URL and a
-bearer token, shown in `backend/onyx/mcp_server/mcp.json.template`:
-
-```json
-{
-  "mcpServers": {
-    "Onyx": {
-      "url": "https://cloud.onyx.app/mcp",
-      "headers": {
-        "Authorization": "Bearer [YOUR PAT OR API KEY HERE]"
-      }
-    }
-  }
-}
-```
-
-The README's Claude Desktop example is the same shape against a self-hosted
-instance, pointing at `https://[YOUR_ONYX_DOMAIN]:8090/` directly rather than
-through an `/mcp` ingress path.
-
-### 4.2 Auth: every request, not just connection setup
-
-`mcp_server = FastMCP(..., auth=build_mcp_server_auth())` (`api.py`, `auth.py`) wires
-`OnyxTokenVerifier.verify_token` (`auth.py`) into FastMCP's per-request
-authentication. On every MCP request, it makes a synchronous `GET /me` call to
-the API server with `Authorization: Bearer {token}` (`auth.py:verify_token`).
-A non-200 response returns `None`, which FastMCP treats as an authentication
-failure; a 200 returns a minimal `AccessToken` with a fixed
-`scopes=["mcp:use"]` (`auth.py`). **This `AccessToken.scopes` value is not the
-real permission scope**, it is FastMCP's own token object; the real,
-capability-bearing scopes (`read:search`, `read:chat`, `write:chat`, and the
-rest of `db/enums.py:Permission`) live on the PAT or API key itself and are
-resolved again, independently, when the token is later presented to the API
-server (see §4.3). The MCP server never inspects or caches the token's real
-scopes; it only checks that `/me` accepts the token at all, then forwards the
-exact same token on every downstream call
-(`search.py:_post_model`, `utils.py:get_indexed_sources`,
-`get_accessible_document_sets`, `get_accessible_agents`).
-
-Tokens are the PAT/API-key mechanism `[[auth-and-identity]]` owns
-(`backend/onyx/auth/pat.py:generate_pat`, `hash_pat`). Scoping is
-`db/enums.py:Permission.READ_SEARCH` / `READ_CHAT` / `WRITE_CHAT`, described in
-that enum's own docstring as "API-surface scopes... coarser than the
-capability tokens... exist primarily to scope Personal Access Tokens."
-
-**OAuth provider tokens.** A bearer with the `onyx_oat_` prefix goes to
-`auth.py:verify_oauth_token` instead of `/me`. It calls
-`GET /oauth-provider/introspect` on the API server and accepts the token only
-if the resource is the MCP resource (`{WEB_DOMAIN}/mcp/`), the token is not
-expired, and the scope is exactly `read:search`. A 401 returns `None`; a 402
-and an outage stay distinct (`SUBSCRIPTION_INACTIVE`, `SERVICE_UNAVAILABLE`,
-turned into responses by `MCPAuthErrorMiddleware`); a 403 becomes an
-`insufficient_scope` challenge that points at the protected-resource metadata.
-When `oauth_provider/config.py:OAUTH_PROVIDER_SETTINGS` is set, `build_mcp_server_auth` wraps the verifier
-in fastmcp's `RemoteAuthProvider`, which serves that metadata and names the
-Onyx issuer. The tokens come from the OAuth provider in [[auth-and-identity]] §4.9.
-Discovery advertises `{WEB_DOMAIN}/mcp` without a trailing slash so clients can
-connect with either `/mcp` or `/mcp/`. Stored token audiences remain `/mcp/`.
-The internal MCP mount path does not change the advertised public resource.
-On Helm deployments, `/mcp/` also routes on the web host so the endpoint and
-protected-resource metadata match the resource derived from `WEB_DOMAIN`.
-The API ingress also routes `/api/oauth-provider` on the web host in split-host
-deployments, removing `/api` before forwarding to the backend.
-Nginx serves authorization metadata at the RFC 8414 issuer path and the root
-and `/mcp` compatibility aliases. All aliases retain the canonical issuer.
-Production discovery is handled by the public proxy, without Next.js rewrite destinations.
-For local OAuth, `next dev` rewrites authorization discovery to `INTERNAL_URL`
-and protected-resource discovery to `MCP_INTERNAL_URL`. These rewrites exist
-only in `PHASE_DEVELOPMENT_SERVER`; production builds and servers omit them.
-
-### 4.3 A search call, end to end
+## Architecture
 
 ```
-Claude Desktop -> POST /  (MCP tool call, bearer token)      mcp_server/api.py (port 8090)
-  -> OnyxTokenVerifier.verify_token                          mcp_server/auth.py
-       -> GET /me  (bearer token)                            API server, port 8080
-  -> search_indexed_documents(...)                           mcp_server/tools/search.py
-       -> _resolve_filters (agent / source_types / document_set_names)
-       -> POST /search  (bearer token, SearchRequest)         API server, port 8080
-            -> require_vector_db, check_token_rate_limits,
-               check_api_key_usage (route dependencies)
-            -> require_permission(Permission.READ_SEARCH)     onyx/server/features/search/api.py:search
-            -> SearchTool(user=<resolved user>, emitter=NullEmitter(), ...)
-            -> search_tool.run(...)                            tools/tool_implementations/search/search_tool.py
+MCP client --bearer--> /mcp  (nginx or ingress)  --> mcp_server process (port 8090)
+  OnyxTokenVerifier.verify_token
+    PAT or API key   -> GET /me                     on the API server
+    onyx_oat_ token  -> GET /oauth-provider/introspect
+  search_indexed_documents
+    _resolve_filters -> /manage/indexed-sources, /manage/document-set, /persona
+    POST /search  (same bearer)  -> require_permission(READ_SEARCH)
+                                 -> SearchTool(user=caller, emitter=NullEmitter())
 ```
 
-The `/search` endpoint (`server/features/search/api.py:search`) is the same
-endpoint `[[internal-search]]` documents as the programmatic entry point for
-"onyx-cli, Craft sandbox, integrations." It resolves the caller from the
-bearer token through the normal FastAPI-Users dependency chain
-(`auth/users.py:current_user`), the same path a session cookie or any other
-PAT/API-key caller goes through, then constructs a `SearchTool` with
-`user=user` (`search/api.py:search`, the `SearchTool(...)` construction), so
-the caller's own document ACLs apply. It passes
-`emitter=NullEmitter()` because there is no chat stream to write packets to;
-`chat/emitter.py:NullEmitter`'s own docstring names both the Search API and the
-MCP server as its callers ("Used by callers that run tools outside the chat
-streaming context (e.g. the Search API, MCP server)").
+**No state of its own.** Nothing in `backend/onyx/mcp_server/` opens a
+database session. Each tool and resource call is an HTTP request to the API
+server with the caller's bearer token, through one shared `httpx.AsyncClient`
+(`mcp_server/utils.py:get_http_client`). The API server resolves the user,
+applies permissions, ACLs and budgets, and does the work.
 
-`search_tool.run(...)` is the same method the core chat loop's search tool
-calls (`[[core-chat-loop]]` §4.1, `tools/tool_constructor.py`). The MCP path
-and the chat path both terminate in `SearchTool.run`
-(`tools/tool_implementations/search/search_tool.py:run`); `[[internal-search]]`
-§4.1 walks its nine stages. What differs for MCP: no LLM answer is generated
-afterward (the endpoint returns ranked `SearchResult` rows, not a chat
-response), and the MCP tool always sets `emitter=NullEmitter()` since it is
-never inside a chat turn.
+**Authentication.** `mcp_server/api.py` builds `FastMCP` with
+`mcp_server/auth.py:build_mcp_server_auth`. When
+`oauth_provider/config.py:OAUTH_PROVIDER_SETTINGS` is set, it wraps the
+verifier in a `RemoteAuthProvider` that serves protected-resource metadata and
+names the Onyx issuer. `OnyxTokenVerifier.verify_token` is async and runs on
+every request. A PAT or API key goes to `/me`, and any failure returns no
+token, which FastMCP reports as a 401. An `onyx_oat_` token goes to
+`verify_oauth_token`, which raises `OnyxError` for a 402, a 403 or an outage.
+`MCPAuthErrorMiddleware` turns that error into a JSON response, so these cases
+are not reported as a bad token.
 
-`search_web` and `open_urls` (`search.py`) do not go through `SearchTool`; they
-forward to `/web-search/search-lite` and `/web-search/open-urls` and return
-whatever those endpoints give back.
-
----
-
-## 5. Contracts and invariants
-
-1. **The acting user's document ACLs apply.** The MCP server never searches
-   the index itself; it delegates to `/search`, which builds `SearchTool` with
-   the resolved user (`search/api.py:search`). `SearchTool.run` always builds
-   ACL filters for that user, and there is no flag that skips them
-   ([[access-control]] §5.3). MCP search is ACL-scoped to the acting user by
-   the same mechanism as chat search. The integration
-   test `backend/tests/integration/tests/mcp/test_mcp_server_search.py:test_mcp_search_respects_acl_filters`
-   exercises this directly.
-2. **A scoped token must not grant more than its scope.** The MCP server's own
-   auth check (`auth.py:verify_token`) only confirms `/me` accepts the token;
-   it does not enforce `read:search` itself. Enforcement happens downstream,
-   at the API server, per endpoint: `/search` requires
-   `Permission.READ_SEARCH` (`search/api.py:search`,
-   `require_permission(Permission.READ_SEARCH)`); `/manage/indexed-sources`,
-   `/manage/document-set`, and `/persona` (used by the three resources) carry
-   their own permission requirements independently. `auth/permissions.py:require_permission`
-   additionally caps by `request.state.token_scopes` when the authenticating
-   token carries scopes narrower than the user's own permissions, so a
-   `read:search`-only PAT cannot reach a `write:chat`-gated endpoint even
-   though the MCP server itself never looked at the scope.
-3. **An unscoped token carries the user's full access**, per the README. This
-   follows from invariant 2: with no `token_scopes` set, `require_permission`
-   only checks the user's own permissions, unconstrained by the token.
-4. **The tool and resource names, argument schemas, and return shapes are a
-   client-facing contract.** A configured Claude Desktop (or any other client)
-   has this schema cached from its last successful list-tools call. Renaming
-   `search_indexed_documents`, changing an argument name, or changing the
-   `{"results": [...]}` / `{title, url, source_type, content, updated_at}`
-   shape (`search.py:_to_mcp_dict`) breaks every already-configured client
-   silently, with no migration path other than the client re-listing tools.
-5. **`agent` and `document_set_names` are mutually exclusive** on
-   `search_indexed_documents`, enforced in `search.py:_resolve_filters`.
-   Explicit document sets replace an agent's knowledge scope rather than
-   narrowing it, so honoring both would silently search outside the agent's
-   intended scope.
-6. **An unknown `source_types`, `document_set_names`, or `agent` value must
-   fail, not silently drop.** `search.py:_unknown_value_error` and its callers
-   raise `_FilterError` rather than proceeding with an unscoped search; a
-   dropped filter would return a wider result set indistinguishable from a
-   correctly scoped one. A malformed `time_cutoff` is the exception. The tool
-   logs a warning and searches without a time bound.
-7. **The MCP server must not become a way to bypass what the web path
-   enforces.** It reuses the exact same `/search` endpoint and the same
-   `Permission.READ_SEARCH` gate as any other programmatic caller
-   (`[[onyx-api]]`); it adds no bypass of its own, including the budget
-   checks (see §9).
-8. **An OAuth provider token reaches only its route allowlist.**
-   `oauth_provider/auth.py:authenticate_oauth_provider_request` admits the
-   token only on `_ACCESS_ROUTES` and only with exactly the `read:search`
-   scope, and sets `request.state.token_scopes` so `require_permission` caps
-   it like a scoped PAT. An invalid or refresh-type OAuth bearer is rejected
-   and never falls back to a browser cookie. Adding a route the MCP server
-   calls means adding it to `_ACCESS_ROUTES`.
+**Routing.** The advertised resource is `{WEB_DOMAIN}/mcp/`
+(`oauth_provider/config.py`). Discovery advertises it without the trailing
+slash, and `create_mcp_fastapi_app` adds a route alias for the
+protected-resource metadata path with and without the slash, so clients can use
+either URL form. Nginx (`deployment/data/nginx/mcp.conf.inc.template`) and the
+Helm ingresses route `/mcp` and `/.well-known/oauth-protected-resource` to this
+process. `/.well-known/oauth-authorization-server` goes to the API server
+(`/oauth-provider/metadata`), not here.
 
 ---
 
-## 6. Relationships
+## Contracts and traps
 
-**Depends on**
-- [[internal-search]]: owns the `SearchTool.run` pipeline this tool calls
-  through `/search`.
-- [[auth-and-identity]]: PATs and API keys are the only credential this
-  server accepts; `auth.py:verify_token` delegates entirely to it.
-- [[access-control]]: the ACL enforcement this server relies on and never
-  duplicates.
-- [[agents-personas]]: the `agent` filter and the `agents` resource surface
-  personas and their knowledge scope.
-- [[document-index]]: `indexed_sources` reflects what is actually indexed.
-- [[rate-and-usage-limits]]: does not gate this surface today (see §9).
-- [[onyx-api]]: the `/search`, `/manage/indexed-sources`,
-  `/manage/document-set`, `/persona`, `/web-search/*`, and `/me` endpoints
-  this server calls all live there.
-
-**Depended on by**
-- Nothing internal to Onyx. This is a leaf surface: external MCP clients are
-  the only consumers.
-
-**Named the opposite direction, do not confuse**
-- [[mcp-and-custom-tools]]: Onyx as an MCP *client*. Different code, different
-  process (it runs inside the main API server, not as its own entry point),
-  different direction of connection.
-
----
-
-## 7. Blast radius
-
-| If your change… | Also check |
-|---|---|
-| changes `search_indexed_documents`'s argument names, types, or return shape | every configured MCP client breaks silently; this is a versioned public contract, treat it like an API break |
-| adds a tool or resource | update `backend/onyx/mcp_server/README.md`'s Capabilities section; add the tool/resource name to `MCPServerToolName` in `server/metrics/mcp_server.py` if it should be observable; consider whether it needs its own `Permission` scope |
-| changes auth (`auth.py`, the `/me` delegation, or `Permission.READ_SEARCH`/`READ_CHAT`/`WRITE_CHAT`) | [[auth-and-identity]] for PAT/API-key issuance; re-run `backend/tests/integration/tests/mcp/test_mcp_server_auth.py`; re-verify invariant 2 in §5 |
-| changes the retrieval pipeline (`SearchTool.run`, `_build_index_filters`, `_expand_queries_and_decide_scope`) | [[internal-search]] owns it; the change reaches this component automatically since `search_indexed_documents` calls the same `/search` endpoint chat's search tool ultimately reaches |
-| changes which `user` `search/api.py:search` passes to `SearchTool`, or adds any way to skip ACL filters | [[access-control]] §5.3 treats this as a security review regardless of caller |
-| changes `NullEmitter` | [[core-chat-loop]] also depends on it for the non-streaming save path; re-check both callers named in its docstring |
-| adds a way for `search_indexed_documents` (or a future tool) to make an LLM call | re-read §9's rate-limit note; the call must stay behind the budget checks in `search/api.py:search` or add its own |
-| changes `MCP_SERVER_ENABLED`/`MCP_SERVER_PORT`/`API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS` defaults | update the Helm chart's `mcp-server-deployment.yaml` env block and the docker-compose `mcp_server` and `nginx` services to match |
-
----
-
-## 8. How to verify a change
-
-The `MCP Compatibility` workflow checks real nginx routing on PRs and merge
-groups. Its native-client job runs Claude Code and Codex OAuth login against
-an isolated Onyx test server with PostgreSQL and Redis, through real nginx
-using the shipped routing configuration, without LLM calls. Each client runs
-OAuth and authenticated tool discovery with both `/mcp` and `/mcp/` URLs.
-PRs use pinned CLI versions; the nightly run uses their latest releases.
-The same job checks the OAuth protocol with omitted resource parameters, which
-legacy Claude Code clients use. Tokens remain bound to the configured MCP URL.
-
-A weekly canary, Mondays at 09:17 UTC, builds the backend under test and starts an isolated Compose
-stack with the API, MCP server, PostgreSQL, Redis, and shipped nginx routing.
-It checks loopback discovery aliases, both endpoint URL forms, the advertised
-resource, MCP auth challenges, and provider routing without creating users or grants.
-It does not use a running deployment or test the Next.js consent UI. Scheduled and
-manual failures post to `#alerts` (`C07K8KBMGKF`) through `slack-post-message`
-with `CVE_REVIEWS_BOT_TOKEN`, matching the channel-addressable bot workflows.
-Messages tag Roshan through the shared `rohoswagger` user mapping.
-The required-client mode fails if either CLI is missing.
-Manual runs with `test_alert=true` send a labeled delivery-test message even
-when compatibility checks pass.
-
-### Tests
-
-```bash
-# Unit tests: filter resolution, timeouts
-cd backend && uv run pytest tests/unit/onyx/mcp_server
-
-# Integration tests: real MCP session over streamable HTTP, real auth, real ACLs
-cd backend && uv run pytest tests/integration/tests/mcp/test_mcp_server_auth.py
-cd backend && uv run pytest tests/integration/tests/mcp/test_mcp_server_search.py
-```
-
-`test_mcp_server_search.py` is the one to read before touching anything in
-§4-5: `test_mcp_document_search_flow`, `test_mcp_search_respects_acl_filters`,
-`test_mcp_search_filters_by_document_set`, and `test_mcp_search_scopes_to_agent`
-each open a real `mcp.ClientSession` over `streamablehttp_client` against a
-running MCP server and call the tool/resources exactly as a real client would.
-
-Tests under `backend/tests/external_dependency_unit/mcp/` and
-`backend/tests/external_dependency_unit/server/features/mcp/` (OAuth dead
-grants, admin API, access control on the admin-configured MCP surface) belong
-to `[[mcp-and-custom-tools]]`, not this component.
-
-### Manual reproduction
-
-1. Set `MCP_SERVER_ENABLED=true` and start the server. Locally, either launch
-   the "MCP Server" configuration in `.vscode/launch.json`, or run
-   `uv run uvicorn onyx.mcp_server.api:mcp_app --port 8090` from `backend/`.
-2. `curl http://localhost:8090/health` and confirm
-   `{"status": "healthy", "service": "mcp_server"}`.
-3. Mint a PAT scoped to `read:search` (see `[[auth-and-identity]]`) for a real
-   user with indexed documents.
-4. `npx @modelcontextprotocol/inspector http://localhost:8090/`, choose Bearer
-   Token auth in the Authentication tab, paste the PAT, connect.
-5. Call `search_indexed_documents` with a query you know matches indexed
-   content; confirm results and that they only include documents that user can
-   see. Try a query that should only surface a document the test user does
-   *not* have access to and confirm it is absent.
-6. Read the `indexed_sources`, `document_sets`, and `agents` resources and
-   confirm they list only what the user can access.
-7. Point Claude Desktop at the local server using the
-   `mcp.json.template` shape and repeat a search from the client, to check the
-   client-facing schema end to end.
+1. `pat-validated-not-scoped` **For a PAT or API key, the MCP auth check only
+   validates the token.** `mcp_server/auth.py:OnyxTokenVerifier.verify_token`
+   asks `/me` whether the token is accepted. The `scopes=["mcp:use"]` on the
+   returned `AccessToken` is a FastMCP placeholder, not the token's real
+   scope. Scope is enforced per endpoint on the API server: `/search` needs `READ_SEARCH`, and
+   `backend/onyx/auth/permissions.py:require_permission` caps a scoped token by
+   `request.state.token_scopes`, so an unscoped PAT or API key carries the
+   user's full access. Do not assume the MCP layer gates a PAT by scope. Only
+   `onyx_oat_` tokens are checked here, by
+   `mcp_server/auth.py:OnyxTokenVerifier.verify_oauth_token`, for exactly
+   `read:search` and the MCP resource.
+2. `acl-from-search-route` **ACLs come from `/search`, not from this process.**
+   `server/features/search/api.py:search` builds `SearchTool` with the resolved
+   user, which always applies that user's ACL filters ([[access-control]]). A
+   new tool must call an API route that applies ACLs. It must never query the
+   index itself.
+3. `oauth-token-route-allowlist` **An OAuth provider token reaches only an
+   allowlist of routes.** `oauth_provider/auth.py:_ACCESS_ROUTES` admits
+   `onyx_oat_` tokens only on the routes this server calls, and only with
+   exactly `read:search`. A new API route that a tool calls must be added
+   there. Otherwise the API server rejects OAuth clients on that route while
+   PAT clients work. The allowlist is not enough: the token's scopes are set to
+   `READ_SEARCH` only, so a route gated on any permission that `READ_SEARCH`
+   does not imply returns 403 to every OAuth client
+   (`auth/permissions.py:require_permission`). A malformed or refresh-type `onyx_oat_` bearer gets a 401
+   (`oauth_provider/auth.py:oauth_provider_tenant_from_request`), and identity
+   resolution never falls back to a browser cookie ([[auth-and-identity]]).
+4. `client-facing-names-stable` **Tool and resource names, arguments and result
+   shapes are a client contract.** Clients cache the tool list. A rename, a new
+   required argument or a change to `mcp_server/tools/search.py:_to_mcp_dict`
+   breaks configured clients with no error until they list tools again.
+5. `errors-as-results` **Errors come back as a result, not as an MCP error.**
+   `mcp_server/tools/search.py:_error_payload` returns `{"error": ...,
+   "results": []}`. A client sees a successful call whose content is the error
+   text.
+6. `unknown-filter-fails` **An unknown filter value fails; it is never dropped.**
+   `mcp_server/tools/search.py:_resolve_filters` raises `_FilterError` for an
+   unknown source, document set or agent, because a dropped filter widens the
+   search with no sign. `agent` and `document_set_names` are mutually exclusive: explicit document sets
+   replace an agent's knowledge scope instead of narrowing it.
+7. `search-is-metered` **Search spends LLM tokens and is metered.**
+   `tools/tool_implementations/search/search_tool.py:SearchTool.run` makes LLM
+   calls, and `/search` runs the token, API-call and cloud cost checks
+   ([[rate-and-usage-limits]]). Keep a new LLM-calling tool behind the same checks.
+8. `oauth-callback-not-this-server` **`/mcp/oauth/callback` is a web page, not
+   this server.** It is the MCP client OAuth callback of
+   [[mcp-and-custom-tools]]. Nginx has an exact `location` for it, and Helm has
+   an exact path in
+   `deployment/helm/charts/onyx/templates/ingress-mcp-oauth-callback.yaml`.
+   Both win over the `/mcp` route. A routing change that sends it here breaks
+   every member OAuth sign-in to an MCP server.
+9. `api-server-url-per-target` **The process reaches the API server through
+   `build_api_server_url_for_http_requests`**
+   (`utils/variable_functionality.py:build_api_server_url_for_http_requests`).
+   Compose sets `API_SERVER_HOST`. Helm sets
+   `API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS` in
+   `deployment/helm/charts/onyx/templates/mcp-server-deployment.yaml`. A change
+   to one path can break only one deployment target.
+10. `streamable-accept-header` **`_ensure_streamable_accept_header` rewrites the
+    `Accept` header.** It sits in `mcp_server/api.py:create_mcp_fastapi_app`.
+    FastMCP's streamable HTTP needs a request that accepts both JSON and event
+    streams. The shim sets both when a client sends `*/*`,
+    omits the header or leaves one out. Keep it.
+11. `ssrf-env-false-lead` **`MCP_SERVER_ALLOW_PRIVATE_NETWORK` and
+    `MCP_SERVER_ALLOW_LOOPBACK` are not settings of this server.** They seed
+    the SSRF level for the MCP client in [[mcp-and-custom-tools]].
 
 ---
 
-## 9. Footguns
+## Known issues
 
-- **Client/server direction confusion.** "MCP" in this codebase means two
-  opposite things depending on the directory: `backend/onyx/mcp_server/` is
-  Onyx as a server (this document); `backend/onyx/server/features/mcp/` and
-  `backend/onyx/tools/tool_implementations/mcp/` is Onyx as a client, admin
-  configured, documented in `[[mcp-and-custom-tools]]`. Grepping "mcp" without
-  checking the path will mix the two up.
-- **It is a separate process, easy to forget when changing shared code.**
-  A change to `SearchTool.run`, `Permission`, or `/search` is exercised by the
-  main API server's own test suite, but this component's own process
-  (`mcp_server_main.py`) is not started by most local dev flows unless
-  `MCP_SERVER_ENABLED=true` is set. A regression here can go unnoticed unless
-  `tests/integration/tests/mcp/` is run specifically.
-- **`search_indexed_documents` spends LLM tokens, and `/search` meters it
-  like chat.** `SearchTool.run` calls `select_sections_for_expansion`
-  (`tools/tool_implementations/search/search_tool.py`) on every call, whatever
-  the value of `skip_query_expansion`. When `skip_query_expansion=False` (the
-  default), it also calls `keyword_query_expansion` and `decide_time_filter`
-  (`search_tool.py:_expand_queries_and_decide_scope`). `search/api.py:search`
-  runs `check_token_rate_limits` before it resolves an LLM,
-  `check_api_key_usage` as a route dependency, and
-  `check_llm_cost_limit_for_provider` (the cloud cost cap on Onyx-managed
-  keys). Do not remove these on the grounds that MCP "never drives a chat
-  turn"; see [[rate-and-usage-limits]] §9.
-- **`/search` returns 501 when `DISABLE_VECTOR_DB` is set.** The route depends on
-  `require_vector_db` (`server/utils_vector_db.py`). `search_indexed_documents` then
-  returns an error on a deployment without a vector database.
-- **The MCP server's own token check is a liveness check, not a scope
-  check.** `auth.py:verify_token` only confirms the token is accepted by
-  `/me`; it does not know or enforce `read:search` vs `read:chat` vs
-  `write:chat`. All real scope enforcement is downstream, per endpoint. A
-  change that assumes the MCP layer itself gates by scope will be wrong.
-- **The server has three tools, not one.** `search_web` and `open_urls` are real, registered tools
-  (`mcp_server/tools/search.py`) alongside `search_indexed_documents`. They
-  proxy to the web-search endpoints, not `SearchTool`, and carry no document
-  ACL concerns of their own, but they are part of this server's contract and
-  its blast radius (§7) all the same.
-- **Local dev and Helm diverge on how the API server is addressed.**
-  `.vscode/launch.json` and the docker-compose `mcp_server` service use
-  `API_SERVER_PROTOCOL`/`API_SERVER_HOST`; the Helm chart uses
-  `API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS` exclusively
-  (`mcp-server-deployment.yaml`). Both are read by the same helper,
-  `variable_functionality.py:build_api_server_url_for_http_requests`, but a
-  change to one config path without the other silently breaks only one
-  deployment target.
+- A malformed `time_cutoff` is logged and ignored, so the search runs with no
+  time bound. This breaks the "fail, do not widen" rule of
+  [[#unknown-filter-fails]].
+- A shared code change (`SearchTool`, `Permission`, `/search`) does not start
+  this process in most local flows. Run the MCP integration tests to catch a
+  regression here.
+- The `/health` check in `mcp_server/api.py`, which the Helm probes call and
+  which skips MCP auth, is an `@app.middleware("http")` function, which the
+  API server forbids
+  ([[streaming-protocol#pure-asgi-middleware]]). It is safe here because this
+  app streams no chat. Do not copy it into the API server.
+
+---
+
+## Dependencies
+
+- [[internal-search]]: the retrieval behind `search_indexed_documents`.
+- [[auth-and-identity]]: token validation through `/me` and introspection,
+  and the OAuth provider.
+- [[authorization]]: token scopes and `require_permission`.
+- [[access-control]]: the ACL filters that `/search` applies.
+- [[agents-personas]]: the `agent` filter and the agents resource.
+- [[web-search]]: the routes behind `search_web` and `open_urls`.
+- [[rate-and-usage-limits]]: budgets on `/search`.
+- [[onyx-api]]: the API routes this server calls.
+- [[observability]]: Prometheus metrics in `server/metrics/mcp_server.py`.
+
+---
+
+## Recipes
+
+- `mcp-server-tool` **A tool or resource.** Copy `search_web` in `mcp_server/tools/search.py`
+  for a tool, or `mcp_server/resources/document_sets.py` for a resource; list
+  the current set with `git grep -n '@mcp_server\.' backend/onyx/mcp_server`.
+  Import a new module in the package `__init__.py`. Call an API route; do not
+  query the database ([[#acl-from-search-route]]). Add the route to
+  `_ACCESS_ROUTES` if OAuth clients may use it
+  ([[#oauth-token-route-allowlist]]). Add a
+  `server/metrics/mcp_server.py:MCPServerToolName` value for a tool, and update
+  `backend/onyx/mcp_server/README.md`.
+- `run-mcp-server-locally` **Run and probe the server locally.** Run `python -m onyx.mcp_server_main`
+  with `MCP_SERVER_ENABLED=true`, check `/health`, and connect
+  `npx @modelcontextprotocol/inspector` with a `read:search` PAT. A search must
+  not return documents the user cannot see.
+- `investigate-prod-oauth` **Investigate an OAuth sign-in that fails only in production.** Local OAuth
+  discovery works only under `next dev`: `web/next.config.js` rewrites
+  authorization-server discovery to `INTERNAL_URL` and protected-resource
+  discovery to `MCP_INTERNAL_URL` in the `PHASE_DEVELOPMENT_SERVER` phase, and
+  the `/mcp` proxy route serves only in development. A production build relies
+  on nginx or the ingress, so a local pass does not prove production routing.
+  Compare `deployment/data/nginx/mcp.conf.inc.template` and the Helm MCP
+  ingresses, and check the advertised resource against `WEB_DOMAIN`.
+
+---
+
+## Verification
+
+- Unit: `backend/tests/unit/onyx/mcp_server/`.
+- Integration: `backend/tests/integration/tests/mcp/`. The MCP server tests
+  open a real MCP session, and one checks [[#acl-from-search-route]].
+- `.github/workflows/mcp-compatibility.yml` checks real nginx routing and real
+  Claude Code and Codex OAuth sign-in on each PR and daily. A weekly job starts
+  an isolated Compose stack and checks discovery and the auth challenge.
+  Scheduled failures post a Slack alert. Its tests are in `deployment/tests/`.

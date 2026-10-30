@@ -336,6 +336,37 @@ services:
     volumes:
       - mcp_server_logs:/var/log/onyx
 
+  # Will receive connector events from sources that push them. It serves
+  # health and metrics only; the event route comes later. Add `webhook` to
+  # COMPOSE_PROFILES in .env to run it; nginx starts either way.
+  webhook_server:
+    profiles: ["webhook"]
+    image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+      target: runtime
+    command: python -m onyx.webhook_server_main
+    env_file:
+      - path: .env
+        required: false
+    # No `cache`: unused, and the Lite overlay puts it behind a profile.
+    depends_on:
+      - relational_db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+    # Optional, only for debugging purposes
+    volumes:
+      - webhook_server_logs:/var/log/onyx
+
   inference_model_server:
     image: ${ONYX_MODEL_SERVER_IMAGE:-onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}}
     build:
@@ -833,6 +864,7 @@ volumes:
   api_server_logs:
   background_logs:
   mcp_server_logs:
+  webhook_server_logs:
   inference_model_server_logs:
   indexing_model_server_logs:
   # Shared volume for persistent document storage (Craft file-system mode)

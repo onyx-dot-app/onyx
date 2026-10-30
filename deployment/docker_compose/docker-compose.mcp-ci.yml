@@ -92,6 +92,7 @@ services:
       - ../data/nginx/app.conf.template:/etc/nginx/conf.d/app.conf.template:ro
       - ../data/nginx/mcp.conf.inc.template:/etc/nginx/conf.d/mcp.conf.inc.template:ro
       - ../data/nginx/mcp_upstream.conf.inc.template:/etc/nginx/conf.d/mcp_upstream.conf.inc.template:ro
+      - ../data/nginx/webhook.conf.inc:/etc/nginx/conf.d/webhook.conf.inc:ro
       - ../data/nginx/run-nginx.sh:/etc/nginx/conf.d/run-nginx.sh:ro
     depends_on:
       api_server:

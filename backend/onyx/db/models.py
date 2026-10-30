@@ -956,6 +956,9 @@ class ToolCall__SearchDoc(Base):
     search_doc_id: Mapped[int] = mapped_column(
         ForeignKey("search_doc.id", ondelete="CASCADE"), primary_key=True
     )
+    # The order the tool call returned this doc in. Rows saved before the
+    # column existed have none.
+    position: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class Document__Tag(Base):
@@ -3857,6 +3860,9 @@ class ToolCall(Base):
         back_populates="tool_calls",
         cascade="all, delete-orphan",
         single_parent=True,
+        # The order the tool returned them in, which a fetch call's replay
+        # shows. Rows saved before `position` existed fall back to id order.
+        order_by=lambda: [ToolCall__SearchDoc.position, SearchDoc.id],
     )
 
 

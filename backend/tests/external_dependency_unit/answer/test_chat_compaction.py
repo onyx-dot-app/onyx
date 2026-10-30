@@ -22,6 +22,7 @@ from onyx.llm.model_response import Delta
 from onyx.llm.models import AssistantMessage, TextContent
 from onyx.server.query_and_chat.models import MessageResponseIDInfo, SendMessageRequest
 from onyx.server.query_and_chat.session_loading import (
+    load_session_tools,
     translate_assistant_message_to_packets,
 )
 from onyx.server.query_and_chat.streaming_models import (
@@ -304,7 +305,9 @@ def test_compacted_chat_reloads_continues_and_regenerates_selected_branch(
             assert original_row is not None and original_row.message == original_input
             saved = db_session.get(ChatMessage, ids.reserved_assistant_message_id)
             assert saved is not None
-            replayed = translate_assistant_message_to_packets(saved, db_session)
+            replayed = translate_assistant_message_to_packets(
+                saved, load_session_tools([saved], db_session), db_session
+            )
             assert (
                 "".join(
                     packet.obj.content

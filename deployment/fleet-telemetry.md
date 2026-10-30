@@ -32,7 +32,7 @@ inside the Cloud deployment.
 | `runtime`, `version`, `resource`, `heartbeat` | Each API server, Celery worker, and Slack bot process | At start, then every 5 minutes |
 | `query` | Chat turns and search requests: channel, mode, outcome, timing, error category, chat tool usage, LLM cycles | At the end of server execution |
 | `attempt` counters | Indexing: documents fetched, chunks embedded and written, errors, durations | Summed for 30 seconds |
-| `connector`, `tenant_domain`, `license`, `users` | Collector: connector settings and counts, signup email domains, license presence, the number of standard user accounts | On change, and every 6 hours |
+| `connector`, `tenant_domain`, `license`, `users` | Collector: connector settings and counts, permission and group sync times and cadence of permission-synced connectors, signup email domains, license presence, the number of standard user accounts | Each item when it changes, and 6 hours after its own last send |
 | `feedback` | A thumbs up or down on an answer: the vote, the channel, and a digest of the answer id | When a user votes |
 | `attempt`, `stage`, `job` | Collector: index attempts, stage timings, sync and migration jobs that changed | Every 5 minutes |
 | `heartbeat` deployment fields | API: Standard or Lite; collector: whether a configured connector has an indexed document | Every 5 minutes |
@@ -83,7 +83,10 @@ Telemetry needs no extra container, Helm value, or migration.
 
 Each pass reads the rows that changed since the previous pass, and all work that is still running.
 It reads 5 minutes of the previous window again, for rows that committed late. Event IDs come from
-the row identity and update time, so the fleet service drops the repeated events. Each read returns
+the row identity and the time of its state, so the fleet service drops the repeated events. Running
+attempts and jobs go out at revision 0. A finished one goes out at its end, at a higher revision,
+so the service orders runs by when they ended. It goes out again only when a late batch or a
+rewritten final status changes it. Each read returns
 the oldest changes first. When a read reaches its row limit, or the sender cannot take more events,
 the next pass starts at the first row that this pass did not send.
 

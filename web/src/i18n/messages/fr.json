@@ -1254,7 +1254,7 @@
       "decisionModel": {
         "title": "Modèle de décision",
         "openAiDecisionsModelName": "Décisions OpenAI (GPT-6 Luna)",
-        "description": "Sélectionnez un modèle pour les futures fonctions de classification et de révision. Onyx n’utilise pas encore ce modèle.",
+        "description": "La recherche interne utilise ce modèle pour classer les résultats et choisir la quantité de contexte à ajouter. Vous pouvez aussi le définir dans les préférences de chat.",
         "clear": "Effacer",
         "notConfigured": "Non configuré",
         "saveFailed": "Impossible de mettre à jour le modèle de décision"
@@ -2222,9 +2222,9 @@
         "description": "Génère les titres des sessions. Un modèle rapide et peu coûteux convient bien.",
         "title": "Modèle de nommage des chats"
       },
-      "searchSelectionModel": {
-        "description": "Sélectionne et vérifie les documents récupérés. Un modèle rapide et peu coûteux peut réduire les coûts de recherche, mais peut affecter la qualité des réponses.",
-        "title": "Modèle de sélection de recherche"
+      "searchDecisionModel": {
+        "description": "Sélectionne les documents récupérés et décide de la quantité de contexte à ajouter. Un modèle de décision les classe en un seul appel. Un modèle de langage les sélectionne comme avant.",
+        "title": "Modèle de décision de recherche"
       },
       "taskModels": {
         "loadFailed": "Impossible de charger les modèles de tâches",
@@ -2405,7 +2405,7 @@
       "toasts": {
         "chatNamingUpdateFailed": "Échec de la mise à jour du modèle de nommage des discussions",
         "providerResolveFailed": "Impossible de résoudre le fournisseur",
-        "searchSelectionUpdateFailed": "Échec de la mise à jour du modèle de sélection pour la recherche",
+        "searchDecisionUpdateFailed": "Échec de la mise à jour du modèle de décision de recherche",
         "settingsUpdateFailed": "Échec de la mise à jour des paramètres",
         "systemPromptUpdateFailed": "Échec de la mise à jour du prompt système",
         "toolsUpdateFailed": "Échec de la mise à jour des outils",
@@ -12096,6 +12096,9 @@
       },
       "failedFiles": {
         "toast": "{count, plural, one {Un fichier a échoué et a été supprimé : {names}} other {Des fichiers ont échoué et ont été supprimés : {names}}}"
+      },
+      "firstOpenLoader": {
+        "ariaLabel": "Chargement de la discussion"
       },
       "newChatButton": {
         "label": "Démarrer une nouvelle discussion"

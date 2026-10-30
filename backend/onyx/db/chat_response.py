@@ -1,7 +1,7 @@
 import json
 from uuid import UUID
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, inspect, select
 from sqlalchemy.orm import Session, aliased, joinedload, object_session, selectinload
 
 from onyx.agents.compaction import count_tokens
@@ -1205,11 +1205,21 @@ def read_response_replay_data(
                 & (ChatResponseItem.step_index == ToolCall.turn_number),
             )
             .where(ToolCall.id.in_(references))
-            .options(selectinload(ToolCall.search_docs))
         ).all()
         if references
         else []
     )
+    # The session replay prefetches these tool calls' search docs; load them
+    # only for calls that do not have them yet, in one query.
+    unloaded_ids = [
+        tool.id for tool, _ in rows if "search_docs" in inspect(tool).unloaded
+    ]
+    if unloaded_ids:
+        db_session.execute(
+            select(ToolCall)
+            .where(ToolCall.id.in_(unloaded_ids))
+            .options(selectinload(ToolCall.search_docs))
+        ).all()
     for tool, message_id in rows:
         reference = references[tool.id]
         if (

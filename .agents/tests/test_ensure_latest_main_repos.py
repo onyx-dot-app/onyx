@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-_HOOK = Path(__file__).resolve().parents[4] / ".agents/hooks/ensure_latest_main.py"
+_HOOK = Path(__file__).resolve().parents[2] / ".agents/hooks/ensure_latest_main.py"
 _GIT_ENV = {
     **os.environ,
     "GIT_AUTHOR_NAME": "t",
