@@ -1,0 +1,29 @@
+name: Coding Agent Runner Tests
+concurrency:
+  group: Coding-Agent-Runner-Tests-${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    paths:
+      - ".github/scripts/run_coding_agent.py"
+      - ".github/scripts/test_run_coding_agent.py"
+      - ".github/actions/run-coding-agent/action.yml"
+      - ".github/workflows/pr-coding-agent-runner-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  coding-agent-runner-tests:
+    name: Coding Agent Runner Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Run tests
+        run: python3 -m unittest discover -s .github/scripts -p test_run_coding_agent.py
