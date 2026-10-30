@@ -154,10 +154,10 @@ def test_load_from_state(
     )
 
     # Mock requests endpoint
-    # Mock requests endpoint (standard JSM endpoint with serviceDeskId filter)
+    # Mock servicedesk-scoped requests endpoint
     responses.add(
         responses.GET,
-        f"{base_url}/rest/servicedeskapi/request",
+        f"{base_url}/rest/servicedeskapi/servicedesk/1/request",
         json=sample_requests_response,
         status=200,
     )
@@ -498,7 +498,7 @@ def test_comments_multi_page_pagination() -> None:
 @responses.activate
 def test_get_customer_requests_service_desk_id_param() -> None:
     base_url = "https://company.atlassian.net"
-    endpoint = f"{base_url}/rest/servicedeskapi/request"
+    endpoint = f"{base_url}/rest/servicedeskapi/servicedesk/5/request"
     responses.add(
         responses.GET,
         endpoint,
@@ -512,14 +512,36 @@ def test_get_customer_requests_service_desk_id_param() -> None:
     assert len(responses.calls) == 1
     call = responses.calls[0]
     assert call.request.url is not None
-    assert "serviceDeskId=5" in call.request.url
+    assert "/rest/servicedeskapi/servicedesk/5/request" in call.request.url
+    assert "requestOwnership" not in call.request.url
+    assert "searchTerm=printer" in call.request.url
+
+
+@responses.activate
+def test_get_customer_requests_no_service_desk_id() -> None:
+    base_url = "https://company.atlassian.net"
+    endpoint = f"{base_url}/rest/servicedeskapi/request"
+    responses.add(
+        responses.GET,
+        endpoint,
+        json={"values": []},
+        status=200,
+    )
+
+    client = JsmClient(base_url=base_url, user_email="a@b.com", api_token="tok")
+    client.get_customer_requests(service_desk_id=None, search_term="printer")
+
+    assert len(responses.calls) == 1
+    call = responses.calls[0]
+    assert call.request.url is not None
+    assert "/rest/servicedeskapi/request?" in call.request.url
     assert "requestOwnership=ALL_REQUESTS" in call.request.url
     assert "searchTerm=printer" in call.request.url
 
 
 @patch("time.sleep")
 @responses.activate
-def test_comments_preserves_page_on_error(mock_sleep: MagicMock) -> None:
+def test_comments_error_raises_jsm_api_error(mock_sleep: MagicMock) -> None:
     base_url = "https://company.atlassian.net"
     endpoint = f"{base_url}/rest/servicedeskapi/request/IT-200/comment"
 
@@ -540,11 +562,42 @@ def test_comments_preserves_page_on_error(mock_sleep: MagicMock) -> None:
         responses.add(responses.GET, endpoint, status=500)
 
     client = JsmClient(base_url=base_url, user_email="a@b.com", api_token="tok")
-    comments = client.get_request_comments("IT-200")
-    # Preserves first page comments without raising
-    assert len(comments) == 1
-    assert comments[0]["body"] == "Comment 1"
+    with pytest.raises(JsmApiError):
+        client.get_request_comments("IT-200")
     assert mock_sleep.call_count == 2
+
+
+@responses.activate
+def test_extract_request_document_reraises_jsm_api_error() -> None:
+    base_url = "https://company.atlassian.net"
+    endpoint = f"{base_url}/rest/servicedeskapi/request/IT-300/comment"
+    for _ in range(3):
+        responses.add(responses.GET, endpoint, status=500)
+
+    connector = JiraServiceManagementConnector(jira_base_url=base_url)
+    client = JsmClient(base_url=base_url, user_email="a@b.com", api_token="tok")
+    req = {
+        "issueKey": "IT-300",
+        "requestFieldValues": [{"fieldId": "summary", "value": "Test ticket"}],
+    }
+    with pytest.raises(JsmApiError):
+        connector._extract_request_document(req, client)
+
+
+def test_extract_request_document_handles_generic_exception() -> None:
+    base_url = "https://company.atlassian.net"
+    connector = JiraServiceManagementConnector(jira_base_url=base_url)
+    mock_client = MagicMock(spec=JsmClient)
+    mock_client.get_request_comments.side_effect = RuntimeError("Unexpected issue")
+    req = {
+        "issueKey": "IT-301",
+        "requestFieldValues": [
+            {"fieldId": "summary", "value": "Generic exception ticket"}
+        ],
+    }
+    doc = connector._extract_request_document(req, mock_client)
+    assert doc is not None
+    assert doc.semantic_identifier == "Generic exception ticket"
 
 
 @responses.activate
