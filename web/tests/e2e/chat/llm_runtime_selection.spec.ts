@@ -405,14 +405,12 @@ test.describe("LLM Runtime Selection", () => {
     const chatPage = new ChatPage(page);
     await chatPage.goto();
 
-    const dialog = await chatPage.openModelList();
-    await chatPage.modelSearchInput.fill(sharedModelName);
+    await chatPage.openModelList(sharedModelName);
 
-    const sharedModelOptions = dialog.locator("[data-interactive-state]");
-    await expect(sharedModelOptions).toHaveCount(2);
+    await expect(chatPage.modelOptions).toHaveCount(2);
     // Two results with the same model name under different providers.
     // Groups are sorted alphabetically, so OpenAI (index 1) comes after Anthropic (index 0).
-    const openAiModelOption = sharedModelOptions.nth(1);
+    const openAiModelOption = chatPage.modelOptions.nth(1);
     await expect(openAiModelOption).toBeVisible();
     await chatPage.chooseModelOption(openAiModelOption);
 
@@ -424,24 +422,17 @@ test.describe("LLM Runtime Selection", () => {
     await startNewChat(page);
     await page.waitForSelector("#onyx-chat-input-textbox", { timeout: 15000 });
 
-    const secondDialog = await chatPage.openModelList();
-    await chatPage.modelSearchInput.fill(sharedModelName);
+    await chatPage.openModelList(sharedModelName);
 
-    const secondSharedModelOptions = secondDialog.locator(
-      "[data-interactive-state]"
-    );
-    await expect(secondSharedModelOptions).toHaveCount(2);
+    await expect(chatPage.modelOptions).toHaveCount(2);
     // Anthropic is index 0 (alphabetically first).
-    const anthropicModelOption = secondSharedModelOptions.nth(0);
+    const anthropicModelOption = chatPage.modelOptions.nth(0);
     await expect(anthropicModelOption).toBeVisible();
     await chatPage.chooseModelOption(anthropicModelOption);
 
-    const verifyDialog = await chatPage.openModelList();
+    await chatPage.openModelList();
     // Verify the Anthropic option (index 0) is selected.
-    const selectedOption = verifyDialog.locator(
-      '[data-interactive-state="selected"]'
-    );
-    await expect(selectedOption).toHaveCount(1);
+    await expect(chatPage.selectedModelOptions).toHaveCount(1);
     await chatPage.closeModelPicker();
 
     await sendMessage(page, "Collision payload check two.");
@@ -500,14 +491,9 @@ test.describe("LLM Runtime Selection", () => {
     const chatPage = new ChatPage(page);
     await chatPage.goto();
 
-    const dialog = await chatPage.openModelList();
-    await chatPage.modelSearchInput.fill(restrictedModelName);
+    const dialog = await chatPage.openModelList(restrictedModelName);
 
-    const restrictedModelOption = dialog
-      .locator("[data-interactive-state]")
-      .filter({ hasText: restrictedModelName });
-
-    await expect(restrictedModelOption).toHaveCount(0);
+    await expect(chatPage.modelOption(restrictedModelName)).toHaveCount(0);
     await expect(dialog.getByText("No models found")).toBeVisible();
   });
 });

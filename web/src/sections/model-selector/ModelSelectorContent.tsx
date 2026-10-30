@@ -515,8 +515,8 @@ export default function ModelSelectorContent({
     new Set([defaultGroupKey])
   );
 
-  // Applied once the options first resolve, so a pick that changes the first
-  // selected group does not collapse the list while the menu fades out.
+  // Applied once the options first resolve, so a pick that moves the first
+  // selected group does not swap the expanded group while the menu fades out.
   const defaultGroupAppliedRef = useRef(false);
   useEffect(() => {
     if (defaultGroupAppliedRef.current || groupedOptions.length === 0) return;

@@ -14,10 +14,7 @@ import MultiModelSelector, {
 } from "@/sections/model-selector/MultiModelSelector";
 import type { ReasoningManager } from "@/sections/model-selector/ModelSelectorContent";
 import { llmOptionKey } from "@/lib/languageModels/options";
-import type {
-  LLMProviderDescriptor,
-  ReasoningEffortOverride,
-} from "@/lib/languageModels/types";
+import type { LLMProviderDescriptor } from "@/lib/languageModels/types";
 import { makeProvider } from "@tests/setup/llmProviderTestUtils";
 
 // Stable across renders, so memoized option lists don't churn.
@@ -67,7 +64,6 @@ interface ModelFixture {
   provider: { id: number; name: string; provider: string };
   modelName: string;
   configId: number;
-  supportedReasoningEfforts?: ReasoningEffortOverride[];
 }
 
 const PROVIDER = { id: 1, name: "Provider", provider: "openai" };
@@ -76,13 +72,7 @@ const OTHER_PROVIDER = { id: 2, name: "Provider Two", provider: "anthropic" };
 
 const MODELS: Record<string, ModelFixture> = {
   "Model A": { provider: PROVIDER, modelName: "model-1", configId: 1 },
-  // Narrower than the base set, so a pane switch can expose an unsupported level.
-  "Model B": {
-    provider: PROVIDER,
-    modelName: "model-2",
-    configId: 2,
-    supportedReasoningEfforts: ["low", "medium"],
-  },
+  "Model B": { provider: PROVIDER, modelName: "model-2", configId: 2 },
   "Model C": { provider: PROVIDER, modelName: "model-3", configId: 3 },
   "Model D": { provider: PROVIDER, modelName: "model-4", configId: 4 },
   "Model E": { provider: OTHER_PROVIDER, modelName: "model-5", configId: 5 },
@@ -103,7 +93,6 @@ const mockProviders: LLMProviderDescriptor[] = [PROVIDER, OTHER_PROVIDER].map(
           max_input_tokens: 128000,
           supports_image_input: false,
           supports_reasoning: true,
-          supported_reasoning_efforts: model.supportedReasoningEfforts,
           effectiveDisplayName: displayName,
         })),
     })
@@ -343,7 +332,7 @@ function rowName(displayName: string): RegExp {
   return new RegExp(`^${displayName}\\s*${MODELS[displayName]?.modelName}$`);
 }
 
-/** A list row; rows in a collapsed provider group are aria-hidden and not found. */
+/** A list row; a collapsed provider group's fold is aria-hidden, so its rows are not found. */
 function queryRow(displayName: string): HTMLElement | null {
   return within(openPopper()).queryByRole("button", {
     name: rowName(displayName),
@@ -416,10 +405,14 @@ async function clickBack(user: User) {
   await user.click(back);
 }
 
-async function openFromAdd(user: User) {
+function requireAddButton(): HTMLElement {
   const add = addButton();
   if (!add) throw new Error("add button is hidden");
-  await user.click(add);
+  return add;
+}
+
+async function openFromAdd(user: User) {
+  await user.click(requireAddButton());
   await waitFor(() => expect(popperWrapper()).not.toBeNull());
 }
 
@@ -434,10 +427,26 @@ async function typeSearch(user: User, text: string) {
   await user.type(search, text);
 }
 
+const CALLBACK_NAMES: (keyof Callbacks)[] = ["onAdd", "onRemove", "onReplace"];
+
 function expectNoCallbacks(callbacks: Callbacks) {
-  expect(callbacks.onAdd).not.toHaveBeenCalled();
-  expect(callbacks.onRemove).not.toHaveBeenCalled();
-  expect(callbacks.onReplace).not.toHaveBeenCalled();
+  for (const name of CALLBACK_NAMES) {
+    expect(callbacks[name]).not.toHaveBeenCalled();
+  }
+}
+
+/** `name` fired once with `args` and no other callback fired. */
+function expectOnlyCall(
+  callbacks: Callbacks,
+  name: keyof Callbacks,
+  ...args: unknown[]
+) {
+  for (const other of CALLBACK_NAMES) {
+    if (other === name) continue;
+    expect(callbacks[other]).not.toHaveBeenCalled();
+  }
+  expect(callbacks[name]).toHaveBeenCalledTimes(1);
+  expect(callbacks[name]).toHaveBeenCalledWith(...args);
 }
 
 describe("MultiModelSelector", () => {
@@ -557,10 +566,7 @@ describe("MultiModelSelector", () => {
       await openFromAdd(user);
       await user.click(row("Model C"));
 
-      expect(callbacks.onAdd).toHaveBeenCalledTimes(1);
-      expect(callbacks.onAdd).toHaveBeenCalledWith(selected("Model C"));
-      expect(callbacks.onRemove).not.toHaveBeenCalled();
-      expect(callbacks.onReplace).not.toHaveBeenCalled();
+      expectOnlyCall(callbacks, "onAdd", selected("Model C"));
       expect(pillNames()).toEqual(["Model C", "Model A"]);
       await expectClosed();
     });
@@ -610,7 +616,7 @@ describe("MultiModelSelector", () => {
       expectPane("Model E");
       expectNoCallbacks(callbacks);
       expect(pillNames()).toEqual(["Model A"]);
-      await expectAnchoredAt(ADD);
+      await expectStillAt(rectOf(ADD));
 
       await clickBack(user);
       expectList();
@@ -622,7 +628,7 @@ describe("MultiModelSelector", () => {
       expectPane("Model A");
       expectNoCallbacks(callbacks);
       expect(pillNames()).toEqual(["Model A"]);
-      await expectAnchoredAt(ADD);
+      await expectStillAt(rectOf(ADD));
 
       await clickBack(user);
       expect(searchInput()).toHaveValue("Model");
@@ -698,10 +704,7 @@ describe("MultiModelSelector", () => {
       await openFromPill(user, "Model B");
       await user.click(row("Model D"));
 
-      expect(callbacks.onReplace).toHaveBeenCalledTimes(1);
-      expect(callbacks.onReplace).toHaveBeenCalledWith(1, selected("Model D"));
-      expect(callbacks.onAdd).not.toHaveBeenCalled();
-      expect(callbacks.onRemove).not.toHaveBeenCalled();
+      expectOnlyCall(callbacks, "onReplace", 1, selected("Model D"));
       expect(pillNames()).toEqual(["Model A", "Model D", "Model C"]);
       await expectClosed();
     });
@@ -730,7 +733,7 @@ describe("MultiModelSelector", () => {
       await user.click(settingsButton("Model D"));
       expectPane("Model D");
       expectNoCallbacks(callbacks);
-      await expectAnchoredAt("Model B");
+      await expectStillAt(rectOf("Model B"));
 
       await clickBack(user);
       expectList();
@@ -788,7 +791,7 @@ describe("MultiModelSelector", () => {
         remove: "Model B",
       },
     ])(
-      "x closes from the $view and the content holds its rect",
+      "x closes from the $view outright and the next open starts fresh",
       async ({ opener, pane, remove }) => {
         const user = setupUser();
         const callbacks = makeCallbacks();
@@ -802,18 +805,18 @@ describe("MultiModelSelector", () => {
           await user.click(settingsButton(pane));
           expectPane(pane);
         }
-        const atOpen = rectOf(opener);
-        const content = holdExitAnimation();
+        holdExitAnimation();
 
         await clickPillX(user, remove);
 
-        expect(callbacks.onRemove).toHaveBeenCalledTimes(1);
-        expect(callbacks.onRemove).toHaveBeenCalledWith(
-          initial.indexOf(remove)
-        );
+        expect(popperWrapper()).toBeNull();
+        expectOnlyCall(callbacks, "onRemove", initial.indexOf(remove));
         expect(pillNames()).not.toContain(remove);
-        expect(content).toHaveAttribute("data-state", "closed");
-        await expectStillAt(atOpen);
+
+        await openFromAdd(user);
+        expectList();
+        expect(searchInput()).toHaveValue("");
+        await expectAnchoredAt(ADD);
       }
     );
 
@@ -824,12 +827,55 @@ describe("MultiModelSelector", () => {
 
       await clickPillX(user, "Model B");
 
-      expect(callbacks.onRemove).toHaveBeenCalledTimes(1);
-      expect(callbacks.onRemove).toHaveBeenCalledWith(1);
-      expect(callbacks.onAdd).not.toHaveBeenCalled();
-      expect(callbacks.onReplace).not.toHaveBeenCalled();
+      expectOnlyCall(callbacks, "onRemove", 1);
       expect(pillNames()).toEqual(["Model A"]);
       expect(popperWrapper()).toBeNull();
+    });
+
+    test("a pill click over an open pane starts on the switch list", async () => {
+      const user = setupUser();
+      renderPicker(["Model A", "Model B"]);
+
+      await openFromAdd(user);
+      await typeSearch(user, "Model");
+      await user.click(settingsButton("Model D"));
+      expectPane("Model D");
+
+      await openFromPill(user, "Model B");
+      expectList();
+      expect(searchInput()).toHaveValue("");
+      expectRowSelected("Model B", true);
+      await expectAnchoredAt("Model B");
+    });
+
+    test("clicking the open menu's own opener closes it", async () => {
+      const user = setupUser();
+      const callbacks = makeCallbacks();
+      renderPicker(["Model A", "Model B"], callbacks);
+
+      await openFromAdd(user);
+      await user.click(requireAddButton());
+      await expectClosed();
+
+      await openFromPill(user, "Model B");
+      await user.click(pill("Model B"));
+      await expectClosed();
+      expectNoCallbacks(callbacks);
+    });
+
+    test("a click on +'s icon over an open switch list opens the add list", async () => {
+      const user = setupUser();
+      renderPicker(["Model A", "Model B"]);
+
+      await openFromPill(user, "Model B");
+      const icon = requireAddButton().querySelector("svg");
+      if (!icon) throw new Error("+ has no icon");
+      await user.click(icon);
+
+      expectList();
+      expectRowSelected("Model A", true);
+      expectRowEnabled("Model A", true);
+      await expectAnchoredAt(ADD);
     });
 
     test("+ then pill then + switches menus with a fresh rect each time", async () => {
@@ -949,8 +995,7 @@ describe("MultiModelSelector", () => {
       const callbacks = makeCallbacks();
       renderPicker(["Model A", "Model B"], callbacks);
 
-      const add = addButton();
-      if (!add) throw new Error("add button is hidden");
+      const add = requireAddButton();
       act(() => add.focus());
       await user.keyboard("{Enter}");
       expectList();

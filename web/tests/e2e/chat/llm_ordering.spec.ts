@@ -47,24 +47,20 @@ test.describe("LLM Ordering", () => {
     const chatPage = new ChatPage(page);
     const originalModelText = await chatPage.readModelPillText();
 
-    const dialog = await chatPage.openModelList();
-    const allModelItems = dialog.locator("[data-interactive-state]");
-    await expect(allModelItems.first()).toBeVisible({ timeout: 5000 });
+    await chatPage.openModelList();
+    await expect(chatPage.modelOptions.first()).toBeVisible({ timeout: 5000 });
 
     // Pick the first non-selected model so the pill text changes after the switch
-    const nonSelectedItem = dialog
-      .locator('[data-interactive-state="empty"]')
-      .first();
+    const nonSelectedItem = chatPage.unselectedModelOptions.first();
     const hasNonSelected = (await nonSelectedItem.count()) > 0;
-    const targetItem = hasNonSelected ? nonSelectedItem : allModelItems.first();
+    const targetItem = hasNonSelected
+      ? nonSelectedItem
+      : chatPage.modelOptions.first();
 
     await expect(targetItem).toBeVisible();
-    const selectedModelText = await chatPage.chooseModelOption(targetItem);
-
-    // Verify the popover closed and the sole pill shows the new model
-    await expect(dialog).toBeHidden();
+    // Waits until the first pill shows the picked row's model.
+    await chatPage.chooseModelOption(targetItem);
     await expect(chatPage.modelPills).toHaveCount(1);
-    await chatPage.expectModelPill(selectedModelText);
 
     if (hasNonSelected) {
       await chatPage.expectModelPillNot(originalModelText);

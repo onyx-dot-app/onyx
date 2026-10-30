@@ -65,31 +65,25 @@ export async function selectModelFromInputPopover(
   preferredModels: string[]
 ): Promise<string> {
   const chatPage = new ChatPage(page);
-  const dialog = await chatPage.openModelList();
-  const searchInput = chatPage.modelSearchInput;
+  await chatPage.openModelList();
+  const { modelOptions, unselectedModelOptions } = chatPage;
 
   for (const modelName of preferredModels) {
-    await searchInput.fill(modelName);
-    const modelOptions = dialog.locator("[data-interactive-state]");
-    const nonSelectedOptions = dialog.locator(
-      '[data-interactive-state="empty"]'
-    );
-
+    await chatPage.modelSearchInput.fill(modelName);
     if ((await modelOptions.count()) > 0) {
       const candidate =
-        (await nonSelectedOptions.count()) > 0
-          ? nonSelectedOptions.first()
+        (await unselectedModelOptions.count()) > 0
+          ? unselectedModelOptions.first()
           : modelOptions.first();
       return chatPage.chooseModelOption(candidate);
     }
   }
 
   // Reset search so fallback sees all available models.
-  await searchInput.fill("");
+  await chatPage.modelSearchInput.fill("");
 
-  const nonSelectedOptions = dialog.locator('[data-interactive-state="empty"]');
-  if ((await nonSelectedOptions.count()) > 0) {
-    const fallback = nonSelectedOptions.first();
+  if ((await unselectedModelOptions.count()) > 0) {
+    const fallback = unselectedModelOptions.first();
     await expect(fallback).toBeVisible();
     return chatPage.chooseModelOption(fallback);
   }
@@ -99,14 +93,7 @@ export async function selectModelFromInputPopover(
 }
 
 export async function switchModel(page: Page, modelName: string) {
-  const chatPage = new ChatPage(page);
-  const dialog = await chatPage.openModelList();
-  await chatPage.modelSearchInput.fill(modelName);
-  const option = dialog
-    .locator("[data-interactive-state]")
-    .filter({ hasText: modelName })
-    .first();
-  await chatPage.chooseModelOption(option);
+  await new ChatPage(page).switchModel(modelName);
 }
 
 export async function startNewChat(page: Page) {
