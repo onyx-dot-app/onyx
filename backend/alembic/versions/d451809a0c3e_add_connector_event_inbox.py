@@ -33,7 +33,7 @@ def upgrade() -> None:
         sa.Column("event_key", sa.String(), nullable=False),
         sa.Column("file_id", sa.String(), nullable=True),
         sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-        sa.Column("status", sa.String(), server_default="pending", nullable=False),
+        sa.Column("status", sa.String(), server_default="PENDING", nullable=False),
         sa.Column("index_attempt_id", sa.Integer(), nullable=True),
         sa.Column(
             "attempt_count", sa.Integer(), server_default=sa.text("0"), nullable=False
@@ -84,7 +84,7 @@ def upgrade() -> None:
         "connector_event_inbox",
         ["available_at", "id"],
         unique=False,
-        postgresql_where=sa.text("status = 'pending'"),
+        postgresql_where=sa.text("status = 'PENDING'"),
     )
     op.create_index(
         op.f("ix_connector_event_inbox_index_attempt_id"),
@@ -120,6 +120,6 @@ def downgrade() -> None:
     op.drop_index(
         "ix_connector_event_inbox_claim",
         table_name="connector_event_inbox",
-        postgresql_where=sa.text("status = 'pending'"),
+        postgresql_where=sa.text("status = 'PENDING'"),
     )
     op.drop_table("connector_event_inbox")

@@ -8114,7 +8114,9 @@ class ConnectorEventInbox(Base):
         Enum(ConnectorEventStatus, native_enum=False, name="connectoreventstatus"),
         nullable=False,
         default=ConnectorEventStatus.PENDING,
-        server_default=ConnectorEventStatus.PENDING.value,
+        # `.name`: a non-native Enum column stores the member name, as every
+        # other enum column in this schema does.
+        server_default=ConnectorEventStatus.PENDING.name,
     )
     # The attempt that claimed the row; how the event is acknowledged.
     index_attempt_id: Mapped[int | None] = mapped_column(
@@ -8163,7 +8165,7 @@ class ConnectorEventInbox(Base):
             "ix_connector_event_inbox_claim",
             "available_at",
             "id",
-            postgresql_where=text("status = 'pending'"),
+            postgresql_where=text("status = 'PENDING'"),
         ),
         # Collapsing several events for one document.
         Index(
