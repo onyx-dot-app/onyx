@@ -568,11 +568,12 @@ test("starts with name and URL fields and shows detection before Continue withou
 });
 
 test.each([
-  [null, copy.clientMetadataDetected],
-  [false, copy.registrationDetected],
+  [true, copy.clientMetadataSupported, "success"],
+  [false, copy.clientMetadataUnsupported, "success"],
+  [null, copy.clientMetadataUnknown, "idle"],
 ])(
-  "OAuth detection shows the client registration path (client metadata %s)",
-  async (supportsClientMetadata, detected) => {
+  "OAuth detection shows client metadata support (%s)",
+  async (supportsClientMetadata, detected, state) => {
     probeResponse = async () => ({
       ...oauthResult,
       discovery: {
@@ -583,8 +584,9 @@ test.each([
     render(<SetupModal />);
     await enterUrl();
     const row = (await screen.findByText(detected)).closest("[data-stage]");
-    expect(row).toHaveAttribute("data-stage", "client_registration");
-    expect(row).toHaveAttribute("data-state", "success");
+    expect(row).toHaveAttribute("data-stage", "client_metadata");
+    expect(row).toHaveAttribute("data-state", state);
+    expect(row).toHaveTextContent(copy.clientMetadata);
   }
 );
 

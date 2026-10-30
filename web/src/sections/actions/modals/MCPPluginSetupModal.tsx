@@ -486,29 +486,46 @@ function MCPSetupSession({
                               [
                                 "authentication",
                                 "contacting_server",
-                                ...(checked?.kind === "oauth"
-                                  ? (["client_registration"] as const)
-                                  : []),
+                                "client_metadata",
                               ] as const
                             ).map((stage) => {
-                              if (stage === "client_registration") {
-                                return checked?.kind === "oauth" ? (
+                              if (stage === "client_metadata") {
+                                const supported =
+                                  checked?.kind === "oauth"
+                                    ? checked.discovery.supports_client_metadata
+                                    : undefined;
+                                const state: ProbeStageProps["state"] =
+                                  probe.kind === "idle" ||
+                                  probe.url !== normalizedUrl
+                                    ? "idle"
+                                    : !checked
+                                      ? "pending"
+                                      : typeof supported === "boolean"
+                                        ? "success"
+                                        : "idle";
+                                return (
                                   <ProbeStage
                                     key={stage}
                                     stage={stage}
-                                    state="success"
-                                    label={t("mcpSetup.clientRegistration")}
-                                    value={t(
-                                      checked.discovery
-                                        .supports_client_metadata !== false
-                                        ? "mcpSetup.clientMetadataDetected"
-                                        : checked.discovery
-                                              .supports_automatic_registration
-                                          ? "mcpSetup.registrationDetected"
-                                          : "mcpSetup.ownClientRequired"
-                                    )}
+                                    state={state}
+                                    label={t("mcpSetup.clientMetadata")}
+                                    value={
+                                      supported === true
+                                        ? t("mcpSetup.clientMetadataSupported")
+                                        : supported === false
+                                          ? t(
+                                              "mcpSetup.clientMetadataUnsupported"
+                                            )
+                                          : supported === null
+                                            ? t(
+                                                "mcpSetup.clientMetadataUnknown"
+                                              )
+                                            : state === "pending"
+                                              ? t("mcpSetup.stagePending")
+                                              : undefined
+                                    }
                                   />
-                                ) : null;
+                                );
                               }
                               let state: ProbeStageProps["state"] =
                                 probe.kind === "idle" ||
