@@ -18,6 +18,9 @@ This file is the only full statement of the map's rules. Other files link here.
 
 ## How to use this map
 
+- **For new work:** start at the Common tasks table in [INDEX.md](INDEX.md) and
+  at [CROSS-CUTTING.md](CROSS-CUTTING.md). Follow the documents and recipes in
+  the order the table gives.
 - **For a change to existing code:** look up each path you will touch in
   [PATHS.md](PATHS.md) and read the component documents it names. Read
   **Contracts and traps** first. Follow the links in **Dependencies** for each
@@ -30,7 +33,9 @@ This file is the only full statement of the map's rules. Other files link here.
 
 | File | What it holds |
 |---|---|
-| [INDEX.md](INDEX.md) | Every component with its summary, grouped by domain. |
+| [INDEX.md](INDEX.md) | Every component with its summary, grouped by domain, and the Common tasks table. |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | How the domains and components fit together, and the main flows that cross them. |
+| [CROSS-CUTTING.md](CROSS-CUTTING.md) | Rules that every change must follow, whatever the component, such as auth, tenancy and access. |
 | [PATHS.md](PATHS.md) | Code path to component. The only record of ownership. |
 | [VERIFYING.md](VERIFYING.md) | How to review a PR with this map, and the shared test commands. |
 | [GLOSSARY.md](GLOSSARY.md) | Domain words and the words Onyx overloads. |
@@ -87,6 +92,9 @@ say. Do not write "none" or "not applicable".
 | `## Dependencies` | yes | What this component depends on. One `- [[slug]]: reason` line each. |
 | `## Recipes` | optional | Keyed recipes: how to add common things, investigate a report, or set up state for a test or a reproduction. |
 | `## Verification` | optional | Test directories and harnesses for the component, and checks that only a person can do. |
+
+[citations.md](components/citations.md) and
+[rate-and-usage-limits.md](components/rate-and-usage-limits.md) are examples.
 
 **Contracts and traps.** Each item starts with its number and a key, then the
 rule in bold. The rule names the code it is about and what else to check:

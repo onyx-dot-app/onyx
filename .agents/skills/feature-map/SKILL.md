@@ -11,6 +11,8 @@ issues. It does not restate the code.
 
 ## Find the component
 
+- For new work: start at the Common tasks table in `.agents/feature-map/INDEX.md`
+  and at `.agents/feature-map/CROSS-CUTTING.md`.
 - From a code path: look it up in `.agents/feature-map/PATHS.md`. The longest
   matching prefix wins. A path under `## Not mapped` has no component. A path
   that no row covers is unmapped: say so, and read the nearest code and tests

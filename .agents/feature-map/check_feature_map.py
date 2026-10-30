@@ -778,17 +778,6 @@ def _check_ancestry(components: list[Doc], repo: Repo) -> list[str]:
     return warnings
 
 
-def legacy_names(map_dir: Path) -> set[str]:
-    path = map_dir / "legacy-schema.txt"
-    if not path.exists():
-        return set()
-    return {
-        line.strip()
-        for line in path.read_text().splitlines()
-        if line.strip() and not line.startswith("#")
-    }
-
-
 def check(
     map_dir: Path = MAP_DIR, repo_root: Path = REPO_ROOT
 ) -> tuple[list[str], list[str]]:
@@ -808,14 +797,6 @@ def check(
             )
         seen[doc.name] = doc.rel
 
-    # Components listed in legacy-schema.txt keep the numbered format until the
-    # rewrite lands. While any are listed, the check skips them and the map-wide
-    # INDEX, PATHS and link checks, which assume the current format.
-    legacy = legacy_names(map_dir)
-    if legacy:
-        components = [doc for doc in components if doc.name not in legacy]
-        top_level = []
-
     summaries: dict[str, str | None] = {}
     for doc in components:
         header_errors, summary = _check_header(doc)
@@ -828,9 +809,6 @@ def check(
     for doc in components + top_level:
         errors.extend(_check_style(doc))
         errors.extend(_check_symbols(doc, repo))
-
-    if legacy:
-        return errors, _check_ancestry(components, repo)
 
     names = {doc.name for doc in components}
     errors.extend(_check_index(map_dir, components, summaries))
