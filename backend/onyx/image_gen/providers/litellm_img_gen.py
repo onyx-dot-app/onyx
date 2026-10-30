@@ -118,7 +118,7 @@ class LiteLLMImageGenerationProvider(ImageGenerationProvider):
             "drop_params": True,
         }
         if self._api_key:
-            call_kwargs["api_key"] = self._api_key
+            call_kwargs.setdefault("api_key", self._api_key)
         if self._api_base:
             call_kwargs["api_base"] = self._api_base
         if self._api_version:

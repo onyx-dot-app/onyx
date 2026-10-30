@@ -43,6 +43,10 @@ def validate_credentials(
     return provider_cls.validate_credentials(credentials)
 
 
+def has_dedicated_provider(provider: str) -> bool:
+    return _get_dedicated_provider_cls(provider) is not None
+
+
 def _get_dedicated_provider_cls(
     provider: str,
 ) -> type[ImageGenerationProvider] | None:
