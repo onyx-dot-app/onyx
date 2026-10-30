@@ -4,7 +4,7 @@ Counts pickups of a user file by the processing task so a file whose worker
 keeps dying mid-file is marked FAILED instead of re-enqueued forever.
 
 Revision ID: a7a7e8c828c0
-Revises: 3e30a81ec3bd
+Revises: 859be0a5310b
 Create Date: 2026-10-30 12:00:04.262001
 
 """
@@ -14,7 +14,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "a7a7e8c828c0"
-down_revision = "3e30a81ec3bd"
+down_revision = "859be0a5310b"
 branch_labels = None
 depends_on = None
 
