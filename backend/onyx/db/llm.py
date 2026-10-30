@@ -660,14 +660,26 @@ def upsert_llm_provider(
         llm_provider_upsert_request, existing_by_name
     )
 
-    # Delete removed models, unless the caller asked to keep what it did not send
+    # Delete removed models, unless the caller asked to keep what it did not send.
+    # Image generation models are managed from the image generation page.
+    image_gen_model_ids = (
+        set(
+            db_session.scalars(
+                select(ImageGenerationConfig.model_configuration_id)
+                .join(ModelConfiguration)
+                .where(ModelConfiguration.llm_provider_id == existing_llm_provider.id)
+            )
+        )
+        if existing_llm_provider.id is not None
+        else set()
+    )
     removed_ids = (
         []
         if llm_provider_upsert_request.keep_existing_models
         else [
             mc.id
             for name, mc in existing_by_name.items()
-            if name not in models_to_exist
+            if name not in models_to_exist and mc.id not in image_gen_model_ids
         ]
     )
 
@@ -983,8 +995,10 @@ def fetch_existing_llm_providers(
         stmt = stmt.where(LLMProviderModel.id.in_(providers_with_flows))
 
     if exclude_image_generation_providers:
-        image_gen_provider_ids = select(ModelConfiguration.llm_provider_id).join(
-            ImageGenerationConfig
+        image_gen_provider_ids = (
+            select(ModelConfiguration.llm_provider_id)
+            .join(ImageGenerationConfig)
+            .where(ImageGenerationConfig.llm_provider_owned.is_(True))
         )
         stmt = stmt.where(~LLMProviderModel.id.in_(image_gen_provider_ids))
 

@@ -7,6 +7,7 @@ from onyx.image_gen.exceptions import ImageProviderCredentialsError
 from onyx.image_gen.factory import get_image_generation_provider
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials, ReferenceImage
 from onyx.image_gen.providers.azure_img_gen import AzureImageGenerationProvider
+from onyx.image_gen.providers.litellm_img_gen import LiteLLMImageGenerationProvider
 from onyx.image_gen.providers.openai_img_gen import OpenAIImageGenerationProvider
 from onyx.image_gen.providers.vertex_img_gen import VertexImageGenerationProvider
 
@@ -25,12 +26,49 @@ def _get_default_image_gen_creds() -> ImageGenerationProviderCredentials:
     )
 
 
-def test_request_provider_that_no_exist() -> None:
-    provider = "nonexistent"
+@pytest.mark.parametrize(
+    "provider,custom_config,expected_model",
+    [
+        ("openrouter", None, "openrouter/google/gemini-2.5-flash-image"),
+        ("google", None, "gemini/google/gemini-2.5-flash-image"),
+        ("litellm_proxy", None, "litellm_proxy/google/gemini-2.5-flash-image"),
+        ("openai_compatible", None, "openai/google/gemini-2.5-flash-image"),
+    ],
+)
+def test_other_providers_route_through_litellm(
+    provider: str, custom_config: dict[str, str] | None, expected_model: str
+) -> None:
     credentials = _get_default_image_gen_creds()
+    credentials.api_key = "sk-test"
+    credentials.api_base = "https://gateway.example.com"
+    credentials.custom_config = custom_config
 
-    with pytest.raises(ValueError):
-        get_image_generation_provider(provider, credentials)
+    image_provider = get_image_generation_provider(provider, credentials)
+    assert isinstance(image_provider, LiteLLMImageGenerationProvider)
+
+    with patch("litellm.image_generation") as mock_generate:
+        image_provider.generate_image(
+            prompt="a cat",
+            model="google/gemini-2.5-flash-image",
+            size="1024x1024",
+            n=1,
+        )
+
+    kwargs = mock_generate.call_args.kwargs
+    assert kwargs["model"] == expected_model
+    assert kwargs["api_key"] == "sk-test"
+    assert kwargs["api_base"] == "https://gateway.example.com"
+    assert kwargs["drop_params"] is True
+
+
+def test_litellm_provider_reference_image_support() -> None:
+    credentials = _get_default_image_gen_creds()
+    assert get_image_generation_provider(
+        "openrouter", credentials
+    ).supports_reference_images
+    assert not get_image_generation_provider(
+        "together_ai", credentials
+    ).supports_reference_images
 
 
 def test_build_openai_provider_from_api_key_and_base() -> None:

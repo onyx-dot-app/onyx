@@ -1,3 +1,5 @@
+import re
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -9,10 +11,16 @@ from onyx.db.image_generation import (
     delete_image_generation_config__no_commit,
     get_all_image_generation_configs,
     get_image_generation_config,
+    link_image_generation_model__no_commit,
     set_default_image_generation_config,
+    unlink_image_generation_model__no_commit,
     unset_default_image_generation_config,
 )
-from onyx.db.llm import remove_llm_provider
+from onyx.db.llm import (
+    fetch_existing_llm_provider_by_id,
+    fetch_existing_llm_providers,
+    remove_llm_provider,
+)
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import ModelConfiguration, User
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -22,12 +30,16 @@ from onyx.image_gen.factory import get_image_generation_provider, validate_crede
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
 from onyx.llm.exceptions import litellm_exception_to_safe_error
 from onyx.llm.model_capabilities import get_max_input_tokens
+from onyx.llm.model_catalog import iter_image_generation_models, resolve_model_mode
 from onyx.llm.utils import collect_credential_values
 from onyx.server.manage.image_generation.models import (
     ImageGenerationConfigCreate,
+    ImageGenerationConfigLink,
     ImageGenerationConfigUpdate,
     ImageGenerationConfigView,
     ImageGenerationCredentials,
+    ImageGenerationLLMProvider,
+    ImageGenerationProviderModel,
     TestImageGenerationRequest,
 )
 from onyx.server.manage.llm.api import (
@@ -272,6 +284,108 @@ def create_config(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+def _linked_image_provider_id(llm_provider_id: int, model_name: str) -> str:
+    slug = re.sub(r"[^a-z0-9._-]+", "-", model_name.lower()).strip("-")
+    return f"llm-{llm_provider_id}-{slug}"
+
+
+@admin_router.get("/llm-providers")
+def list_llm_provider_image_models(
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> list[ImageGenerationLLMProvider]:
+    """Connected LLM providers with every model they can serve. Catalog image
+    models are listed even when the provider's model list omits them, and are
+    marked recommended."""
+    connected_by_model_id = {
+        config.model_configuration_id: config.image_provider_id
+        for config in get_all_image_generation_configs(db_session)
+        if not config.llm_provider_owned
+    }
+    result: list[ImageGenerationLLMProvider] = []
+    for llm_provider in fetch_existing_llm_providers(
+        db_session=db_session, flow_type_filter=[], include_model_flows=True
+    ):
+        catalog_models = set(iter_image_generation_models(llm_provider.provider))
+        stored_by_name = {mc.name: mc for mc in llm_provider.model_configurations}
+        models: list[ImageGenerationProviderModel] = []
+        for name in sorted(catalog_models | set(stored_by_name)):
+            stored = stored_by_name.get(name)
+            models.append(
+                ImageGenerationProviderModel(
+                    name=name,
+                    display_name=(
+                        (stored.custom_display_name or stored.display_name)
+                        if stored
+                        else None
+                    ),
+                    is_recommended=(
+                        name in catalog_models
+                        or resolve_model_mode(name) == "image_generation"
+                    ),
+                    image_provider_id=(
+                        connected_by_model_id.get(stored.id) if stored else None
+                    ),
+                )
+            )
+        result.append(
+            ImageGenerationLLMProvider(
+                llm_provider_id=llm_provider.id,
+                llm_provider_name=llm_provider.name,
+                provider=llm_provider.provider,
+                is_public=llm_provider.is_public,
+                models=models,
+            )
+        )
+    return result
+
+
+@admin_router.post("/config/link")
+def link_config(
+    config_link: ImageGenerationConfigLink,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> ImageGenerationConfigView:
+    """Use a model on an existing LLM provider for image generation."""
+    model_name = config_link.model_name.strip()
+    if not model_name:
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, "Model name is required")
+
+    llm_provider = fetch_existing_llm_provider_by_id(
+        config_link.llm_provider_id, db_session
+    )
+    if llm_provider is None:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"LLM provider {config_link.llm_provider_id} not found",
+        )
+    # Image generation is available to every user.
+    if not llm_provider.is_public:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Only public LLM providers can be used for image generation",
+        )
+
+    image_provider_id = _linked_image_provider_id(llm_provider.id, model_name)
+    if get_image_generation_config(db_session, image_provider_id):
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"{model_name} is already connected for image generation",
+        )
+
+    config = link_image_generation_model__no_commit(
+        db_session=db_session,
+        image_provider_id=image_provider_id,
+        llm_provider_id=llm_provider.id,
+        model_name=model_name,
+        is_default=config_link.is_default,
+    )
+    db_session.commit()
+    invalidate_provider_listing_cache()
+    db_session.refresh(config)
+    return ImageGenerationConfigView.from_model(config)
+
+
 @admin_router.get("/config")
 def get_all_configs(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
@@ -297,6 +411,12 @@ def get_config_credentials(
         raise HTTPException(
             status_code=404,
             detail=f"ImageGenerationConfig with image_provider_id {image_provider_id} not found",
+        )
+
+    if not config.llm_provider_owned:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "This model uses an LLM provider's credentials. Edit the LLM provider instead.",
         )
 
     return ImageGenerationCredentials.from_model(config)
@@ -325,6 +445,12 @@ def update_config(
             raise HTTPException(
                 status_code=404,
                 detail=f"ImageGenerationConfig with image_provider_id {image_provider_id} not found",
+            )
+
+        if not existing_config.llm_provider_owned:
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "This model uses an LLM provider's credentials. Edit the LLM provider instead.",
             )
 
         old_llm_provider_id = existing_config.model_configuration.llm_provider_id
@@ -390,7 +516,7 @@ def update_config(
         db_session.refresh(existing_config)
         return ImageGenerationConfigView.from_model(existing_config)
 
-    except HTTPException:
+    except (HTTPException, OnyxError):
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -411,6 +537,12 @@ def delete_config(
                 status_code=404,
                 detail=f"ImageGenerationConfig with image_provider_id {image_provider_id} not found",
             )
+
+        if not existing_config.llm_provider_owned:
+            unlink_image_generation_model__no_commit(db_session, existing_config)
+            db_session.commit()
+            invalidate_provider_listing_cache()
+            return
 
         llm_provider_id = existing_config.model_configuration.llm_provider_id
 

@@ -230,6 +230,20 @@ def iter_models(provider: str, mode: str | None = None) -> list[str]:
     )
 
 
+def iter_image_generation_models(provider: str) -> list[str]:
+    """Non-deprecated image generation models under a provider. Pricing keys
+    prefixed with a size or quality (e.g. ``1024-x-1024/dall-e-2``) are
+    skipped."""
+    models = _catalog().get(provider, {}).get("models", {})
+    return sorted(
+        model_id
+        for model_id, entry in models.items()
+        if "/" not in model_id
+        and entry.get("status") != "deprecated"
+        and _catalog_mode(entry, model_id) == "image_generation"
+    )
+
+
 def _vendored_model_entry(provider: str, model_name: str) -> dict[str, Any] | None:
     """A model's vendored catalog entry for the provider (direct or alias)."""
     section = _catalog().get(provider)

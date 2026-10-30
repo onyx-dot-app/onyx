@@ -1,7 +1,13 @@
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session, selectinload
 
-from onyx.db.models import ImageGenerationConfig, LLMProvider, ModelConfiguration
+from onyx.db.enums import LLMModelFlowType
+from onyx.db.models import (
+    ImageGenerationConfig,
+    LLMModelFlow,
+    LLMProvider,
+    ModelConfiguration,
+)
 from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.utils.logger import setup_logger
 
@@ -18,6 +24,7 @@ def create_image_generation_config__no_commit(
     image_provider_id: str,
     model_configuration_id: int,
     is_default: bool = False,
+    llm_provider_owned: bool = True,
 ) -> ImageGenerationConfig:
     """Create a new image generation config."""
     # If setting as default, clear ALL existing defaults in a single atomic update
@@ -33,6 +40,7 @@ def create_image_generation_config__no_commit(
         image_provider_id=image_provider_id,
         model_configuration_id=model_configuration_id,
         is_default=is_default,
+        llm_provider_owned=llm_provider_owned,
     )
     db_session.add(new_config)
     db_session.flush()
@@ -239,3 +247,68 @@ def create_default_image_gen_config_from_api_key(
             "Failed to create default image generation config %s", image_provider_id
         )
         return None
+
+
+def link_image_generation_model__no_commit(
+    db_session: Session,
+    image_provider_id: str,
+    llm_provider_id: int,
+    model_name: str,
+    is_default: bool = False,
+) -> ImageGenerationConfig:
+    """Point a new image generation config at a model on an existing LLM
+    provider. The provider's own credentials are used at call time."""
+    model_configuration = db_session.scalar(
+        select(ModelConfiguration).where(
+            ModelConfiguration.llm_provider_id == llm_provider_id,
+            ModelConfiguration.name == model_name,
+        )
+    )
+    if model_configuration is None:
+        model_configuration = ModelConfiguration(
+            llm_provider_id=llm_provider_id,
+            name=model_name,
+            is_visible=False,
+        )
+        db_session.add(model_configuration)
+        db_session.flush()
+
+    if (
+        LLMModelFlowType.IMAGE_GENERATION
+        not in model_configuration.llm_model_flow_types
+    ):
+        db_session.add(
+            LLMModelFlow(
+                llm_model_flow_type=LLMModelFlowType.IMAGE_GENERATION,
+                model_configuration_id=model_configuration.id,
+            )
+        )
+
+    return create_image_generation_config__no_commit(
+        db_session=db_session,
+        image_provider_id=image_provider_id,
+        model_configuration_id=model_configuration.id,
+        is_default=is_default,
+        llm_provider_owned=False,
+    )
+
+
+def unlink_image_generation_model__no_commit(
+    db_session: Session,
+    config: ImageGenerationConfig,
+) -> None:
+    """Delete a linked config. The model row is removed only when nothing
+    else uses it; the LLM provider is never touched."""
+    model_configuration = config.model_configuration
+    db_session.delete(config)
+    db_session.execute(
+        delete(LLMModelFlow).where(
+            LLMModelFlow.model_configuration_id == model_configuration.id,
+            LLMModelFlow.llm_model_flow_type == LLMModelFlowType.IMAGE_GENERATION,
+        )
+    )
+    db_session.flush()
+    db_session.refresh(model_configuration)
+    if not model_configuration.is_visible and not model_configuration.llm_model_flows:
+        db_session.delete(model_configuration)
+    db_session.flush()
