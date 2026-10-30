@@ -237,17 +237,25 @@ _DATED_SNAPSHOT_SUFFIX = re.compile(r"-\d{4}-?\d{2}-?\d{2}$")
 def _supplement_only_model_ids() -> dict[str, frozenset[str]]:
     if not _SUPPLEMENT_PATH.exists():
         return {}
-    supplement = json.loads(_SUPPLEMENT_PATH.read_text())
+    try:
+        supplement = json.loads(_SUPPLEMENT_PATH.read_text())
+    except Exception:
+        logger.exception("Failed to load catalog supplement %s", _SUPPLEMENT_PATH)
+        return {}
     supplement_only: dict[str, frozenset[str]] = {}
     for provider, section in supplement.items():
         if provider.startswith("_"):
             continue
         upstream_path = _CATALOG_DIR / f"{provider}.json"
-        upstream = (
-            json.loads(upstream_path.read_text()).get("models") or {}
-            if upstream_path.exists()
-            else {}
-        )
+        try:
+            upstream = (
+                json.loads(upstream_path.read_text()).get("models") or {}
+                if upstream_path.exists()
+                else {}
+            )
+        except Exception:
+            logger.exception("Failed to load catalog file %s", upstream_path)
+            continue
         supplement_only[provider] = frozenset(
             model_id
             for model_id in section.get("models") or {}
