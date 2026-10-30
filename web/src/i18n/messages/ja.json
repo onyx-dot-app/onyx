@@ -154,7 +154,7 @@
         "title": "アクセス制御",
         "description": "このMCPを使用できるユーザーを選択します。",
         "public": {
-          "label": "公開",
+          "label": "組織",
           "description": "組織内の誰でもこのMCPを使用できます"
         },
         "groups": {
@@ -1646,7 +1646,7 @@
             "label": "プライベート"
           },
           "public": {
-            "label": "公開"
+            "label": "組織"
           },
           "shared": {
             "label": "共有"
@@ -1920,7 +1920,7 @@
             "text": "このデプロイメントからアクセス制御が削除されます。**再インデックスが開始され**、検索結果に変更が反映されます。大きなインデックスでは時間がかかることがあります。"
           },
           "madePublic": {
-            "text": "**公開:** すべてのコネクタと、ユーザーグループに共有されているエージェント、ドキュメントセット、LLM プロバイダー、MCP サーバー、スキル"
+            "text": "**組織に開放:** すべてのコネクタと、ユーザーグループに共有されているエージェント、ドキュメントセット、LLM プロバイダー、MCP サーバー、スキル"
           },
           "reset": {
             "text": "**デフォルトにリセット:** カスタムブランディングとチャット保持ポリシー"
@@ -3685,7 +3685,7 @@
         "documentAccess": {
           "description": "このコネクタでインデックスされたドキュメントにアクセスできるユーザーを管理します。",
           "everyone": {
-            "description": "このコネクタでインデックスされたドキュメントは、組織内の全員に公開されます。",
+            "description": "このコネクタでインデックスされたドキュメントは、組織内の全員が利用できます。",
             "title": "組織内の全員"
           },
           "specificGroups": {
@@ -5622,7 +5622,7 @@
             "label": "非公開"
           },
           "public": {
-            "label": "公開"
+            "label": "組織"
           }
         },
         "connector": {
@@ -5743,7 +5743,7 @@
             "header": "名前"
           },
           "public": {
-            "header": "公開"
+            "header": "アクセス"
           },
           "status": {
             "header": "ステータス"
@@ -7412,7 +7412,7 @@
           "deleting": "{count, plural, other {# 件のコネクタを削除中}}"
         },
         "access": {
-          "public": "公開",
+          "public": "組織",
           "private": "非公開",
           "sync": "自動同期",
           "sync_restricted": "自動同期（制限付き）"
@@ -9040,8 +9040,8 @@
         },
         "knowledgeSource": {
           "allPublic": {
-            "label": "すべての公開ナレッジ",
-            "sublabel": "OnyxBot がすべての公開コネクターの情報に基づいて応答します"
+            "label": "組織全体のすべてのナレッジ",
+            "sublabel": "OnyxBot が組織全体のすべてのコネクターの情報に基づいて応答します"
           },
           "documentSets": {
             "label": "特定のドキュメントセット",
@@ -11418,7 +11418,7 @@
           }
         },
         "publicPermissionMenu": {
-          "ariaLabel": "公開権限を変更"
+          "ariaLabel": "組織の権限を変更"
         },
         "row": {
           "updateAccess": {
@@ -11502,7 +11502,7 @@
           "title": "プロンプトリマインダー"
         },
         "public": {
-          "label": "組織全体に公開"
+          "label": "組織で利用可能"
         }
       }
     },
@@ -14082,11 +14082,11 @@
         "text": "読み込み中..."
       },
       "makePublic": {
-        "label": "この{objectName}を公開しますか？",
+        "label": "この{objectName}を組織で利用可能にしますか？",
         "subtext": "設定すると、この{objectName}は<b>すべての{publicToWhom}</b>が利用できるようになります。設定しない場合、<b>管理者</b>と、（ユーザーグループなどを通じて）この{objectName}へのアクセスを明示的に付与された<b>{publicToWhom}</b>のみがアクセスできます。"
       },
       "publicDisabled": {
-        "message": "この{objectName}は公開されており、すべてのユーザーが利用できます。"
+        "message": "この{objectName}は組織内の全員が利用できます。"
       },
       "usersFallback": {
         "text": "ユーザー"
@@ -16431,7 +16431,7 @@
       "row": {
         "contentPlaceholder": "以下の内容を 1〜2 文で簡潔に要約してください：",
         "promptPlaceholder": "要約",
-        "publicTooltip": "公開のプロンプトショートカットは削除できません。",
+        "publicTooltip": "組織全体のプロンプトショートカットは削除できません。",
         "removeAriaLabel": "ショートカットを削除"
       },
       "title": "プロンプトショートカット",

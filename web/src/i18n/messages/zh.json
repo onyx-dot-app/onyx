@@ -154,7 +154,7 @@
         "title": "访问控制",
         "description": "选择谁可以使用此 MCP。",
         "public": {
-          "label": "公开",
+          "label": "组织",
           "description": "组织内的任何人都可以使用此 MCP"
         },
         "groups": {
@@ -1646,7 +1646,7 @@
             "label": "私有"
           },
           "public": {
-            "label": "公开"
+            "label": "组织"
           },
           "shared": {
             "label": "共享"
@@ -1920,7 +1920,7 @@
             "text": "访问控制将从此部署中移除。**这会启动重新索引**，使搜索结果反映此更改，大型索引可能需要一段时间。"
           },
           "madePublic": {
-            "text": "**公开：** 所有连接器，以及与用户组共享的代理、文档集、LLM 提供方、MCP 服务器和技能；"
+            "text": "**向您的组织开放：** 所有连接器，以及与用户组共享的代理、文档集、LLM 提供方、MCP 服务器和技能；"
           },
           "reset": {
             "text": "**重置为默认：** 自定义品牌和聊天保留策略。"
@@ -3685,7 +3685,7 @@
         "documentAccess": {
           "description": "控制谁可以访问此连接器索引的文档。",
           "everyone": {
-            "description": "此连接器索引的文档将对组织中的所有人公开。",
+            "description": "此连接器索引的文档对组织中的所有人可用。",
             "title": "组织中的所有人"
           },
           "specificGroups": {
@@ -5622,7 +5622,7 @@
             "label": "私有"
           },
           "public": {
-            "label": "公开"
+            "label": "组织"
           }
         },
         "connector": {
@@ -5743,7 +5743,7 @@
             "header": "名称"
           },
           "public": {
-            "header": "公开"
+            "header": "访问权限"
           },
           "status": {
             "header": "状态"
@@ -7412,7 +7412,7 @@
           "deleting": "{count, plural, other {# 个连接器正在删除}}"
         },
         "access": {
-          "public": "公开",
+          "public": "组织",
           "private": "私有",
           "sync": "自动同步",
           "sync_restricted": "自动同步（受限）"
@@ -9040,8 +9040,8 @@
         },
         "knowledgeSource": {
           "allPublic": {
-            "label": "所有公开知识",
-            "sublabel": "让 OnyxBot 基于所有公开连接器中的信息进行回复"
+            "label": "所有组织范围的知识",
+            "sublabel": "让 OnyxBot 基于所有组织范围连接器中的信息进行回复"
           },
           "documentSets": {
             "label": "指定文档集",
@@ -11418,7 +11418,7 @@
           }
         },
         "publicPermissionMenu": {
-          "ariaLabel": "更改公开权限"
+          "ariaLabel": "更改组织权限"
         },
         "row": {
           "updateAccess": {
@@ -11502,7 +11502,7 @@
           "title": "提示词提醒"
         },
         "public": {
-          "label": "对您的组织公开"
+          "label": "对您的组织可用"
         }
       }
     },
@@ -14082,11 +14082,11 @@
         "text": "正在加载..."
       },
       "makePublic": {
-        "label": "将此{objectName}设为公开？",
+        "label": "将此{objectName}提供给您的组织？",
         "subtext": "如果启用，此{objectName}将可供<b>所有{publicToWhom}</b>使用。否则，只有<b>管理员</b>和（例如通过用户组）被明确授予此{objectName}访问权限的<b>{publicToWhom}</b>才能访问。"
       },
       "publicDisabled": {
-        "message": "此{objectName}是公开的，所有用户均可使用。"
+        "message": "此{objectName}对组织中的所有人可用。"
       },
       "usersFallback": {
         "text": "用户"
@@ -16431,7 +16431,7 @@
       "row": {
         "contentPlaceholder": "请用 1–2 句话对以下内容做简明总结：",
         "promptPlaceholder": "总结",
-        "publicTooltip": "无法删除公开的提示词快捷方式。",
+        "publicTooltip": "无法删除组织范围的提示词快捷方式。",
         "removeAriaLabel": "移除快捷方式"
       },
       "title": "提示词快捷方式",
