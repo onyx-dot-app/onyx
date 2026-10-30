@@ -75,7 +75,7 @@ class _ClaudeCodeAdapter(_HarnessAdapter):
     def build_command(
         self, prompt: str, config: RunAgentConfig, add_dirs: Sequence[Path]
     ) -> list[str]:
-        command = [
+        command: list[str] = [
             "npx",
             "--yes",
             CLAUDE_CODE_PACKAGE,
@@ -503,7 +503,7 @@ def _build_subprocess_env(
     api_key = env.get(credential_env_var)
     if not api_key:
         raise AgentConfigError(f"{credential_env_var} is required")
-    subprocess_env = {
+    subprocess_env: dict[str, str] = {
         credential_env_var: api_key,
         "PATH": env.get("PATH", os.defpath),
         "npm_config_cache": str(temp_root / "npm-cache"),
@@ -567,7 +567,7 @@ def run_agent(config: RunAgentConfig, env: Mapping[str, str] | None = None) -> i
     add_dirs = tuple(
         _resolve_existing_directory(add_dir, "add_dir") for add_dir in config.add_dirs
     )
-    allowed_paths = _normalize_allowed_files(config.allowed_files)
+    allowed_paths: tuple[Path, ...] = _normalize_allowed_files(config.allowed_files)
     isolated_mode = bool(allowed_paths)
     if isolated_mode:
         for add_dir in add_dirs:
@@ -610,7 +610,7 @@ def run_agent(config: RunAgentConfig, env: Mapping[str, str] | None = None) -> i
                 trusted_working_directory, temp_root
             )
 
-        command = adapter.build_command(prompt, config, add_dirs)
+        command: list[str] = adapter.build_command(prompt, config, add_dirs)
         exit_code = _run_process(
             command=command,
             cwd=agent_working_directory,
