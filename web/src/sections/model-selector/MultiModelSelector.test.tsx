@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { setupUser } from "@tests/setup/test-utils";
 import MultiModelSelector, {
   MAX_MODELS,
   type SelectedModel,
@@ -178,7 +178,7 @@ describe("MultiModelSelector settings pane anchoring", () => {
   });
 
   test("keeps the settings pane anchored to the selector row when adding the last model removes the add button", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     render(<Harness initial={[selected("Model A"), selected("Model B")]} />);
 
     await user.click(
@@ -197,7 +197,7 @@ describe("MultiModelSelector settings pane anchoring", () => {
   });
 
   test("keeps the settings pane anchored when replacing a pill from its settings button", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     render(
       <Harness
         initial={[
@@ -221,7 +221,7 @@ describe("MultiModelSelector settings pane anchoring", () => {
 
   // Guards the remove path, where the anchor pill unmounts as the pane closes.
   test("removing the model whose settings pane is open closes the popover and calls onRemove", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const onRemove = jest.fn();
     render(
       <Harness
