@@ -263,7 +263,6 @@ function popperXY(): { x: number; y: number } | null {
   return match ? { x: Number(match[1]), y: Number(match[2]) } : null;
 }
 
-
 /**
  * The 0x0 jsdom pane sits with its right edge on the anchor's right and its
  * bottom SIDE_OFFSET above the anchor's top. autoUpdate re-measures on window
@@ -809,7 +808,9 @@ describe("MultiModelSelector", () => {
         await clickPillX(user, remove);
 
         expect(callbacks.onRemove).toHaveBeenCalledTimes(1);
-        expect(callbacks.onRemove).toHaveBeenCalledWith(initial.indexOf(remove));
+        expect(callbacks.onRemove).toHaveBeenCalledWith(
+          initial.indexOf(remove)
+        );
         expect(pillNames()).not.toContain(remove);
         expect(content).toHaveAttribute("data-state", "closed");
         await expectStillAt(atOpen);

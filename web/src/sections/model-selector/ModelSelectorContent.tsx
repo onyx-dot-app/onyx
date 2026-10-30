@@ -415,14 +415,9 @@ export interface ModelSelectorContentProps {
   globalDefaultDisplayName?: string | null;
   /** When provided, model rows gain a drill-in settings pane. */
   modelDetail?: ModelDetailManagers;
-  /** Called when a model's settings open. A host that wants that to select
-   *  the model passes its select action WITHOUT closing the popover. */
+  /** Opening a model's settings also selects it. Hosts pass their select
+   *  action WITHOUT closing the popover, so the pane stays visible. */
   onDetailSelect?: (option: LLMOption) => void;
-  /** Controls which model's pane shows (an `llmOptionKey`, null for the list),
-   *  so a host can open a pane. Uncontrolled when omitted. */
-  detailKey?: string | null;
-  /** Required with `detailKey`; the gear and back buttons report through it. */
-  onDetailKeyChange?: (key: string | null) => void;
 }
 
 export default function ModelSelectorContent({
@@ -440,8 +435,6 @@ export default function ModelSelectorContent({
   globalDefaultDisplayName: globalDefaultDisplayNameProp,
   modelDetail,
   onDetailSelect,
-  detailKey: detailKeyProp,
-  onDetailKeyChange,
 }: ModelSelectorContentProps) {
   const t = useTranslations("chat.modelSelector");
   const {
@@ -449,15 +442,7 @@ export default function ModelSelectorContent({
     model_routing_enabled: modelRoutingEnabled,
     model_routing_model_configuration_id: routingModelId,
   } = useSettings();
-  const [internalDetailKey, setInternalDetailKey] = useState<string | null>(
-    null
-  );
-  const detailKey: string | null =
-    detailKeyProp === undefined ? internalDetailKey : detailKeyProp;
-  const setDetailKey = (key: string | null): void => {
-    if (detailKeyProp === undefined) setInternalDetailKey(key);
-    onDetailKeyChange?.(key);
-  };
+  const [detailOption, setDetailOption] = useState<LLMOption | null>(null);
   const {
     llmProviders: currentAgentProviderOptions,
     isLoading: currentAgentProvidersLoading,
@@ -495,15 +480,6 @@ export default function ModelSelectorContent({
     return { ...backing, displayName: t("autoItem.label"), isAuto: true };
   }, [llmOptions, modelRoutingEnabled, routingModelId, t]);
 
-  // Ignores selection, so the pane of a removed model holds through the
-  // popover's exit animation. Auto shares its backing model's key and wins so
-  // the header reads the Auto label.
-  const detailOption = useMemo<LLMOption | null>(() => {
-    if (detailKey === null) return null;
-    if (autoOption && llmOptionKey(autoOption) === detailKey) return autoOption;
-    return llmOptions.find((opt) => llmOptionKey(opt) === detailKey) ?? null;
-  }, [detailKey, autoOption, llmOptions]);
-
   const filteredOptions = useMemo(() => {
     let result = llmOptions.filter((opt) => !opt.isRouter);
     if (requiresImageInput) {
@@ -539,8 +515,8 @@ export default function ModelSelectorContent({
     new Set([defaultGroupKey])
   );
 
-  // Applied once the options first resolve, so a select or deselect with the
-  // menu open keeps the groups the user expanded.
+  // Applied once the options first resolve, so a pick that changes the first
+  // selected group does not collapse the list while the menu fades out.
   const defaultGroupAppliedRef = useRef(false);
   useEffect(() => {
     if (defaultGroupAppliedRef.current || groupedOptions.length === 0) return;
@@ -692,7 +668,7 @@ export default function ModelSelectorContent({
                     onClick={(e) => {
                       e.stopPropagation();
                       onDetailSelect?.(option);
-                      setDetailKey(llmOptionKey(option));
+                      setDetailOption(option);
                     }}
                   />
                 </Hoverable.Item>
@@ -708,12 +684,10 @@ export default function ModelSelectorContent({
 
   if (detailOption && modelDetail) {
     return (
-      // Keyed so a switch between models remounts with the new model's values.
       <ModelDetailPane
-        key={llmOptionKey(detailOption)}
         option={detailOption}
         managers={modelDetail}
-        onBack={() => setDetailKey(null)}
+        onBack={() => setDetailOption(null)}
       />
     );
   }
