@@ -57,7 +57,7 @@ export async function sendMessage(page: Page, message: string) {
 }
 
 export async function verifyCurrentModel(page: Page, modelName: string) {
-  await expect(new ChatPage(page).modelPill(modelName).first()).toBeVisible();
+  await new ChatPage(page).expectModelPill(modelName);
 }
 
 export async function selectModelFromInputPopover(
@@ -65,8 +65,6 @@ export async function selectModelFromInputPopover(
   preferredModels: string[]
 ): Promise<string> {
   const chatPage = new ChatPage(page);
-  const currentModelText = await chatPage.modelPillText();
-
   const dialog = await chatPage.openModelList();
   const searchInput = chatPage.modelSearchInput;
 
@@ -97,12 +95,7 @@ export async function selectModelFromInputPopover(
   }
 
   await chatPage.closeModelPicker().catch(() => {});
-
-  if (currentModelText) {
-    return currentModelText;
-  }
-
-  throw new Error("Unable to select a model from input popover");
+  return chatPage.readModelPillText();
 }
 
 export async function switchModel(page: Page, modelName: string) {

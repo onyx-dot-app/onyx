@@ -45,14 +45,11 @@ test.describe("LLM Ordering", () => {
     await page.waitForSelector("#onyx-chat-input-textbox", { timeout: 10000 });
 
     const chatPage = new ChatPage(page);
-    const originalModelText = await chatPage.modelPillText();
+    const originalModelText = await chatPage.readModelPillText();
 
     const dialog = await chatPage.openModelList();
     const allModelItems = dialog.locator("[data-interactive-state]");
     await expect(allModelItems.first()).toBeVisible({ timeout: 5000 });
-
-    const count = await allModelItems.count();
-    expect(count).toBeGreaterThan(0);
 
     // Pick the first non-selected model so the pill text changes after the switch
     const nonSelectedItem = dialog
@@ -67,9 +64,10 @@ test.describe("LLM Ordering", () => {
     // Verify the popover closed and the sole pill shows the new model
     await expect(dialog).toBeHidden();
     await expect(chatPage.modelPills).toHaveCount(1);
+    await chatPage.expectModelPill(selectedModelText);
 
     if (hasNonSelected) {
-      expect(selectedModelText).not.toBe(originalModelText);
+      await chatPage.expectModelPillNot(originalModelText);
     }
   });
 });

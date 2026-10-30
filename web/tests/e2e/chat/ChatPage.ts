@@ -211,8 +211,19 @@ export class ChatPage {
     return this.modelPills.filter({ hasText: modelName });
   }
 
-  async modelPillText(index = 0): Promise<string> {
-    return (await this.modelPills.nth(index).textContent())?.trim() ?? "";
+  async expectModelPill(modelName: string, index = 0): Promise<void> {
+    await expect(this.modelPills.nth(index)).toContainText(modelName);
+  }
+
+  async expectModelPillNot(modelText: string, index = 0): Promise<void> {
+    await expect(this.modelPills.nth(index)).not.toHaveText(modelText);
+  }
+
+  /** Waits for the pill to render a name before reading it. */
+  async readModelPillText(index = 0): Promise<string> {
+    const pill = this.modelPills.nth(index);
+    await expect(pill).toHaveText(/\S/);
+    return (await pill.innerText()).trim();
   }
 
   /** Opens the model list from the add button and returns the popover. */
@@ -259,11 +270,7 @@ export class ChatPage {
       await this.removeLastModelPill();
     }
 
-    const selectedText = await this.modelPillText();
-    if (!selectedText) {
-      throw new Error("Failed to read selected model text from model selector");
-    }
-    return selectedText;
+    return this.readModelPillText();
   }
 
   async maximizeModelTemperature(modelName: string): Promise<void> {
