@@ -175,7 +175,8 @@ including requests of a run in progress.
     never has one.
 11. `run-viewed-revision` **Run read state mirrors Outputs artifacts.**
     `db/scheduled_task.py:mark_run_status` increments `ScheduledTaskRun.version`
-    when a run moves into `succeeded`, `failed`, or `awaiting_approval`.
+    when a run moves into a terminal status (`is_terminal()`). `SKIPPED` rows
+    are inserted directly by `insert_run`, so they stay at version 0.
     `viewed_revision` only moves forward (`mark_runs_viewed` uses `greatest`).
     A revision newer than `version` returns 409. A run is unviewed while
     `(viewed_revision ?? 0) < version`.

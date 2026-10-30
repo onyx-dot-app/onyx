@@ -379,7 +379,7 @@ def mark_run_status(
     ).scalar_one_or_none()
     if run is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Scheduled task run not found")
-    if status.has_results() and run.status != status:
+    if status.is_terminal() and run.status != status:
         run.version += 1
     run.status = status
     if session_id is not None:

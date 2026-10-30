@@ -422,7 +422,14 @@ def test_run_results_stay_unviewed_until_opened(
     response.raise_for_status()
     task_id = UUID(response.json()["id"])
 
-    skipped_id = _insert_run_with_status(task_id, ScheduledTaskRunStatus.SKIPPED)
+    with get_session_with_current_tenant() as db_session:
+        skipped_id = insert_run(
+            db_session=db_session,
+            task_id=task_id,
+            trigger_source=ScheduledTaskTriggerSource.MANUAL_RUN_NOW,
+            status=ScheduledTaskRunStatus.SKIPPED,
+        ).id
+        db_session.commit()
     run_id = _insert_run_with_status(
         task_id, ScheduledTaskRunStatus.RUNNING, ScheduledTaskRunStatus.SUCCEEDED
     )
@@ -458,7 +465,7 @@ def test_bulk_view_keeps_newer_run_results_unviewed(admin_user: DATestUser) -> N
     run_id = _insert_run_with_status(
         task_id,
         ScheduledTaskRunStatus.RUNNING,
-        ScheduledTaskRunStatus.AWAITING_APPROVAL,
+        ScheduledTaskRunStatus.FAILED,
     )
     bulk = client.patch(
         _url(str(task_id), "runs", "viewed"),
