@@ -75,6 +75,7 @@ def test_a_registered_event_source_gets_the_event_input_type(
     try:
         assert connector.input_type == InputType.EVENT
     finally:
+        db_session.rollback()
         db_session.delete(connector)
         db_session.commit()
 
@@ -87,5 +88,6 @@ def test_a_polled_source_keeps_what_the_caller_asked_for(
     try:
         assert connector.input_type == InputType.POLL
     finally:
+        db_session.rollback()
         db_session.delete(connector)
         db_session.commit()
