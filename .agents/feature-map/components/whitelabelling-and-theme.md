@@ -87,10 +87,10 @@ on `ee_features_enabled`. There is no CE copy of the page.
 static connector and service icons. It does not render the uploaded logo.
 `web/src/lib/app/components.tsx:Logo` renders it as a plain `<img>`.
 
-**Branding cases.** A custom logo and a custom name each show whenever they
-are set. With neither, the sidebar shows the stock mark and wordmark; a logo
-alone shows only the logo; a name shows with the custom logo or the stock
-mark, plus the "Powered by" line unless `hide_onyx_branding` is set. The
+**Branding cases.** The custom logo and the custom name are independent
+overrides: the logo replaces the stock mark, the name replaces the stock
+wordmark, and each falls back on its own. A custom name adds the "Powered by"
+line unless `hide_onyx_branding` is set. The
 display style can then leave out the logo or the name. Three places implement
 this and must agree: the app sidebar (`web/src/lib/app/components.tsx:SidebarLogoMark`
 and `SidebarWordmark`, split so the name can fade on fold), the admin and Craft

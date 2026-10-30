@@ -121,12 +121,25 @@ export function FoldableLogo({
     );
   };
 
-  // No custom name: the custom logo alone, or the Onyx logo and wordmark.
+  // No custom name: the Onyx wordmark beside the mark, which a custom logo
+  // overrides.
   if (!applicationName) {
-    return logoUrl || folded ? (
-      <Logo size={resolvedSize} className={className} />
-    ) : (
-      <SvgOnyxLogoWordmark size={resolvedSize} className={className} />
+    if (folded) return <Logo size={resolvedSize} className={className} />;
+    if (!logoUrl) {
+      return <SvgOnyxLogoWordmark size={resolvedSize} className={className} />;
+    }
+    return (
+      <Section
+        flexDirection="row"
+        alignItems="center"
+        justifyContent="start"
+        gap={2}
+        width="fit"
+        height="fit"
+      >
+        <Logo size={resolvedSize} className={className} />
+        <SvgOnyxWordmark size={resolvedSize} />
+      </Section>
     );
   }
 
@@ -154,29 +167,30 @@ export function SidebarLogoMark({ size }: { size: number }) {
 }
 
 /**
- * The sidebar's wordmark, beside the mark. With a custom name: the name and,
- * unless Onyx branding is hidden, the "Powered by" line. Without one: the Onyx
- * wordmark, or nothing when a custom logo stands alone.
+ * The sidebar's wordmark, beside the mark: the custom name, which overrides
+ * the Onyx wordmark, with the "Powered by" line unless Onyx branding is
+ * hidden. Without a custom name, the Onyx wordmark.
  */
 export function SidebarWordmark({ size }: { size: number }) {
   const t = useTranslations("common");
-  const { enterprise, logoUrl, hide_onyx_branding, isLoading } = useSettings();
+  const { enterprise, hide_onyx_branding, isLoading } = useSettings();
   const logoDisplayStyle = enterprise?.logo_display_style;
   const applicationName = enterprise?.application_name;
 
   if (!applicationName) {
-    return logoUrl ? null : <SvgOnyxWordmark size={size} />;
+    return <SvgOnyxWordmark size={size} />;
   }
 
   return (
-    /* H3 text is 4px larger (28px) than the Logo icon (24px), so negative margin hack. */
+    /* The name's line is as tall as the 28px mark, so the two sit level; the
+    "Powered by" line hangs below and never moves the name. */
     <Section
       flexDirection="column"
       alignItems="start"
       justifyContent="start"
       gap={0}
       height="fit"
-      className="min-w-0 flex-1 -mt-0.5"
+      className="min-w-0 flex-1"
     >
       {logoDisplayStyle !== "logo_only" && (
         <OverflowText

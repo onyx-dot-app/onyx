@@ -107,7 +107,6 @@
    returns when the row is hovered or focused from the keyboard. */
 .opal-sidebar-header__brand {
   @apply relative flex flex-row items-start px-1 w-full;
-  min-height: 2.25rem;
   /* The gap between mark and wordmark: 5/16 of the logo height (Figma). */
   --sidebar-logo-gap: calc(var(--sidebar-logo-size) * 5 / 16);
   gap: var(--sidebar-logo-gap);
@@ -131,6 +130,7 @@
     visibility 0s linear 0s;
 }
 
+/* The button is as tall as the mark, so the row needs no room for it. */
 .opal-sidebar-header__fold-button {
   @apply absolute top-0 z-10 flex;
   inset-inline-end: 0.25rem;
