@@ -31,14 +31,14 @@ Sidebar entry point. Handles three viewport sizes:
 
 - **Desktop** — normal flex-row participant; width animates between
   `--sidebar-width-folded` and `--sidebar-width-expanded`.
-- **Medium** (`≤ 1232 px`) — fixed overlay; a spacer div preserves the
+- **Medium** (`< 912 px`) — fixed overlay; a spacer div preserves the
   folded width in the layout flow. Backdrop closes on click.
-- **Mobile** (`≤ 724 px`) — full-height fixed overlay with a tinted and
+- **Mobile** (`< 724 px`) — full-height fixed overlay with a tinted and
   blurred backdrop that closes on click.
 
 | Prop       | Type        | Default | Description                                      |
 | ---------- | ----------- | ------- | ------------------------------------------------ |
-| `foldable` | `boolean`   | `false` | Enable fold/unfold on desktop, and ⌘E / Ctrl+E   |
+| `foldable` | `boolean`   | `false` | Enable fold/unfold (and ⌘E / Ctrl+E) on desktop  |
 | `children` | `ReactNode` | —       | `Header`, `Body`, `Footer`, `Section`, `Divider` |
 
 ### `SidebarLayouts.Header`

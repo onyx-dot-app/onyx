@@ -60,9 +60,12 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
 
   const closeSidebar = useCallback(() => setFolded(true), [setFolded]);
 
-  // ⌘E / Ctrl+E folds a foldable sidebar. A non-foldable one ignores it, so
-  // its fold state never changes behind it.
-  useHotkey("mod+e", () => setFolded((prev) => !prev), { enabled: foldable });
+  // ⌘E / Ctrl+E folds the sidebar wherever it can fold: a foldable column,
+  // or the overlay that small screens force on every sidebar. Only a
+  // non-foldable sidebar at full width ignores it.
+  useHotkey("mod+e", () => setFolded((prev) => !prev), {
+    enabled: foldable || isMobile || isSmallScreen,
+  });
 
   useEffect(() => {
     // Before mount the screen size reports desktop. Act on the real size only,
