@@ -369,14 +369,32 @@ export const RenderField: FC<RenderFieldProps> = ({
       ? formikError
       : fieldError;
 
-  const label =
+  // Labels/descriptions may be i18n message keys (e.g. "connectors.directory.*");
+  // resolve those against the connectorsList catalog and pass everything else
+  // through unchanged.
+  // SAFETY: a value starting with "connectors." is a key of the
+  // `admin.connectorsList` catalog; `connectorCopy.test.ts` checks each one
+  // against en.json.
+  const isConnectorMessageKey = (
+    value: string,
+  ): value is Parameters<typeof t>[0] => value.startsWith("connectors.");
+  const translateIfKey = (
+    value: string | undefined,
+  ): string | undefined =>
+    typeof value === "string" && isConnectorMessageKey(value)
+      ? t(value)
+      : value;
+
+  const label = translateIfKey(
     typeof field.label === "function"
       ? field.label(currentCredential)
-      : field.label;
-  const description =
+      : field.label
+  );
+  const description = translateIfKey(
     typeof field.description === "function"
       ? field.description(currentCredential)
-      : field.description;
+      : field.description
+  );
   const disabled =
     typeof field.disabled === "function"
       ? field.disabled(currentCredential)
@@ -418,13 +436,16 @@ export const RenderField: FC<RenderFieldProps> = ({
   const checkActions = useConnectorCheckActions();
   const testCheck: { checkId: string; label: string } | undefined =
     field.type === "text" ? field.testCheck : undefined;
-  // A text field's placeholder can follow the form's values.
-  const textPlaceholder: string | undefined =
+  // A text field's placeholder can follow the form's values. A
+  // "connectors." key (see `isConnectorMessageKey`) is translated; anything
+  // else passes through unchanged.
+  const textPlaceholder: string | undefined = translateIfKey(
     field.type === "text"
       ? typeof field.placeholder === "function"
         ? field.placeholder(values)
         : field.placeholder
-      : undefined;
+      : undefined
+  );
   const optionalSuffix: string | undefined = field.optional
     ? t("field.optionalSuffix.label")
     : undefined;

@@ -1504,6 +1504,9 @@
         },
         "federatedSlack": {
           "description": "البحث في Slack عند الاستعلام"
+        },
+        "directory": {
+          "description": "فهرسة الملفات من دليل مُثبَّت على الخادم"
         }
       }
     },
@@ -4862,6 +4865,44 @@
             "mailboxes": {
               "label": "صناديق البريد",
               "description": "حدّد صناديق البريد المراد فهرستها (مثل INBOX وSent وDrafts). اتركه فارغًا لفهرسة جميع صناديق البريد."
+            }
+          }
+        },
+        "directory": {
+          "description": "يفهرس المستندات من مجلد مُثبَّت على خادم Onyx.",
+          "fields": {
+            "root_directory": {
+              "label": "Root directory",
+              "description": "Absolute path of the folder to index (e.g. /data/documents). The path must be listed in DIRECTORY_CONNECTOR_ALLOWED_ROOTS in the backend environment.",
+              "placeholder": "/data/documents"
+            },
+            "recursive": {
+              "label": "Include subdirectories",
+              "description": "Also index files in subdirectories of the root directory."
+            },
+            "file_extensions": {
+              "label": "File extensions",
+              "description": "Restrict indexing to these file extensions (e.g. .pdf, .docx). Leave empty to index all supported files."
+            },
+            "include_patterns": {
+              "label": "Include patterns",
+              "description": "تعبيرات نمطية؛ تتم فهرسة الملفات المطابقة فقط (مثل report-2024 أو ~$). اختياري."
+            },
+            "exclude_patterns": {
+              "label": "Exclude patterns",
+              "description": "تعبيرات نمطية للملفات التي يتم تخطيها (مثل -draft$ أو ~$). اختياري."
+            },
+            "exclude_hidden": {
+              "label": "Exclude hidden files",
+              "description": "Skip dotfiles and hidden directories."
+            },
+            "max_file_size_mb": {
+              "label": "Max file size (MB)",
+              "description": "Files larger than this are skipped. Set to 0 for unlimited."
+            },
+            "max_directories_per_batch": {
+              "label": "Max directories per batch",
+              "description": "Upper limit of directories scanned per batch. Set to 0 for unlimited."
             }
           }
         }

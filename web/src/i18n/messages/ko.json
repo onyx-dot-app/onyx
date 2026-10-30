@@ -1504,6 +1504,9 @@
         },
         "federatedSlack": {
           "description": "질의 시 Slack 검색"
+        },
+        "directory": {
+          "description": "서버에 마운트된 디렉터리에서 파일을 인덱싱합니다"
         }
       }
     },
@@ -4862,6 +4865,44 @@
             "mailboxes": {
               "label": "사서함",
               "description": "인덱싱할 사서함을 지정하세요 (예: INBOX, Sent, Drafts). 비워 두면 모든 사서함을 인덱싱합니다."
+            }
+          }
+        },
+        "directory": {
+          "description": "Onyx 서버에 마운트된 폴더의 문서를 인덱싱합니다.",
+          "fields": {
+            "root_directory": {
+              "label": "Root directory",
+              "description": "Absolute path of the folder to index (e.g. /data/documents). The path must be listed in DIRECTORY_CONNECTOR_ALLOWED_ROOTS in the backend environment.",
+              "placeholder": "/data/documents"
+            },
+            "recursive": {
+              "label": "Include subdirectories",
+              "description": "Also index files in subdirectories of the root directory."
+            },
+            "file_extensions": {
+              "label": "File extensions",
+              "description": "Restrict indexing to these file extensions (e.g. .pdf, .docx). Leave empty to index all supported files."
+            },
+            "include_patterns": {
+              "label": "Include patterns",
+              "description": "정규 표현식; 일치하는 파일만 인덱싱됩니다(예: report-2024 또는 ~$). 선택 사항."
+            },
+            "exclude_patterns": {
+              "label": "Exclude patterns",
+              "description": "건너뛸 파일에 대한 정규 표현식(예: -draft$ 또는 ~$). 선택 사항."
+            },
+            "exclude_hidden": {
+              "label": "Exclude hidden files",
+              "description": "Skip dotfiles and hidden directories."
+            },
+            "max_file_size_mb": {
+              "label": "Max file size (MB)",
+              "description": "Files larger than this are skipped. Set to 0 for unlimited."
+            },
+            "max_directories_per_batch": {
+              "label": "Max directories per batch",
+              "description": "Upper limit of directories scanned per batch. Set to 0 for unlimited."
             }
           }
         }
