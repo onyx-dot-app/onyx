@@ -161,6 +161,29 @@ async function expectAnchoredToRow() {
   await waitFor(() => expect(popperX()).toBe(ROW_RECT.right));
 }
 
+/**
+ * Gives the popover content a CSS exit animation, as `animate-out` does in the
+ * browser, so Radix Presence keeps it mounted until `animationend`.
+ */
+function mockExitAnimation() {
+  const realGetComputedStyle = window.getComputedStyle;
+  jest
+    .spyOn(window, "getComputedStyle")
+    .mockImplementation((element, pseudo) => {
+      const styles = realGetComputedStyle(element, pseudo);
+      if (element.parentElement !== popperWrapper()) return styles;
+      // Presence keeps this object and re-reads it, so resolve on each read.
+      return new Proxy(styles, {
+        get: (target, prop) =>
+          prop === "animationName"
+            ? element.getAttribute("data-state") === "closed"
+              ? "exit"
+              : "enter"
+            : Reflect.get(target, prop),
+      });
+    });
+}
+
 function settingsButton(displayName: string): HTMLElement {
   return screen.getByRole("button", {
     name: `modelSettingsButton.ariaLabel:${displayName}`,
@@ -219,8 +242,9 @@ describe("MultiModelSelector settings pane anchoring", () => {
     await expectAnchoredToRow();
   });
 
-  // Guards the remove path, where the anchor pill unmounts as the pane closes.
-  test("removing the model whose settings pane is open closes the popover and calls onRemove", async () => {
+  // Guards the remove path: the pane must not linger in an exit animation once its pill is gone.
+  test("removing the model whose settings pane is open unmounts the pane at once and calls onRemove", async () => {
+    mockExitAnimation();
     const user = setupUser();
     const onRemove = jest.fn();
     render(
@@ -246,6 +270,7 @@ describe("MultiModelSelector settings pane anchoring", () => {
     await user.click(removeIcon);
 
     expect(onRemove).toHaveBeenCalledWith(1);
-    await waitFor(() => expect(popperWrapper()).toBeNull());
+    expect(pill).not.toBeInTheDocument();
+    expect(popperWrapper()).toBeNull();
   });
 });
