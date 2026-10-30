@@ -50,8 +50,7 @@ import { removeChatSessionFromProject } from "@/lib/projects/svc";
 import type { Project } from "@/lib/projects/types";
 import { SidebarLoader } from "@opal/loaders";
 import { SidebarLayouts, useSidebarState } from "@opal/layouts";
-import { SidebarLogoMark, SidebarWordmark } from "@/lib/app/components";
-import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
+import BrandedSidebarHeader from "@/sections/sidebar/BrandedSidebarHeader";
 import { Button as OpalButton, Text } from "@opal/components";
 import { cn } from "@opal/utils";
 import { Disabled } from "@opal/core";
@@ -507,7 +506,6 @@ export default function AppSidebar() {
   const { hasAdminAccess, adminCapabilities, user, isAdmin } = useUser();
   const activeSidebarTab = useAppPosition();
   const createProjectModal = useCreateModal();
-  const showLogoWhenFolded = useShowLogoWhenFolded();
   const defaultAppMode =
     (user?.preferences?.default_app_mode?.toLowerCase() as "chat" | "search") ??
     "chat";
@@ -611,11 +609,7 @@ export default function AppSidebar() {
       </AnimatePresence>
 
       <SidebarLayouts.Root foldable>
-        <SidebarLayouts.Header
-          showLogoWhenFolded={showLogoWhenFolded}
-          logo={<SidebarLogoMark size={28} />}
-          wordmark={<SidebarWordmark size={28} />}
-        >
+        <BrandedSidebarHeader>
           <div data-testid="AppSidebar/new-session">
             <SidebarTab
               icon={SvgEditBig}
@@ -694,7 +688,7 @@ export default function AppSidebar() {
               unfolded order: Agents, then Projects. */}
           {folded && moreAgentsButton}
           {folded && <FoldedProjectsPopover />}
-        </SidebarLayouts.Header>
+        </BrandedSidebarHeader>
 
         <SidebarLayouts.Body scrollKey="app-sidebar">
           <>
