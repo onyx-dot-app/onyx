@@ -308,6 +308,9 @@ def is_recommended_image_model(provider: str, model_name: str) -> bool:
     that another provider's catalog lists (e.g. a proxy that serves
     ``gpt-image-2``) follows that provider's recommendation. Unknown names
     fall back to the name-based mode."""
+    prefix, _, bare_name = model_name.partition("/")
+    if bare_name and prefix in _catalog():
+        model_name = bare_name
     if model_name in iter_image_generation_models(provider):
         return True
     if _vendored_model_entry(provider, model_name) is not None:

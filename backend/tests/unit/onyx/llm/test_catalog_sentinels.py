@@ -164,3 +164,7 @@ def test_is_recommended_image_model_follows_the_listing_provider() -> None:
     assert not model_catalog.is_recommended_image_model(
         LlmProviderNames.OPENAI, "dall-e-3"
     )
+    assert model_catalog.is_recommended_image_model(gateway, "openai/gpt-image-1.5")
+    assert not model_catalog.is_recommended_image_model(
+        gateway, "openai/gpt-image-1.5-2025-12-16"
+    )
