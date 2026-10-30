@@ -241,9 +241,8 @@ def _parse_to_vertex_credentials(
     if not custom_config:
         raise ImageProviderCredentialsError("Custom config is required")
 
-    vertex_location = custom_config.get(VERTEX_LOCATION_KWARG)
-    if not vertex_location:
-        raise ImageProviderCredentialsError("Vertex location is required")
+    # Same default as Vertex chat: the latest Gemini models only serve "global".
+    vertex_location = custom_config.get(VERTEX_LOCATION_KWARG) or "global"
 
     # Missing auth method is treated as service_account_json for backwards
     # compatibility with configs created before this field existed.

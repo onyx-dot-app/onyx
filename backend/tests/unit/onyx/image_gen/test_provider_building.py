@@ -435,3 +435,16 @@ def test_azure_provider_rejects_reference_images_for_unsupported_model() -> None
             n=1,
             reference_images=[ReferenceImage(data=b"image-1", mime_type="image/png")],
         )
+
+
+def test_build_vertex_provider_defaults_location_to_global() -> None:
+    credentials = _get_default_image_gen_creds()
+    credentials.custom_config = {
+        "vertex_auth_method": "workload_identity",
+        "vertex_project": "demo_project_wi",
+    }
+
+    image_gen_provider = get_image_generation_provider(VERTEX_PROVIDER, credentials)
+
+    assert isinstance(image_gen_provider, VertexImageGenerationProvider)
+    assert image_gen_provider._vertex_location == "global"
