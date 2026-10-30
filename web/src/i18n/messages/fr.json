@@ -154,7 +154,7 @@
         "title": "Contrôle d’accès",
         "description": "Choisissez qui peut utiliser ce MCP.",
         "public": {
-          "label": "Public",
+          "label": "Organisation",
           "description": "Toute personne de votre organisation peut utiliser ce MCP"
         },
         "groups": {
@@ -1646,7 +1646,7 @@
             "label": "Privé"
           },
           "public": {
-            "label": "Public"
+            "label": "Organisation"
           },
           "shared": {
             "label": "Partagé"
@@ -1920,7 +1920,7 @@
             "text": "Les contrôles d'accès sont supprimés de ce déploiement. **Cela lance une réindexation** pour que les résultats de recherche reflètent le changement, ce qui peut prendre du temps sur un grand index."
           },
           "madePublic": {
-            "text": "**Rendus publics :** tous les connecteurs, ainsi que les agents, ensembles de documents, fournisseurs LLM, serveurs MCP et compétences partagés avec un groupe d'utilisateurs ;"
+            "text": "**Ouverts à votre organisation :** tous les connecteurs, ainsi que les agents, ensembles de documents, fournisseurs LLM, serveurs MCP et compétences partagés avec un groupe d'utilisateurs ;"
           },
           "reset": {
             "text": "**Réinitialisés :** personnalisation de la marque et politique de conservation des conversations."
@@ -3685,7 +3685,7 @@
         "documentAccess": {
           "description": "Contrôlez qui peut accéder aux documents indexés par ce connecteur.",
           "everyone": {
-            "description": "Les documents indexés par ce connecteur seront publics pour tout le monde dans votre organisation.",
+            "description": "Les documents indexés par ce connecteur sont accessibles à tous les membres de votre organisation.",
             "title": "Tout le monde dans votre organisation"
           },
           "specificGroups": {
@@ -5622,7 +5622,7 @@
             "label": "Privé"
           },
           "public": {
-            "label": "Public"
+            "label": "Organisation"
           }
         },
         "connector": {
@@ -5743,7 +5743,7 @@
             "header": "Nom"
           },
           "public": {
-            "header": "Public"
+            "header": "Accès"
           },
           "status": {
             "header": "Statut"
@@ -7407,7 +7407,7 @@
           "deleting": "{count, plural, one {# connecteur en cours de suppression} other {# connecteurs en cours de suppression}}"
         },
         "access": {
-          "public": "Public",
+          "public": "Organisation",
           "private": "Privé",
           "sync": "Synchronisation automatique",
           "sync_restricted": "Synchronisation automatique, restreinte"
@@ -9035,8 +9035,8 @@
         },
         "knowledgeSource": {
           "allPublic": {
-            "label": "Toutes les connaissances publiques",
-            "sublabel": "Laissez OnyxBot répondre à partir des informations de tous les connecteurs publics"
+            "label": "Toutes les connaissances de l'organisation",
+            "sublabel": "Laissez OnyxBot répondre à partir des informations de tous les connecteurs de l'organisation"
           },
           "documentSets": {
             "label": "Ensembles de documents précis",
@@ -11413,7 +11413,7 @@
           }
         },
         "publicPermissionMenu": {
-          "ariaLabel": "Changer l'autorisation publique"
+          "ariaLabel": "Changer l'autorisation de l'organisation"
         },
         "row": {
           "updateAccess": {
@@ -11497,7 +11497,7 @@
           "title": "Rappels de prompt"
         },
         "public": {
-          "label": "Public dans votre organisation"
+          "label": "Disponible pour votre organisation"
         }
       }
     },
@@ -14068,11 +14068,11 @@
         "text": "Chargement..."
       },
       "makePublic": {
-        "label": "Rendre ce {objectName} public ?",
+        "label": "Rendre ce {objectName} disponible pour votre organisation ?",
         "subtext": "Si activé, ce {objectName} sera utilisable par <b>tous les {publicToWhom}</b>. Sinon, seuls les <b>administrateurs</b> et les <b>{publicToWhom}</b> ayant reçu un accès explicite à ce {objectName} (par ex. via un groupe d'utilisateurs) y auront accès."
       },
       "publicDisabled": {
-        "message": "Ce {objectName} est public et accessible à tous les utilisateurs."
+        "message": "Ce {objectName} est accessible à tous les membres de votre organisation."
       },
       "usersFallback": {
         "text": "Utilisateurs"
@@ -16416,7 +16416,7 @@
       "row": {
         "contentPlaceholder": "Fournissez un résumé concis en 1 à 2 phrases de ce qui suit :",
         "promptPlaceholder": "Résumer",
-        "publicTooltip": "Impossible de supprimer les raccourcis d'invite publics.",
+        "publicTooltip": "Impossible de supprimer les raccourcis d'invite de l'organisation.",
         "removeAriaLabel": "Supprimer le raccourci"
       },
       "title": "Raccourcis d'invite",
