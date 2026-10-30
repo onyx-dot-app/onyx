@@ -22,12 +22,17 @@ from onyx.connectors.event_inbox.connector import (
     EventInboxCheckpoint,
     EventInboxConnector,
 )
-from onyx.connectors.event_inbox.handlers import _HANDLERS, register_event_handler
-from onyx.connectors.event_inbox.source_registry import (
-    _SPECS,
+from onyx.connectors.event_inbox.handlers import (
+    register_event_handler,
+    unregister_event_handler,
+)
+from onyx.connectors.event_inbox.models import (
     WebhookRequest,
     WebhookSourceSpec,
+)
+from onyx.connectors.event_inbox.source_registry import (
     register_webhook_source,
+    unregister_webhook_source,
 )
 from onyx.connectors.event_models import EventParseResult, ParsedEvent
 from onyx.connectors.models import Document, InputType, TextSection
@@ -88,8 +93,8 @@ def registered_source() -> Generator[None, None, None]:
     try:
         yield
     finally:
-        _SPECS.pop(SLUG, None)
-        _HANDLERS.pop(SOURCE, None)
+        unregister_webhook_source(SLUG)
+        unregister_event_handler(SOURCE)
 
 
 @pytest.fixture
@@ -272,7 +277,7 @@ def test_the_route_refuses_a_spec_with_no_verifier(
     )
     # Reproduce the state the validator forbids.
     object.__setattr__(unsigned, "allow_unsigned", False)
-    _SPECS.pop(SLUG, None)
+    unregister_webhook_source(SLUG)
     register_webhook_source(unsigned)
 
     app = FastAPI()

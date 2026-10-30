@@ -28,12 +28,17 @@ from onyx.connectors.event_inbox.connector import (
     EventInboxCheckpoint,
     EventInboxConnector,
 )
-from onyx.connectors.event_inbox.handlers import _HANDLERS, register_event_handler
-from onyx.connectors.event_inbox.source_registry import (
-    _SPECS,
+from onyx.connectors.event_inbox.handlers import (
+    register_event_handler,
+    unregister_event_handler,
+)
+from onyx.connectors.event_inbox.models import (
     WebhookRequest,
     WebhookSourceSpec,
+)
+from onyx.connectors.event_inbox.source_registry import (
     register_webhook_source,
+    unregister_webhook_source,
 )
 from onyx.connectors.event_models import EventParseResult, ParsedEvent
 from onyx.connectors.models import Document, InputType, TextSection
@@ -158,8 +163,8 @@ def registered() -> Generator[None, None, None]:
     try:
         yield
     finally:
-        _SPECS.pop(SLUG, None)
-        _HANDLERS.pop(SOURCE, None)
+        unregister_webhook_source(SLUG)
+        unregister_event_handler(SOURCE)
 
 
 @pytest.fixture
@@ -404,7 +409,7 @@ def test_a_verifier_that_raises_fails_closed(
     # Register before building: a router captures the specs it was built
     # from, so a later registration does not reach an existing app. The slug
     # is already claimed, and a registry refuses a duplicate.
-    _SPECS.pop(SLUG, None)
+    unregister_webhook_source(SLUG)
     register_webhook_source(SPEC.model_copy(update={"verifier": exploding_verifier}))
     app = FastAPI()
     register_onyx_exception_handlers(app)

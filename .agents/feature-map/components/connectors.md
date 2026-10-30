@@ -151,9 +151,9 @@ A spec gets one `POST /webhook/<slug>` on the webhook server
 or not the source is set up; what opens it is an active `EVENT` pair, because
 without one there is no ACL to attribute a document to
 ([[#handshake-after-verification]] governs the order within it). A source's
-parser, verifier and responder are each contained: the first two answer 400
-and the verifier 401, because a 5xx makes a provider retry a body that will
-never parse. Single tenant only; the webhook server refuses to start under
+parser, verifier and responder are each contained: the parser and responder
+answer 400 and the verifier 401, because a 5xx makes a provider retry a body
+that will never parse. Single tenant only; the webhook server refuses to start under
 `MULTI_TENANT`.
 
 **Source gateways.** A source can put every remote call in one
