@@ -12097,6 +12097,9 @@
       "failedFiles": {
         "toast": "{count, plural, one {文件处理失败并已移除：{names}} other {文件处理失败并已移除：{names}}}"
       },
+      "firstOpenLoader": {
+        "ariaLabel": "正在加载聊天"
+      },
       "newChatButton": {
         "label": "开始新聊天"
       },

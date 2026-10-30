@@ -12097,6 +12097,9 @@
       "failedFiles": {
         "toast": "{count, plural, one {ファイルの処理に失敗したため削除しました：{names}} other {ファイルの処理に失敗したため削除しました：{names}}}"
       },
+      "firstOpenLoader": {
+        "ariaLabel": "チャットを読み込んでいます"
+      },
       "newChatButton": {
         "label": "新しいチャットを開始"
       },
