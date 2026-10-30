@@ -30,6 +30,11 @@ class EmbeddingModelTextType:
             EmbedTextType.QUERY: "RETRIEVAL_QUERY",
             EmbedTextType.PASSAGE: "RETRIEVAL_DOCUMENT",
         },
+        # Bifrost's `task_type`, forwarded only to Gemini / Vertex models
+        EmbeddingProvider.BIFROST: {
+            EmbedTextType.QUERY: "RETRIEVAL_QUERY",
+            EmbedTextType.PASSAGE: "RETRIEVAL_DOCUMENT",
+        },
     }
 
     @staticmethod

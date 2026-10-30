@@ -101,6 +101,7 @@ def _provider(
             "connection_config_id": 101,
             "transport": "STREAMABLE_HTTP",
             "oauth_provider_mode": "AUTO_DISCOVERY",
+            "oauth_cimd_enabled": True,
         },
         authorization_request_handler=authorization_request_handler,
     )

@@ -19,6 +19,7 @@ from onyx.server.features.build.configs import (
     SANDBOX_BACKEND,
     SandboxBackend,
 )
+from tests.common.models import CI_OPENAI_MODEL
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
@@ -43,7 +44,7 @@ class DockerLiveSession(NamedTuple):
     session_id: UUID
 
 
-_LIVE_MODEL = "gpt-5-mini"
+_LIVE_MODEL = CI_OPENAI_MODEL
 
 _SKIP_NO_LLM_KEY = pytest.mark.skipif(
     not os.environ.get("OPENAI_API_KEY"),
@@ -119,7 +120,7 @@ def _collect_turn_events(
                 out.tool_starts.append(event)
             elif etype == "tool_call_progress":
                 out.tool_progress.append(event)
-            elif etype == "prompt_response":
+            elif etype == "turn_completed":
                 out.terminators.append(event)
             elif etype == "error":
                 out.errors.append(event)
@@ -154,7 +155,7 @@ def live_openai_provider(admin_user: DATestUser) -> Generator[None, None, None]:
     # The base craft conftest seeds a fake-keyed openai provider, and both the
     # session-config and sandbox-proxy key resolvers pick the *first* openai
     # provider. Delete any existing openai provider so the real key is the only
-    # one in play, then seed it (with gpt-5-mini visible).
+    # one in play, then seed it (with gpt-6-luna visible).
     for provider in LLMProviderManager.get_all(admin_user):
         if provider.provider == LlmProviderNames.OPENAI:
             LLMProviderManager.delete(provider, admin_user, force=True)
@@ -252,9 +253,9 @@ def test_simple_message_streams_text_and_terminates(
     user, session_id = live_session
     out = _drive_turn(user, session_id, "Say hi briefly.")
 
-    assert out.term is not None, "turn never produced a prompt_response terminator"
-    assert out.term.get("stopReason") == "end_turn", (
-        f"unexpected stop reason: {out.term!r}"
+    assert out.term is not None, "turn never produced a committed completion"
+    assert out.term.get("status") == "SUCCEEDED", (
+        f"unexpected turn status: {out.term!r}"
     )
     assert out.errors == [], f"unexpected errors: {out.errors}"
     assert len(out.text) > 0, "expected at least one agent_message_chunk"

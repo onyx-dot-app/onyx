@@ -21,8 +21,7 @@ interface SidebarTabProps {
    *
    * Leave this unset inside a sidebar: the enclosing `SidebarRoot` publishes
    * its fold state as a `data-folded` attribute, and CSS collapses the label.
-   * Set it only to override that — outside a sidebar, in Storybook, or in a
-   * skeleton.
+   * Set it only to override that — outside a sidebar, or in a skeleton.
    */
   folded?: boolean;
 
@@ -96,7 +95,7 @@ function FoldedTooltip({ label, folded, children }: FoldedTooltipProps) {
   /* `suppressed`, not a controlled `open`: hover stays Radix's to track, so an
   unfolded tab keeps no hover state of its own that a later fold could act on. */
   return (
-    <Tooltip tooltip={label} side="right" suppressed={!effectiveFolded}>
+    <Tooltip tooltip={label} side="end" suppressed={!effectiveFolded}>
       {children}
     </Tooltip>
   );
@@ -196,7 +195,7 @@ function SidebarTab({
   const trigger =
     overlay &&
     (tooltip ? (
-      <Tooltip tooltip={tooltip} side="right">
+      <Tooltip tooltip={tooltip} side="end">
         {overlay}
       </Tooltip>
     ) : label !== undefined ? (

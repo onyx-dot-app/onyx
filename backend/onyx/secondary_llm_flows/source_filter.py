@@ -1,8 +1,7 @@
 import json
 
-from pydantic import BaseModel
-
 from onyx.configs.constants import DocumentSource, MessageType
+from onyx.context.search.models import SearchCycle
 from onyx.llm.interfaces import LLM, GenerationContext
 from onyx.llm.models import (
     GenerationOptions,
@@ -22,14 +21,6 @@ logger = setup_logger()
 # Only the most recent user turns feed the scope decision — older turns add
 # tokens and stale directives without helping the current request.
 MAX_SOURCE_FILTER_USER_TURNS = 5
-
-
-class SearchCycle(BaseModel):
-    """One internal_search cycle this turn, as context for the next decision."""
-
-    cycle_number: int
-    queries: list[str]
-    searched_sources: list[str]
 
 
 def strings_to_document_sources(source_strs: list[str]) -> list[DocumentSource]:
@@ -101,6 +92,11 @@ def decide_search_scope(
         if previous_cycles
         else "N/A This is the first search"
     )
+    searched_sources = ", ".join(
+        dict.fromkeys(
+            src for cycle in previous_cycles for src in cycle.searched_sources
+        )
+    )
     current_cycle_queries = "\n".join(current_queries) or "N/A"
     valid_sources = "\n".join(source.value for source in connected_sources)
 
@@ -110,6 +106,7 @@ def decide_search_scope(
         previous_cycles=previous_cycles_str,
         valid_sources=valid_sources,
         last_user_query=last_user_query,
+        searched_sources=searched_sources or "none",
     )
     messages: list[Message] = [UserMessage(content=prompt)]
 

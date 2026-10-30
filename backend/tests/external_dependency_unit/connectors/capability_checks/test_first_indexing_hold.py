@@ -4,6 +4,7 @@ report has no required check that is running, failed or failed to run."""
 
 from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -28,8 +29,8 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckStatus,
     CredentialCapability,
     CredentialCapabilityReport,
-    compute_connector_config_hash,
 )
+from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.db.credential_capability import (
     get_capability_report_row,
     mark_capability_report_running,
@@ -215,6 +216,7 @@ def _mark_running(db_session: Session, cc_pair: ConnectorCredentialPair) -> None
         connector_id=cc_pair.connector_id,
         source=cc_pair.connector.source,
         trigger=_TRIGGER,
+        lease=timedelta(hours=1),
         active_within=timedelta(0),
     )
     assert row is not None
@@ -225,14 +227,17 @@ def _complete(
     db_session: Session,
     cc_pair: ConnectorCredentialPair,
     results: list[CapabilityCheckResult],
+    connector_specific_config: dict[str, Any] | None = None,
 ) -> None:
-    """Marks the row RUNNING and lands a completed report on it."""
+    """Marks the row RUNNING and lands a completed report on it, run with
+    ``connector_specific_config`` (default: the pair's saved config)."""
     row = mark_capability_report_running(
         db_session,
         credential_id=cc_pair.credential_id,
         connector_id=cc_pair.connector_id,
         source=cc_pair.connector.source,
         trigger=_TRIGGER,
+        lease=timedelta(hours=1),
         active_within=timedelta(0),
     )
     assert row is not None
@@ -253,6 +258,8 @@ def _complete(
         ),
         connector_config_hash=compute_connector_config_hash(
             cc_pair.connector.connector_specific_config
+            if connector_specific_config is None
+            else connector_specific_config
         ),
         run_id=row.run_id,
     )
@@ -304,9 +311,15 @@ def test_waits_on_a_failed_required_check(
 
 
 @pytest.mark.parametrize(
-    "status", [CapabilityCheckStatus.INDETERMINATE, CapabilityCheckStatus.SKIPPED]
+    "status",
+    [
+        CapabilityCheckStatus.INCOMPLETE,
+        # A report stored before INCOMPLETE had its own value.
+        CapabilityCheckStatus.INDETERMINATE,
+        CapabilityCheckStatus.SKIPPED,
+    ],
 )
-def test_starts_on_indeterminate_or_skipped(
+def test_starts_on_incomplete_or_skipped(
     db_session: Session,
     slack_pair: ConnectorCredentialPair,
     beat: _Beat,
@@ -314,6 +327,22 @@ def test_starts_on_indeterminate_or_skipped(
 ) -> None:
     _complete(db_session, slack_pair, [_result(status)])
 
+    beat.run()
+    beat.assert_started()
+
+
+def test_a_report_for_another_config_does_not_hold(
+    db_session: Session, slack_pair: ConnectorCredentialPair, beat: _Beat
+) -> None:
+    # E.g. the report of an edit's proposed config that apply rejected.
+    _complete(
+        db_session,
+        slack_pair,
+        [_result(CapabilityCheckStatus.FAILED)],
+        connector_specific_config={"channels": ["not-the-saved-config"]},
+    )
+
+    assert _hold_reason(db_session, slack_pair) is None
     beat.run()
     beat.assert_started()
 
@@ -432,19 +461,17 @@ def test_a_dead_run_counts_as_failed_to_run(
             CredentialCapabilityReportRow.credential_id == slack_pair.credential_id,
             CredentialCapabilityReportRow.connector_id == slack_pair.connector_id,
         )
-        .values(run_started_at=datetime.now(timezone.utc) - timedelta(days=7))
+        .values(run_deadline_at=datetime.now(timezone.utc) - timedelta(minutes=1))
     )
     db_session.commit()
 
-    # Stale before the sweep, and FAILED_TO_RUN after it: both hold.
+    # Past its deadline before the sweep, and FAILED_TO_RUN after it: both hold.
     beat.run()
     beat.assert_waiting()
     assert (
         _hold_reason(db_session, slack_pair) == IndexingHoldReason.CHECKS_FAILED_TO_RUN
     )
-    mark_stale_capability_runs_failed(
-        db_session, source=DocumentSource.SLACK, stale_after=timedelta(days=1)
-    )
+    mark_stale_capability_runs_failed(db_session, source=DocumentSource.SLACK)
     db_session.commit()
     beat.run()
     beat.assert_waiting()

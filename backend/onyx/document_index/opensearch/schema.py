@@ -412,10 +412,14 @@ class DocumentSchema:
         parameters: dict[str, Any] = {"ef_construction": EF_CONSTRUCTION, "m": M}
         lucene_scalar_quantization = LUCENE_SCALAR_QUANTIZATION.get(vector_quantization)
         if lucene_scalar_quantization is not None:
-            parameters["encoder"] = {
-                "name": "sq",
-                "parameters": {"bits": lucene_scalar_quantization.bits},
+            encoder_parameters: dict[str, Any] = {
+                "bits": lucene_scalar_quantization.bits
             }
+            if lucene_scalar_quantization.confidence_interval is not None:
+                encoder_parameters["confidence_interval"] = (
+                    lucene_scalar_quantization.confidence_interval
+                )
+            parameters["encoder"] = {"name": "sq", "parameters": encoder_parameters}
         return {
             "name": "hnsw",
             "space_type": "cosinesimil",

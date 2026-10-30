@@ -17,9 +17,7 @@ transforms), `mobile/src/components/` (`chat/`, `auth/`, `ui/`, `sidebar/`, `set
 `backend/onyx/auth/mobile_sso/`
 
 **Read first:** `mobile/AGENTS.md`. It is the authoritative standards file for this
-component and explicitly does **not** inherit `web/AGENTS.md`. `docs/mobile-chat/00-index.md`
-through `06-unified-chat-surface.md` are design docs, not a record of current behaviour;
-verify every claim against code before trusting a doc there (see §9).
+component and explicitly does **not** inherit `web/AGENTS.md`.
 
 ---
 
@@ -59,7 +57,13 @@ plus `AppSidebar`, `ComposerDraftProvider`, and `UploadReconciler`
 (`mobile/src/app/(app)/_layout.tsx:AppLayout`). Chat routes render `null`; `ChatSurface`
 derives a `ChatFocus` from `usePathname()` via `chatFocus.ts:deriveFocus` and renders the
 matching content without remounting, so the header and composer persist across
-new/chat/project transitions (`docs/mobile-chat/06-unified-chat-surface.md`). `AuthGate`
+new/chat/project transitions. The URL still changes, for deep links and the back stack.
+The surface is an opaque overlay, not a set of transparent Stack screens, so it does not
+depend on `react-native-screens` transparency or touch behaviour; `AppSidebar` uses the
+same model, and web's `AppPage` also never remounts across these modes. On non-chat
+routes (`/agents`, settings) `deriveFocus` returns `null`, the surface renders nothing,
+and the opaque Stack screen shows. The empty state waits for `!isHydrating`, so a cold
+open of an existing chat does not flash the welcome screen. `AuthGate`
 (`mobile/src/components/auth/AuthGate.tsx:AuthGate`) wraps the whole router tree and
 redirects imperatively based on `resolveAuthGate` (`components/auth/authRoute.ts`).
 
@@ -76,7 +80,8 @@ redirects imperatively based on `resolveAuthGate` (`components/auth/authRoute.ts
 | `POST /chat/send-chat-message` | `api/chat/stream.ts:streamChatMessage` |
 | `GET /chat/chat-session/{id}/resume-stream?cursor=` | `api/chat/stream.ts:resumeChatMessage` |
 | `GET /chat/get-chat-session/{id}` | `api/chat/sessions.ts` |
-| `POST /chat/stop-chat-session/{id}?stream_id=` | `api/chat/sessions.ts:stopChatSession`, called from `hooks/useChatController.ts:stop`. `stream_id` is the reserved assistant message id; the app omits it before the id packet arrives, and the backend then stops the stream in flight. |
+| `GET /chat/chat-session/{id}/status` | `api/chat/sessions.ts:getChatSessionStatus`, polled by `chat/sessionReadiness.ts:waitForSessionIdle`. Send stays blocked until `is_processing` is `false`. |
+| `POST /chat/stop-chat-session/{id}?stream_id=` | `api/chat/sessions.ts:stopChatSession`, called from `hooks/useChatController.ts:stop`. `stream_id` is the reserved assistant message id; the app waits for the ID packet before sending Stop. Failed Stop requests can be retried for the same response. |
 | `POST /chat/create-chat-session`, `GET /chat/get-user-chat-sessions` | `api/chat/sessions.ts` |
 | `GET /auth/type` | `api/auth/useAuthConfig.ts` |
 | `GET /llm/persona/{id}/providers`, `GET /tool`, `GET/PUT /user/assistant/preferences` | `api/chat/llm.ts`, `api/tools.ts`, `api/chat/agentPreferences.ts` |
@@ -228,8 +233,23 @@ objects. `readNdjson` drops `chat_heartbeat` events unless `keepHeartbeats` is s
 `resumeStream` not filtering heartbeats (see [[streaming-protocol]] §4.4).
 
 Stop (`hooks/useChatController.ts:stop`) calls `POST /chat/stop-chat-session/{id}`
-(`api/chat/sessions.ts:stopChatSession`) and aborts the session's local
-`AbortController`, the same two-part contract as web (see [[core-chat-loop]] §4.6).
+(`api/chat/sessions.ts:stopChatSession`) with the acknowledged response ID, then aborts
+local delivery. Before acknowledgement, Stop waits up to 10 seconds for the response ID.
+If the response ID does not arrive, the app closes local delivery and checks server readiness without sending an unscoped Stop.
+The Stop request times out after 10 seconds; a failed request releases its retry guard only for the same response owner.
+API calls and chat streams share cancellable credential resolution. Request cancellation stops that waiter, not the shared token refresh.
+The request retains its controller while `chat/sessionReadiness.ts:waitForSessionIdle`
+polls `GET /chat/chat-session/{id}/status`. Stream completion alone does not enable Send.
+Transient failures keep input blocked and retry. Access denial or a missing session stops polling, shows an error, and leaves readiness unconfirmed. A stale callback cannot release a newer
+controller. Drafts clear only after acknowledgement and only if unchanged since submission.
+Rejected sends and newer composer edits keep their drafts.
+Before sending to an existing session, a busy or failed readiness check shows a toast and keeps the draft for retry.
+Resumed streams confirm idle before loading saved history. Status, Stop, and history requests have a 10-second deadline, including credentials and response reads. If history loading fails after confirmed idle, the app preserves local messages and shows an error. Send stays disabled until recovery succeeds. Reopening retries history loading, including when no current stream remains.
+Saved responses with `response_status` of `complete`, `limit`, or `cancelled` replace local errors. Null, running, or suspended status preserves the local error despite placeholder text. Saved failures remain authoritative. Older servers without this field use nonempty text or files as the completion signal.
+If saved history has no matching response, recovery retains the local failed question and error for retry.
+Navigating away releases the replay reader, so reopening can reconnect during a blocked read or status check.
+Releasing a reader does not mark the server idle. A reopened response with a local error resumes readiness checks without replaying output.
+Reopening also retries an unresolved readiness check when no current stream remains. Permanent access or missing-session errors stop that attempt; they do not trigger an automatic retry loop.
 
 ### 4.4 Parsing and rendering the stream
 
@@ -271,6 +291,39 @@ Citations are **not** rendered as a timeline block on mobile either, matching we
 `citations` as it streams (`messageProcessor.ts`, the `citation_info` case), and
 `chat/citations.ts:selectSources` derives the cited/more/files split the `CitedSources`
 sheet component renders (`components/chat/CitedSources.tsx`).
+
+The timeline is a port of web's packet processor and timeline shell
+(`chat/messageProcessor.ts`, `hooks/timeline/*`, `components/chat/AgentTimeline.tsx`), and
+it keeps web's render-prop renderer contract, so a web tool renderer ports with little
+change. Packets group into steps by `"{turn_index}-{tab_index}"` (`getGroupKey`). The
+backend seldom sends `section_end`, so the client synthesizes it (`injectSectionEnd`):
+on `stop` it closes every open group, which is how the final-answer group completes.
+Two hooks differ from web on purpose: web mutates or reads refs during render, which
+mobile's `react-hooks/refs` lint forbids. `usePacketProcessor` recomputes the whole
+grouping in a `useMemo` on each flush, and `usePacedTurnGroups` keeps pacing state in
+effects (same 200 ms cadence). The output is the same as web's.
+
+### 4.4a Composer tool controls
+
+`state/ComposerToolsProvider.tsx` owns the composer tool state; `ToolbarControls` and
+`ActionsMenu` render it. `ActionsMenu` holds the deep-research switch, force-a-tool,
+per-tool enable/disable, and the search-source sub-view. It is a bottom sheet
+(`ui/sheet`), not web's anchored popover, because the keyboard-sticky composer moves the
+anchor. At send time `resolveToolOptions()` gives `useChatController` the values for
+`deep_research`, `forced_tool_id`, `allowed_tool_ids`, and `internal_search_filters`.
+Persistence matches web:
+
+- `disabled_tool_ids` is saved on the server per agent (`hooks/useAgentPreferences.ts`,
+  `api/chat/agentPreferences.ts`), so a tool disabled on mobile is also disabled on web.
+- The forced tool and the deep-research flag are local. They reset on a change of agent
+  or conversation (`useForcedTools`, `useDeepResearchToggle`). They do not reset on the
+  `null` → new-session change, because that change is the send itself.
+- The source selection is a local preference saved per server URL (`useSourceSelection`).
+  It does not reset on a change of conversation. When the agent's source list changes, the
+  hook restores the saved preference for only the sources that agent can reach.
+- Sources are coupled to the search tool (`toggleSource`, `toggleToolEnabled`): turning a
+  source on forces search; turning the last one off releases it; disabling search clears
+  the sources and re-enabling it restores the previous selection.
 
 ### 4.5 Session and message lifecycle
 
@@ -319,8 +372,8 @@ rules:
    unit test; import the leaf component instead.
 10. **The chat pure layer is intentionally not shared with web.** `mobile/src/chat/*`
     duplicates web's NDJSON parser, message tree, and packet contracts on purpose
-    (`docs/mobile-chat/05-pr-roadmap.md`, PR 2 decision, restated in
-    `mobile/AGENTS.md`). This is a deliberate acceptance of drift risk, not an oversight.
+    (`mobile/AGENTS.md`, "Shared package", gives the reason). This is a deliberate
+    acceptance of drift risk, not an oversight.
 
 ### This component's own invariants
 
@@ -438,7 +491,7 @@ folders, wired in `jest.setup.ts`.
   spacing table).
 - **The packet enum is hand-mirrored twice over, not once.** Web mirrors the backend
   `StreamingType`; mobile mirrors it independently, by an explicit repo decision not to
-  share chat code with web (`docs/mobile-chat/05-pr-roadmap.md`, the 2026-06-29 override).
+  share chat code with web (rule 10).
   A new backend packet type needs three edits, not two, to stay visible everywhere:
   `streaming_models.py`, `web/src/app/app/services/streamingModels.ts`, and
   `mobile/src/chat/streamingModels.ts`.
@@ -462,23 +515,12 @@ folders, wired in `jest.setup.ts`.
   work ("PR 9x"), not a bug, but it means a PR that adds a new tool call path on the
   backend will appear to do nothing visible on mobile until its renderer lands, with no
   error to signal the gap.
-- **`docs/mobile-chat/` is a plan, and parts of it are stale relative to code.** The
-  index (`00-index.md`) lists citations, the agentic timeline, regenerate/edit/feedback,
-  and image-gen as deferred to "PR 9". In the code as it stands, citation folding and the
-  `CitedSources` sheet **have** shipped (`chat/citations.ts`, `chat/messageProcessor.ts`,
-  `components/chat/CitedSources.tsx`, with tests), ahead of what the index still marks as
-  deferred; regenerate/edit/feedback/multi-model and every non-text/reasoning timeline
-  renderer have **not** shipped, matching the index. The unified chat surface
-  (`06-unified-chat-surface.md`) has shipped in code (`ChatSurface.tsx`, `chatFocus.ts`)
-  but its own header still marks on-device visual verification as pending. Always check
-  the file, not the doc.
 - **No message-editing, regeneration, feedback, or multi-model comparison exists on
   mobile.** `useChatController.ts` has no call sites for any of these; do not assume
   parity with [[chat-frontend]]'s message actions (§4.7 of that document) when reviewing
   a mobile PR that touches message state.
 - **Only photo-library image attachment is supported, no camera capture**, per
-  `docs/mobile-chat/00-index.md`'s locked scope and `api/files/pickers.ts`'s
-  `ImagePicker.launchImageLibraryAsync` usage; verify a "camera" feature request isn't
+  `api/files/pickers.ts`'s `ImagePicker.launchImageLibraryAsync` usage; verify a "camera" feature request isn't
   assumed to already work.
 - **The credential threat model differs from web's cookie session on purpose.** A bearer
   token in `expo-secure-store` cannot be marked HttpOnly or SameSite; it is protected by

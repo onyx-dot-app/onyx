@@ -1,0 +1,491 @@
+---
+title: "Terraform"
+description: "Provision the AWS, GCP, or Azure infrastructure Onyx runs on with Terraform modules"
+icon: "grid"
+---
+
+import DeploymentNextSteps from "/snippets/deployment-next-steps.mdx"
+
+<Note>
+  This page covers the Terraform **modules** that provision the infrastructure Onyx runs on — network,
+  Kubernetes cluster, database, and the rest. They run before Onyx exists.
+
+  To configure a deployment that is already running — LLM providers, connectors, document sets,
+  agents — use the [Onyx Terraform provider](/admins/advanced_configs/terraform_provider) instead.
+</Note>
+
+<Tip>
+  Check out the [Resourcing Guide](/deployment/getting_started/resourcing) before getting started.
+</Tip>
+
+Onyx ships [Terraform modules](https://github.com/onyx-dot-app/onyx/tree/main/deployment/terraform/modules) for AWS,
+GCP, and Azure. Each set provisions a network, a Kubernetes cluster, managed PostgreSQL, Redis,
+object storage for the file store, and a web application firewall. Once the infra is up,
+you install the Onyx workloads with the [Helm chart](/deployment/local/kubernetes).
+
+| Cloud | Modules | Release tags | Services | Guide |
+| --- | --- | --- | --- | --- |
+| AWS | [`modules/aws`](https://github.com/onyx-dot-app/onyx/tree/main/deployment/terraform/modules/aws) | `tf/vX.Y.Z` | VPC, EKS, RDS for PostgreSQL, ElastiCache for Redis, S3, WAF, and (optionally) Amazon OpenSearch | This page |
+| GCP | [`modules/gcp`](https://github.com/onyx-dot-app/onyx/tree/main/deployment/terraform/modules/gcp) | `tf-gcp/vX.Y.Z` | VPC, GKE, Cloud SQL for PostgreSQL, Memorystore for Redis, Cloud Storage, Cloud Armor, L7 load balancer (opt-in) | [GCP guide](/deployment/cloud/gcp#gke-with-terraform) |
+| Azure | [`modules/azure`](https://github.com/onyx-dot-app/onyx/tree/main/deployment/terraform/modules/azure) | `tf-azure/vX.Y.Z` | Virtual network, AKS, PostgreSQL Flexible Server, Azure Managed Redis, Blob Storage, WAF policy | [Module README](https://github.com/onyx-dot-app/onyx/blob/main/deployment/terraform/modules/azure/README.md) |
+
+Each cloud has its own release tags, independent of Onyx releases. To use the modules from your own repository,
+set a `git::` source and pin a `ref`:
+
+```hcl
+module "onyx" {
+  source = "git::https://github.com/onyx-dot-app/onyx.git//deployment/terraform/modules/aws/onyx?ref=tf/v1.0.2"
+  # ...
+}
+```
+
+On GCP and Azure, the document index (OpenSearch) runs in the cluster,
+because those clouds have no managed OpenSearch service that the modules use.
+
+The rest of this page covers the **AWS** modules.
+
+<Info>
+  These modules are intended as a **reference implementation**.
+  They reflect how we deploy Onyx and encode sensible defaults,
+  but every environment is different — you should treat them as a starting point to fork and adapt to your account,
+  networking, and compliance requirements rather than a black box to consume as-is.
+</Info>
+
+## What gets provisioned
+
+The composed `onyx` module wires together the building blocks below.
+You can also use them individually if you need more granular control.
+
+| Module        | Resource                                                                 |
+| ------------- | ------------------------------------------------------------------------ |
+| `vpc`         | VPC, public/private subnets across AZs, NAT, and an S3 gateway endpoint  |
+| `eks`         | EKS cluster, managed node groups (main, dedicated OpenSearch, optional GPU and Craft sandbox), addons, IRSA  |
+| `postgres`    | RDS for PostgreSQL with backups and CloudWatch alarms                    |
+| `redis`       | ElastiCache for Redis replication group with TLS in transit              |
+| `s3`          | S3 bucket for the Onyx file store, locked to the VPC's S3 endpoint       |
+| `opensearch`  | (Optional) Amazon OpenSearch domain inside the VPC                       |
+| `waf`         | (Optional, recommended) AWS WAFv2 web ACL with managed rule sets, rate limits, and geo controls |
+| `onyx`        | Top-level composition that wires the modules above together              |
+
+## Prerequisites
+
+<Steps>
+  <Step title="Install tooling">
+    - [Terraform](https://developer.hashicorp.com/terraform/install) `>= 1.12.0`
+    - [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) configured with credentials that can create VPCs, EKS clusters, RDS, ElastiCache, S3 buckets, IAM roles, and (optionally) WAF and OpenSearch
+    - [`kubectl`](https://kubernetes.io/docs/tasks/tools/) and [`helm`](https://helm.sh/docs/intro/install/) for the post-apply Helm install
+  </Step>
+
+  <Step title="Clone the Onyx repo">
+    ```bash
+    git clone --depth 1 https://github.com/onyx-dot-app/onyx.git
+    cd onyx/deployment/terraform
+    ```
+
+    The modules live under `modules/aws/`. You will create a small root module that calls them.
+  </Step>
+</Steps>
+
+## Quickstart
+
+The snippet below is a minimal root module that provisions a complete Onyx stack on AWS using the composed `onyx`
+module.
+
+```hcl main.tf
+locals {
+  region = "us-west-2"
+}
+
+terraform {
+  required_version = ">= 1.12.0"
+
+  required_providers {
+    aws        = { source = "hashicorp/aws",        version = "~> 5.100" }
+    helm       = { source = "hashicorp/helm",       version = "~> 2.16"  }
+    kubernetes = { source = "hashicorp/kubernetes", version = "~> 2.37"  }
+  }
+}
+
+provider "aws" {
+  region = local.region
+}
+
+module "onyx" {
+  # Adjust the source path to wherever you have the modules checked out.
+  source = "./modules/aws/onyx"
+
+  region            = local.region
+  name              = "onyx"
+  postgres_username = "onyx"
+  postgres_password = var.postgres_password # pass via TF_VAR_postgres_password
+}
+
+# Wait for the EKS control plane before configuring the k8s/helm providers.
+resource "null_resource" "wait_for_cluster" {
+  provisioner "local-exec" {
+    command = "aws eks wait cluster-active --name ${module.onyx.cluster_name} --region ${local.region}"
+  }
+}
+
+data "aws_eks_cluster" "eks" {
+  name       = module.onyx.cluster_name
+  depends_on = [null_resource.wait_for_cluster]
+}
+
+data "aws_eks_cluster_auth" "eks" {
+  name       = module.onyx.cluster_name
+  depends_on = [null_resource.wait_for_cluster]
+}
+
+provider "kubernetes" {
+  host                   = data.aws_eks_cluster.eks.endpoint
+  cluster_ca_certificate = base64decode(data.aws_eks_cluster.eks.certificate_authority[0].data)
+  token                  = data.aws_eks_cluster_auth.eks.token
+}
+
+provider "helm" {
+  kubernetes {
+    host                   = data.aws_eks_cluster.eks.endpoint
+    cluster_ca_certificate = base64decode(data.aws_eks_cluster.eks.certificate_authority[0].data)
+    token                  = data.aws_eks_cluster_auth.eks.token
+  }
+}
+
+output "cluster_name" {
+  value = module.onyx.cluster_name
+}
+
+output "postgres_endpoint" {
+  value = module.onyx.postgres_endpoint
+}
+
+output "redis_connection_url" {
+  value     = module.onyx.redis_connection_url
+  sensitive = true
+}
+```
+
+Apply it:
+
+```bash
+export TF_VAR_postgres_password='change-me'
+
+terraform init
+terraform plan
+terraform apply
+```
+
+The full apply takes ~20 minutes — most of the time is spent waiting on EKS, RDS, and ElastiCache.
+
+## Common configuration
+
+The composed `onyx` module exposes the inputs you'll most often want to tune.
+
+### Core
+
+<ParamField path="name" type="string" default="onyx">
+  Prefix for every resource created by the module. Combined with the active Terraform workspace,
+  so the same code base can manage multiple environments.
+</ParamField>
+
+<ParamField path="region" type="string" default="us-west-2">
+  AWS region for all resources.
+</ParamField>
+
+<ParamField path="postgres_username" type="string" required>
+  Master username for the RDS Postgres instance.
+</ParamField>
+
+<ParamField path="postgres_password" type="string" required>
+  Master password for the RDS Postgres instance.
+  Marked sensitive — pass via `TF_VAR_postgres_password` or your secrets manager rather than hard-coding.
+</ParamField>
+
+<ParamField path="size" type="string" default="medium">
+  T-shirt size that sets coherent defaults for every compute and data-plane knob.
+  `small` fits pilots and small teams (up to about 200 users and 500k documents),
+  `medium` a typical department or company (about 200 to 1,000 users and 0.5 to 2M documents),
+  and `large` org-wide deployments (1,000+ users, multi-million documents).
+  Any sizing variable you set explicitly overrides its tier default.
+</ParamField>
+
+<ParamField path="tags" type="map(string)" default='{"project":"onyx"}'>
+  Base tags applied to every AWS resource created by the modules.
+</ParamField>
+
+### Networking
+
+<ParamField path="create_vpc" type="bool" default="true">
+  When `true`, the module creates a new VPC sized for EKS.
+  Set to `false` to reuse an existing VPC — see [Using an existing VPC](#using-an-existing-vpc).
+</ParamField>
+
+<ParamField path="public_cluster_enabled" type="bool" default="true">
+  Whether the EKS API endpoint is reachable from the public internet.
+  Combine with `cluster_endpoint_public_access_cidrs` to lock it down to specific IPs.
+</ParamField>
+
+<ParamField path="private_cluster_enabled" type="bool" default="false">
+  Enable the private EKS API endpoint. Recommended for production. You can enable both public and private together,
+  or only private.
+</ParamField>
+
+<ParamField path="cluster_endpoint_public_access_cidrs" type="list(string)" default="[]">
+  CIDR blocks allowed to reach the public EKS API endpoint when it is enabled.
+</ParamField>
+
+### Database & cache
+
+<ParamField path="enable_iam_auth" type="bool" default="false">
+  Enables RDS IAM authentication and wires an IRSA role into the EKS module so Onyx workloads can connect to Postgres
+  without a static password. Requires `rds_db_connect_arn` to be set.
+</ParamField>
+
+<ParamField path="postgres_backup_retention_period" type="number" default="7">
+  Days to retain automated RDS backups. Set to `0` to disable.
+</ParamField>
+
+<ParamField path="redis_auth_token" type="string">
+  Optional auth token for Redis. Marked sensitive.
+</ParamField>
+
+### Craft sandboxes
+
+<ParamField path="enable_craft" type="bool" default="false">
+  Create a dedicated node group for [Craft](/deployment/local/craft_kubernetes) sandbox pods.
+  The nodes carry the `onyx.app/workload=sandbox` label and the `workload=sandbox:NoSchedule` taint that the Helm
+  chart's sandbox pods select by default, and limit the instance metadata hop count to 1.
+  Tune the group with the `craft_sandbox_node_*` variables.
+</ParamField>
+
+### OpenSearch (optional)
+
+Managed OpenSearch is **off by default**.
+Enable it if you want a managed document index instead of the in-cluster OpenSearch node group.
+
+If you provision a managed document index,
+disable the in-cluster OpenSearch in your Helm values and set the connection variables.
+See [configure Onyx with OpenSearch](/deployment/local/opensearch).
+Set `vespa_node_enabled = false` to skip the dedicated in-cluster index node group.
+
+<ParamField path="enable_opensearch" type="bool" default="false">
+  Provision an Amazon OpenSearch domain inside the VPC.
+</ParamField>
+
+<ParamField path="opensearch_instance_type" type="string" default="r8g.large.search" />
+<ParamField path="opensearch_instance_count" type="number" default="3" />
+<ParamField path="opensearch_master_user_name" type="string" />
+<ParamField path="opensearch_master_user_password" type="string" />
+
+### WAF
+
+The `waf` module is optional but **strongly recommended** for any internet-facing deployment.
+It provisions an AWS WAFv2 web ACL with the common managed rule sets, rate limits,
+and optional geo blocking that you can attach to the load balancer fronting Onyx.
+
+<ParamField path="waf_allowed_ip_cidrs" type="list(string)" default="[]">
+  Optional IP allowlist. Leave empty to allow all source IPs subject to the managed rule sets and rate limits.
+</ParamField>
+
+<ParamField path="waf_rate_limit_requests_per_5_minutes" type="number" default="2000" />
+<ParamField path="waf_api_rate_limit_requests_per_5_minutes" type="number" default="1000" />
+
+<ParamField path="waf_geo_restriction_countries" type="list(string)" default="[]">
+  Country codes to block. Leave empty to disable geo restrictions.
+</ParamField>
+
+For the full list of inputs,
+see
+[`modules/aws/onyx/variables.tf`](https://github.com/onyx-dot-app/onyx/blob/main/deployment/terraform/modules/aws/onyx/variables.tf).
+
+## Using an existing VPC
+
+If you already have a VPC you want to deploy into, set `create_vpc = false` and pass in the VPC details,
+including the ID of an existing S3 gateway VPC endpoint that the bucket policy will reference.
+
+```hcl
+module "onyx" {
+  source = "./modules/aws/onyx"
+
+  region            = "us-west-2"
+  name              = "onyx"
+  postgres_username = "onyx"
+  postgres_password = var.postgres_password
+
+  create_vpc         = false
+  vpc_id             = "vpc-0123456789abcdef0"
+  vpc_cidr_block     = "10.0.0.0/16"
+  private_subnets    = ["subnet-aaa", "subnet-bbb", "subnet-ccc"]
+  public_subnets     = ["subnet-ddd", "subnet-eee", "subnet-fff"]
+  s3_vpc_endpoint_id = "vpce-0123456789abcdef0"
+}
+```
+
+<Warning>
+  The S3 bucket policy locks bucket access to the provided `s3_vpc_endpoint_id`.
+  Make sure your worker nodes route S3 traffic through that endpoint,
+  otherwise S3 calls from the cluster will be denied.
+</Warning>
+
+## Production hardening
+
+For production environments we recommend the following deltas from the quickstart:
+
+```hcl
+module "onyx" {
+  source = "./modules/aws/onyx"
+
+  region            = "us-west-2"
+  name              = "onyx"
+  postgres_username = "onyx"
+  postgres_password = var.postgres_password
+
+  # Restrict the EKS control plane
+  private_cluster_enabled              = true
+  public_cluster_enabled               = true
+  cluster_endpoint_public_access_cidrs = ["203.0.113.0/24"] # your office/VPN
+
+  # Use IAM auth instead of a static Postgres password in cluster secrets
+  enable_iam_auth    = true
+  rds_db_connect_arn = "arn:aws:rds-db:us-west-2:123456789012:dbuser:*/onyx"
+
+  # Tighten WAF
+  waf_rate_limit_requests_per_5_minutes     = 1000
+  waf_api_rate_limit_requests_per_5_minutes = 500
+  waf_geo_restriction_countries             = ["RU", "KP"]
+
+  # Backups
+  postgres_backup_retention_period = 30
+
+  # Optional: managed search backend
+  enable_opensearch               = true
+  opensearch_master_user_name     = "onyx-admin"
+  opensearch_master_user_password = var.opensearch_password
+}
+```
+
+## Outputs
+
+Once `terraform apply` finishes, the `onyx` module exposes the values you'll need to configure the Helm chart.
+
+| Output                          | Description                                                  |
+| ------------------------------- | ------------------------------------------------------------ |
+| `cluster_name`                  | EKS cluster name — pass to `aws eks update-kubeconfig`       |
+| `postgres_endpoint`             | RDS hostname                                                 |
+| `postgres_port`                 | RDS port                                                     |
+| `postgres_db_name`              | Database name (defaults to `postgres`)                       |
+| `postgres_username`             | Master username (sensitive)                                  |
+| `redis_connection_url`          | Redis primary endpoint (sensitive)                           |
+| `opensearch_endpoint`           | OpenSearch domain endpoint, when `enable_opensearch = true`  |
+| `opensearch_dashboard_endpoint` | OpenSearch Dashboards endpoint, when enabled                 |
+
+Read them with `terraform output`:
+
+```bash
+terraform output cluster_name
+terraform output -raw postgres_endpoint
+terraform output -raw redis_connection_url
+```
+
+## Install Onyx with Helm
+
+<Steps>
+  <Step title="Update kubeconfig">
+    ```bash
+    aws eks update-kubeconfig \
+      --name $(terraform output -raw cluster_name) \
+      --region us-west-2
+    ```
+  </Step>
+
+  <Step title="Create the namespace">
+    ```bash
+    kubectl create namespace onyx
+    ```
+  </Step>
+
+  <Step title="Install the chart">
+    The EKS module creates an IRSA-backed `ServiceAccount` named `onyx-workload-access` in the `onyx` namespace,
+    which has access to the S3 bucket the module created. Point the chart at it and disable the in-cluster object store,
+    and the legacy MinIO store, so file storage uses the real S3 bucket.
+
+    ```bash
+    helm repo add onyx https://onyx-dot-app.github.io/onyx/
+    helm repo update
+
+    helm upgrade --install onyx onyx/onyx \
+      --namespace onyx \
+      --set objectStore.enabled=false \
+      --set minio.enabled=false \
+      --set serviceAccount.create=false \
+      --set serviceAccount.name=onyx-workload-access
+    ```
+
+    You'll also want to wire the chart's database, Redis, and (optionally)
+    OpenSearch settings to the Terraform outputs via your own `values.yaml`.
+    See the [Kubernetes deployment guide](/deployment/local/kubernetes) for the full set of values.
+  </Step>
+
+  <Step title="Verify">
+    ```bash
+    kubectl get pods -n onyx
+    ```
+
+    Wait until all pods report `Running` before accessing Onyx.
+  </Step>
+</Steps>
+
+## Workspaces and multiple environments
+
+Every resource the `onyx` module creates is named with the active Terraform workspace,
+so the same root module can manage isolated environments without collisions:
+
+```bash
+terraform workspace new dev
+terraform workspace new staging
+terraform workspace new prod
+
+terraform workspace select prod
+terraform apply
+```
+
+A `name = "onyx"` module call in workspace `prod` will produce `onyx-prod`-prefixed resources,
+while the same call in `dev` produces `onyx-dev` resources.
+
+## Notes & gotchas
+
+- **Sensitive outputs.** `postgres_username`, `redis_connection_url`, and the
+  EKS CA data are marked sensitive.
+  Hand them off to your secrets manager or Helm values file rather than echoing them to logs.
+- **State storage.** The quickstart uses local state for brevity. For shared
+  or production use, configure an [S3 backend](https://developer.hashicorp.com/terraform/language/backend/s3)
+  with DynamoDB locking.
+- **First apply is infra-only.** EKS takes several minutes to become active.
+  The `null_resource.wait_for_cluster` block in the quickstart blocks the Kubernetes/Helm providers until the API server
+  is reachable.
+- **The OpenSearch node group is tainted.** The `eks` module provisions a
+  dedicated document-index node group with a `vespa-dedicated=true:NoSchedule` taint.
+  The group keeps its legacy `vespa` name so existing clusters are not replaced.
+  To run in-cluster OpenSearch on this group,
+  add these overrides to your Helm values file and pass it with `-f values.yaml` when installing the chart:
+
+  ```yaml
+  opensearch:
+    nodeSelector:
+      eks.amazonaws.com/nodegroup: vespa-node-group
+    tolerations:
+      - key: vespa-dedicated
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
+  ```
+
+  The chart does not set these overrides by default. Without the toleration, OpenSearch cannot run on this node group.
+
+## Configure Onyx as code
+
+<Card title="Onyx Terraform Provider" icon="cubes" href="/admins/advanced_configs/terraform_provider">
+  Declare LLM providers, connectors, document sets, agents, and user groups in Terraform and apply them from CI.
+</Card>
+
+<DeploymentNextSteps />

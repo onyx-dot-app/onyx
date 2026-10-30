@@ -35,15 +35,18 @@ refer to by using matching keywords to other parts of the prompt and reminders.
 """
 
 import time
-from collections.abc import Callable
-from typing import Any, cast
+from collections.abc import Callable, Sequence
+from typing import Any
 
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.chat.emitter import Emitter
-from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
-from onyx.configs.constants import DocumentSource, FederatedConnectorSource
+from onyx.agents.tools import (
+    ToolInvocation,
+    ToolProgress,
+    ToolUpdate,
+)
+from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT, NUM_RETURNED_HITS
+from onyx.configs.constants import DocumentSource, FederatedConnectorSource, MessageType
 from onyx.context.search.federated.slack_search import slack_retrieval
 from onyx.context.search.models import (
     BaseFilters,
@@ -53,6 +56,7 @@ from onyx.context.search.models import (
     InferenceChunk,
     InferenceSection,
     PersonaSearchInfo,
+    SearchCycle,
     SearchDocsResponse,
     UserAccessFilters,
 )
@@ -87,7 +91,7 @@ from onyx.federated_connectors.federated_retrieval import (
 )
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM
-from onyx.llm.models import ToolDefinition
+from onyx.llm.models import ToolDefinition, ToolResult, ToolResultMessage
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.secondary_llm_flows.document_filter import (
@@ -98,23 +102,20 @@ from onyx.secondary_llm_flows.query_expansion import (
     keyword_query_expansion,
     semantic_query_rephrase,
 )
-from onyx.secondary_llm_flows.source_filter import SearchCycle, decide_search_scope
-from onyx.secondary_llm_flows.time_filter import TimeFilter, decide_time_filter
-from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import (
-    Packet,
-    SearchToolDocumentsDelta,
-    SearchToolFilterDelta,
-    SearchToolQueriesDelta,
-    SearchToolStart,
-)
+from onyx.secondary_llm_flows.source_filter import decide_search_scope
+from onyx.secondary_llm_flows.time_filter import decide_time_filter
+from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.tools.constants import INTERNAL_SEARCH_TOOL_NAME
-from onyx.tools.interface import Tool
+from onyx.tools.interface import (
+    CITATIONS_PER_TOOL_CALL,
+    Tool,
+    parse_tool_arguments,
+    tool_message_history,
+)
 from onyx.tools.models import (
     ChatMinimalTextMessage,
-    SearchToolOverrideKwargs,
     ToolCallException,
-    ToolResponse,
+    ToolContext,
 )
 from onyx.tools.tool_implementations.search.constants import (
     KEYWORD_QUERY_HYBRID_ALPHA,
@@ -124,6 +125,12 @@ from onyx.tools.tool_implementations.search.constants import (
     MAX_CHUNKS_FOR_RELEVANCE,
     ORIGINAL_QUERY_WEIGHT,
     SELECTION_TOKEN_BUDGET_MULTIPLIER,
+)
+from onyx.tools.tool_implementations.search.models import (
+    QueryExpansionAndScope,
+    SearchArguments,
+    SearchContext,
+    SearchPlanningResult,
 )
 from onyx.tools.tool_implementations.search.search_utils import (
     expand_section_with_context,
@@ -141,19 +148,53 @@ from shared_configs.configs import (
     MODEL_SERVER_HOST,
     MODEL_SERVER_PORT,
 )
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
 QUERIES_FIELD = "queries"
 
 
-class QueryExpansionAndScope(BaseModel):
-    """Result of one search cycle's query expansion + source-scope decision."""
-
-    semantic_query: str | None
-    keyword_queries: list[str]
-    plan_scope: list[DocumentSource] | None
-    time_filter: TimeFilter | None = None
+def update_search_context(
+    context: SearchContext, results: Sequence[ToolResultMessage]
+) -> SearchContext:
+    """Fold completed searches in model-call order, counting merged retrievals once."""
+    new_cycles: list[SearchCycle] = []
+    cached_expansion = context.cached_expansion
+    scope_decision_settled = context.scope_decision_settled
+    time_filter = context.time_filter
+    time_filter_computed = context.time_filter_computed
+    seen_calls: set[str] = set()
+    for result in results:
+        planning = result.metadata
+        if result.is_error or not isinstance(planning, SearchPlanningResult):
+            continue
+        if planning.tool_call_id is not None:
+            if planning.tool_call_id in seen_calls:
+                continue
+            seen_calls.add(planning.tool_call_id)
+        new_cycles.append(
+            SearchCycle(
+                cycle_number=len(context.search_cycles) + len(new_cycles) + 1,
+                queries=list(planning.original_queries),
+                searched_sources=list(planning.searched_sources),
+            )
+        )
+        if planning.cached_expansion is not None:
+            cached_expansion = planning.cached_expansion
+        scope_decision_settled |= planning.scope_decision_settled
+        if planning.time_filter_computed and not time_filter_computed:
+            time_filter = planning.time_filter
+            time_filter_computed = True
+    if not new_cycles:
+        return context
+    return SearchContext(
+        search_cycles=context.search_cycles + tuple(new_cycles),
+        cached_expansion=cached_expansion,
+        scope_decision_settled=scope_decision_settled,
+        time_filter=time_filter,
+        time_filter_computed=time_filter_computed,
+    )
 
 
 def _build_scope_note(
@@ -225,7 +266,7 @@ def _estimate_section_tokens(
     return content_tokens + METADATA_TOKEN_ESTIMATE
 
 
-@log_function_time(print_only=True)
+@log_function_time()
 def _trim_sections_by_tokens(
     sections: list[InferenceSection],
     max_tokens: int,
@@ -270,7 +311,9 @@ def _trim_sections_by_tokens(
     return trimmed_sections
 
 
-class SearchTool(Tool[SearchToolOverrideKwargs]):
+class SearchTool(Tool):
+    merge_list_argument = QUERIES_FIELD
+
     NAME = INTERNAL_SEARCH_TOOL_NAME
     DISPLAY_NAME = "Internal Search"
     DESCRIPTION = "Search connected applications for information."
@@ -278,7 +321,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
     def __init__(
         self,
         tool_id: int,
-        emitter: Emitter,
         # Used for ACLs and federated search, anonymous users only see public docs
         user: User,
         # Pre-extracted persona search configuration
@@ -299,12 +341,16 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # Whether to infer source and time filters from the
         # query. When False, only user/persona-selected filters are applied.
         auto_detect_filters: bool = True,
+        selection_llm_factory: Callable[[], LLM] | None = None,
+        primary_llm_cost_checked: bool = True,
+        include_link: bool = False,
     ) -> None:
-        super().__init__(emitter=emitter)
 
         self.user = user
         self.persona_search_info = persona_search_info
         self.llm = llm
+        self._selection_llm_factory = selection_llm_factory
+        self._primary_llm_cost_checked = primary_llm_cost_checked
         self.document_index = document_index
         self.user_selected_filters = user_selected_filters
         self.project_id_filter = project_id_filter
@@ -312,14 +358,13 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self.slack_context = slack_context
         self.enable_slack_search = enable_slack_search
         self.auto_detect_filters = auto_detect_filters
-
-        self._search_cycles: list[SearchCycle] = []
-        self._cached_expansion: tuple[str | None, list[str]] | None = None
-        self._scope_decision_settled = False
-        self._time_filter: TimeFilter | None = None
-        self._time_filter_computed = False
+        self.include_link = include_link
 
         self._id = tool_id
+
+    @property
+    def _is_project_only_search(self) -> bool:
+        return self.project_id_filter is not None and self.persona_id_filter is None
 
     def _prefetch_slack_data(
         self, db_session: Session
@@ -506,9 +551,9 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             chunk_search_request=ChunkSearchRequest(
                 query=query,
                 hybrid_alpha=hybrid_alpha,
-                # For projects, the search scope is the project and has no other limits
+                # Project-only searches ignore user-selected filters.
                 user_selected_filters=(
-                    effective_filters if self.project_id_filter is None else None
+                    effective_filters if not self._is_project_only_search else None
                 ),
                 limit=num_hits,
             ),
@@ -584,53 +629,63 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             },
         )
 
-    def emit_start(self, placement: Placement) -> None:
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=SearchToolStart(),
-            )
-        )
-
     @log_function_time(
         func_name="Search tool - query expansion + scope decision",
-        print_only=True,
         debug_only=True,
     )
     def _expand_queries_and_decide_scope(
         self,
         skip_query_expansion: bool,
+        search_context: SearchContext,
         message_history: list[ChatMinimalTextMessage],
         user_info: str | None,
         memories: list[str],
-        decide_args: tuple[Any, ...],
+        candidate_sources: list[DocumentSource],
+        llm_queries: list[str],
     ) -> QueryExpansionAndScope:
-        """Expand the query and decide the source/time scope, in parallel when each
-        applies.
-
-        Repeat calls reuse the cached expansion instead of re-expanding. Once the
-        scope decision finds no source directive it latches off for the rest of the
-        turn, since the conversation cannot introduce one mid-turn. The time-window
-        decision is computed once per turn and cached. Both auto decisions are
-        gated by ``auto_detect_filters``.
-        """
+        """Infer missing search decisions from the prior completed-step context."""
         expand_queries = not skip_query_expansion
-        decide_scope = self.auto_detect_filters and not self._scope_decision_settled
-        decide_time = self.auto_detect_filters and not self._time_filter_computed
+        decide_scope = (
+            self.auto_detect_filters and not search_context.scope_decision_settled
+        )
+        decide_time = (
+            self.auto_detect_filters and not search_context.time_filter_computed
+        )
 
         jobs: list[tuple[Callable, tuple]] = []
         scope_job_index: int | None = None
         time_job_index: int | None = None
         if expand_queries:
-            expansion_args = (message_history, self.llm, user_info, memories)
+            expansion_args = (
+                message_history,
+                self.llm,
+                user_info,
+                memories,
+            )
             jobs.append((semantic_query_rephrase, expansion_args))
             jobs.append((keyword_query_expansion, expansion_args))
         if decide_scope:
             scope_job_index = len(jobs)
-            jobs.append((decide_search_scope, decide_args))
+            jobs.append(
+                (
+                    decide_search_scope,
+                    (
+                        message_history,
+                        self.llm,
+                        candidate_sources,
+                        list(search_context.search_cycles),
+                        llm_queries,
+                    ),
+                )
+            )
         if decide_time:
             time_job_index = len(jobs)
-            jobs.append((decide_time_filter, (message_history, self.llm)))
+            jobs.append(
+                (
+                    decide_time_filter,
+                    (message_history, self.llm),
+                )
+            )
 
         results = run_functions_tuples_in_parallel(jobs) if jobs else []
 
@@ -639,34 +694,37 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         if expand_queries:
             semantic_query = results[0]
             keyword_queries = results[1] or []
-            self._cached_expansion = (semantic_query, keyword_queries)
 
         plan_scope: list[DocumentSource] | None = None
         if scope_job_index is not None:
             plan_scope = results[scope_job_index]
-            self._scope_decision_settled = plan_scope is None
-
-        if time_job_index is not None:
-            self._time_filter = results[time_job_index]
-            self._time_filter_computed = True
 
         return QueryExpansionAndScope(
             semantic_query=semantic_query,
             keyword_queries=keyword_queries,
             plan_scope=plan_scope,
-            time_filter=self._time_filter,
+            scope_decision_settled=decide_scope and plan_scope is None,
+            time_filter=(
+                results[time_job_index]
+                if time_job_index is not None
+                else search_context.time_filter
+            ),
+            time_filter_computed=decide_time,
         )
 
-    @log_function_time(print_only=True)
-    def run(
-        self,
-        placement: Placement,
-        override_kwargs: SearchToolOverrideKwargs,
-        **llm_kwargs: Any,
-    ) -> ToolResponse:
-        # Malformed calls fail loudly whatever the source selection says, so
-        # the argument check comes before any short-circuit.
-        if QUERIES_FIELD not in llm_kwargs:
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
+        message_history = tool_message_history(list(invocation.messages))
+        original_query = next(
+            (
+                message.message
+                for message in reversed(message_history)
+                if message.message_type == MessageType.USER
+            ),
+            None,
+        )
+        if original_query is None:
+            raise ValueError("Search requires a user message")
+        if QUERIES_FIELD not in invocation.arguments:
             raise ToolCallException(
                 message=f"Missing required '{QUERIES_FIELD}' parameter in internal_search tool call",
                 llm_facing_message=(
@@ -675,31 +733,56 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                     f'like: {{"queries": ["your search query here"]}}'
                 ),
             )
+        llm_queries = parse_tool_arguments(
+            SearchArguments, invocation.arguments
+        ).queries
 
+        return self.search(
+            llm_queries,
+            original_query=original_query,
+            message_history=message_history,
+            context=context,
+            citation_start=context.next_citation_num
+            + CITATIONS_PER_TOOL_CALL * invocation.call_index,
+            update=invocation.update,
+            tool_call_id=invocation.call_id,
+        )
+
+    @log_function_time()
+    def search(
+        self,
+        llm_queries: list[str],
+        *,
+        original_query: str,
+        message_history: list[ChatMinimalTextMessage],
+        context: ToolContext,
+        citation_start: int = 1,
+        update: ToolUpdate | None = None,
+        tool_call_id: str | None = None,
+    ) -> ToolResult:
+        """Retrieve documents using the original question and optional query variants."""
         # An explicitly empty source selection is a statement, not an absent
         # filter: the tool still runs (it may be forced), and it honestly
         # finds nothing. `None` keeps its meaning of "no source filter".
-        # Project mode ignores user filters entirely, so the guard must too.
+        # Project-only searches ignore user filters, so the guard must too.
         if (
             self.user_selected_filters is not None
-            and self.project_id_filter is None
-            and self.user_selected_filters.source_type is not None
-            and len(self.user_selected_filters.source_type) == 0
+            and not self._is_project_only_search
+            and self.user_selected_filters.source_type == []
         ):
-            empty_response, _ = convert_inference_sections_to_llm_string(
-                top_sections=[],
-                note=None,
+            content, _ = convert_inference_sections_to_llm_string(
+                top_sections=[], note=None
             )
-            return ToolResponse(
-                rich_response=SearchDocsResponse(
-                    search_docs=[],
-                    citation_mapping={},
-                    displayed_docs=None,
-                ),
-                llm_facing_response=empty_response,
+            return ToolResult(
+                content=content,
+                details=SearchDocsResponse(search_docs=[], citation_mapping={}),
             )
-
-        # Start overall timing
+        memory = context.user_memory_context
+        if memory is not None and not context.inject_memories_in_prompt:
+            memory = memory.without_memories()
+        search_output = SearchDocsResponse(
+            search_docs=[], citation_mapping={}, queries=list(llm_queries)
+        )
         overall_start_time = time.time()
 
         # Initialize timing variables (in case of early exceptions)
@@ -753,8 +836,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             )
 
             # Federated retrieval functions (non-Slack; Slack is separate)
-            if self.project_id_filter is not None:
-                # Project mode ignores user filters → no federated sources
+            if self._is_project_only_search:
+                # Project-only searches ignore source selections.
                 prefetch_source_types = None
             else:
                 prefetch_source_types = (
@@ -773,8 +856,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 or []
             )
 
-            # Project mode ignores user filters, so source scoping doesn't apply.
-            if self.project_id_filter is None:
+            # Custom agents retain source selection inside projects.
+            if not self._is_project_only_search:
                 connected_sources = fetch_unique_document_sources(db_session)
 
             # Slack tokens and entity config — only prefetch when Slack
@@ -791,17 +874,9 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 )
         # Session is closed here — all parallel work uses plain Python objects only
 
-        llm_queries = cast(list[str], llm_kwargs[QUERIES_FIELD])
-
         # Run semantic and keyword query expansion in parallel (unless skipped)
-        # Use message history, memories, and user info from override_kwargs
-        message_history = override_kwargs.message_history or []
-        memories = (
-            override_kwargs.user_memory_context.as_formatted_list()
-            if override_kwargs.user_memory_context
-            else []
-        )
-        user_info = override_kwargs.user_info
+        memories = memory.as_formatted_list() if memory else []
+        user_info = context.user_info
 
         # A persona/user source restriction is the outer bound the decision works within.
         user_source_restriction: list[DocumentSource] | None = (
@@ -815,19 +890,14 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         else:
             candidate_sources = connected_sources
 
-        decide_args = (
-            message_history,
-            self.llm,
-            candidate_sources,
-            list(self._search_cycles),
-            llm_queries,
-        )
         expansion = self._expand_queries_and_decide_scope(
-            skip_query_expansion=override_kwargs.skip_query_expansion,
+            skip_query_expansion=context.skip_search_query_expansion,
+            search_context=context.search_context,
             message_history=message_history,
             user_info=user_info,
             memories=memories,
-            decide_args=decide_args,
+            candidate_sources=candidate_sources,
+            llm_queries=llm_queries,
         )
         semantic_query = expansion.semantic_query
         keyword_queries = expansion.keyword_queries
@@ -836,6 +906,20 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         resolved_scope = (
             plan_scope if plan_scope is not None else user_source_restriction
         )
+        # Inferred connector sources must not hide files supplied as context.
+        # Explicit source selections remain the outer bound.
+        if (
+            plan_scope is not None
+            and (
+                self.project_id_filter is not None or self.persona_id_filter is not None
+            )
+            and (
+                user_source_restriction is None
+                or DocumentSource.USER_FILE in user_source_restriction
+            )
+            and DocumentSource.USER_FILE not in plan_scope
+        ):
+            resolved_scope = [*plan_scope, DocumentSource.USER_FILE]
 
         logger.info(
             "Internal search - source scope: %s",
@@ -845,33 +929,38 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # On a repeat call that advanced to a not-yet-searched source, reuse the
         # cached expansion (it is source-agnostic) rather than searching raw queries.
         searched_sources = {
-            value for cycle in self._search_cycles for value in cycle.searched_sources
+            value
+            for cycle in context.search_context.search_cycles
+            for value in cycle.searched_sources
         }
         is_new_filter = bool(resolved_scope) and any(
             source.value not in searched_sources for source in resolved_scope
         )
         if (
-            override_kwargs.skip_query_expansion
+            context.skip_search_query_expansion
             and is_new_filter
-            and self._cached_expansion is not None
+            and context.search_context.cached_expansion is not None
         ):
-            semantic_query, keyword_queries = self._cached_expansion
+            semantic_query, cached_keywords = context.search_context.cached_expansion
+            keyword_queries = list(cached_keywords)
 
-        self._search_cycles.append(
-            SearchCycle(
-                cycle_number=len(self._search_cycles) + 1,
-                queries=list(llm_queries),
-                searched_sources=(
-                    [source.value for source in resolved_scope]
-                    if resolved_scope
-                    else []
-                ),
-            )
+        planning_result = SearchPlanningResult(
+            tool_call_id=tool_call_id,
+            original_queries=tuple(llm_queries),
+            searched_sources=tuple(source.value for source in resolved_scope or ()),
+            cached_expansion=(
+                (expansion.semantic_query, tuple(expansion.keyword_queries))
+                if not context.skip_search_query_expansion
+                else None
+            ),
+            scope_decision_settled=expansion.scope_decision_settled,
+            time_filter=(
+                expansion.time_filter if expansion.time_filter_computed else None
+            ),
+            time_filter_computed=expansion.time_filter_computed,
         )
 
-        # Surface the applied filters (source scope + time window) to the UI. Scope
-        # is reported only when it narrows to a strict subset — scoping to all
-        # connected sources is equivalent to an unscoped search.
+        # Scoping to all connected sources is equivalent to an unscoped search.
         scopes_all_sources = bool(connected_sources) and set(
             connected_sources
         ).issubset(resolved_scope or [])
@@ -881,17 +970,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             else []
         )
         time_filter = expansion.time_filter
-        if emitted_sources or time_filter is not None:
-            self.emitter.emit(
-                Packet(
-                    placement=placement,
-                    obj=SearchToolFilterDelta(
-                        sources=emitted_sources,
-                        time_filter_start=time_filter.start if time_filter else None,
-                        time_filter_end=time_filter.end if time_filter else None,
-                    ),
-                )
-            )
+        search_output.sources = emitted_sources
+        search_output.time_filter_start = time_filter.start if time_filter else None
+        search_output.time_filter_end = time_filter.end if time_filter else None
+        if update is not None:
+            update(ToolProgress(details=search_output))
 
         queries_run = list(
             dict.fromkeys(
@@ -948,16 +1031,14 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             for llm_query in llm_queries
             if llm_query
         )
-        if override_kwargs.original_query:
+        if original_query:
             semantic_queries_with_weights.append(
-                (override_kwargs.original_query, ORIGINAL_QUERY_WEIGHT)
+                (original_query, ORIGINAL_QUERY_WEIGHT)
             )
         deduplicated_semantic_queries = deduplicate_queries(
             semantic_queries_with_weights
         )
 
-        # Build the all_queries list for UI display, sorted by weight (highest first)
-        # Combine all deduplicated queries and sort by weight
         all_queries_with_weights = (
             deduplicated_semantic_queries + deduplicated_keyword_queries
         )
@@ -978,15 +1059,9 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             [q for q, _ in deduplicated_keyword_queries],
         )
 
-        # Emit the queries early so the UI can display them immediately
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=SearchToolQueriesDelta(
-                    queries=all_queries,
-                ),
-            )
-        )
+        search_output.queries = all_queries
+        if update is not None:
+            update(ToolProgress(details=search_output))
 
         # Run all searches in parallel with appropriate hybrid_alpha values
         # Keyword queries use hybrid_alpha=0.2 (favor keyword search)
@@ -1002,7 +1077,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                     (
                         query,
                         None,
-                        override_kwargs.num_hits,
+                        NUM_RETURNED_HITS,
                         acl_filters,
                         embedding_model,
                         federated_retrieval_infos,
@@ -1020,7 +1095,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                     (
                         query,
                         KEYWORD_QUERY_HYBRID_ALPHA,
-                        override_kwargs.num_hits,
+                        NUM_RETURNED_HITS,
                         acl_filters,
                         embedding_model,
                         federated_retrieval_infos,
@@ -1034,12 +1109,36 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # This avoids the query multiplication problem where each index query
         # would trigger a separate Slack search.
         # Only run if pre-fetch found a valid Slack access token.
-        if slack_access_token and override_kwargs.original_query:
+        primary_llm_cost_checked = self._primary_llm_cost_checked
+
+        def check_primary_llm_cost() -> None:
+            nonlocal primary_llm_cost_checked
+            if primary_llm_cost_checked:
+                return
+            with get_session_with_current_tenant() as usage_session:
+                check_llm_cost_limit_for_provider(
+                    db_session=usage_session,
+                    tenant_id=get_current_tenant_id(),
+                    llm_provider_api_key=self.llm.config.api_key,
+                )
+            primary_llm_cost_checked = True
+
+        run_slack_search = bool(slack_access_token and original_query)
+        if run_slack_search:
+            try:
+                check_primary_llm_cost()
+            except Exception:
+                logger.warning(
+                    "Skipping Slack search: primary model cost check failed",
+                    exc_info=True,
+                )
+                run_slack_search = False
+        if run_slack_search:
             search_functions.append(
                 (
                     self._run_slack_search,
                     (
-                        override_kwargs.original_query,
+                        original_query,
                         slack_access_token,
                         slack_bot_token,
                         slack_entities,
@@ -1065,7 +1164,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
         # We can disregard all of the chunks that exceed the num_hits parameter since it's not valid to have
         # documents/contents from things that aren't returned to the user on the frontend
-        top_sections = merge_individual_chunks(top_chunks)[: override_kwargs.num_hits]
+        top_sections = merge_individual_chunks(top_chunks)[:NUM_RETURNED_HITS]
 
         if not top_sections:
             logger.info("Search tool - no results found, returning empty response")
@@ -1073,14 +1172,32 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 top_sections=[],
                 note=scope_note or None,
             )
-            return ToolResponse(
-                rich_response=SearchDocsResponse(
+            return ToolResult(
+                details=SearchDocsResponse(
+                    queries=search_output.queries,
+                    sources=search_output.sources,
+                    time_filter_start=search_output.time_filter_start,
+                    time_filter_end=search_output.time_filter_end,
                     search_docs=[],
                     citation_mapping={},
                     displayed_docs=None,
                 ),
-                llm_facing_response=empty_response,
+                content=empty_response,
+                metadata=planning_result,
             )
+
+        selection_llm = self.llm
+        if self._selection_llm_factory is not None:
+            try:
+                selection_llm = self._selection_llm_factory()
+            except Exception:
+                logger.warning(
+                    "Search selection model unavailable, using the primary model",
+                    exc_info=True,
+                )
+        if selection_llm is self.llm:
+            check_primary_llm_cost()
+        enforce_selection_input_budget = selection_llm is not self.llm
 
         # Enrich chunks with `Document.file_id` (Postgres-only metadata not
         # stored in the document index).
@@ -1093,9 +1210,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         )
 
         secondary_flows_user_query = (
-            override_kwargs.original_query
-            or semantic_query
-            or (llm_queries[0] if llm_queries else "")
+            original_query or semantic_query or (llm_queries[0] if llm_queries else "")
         )
 
         token_counter = get_llm_token_counter(self.llm)
@@ -1105,7 +1220,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # Only consider MAX_CHUNKS_FOR_RELEVANCE chunks per section to avoid flooding from
         # documents with many matching sections
         max_tokens_for_selection = (
-            (override_kwargs.max_llm_chunks or MAX_CHUNKS_FED_TO_CHAT)
+            MAX_CHUNKS_FED_TO_CHAT
             * DOC_EMBEDDING_CONTEXT_SIZE
             * SELECTION_TOKEN_BUDGET_MULTIPLIER
         )
@@ -1126,8 +1241,9 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         selected_sections, best_doc_ids = select_sections_for_expansion(
             sections=sections_for_selection,
             user_query=secondary_flows_user_query,
-            llm=self.llm,
+            llm=selection_llm,
             max_chunks_per_section=MAX_CHUNKS_FOR_RELEVANCE,
+            enforce_llm_input_budget=enforce_selection_input_budget,
         )
 
         # End timing for LLM document selection
@@ -1145,15 +1261,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         final_ui_docs = convert_inference_sections_to_search_docs(
             selected_sections, is_internet=False
         )
-
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=SearchToolDocumentsDelta(
-                    documents=final_ui_docs,
-                ),
-            )
-        )
+        search_output.search_docs = search_docs
+        search_output.displayed_docs = final_ui_docs
+        if update is not None:
+            update(ToolProgress(details=search_output))
 
         # Create wrapper function to handle errors gracefully
         def expand_section_safe(
@@ -1171,6 +1282,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                     llm=llm,
                     document_index=document_index,
                     expand_override=expand_override,
+                    enforce_llm_input_budget=enforce_selection_input_budget,
                 )
                 # Return expanded section if not None, otherwise original
                 return expanded_section if expanded_section is not None else section
@@ -1188,7 +1300,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 (
                     section,
                     secondary_flows_user_query,
-                    self.llm,
+                    selection_llm,
                     self.document_index,
                     section.center_chunk.document_id in best_doc_ids_set,
                 ),
@@ -1219,10 +1331,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
         docs_str, citation_mapping = convert_inference_sections_to_llm_string(
             top_sections=merged_sections,
-            citation_start=override_kwargs.starting_citation_num,
-            limit=override_kwargs.max_llm_chunks,
+            citation_start=citation_start,
+            limit=MAX_CHUNKS_FED_TO_CHAT,
             include_document_id=False,
-            include_link=override_kwargs.include_link,
+            include_link=self.include_link,
             note=scope_note or None,
         )
 
@@ -1235,15 +1347,17 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             format(document_expansion_elapsed, ".3f"),
         )
 
-        llm_facing_response = docs_str
-
-        return ToolResponse(
-            # Typically the rich response will give more docs in case it needs to be displayed in the UI
-            rich_response=SearchDocsResponse(
+        return ToolResult(
+            # Displayed documents can exceed the subset sent to the model.
+            details=SearchDocsResponse(
+                queries=search_output.queries,
+                sources=search_output.sources,
+                time_filter_start=search_output.time_filter_start,
+                time_filter_end=search_output.time_filter_end,
                 search_docs=search_docs,
                 citation_mapping=citation_mapping,
                 displayed_docs=final_ui_docs,
             ),
-            # The LLM facing response typically includes less docs to cut down on noise and token usage
-            llm_facing_response=llm_facing_response,
+            content=docs_str,
+            metadata=planning_result,
         )

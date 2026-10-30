@@ -80,7 +80,7 @@ function VercelAIGatewayModalInternals({
 
       <InputDivider />
       <ModelSelectionField
-        shouldShowAutoUpdateToggle={true}
+        shouldShowAutoUpdateToggle
         onRefetch={isFetchDisabled ? undefined : handleFetchModels}
       />
 

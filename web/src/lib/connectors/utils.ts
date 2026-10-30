@@ -1,23 +1,22 @@
 import * as Yup from "yup";
+import {
+  SOURCE_METADATA_MAP,
+  type PartialSourceMetadata,
+} from "@/lib/connectors/constants";
+import {
+  type SourceMetadata,
+  ValidSources,
+  type ConfigurableSources,
+} from "@/lib/connectors/types/source";
 import type {
   ConnectorAccessFormValues,
   ConnectorGroupRestrictionFormValues,
 } from "@/lib/connectors/accessType";
-import { ValidSources } from "@/lib/connectors/types/source";
-import type { IndexAttemptStage, IndexAttemptStageMetric } from "@/lib/types";
-import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import {
-  connectorConfigs,
-  MIN_PRUNE_FREQ_HOURS,
-  MIN_REFRESH_FREQ_MINUTES,
-} from "@/lib/connectors/connectors";
+import { connectorConfigs } from "@/lib/connectors/connectors";
 import credentialBoundFields from "@/lib/connectors/credentialBoundFields.json";
+import { getCredentialSpec, realmFields } from "@/lib/credentials/utils";
 import { FILE_TYPE_DEFINITIONS, TypedFile } from "@/lib/connectors/fileTypes";
-import {
-  PIPELINE_ORDER,
-  STAGE_BAR_COLORS,
-} from "@/lib/connectors/stageMetrics/constants";
 import {
   ConnectorCredentialPairStatus,
   FileTypeCategory,
@@ -26,7 +25,6 @@ import {
 import type {
   ConnectionConfiguration,
   GmailConfig,
-  SortMode,
 } from "@/lib/connectors/types";
 
 // ---------------------------------------------------------------------------
@@ -65,6 +63,124 @@ const CREDENTIAL_BOUND_FIELDS: Partial<Record<ValidSources, string[]>> =
   credentialBoundFields;
 
 /**
+ * The source's form-only fields: the account's realm (its site, host or
+ * subdomain), one per realm field of the credential spec, under the same key.
+ * The realm lives in the credential only. The form uses it to filter the saved
+ * accounts and to fill in a new account, and never sends it as connector
+ * config (see `withoutFormOnlyFields`).
+ */
+export function formOnlyFieldNames(source: ValidSources): string[] {
+  const spec = getCredentialSpec(source);
+  return spec ? realmFields(spec).map(([key]) => key) : [];
+}
+
+/**
+ * The connector config without the source's form-only fields. Every request
+ * that sends form values as `connector_specific_config` (create, check runs
+ * and plans, binding checks) goes through it.
+ */
+export function withoutFormOnlyFields<V>(
+  source: ValidSources,
+  config: Readonly<Record<string, V>>
+): Record<string, V> {
+  const formOnly: ReadonlySet<string> = new Set(formOnlyFieldNames(source));
+  return Object.fromEntries(
+    Object.entries(config).filter(([name]) => !formOnly.has(name))
+  );
+}
+
+/** The config field named `name`, tab contents included. */
+export function findConfigField(
+  configuration: ConnectionConfiguration,
+  name: string
+): ConnectionConfiguration["values"][number] | undefined {
+  const find = (
+    fields: ConnectionConfiguration["values"]
+  ): ConnectionConfiguration["values"][number] | undefined => {
+    for (const field of fields) {
+      if (field.name === name) return field;
+      if (field.type === "tab") {
+        const nested = find(field.tabs.flatMap((tab) => tab.fields));
+        if (nested) return nested;
+      }
+    }
+    return undefined;
+  };
+  return find([...configuration.values, ...configuration.advanced_values]);
+}
+
+/** A list's entries as the config takes them: with the field's `transform`
+ * applied. */
+export function listConfigValue(
+  configuration: ConnectionConfiguration,
+  name: string,
+  entries: string[]
+): string[] | string {
+  const field = findConfigField(configuration, name);
+  return field?.type === "list" && field.transform
+    ? field.transform(entries)
+    : entries;
+}
+
+function withoutBlankEntries(items: readonly unknown[]): unknown[] {
+  return items.filter((item) => typeof item !== "string" || item.trim() !== "");
+}
+
+/**
+ * The form keys that are not connector config: the configuration's tab
+ * controls, and `extraNames` (e.g. the typed account).
+ */
+export function connectorFormControlFieldNames(
+  configuration: ConnectionConfiguration,
+  extraNames: readonly string[] = []
+): Set<string> {
+  return new Set([
+    ...[...configuration.values, ...configuration.advanced_values]
+      .filter((field) => field.type === "tab")
+      .map((field) => field.name),
+    ...extraNames,
+  ]);
+}
+
+/**
+ * The `connector_specific_config` that Create sends for the form's config
+ * values: without form controls and form-only fields, without blank list
+ * entries, and with each field's `transform` applied.
+ */
+export function connectorConfigFromForm(
+  source: ValidSources,
+  configuration: ConnectionConfiguration,
+  values: Readonly<Record<string, unknown>>,
+  formControlFieldNames: ReadonlySet<string>
+): Record<string, unknown> {
+  const config: Record<string, unknown> = {};
+  for (const [key, raw] of Object.entries(values)) {
+    if (formControlFieldNames.has(key)) continue;
+    const value: unknown = Array.isArray(raw) ? withoutBlankEntries(raw) : raw;
+    config[key] =
+      Array.isArray(value) &&
+      value.every((entry): entry is string => typeof entry === "string")
+        ? listConfigValue(configuration, key, value)
+        : value;
+  }
+  return withoutFormOnlyFields(source, config);
+}
+
+/**
+ * The names of the source's credential-bound config fields: the backend
+ * binding fields, then the form-only realm fields. The create form shows them
+ * above the credential section and filters the saved accounts with them.
+ */
+export function credentialBoundFieldNames(source: ValidSources): string[] {
+  return [
+    ...new Set([
+      ...(CREDENTIAL_BOUND_FIELDS[source] ?? []),
+      ...formOnlyFieldNames(source),
+    ]),
+  ];
+}
+
+/**
  * Takes the credential-bound fields out of a configuration, so the create form
  * can show them above the credential section. Only top-level fields move. A
  * bound field inside a tab is not supported: it stays with its tab, and no
@@ -74,7 +190,7 @@ export function splitCredentialBoundFields(
   source: ValidSources,
   configuration: ConnectionConfiguration
 ): CredentialBoundFieldSplit {
-  const boundNames = new Set(CREDENTIAL_BOUND_FIELDS[source] ?? []);
+  const boundNames = new Set(credentialBoundFieldNames(source));
   const isBound = (field: ConnectorField) => boundNames.has(field.name);
   return {
     values: configuration.values.filter(isBound),
@@ -90,7 +206,18 @@ export function splitCredentialBoundFields(
 }
 
 interface ConnectorValidationMessages {
+  /** A required field left empty, named by its label. */
+  required?: (field: string) => string;
+  /**
+   * Set on create: Refresh Every and Prune Every must hold a value, each with
+   * this message. Edit keeps a pair's empty schedule.
+   */
+  scheduleRequired?: { refreshFreq: string; pruneFreq: string };
   oneDriveUsersRequired?: string;
+  /** Confluence's Select tab with no space and no page. */
+  confluenceScopeRequired?: string;
+  /** Confluence's CQL Query tab with no query. */
+  confluenceCqlRequired?: string;
   specificGroupsRequired?: string;
   /** A string-pair row with an empty left key. */
   stringPairEmptyKey?: string;
@@ -169,7 +296,8 @@ export function createConnectorInitialValues(
   const configuration = connectorConfigs[connector];
 
   return {
-    name: "",
+    // Starts as the source's name; the admin can rename it.
+    name: getSourceDisplayName(connector) ?? "",
     groups: [],
     group_roles: {},
     data_access_group_ids: [],
@@ -181,12 +309,38 @@ export function createConnectorInitialValues(
   };
 }
 
+/** `schema`, required with `message` when one is given. */
+function requiredIf(
+  schema: Yup.NumberSchema<number | undefined>,
+  message: string | undefined
+): Yup.NumberSchema<number | undefined> {
+  return message === undefined ? schema : schema.required(message);
+}
+
+/** A scope list as the form holds it, or a stored comma-separated string. */
+type ScopeListValue = string[] | string | undefined;
+
+/** Confluence's scope fields, as the validation reads them. */
+interface ConfluenceScopeValues {
+  indexing_scope?: string;
+  space?: ScopeListValue;
+  page_id?: ScopeListValue;
+}
+
+/** Whether a scope list names anything. */
+function hasScopeEntry(value: ScopeListValue): boolean {
+  const entries: string[] =
+    typeof value === "string" ? value.split(",") : (value ?? []);
+  return entries.some((entry) => entry.trim() !== "");
+}
+
 export function createConnectorValidationSchema(
   connector: ConfigurableSources,
   requireGroups: boolean = false,
-  messages: ConnectorValidationMessages = {}
+  messages: ConnectorValidationMessages = {},
+  // The translated config, so "required" messages name translated labels.
+  configuration: ConnectionConfiguration = connectorConfigs[connector]
 ): Yup.ObjectSchema<Record<string, any>> {
-  const configuration = connectorConfigs[connector];
   const fields = [...configuration.values, ...configuration.advanced_values];
 
   const fieldSchemas = fields.reduce<Record<string, Yup.Schema>>(
@@ -207,7 +361,13 @@ export function createConnectorValidationSchema(
                     : Yup.string();
 
       if (!field.optional) {
-        schema = schema.required(`${field.label} is required`);
+        const label: string =
+          (typeof field.label === "function"
+            ? field.label(null)
+            : field.label) ?? field.name;
+        schema = schema.required(
+          messages.required?.(label) ?? `${label} is required`
+        );
       }
 
       acc[field.name] = schema;
@@ -223,6 +383,27 @@ export function createConnectorValidationSchema(
         is: OneDriveScope.Specific,
         then: (schema) => schema.min(1, messages.oneDriveUsersRequired),
       });
+  }
+
+  if (connector === ValidSources.Confluence) {
+    // An empty selection would index every space.
+    fieldSchemas.space = Yup.mixed().test(
+      "confluence-scope",
+      messages.confluenceScopeRequired ?? "Add at least one space or page.",
+      function hasScope(): boolean {
+        const values: ConfluenceScopeValues = this.parent;
+        if (values.indexing_scope !== "select") return true;
+        return [values.space, values.page_id].some(hasScopeEntry);
+      }
+    );
+    // A blank query would index every page too.
+    fieldSchemas.cql_query = Yup.string().when("indexing_scope", {
+      is: "cql",
+      then: (schema) =>
+        schema
+          .trim()
+          .required(messages.confluenceCqlRequired ?? "Add a CQL query."),
+    });
   }
 
   const object = Yup.object().shape({
@@ -247,13 +428,11 @@ export function createConnectorValidationSchema(
     ...fieldSchemas,
     // These are advanced settings
     indexingStart: Yup.string().nullable(),
-    pruneFreq: Yup.number().min(
-      MIN_PRUNE_FREQ_HOURS,
-      "Prune frequency must be at least 0.083 hours (5 minutes)"
-    ),
-    refreshFreq: Yup.number().min(
-      MIN_REFRESH_FREQ_MINUTES,
-      "Refresh frequency must be at least 1 minute"
+    // Their ranges are checked by the fields themselves (InputNumberField).
+    pruneFreq: requiredIf(Yup.number(), messages.scheduleRequired?.pruneFreq),
+    refreshFreq: requiredIf(
+      Yup.number(),
+      messages.scheduleRequired?.refreshFreq
     ),
   });
 
@@ -320,35 +499,97 @@ export function statusIsNotCurrentlyActive(
 }
 
 // ---------------------------------------------------------------------------
-// Stage metrics
-// ---------------------------------------------------------------------------
-
-// Sort per-batch stages according to the current sort mode. Pipeline order is
-// the canonical enum declaration order; time-taken sorts descending by
-// total duration so the long pole sits first.
-export function sortPerBatchStages(
-  stages: IndexAttemptStageMetric[],
-  sortMode: SortMode
-): IndexAttemptStageMetric[] {
-  const sorted = [...stages];
-  if (sortMode === "pipeline") {
-    sorted.sort(
-      (a, b) => (PIPELINE_ORDER[a.stage] ?? 0) - (PIPELINE_ORDER[b.stage] ?? 0)
-    );
-  } else {
-    sorted.sort((a, b) => b.total_duration_ms - a.total_duration_ms);
-  }
-  return sorted;
-}
-
-export function colorClassForStage(stage: IndexAttemptStage): string {
-  const idx = PIPELINE_ORDER[stage] ?? 0;
-  return STAGE_BAR_COLORS[idx % STAGE_BAR_COLORS.length]!;
-}
-
-// ---------------------------------------------------------------------------
 // Gmail
 // ---------------------------------------------------------------------------
 
 export const gmailConnectorNameBuilder = (values: GmailConfig) =>
   "GmailConnector";
+
+// ---------------------------------------------------------------------------
+// Source metadata
+// ---------------------------------------------------------------------------
+
+function fillSourceMetadata(
+  partialMetadata: PartialSourceMetadata,
+  internalName: ValidSources
+): SourceMetadata {
+  return {
+    internalName: partialMetadata.baseSourceType || internalName,
+    ...partialMetadata,
+    adminUrl: `/admin/connectors/${internalName}`,
+  };
+}
+
+export function getSourceMetadata(sourceType: ValidSources): SourceMetadata {
+  const partialMetadata = SOURCE_METADATA_MAP[sourceType];
+
+  // Fallback to not_applicable if sourceType not found in map
+  if (!partialMetadata) {
+    return fillSourceMetadata(
+      SOURCE_METADATA_MAP[ValidSources.NotApplicable],
+      ValidSources.NotApplicable
+    );
+  }
+
+  return fillSourceMetadata(partialMetadata, sourceType);
+}
+
+export function listSourceMetadata(): SourceMetadata[] {
+  /* This gives back all the viewable / common sources, primarily for
+  display in the Add Connector page */
+  const entries = Object.entries(SOURCE_METADATA_MAP)
+    .filter(
+      ([source, _]) =>
+        source !== "not_applicable" &&
+        source !== "ingestion_api" &&
+        source !== "mock_connector" &&
+        // use the "regular" slack connector when listing
+        source !== "federated_slack" &&
+        // user_file is for internal use (projects), not the Add Connector page
+        source !== "user_file" &&
+        // craft_file backs the Craft user library, which has its own upload UI
+        source !== "craft_file"
+    )
+    .map(([source, metadata]) => {
+      return fillSourceMetadata(metadata, source as ValidSources);
+    });
+  return entries;
+}
+
+export function getSourceDocLink(sourceType: ValidSources): string | null {
+  return SOURCE_METADATA_MAP[sourceType].docs || null;
+}
+
+export function isValidSource(sourceType: string): boolean {
+  return Object.keys(SOURCE_METADATA_MAP).includes(sourceType);
+}
+
+export function getSourceDisplayName(sourceType: ValidSources): string | null {
+  return getSourceMetadata(sourceType).displayName;
+}
+
+/** The configured sources, one entry per source type. */
+export function getConfiguredSources(
+  availableSources: ValidSources[]
+): Array<SourceMetadata & { originalName: string; uniqueKey: string }> {
+  const seen = new Set<string>();
+  const result: Array<
+    SourceMetadata & { originalName: string; uniqueKey: string }
+  > = [];
+
+  for (const sourceName of availableSources) {
+    const cleanName = sourceName.replace("federated_", "") as ValidSources;
+    if (seen.has(cleanName)) continue;
+    seen.add(cleanName);
+
+    const metadata = getSourceMetadata(cleanName);
+    if (metadata.internalName === ValidSources.NotApplicable) continue;
+
+    result.push({
+      ...metadata,
+      originalName: sourceName,
+      uniqueKey: cleanName,
+    });
+  }
+  return result;
+}

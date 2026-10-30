@@ -4,7 +4,7 @@ directory fields when present and is absent when the profile is empty."""
 from unittest.mock import patch
 
 from onyx.chat.prompt_utils import build_system_prompt
-from onyx.db.memory import UserInfo, UserMemoryContext
+from onyx.context.models import UserInfo, UserMemoryContext
 
 
 def _context(organization_profile: dict[str, str]) -> UserMemoryContext:

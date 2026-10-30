@@ -19,6 +19,9 @@ from onyx.connectors.sharepoint.connector import (
     SiteDrive,
 )
 from onyx.db.enums import HierarchyNodeType
+from tests.unit.onyx.connectors.sharepoint.sharepoint_gateway_fakes import (
+    connector_with_gateway,
+)
 
 
 def test_resolve_drive_folder_requests_canonical_web_url() -> None:
@@ -50,7 +53,7 @@ def test_hierarchy_helpers_fetch_permissions_when_requested(
     )
     mock_get_access.return_value = access
     connector = SharepointConnector()
-    connector._graph_client = MagicMock()
+    connector_with_gateway(connector)
     checkpoint = SharepointConnectorCheckpoint(has_more=True)
     site_url = "https://contoso.sharepoint.com/sites/eng"
     drive_url = f"{site_url}/Shared%20Documents"
@@ -61,35 +64,30 @@ def test_hierarchy_helpers_fetch_permissions_when_requested(
         web_url=drive_url,
     )
 
-    with patch.object(
-        connector,
-        "_create_rest_client_context",
-        return_value=MagicMock(),
-    ):
-        site_node = next(
-            connector._yield_site_hierarchy_node(
-                SiteDescriptor(url=site_url, drive_name=None, folder_path=None),
-                checkpoint,
-                include_permissions=True,
-            )
+    site_node = next(
+        connector._yield_site_hierarchy_node(
+            SiteDescriptor(url=site_url, drive_name=None, folder_path=None),
+            checkpoint,
+            include_permissions=True,
         )
-        drive_node = next(
-            connector._yield_drive_hierarchy_node(
-                site_url,
-                drive,
-                checkpoint,
-                include_permissions=True,
-            )
+    )
+    drive_node = next(
+        connector._yield_drive_hierarchy_node(
+            site_url,
+            drive,
+            checkpoint,
+            include_permissions=True,
         )
-        folder_node = next(
-            connector._yield_folder_hierarchy_nodes(
-                site_url,
-                drive,
-                "Engineering",
-                checkpoint,
-                include_permissions=True,
-            )
+    )
+    folder_node = next(
+        connector._yield_folder_hierarchy_nodes(
+            site_url,
+            drive,
+            "Engineering",
+            checkpoint,
+            include_permissions=True,
         )
+    )
 
     assert site_node.external_access is access
     assert drive_node.external_access is access
@@ -110,7 +108,7 @@ def test_folder_permissions_use_library_url_not_display_name(
     """SharePoint strips "&" from the library URL, so "R&D Docs" lives at "RD Docs"."""
     mock_get_access.return_value = ExternalAccess.empty()
     connector = SharepointConnector()
-    connector._graph_client = MagicMock()
+    connector_with_gateway(connector)
     site_url = "https://contoso.sharepoint.com/sites/eng"
     drive = SiteDrive(
         drive_id="drive-id",
@@ -131,18 +129,15 @@ def test_folder_permissions_use_library_url_not_display_name(
         ),
     )
 
-    with patch.object(
-        connector, "_create_rest_client_context", return_value=MagicMock()
-    ):
-        nodes = list(
-            connector._yield_folder_hierarchy_nodes(
-                site_url,
-                drive,
-                "Plans/Q1%20%26%20Q2",
-                checkpoint,
-                include_permissions=True,
-            )
+    nodes = list(
+        connector._yield_folder_hierarchy_nodes(
+            site_url,
+            drive,
+            "Plans/Q1%20%26%20Q2",
+            checkpoint,
+            include_permissions=True,
         )
+    )
 
     assert [
         call.kwargs["folder_server_relative_path"]
@@ -183,7 +178,7 @@ def test_full_and_slim_folder_hierarchy_use_canonical_url() -> None:
         include_site_documents=True,
     )
     connector.site_descriptors = [site]
-    connector._graph_client = MagicMock()
+    connector_with_gateway(connector)
 
     full_checkpoint = SharepointConnectorCheckpoint(
         has_more=True,
@@ -230,7 +225,7 @@ def test_folder_permission_failure_does_not_stop_hierarchy(
     access = ExternalAccess.empty()
     mock_get_access.side_effect = [RuntimeError("401 Unauthorized"), access]
     connector = SharepointConnector()
-    connector._graph_client = MagicMock()
+    connector_with_gateway(connector)
     site_url = "https://contoso.sharepoint.com/sites/eng"
     drive = SiteDrive(
         drive_id="drive-id",
@@ -240,14 +235,11 @@ def test_folder_permission_failure_does_not_stop_hierarchy(
     )
     checkpoint = SharepointConnectorCheckpoint(has_more=True)
 
-    with patch.object(
-        connector, "_create_rest_client_context", return_value=MagicMock()
-    ):
-        nodes = list(
-            connector._yield_folder_hierarchy_nodes(
-                site_url, drive, "Plans/Q1", checkpoint, include_permissions=True
-            )
+    nodes = list(
+        connector._yield_folder_hierarchy_nodes(
+            site_url, drive, "Plans/Q1", checkpoint, include_permissions=True
         )
+    )
 
     assert [node.display_name for node in nodes] == ["Plans", "Q1"]
     assert nodes[0].external_access is None

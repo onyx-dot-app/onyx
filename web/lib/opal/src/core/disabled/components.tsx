@@ -1,6 +1,6 @@
 import "@opal/core/disabled/styles.css";
 import React from "react";
-import { Tooltip, type TooltipSide } from "@opal/components";
+import { Tooltip, type TooltipAlign, type TooltipSide } from "@opal/components";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import type { RichStr, WithoutStyles } from "@opal/types";
 
@@ -30,12 +30,17 @@ interface DisabledProps extends WithoutStyles<
    * Tooltip content shown on hover when disabled. Implies `allowClick` so that
    * the tooltip trigger can receive pointer events. Supports inline markdown
    * via `markdown()`. Screen readers read it as plain text from a hidden live
-   * region.
+   * region. Pass it whether or not `disabled` is set: the tooltip then stays
+   * mounted (suppressed while enabled), so toggling `disabled` never remounts
+   * the children.
    */
   tooltip?: string | RichStr;
 
   /** Which side the tooltip appears on. @default "right" */
   tooltipSide?: TooltipSide;
+
+  /** Where the tooltip sits along its side. See `Tooltip`'s `align`. @default "center" */
+  tooltipAlign?: TooltipAlign;
 
   children?: React.ReactNode;
 }
@@ -69,7 +74,8 @@ function Disabled({
   disabled,
   allowClick,
   tooltip,
-  tooltipSide = "right",
+  tooltipSide = "end",
+  tooltipAlign = "center",
   ref,
   children,
   ...rest
@@ -78,7 +84,7 @@ function Disabled({
   const enableClick = allowClick || showTooltip;
   // The CSS only blocks the pointer. A disabled fieldset also takes the form
   // controls inside out of the tab order and stops keyboard input. It is
-  // always rendered, so toggling `disabled` never remounts the children.
+  // always rendered, so toggling `disabled` does not remount the children.
   // `allowClick` keeps the children interactive, so it keeps the keyboard.
   const blockKeyboard: boolean = Boolean(disabled) && !allowClick;
 
@@ -109,10 +115,18 @@ function Disabled({
     </div>
   );
 
-  if (!showTooltip) return wrapper;
+  // The tooltip wraps the region whenever one is given, and is suppressed
+  // while enabled. Adding the wrapper only while disabled would change the
+  // element tree on each toggle and remount the children.
+  if (!tooltip) return wrapper;
 
   return (
-    <Tooltip tooltip={tooltip} side={tooltipSide}>
+    <Tooltip
+      tooltip={tooltip}
+      side={tooltipSide}
+      align={tooltipAlign}
+      suppressed={!showTooltip}
+    >
       {wrapper}
     </Tooltip>
   );

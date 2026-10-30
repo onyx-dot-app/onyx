@@ -169,10 +169,11 @@ class SidecarClient:
         *,
         sandbox_id: UUID,
         session_id: UUID,
+        include_web: bool = False,
         timeout_seconds: float = RPC_TIMEOUT_SECONDS,
     ) -> OutputsManifestResponse:
-        payload = OutputsManifestRequest(session_id=session_id)
-        body = payload.model_dump_json().encode()
+        payload = OutputsManifestRequest(session_id=session_id, include_web=include_web)
+        body = payload.model_dump_json(exclude_defaults=True).encode()
         sha256_hex = hashlib.sha256(body).hexdigest()
 
         try:

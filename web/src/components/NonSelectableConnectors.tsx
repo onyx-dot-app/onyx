@@ -2,7 +2,7 @@ import { ConnectorStatus } from "@/lib/types";
 import { useTranslations } from "next-intl";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 import { Content } from "@opal/layouts";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { SvgLock } from "@opal/icons";
 interface NonSelectableConnectorsProps {
   connectors: ConnectorStatus<any, any>[];
@@ -32,7 +32,7 @@ export const NonSelectableConnectors = ({
       <div className="p-3 border border-dashed border-border-02 rounded-12 bg-background-neutral-01">
         <div className="mb-2 flex items-center gap-1.5">
           <SvgLock className="h-3.5 w-3.5 stroke-text-03" />
-          <Text as="p" figureSmallLabel text04 className="mb-0!">
+          <Text as="p" font="figure-small-label" color="text-04">
             {t("unavailable.label")}
           </Text>
         </div>

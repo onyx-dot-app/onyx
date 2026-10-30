@@ -13,24 +13,20 @@ Nothing here calls the retrieval path; it only decides who should do the call.
 from collections.abc import Callable, Iterator
 from enum import Enum
 
-from google.auth.exceptions import RefreshError
-from googleapiclient.errors import HttpError  # type: ignore[import-untyped]
 from pydantic import BaseModel
 
-from onyx.connectors.google_utils.google_utils import (
-    execute_access_probe,
-    execute_paginated_retrieval,
+from onyx.connectors.google_drive.source_operations import (
+    GoogleDriveHttpError,
+    GoogleDriveRefreshError,
+    GoogleDriveSourceOperations,
 )
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-# permissions.list needs the file id of the drive itself; `role` is in
-# PERMISSION_FULL_DESCRIPTION but this call only needs these three fields.
+# `role` is in PERMISSION_FULL_DESCRIPTION, but these calls only need these
+# three fields.
 DRIVE_MEMBER_FIELDS = "permissions(emailAddress, type, role), nextPageToken"
-
-# What a requested target probe needs to decide who should crawl it.
-TARGET_PROBE_FIELDS = "id, mimeType, driveId, owners(emailAddress)"
 
 
 class DriveRole(str, Enum):
@@ -62,14 +58,6 @@ class PrincipalType(str, Enum):
     GROUP = "group"
     DOMAIN = "domain"
     ANYONE = "anyone"
-
-
-class DriveReachability(str, Enum):
-    REACHABLE = "reachable"
-    # drives.get 404s. An empty files.list for such a drive means "cannot see
-    # it", not "it is empty", and must never drive a prune.
-    UNREACHABLE = "unreachable"
-    UNKNOWN = "unknown"
 
 
 class DriveMember(BaseModel):
@@ -110,7 +98,9 @@ def _parse_member(raw: dict[str, object]) -> DriveMember | None:
     )
 
 
-def list_drive_members(admin_drive_service: object, drive_id: str) -> list[DriveMember]:
+def list_drive_members(
+    ops: GoogleDriveSourceOperations, drive_id: str
+) -> list[DriveMember]:
     """Read a shared drive's membership using domain admin access.
 
     This works even for drives the admin is not a member of, which is the point:
@@ -123,19 +113,14 @@ def list_drive_members(admin_drive_service: object, drive_id: str) -> list[Drive
     """
     members: list[DriveMember] = []
     try:
-        for raw in execute_paginated_retrieval(
-            retrieval_function=admin_drive_service.permissions().list,  # ty: ignore[unresolved-attribute]
-            list_key="permissions",
-            fileId=drive_id,
-            useDomainAdminAccess=True,
-            supportsAllDrives=True,
-            fields=DRIVE_MEMBER_FIELDS,
+        for raw in ops.list_drive_members(
+            drive_id=drive_id, use_domain_admin_access=True
         ):
             member = _parse_member(raw)
             if member is not None:
                 members.append(member)
-    except HttpError as error:
-        if error.resp.status != 404:
+    except GoogleDriveHttpError as error:
+        if error.status_code != 404:
             raise
         # Domain admin access only applies to drives we own, so a drive in a
         # foreign domain always answers 404 here.
@@ -148,69 +133,20 @@ def list_drive_members(admin_drive_service: object, drive_id: str) -> list[Drive
     return members
 
 
-def list_group_member_emails(admin_service: object, group_email: str) -> list[str]:
+def list_group_member_emails(
+    ops: GoogleDriveSourceOperations, group_email: str
+) -> list[str]:
     """Direct user members of a group. Nested groups are not expanded."""
     return [
-        member["email"]
-        for member in execute_paginated_retrieval(
-            retrieval_function=admin_service.members().list,  # ty: ignore[unresolved-attribute]
-            list_key="members",
-            groupKey=group_email,
-            fields="members(email, type), nextPageToken",
-        )
-        if member.get("type") == "USER" and member.get("email")
+        member.email
+        for member in ops.list_group_members(group_email=group_email)
+        if member.type == "USER" and member.email
     ]
 
 
-def can_list_drive(drive_service: object, drive_id: str) -> bool:
-    """Whether the impersonated user is a member who can list the drive.
-
-    drives.get comes first: for a non-member, files.list can succeed with zero
-    items, which would make the drive look empty rather than out of reach.
-    Only access denial or a failed impersonation rejects the candidate; any
-    other error raises so the run fails instead of picking a weaker principal.
-    """
-    try:
-        drive = execute_access_probe(
-            drive_service.drives().get(  # ty: ignore[unresolved-attribute]
-                driveId=drive_id, fields="id"
-            )
-        )
-        if drive is None:
-            return False
-        listing = execute_access_probe(
-            drive_service.files().list(  # ty: ignore[unresolved-attribute]
-                corpora="drive",
-                driveId=drive_id,
-                includeItemsFromAllDrives=True,
-                supportsAllDrives=True,
-                pageSize=1,
-                fields="files(id)",
-            )
-        )
-    except RefreshError as error:
-        logger.info("Cannot impersonate a candidate for drive %s: %s", drive_id, error)
-        return False
-    return listing is not None
-
-
-def probe_target(drive_service: object, target_id: str) -> dict[str, object] | None:
-    """Metadata of a requested drive or folder, or None if this user cannot
-    see it. A user without access gets 404, so a miss is cheap and unambiguous.
-    """
-    try:
-        request = drive_service.files().get(  # ty: ignore[unresolved-attribute]
-            fileId=target_id,
-            supportsAllDrives=True,
-            fields=TARGET_PROBE_FIELDS,
-        )
-        return execute_access_probe(request)
-    except RefreshError:
-        return None
-
-
 def internal_principals_of(
-    drive_service: object,
+    ops: GoogleDriveSourceOperations,
+    viewer_email: str,
     target_id: str,
     google_domain: str,
     expand_group: Callable[[str], list[str]],
@@ -223,15 +159,11 @@ def internal_principals_of(
     """
     try:
         permissions = list(
-            execute_paginated_retrieval(
-                retrieval_function=drive_service.permissions().list,  # ty: ignore[unresolved-attribute]
-                list_key="permissions",
-                fileId=target_id,
-                supportsAllDrives=True,
-                fields=DRIVE_MEMBER_FIELDS,
+            ops.list_file_permissions(
+                user_email=viewer_email, file_id=target_id, fields=DRIVE_MEMBER_FIELDS
             )
         )
-    except (HttpError, RefreshError) as error:
+    except (GoogleDriveHttpError, GoogleDriveRefreshError) as error:
         logger.info("Cannot read permissions of %s: %s", target_id, error)
         return None
 
@@ -248,27 +180,6 @@ def internal_principals_of(
             except Exception:
                 logger.exception("Could not expand group %s on %s", email, target_id)
     return sorted(email for email in emails if _in_domain(email, google_domain))
-
-
-def check_drive_reachable(drive_service: object, drive_id: str) -> DriveReachability:
-    """Distinguish a drive we cannot see from a drive with no files.
-
-    shared_drive_3 in the test tenant shows why this matters: files.list returns
-    success with zero items while drives.get 404s. Treating that as an empty
-    drive would prune every document previously indexed from it.
-    """
-    try:
-        drive_service.drives().get(  # ty: ignore[unresolved-attribute]
-            driveId=drive_id, fields="id"
-        ).execute()
-    except HttpError as error:
-        if error.resp.status == 404:
-            return DriveReachability.UNREACHABLE
-        logger.warning(
-            "Unexpected error checking reachability of drive %s: %s", drive_id, error
-        )
-        return DriveReachability.UNKNOWN
-    return DriveReachability.REACHABLE
 
 
 def _emails_of_type(

@@ -4,12 +4,12 @@ version = "0.0.0"
 requires-python = ">=3.13"
 # Shared dependencies between backend and model_server
 dependencies = [
-    "aioboto3==15.1.0",
+    "aiobotocore==3.8.0",
     "cohere==7.0.5",
     "fastapi==0.133.1",
     "google-genai==2.18.1",
     "huggingface-hub==1.26.0",
-    "litellm[google]==1.93.2",
+    "litellm[google]==1.100.4",
     "openai==2.38.0",
     "pydantic==2.12.5",
     # Shared so structured JSON logging (LOG_FORMAT=json) works in the
@@ -21,13 +21,13 @@ dependencies = [
     "tenacity==9.1.2",
     "uvicorn==0.49.0",
     "voyageai==0.2.3",
-    "brotli>=1.2.0",
+    "brotli==1.2.1",
     "agent-client-protocol>=0.7.1",
 ]
 
 [dependency-groups]
 backend = [
-    "aiohttp==3.14.3",
+    "aiohttp==3.14.4",
     "alembic==1.18.4",
     "asyncpg==0.30.0",
     "atlassian-python-api==4.0.7",
@@ -35,7 +35,7 @@ backend = [
     "azure-identity>=1.23.0,<2.0.0",
     "azure-storage-blob>=12.24.0,<13.0.0",
     "beautifulsoup4==4.12.3",
-    "boto3==1.39.11",
+    "boto3==1.43.3",
     "boxsdk==10.12.0",
     "celery==5.5.1",
     "chardet==5.2.0",
@@ -48,11 +48,11 @@ backend = [
     "fastapi-users==15.0.4",
     "fastapi-users-db-sqlalchemy==7.0.0",
     "fastapi-limiter==0.1.6",
-    "fastmcp==3.2.0",
+    "fastmcp==3.4.10",
     "google-api-python-client==2.86.0",
     "google-auth-oauthlib==1.4.0",
     "google-cloud-storage>=3.0.0,<4.0.0",
-    "graphql-core==3.2.8",
+    "graphql-core==3.2.12",
     # GPT4All library has issues running on Macs and python:3.11.4-slim-bookworm
     # will reintroduce this when library version catches up
     # "gpt4all==2.0.2",
@@ -69,11 +69,11 @@ backend = [
     # backend/onyx/file_processing/extract_file_text.py and what impacts
     # updating might have on this behavior.
     "markitdown[pdf, docx, pptx, xlsx, xls]==0.1.7",
-    "mcp[cli]==1.28.1",
+    "mcp[cli]==1.30.0",
     "msal==1.37.0",
     "msoffcrypto-tool==6.0.0",
     "Office365-REST-Python-Client==2.6.2",
-    "oauthlib==3.2.2",
+    "oauthlib==4.0.0",
     # NOTE: This is frozen to avoid https://foss.heptapod.net/openpyxl/openpyxl/-/issues/2147
     "openpyxl==3.0.10",
     "opensearch-py==3.2.0",
@@ -92,13 +92,14 @@ backend = [
     "python-docx==1.1.2",
     "python-gitlab==5.6.0",
     "python-pptx==0.6.23",
-    "pypdf==6.19.0",
+    "pypdf==6.21.2",
     "pypdfium2==5.9.0",
     "python-dotenv==1.2.2",
     "python-slugify==8.0.4",
     "pywikibot==11.4.2",
     "readerwriterlock==1.0.9",
     "redis==5.0.8",
+    "regex==2025.11.3",
     # PDF generation for the usage report review pack.
     "reportlab==5.0.0",
     "requests==2.33.0",
@@ -133,7 +134,7 @@ backend = [
 
 # Dev tools
 dev = [
-    "boto3-stubs[s3]==1.39.11",
+    "boto3-stubs[s3]==1.43.3",
     "celery-types==0.26.0",
     "faker==40.38.0",
     "hatchling==1.28.0",
@@ -173,7 +174,7 @@ dev = [
 # One-tool groups, installed with `--only-group` by the pre-commit hooks: each
 # tool comes from hash-verified uv.lock artifacts without a full project sync,
 # and each pin below is the only one in the repo.
-ods = ["onyx-devtools[audit]==0.13.10"]
+ods = ["onyx-devtools[audit]==0.13.15"]
 ruff = ["ruff==0.16.1"]
 zizmor = ["zizmor==1.25.2"]
 
@@ -212,7 +213,7 @@ default-groups = ["backend", "dev", "ee", "model_server"]
 # Loosen mitmproxy's over-tight upper caps so the resolver keeps the
 # backend's newer versions.
 override-dependencies = [
-    "brotli>=1.2.0,<2.0",
+    "brotli==1.2.1",
     "h11>=0.11,<1.0",
     "cryptography>=42.0,<51.0",
     "h2>=4.3.0,<5.0",
@@ -355,6 +356,9 @@ known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 # Tests use asserts, mock credentials, and lots of patterns the bandit rules
 # flag as suspicious. Disable the full S rule set in tests.
 "backend/tests/**" = ["S"]
+# Docs site tooling (documentation/scripts, documentation/audit), imported with the
+# docs. format_docs.py is one long line-by-line formatter; leave its shape alone.
+"documentation/**" = ["C901", "PERF401", "ARG001"]
 # Ops and developer scripts run by humans (kubectl exec payloads, one-off
 # data dumps, manual tenant cleanup) commonly use `/tmp/...` script payloads,
 # pipe shell commands, and build ad-hoc SQL against trusted internal inputs

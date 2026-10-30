@@ -148,3 +148,27 @@ func TestWriteFailsWhenACopyIsUnreadable(t *testing.T) {
 		t.Fatalf("expected %q, got %v", want, err)
 	}
 }
+
+func TestWriteRefusesSymlinkedCopy(t *testing.T) {
+	repoRoot := t.TempDir()
+	seedSources(t, repoRoot)
+	sentinel := filepath.Join(t.TempDir(), "sentinel")
+	if err := os.WriteFile(sentinel, []byte("original"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(DestDir(repoRoot), "docker_compose", "README.md")
+	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(sentinel, dest); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Write(repoRoot); err == nil {
+		t.Fatal("expected Write to refuse the symlinked copy")
+	}
+
+	if got, _ := os.ReadFile(sentinel); string(got) != "original" {
+		t.Fatalf("symlink target was overwritten: %q", got)
+	}
+}

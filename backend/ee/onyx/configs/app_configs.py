@@ -150,6 +150,35 @@ ONEDRIVE_PERMISSION_GROUP_SYNC_FREQUENCY_S = int(
 )
 
 #####
+# Linear
+#####
+
+# In seconds, default is 5 minutes
+LINEAR_PERMISSION_GROUP_SYNC_FREQUENCY = int(
+    os.environ.get("LINEAR_PERMISSION_GROUP_SYNC_FREQUENCY") or 5 * 60
+)
+# In seconds, default is 1 hour: how long an issue moved between teams keeps
+# its old readers. A sync is one call per 250 issues against the 1,500 calls
+# per hour the indexing polls share.
+LINEAR_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("LINEAR_PERMISSION_DOC_SYNC_FREQUENCY") or 60 * 60
+)
+
+#####
+# YouTrack
+#####
+
+# In seconds, default 30 minutes. Each run walks every issue in scope.
+YOUTRACK_PERMISSION_GROUP_SYNC_FREQUENCY = int(
+    os.environ.get("YOUTRACK_PERMISSION_GROUP_SYNC_FREQUENCY") or 30 * 60
+)
+# In seconds, default 30 minutes. Bounds how long an issue whose visibility
+# or project changed keeps its old readers.
+YOUTRACK_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("YOUTRACK_PERMISSION_DOC_SYNC_FREQUENCY") or 30 * 60
+)
+
+#####
 # Zoom
 #####
 # In seconds, default is 5 minutes
@@ -161,6 +190,16 @@ ZOOM_PERMISSION_GROUP_SYNC_FREQUENCY = int(
 # recording, one call each.
 ZOOM_PERMISSION_DOC_SYNC_FREQUENCY = int(
     os.environ.get("ZOOM_PERMISSION_DOC_SYNC_FREQUENCY") or 6 * 60 * 60
+)
+
+#####
+# HubSpot
+#####
+
+# In seconds, default is 1 hour: a sync pages every record (100 per call) and
+# asks for the viewers of 20 records per call, about 1,500 calls per 24,000 records.
+HUBSPOT_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("HUBSPOT_PERMISSION_DOC_SYNC_FREQUENCY") or 60 * 60
 )
 
 
@@ -202,4 +241,23 @@ GATED_TENANTS_KEY = "gated_tenants"
 # Used when MULTI_TENANT=false (self-hosted mode)
 CLOUD_DATA_PLANE_URL = os.environ.get(
     "CLOUD_DATA_PLANE_URL", "https://cloud.onyx.app/api"
+)
+
+# Log export collects pod stdout, pod state, and events through the Kubernetes API
+# when the api_server runs in Kubernetes. Off by default: it needs a service
+# account with read access to pods, which the Helm chart grants only to the
+# api-server when logExport.kubernetes.enabled is set.
+LOG_EXPORT_KUBERNETES_ENABLED = (
+    os.environ.get("LOG_EXPORT_KUBERNETES_ENABLED") or "false"
+).lower() == "true"
+# Most recent lines read from each container log stream.
+LOG_EXPORT_KUBERNETES_TAIL_LINES = int(
+    os.environ.get("LOG_EXPORT_KUBERNETES_TAIL_LINES") or 100_000
+)
+# Byte cap per container log stream, and for all streams in one export.
+LOG_EXPORT_KUBERNETES_MAX_BYTES_PER_STREAM = int(
+    os.environ.get("LOG_EXPORT_KUBERNETES_MAX_BYTES_PER_STREAM") or 25 * 1024 * 1024
+)
+LOG_EXPORT_KUBERNETES_MAX_TOTAL_BYTES = int(
+    os.environ.get("LOG_EXPORT_KUBERNETES_MAX_TOTAL_BYTES") or 500 * 1024 * 1024
 )

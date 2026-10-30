@@ -25,6 +25,9 @@ class CCPairIdsBackfillProgress(BaseModel):
     # None until the first run takes the snapshot. cc-pairs created later get
     # cc_pair_ids at index time, so they are never added.
     pending_cc_pair_ids: list[int] | None = None
+    # Every cc-pair in the snapshot, for progress reporting. None for progress
+    # stored before this field was added.
+    snapshot_cc_pair_ids: list[int] | None = None
     # Cursor in the first pending cc-pair: every document with an ID <= this
     # one is done.
     last_document_id: str | None = None

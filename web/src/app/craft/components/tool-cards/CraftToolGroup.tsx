@@ -2,28 +2,18 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Tag, Text } from "@opal/components";
+import { Collapsible, Tag, Text } from "@opal/components";
 import { cn } from "@opal/utils";
-import { SvgCheckAll, SvgChevronDown } from "@opal/icons";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/refresh-components/Collapsible";
+import { SvgCheckAll, SvgChevronDown, SvgLoader } from "@opal/icons";
 import CraftToolCard from "@/app/craft/components/tool-cards/CraftToolCard";
 import CometEdge from "@/app/craft/components/CometEdge";
-import {
-  isSkillCall,
-  SvgLoader,
-} from "@/app/craft/components/tool-cards/helpers";
+import { isSkillCall } from "@/app/craft/components/tool-cards/helpers";
 import type { ToolCallState } from "@/app/craft/types/displayTypes";
 
 interface CraftToolGroupProps {
   toolCalls: ToolCallState[];
   /** Once an assistant message follows, animate the block closed. */
   autoCollapse?: boolean;
-  /** Override the initial open/closed state (useful in Storybook). */
-  defaultOpen?: boolean;
 }
 
 function aggregateStatus(toolCalls: ToolCallState[]): ToolCallState["status"] {
@@ -52,15 +42,12 @@ function renderStatusIcon(toolCalls: ToolCallState[]) {
 export default function CraftToolGroup({
   toolCalls,
   autoCollapse = false,
-  defaultOpen,
 }: CraftToolGroupProps) {
   const t = useTranslations("craft.toolCards.group");
   const aggregate = aggregateStatus(toolCalls);
   // Open while the run is active so streaming calls stay visible and nothing
   // collapses as new calls append; settled groups start collapsed.
-  const [isOpen, setIsOpen] = useState(
-    defaultOpen ?? aggregate === "in_progress"
-  );
+  const [isOpen, setIsOpen] = useState(aggregate === "in_progress");
   // Skill groups get a comet while running and a thin border at rest.
   const skillGroup = toolCalls.some(isSkillCall);
   const skillActive = aggregate === "in_progress" && skillGroup;
@@ -82,8 +69,8 @@ export default function CraftToolGroup({
           skillGroup && "border-[0.5px] border-border-01"
         )}
       >
-        <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-          <CollapsibleTrigger asChild>
+        <Collapsible.Root open={isOpen} onOpenChange={setIsOpen}>
+          <Collapsible.Trigger asChild>
             <button
               className={cn(
                 "w-full text-start px-3 py-2 rounded-md",
@@ -114,8 +101,8 @@ export default function CraftToolGroup({
                 />
               </div>
             </button>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
+          </Collapsible.Trigger>
+          <Collapsible.Content>
             <div className="flex flex-col border-t-[0.5px] border-border-01">
               {toolCalls.map((toolCall) => (
                 <CraftToolCard
@@ -126,8 +113,8 @@ export default function CraftToolGroup({
                 />
               ))}
             </div>
-          </CollapsibleContent>
-        </Collapsible>
+          </Collapsible.Content>
+        </Collapsible.Root>
       </div>
     </CometEdge>
   );

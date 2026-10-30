@@ -32,10 +32,8 @@ from sqlalchemy import (
     and_,
     delete,
     exists,
-    func,
     or_,
     select,
-    true,
     update,
 )
 from sqlalchemy.dialects.postgresql import insert
@@ -48,6 +46,7 @@ from onyx.db.enums import (
     Permission,
     PermissionAuthority,
     SandboxStatus,
+    SkillInstallationPolicy,
     SkillSharePermission,
 )
 from onyx.db.external_app import (
@@ -69,7 +68,7 @@ from onyx.db.scoped_permissions import (
     within_managed_scope_clause,
 )
 from onyx.db.user_group import assert_not_shared_with_default_group
-from onyx.db.utils import is_fk_violation
+from onyx.db.utils import is_fk_violation, is_unique_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import BUILT_IN_SKILLS
@@ -167,14 +166,49 @@ def _is_editable_by_user(user: User) -> ColumnElement[bool]:
     return editable
 
 
+def _is_required_for_user(user: User) -> ColumnElement[bool]:
+    return and_(
+        Skill.installation_policy == SkillInstallationPolicy.REQUIRED,
+        skill_visible_to_user(user),
+    )
+
+
 def _is_enabled_for_user(user: User) -> ColumnElement[bool]:
+    preference = (
+        select(UserSkillPreference.enabled)
+        .where(
+            UserSkillPreference.user_id == user.id,
+            UserSkillPreference.skill_id == Skill.id,
+        )
+        .correlate(Skill)
+        .scalar_subquery()
+    )
+    selected_name = exists().where(
+        UserSkillPreference.user_id == user.id,
+        UserSkillPreference.name == Skill.name,
+        UserSkillPreference.enabled.is_(True),
+        UserSkillPreference.skill_id.in_(
+            select(Skill.id).where(skill_visible_to_user(user)).correlate(None)
+        ),
+    )
+    visible = skill_visible_to_user(user)
+    required_name = Skill.name.in_(
+        select(Skill.name).where(_is_required_for_user(user)).correlate(None)
+    )
     return or_(
         Skill.built_in_skill_id.isnot(None),
-        exists(
-            select(UserSkillPreference.user_id).where(
-                UserSkillPreference.user_id == user.id,
-                UserSkillPreference.skill_id == Skill.id,
-            )
+        _is_required_for_user(user),
+        and_(
+            ~required_name,
+            or_(
+                preference.is_(True),
+                and_(
+                    Skill.installation_policy == SkillInstallationPolicy.DEFAULT,
+                    visible,
+                    preference.is_(None),
+                    ~selected_name,
+                ),
+            ),
         ),
     )
 
@@ -376,20 +410,42 @@ def add_new_skill__no_commit(
     return skill
 
 
+def _lock_user_skill_preferences(user_id: UUID, db_session: Session) -> None:
+    # Serialize preference changes without blocking foreign-key reads from sharing.
+    db_session.execute(
+        select(User.__table__.c.id)
+        .where(User.__table__.c.id == user_id)
+        .with_for_update(key_share=True)
+    )
+
+
 def enable_new_skill_if_name_available__no_commit(
     skill: Skill,
     user_id: UUID,
     db_session: Session,
 ) -> bool:
+    """Enable a newly inserted skill under the same user lock as toggles."""
+    _lock_user_skill_preferences(user_id, db_session)
+    user = db_session.get(User, user_id)
+    if user is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found.")
+    if skill.installation_policy == SkillInstallationPolicy.REQUIRED:
+        return True
+    if (
+        db_session.scalar(
+            select(Skill.id).where(
+                Skill.name == skill.name,
+                Skill.id != skill.id,
+                _is_enabled_for_user(user),
+            )
+        )
+        is not None
+    ):
+        return False
     inserted_user_id = db_session.scalar(
         insert(UserSkillPreference)
-        .values(user_id=user_id, skill_id=skill.id, name=skill.name)
-        .on_conflict_do_nothing(
-            index_elements=[
-                UserSkillPreference.user_id,
-                UserSkillPreference.name,
-            ]
-        )
+        .values(user_id=user_id, skill_id=skill.id, name=skill.name, enabled=True)
+        .on_conflict_do_nothing()
         .returning(UserSkillPreference.user_id)
     )
     return inserted_user_id is not None
@@ -452,6 +508,11 @@ def set_skill_public_permission(
             "Skills associated with an external app must remain visible to the "
             "organization with viewer access.",
         )
+    if public_permission is None and skill.is_custom and skill.author_user_id is None:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "Assign an owner before making this skill private.",
+        )
     skill.public_permission = public_permission
     db_session.flush()
 
@@ -474,10 +535,11 @@ def skill_user_states(
         select(
             Skill.id,
             _is_enabled_for_user(user).label("enabled"),
-            func.coalesce(skill_visible_to_user(user), False).label("visible"),
+            skill_visible_to_user(user).label("visible"),
             and_(
                 Skill.built_in_skill_id.is_(None),
                 Skill.is_valid.is_not(False),
+                Skill.installation_policy != SkillInstallationPolicy.REQUIRED,
             ).label("supports_preference"),
         ).where(Skill.id.in_(requested_ids))
     )
@@ -505,6 +567,7 @@ def set_skill_enabled_for_user(
     user: User,
     db_session: Session,
 ) -> Skill:
+    _lock_user_skill_preferences(user.id, db_session)
     skill = fetch_skill(
         skill_id,
         policy=SkillManagementPolicy.VIEW,
@@ -525,40 +588,85 @@ def set_skill_enabled_for_user(
             "This skill cannot be enabled or disabled.",
         )
 
-    if not enabled:
-        db_session.execute(
-            delete(UserSkillPreference).where(
-                UserSkillPreference.user_id == user.id,
-                UserSkillPreference.skill_id == skill.id,
+    if enabled:
+        required = db_session.scalar(
+            select(Skill.id).where(
+                Skill.name == skill.name,
+                Skill.id != skill.id,
+                _is_required_for_user(user),
             )
         )
-        return skill
+        if required is not None:
+            raise OnyxError(
+                OnyxErrorCode.SKILL_NAME_CONFLICT,
+                "A required skill already uses this name.",
+            )
+        conflicts = db_session.scalars(
+            select(Skill.id).where(
+                Skill.name == skill.name,
+                Skill.id != skill.id,
+                _is_enabled_for_user(user),
+            )
+        ).all()
+        if conflicts:
+            if not replace_conflict:
+                raise OnyxError(
+                    OnyxErrorCode.SKILL_NAME_CONFLICT,
+                    f"Another skill named '{skill.name}' is already enabled.",
+                )
+            db_session.execute(
+                insert(UserSkillPreference)
+                .values(
+                    [
+                        {
+                            "user_id": user.id,
+                            "skill_id": conflict,
+                            "name": skill.name,
+                            "enabled": False,
+                        }
+                        for conflict in conflicts
+                    ]
+                )
+                .on_conflict_do_update(
+                    index_elements=[
+                        UserSkillPreference.user_id,
+                        UserSkillPreference.skill_id,
+                    ],
+                    set_={"enabled": False},
+                )
+            )
+    db_session.execute(
+        insert(UserSkillPreference)
+        .values(user_id=user.id, skill_id=skill.id, name=skill.name, enabled=enabled)
+        .on_conflict_do_update(
+            index_elements=[UserSkillPreference.user_id, UserSkillPreference.skill_id],
+            set_={"enabled": enabled},
+        )
+    )
+    return skill
 
-    preference_insert = insert(UserSkillPreference).values(
-        user_id=user.id,
-        skill_id=skill.id,
-        name=skill.name,
-    )
-    enabled_skill_id = db_session.scalar(
-        preference_insert.on_conflict_do_update(
-            index_elements=[
-                UserSkillPreference.user_id,
-                UserSkillPreference.name,
-            ],
-            set_={"skill_id": preference_insert.excluded.skill_id},
-            where=(
-                true()
-                if replace_conflict
-                else UserSkillPreference.skill_id == preference_insert.excluded.skill_id
-            ),
-        ).returning(UserSkillPreference.skill_id)
-    )
-    if enabled_skill_id is None:
+
+def set_skill_installation_policy(
+    skill: Skill,
+    policy: SkillInstallationPolicy,
+    db_session: Session,
+) -> None:
+    if policy != SkillInstallationPolicy.AVAILABLE and not skill.is_custom:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Installation policies apply only to custom skills.",
+        )
+    try:
+        with db_session.begin_nested():
+            skill.installation_policy = policy
+            db_session.flush()
+    except IntegrityError as exc:
+        if not is_unique_violation(exc, "uq_skill_automatic_name"):
+            raise
         raise OnyxError(
             OnyxErrorCode.SKILL_NAME_CONFLICT,
-            f"Another skill named '{skill.name}' is already enabled.",
-        )
-    return skill
+            "Another automatically installed skill already uses this name.",
+        ) from exc
 
 
 def _flush_shares(db_session: Session, fk_violation_detail: str) -> None:
@@ -584,6 +692,7 @@ def replace_skill_shares(
                 Skill__User(skill_id=skill.id, user_id=user_id, permission=permission)
             )
         _flush_shares(db_session, "One or more user share targets do not exist.")
+        db_session.expire(skill, ["user_shares"])
 
     if group_shares is not None:
         assert_not_shared_with_default_group(db_session, list(group_shares))
@@ -599,6 +708,7 @@ def replace_skill_shares(
                 )
             )
         _flush_shares(db_session, "One or more group share targets do not exist.")
+        db_session.expire(skill, ["group_shares"])
 
 
 def transfer_skill_ownership(

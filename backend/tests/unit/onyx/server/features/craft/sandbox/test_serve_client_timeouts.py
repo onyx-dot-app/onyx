@@ -72,6 +72,11 @@ def test_initialization_timeout_does_not_change_normal_requests(
         assert request.url.params["directory"] == directory
     assert len(normal_requests) == 4
     for request in normal_requests:
+        if request.url.path.endswith("/abort"):
+            assert request.extensions["timeout"] == dict.fromkeys(
+                ("connect", "pool", "read", "write"), 2.0
+            )
+            continue
         assert request.extensions["timeout"] == {
             "connect": connect_timeout,
             "pool": connect_timeout,

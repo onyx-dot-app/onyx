@@ -997,8 +997,8 @@ class DocumentQuery:
                 replaces the access control list filter above with the
                 cc-pair access filter.
             restricted_cc_pair_guard: Read only when the access control list
-                filter is used. Its hidden SYNC_RESTRICTED pairs are removed
-                from that filter; see _get_restricted_cc_pair_guard.
+                filter is used. Its hidden pairs are removed from that
+                filter; see _get_restricted_cc_pair_guard.
             source_types: If supplied, only documents of one of these source
                 types will be retrieved.
             tags: If supplied, only documents with an entry in their metadata
@@ -1163,9 +1163,10 @@ class DocumentQuery:
         ) -> dict[str, Any]:
             """The access control list filter cannot require a data-access
             group, so it would show a SYNC_RESTRICTED pair's chunks to anyone
-            matching the source ACL. This clause hides chunks of the pairs
-            that grant the user nothing, unless an open or ACL pair of the
-            chunk grants access.
+            matching the source ACL. It would also show the chunks of a pair
+            awaiting its first permission sync, which can still be public.
+            This clause hides chunks of the hidden pairs, unless an open or
+            ACL pair of the chunk grants access.
 
             Raises:
                 ValueError: A term list is longer than

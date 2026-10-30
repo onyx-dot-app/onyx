@@ -3,7 +3,7 @@ import time
 import traceback
 from collections.abc import Generator, Iterable
 from datetime import datetime, timedelta, timezone
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import sentry_sdk
 from celery import Celery
@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from onyx.access.access import source_should_fetch_permissions_during_indexing
 from onyx.background.indexing.checkpointing_utils import (
+    attempt_config_differs,
     check_checkpoint_size,
     get_latest_valid_checkpoint,
     save_checkpoint,
@@ -36,6 +37,7 @@ from onyx.configs.constants import (
 from onyx.connectors.capability_checks.recorder import (
     record_blocking_validation_outcome,
 )
+from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.connector_runner import ConnectorRunner
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -81,7 +83,9 @@ from onyx.db.index_attempt_metrics import (
     time_stage,
 )
 from onyx.db.indexing_coordination import IndexingCoordination
-from onyx.db.models import Connector, Credential, IndexAttempt
+from onyx.db.models import Connector, Credential, IndexAttempt, SearchSettings
+from onyx.db.port_attempt import reindex_finalizing
+from onyx.db.search_settings import get_search_settings_by_id
 from onyx.file_store.document_batch_storage import (
     DocumentBatchStorage,
     get_document_batch_storage,
@@ -101,6 +105,7 @@ from onyx.redis.redis_hierarchy import (
     get_source_node_id_from_cache,
 )
 from onyx.redis.redis_pool import get_redis_client
+from onyx.utils.fleet_telemetry import emit_stage_counter
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import (
     sanitize_document_for_postgres,
@@ -112,7 +117,51 @@ from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
 
 logger = setup_logger(propagate=False)
 
+# How often a running FUTURE attempt re-checks whether the reindex finalizes.
+_FINALIZING_RECHECK_INTERVAL_S = 60
+
 INDEXING_TRACER_NUM_PRINT_ENTRIES = 5
+
+
+def _get_run_config(attempt: IndexAttempt) -> dict[str, Any]:
+    """The connector config the attempt runs with: its override, else the
+    connector's saved config."""
+    if attempt.connector_config_override is not None:
+        return attempt.connector_config_override
+    return attempt.connector_credential_pair.connector.connector_specific_config
+
+
+def _get_backfill_window(attempt: IndexAttempt) -> tuple[datetime, datetime]:
+    if attempt.poll_range_start is None or attempt.poll_range_end is None:
+        raise RuntimeError(f"Backfill attempt {attempt.id} has no window")
+    return attempt.poll_range_start, attempt.poll_range_end
+
+
+def _get_incremental_window_start(
+    db_session: Session,
+    index_attempt: IndexAttempt,
+    search_settings: SearchSettings,
+    earliest_index_time: float,
+) -> datetime:
+    # A port-flow FUTURE's resume cursor comes from its synthetic seed
+    # (get_last_successful_... keeps ignore_synthetic_seed=False by default).
+    last_successful_index_poll_range_end = (
+        earliest_index_time
+        if index_attempt.from_beginning
+        else get_last_successful_attempt_poll_range_end(
+            cc_pair_id=index_attempt.connector_credential_pair_id,
+            earliest_index=earliest_index_time,
+            search_settings=search_settings,
+            db_session=db_session,
+        )
+    )
+
+    if last_successful_index_poll_range_end > POLL_CONNECTOR_OFFSET:
+        return datetime.fromtimestamp(
+            last_successful_index_poll_range_end, tz=timezone.utc
+        ) - timedelta(minutes=POLL_CONNECTOR_OFFSET)
+    # don't go into "negative" time if we've never indexed before
+    return datetime.fromtimestamp(0, tz=timezone.utc)
 
 
 def _get_connector_runner(
@@ -126,7 +175,9 @@ def _get_connector_runner(
     raw_file_callback: RawFileCallback | None = None,
 ) -> ConnectorRunner:
     """
-    NOTE: `start_time` and `end_time` are only used for poll connectors
+    NOTE: `start_time` and `end_time` are only used for poll and checkpointed
+    connectors. A load-state connector ignores them and fetches everything,
+    so a backfill of such a source is a full run.
 
     Returns an iterator of document batches and whether the returned documents
     are the complete list of existing documents of the connector. If the task of
@@ -142,15 +193,16 @@ def _get_connector_runner(
     credential_id = attempt.connector_credential_pair.credential.id
     connector_id = attempt.connector_credential_pair.connector.id
     source = attempt.connector_credential_pair.connector.source
-    connector_specific_config = (
-        attempt.connector_credential_pair.connector.connector_specific_config
-    )
+    connector_specific_config = _get_run_config(attempt)
+    has_config_override = attempt.connector_config_override is not None
+    is_backfill = attempt.is_backfill
 
     def _record_outcome(error: Exception | None, perm_sync_validated: bool) -> None:
         # Best-effort scribe for the validation outcome below; never raises.
         # INTEGRATION_TESTS_MODE skips the validation itself, so there is no
-        # outcome to record.
-        if INTEGRATION_TESTS_MODE:
+        # outcome to record. The pair's report describes its saved config, so
+        # a run with an override records nothing.
+        if INTEGRATION_TESTS_MODE or has_config_override:
             return
         record_blocking_validation_outcome(
             credential_id=credential_id,
@@ -168,7 +220,7 @@ def _get_connector_runner(
                 db_session=db_session,
                 source=attempt.connector_credential_pair.connector.source,
                 input_type=task,
-                connector_specific_config=attempt.connector_credential_pair.connector.connector_specific_config,
+                connector_specific_config=connector_specific_config,
                 credential=attempt.connector_credential_pair.credential,
                 raw_file_callback=raw_file_callback,
             )
@@ -204,7 +256,8 @@ def _get_connector_runner(
         # leave_connector_active=True to allow it to continue.
         # For example, if there is nightly maintenance on a Confluence Server instance,
         # the connector will fail to initialize every night.
-        if not leave_connector_active:
+        # A backfill may run a partial config, so its failure never pauses the pair.
+        if not leave_connector_active and not is_backfill:
             cc_pair = get_connector_credential_pair_from_id(
                 db_session=db_session,
                 cc_pair_id=attempt.connector_credential_pair.id,
@@ -234,13 +287,42 @@ _TimedYield = TypeVar("_TimedYield")
 _CONNECTOR_FETCH_FLUSH_EVERY = 8
 
 
+def _emit_fetch_telemetry(
+    index_attempt_id: int, item: object, duration_ms: int
+) -> None:
+    """Count the documents and the failure of one ConnectorRunner batch."""
+    if isinstance(item, tuple) and len(item) == 4:
+        docs, hierarchy, failure, _checkpoint = item
+        if docs is None and hierarchy is None and failure is None:
+            return
+        emit_stage_counter(
+            index_attempt_id,
+            "fetch",
+            {
+                "fetch_docs": len(docs) if isinstance(docs, list) else 0,
+                "fetch_errors": int(failure is not None),
+            },
+            duration_ms=duration_ms,
+        )
+
+
+def _is_fetch_batch(item: object) -> bool:
+    if not (isinstance(item, tuple) and len(item) == 4):
+        return False
+    docs, hierarchy, _failure, _checkpoint = item
+    return bool(docs) or bool(hierarchy)
+
+
 def _timed_connector_runs(
     runner_iterable: Iterable[_TimedYield],
     index_attempt_id: int,
 ) -> Generator[_TimedYield, None, None]:
     """Yield from `runner_iterable`, recording one CONNECTOR_FETCH event per
-    successful yield with the time spent inside the connector waiting for it.
+    document or hierarchy batch with the time spent inside the connector
+    waiting for it.
 
+    Failure and checkpoint-only yields are not batches: their wait time is
+    carried into the next batch, and time after the last batch is dropped.
     Time is measured between consecutive ``next()`` calls so the metric
     reflects "how slow is the source itself" rather than "how slow is each
     iteration of the docfetching loop body".
@@ -251,6 +333,7 @@ def _timed_connector_runs(
     """
     buffer = StageEventBuffer(IndexAttemptStage.CONNECTOR_FETCH, index_attempt_id)
     runner_iter = iter(runner_iterable)
+    carried_ms = 0
     try:
         while True:
             fetch_start = time.monotonic()
@@ -261,9 +344,25 @@ def _timed_connector_runs(
             except Exception:
                 # Record the partial duration of the failing fetch so the
                 # terminal error iteration isn't lost from the metric.
-                buffer.record(max(0, int((time.monotonic() - fetch_start) * 1000)))
+                failed_ms: int = carried_ms + max(
+                    0, int((time.monotonic() - fetch_start) * 1000)
+                )
+                buffer.record(failed_ms)
+                emit_stage_counter(
+                    index_attempt_id,
+                    "fetch",
+                    {"fetch_errors": 1},
+                    duration_ms=failed_ms,
+                )
                 raise
-            buffer.record(max(0, int((time.monotonic() - fetch_start) * 1000)))
+            carried_ms += max(0, int((time.monotonic() - fetch_start) * 1000))
+            if not _is_fetch_batch(item):
+                _emit_fetch_telemetry(index_attempt_id, item, 0)
+                yield item
+                continue
+            buffer.record(carried_ms)
+            _emit_fetch_telemetry(index_attempt_id, item, carried_ms)
+            carried_ms = 0
             if buffer.count >= _CONNECTOR_FETCH_FLUSH_EVERY:
                 buffer.flush()
             yield item
@@ -361,6 +460,25 @@ def _check_failure_threshold(
         )
 
 
+def mark_attempt_failed_unless_terminal(
+    index_attempt_id: int, error: Exception
+) -> None:
+    """Fail the attempt with ``error`` unless it is already terminal. The
+    watchdog's reason names only the exit code, so the real message is recorded
+    here. Best effort: the watchdog still fails the attempt if this write misses."""
+    try:
+        with get_session_with_current_tenant() as db_session:
+            mark_attempt_failed(
+                index_attempt_id,
+                db_session,
+                failure_reason=str(error) or type(error).__name__,
+                full_exception_trace="".join(traceback.format_exception(error)),
+                unless_terminal=True,
+            )
+    except Exception:
+        logger.exception("Failed to mark attempt %s as failed", index_attempt_id)
+
+
 def run_docfetching_entrypoint(
     app: Celery,
     index_attempt_id: int,
@@ -387,9 +505,7 @@ def run_docfetching_entrypoint(
             tenant_str = f" for tenant {tenant_id}"
 
         connector_name = attempt.connector_credential_pair.connector.name
-        connector_config = (
-            attempt.connector_credential_pair.connector.connector_specific_config
-        )
+        connector_config = _get_run_config(attempt)
         credential_id = attempt.connector_credential_pair.credential_id
 
     logger.info(
@@ -464,9 +580,6 @@ def connector_document_extraction(
         tenant_id,
     )
 
-    # Get batch storage (transition to IN_PROGRESS is handled by run_indexing_entrypoint)
-    batch_storage = get_document_batch_storage(cc_pair_id, index_attempt_id)
-
     # Initialize memory tracer. NOTE: won't actually do anything if
     # `INDEXING_TRACER_INTERVAL` is 0.
     memory_tracer = MemoryTracer(interval=INDEXING_TRACER_INTERVAL)
@@ -488,8 +601,18 @@ def connector_document_extraction(
         if index_attempt.search_settings is None:
             raise ValueError("Search settings must be set for indexing")
 
-        # Clear the indexing trigger if it was set, to prevent duplicate indexing attempts
-        if index_attempt.connector_credential_pair.indexing_trigger is not None:
+        # Read once: the batch tasks get it so they need no lookup per batch.
+        is_backfill = index_attempt.is_backfill
+        batch_storage = get_document_batch_storage(
+            cc_pair_id, index_attempt_id, is_backfill=is_backfill
+        )
+
+        # Clear the indexing trigger if it was set, to prevent duplicate indexing
+        # attempts. A backfill does not serve the trigger, so it leaves it set.
+        if (
+            not index_attempt.is_backfill
+            and index_attempt.connector_credential_pair.indexing_trigger is not None
+        ):
             logger.info(
                 "Clearing indexing trigger: cc_pair=%s trigger=%s",
                 index_attempt.connector_credential_pair.id,
@@ -511,13 +634,21 @@ def connector_document_extraction(
             index_attempt.connector_credential_pair.last_successful_index_time
             is not None
         )
-        # Use higher priority for first-time indexing to ensure new connectors
-        # get processed before re-indexing of existing connectors
-        docprocessing_priority = (
-            OnyxCeleryPriority.MEDIUM
-            if has_successful_attempt
-            else OnyxCeleryPriority.HIGH
+        # First-time indexing goes before refreshes of indexed connectors. While a
+        # port-flow reindex finalizes, FUTURE batches go first: the swap waits on them.
+        if not has_successful_attempt or (
+            not is_primary
+            and reindex_finalizing(db_session, index_attempt.search_settings)
+        ):
+            docprocessing_priority = OnyxCeleryPriority.HIGH
+        else:
+            docprocessing_priority = OnyxCeleryPriority.MEDIUM
+        # A FUTURE attempt that started before the last port finished re-checks
+        # while it runs, so its later batches get the finalizing boost too.
+        recheck_finalizing = (
+            not is_primary and docprocessing_priority != OnyxCeleryPriority.HIGH
         )
+        last_finalizing_check = time.monotonic()
 
         earliest_index_time = (
             db_connector.indexing_start.timestamp()
@@ -537,55 +668,67 @@ def connector_document_extraction(
             )
         )
 
-        # Set up time windows for polling. A port-flow FUTURE's resume cursor comes from its
-        # synthetic seed (get_last_successful_... keeps ignore_synthetic_seed=False by default).
-        last_successful_index_poll_range_end = (
-            earliest_index_time
-            if from_beginning
-            else get_last_successful_attempt_poll_range_end(
-                cc_pair_id=cc_pair_id,
-                earliest_index=earliest_index_time,
-                search_settings=index_attempt.search_settings,
-                db_session=db_session,
+        # A backfill resumes nothing. The query skips backfills, so a normal
+        # attempt never resumes a backfill's window or checkpoint either.
+        most_recent_attempt = (
+            None
+            if index_attempt.is_backfill
+            else next(
+                iter(
+                    get_recent_completed_attempts_for_cc_pair(
+                        cc_pair_id=cc_pair_id,
+                        search_settings_id=index_attempt.search_settings_id,
+                        db_session=db_session,
+                        limit=1,
+                    )
+                ),
+                None,
             )
         )
 
-        if last_successful_index_poll_range_end > POLL_CONNECTOR_OFFSET:
-            window_start = datetime.fromtimestamp(
-                last_successful_index_poll_range_end, tz=timezone.utc
-            ) - timedelta(minutes=POLL_CONNECTOR_OFFSET)
-        else:
-            # don't go into "negative" time if we've never indexed before
-            window_start = datetime.fromtimestamp(0, tz=timezone.utc)
-
-        most_recent_attempt = next(
-            iter(
-                get_recent_completed_attempts_for_cc_pair(
-                    cc_pair_id=cc_pair_id,
-                    search_settings_id=index_attempt.search_settings_id,
-                    db_session=db_session,
-                    limit=1,
-                )
-            ),
-            None,
+        # The hash of the config this run uses. It replaces the hash stamped at
+        # creation, because the config can change before the attempt starts.
+        connector_config_hash = compute_connector_config_hash(
+            _get_run_config(index_attempt)
         )
+        config_changed_since_last_attempt = (
+            most_recent_attempt is not None
+            and attempt_config_differs(most_recent_attempt, connector_config_hash)
+        )
+        if config_changed_since_last_attempt:
+            logger.info(
+                "Connector config changed since the last attempt; starting a fresh window and checkpoint: cc_pair=%s",
+                cc_pair_id,
+            )
 
-        # if the last attempt didn't complete cleanly, reuse the same window. This
-        # is necessary to ensure correctness with checkpointing. If we don't do this,
-        # things like new slack channels could be missed (since existing slack
-        # channels are cached as part of the checkpoint).
-        if (
-            most_recent_attempt
-            and most_recent_attempt.poll_range_end
-            and most_recent_attempt.status.should_reuse_checkpoint()
-        ):
-            window_end = most_recent_attempt.poll_range_end
+        if index_attempt.is_backfill:
+            # exactly the requested window, outside the incremental cursor
+            window_start, window_end = _get_backfill_window(index_attempt)
         else:
-            window_end = datetime.now(tz=timezone.utc)
+            window_start = _get_incremental_window_start(
+                db_session,
+                index_attempt,
+                index_attempt.search_settings,
+                earliest_index_time,
+            )
+            # if the last attempt didn't complete cleanly, reuse the same window. This
+            # is necessary to ensure correctness with checkpointing. If we don't do this,
+            # things like new slack channels could be missed (since existing slack
+            # channels are cached as part of the checkpoint).
+            if (
+                most_recent_attempt
+                and most_recent_attempt.poll_range_end
+                and most_recent_attempt.status.should_reuse_checkpoint()
+                and not config_changed_since_last_attempt
+            ):
+                window_end = most_recent_attempt.poll_range_end
+            else:
+                window_end = datetime.now(tz=timezone.utc)
 
         # set time range in db
         index_attempt.poll_range_start = window_start
         index_attempt.poll_range_end = window_end
+        index_attempt.connector_config_hash = connector_config_hash
         db_session.commit()
 
         # TODO: maybe memory tracer here
@@ -606,9 +749,17 @@ def connector_document_extraction(
         # checkpointing / failure handling
         # OR
         # if the last attempt was successful
+        # OR
+        # if the connector config changed since the last attempt
+        # OR
+        # if this is a backfill, which never resumes. Its batch storage is
+        # separate, so the cleanup leaves normal attempts' batches alone.
         with time_stage(IndexAttemptStage.CHECKPOINT_LOAD, index_attempt_id):
-            if index_attempt.from_beginning or (
-                most_recent_attempt and most_recent_attempt.status.is_successful()
+            if (
+                index_attempt.from_beginning
+                or index_attempt.is_backfill
+                or (most_recent_attempt and most_recent_attempt.status.is_successful())
+                or config_changed_since_last_attempt
             ):
                 logger.info(
                     "Cleaning up all old batches for index attempt %s before starting new run",
@@ -628,6 +779,7 @@ def connector_document_extraction(
                     window_start=window_start,
                     window_end=window_end,
                     connector=connector_runner.connector,
+                    connector_config_hash=connector_config_hash,
                 )
 
                 # checkpoint resumption OR the connector already finished.
@@ -639,18 +791,16 @@ def connector_document_extraction(
                     and most_recent_attempt.total_batches is not None
                     and not checkpoint.has_more
                 ):
-                    reissued_batch_count, completed_batches = reissue_old_batches(
+                    last_batch_num = reissue_old_batches(
                         batch_storage,
-                        index_attempt_id,
+                        db_session,
+                        index_attempt,
                         cc_pair_id,
                         tenant_id,
                         app,
-                        most_recent_attempt,
+                        most_recent_attempt.id if most_recent_attempt else None,
                         docprocessing_priority,
                     )
-                    last_batch_num = reissued_batch_count + completed_batches
-                    index_attempt.completed_batches = completed_batches
-                    db_session.commit()
                 else:
                     logger.info(
                         "Cleaning up all batches for index attempt %s before starting new run",
@@ -682,7 +832,7 @@ def connector_document_extraction(
 
         # Main extraction loop
         while checkpoint.has_more:
-            logger.info(
+            logger.debug(
                 "Running '%s' connector with checkpoint: %s",
                 db_connector.source.value,
                 checkpoint,
@@ -710,6 +860,20 @@ def connector_document_extraction(
                         index_attempt.search_settings.status,
                         index_attempt_id,
                     )
+                    if (
+                        recheck_finalizing
+                        and time.monotonic() - last_finalizing_check
+                        >= _FINALIZING_RECHECK_INTERVAL_S
+                    ):
+                        last_finalizing_check = time.monotonic()
+                        if reindex_finalizing(
+                            db_session_tmp,
+                            get_search_settings_by_id(
+                                db_session_tmp, index_attempt.search_settings_id
+                            ),
+                        ):
+                            docprocessing_priority = OnyxCeleryPriority.HIGH
+                            recheck_finalizing = False
 
                 # save record of any failures at the connector level
                 if failure is not None:
@@ -832,6 +996,10 @@ def connector_document_extraction(
                     "batch_num": batch_num,  # 0-indexed
                     "enqueue_time_ms": int(time.time() * 1000),
                 }
+                # Sent only when set, so a worker from before backfills still
+                # accepts normal batches during a rolling upgrade.
+                if is_backfill:
+                    processing_batch_data["is_backfill"] = True
 
                 # Queue document processing task
                 with time_stage(IndexAttemptStage.DOC_BATCH_ENQUEUE, index_attempt_id):
@@ -921,7 +1089,9 @@ def connector_document_extraction(
                     reason=f"{CONNECTOR_VALIDATION_ERROR_MESSAGE_PREFIX}{str(e)}",
                 )
 
-                if is_primary:
+                # A backfill may run a partial config, so its failure never
+                # marks the pair invalid.
+                if is_primary and not is_backfill:
                     if not index_attempt:
                         # should always be set by now
                         raise RuntimeError("Should never happen.")
@@ -984,31 +1154,9 @@ def connector_document_extraction(
                 )
 
         else:
-            with get_session_with_current_tenant() as db_session_temp:
-                # don't overwrite an attempt already in a terminal state for
-                # another reason (e.g. INTERRUPTED by a worker shutdown)
-                index_attempt = get_index_attempt(db_session_temp, index_attempt_id)
-                if index_attempt and index_attempt.status.is_terminal():
-                    logger.info(
-                        "Attempt %s is already terminal, skipping marking as failed.",
-                        index_attempt_id,
-                    )
-                    raise e
-
-                # PERSISTENT_INDEXING deliberately does NOT catch unhandled
-                # connector-generator exceptions: we can't isolate the failing
-                # entity from a black-box raise, and silently landing the
-                # attempt as COMPLETED_WITH_ERRORS would let the system advance
-                # past potentially-missed source data. Operators need a FAILED
-                # signal here to triage. Threshold disable + docprocessing
-                # per-batch recovery still apply.
-                mark_attempt_failed(
-                    index_attempt_id,
-                    db_session_temp,
-                    failure_reason=str(e),
-                    full_exception_trace=traceback.format_exc(),
-                )
-
+            # Even under PERSISTENT_INDEXING an unattributed raise fails the attempt:
+            # COMPLETED_WITH_ERRORS would advance past missed source data.
+            mark_attempt_failed_unless_terminal(index_attempt_id, e)
             raise e
 
     finally:
@@ -1049,50 +1197,76 @@ def cache_and_upsert_hierarchy_nodes(
 
 def reissue_old_batches(
     batch_storage: DocumentBatchStorage,
-    index_attempt_id: int,
+    db_session: Session,
+    index_attempt: IndexAttempt,
     cc_pair_id: int,
     tenant_id: str,
     app: Celery,
-    most_recent_attempt: IndexAttempt | None,
+    most_recent_attempt_id: int | None,
     priority: OnyxCeleryPriority,
-) -> tuple[int, int]:
-    # When loading from a checkpoint, we need to start new docprocessing tasks
-    # tied to the new index attempt for any batches left over in the file store
-    old_batches = batch_storage.get_all_batches_for_cc_pair()
-    batch_storage.update_old_batches_to_new_index_attempt(old_batches)
-    for batch_id in old_batches:
+) -> int:
+    """Moves the batches a previous attempt left in the file store to this
+    attempt and sends a docprocessing task for each. Returns the number for this
+    attempt's next new batch.
+
+    The previous attempt's docprocessing tasks can still run. Each one counts
+    its batch in completed_batches before it deletes the batch. So after the
+    move, a fresh read of the count covers every batch that was not moved. A
+    batch can be in both, which only leaves an unused batch number. The count
+    can also come from a later attempt than the one that stored the batches
+    (one that failed before it fetched anything), so the next number is also
+    kept above every moved batch.
+    """
+    moved_batches = batch_storage.update_old_batches_to_new_index_attempt(
+        batch_storage.get_all_batches_for_cc_pair()
+    )
+    moved_batch_nums: list[int] = []
+    for batch_id in moved_batches:
+        path_info = batch_storage.extract_path_info(batch_id)
+        if path_info is None:
+            raise RuntimeError(f"Could not extract path info from batch {batch_id}")
+        moved_batch_nums.append(path_info.batch_num)
+
+    old_completed_batches = (
+        IndexingCoordination.get_completed_batches(db_session, most_recent_attempt_id)
+        if most_recent_attempt_id is not None
+        else 0
+    )
+    next_batch_num = max(
+        [old_completed_batches + len(moved_batch_nums)]
+        + [batch_num + 1 for batch_num in moved_batch_nums]
+    )
+    # Completion needs completed_batches to reach the final batch number, so
+    # the batch numbers this attempt never processes count as completed. Set
+    # before the tasks go out, so their increments are not overwritten.
+    index_attempt.completed_batches = next_batch_num - len(moved_batch_nums)
+    db_session.commit()
+
+    for batch_id, batch_num in zip(moved_batches, moved_batch_nums, strict=True):
         logger.info(
             "Re-issuing docprocessing task for batch %s for index attempt %s",
             batch_id,
-            index_attempt_id,
+            index_attempt.id,
         )
-        path_info = batch_storage.extract_path_info(batch_id)
-        if path_info is None:
-            logger.warning(
-                "Could not extract path info from batch %s, skipping", batch_id
-            )
-            continue
-        if path_info.cc_pair_id != cc_pair_id:
-            raise RuntimeError(f"Batch {batch_id} is not for cc pair {cc_pair_id}")
 
         try:
             RedisDocprocessing(
-                index_attempt_id,
+                index_attempt.id,
                 get_redis_client(),
             ).incr_pending()
         except Exception:
             logger.debug(
                 "Failed to increment pending counter for attempt %s",
-                index_attempt_id,
+                index_attempt.id,
                 exc_info=True,
             )
         app.send_task(
             OnyxCeleryTask.DOCPROCESSING_TASK,
             kwargs={
-                "index_attempt_id": index_attempt_id,
+                "index_attempt_id": index_attempt.id,
                 "cc_pair_id": cc_pair_id,
                 "tenant_id": tenant_id,
-                "batch_num": path_info.batch_num,  # use same batch num as previously
+                "batch_num": batch_num,  # use same batch num as previously
                 # Use current time (not the original send time) so QUEUE_WAIT
                 # measures wait time for *this* reissue, not stale latency from
                 # the prior attempt.
@@ -1101,15 +1275,11 @@ def reissue_old_batches(
             queue=OnyxCeleryQueues.DOCPROCESSING,
             priority=priority,
         )
-    recent_batches = most_recent_attempt.completed_batches if most_recent_attempt else 0
-    # resume from the batch num of the last attempt. This should be one more
-    # than the last batch created by docfetching regardless of whether the batch
-    # is still in the filestore waiting for processing or not.
-    last_batch_num = len(old_batches) + recent_batches
+
     logger.info(
         "Starting from batch %s due to re-issued batches: %s, completed batches: %s",
-        last_batch_num,
-        old_batches,
-        recent_batches,
+        next_batch_num,
+        moved_batches,
+        old_completed_batches,
     )
-    return len(old_batches), recent_batches
+    return next_batch_num

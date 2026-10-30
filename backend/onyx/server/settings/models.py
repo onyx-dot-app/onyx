@@ -3,12 +3,17 @@ from enum import Enum
 from pydantic import BaseModel, Field
 
 from onyx.configs.app_configs import (
+    DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS,
     DEFAULT_PRUNING_FREQ,
+    DEFAULT_REFRESH_FREQ,
     DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB,
     DISABLE_VECTOR_DB,
     MAX_ALLOWED_UPLOAD_SIZE_MB,
+    MAX_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS,
+    MAX_EMBEDDING_RATE_LIMIT_REQUESTS,
 )
 from onyx.configs.constants import QueryHistoryType
+from onyx.db.enums import SupportedLanguage
 from onyx.server.features.notifications.models import NotificationResponse
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
@@ -67,6 +72,10 @@ class Settings(BaseModel):
     reasoning_override_enabled: bool | None = True
     # Model selector shows one flat list instead of per-provider groups.
     hide_provider_grouping: bool = False
+
+    # "Auto" picker item backed by the chosen router configuration.
+    model_routing_enabled: bool = False
+    model_routing_model_configuration_id: int | None = None
     auto_scroll: bool | None = False
     query_history_type: QueryHistoryType | None = None
 
@@ -75,7 +84,21 @@ class Settings(BaseModel):
 
     # Image processing settings
     image_extraction_and_analysis_enabled: bool | None = True
-    image_analysis_max_size_mb: int | None = 20
+    # Unused. Stored and returned only so that Terraform provider releases up to
+    # 0.3.0, which still send it, do not fail apply. Remove after a provider
+    # release without it.
+    image_analysis_max_size_mb: int | None = None
+
+    # Global limit on indexing embedding requests: at most this many in any
+    # window of `embedding_rate_limit_period_seconds`. None means no limit.
+    embedding_rate_limit_requests: int | None = Field(
+        default=None, gt=0, le=MAX_EMBEDDING_RATE_LIMIT_REQUESTS
+    )
+    embedding_rate_limit_period_seconds: int = Field(
+        default=DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS,
+        gt=0,
+        le=MAX_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS,
+    )
 
     # User Knowledge settings
     user_knowledge_enabled: bool | None = True
@@ -96,6 +119,9 @@ class Settings(BaseModel):
     # Workspace default for Craft access; per-user User.craft_enabled
     # overrides win. The deployment-level Craft gate still applies on top.
     craft_default_enabled: bool = True
+
+    # Workspace UI language for users without a stored User.language.
+    default_language: SupportedLanguage = SupportedLanguage.EN
 
     # Workspace-wide switch for the LLM gateway (/api/gateway — direct model
     # API access for external tools like Claude Code or Cursor). When False,
@@ -127,6 +153,8 @@ class UserSettings(Settings):
     # Deployment-level Craft availability, ignoring the per-user admin toggle.
     # Gates visibility of the admin per-user Craft controls.
     onyx_craft_available: bool = False
+    # Craft is switched on but the tier is too low: show the upgrade prompt.
+    onyx_craft_requires_upgrade: bool = False
     # Dev/debug flag: when true, the FE renders a button that streams the
     # user's sandbox pod's opencode-serve logs. Gated by the
     # ENABLE_OPENCODE_DEBUGGING env var; never set in prod.
@@ -145,6 +173,8 @@ class UserSettings(Settings):
     max_allowed_upload_size_mb: int = MAX_ALLOWED_UPLOAD_SIZE_MB
     # Factory defaults so the frontend can show a "restore default" button.
     default_pruning_freq: int = DEFAULT_PRUNING_FREQ
+    # A new connector's schedule as the create form fills it in, in seconds.
+    default_refresh_freq: int = DEFAULT_REFRESH_FREQ
     default_user_file_max_upload_size_mb: int = DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB
     default_file_token_count_threshold_k: int = Field(
         default_factory=lambda: (

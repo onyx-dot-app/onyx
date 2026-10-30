@@ -152,7 +152,9 @@ misses the main store falls back to the legacy store. The copy tool
 `python -m onyx.file_store.legacy_copy [--retire | --replay]` (`legacy_copy.py`) copies the
 objects that file records point at into the main store. After `--retire`, a marker object
 (`LEGACY_RETIRED_MARKER_KEY`) makes writes and deletes skip the legacy store. Reads still fall
-back to it.
+back to it. When the s3 backend still points at the bundled MinIO (`_runs_on_legacy_minio`, an
+upgrade whose `.env` was never switched), `app_configs.py` logs a warning at import that names
+the `.env` settings to change, so both `api_server` and the copy tool show it.
 
 `file_store.py:content_byte_size` computes the stored size at save time;
 `FILE_SIZE_MISSING_SENTINEL` (-1) marks a row whose backing object was
@@ -191,7 +193,9 @@ Synchronous, inside the request:
 Asynchronous, in `PROCESS_SINGLE_USER_FILE`
 (`tasks.py:process_user_file_impl`): loads the blob back through
 `LocalFileConnector` (`tasks.py:_load_user_file_documents`), then dispatches
-to one of the two consumption paths (§4.4).
+to one of the two consumption paths (§4.4). The loader sets the connector's
+`skip_spreadsheet_content` to False, so `SKIP_SPREADSHEET_CONTENT` never replaces
+a user file's spreadsheet content.
 
 ### 4.3 Extraction
 
@@ -200,7 +204,7 @@ dispatch by extension:
 
 | Extension | Function | Notes |
 |---|---|---|
-| `.pdf` | `read_pdf_file` (via `pdf_to_text` for text-only callers) | Runs in an isolated subprocess by default (`isolate_pdfium=True`); embedded images extracted via `pdf_image_utils.py:iter_pdf_extracted_images`. |
+| `.pdf` | `read_pdf_file` (via `pdf_to_text` for text-only callers) | Runs in an isolated subprocess by default (`isolate_pdfium=True`); embedded images extracted via `pdf_image_utils.py:iter_pdf_extracted_images`. An image failure is logged and keeps the text. |
 | `.docx` | `read_docx_file` | Embedded images via `extract_docx_images`. |
 | `.pptx` | `read_pptx_file` / `pptx_to_text` | Embedded images via `extract_pptx_images`; chart-to-markdown conversion is patched to a no-op for performance (`image_summarization.py:get_markitdown_converter`). |
 | `.xlsx` | `xlsx_sheet_extraction` / `xlsx_to_text` | Streams rows; `stage_xlsx_sheets` materializes large tabular sections to a staged file rather than holding them in memory. |
@@ -307,9 +311,10 @@ Computed **at upload time**, before any chat turn runs:
 `projects_file_utils.py:categorize_uploaded_files` resolves a tokenizer via
 `natural_language_processing/utils.py:get_tokenizer(model_name, provider_type)`
 from the workspace's default LLM model
-(`db/llm.py:fetch_default_llm_model`), falling back to
-`_get_default_tokenizer()` (`HuggingFaceTokenizer(DOCUMENT_ENCODER_MODEL)`)
-when the provider type is unrecognized. Text/document files are counted with
+(`db/llm.py:fetch_default_model(..., LLMModelFlowType.CHAT)`), falling back to
+`_get_default_tokenizer()` (`HuggingFaceTokenizer(DEFAULT_TOKENIZER_MODEL)`:
+the `DOCUMENT_ENCODER_MODEL` env var, else nomic, whose tokenizer the API image
+bakes) when the provider type is unrecognized. Text/document files are counted with
 `natural_language_processing/utils.py:count_tokens` against the extracted
 text. Images are **not** tokenized against real content; their count is a
 heuristic, `projects_file_utils.py:estimate_image_tokens_for_upload`, which
@@ -406,6 +411,19 @@ access-control consequence of this.
 
 ---
 
+### Checkpoint file snapshots
+
+`backend/onyx/tools/file_snapshot.py` captures files for later execution restoration.
+`SavedChatFile` keeps a stored file ID without reading its bytes.
+Inline snapshots encode binary content as base64 for JSON round trips.
+`SavedContextFiles` preserves context metadata and restores image bytes lazily from the file store.
+`ChatSearchResult` in `chat/models.py` uses these snapshots for staged files.
+Existing tools can still construct eager files without an ID.
+
+These values do not authorize file access or persist new blobs.
+Application integration must authorize references and store large files before publishing a checkpoint.
+The current chat engines do not use checkpoint restoration yet.
+
 ## 5. Contracts and invariants
 
 1. **A file read must be authorized against the acting user.**
@@ -464,6 +482,10 @@ access-control consequence of this.
    `save_file` call, or the new write silently overwrites the renamed object
    still referenced by the old key. The Postgres backend is safe: it moves the
    `FileContent` row to the new id, so a reused id makes a new large object.
+   `change_file_id` and `delete_file` lock the `FileRecord` row, so a rename
+   and a delete of the same file run one after the other. `delete_file` removes
+   the object only after it deletes the row. `change_file_id` returns `False`
+   when the record is already gone.
 
 ---
 

@@ -2,6 +2,8 @@ import type { ErrorResponseBody } from "@/lib/fetcher";
 import type { Settings } from "@/lib/settings/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
+  CCPairAccessMode,
+  CCPairIdsBackfillStatus,
   EmbeddingModelSpec,
   EmbeddingProviderName,
   ReindexErrorRow,
@@ -11,6 +13,11 @@ import {
   type VertexEmbeddingConfig,
 } from "@/lib/searchSettings/types";
 import { isCloudBased } from "@/lib/searchSettings";
+
+/** Mirrors backend `TestEmbeddingResponse`. */
+interface TestEmbeddingResponse {
+  dimension: number;
+}
 
 interface TestEmbeddingArgs {
   provider_type: string;
@@ -31,9 +38,6 @@ export async function testEmbedding({
   deploymentName,
   vertexConfig,
 }: TestEmbeddingArgs) {
-  const testModelName =
-    provider_type === "openai" ? "text-embedding-3-small" : modelName;
-
   return await fetch("/api/admin/embedding/test-embedding", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -41,7 +45,7 @@ export async function testEmbedding({
       provider_type: provider_type,
       api_key: apiKey,
       api_url: apiUrl,
-      model_name: testModelName,
+      model_name: modelName,
       api_version: apiVersion,
       deployment_name: deploymentName,
       vertex_config: vertexConfig,
@@ -57,26 +61,34 @@ export async function testEmbedding({
  * `apiVersion` and `deploymentName` are Azure-specific — backend's
  * `CloudEmbeddingProviderCreationRequest` accepts them as optional, and
  * non-Azure providers should pass `null`.
+ *
+ * Returns the vector length of the test embedding, or `null` when no test ran.
+ * `alwaysTest` runs the test even when the stored key is kept, for providers
+ * whose model is free text (Bifrost). The test embeds with `modelName`, which
+ * must not be empty.
  */
 export async function connectEmbeddingProvider({
   providerType,
   apiKey,
   apiUrl,
-  modelName = "",
+  modelName,
   apiVersion,
   deploymentName,
   vertexConfig,
+  alwaysTest = false,
 }: {
   providerType: string;
   apiKey: string | null;
   apiUrl: string;
-  modelName?: string;
+  modelName: string;
   apiVersion: string | null;
   deploymentName: string | null;
   vertexConfig?: VertexEmbeddingConfig | null;
-}): Promise<void> {
+  alwaysTest?: boolean;
+}): Promise<number | null> {
   const useWorkloadIdentity = vertexConfig?.auth_method === "workload_identity";
-  if (apiKey !== null || vertexConfig != null) {
+  let dimension: number | null = null;
+  if (alwaysTest || apiKey !== null || vertexConfig != null) {
     const testResponse = await testEmbedding({
       provider_type: providerType,
       modelName,
@@ -91,6 +103,8 @@ export async function connectEmbeddingProvider({
       const err: ErrorResponseBody = await testResponse.json();
       throw new Error(err.detail ?? "Embedding test failed");
     }
+    const result: TestEmbeddingResponse = await testResponse.json();
+    dimension = result.dimension;
   }
 
   // A null input preserves the stored key, except when switching to Workload
@@ -119,6 +133,7 @@ export async function connectEmbeddingProvider({
     const err: ErrorResponseBody = await saveResponse.json();
     throw new Error(err.detail ?? "Failed to save provider");
   }
+  return dimension;
 }
 
 /**
@@ -212,9 +227,10 @@ export async function setNewSearchSettings({
   acknowledgedWontPortCcPairIds,
 }: SetNewSearchSettingsArgs): Promise<Response> {
   // The backend's EmbeddingProvider enum only contains cloud providers
-  // (openai/cohere/voyage/google/litellm/azure). Self-hosted models live
-  // under the frontend's EmbeddingProviderName for UI grouping (icon,
-  // docs link), but the backend expects provider_type=null for them.
+  // (openai/cohere/voyage/google/litellm/azure/bifrost/openai_compatible).
+  // Self-hosted models live under the frontend's EmbeddingProviderName for UI
+  // grouping (icon, docs link), but the backend expects provider_type=null
+  // for them.
   const providerType = isCloudBased(providerName) ? providerName : null;
 
   return await fetch("/api/search-settings/set-new-search-settings", {
@@ -223,6 +239,7 @@ export async function setNewSearchSettings({
     body: JSON.stringify({
       model_name: model.modelName,
       model_dim: model.modelDim,
+      reduced_dimension: model.reducedDimension ?? null,
       normalize: model.normalize,
       query_prefix: model.queryPrefix,
       passage_prefix: model.passagePrefix,
@@ -241,8 +258,9 @@ export async function setNewSearchSettings({
 }
 
 /**
- * Switches the Contextual Retrieval LLM on the current index. Contextual
- * Retrieval must already be enabled; all other settings must stay unchanged.
+ * Changes Contextual Retrieval on the current index without a re-index: on
+ * with a model, a different model, or off. All other settings must stay
+ * unchanged.
  */
 export async function updateInferenceSettings(
   settings: SavedSearchSettings
@@ -252,4 +270,20 @@ export async function updateInferenceSettings(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(settings),
   });
+}
+
+/** Sets the search access mode. Returns the updated backfill status. */
+export async function updateCCPairAccessMode(
+  mode: CCPairAccessMode
+): Promise<CCPairIdsBackfillStatus> {
+  const response = await fetch("/api/search-settings/cc-pair-access-mode", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mode }),
+  });
+  if (!response.ok) {
+    const err: ErrorResponseBody = await response.json();
+    throw new Error(err.detail ?? "Failed to update the search access mode");
+  }
+  return response.json();
 }

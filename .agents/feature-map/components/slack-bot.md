@@ -85,6 +85,10 @@ tenants via a Redis lock (`OnyxRedisLocks.SLACK_BOT_LOCK`,
 `config.py:TENANT_LOCK_EXPIRATION` = 1800s) so exactly one pod owns a tenant's
 Slack bots at a time, up to `MAX_TENANTS_PER_POD` (default 50).
 
+The `__main__` block starts the process's fleet telemetry sender
+(`utils/fleet_telemetry.py:start_telemetry`) before it creates the
+`SlackbotHandler` and its message-processing threads.
+
 ### Environment configuration (`backend/onyx/configs/onyxbot_configs.py`)
 
 | Variable | Default | Effect |
@@ -245,10 +249,14 @@ message.
 never issues an HTTP request to `POST /chat/send-chat-message`
 (`chat_backend.py:handle_send_chat_message`), so it never goes through that
 endpoint's FastAPI `Depends` chain. See §5 and §9 for what that skips.
+Because `handle_stream_message_objects` carries
+`utils/fleet_query_telemetry.py:telemetry_chat`, each Slack answer also queues a
+fleet `query` event with the channel `slack` (from `MessageOrigin.SLACKBOT`) on the
+listener's sender.
 
 It passes
 `slack_context=message_info.slack_context` (drives federated Slack search,
-[[internal-search]], `_should_enable_slack_search`,
+[[internal-search]], `execution.py:create_chat_agent`,
 `context/search/federated/slack_search.py`) and
 `additional_context=slack_context_str` (prior thread messages, formatted by
 `build_slack_context_str`, injected as extra LLM context, never persisted to the
@@ -283,6 +291,10 @@ the clicking user, re-resolving the persona through that user's own access via
 `{WEB_DOMAIN}/chat?chatId=...`. Both DB functions read the source Slack chat
 session with `user_id=None` / `skip_permission_check=True`, since the reader at
 that point is not the message's original asker.
+
+The copy retains displayed answers and final thinking, without tool execution history.
+SDK sources read thinking from response items; legacy sources read the existing thinking column.
+The copied messages use the legacy display format, with no execution records or provider signatures.
 
 ---
 
@@ -356,6 +368,8 @@ that point is not the message's original asker.
   `ChatSession`/`ChatMessage` rows via the same tables `save_chat_turn` writes.
 - [[rate-and-usage-limits]]: `check_token_rate_limits(usage_user)` runs
   before each answer; see §9 for why it must be called inline.
+- [[observability]]: the fleet telemetry sender that `listener.py` starts (§2),
+  which carries the Slack answers' query events.
 
 **Depended on by**
 - [[chat-persistence]]: seeded web sessions from
@@ -366,7 +380,7 @@ that point is not the message's original asker.
 **Distinct from (do not conflate)**
 - Slack as a **search source**: `backend/onyx/context/search/federated/slack_search.py`
   lets the chat loop's search tool query live Slack messages/channels as a
-  retrieval source, gated by `_should_enable_slack_search` and
+  retrieval source, gated by `execution.py:create_chat_agent` and
   `SearchTool`'s `slack_context`. This runs for *any* chat turn (web, API, or Slack bot) whose
   persona/filters select the Slack source, and requires a **federated Slack
   connector**, a separate config from `SlackBot`/`SlackChannelConfig`. The Slack
@@ -476,7 +490,7 @@ See `backend/AGENTS.md` for required env and secrets.
   document, is posted into the Slack thread on failure unless an operator
   explicitly sets it to `"false"`.
 - **`respond_member_group_list` is a single allowlist doing two jobs.** It gates
-  who can invoke the bot at all (before telemetry, before user provisioning) and
+  who can invoke the bot at all (before answer processing, before user provisioning) and
   also scopes who sees the ephemeral response. Configuring it wrong (e.g. an
   admin expecting it to only affect visibility) silences the bot for everyone
   else in the channel, including tags and DMs.
@@ -495,3 +509,6 @@ See `backend/AGENTS.md` for required env and secrets.
   standard answer can be given again in a different Slack thread even if a user
   already saw it elsewhere, because `used_standard_answer_ids` is computed from
   `get_chat_sessions_by_slack_thread_id` for the current thread only.
+
+Slack's collected answer retains all root response text sections and their citations,
+including text separated by tool execution. Child-agent packets are not part of that answer.

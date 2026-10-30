@@ -5,9 +5,15 @@ import httpx
 import pytest
 
 from onyx.connectors.models import InputType
+from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.server.documents.models import DocumentSource
+from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.connector import ConnectorManager
+from tests.integration.common_utils.managers.index_attempt import (
+    IndexAttemptManager,
+)
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -171,3 +177,37 @@ def test_connector_creation_rejects_invalid_config(reset: None) -> None:  # noqa
 
     assert exc_info.value.response.status_code == 400
     assert "mock_server_port" in exc_info.value.response.text
+
+
+def test_mock_credential_connector_created_paused(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+) -> None:
+    response = client.post(
+        f"{API_SERVER_URL}/manage/admin/connector-with-mock-credential",
+        params={"paused": True},
+        json={
+            "name": "paused-file-connector",
+            "source": DocumentSource.FILE.value,
+            "input_type": InputType.LOAD_STATE.value,
+            "connector_specific_config": {"file_locations": []},
+            "refresh_freq": None,
+            "prune_freq": None,
+            "indexing_start": None,
+            "access_type": "public",
+            "groups": [],
+        },
+        headers=admin_user.headers,
+    )
+    response.raise_for_status()
+    cc_pair_id: int = response.json()["data"]
+
+    cc_pair_info = CCPairManager.get_single(
+        cc_pair_id, user_performing_action=admin_user
+    )
+    assert cc_pair_info
+    assert cc_pair_info.status == ConnectorCredentialPairStatus.PAUSED
+    attempts = IndexAttemptManager.get_index_attempt_page(
+        cc_pair_id=cc_pair_id, user_performing_action=admin_user
+    )
+    assert attempts.total_items == 0

@@ -260,6 +260,14 @@ def passes_global_filters(model: CatalogModel, rules: CurationRules, now: date) 
     return True
 
 
+def matches_rule(rule: FamilyRule, model: CatalogModel) -> bool:
+    return (
+        model.id.startswith(rule.vendor_prefix)
+        and re.search(rule.include_regex, model.id) is not None
+        and not (rule.exclude_regex and re.search(rule.exclude_regex, model.id))
+    )
+
+
 def select_for_rule(
     rule: FamilyRule,
     catalog: list[CatalogModel],
@@ -269,10 +277,7 @@ def select_for_rule(
     candidates = [
         model
         for model in catalog
-        if model.id.startswith(rule.vendor_prefix)
-        and re.search(rule.include_regex, model.id)
-        and not (rule.exclude_regex and re.search(rule.exclude_regex, model.id))
-        and passes_global_filters(model, rules, now)
+        if matches_rule(rule, model) and passes_global_filters(model, rules, now)
     ]
     if not candidates:
         return None

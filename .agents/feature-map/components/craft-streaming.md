@@ -18,11 +18,9 @@
 `web/src/app/craft/hooks/useBuildStreaming.ts`, `utils/parsePacket.ts`,
 `utils/subagentRouting.ts`, `services/apiServices.ts`
 
-**Read first:** `docs/craft/features/streaming/opencode-serve-client.md` for the
-client's design intent, and `docs/craft/issues/opencode-serve-event-stream-pitfalls.md`
-for three real bugs this layer had to fix. Both are still accurate: **most of
-`docs/craft/features/streaming/` describes history, not present behaviour**
-(see §9).
+**Read first:** the module docstring of `sandbox/opencode/serve_client.py`. It
+lists the event-stream rules that the translator must keep, and the bug that
+each rule prevents.
 
 ---
 
@@ -37,9 +35,32 @@ background and continues rendering it live; it does not lose the turn, but it
 also does not replay, byte-for-byte, whatever the client missed while
 disconnected (see §5, §9).
 
+Connected app setup cards link to **App permissions**. This opens Tools > Approval settings in plugin details, without delaying authentication.
+New attachments restore pending connection cards from the session's cache index.
+The pending record includes the card data and expires with the permission wait.
+The index lasts at least as long as its longest-lived pending request.
+Turn cleanup removes only that turn's requests, including when the user stops it.
+Resolved and expired requests are excluded. Request IDs deduplicate restored and live announcements.
+The editor covers external apps and MCP servers. Workspace-disabled actions
+remain visible and locked. Task editors use the same action rows with
+independent saved choices.
+
+Approval cards keep **Approve once**, **Approve for session**, and **Reject**.
+All three call the approval decision endpoint. The session polls lightweight
+approval status every ten seconds. Status changes refresh the history. The history
+contains live requests and recent outcomes. Completed requests become compact,
+neutral tool rows with details collapsed. Expired requests state that the action
+did not run; only pending requests keep the attention border and decision buttons.
+Approval cards use the server live status to show expiry. Device clock differences cannot block decisions.
+The displayed approval deadline comes from the server; a browser does not own the wait.
+
 The Working group shows the tool-call count without a failed-count badge.
 Its tool details start collapsed, including failures; users can expand each call
 to read its output.
+An active turn keeps the existing flashing cursor visible, including after refresh during a quiet tool call.
+Streaming text owns its cursor; the message list adds one only when no text cursor is active.
+Failed active-turn reads use session-load recovery instead of treating the turn as idle.
+Typing and submission remain disabled until recovery succeeds.
 
 A sub-agent ("task" tool) has a separate sub-agent view (`SubagentView.tsx`).
 That view shows the sub-agent's own thinking and tool calls live while the
@@ -69,7 +90,7 @@ subscriber queue off the same `PodEventBus` (§4.2); neither is authoritative.
 
 | Variable | Default | Effect |
 |---|---|---|
-| `SSE_KEEPALIVE_INTERVAL` | 15s | Cadence of `SSEKeepalive` markers on every stream in this component. |
+| `SSE_KEEPALIVE_INTERVAL` | 15s | Default keepalive cadence. Interactive browser attachments use 1s to detect completion missed during attachment. |
 | `OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS` | derived from `SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS` | Renewed by turn activity. It aborts a silent prompt step after this long. The runner re-prompts up to `MAX_TIMEOUT_CONTINUATIONS` (2) times before it fails the turn (`interactive_turns/executor.py`). |
 | `OPENCODE_SERVE_CONNECT_TIMEOUT` / `_REQUEST_TIMEOUT` / `_EVENT_READ_TIMEOUT` | 5s / 30s / 60s | HTTP timeouts from the API server to the in-pod `opencode serve` process. |
 | `OPENCODE_SERVE_SESSION_INIT_TIMEOUT` | 90s | HTTP read/write timeout for `ensure_session` lookup and creation, which can initialize a cold directory. Ordinary requests use 30s. |
@@ -188,8 +209,8 @@ so at most one runner drives a turn), wakes the sandbox if needed
 
 The browser never talks to this thread directly. It calls
 `GET /sessions/{id}/turns/{turn_id}/events`
-(`interactive_turns/api.py:get_interactive_turn_events`), which polls
-`get_active_turn`/`get_turn` until the turn is active and the sandbox is up,
+(`interactive_turns/api.py:get_interactive_turn_events`), which checks
+the owned turn until the sandbox is ready,
 then calls `SessionManager.subscribe_to_existing_session_events`
 (`session/manager.py:subscribe_to_existing_session_events`), which subscribes
 to the **same** `PodEventBus` by `opencode_session_id`. If the runner looks
@@ -197,13 +218,26 @@ dead (`RUNNER_STALE_AFTER_SECONDS` since its last heartbeat), the attach
 endpoint restarts it (`maybe_start_runner`) rather than waiting for it
 forever.
 
-`POST /sessions/{id}/interrupt` sets a fence the runner's
+The interactive endpoint withholds the agent's `prompt_response` or `error` terminator.
+It closes its live subscription, then checks the existing turn cache every 200ms for up to 30 seconds.
+After finalization, it sends `turn_completed` with the turn ID, session ID, index, status, and error detail.
+The runner captures outputs before it records the terminal state.
+A late attachment to an owned terminal turn receives the same completion packet immediately.
+An idle attachment checks the saved state each second if it missed the agent's terminal packet.
+Timeouts and early stream closure leave recovery to the existing reconnect and status-read paths.
+
+The browser uses `turn_completed` to fetch saved messages and output cards without initial completion polling.
+It still checks for a successor after reading history, so another browser's new turn remains active.
+The visible response remains active until history reconciliation finishes.
+Scheduled runs retain their existing terminal packets and status checks.
+
+`POST /sessions/{id}/interrupt` accepts an optional `turn_id` and sets a turn-scoped fence the runner's
 `interrupt_requested()` closure polls; the runner aborts the opencode turn
 and finishes with `CANCELLED`.
 
 ### 4.4 The packet vocabulary
 
-Two families of packets travel over the wire, both serialized by
+Sandbox events and Onyx packets travel over the wire, serialized by
 `event_to_sse` (`session/streaming.py:event_to_sse`) as
 `event: message\ndata: {...}\n\n` with a `type` discriminator field. **Neither
 is chat's `Packet`/`Placement`.** There is no `placement` field at all; routing
@@ -222,13 +256,16 @@ through the single wrapper `sandbox/event_schema.py`, historically called
 | `ToolCallProgress` (`tool_call_progress`) | Tool status/result update. Persisted on `completed`/`failed` (every update for `todowrite`). |
 | `AgentPlanUpdate` (`agent_plan_update`) | The agent's todo/plan list. Upserted, one row per turn. |
 | `CurrentModeUpdate` (`current_mode_update`) | Agent mode changed. |
-| `PromptResponse` (`prompt_response`) | Turn ended. Terminal for the stream; carries `stopReason` (`"end_turn"`, `"cancelled"`, …). |
+| `PromptResponse` (`prompt_response`) | Agent stopped; carries `stopReason` (`"end_turn"`, `"cancelled"`, …). Interactive attachments replace this with committed completion; scheduled streams forward it. |
 | `Error` (`error`) | opencode reported a turn-terminating failure. Carries a negative `code` sentinel: `TURN_ERROR_CODE_SESSION`, `_TIMEOUT`, `_TRANSPORT` (`event_schema.py`). |
 | `ActivityTimeoutError` | Subtype of `Error` for a recoverable inactivity timeout (retry by re-prompting), distinguished by Python type, not `code`. |
 
 **Onyx-defined packets** (`packets.py:BuildPacket`, a `Union`, not a
 discriminated Pydantic union enforced at the type level the way chat's
 `PacketObj` is):
+
+Interactive attachments also serialize `InteractiveTurnCompletedPacket` from `interactive_turns/models.py` directly.
+Its `turn_completed` type carries a terminal status: `SUCCEEDED`, `FAILED`, or `CANCELLED`.
 
 | Type | Meaning |
 |---|---|
@@ -245,79 +282,106 @@ marker: it never reaches the browser as JSON, only as the literal SSE comment
 
 ---
 
+### Completed transcript handoff
+
+The streamed response remains visible until the server confirms completion and persisted history is available.
+`turnSettlement` owns this handoff with reconciling, failed, and ready states.
+Interactive completion and interruption use the same settlement path. Scheduled runs use their own saved run status as the completion boundary.
+Approval pauses and failed scheduled runs never release queued interactive work.
+Settlement reads turn status and messages independently of runtime discovery, artifacts, and navigation.
+Failures retain the transcript and expose a retry for that same settlement.
+The streaming hook claims ready queue work atomically, so repeated events or multiple mounted hooks cannot duplicate a send.
+A queued prompt remains in the queue until the server accepts its turn.
+Rejected queued starts remain available for explicit retry with the same request identity. Unrelated prompt failures do not authorize queue retries.
+A clean stream close reconnects while the backend turn remains active. A successor turn replaces the old completion owner.
+Stopping a pending start keeps cancellation intent until the accepted turn can be interrupted.
+Earlier session instances and turns cannot publish settlement results.
+Session metadata and artifacts may finish after a newer turn starts without replacing its transcript or status.
+
 ### Output inventory and panel navigation
+
+Turn-end chat cards use the server artifact index, separate from the live output inventory below.
+The browser refreshes card metadata after confirmed worker completion, alongside transcript loading, not the raw completion packet.
+Card refresh failures are logged and do not block transcript loading.
+Recovery settlement checks run every 250ms for the first second, then every second within the bounded retry window.
+Each card belongs to the latest indexed producing turn and opens the current resource.
+Three cards appear inline; the overflow action opens Outputs filtered to that turn.
+Unread dots compare artifact version with the owner’s saved viewed revision.
+The open output panel acknowledges the active file revision, even if its preview cannot render.
+Updates to that active file are acknowledged while the runtime is ready. Hidden file tabs do not acknowledge updates.
+App card clicks acknowledge the captured revision. This records user acknowledgement, not successful content delivery.
+Mark all viewed applies to the current Outputs scope, including folder descendants, and preserves newer revisions.
+Opening the overview or loading a thumbnail does not mark an output viewed.
+Live inventory determines file availability when a saved card still records a prior deletion.
+Turn collections retain saved cards when a complete live inventory confirms that their files are missing.
+These cards appear unavailable even when the saved deletion flag is stale.
+Outputs filters survive welcome workspace claim. Folder unread markers follow the selected turn scope.
+Reload retrieves card metadata without reconstructing attribution from sandbox files.
+See [[craft-sessions]] §4.7 for capture and persistence boundaries.
 
 The frontend keeps a temporary output inventory in each Zustand session.
 `useBuildSessionStore.ts:refreshOutputInventory` reads one flat response from
 `GET /build/sessions/{id}/outputs`. Each file has a path, size, and opaque revision.
-Artifacts derives its folder tree from this same inventory without directory requests.
-It shows loading, failed, and incomplete reads separately from complete empty results.
-Partial first reads can display known files but cannot establish a discovery baseline.
-Activating Artifacts reconciles the inventory; only idle sessions use a silent refresh.
-The browser does not walk output directories.
-Session loading and pre-provisioning fetch the inventory in the background.
-Messages send immediately, using the last successful inventory for discovery.
-Neither message submission nor turn completion waits for inventory reads.
-The first complete response establishes a silent baseline, even if a task has already created files.
-Those files appear in Artifacts but do not automatically open. Later discoveries can open normally.
-Partial initial reads cannot establish the baseline.
-Idle cached sessions reconcile revisions on entry and focus without adding tabs or changing selection.
-Reloading the page discards the inventory; nothing is written to the database or local storage.
+The Files resource tab browses the accessible session workspace through directory requests.
+Its search walks accessible directory listings without fetching file contents.
+Session loading and pre-provisioning fetch the output inventory in the background.
+Messages submit immediately; neither submission nor turn completion waits for inventory reads.
+Complete inventories replace known files. Partial reads merge their results and preserve unscanned files.
+Idle cached sessions reconcile revisions on entry and focus without changing resource tabs or selection.
+Reload reconstructs live inventory. Browser metadata snapshots provide display hints until validation; see [[craft-webapp-proxy]] §4.
 Reads allow 35 seconds per attempt, covering the backend's 30-second RPC deadline and HTTP overhead.
-Failed reads retry twice, after one and two seconds. Retries retain their original turn and selection rules.
-An incomplete scan preserves known entries and waits for a later refresh to establish a complete baseline.
-This can occur when a tree exceeds scan limits or contains an unreadable directory.
+Failed reads retry twice, after one and two seconds.
+An incomplete scan preserves known entries. A later complete response can remove missing files.
 
 `useBuildSessionStore.ts:compareOutputInventory` compares paths and metadata
 revisions. Completed shell and edit tools, including child-agent tools,
 schedule a refresh. The private queue in `useBuildStreaming.ts` combines rapid
-completions and reconciles when the stream settles, even if it missed every tool packet.
-Tool completions during a read coalesce into one pending refresh.
-Settlement replaces that pending work with one final read, queued immediately.
+completions while the turn streams. Tool completions during a read coalesce into one pending refresh.
+A terminal stream observation cancels pending discovery timers.
+Canonical completion owns the final authoritative read, including recovery without a terminal packet.
+Transcript reconciliation cancels earlier inventory reads. Passive reads defer until reconciliation ends.
+Settlement starts a replacement inventory read even when it hands off to a successor turn.
+That read can update file availability, but the predecessor cannot open or select tabs for the successor.
 The store serializes all inventory reads per session, including focus and panel reads.
-A silent read cannot consume new files before pending turn discovery selects them.
+Queued reads preserve turn ordering; passive discoveries never select resources.
 An already-settled turn also triggers reconciliation when the attach returns no stream.
 Partial responses retain unseen entries. Failed responses preserve the last
 inventory. Queued reads and responses from older turns are ignored.
 Aborted queued reads do not issue a request. Completed queues are released.
 
-New previewable files add tabs. One shared transition selects the first eligible output,
-opens the panel, and locks automatic selection for the task. Files and ready webapps
-use the same interruption, dismissal, and manual-navigation checks.
-Within that batch, PowerPoint and PDF take priority over Markdown and images.
-Later files add tabs without changing the selection. This also works when the
-panel is already open. Opening, selecting, and locking the selection happen in
-one store update. Other formats update the inventory without opening a generic tab;
-helper scripts must not reveal an empty Artifacts view before the deliverable exists. Changed files
-refresh their previews without selecting a tab. Deleted files invalidate their
-previews. Each mounted viewer caches one payload for its file path, inventory
-revision, and explicit reload counter. Reload counters are per file and change only
-when the user requests a reload. The panel retains up to five recently visited tab
-bodies, preserving scroll, slide selection, and unchanged preview bytes across
-switches. Retained iframes stay in stable DOM order. Closed tabs, evicted tabs, and
-prior sessions release their viewer caches. Closing the panel releases its bodies
-after the animation. Hidden file viewers retain their displayed revision and load
-the latest revision on activation. Files without inventory revisions revalidate
-when their preview mounts or becomes active. Each successful PowerPoint conversion response gives
-slide images a fresh browser cache token; unchanged retained viewers reuse it.
-PDF activation reads without revisions reuse the displayed Blob when bytes match.
-Changed bytes replace the PDF; previews release their object URL on replacement or unmount. Presentation
-keyboard navigation stays inside the active viewer.
+Passive inventory reads never open or select tabs. During a task, newly created previewable files open tabs after a complete baseline.
+The first eligible output can select a tab once per task. File and ready-webapp discovery share this selection lock.
+Manual navigation, dismissal, and restored preferences lock selection until the next task.
+App readiness requests coalesce per runtime and reject retired session, task, or sandbox results.
+Existing local app tabs are reused. The first automatic opening also retains an Outputs overview tab.
+Explicit file clicks open a file tab and use medium when the panel was closed.
+Explicit opening preserves an existing medium or full layout.
+Uploaded attachment Expand actions also open file tabs, including files without preview support.
+Expand never starts a download. The output panel provides the Download action.
+Outputs, All Files, file previews, and Browser share one ordered, closeable tab collection per session.
+File identity uses a normalized session-relative path. Browser identity remains separate from its selected app.
+Resource tabs and their active ID are the only tab-selection model.
+OutputPanelMode is the only source of panel visibility; no category adapter or stored open boolean remains.
 
-The first automatic output selection, manual tab selection, closing a tab or the panel, and
-history navigation suppress further automatic selection for the current turn.
-A single `outputSelectionLocked` flag controls this behavior independently of panel visibility.
-A new interactive turn clears the lock. Reopening the panel does not clear it.
-Scheduled runs use fresh sessions; reattaching preserves their selection lock.
-Explicit file clicks still open their preview. The inventory keeps updating while navigation
-is suppressed, so old changes do not appear as new files later.
-Selecting the current history entry preserves Back and Forward history instead of adding a duplicate entry.
+Changed revisions invalidate file previews without selecting tabs. Deleted files retain explanatory tabs.
+Viewer retention, cache invalidation, document controls, and browser snapshots belong to [[craft-webapp-proxy]] §4.
+CSV previews use the shared parser and limit display to 1,000 rows, 100 columns, and 5,000 cells.
+Malformed quoted fields show an error with a raw-download action.
+
+Tabs and layout remain independent of stream rendering. Inventory responses require the same session instance.
+Passive reads also require the captured turn; active reads can update metadata after a queued turn starts.
+Tab creation and selection always check the requesting turn. Recreated sessions reject responses from retired instances.
+
+The first accepted interactive turn starts automatic naming through the session store.
+This happens after message persistence and before view ownership checks.
+Naming survives navigation and unmount; failed submissions do not start naming.
+It does not delay stream attachment. See [[craft-sessions]] for name persistence and fallback rules.
 
 ## 5. Contracts and invariants
 
-1. **Craft does not reuse chat's `Packet`/`Placement`.** It has its own two
-   families (§4.4), no `placement` field, and no `turn_index`/`tab_index`
-   coordinate system. A reader who assumes chat's contract will look for
+1. **Craft does not reuse chat's `Packet`/`Placement`.** It has its own packet
+   vocabulary (§4.4), no `placement` field, and no chat `turn_index`/`tab_index`
+   coordinate system. Completion packets carry Craft's own turn index. A reader who assumes chat's contract will look for
    fields that do not exist here.
 2. **`event_schema.py` is the sole import point for `acp.schema`.** Nothing
    else in the tree should `from acp.schema import ...` directly (verified:
@@ -330,19 +394,20 @@ Selecting the current history entry preserves Back and Forward history instead o
    `{ type: "unknown" }` for anything it does not recognize, mirroring
    `findRenderer`'s `null` in [[streaming-protocol]]. Adding a packet type here
    needs a `parsePacket.ts` case or it renders as nothing.
-4. **A successful turn ends on `session.idle` / `session.status:{type:idle}`. An error
-   can end it earlier.** `message.updated` with `info.error` and `session.error` both
+4. **Agent execution ends on `session.idle` / `session.status:{type:idle}`. An error
+   can end it earlier.** Interactive browser completion waits for the runner's saved terminal state (§4.3).
+   `message.updated` with `info.error` and `session.error` both
    emit an `Error` terminator. `message.updated` fires once per inner opencode step, not once per
    turn; treating it as a terminator drops every step after the first (see
-   `docs/craft/issues/opencode-serve-event-stream-pitfalls.md` §1). This is
+   the `serve_client.py` module docstring, rule 1). This is
    fixed in `translate_opencode_event`, not a live risk, but any new
    consumer of the opencode event stream must respect it.
 5. **Tagged-union payloads (`session.status`) are inspected by `.type`, not by
-   string equality on the outer field**, per the same pitfalls doc §2.
+   string equality on the outer field** (module docstring, rule 2).
 6. **Content deltas can arrive before their message's role is known.**
    `_is_assistant_message` (`serve_client.py`) hydrates unknown message ids via
    a synchronous `GET /session/{id}/message/{id}` rather than buffering and
-   hoping metadata arrives later (pitfalls doc §3). A new content-classifying
+   hoping metadata arrives later (module docstring, rule 3). A new content-classifying
    code path must go through this cache-or-hydrate chokepoint, not invent its
    own buffering.
 7. **The runner is the only writer of persisted turn state; the browser
@@ -359,11 +424,12 @@ Selecting the current history entry preserves Back and Forward history instead o
    [[streaming-protocol]]'s `stream_buffer.py`, nothing compresses and stores
    every SSE line Craft emits. A client that attaches after missing events
    gets an empty per-subscriber queue (bounded, `maxsize=500`, per
-   `_Subscription`). It receives only events the turn emits after the attach. What it lost is recoverable only
+   `_Subscription`). It receives only events the turn emits after the attach. Missing conversation content is recovered
    through the **persisted** `BuildMessage` rows via
    `GET /sessions/{id}/messages`, which is a different, coarser shape (no
    `ToolCallStart`, no `CurrentModeUpdate`, no live deltas), not a replay of
-   the wire format. See §9.
+   the wire format. Pending Connect app requests are restored separately from their cache records.
+   Owned terminal turns replay only `turn_completed`, not earlier content. See §9.
 10. **There is no terminal channel.** There is no `/build/sessions/{id}/terminal` websocket, no PTY
     bridge, and no `xterm.js` integration anywhere under `web/src/app/craft/`
     (verified by grep; the only websocket route in `webapp_proxy.py` is the
@@ -434,7 +500,7 @@ cd backend && uv run pytest tests/integration -k craft
 Frontend regression tests for output discovery and panel selection:
 
 ```bash
-cd web && bun run test --runInBand useBuildStreaming.test.tsx useBuildSessionStore.outputs.test.ts
+cd web && bun run test --runInBand useBuildStreaming.test.tsx useBuildSessionStore.test.tsx
 ```
 
 `backend/tests/external_dependency_unit/craft/test_streaming_persistence.py`
@@ -442,10 +508,9 @@ exercises `persist_sandbox_event` against real sandbox-event payloads.
 
 ### Manual reproduction
 
-`docs/craft/dev/local-compose-craft.md` is the setup guide for the Docker
-sandbox backend specifically (proxy iteration); for general Craft streaming
-work against the default Kubernetes backend, follow
-`docs/craft/dev/local-kubernetes.md` instead (referenced by the compose doc).
+For local setup, see `[[craft-sandboxes]]`. Use the default Kubernetes backend
+for general streaming work. Use the Docker backend only for Docker-sandbox or
+proxy work.
 
 1. Confirm services are up: `tail -f backend/log/api_server_debug.log`.
 2. Open the browser devtools Network tab, send a Craft message, and inspect
@@ -462,34 +527,31 @@ work against the default Kubernetes backend, follow
 
 ## 9. Footguns
 
-- **`docs/craft/features/streaming/` is mostly history, not a design to
-  verify against.** `drop-acp-layer.md` states the ACP transport (`opencode
-  acp`, `ACPExecClient`/`DockerACPExecClient`, `AGENT_TRANSPORT` env var) is
-  fully deleted, and this is confirmed in code: only `event_schema.py`'s
-  wrapper, `serve_client.py`'s docstring, and a few docstrings/imports in
-  `session/{streaming,manager,api}.py` still say "acp" (as the name of the
-  PyPI wrapper module, `sandbox.event_schema`, or historical comments); there
-  is no live ACP exec-client code path left. `shared-acp-exec-client.md` and
-  `docker-opencode-serve.md` describe now-deleted machinery entirely.
-  `opencode-serve-client.md` and `preserve-opencode-sessions.md` are closer to
-  current (the latter is actively cited by `session/streaming.py`'s own
-  `_ensure_opencode_session_id`), but treat every doc under this directory as
-  something to verify against `serve_client.py`/`serve_transport.py` before
-  trusting, not as ground truth.
-- **The event stream is a hint, not the source of truth.** All three bugs in
-  `docs/craft/issues/opencode-serve-event-stream-pitfalls.md` (premature
-  per-step termination, string-vs-tagged-union comparison, racing content
-  deltas) share one lesson: when the stream is ambiguous, fall back to a REST
-  call against opencode's persisted state (`get_message`), don't invent
-  compensating stream-side logic.
-- **Deploy-time gotchas are RBAC and env-refresh, not streaming logic**
-  (`docs/craft/issues/opencode-serve-deploy-gotchas.md`): a missing `secrets`
-  RBAC verb on the sandbox namespace, Kubernetes not refreshing
-  `OPENCODE_CONFIG_CONTENT` on a live pod after a Secret update (needs a pod
-  delete), and mutable image tags serving stale content under
-  `IfNotPresent`. None of these are bugs in the translator; they surface as
-  streaming symptoms (`ProviderModelNotFoundError`, connection refused on
-  `/session`) that look like transport bugs but aren't.
+- **"ACP" names are only the schema package.** The `opencode acp` transport,
+  the ACP exec clients, and `AGENT_TRANSPORT` do not exist. "acp" remains only
+  as the `agent-client-protocol` PyPI package that `sandbox/event_schema.py`
+  re-exports. Production code imports event types from that wrapper, not from
+  `acp.schema`.
+- **The event stream is a hint, not the source of truth.** When the stream is
+  ambiguous, read opencode's REST state (`get_message`). Do not add
+  compensating stream-side logic. See the `serve_client.py` module docstring.
+- **Some deploy faults look like streaming bugs.** Check these before you
+  debug the translator:
+  - Connection refused on `POST /session`: opencode-serve has not bound
+    `:4096` yet, or it crashed. `_http_with_cold_pod_retry` retries
+    `ConnectError` a few times. It never retries `POST /session` on
+    `RemoteProtocolError`, because the server can have created the session.
+  - 401 from opencode: the Basic-auth username is `opencode`
+    (`OPENCODE_SERVER_USERNAME`), not `onyx`. The password comes from the
+    per-pod `sandbox-<id>-opencode-auth` Secret. Kubernetes reads
+    `secretKeyRef` env only at container start, so a Secret update does not
+    reach a running pod. `_request` reloads the password once on a 401.
+  - The pod runs an old sandbox image: a mutable tag with
+    `SANDBOX_IMAGE_PULL_POLICY=IfNotPresent` (the default) uses the node's
+    cached image. Use immutable tags, or set the policy to `Always`.
+  - `/event` never becomes ready: after 20 consecutive failed reconnects a
+    `PodEventBus` closes itself. `serve_transport.py` replaces a closed bus on
+    the next turn.
 - **No terminal/PTY channel exists.** An old design note that mentions one
   describes an unbuilt branch; see §5.10.
 - **The sub-agent view follows the main turn stream, with no stream of its own.**
@@ -508,3 +570,15 @@ work against the default Kubernetes backend, follow
   make the attach endpoint wait rather than force a restart; this is
   deliberate (avoids double-driving a healthy turn) but reads as latency if
   you don't know the constant.
+
+### Output and transcript recovery
+
+Webapp readiness and automatic selection belong to the session store, not the mounted chat panel.
+See §4 for selection locks and preview-cache ownership.
+
+Live text parts retain their OpenCode part ID across stream attachments. Delta packets append to that part. Authoritative snapshots replace its text in place. Text and thinking parts keep their position relative to tool events. Durable worker events retain delta text and the part ID. Persistence splits text at part or routing boundaries. Restoration combines segments of the same part before live snapshots replace them. Older saved rows without IDs retain their existing display behavior.
+
+Transport failures retain the visible transcript and reconnect while the backend owner remains active. Permanent access and missing-session failures stop observation and use session-load recovery, which blocks submission until a reload succeeds. Terminal packets, including interactive errors, reconcile saved history before clearing the turn. The last assistant block retains its cursor during reconciliation without creating another message. A failed completion read removes the cursor and shows the existing retry action. Successful completion starts an authoritative output inventory read before it permits queued work.
+
+Restored child text parts own the child transcript. Parent task completion settles those parts without inserting their combined text again.
+The parent task result supplies a fallback only when no child response was saved.

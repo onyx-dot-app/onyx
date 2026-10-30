@@ -1,0 +1,156 @@
+---
+title: "Overview"
+description: "Configure language model providers and models in Onyx"
+icon: "sliders"
+---
+
+<Note>
+  Image generation and voice are configured separately in [Image Generation](/admins/actions/image_generation)
+  and [Voice Mode](/admins/actions/voice_mode).
+</Note>
+
+## Language Models
+
+Open the **Admin Panel** and go to **Language Models**. On this page you connect providers,
+choose which models users can see, set the default model, and control model settings for the workspace.
+
+<img className="rounded-image" src="/assets/admins/ai_models/ai_config_overview.webp" alt="Language Models page overview"/>
+
+The page has these sections:
+
+- **Default Model**: the model Onyx uses for new chat sessions unless a user or agent picks another one.
+- **Available Providers**: the providers you have connected. You cannot delete the provider that owns the default model.
+- **Add Provider**, **Gateways & Routers**, and **Self-hosted & Custom**: the providers you can connect.
+
+### Provider Types
+
+<AccordionGroup>
+  <Accordion title="Add Provider: Direct Model Providers" icon="cloud">
+    These cards connect to a model vendor or cloud platform directly: **GPT** (OpenAI), **Claude** (Anthropic),
+    **Gemini** (Google Cloud Vertex AI), **Amazon Bedrock**, and **Azure OpenAI**.
+
+    For OpenAI, Anthropic, and Vertex AI, Onyx lists the recommended models and can update the list automatically.
+  </Accordion>
+
+  <Accordion title="Gateways & Routers" icon="server">
+    These providers put a routing or gateway layer in front of one or more model vendors: **OpenRouter**,
+    **LiteLLM Proxy**, **Portkey**, **Vercel AI Gateway**, **Nebius TokenFactory**, and **Bifrost**.
+
+    Onyx reads the model list from the gateway. Use these when you need central billing, routing,
+    or access to many model families from one integration point.
+  </Accordion>
+
+  <Accordion title="Self-hosted & Custom" icon="desktop">
+    Run open-weight models on your own infrastructure or local hardware with [Ollama](/admins/ai_models/ollama)
+    or [LM Studio](/admins/ai_models/lm_studio).
+
+    If your provider is not listed, connect it as an [OpenAI-Compatible](/admins/ai_models/custom_inference_provider)
+    endpoint, or as **Custom Models** for any provider that LiteLLM supports.
+  </Accordion>
+</AccordionGroup>
+
+### Choosing a Good Starting Setup
+
+<Note>
+  If cloud-hosted models are approved for your organization, they are usually the best default choice.
+  They are easier to operate and generally give the best capability-to-cost tradeoff.
+</Note>
+
+- Start with one primary provider for most users.
+- Use a recent **GPT**, **Claude**,
+  or **Gemini** family model as your default for the strongest out-of-the-box experience.
+- Use **Bedrock**, **Vertex AI**, **Azure OpenAI**, or a gateway when procurement, routing,
+  or cloud alignment matters more than a direct vendor integration.
+- Use open-weight families such as **Llama**, **Qwen**, **DeepSeek**, or **gpt-oss** if you self-host.
+- Keep the visible model list short so users choose between a few intentional options.
+
+## Configure Your Providers
+
+<Columns cols={3}>
+  <Card title="OpenAI" icon="bolt" href="/admins/ai_models/openai"/>
+
+  <Card title="Azure OpenAI" icon="microsoft" href="/admins/ai_models/azure_openai"/>
+
+  <Card title="Anthropic" icon="brain" href="/admins/ai_models/anthropic"/>
+
+  <Card title="Amazon Bedrock" icon="aws" href="/admins/ai_models/bedrock"/>
+
+  <Card title="Google Vertex AI" icon="google" href="/admins/ai_models/google_ai"/>
+
+  <Card title="OpenRouter" icon="robot" href="/admins/ai_models/openrouter"/>
+
+  <Card title="Bifrost" icon="server" href="/admins/ai_models/bifrost"/>
+
+  <Card title="Portkey" icon="server" href="/admins/ai_models/portkey"/>
+
+  <Card title="Vercel AI Gateway" icon="server" href="/admins/ai_models/vercel_ai_gateway"/>
+
+  <Card title="Nebius TokenFactory" icon="server" href="/admins/ai_models/nebius_tokenfactory"/>
+
+  <Card title="LiteLLM Proxy" icon="server" href="/admins/ai_models/litellm_proxy"/>
+
+  <Card title="Ollama" icon="robot" href="/admins/ai_models/ollama"/>
+
+  <Card title="LM Studio" icon="desktop" href="/admins/ai_models/lm_studio"/>
+
+  <Card title="OpenAI-Compatible & Custom" icon="server" href="/admins/ai_models/custom_inference_provider"/>
+</Columns>
+
+## Models
+
+Every provider dialog has a **Models** section. Use it to control what users see:
+
+- Select the models that users can pick in chat. Hidden models stay configured but do not appear in the model picker.
+- Click **Refresh models** to reload the list from a provider that publishes one.
+  Type a name and click **Add Model** to add one by hand.
+- **Auto Update** (OpenAI, Anthropic, Vertex AI) adds new models when the vendor releases them.
+- **Set as Default** makes a model the workspace **Default Model**.
+- A **Vision** marker shows that a model accepts images.
+- **Model Settings** on a model row lets you rename it, set the default and maximum reasoning level,
+  and set the default temperature. Reasoning models always run at temperature 1.
+
+## Workspace Model Settings
+
+Below the provider list, the **Language Models** page has switches that apply to every model:
+
+- **Reasoning Control**: let users change the model's reasoning level per session.
+- **Temperature Control**: let users change the model's temperature per session.
+- **Hide Provider Grouping**: show all models as one list in the chat model picker. Best with a small model set.
+- **Auto Mode**: add an **Auto** option to the model picker that picks a model for each message.
+  Select the **Router Model** that handles the routing. A router model is a routing entry on a gateway provider,
+  such as OpenRouter's `openrouter/auto`.
+  See [OpenRouter](/admins/ai_models/openrouter#auto-mode-with-the-openrouter-router).
+
+## Models Access
+
+Each provider has a **Models Access** setting:
+
+- **All Users & Agents**: every user and agent can use the provider's visible models.
+- **Named Groups & Agents**: only the groups and agents you add can use the provider. Admins can always use it.
+
+See [Language Model Access Controls](/admins/advanced_configs/llm_access_controls) for details.
+
+<Note>
+  Restricting a provider to user groups requires the Business tier or higher.
+  Agent restrictions are available in every edition.
+</Note>
+
+## Models for Other Tasks
+
+Some tasks use their own model setting instead of the default chat model:
+
+- **Chat Preferences**: set a **Chat Naming Model** for session titles and a **Search Selection Model**
+  for picking and checking retrieved documents. Both default to the chat model.
+- **Index Settings**:
+  choose the model for [Contextual Retrieval](/admins/advanced_configs/search_configs#contextual-retrieval).
+- **Image Generation** and **Voice** have their own provider pages.
+
+## LLM Gateway
+
+Onyx can also serve the models you configure here to other tools through an OpenAI- and Anthropic-compatible API.
+Users authenticate with a personal access token, and Onyx applies the same model access rules.
+Turn it on or off under **LLM Gateway** in the Admin Panel. See the [LLM Gateway guide](/developers/guides/llm_gateway).
+
+<Note>
+  The LLM Gateway requires the Business tier or higher.
+</Note>

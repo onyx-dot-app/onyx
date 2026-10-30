@@ -27,7 +27,7 @@ x-backend: &backend
 
 services:
   relational_db:
-    image: postgres:15.2-alpine
+    image: ${BASE_IMAGE_REGISTRY:-docker.io}/library/postgres:15.2-alpine
     environment:
       POSTGRES_PASSWORD: mcp-ci-postgres
     volumes:
@@ -39,7 +39,7 @@ services:
       retries: 30
 
   cache:
-    image: redis:7.4-alpine
+    image: ${BASE_IMAGE_REGISTRY:-docker.io}/library/redis:7.4-alpine
     healthcheck:
       test: [CMD, redis-cli, ping]
       interval: 2s
@@ -76,12 +76,12 @@ services:
 
   # Only satisfy nginx's web upstream; this stack does not test the consent UI.
   web_server:
-    image: nginx:1.25.5-alpine
+    image: ${BASE_IMAGE_REGISTRY:-docker.io}/library/nginx:1.25.5-alpine
     volumes:
       - ./mcp-ci-web.conf:/etc/nginx/conf.d/default.conf:ro
 
   nginx:
-    image: nginx:1.25.5-alpine
+    image: ${BASE_IMAGE_REGISTRY:-docker.io}/library/nginx:1.25.5-alpine
     command: [sh, /etc/nginx/conf.d/run-nginx.sh, app.conf.template]
     environment:
       MCP_SERVER_ENABLED: "true"

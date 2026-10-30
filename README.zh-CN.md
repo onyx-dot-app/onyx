@@ -45,7 +45,7 @@ Onyx 可连接 50 多种应用，为其中的知识建立索引并提供检索�
 > curl -fsSL https://onyx.app/install_onyx.sh | bash
 > ```
 
-![Onyx 聊天界面回答关于使用场景的问题](docs/assets/onyx-chat-use-cases.png)
+![Onyx 聊天界面回答关于使用场景的问题](.github/assets/onyx-chat-use-cases.png)
 
 ---
 
@@ -78,7 +78,7 @@ Onyx 支持所有主流 LLM 提供商，包括自托管方案（如 Ollama、Lit
 
 ## 安全与数据处理
 
-![Onyx 架构：所有组件均在你的环境中运行](docs/assets/architecture.png)
+![Onyx 架构：所有组件均在你的环境中运行](.github/assets/architecture.png)
 
 连接组织知识时，必须防止敏感的知识产权信息泄露给组织内外未经授权的人员。
 
@@ -122,7 +122,7 @@ Lite 模式是轻量级的 AI 聊天界面。它占用的资源更少（内存�
 适合希望快速试用 Onyx 界面的用户，或仅需要聊天界面和智能体功能的团队。
 
 > [!TIP]
-> **如需免费试用 Onyx 且无需部署，请访问 [Onyx Cloud](https://cloud.onyx.app/signup?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)。**
+> **如需免费试用 Onyx 且无需部署，请访问 [Onyx Cloud](https://cloud.onyx.app/auth/signup?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)。**
 
 ---
 

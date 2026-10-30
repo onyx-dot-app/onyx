@@ -72,3 +72,10 @@ def build_core_v1_api() -> client.CoreV1Api:
         backoff_factor=0.5,
     )
     return client.CoreV1Api(_DeadlinedApiClient(configuration))
+
+
+def build_runtime_api_client() -> client.ApiClient:
+    """Bound runtime calls, with retries owned by the lifecycle operation."""
+    configuration = client.Configuration.get_default_copy()
+    configuration.retries = 0
+    return _DeadlinedApiClient(configuration)

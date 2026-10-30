@@ -18,13 +18,15 @@ from ee.onyx.server.license.api import (
     refresh_license_cache_endpoint,
     upload_license,
 )
-from ee.onyx.server.license.models import LicensePayload, PlanType
+from ee.onyx.server.license.models import LicenseMetadata, LicensePayload, PlanType
 from ee.onyx.utils.license import (
     LicenseNotStoredError,
     LicenseRejectedError,
     normalize_license_file,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.settings.models import ApplicationStatus
 
 
 class TestNormalizeLicenseFile:
@@ -276,9 +278,29 @@ def downgrade_steps() -> Generator[MagicMock, None, None]:
         yield steps
 
 
+def _license_metadata(status: ApplicationStatus) -> LicenseMetadata:
+    """The gate reads only the status, so the dates are placeholders."""
+    now = datetime.now(timezone.utc)
+    return LicenseMetadata(
+        tenant_id="public",
+        seats=10,
+        used_seats=1,
+        plan_type=PlanType.ANNUAL,
+        issued_at=now,
+        expires_at=now,
+        status=status,
+    )
+
+
 class TestDowngradeToCommunity:
+    @patch(
+        "ee.onyx.server.license.api.get_license_metadata",
+        return_value=_license_metadata(ApplicationStatus.GATED_ACCESS),
+    )
     @patch("ee.onyx.server.license.api.MULTI_TENANT", False)
-    def test_the_license_goes_last(self, downgrade_steps: MagicMock) -> None:
+    def test_the_license_goes_last(
+        self, _mock_get_metadata: MagicMock, downgrade_steps: MagicMock
+    ) -> None:
         """Removed earlier, a later failure would leave an unlicensed deployment
         that still holds synced permissions and running paid features."""
         db_session = MagicMock()
@@ -304,6 +326,65 @@ class TestDowngradeToCommunity:
         with pytest.raises(OnyxError):
             downgrade_to_community(user=MagicMock(), db_session=MagicMock())
 
+        assert not downgrade_steps.mock_calls
+
+    @pytest.mark.parametrize(
+        "status",
+        [
+            ApplicationStatus.ACTIVE,
+            ApplicationStatus.PAYMENT_REMINDER,
+            ApplicationStatus.GRACE_PERIOD,
+        ],
+    )
+    @patch("ee.onyx.server.license.api.get_license_metadata")
+    @patch("ee.onyx.server.license.api.MULTI_TENANT", False)
+    def test_a_license_before_lockout_is_refused_untouched(
+        self,
+        mock_get_metadata: MagicMock,
+        status: ApplicationStatus,
+        downgrade_steps: MagicMock,
+    ) -> None:
+        """A direct call must not drop a license the UI would not offer to drop."""
+        mock_get_metadata.return_value = _license_metadata(status)
+
+        with pytest.raises(OnyxError) as exc_info:
+            downgrade_to_community(user=MagicMock(), db_session=MagicMock())
+
+        assert exc_info.value.error_code == OnyxErrorCode.CONFLICT
+        assert not downgrade_steps.mock_calls
+
+    @patch("ee.onyx.server.settings.api.has_perm_synced_cc_pairs", return_value=True)
+    @patch("ee.onyx.server.settings.api.get_session_with_current_tenant")
+    @patch("ee.onyx.server.license.api.get_license_metadata", return_value=None)
+    @patch("ee.onyx.server.license.api.MULTI_TENANT", False)
+    def test_no_license_with_perm_synced_data_downgrades(
+        self,
+        _mock_get_metadata: MagicMock,
+        _mock_session: MagicMock,
+        _mock_has_perm_synced: MagicMock,
+        downgrade_steps: MagicMock,
+    ) -> None:
+        """With no license, a perm-synced connector locks the UI, so the
+        downgrade proceeds."""
+        downgrade_to_community(user=MagicMock(), db_session=MagicMock())
+
+        downgrade_steps.db_delete_license.assert_called_once()
+
+    @patch("ee.onyx.server.settings.api.has_perm_synced_cc_pairs", return_value=False)
+    @patch("ee.onyx.server.settings.api.get_session_with_current_tenant")
+    @patch("ee.onyx.server.license.api.get_license_metadata", return_value=None)
+    @patch("ee.onyx.server.license.api.MULTI_TENANT", False)
+    def test_no_license_without_perm_synced_data_is_refused(
+        self,
+        _mock_get_metadata: MagicMock,
+        _mock_session: MagicMock,
+        _mock_has_perm_synced: MagicMock,
+        downgrade_steps: MagicMock,
+    ) -> None:
+        with pytest.raises(OnyxError) as exc_info:
+            downgrade_to_community(user=MagicMock(), db_session=MagicMock())
+
+        assert exc_info.value.error_code == OnyxErrorCode.CONFLICT
         assert not downgrade_steps.mock_calls
 
 

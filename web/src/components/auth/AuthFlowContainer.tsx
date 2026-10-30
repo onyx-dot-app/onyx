@@ -27,7 +27,6 @@ export default function AuthFlowContainer({
             className="aspect-square rounded-full overflow-hidden relative"
             style={{ height: 44 }}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               alt={t("logo.alt")}
               src={logoUrl}

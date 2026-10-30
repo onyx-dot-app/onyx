@@ -3,7 +3,7 @@
   "models": {
     "ada": {
       "cost": {
-        "input": 0.09999999999999999,
+        "input": 0.11,
         "output": 0.0
       },
       "limit": {
@@ -40,6 +40,7 @@
       "reasoning": true,
       "release_date": "2026-06-09",
       "status": "beta",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -180,37 +181,6 @@
       "temperature": false,
       "tool_call": true
     },
-    "claude-opus-4-1": {
-      "attachment": true,
-      "cost": {
-        "cache_read": 1.5,
-        "cache_write": 18.75,
-        "input": 15,
-        "output": 75
-      },
-      "family": "claude-opus",
-      "limit": {
-        "context": 200000,
-        "output": 32000
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image",
-          "pdf"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "Claude Opus 4.1",
-      "open_weights": false,
-      "reasoning": true,
-      "release_date": "2025-11-18",
-      "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
     "claude-opus-4-5": {
       "attachment": true,
       "cost": {
@@ -238,6 +208,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-11-24",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -286,6 +257,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-02-05",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -316,6 +288,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-04-16",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -364,6 +337,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-05-28",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -593,7 +567,9 @@
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "image",
+          "pdf"
         ],
         "output": [
           "text"
@@ -713,33 +689,6 @@
       "temperature": false,
       "tool_call": false
     },
-    "deepseek-r1": {
-      "attachment": false,
-      "cost": {
-        "input": 1.35,
-        "output": 5.4
-      },
-      "family": "deepseek-thinking",
-      "limit": {
-        "context": 163840,
-        "output": 163840
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "DeepSeek-R1",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2025-01-20",
-      "status": "deprecated",
-      "temperature": true,
-      "tool_call": false
-    },
     "deepseek-v3.2": {
       "attachment": false,
       "cost": {
@@ -817,7 +766,7 @@
       "release_date": "2026-04-24",
       "structured_output": true,
       "temperature": true,
-      "tool_call": false
+      "tool_call": true
     },
     "deepseek-v4-pro": {
       "attachment": false,
@@ -844,7 +793,37 @@
       "release_date": "2026-04-24",
       "structured_output": true,
       "temperature": true,
-      "tool_call": false
+      "tool_call": true
+    },
+    "deepseek-v4.1-flash": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.006,
+        "input": 0.3,
+        "output": 1.2
+      },
+      "family": "deepseek-flash",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "DeepSeek-V4.1-Flash",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-09-10",
+      "status": "beta",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
     },
     "eu/gpt-4o-mini-realtime-preview-2024-12-17": {
       "cost": {
@@ -1059,7 +1038,8 @@
       "modalities": {
         "input": [
           "text",
-          "image"
+          "image",
+          "pdf"
         ],
         "output": [
           "text"
@@ -1089,7 +1069,8 @@
       "modalities": {
         "input": [
           "text",
-          "image"
+          "image",
+          "pdf"
         ],
         "output": [
           "text"
@@ -1119,7 +1100,8 @@
       "modalities": {
         "input": [
           "text",
-          "image"
+          "image",
+          "pdf"
         ],
         "output": [
           "text"
@@ -1149,7 +1131,8 @@
       "modalities": {
         "input": [
           "text",
-          "image"
+          "image",
+          "pdf"
         ],
         "output": [
           "text"
@@ -1179,7 +1162,8 @@
       "modalities": {
         "input": [
           "text",
-          "image"
+          "image",
+          "pdf"
         ],
         "output": [
           "text"
@@ -1281,7 +1265,7 @@
     "gpt-5": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.13,
+        "cache_read": 0.125,
         "input": 1.25,
         "output": 10
       },
@@ -1294,7 +1278,8 @@
       "modalities": {
         "input": [
           "text",
-          "image"
+          "image",
+          "pdf"
         ],
         "output": [
           "text"
@@ -1309,9 +1294,9 @@
       "tool_call": true
     },
     "gpt-5-codex": {
-      "attachment": false,
+      "attachment": true,
       "cost": {
-        "cache_read": 0.13,
+        "cache_read": 0.125,
         "input": 1.25,
         "output": 10
       },
@@ -1324,7 +1309,8 @@
       "modalities": {
         "input": [
           "text",
-          "image"
+          "image",
+          "pdf"
         ],
         "output": [
           "text"
@@ -1341,7 +1327,7 @@
     "gpt-5-mini": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.03,
+        "cache_read": 0.025,
         "input": 0.25,
         "output": 2
       },
@@ -1354,7 +1340,8 @@
       "modalities": {
         "input": [
           "text",
-          "image"
+          "image",
+          "pdf"
         ],
         "output": [
           "text"
@@ -1371,7 +1358,7 @@
     "gpt-5-nano": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.01,
+        "cache_read": 0.005,
         "input": 0.05,
         "output": 0.4
       },
@@ -1384,7 +1371,8 @@
       "modalities": {
         "input": [
           "text",
-          "image"
+          "image",
+          "pdf"
         ],
         "output": [
           "text"
@@ -1413,7 +1401,8 @@
       "modalities": {
         "input": [
           "text",
-          "image"
+          "image",
+          "pdf"
         ],
         "output": [
           "text"
@@ -1445,12 +1434,10 @@
         "input": [
           "text",
           "image",
-          "audio"
+          "pdf"
         ],
         "output": [
-          "text",
-          "image",
-          "audio"
+          "text"
         ]
       },
       "mode": "chat",
@@ -1464,7 +1451,7 @@
       "tool_call": true
     },
     "gpt-5.1-codex": {
-      "attachment": false,
+      "attachment": true,
       "cost": {
         "cache_read": 0.125,
         "input": 1.25,
@@ -1480,12 +1467,10 @@
         "input": [
           "text",
           "image",
-          "audio"
+          "pdf"
         ],
         "output": [
-          "text",
-          "image",
-          "audio"
+          "text"
         ]
       },
       "mode": "responses",
@@ -1513,7 +1498,8 @@
       "modalities": {
         "input": [
           "text",
-          "image"
+          "image",
+          "pdf"
         ],
         "output": [
           "text"
@@ -1529,7 +1515,7 @@
       "tool_call": true
     },
     "gpt-5.1-codex-mini": {
-      "attachment": false,
+      "attachment": true,
       "cost": {
         "cache_read": 0.025,
         "input": 0.25,
@@ -1544,7 +1530,8 @@
       "modalities": {
         "input": [
           "text",
-          "image"
+          "image",
+          "pdf"
         ],
         "output": [
           "text"
@@ -1562,7 +1549,7 @@
     "gpt-5.2": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.125,
+        "cache_read": 0.175,
         "input": 1.75,
         "output": 14
       },
@@ -1575,7 +1562,8 @@
       "modalities": {
         "input": [
           "text",
-          "image"
+          "image",
+          "pdf"
         ],
         "output": [
           "text"
@@ -1591,7 +1579,7 @@
       "tool_call": true
     },
     "gpt-5.2-codex": {
-      "attachment": false,
+      "attachment": true,
       "cost": {
         "cache_read": 0.175,
         "input": 1.75,
@@ -1606,7 +1594,8 @@
       "modalities": {
         "input": [
           "text",
-          "image"
+          "image",
+          "pdf"
         ],
         "output": [
           "text"
@@ -1622,7 +1611,7 @@
       "tool_call": true
     },
     "gpt-5.3-codex": {
-      "attachment": false,
+      "attachment": true,
       "cost": {
         "cache_read": 0.175,
         "input": 1.75,
@@ -1637,7 +1626,8 @@
       "modalities": {
         "input": [
           "text",
-          "image"
+          "image",
+          "pdf"
         ],
         "output": [
           "text"
@@ -1797,7 +1787,8 @@
       "modalities": {
         "input": [
           "text",
-          "image"
+          "image",
+          "pdf"
         ],
         "output": [
           "text"
@@ -1916,22 +1907,22 @@
     "gpt-5.6-sol": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.5,
-        "cache_write": 6.25,
+        "cache_read": 0.4,
+        "cache_write": 5,
         "context_over_200k": {
-          "cache_read": 1,
-          "cache_write": 12.5,
-          "input": 10,
-          "output": 45
+          "cache_read": 0.8,
+          "cache_write": 10,
+          "input": 8,
+          "output": 30
         },
         "input": 4,
         "output": 20,
         "tiers": [
           {
-            "cache_read": 1,
-            "cache_write": 12.5,
-            "input": 10,
-            "output": 45,
+            "cache_read": 0.8,
+            "cache_write": 10,
+            "input": 8,
+            "output": 30,
             "tier": {
               "size": 272000,
               "type": "context"
@@ -2065,7 +2056,6 @@
       "reasoning": true,
       "release_date": "2026-09-04",
       "structured_output": true,
-      "supports_none_reasoning_effort": true,
       "temperature": false,
       "tool_call": true
     },
@@ -2221,7 +2211,6 @@
       "reasoning": true,
       "release_date": "2026-09-29",
       "structured_output": true,
-      "supports_none_reasoning_effort": true,
       "temperature": false,
       "tool_call": true
     },
@@ -2806,7 +2795,7 @@
       "name": "high/1536-x-1024/gpt-image-1-mini"
     },
     "kimi-k2.5": {
-      "attachment": false,
+      "attachment": true,
       "cost": {
         "input": 0.6,
         "output": 3
@@ -2828,13 +2817,13 @@
       "name": "Kimi K2.5",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-02-06",
+      "release_date": "2026-01-27",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
     "kimi-k2.6": {
-      "attachment": false,
+      "attachment": true,
       "cost": {
         "input": 0.95,
         "output": 4
@@ -2856,7 +2845,7 @@
       "name": "Kimi K2.6",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-04-22",
+      "release_date": "2026-04-20",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -3126,7 +3115,7 @@
       "tool_call": true
     },
     "o1": {
-      "attachment": false,
+      "attachment": true,
       "cost": {
         "cache_read": 7.5,
         "input": 15,
@@ -3140,7 +3129,8 @@
       "modalities": {
         "input": [
           "text",
-          "image"
+          "image",
+          "pdf"
         ],
         "output": [
           "text"
@@ -3170,7 +3160,8 @@
       "modalities": {
         "input": [
           "text",
-          "image"
+          "image",
+          "pdf"
         ],
         "output": [
           "text"
@@ -3228,7 +3219,8 @@
       "modalities": {
         "input": [
           "text",
-          "image"
+          "image",
+          "pdf"
         ],
         "output": [
           "text"

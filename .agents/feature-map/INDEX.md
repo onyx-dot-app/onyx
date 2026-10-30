@@ -37,6 +37,7 @@ loop with tools, streams packets back, and saves the turn.
 
 | | Component | What it covers |
 |---|---|---|
+| ✅ | [agent-runtime](components/agent-runtime.md) | Shared Python execution engine, child coordination, suspension, and restoration contracts. Available for integration; production paths remain unchanged. |
 | ✅ | [core-chat-loop](components/core-chat-loop.md) | `process_message` → `run_llm_loop` → `run_llm_step`. The turn engine. |
 | ✅ | [context-assembly](components/context-assembly.md) | System prompt, custom agent prompt, project files, user files, reminders, token budget, compression. |
 | ✅ | [streaming-protocol](components/streaming-protocol.md) | Packet types, `Placement`/`turn_index`, the emitter, the wire format the frontend consumes. |
@@ -92,7 +93,7 @@ Cross-cutting services every feature depends on.
 | ✅ | [multi-tenancy](components/multi-tenancy.md) | Tenant isolation, shards, schema-per-tenant. |
 | ✅ | [background-jobs](components/background-jobs.md) | Celery apps, queues, beat schedules, locking, the task conventions. |
 | ✅ | [editions-and-gating](components/editions-and-gating.md) | CE vs EE, feature flags, licensing, gated apps. |
-| ✅ | [observability](components/observability.md) | Metrics, tracing, audit logging, LLM usage and cost. |
+| ✅ | [observability](components/observability.md) | Metrics, tracing, audit logging, LLM usage and cost, fleet telemetry. |
 | ✅ | [rate-and-usage-limits](components/rate-and-usage-limits.md) | Token rate limits, usage limits, invite limits. |
 | ✅ | [notifications](components/notifications.md) | In-app notifications, release notes, admin banners. |
 | ✅ | [billing](components/billing.md) | Plans, checkout, license activation, seat and usage billing. |
@@ -117,12 +118,11 @@ Ways to reach Onyx that are not the web chat UI.
 
 ## Domain: Craft
 
-The agentic coding product. It has its own deep documentation under `docs/craft/`;
-these components are the map into it.
+The agentic coding product.
 
 | | Component | What it covers |
 |---|---|---|
-| ✅ | [craft-admin](components/craft-admin.md) | The three Craft admin pages: access, apps, preferences. Map into `docs/craft/`. |
+| ✅ | [craft-admin](components/craft-admin.md) | The three Craft admin pages: access, apps, preferences. |
 | ✅ | [skills](components/skills.md) | Capability bundles pushed into a Craft sandbox. Surfaced at `/craft/v1/skills`, tied to external apps. |
 | ✅ | [craft-sessions](components/craft-sessions.md) | Craft session lifecycle, turns, history. |
 | ✅ | [craft-sandboxes](components/craft-sandboxes.md) | Kubernetes sandbox provisioning, snapshot and restore. |
@@ -159,7 +159,7 @@ Two traps when auditing this yourself:
 
 - Some `/admin/*` paths are served from a second tree, `web/src/app/ee/admin/`, via a
   rewrite in `web/src/proxy.ts:EE_ROUTES`. Listing `web/src/app/admin/` alone misses
-  theme, standard-answer, export-logs, performance, and groups.
+  theme, standard-answer, export-logs, performance, groups, scim, and service-accounts.
 - A directory under `ee/admin/` that is **not** in `EE_ROUTES` is unreachable.
   The billing page is `web/src/app/admin/billing/`.
 

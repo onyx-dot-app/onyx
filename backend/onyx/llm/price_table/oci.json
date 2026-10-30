@@ -123,6 +123,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-12-06",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": false
     },
@@ -201,6 +202,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GPT OSS 120B",
       "open_weights": true,
       "reasoning": true,
@@ -228,6 +230,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GPT OSS 20B",
       "open_weights": true,
       "reasoning": true,
@@ -273,6 +276,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Grok 4.20 (Non-Reasoning)",
       "open_weights": false,
       "reasoning": false,
@@ -318,6 +322,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Grok 4.20 (Reasoning)",
       "open_weights": false,
       "reasoning": true,

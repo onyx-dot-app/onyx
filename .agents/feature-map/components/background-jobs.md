@@ -125,6 +125,8 @@ this document.
   raising `WorkerShutdown` on timeout. `on_worker_ready` and `on_worker_shutdown`
   touch/remove a file-based readiness probe (`app_base.py:make_probe_path`,
   checked by `celery_k8s_probe.py`'s `main_readiness`/`main_liveness`).
+  `on_worker_ready` also starts the worker's fleet telemetry sender
+  (`utils/fleet_telemetry.py:start_telemetry`). See [[observability]] §4.11.
   `LivenessProbe` (`app_base.py:LivenessProbe`) is a Celery bootstep that
   refreshes the liveness file every 15 seconds.
 - The primary worker additionally holds a singleton Redis lock,
@@ -133,6 +135,10 @@ this document.
   `on_worker_shutdown` (`app_base.py:on_worker_shutdown`).
 
 ### Beat schedules
+
+The incognito file cleanup task also retries pending Redis context teardown
+before deleting generated files. Busy session locks leave requests pending for
+the next attempt. See [[context-assembly]] §4.10.
 
 `onyx/background/celery/tasks/beat_schedule.py` defines three lists, resolved
 through `fetch_versioned_implementation` so EE can extend them
@@ -145,7 +151,14 @@ lists plus its own additions):
   `check-for-index-attempt-cleanup`, `backfill-cc-pair-ids`, and more). The
   `backfill-cc-pair-ids` entry runs every 5 minutes on the `index_reclaim` queue
   (Light worker) and fills `cc_pair_ids` on existing OpenSearch chunks for the
-  cc-pair access filter (see [[access-control]] §4.3a). Filtered by
+  cc-pair access filter (see [[access-control]] §4.3a). The `tabular-rechunk`
+  entry shares that cadence but runs on the `docprocessing` queue, where its
+  embedding belongs: each tick scans the document table by primary key, across
+  all cc-pairs, and re-chunks the tabular documents still holding more chunks
+  than the current chunker could produce, until its time budget runs out
+  (`background/indexing/run_tabular_rechunk.py`).
+  `TABULAR_RECHUNK_ENABLED` arms it and a KV record stops it, so a finished
+  migration costs one cached read per tick. Both are filtered by
   `_VECTOR_DB_BEAT_TASK_NAMES` when `DISABLE_VECTOR_DB` is set.
   `beat_schedule.py:beat_task_templates`
 - `beat_cloud_tasks`: system-wide tasks that exist once regardless of tenant
@@ -158,8 +171,7 @@ lists plus its own additions):
   taking `beat_task_templates` (with the cloud-only `skip_gated`/`work_gated`
   option keys stripped) and adding self-hosted-only entries
   (`monitor-celery-queues`, `monitor-process-memory`, `celery-beat-heartbeat`,
-  `emit-version-telemetry`, `cleanup-oauth-provider-clients`).
-  `beat_schedule.py:tasks_to_schedule`
+  `cleanup-oauth-provider-clients`). `beat_schedule.py:tasks_to_schedule`
 
 The per-tenant `cleanup-oauth-provider-grants` template deletes expired OAuth
 provider grants daily; their tokens cascade. Without Celery (`DISABLE_VECTOR_DB`),
@@ -197,7 +209,9 @@ seconds, `beat_schedule.py:BEAT_EXPIRES_DEFAULT`), matching the
 - `SyncRecord` (`onyx/db/models.py`, via `onyx/db/sync_record.py`): one row per
   sync attempt against an entity (`entity_id` + `SyncType`, e.g. `PRUNING`).
   `insert_sync_record` cancels any prior `IN_PROGRESS` record for the same
-  entity/type before creating the new one (`db/sync_record.py:insert_sync_record`).
+  entity/type, and sets its end time, before creating the new one
+  (`db/sync_record.py:insert_sync_record`). The fleet collection pass finds the
+  cancellation by that end time (`db/fleet_telemetry.py:job_rows`).
 - `BackgroundError` (`onyx/db/models.py:BackgroundError`, via
   `onyx/db/background_error.py:create_background_error`): a message plus an
   optional `cc_pair_id`. Written through
@@ -214,7 +228,6 @@ seconds, `beat_schedule.py:BEAT_EXPIRES_DEFAULT`), matching the
 Every connector-scoped key is namespaced per tenant through the standard Redis
 client factory and, within a tenant, per `cc_pair_id` via the `RedisConnector`
 family in `onyx/redis/` (`redis_connector_prune.py`, `redis_connector_delete.py`,
-`redis_connector_doc_perm_sync.py`, `redis_connector_ext_group_sync.py`,
 `redis_document_set.py`, `redis_usergroup.py`).
 
 | Pattern | Example owner | TTL | Meaning |
@@ -222,7 +235,7 @@ family in `onyx/redis/` (`redis_connector_prune.py`, `redis_connector_delete.py`
 | `<prefix>_fence_<id>` | `RedisConnectorPrune.FENCE_PREFIX` (`redis_connector_prune.py`) | 7 days (`FENCE_TTL`) | The task is in progress. Holds a JSON payload (submitted time, celery task id, progress). Presence is the source of truth for "is this running". |
 | `<prefix>_generator_progress_<id>` | `redis_connector_prune.py:GENERATOR_PROGRESS_PREFIX` | tied to fence lifecycle | Running count of work items produced by the generator task. |
 | `<prefix>_generator_complete_<id>` | `redis_connector_prune.py:GENERATOR_COMPLETE_PREFIX` | tied to fence lifecycle | Set once the generator finishes fanning out; its int payload is the starting item count. |
-| `active_fences` (a Redis set) | `OnyxRedisConstants.ACTIVE_FENCES` (`onyx/configs/constants.py`) | n/a (set membership) | A lookup table of every fence key currently believed active, across pruning, deletion, doc-permission sync, external-group sync, document sync, and docprocessing. Beat-driven checker tasks (`check_for_pruning`, its siblings) scan this set instead of doing a `KEYS`/`SCAN` over the whole keyspace, then re-verify each key still exists before trusting it. |
+| `active_fences` (a Redis set) | `OnyxRedisConstants.ACTIVE_FENCES` (`onyx/configs/constants.py`) | n/a (set membership) | A lookup table of every fence key currently believed active, across pruning, deletion, document sync, and docprocessing. Beat-driven checker tasks (`check_for_pruning`, its siblings) scan this set instead of doing a `KEYS`/`SCAN` over the whole keyspace, then re-verify each key still exists before trusting it. |
 | `da_lock:primary_worker` | `OnyxRedisLocks.PRIMARY_WORKER` | touched every `CELERY_PRIMARY_WORKER_LOCK_TIMEOUT / 8`s | Singleton lock so only one primary worker instance is active. |
 | `da_lock:check_prune_beat`, `da_lock:check_vespa_sync_beat`, etc. | `OnyxRedisLocks.*` | short | Per-checker-task locks (`lock_beat` in `check_for_pruning`) so overlapping beat firings of the same checker don't run concurrently. |
 | `signal:block_validate_indexing_fences`, `signal:block_validate_pruning_fences` | `OnyxRedisSignals.*` | a few minutes | Rate-limits the (expensive) fence-validation pass to run less often than the checker task itself. |
@@ -307,11 +320,20 @@ generator, and a set of lightweight fan-out subtasks, tied together by a fence:
    in `celery_redis.py`). If a fence's payload fails to parse (schema drift), it
    is reset rather than left stuck. This is the mechanism by which a fence whose
    generator task died without cleaning up gets recovered without manual
-   intervention; `pruning/tasks.py:validate_pruning_fence` has a comment
+   intervention. Either reset also ends the pair's `IN_PROGRESS` prune
+   `SyncRecord` as `FAILED` with the reason (`fail_orphaned_prune_records`,
+   called while the fence still blocks a new prune), and the primary worker's
+   single-tenant startup reset of every prune fence
+   (`reset_prune_fences_on_startup`, which holds the prune dispatch lock with
+   a longer TTL than a dispatch and renews it between steps, so an API call
+   cannot start a prune half inside the reset) does the same for every
+   running prune record, which would otherwise stay `IN_PROGRESS` with no
+   reason until the next prune cancels it;
+   `pruning/tasks.py:validate_pruning_fence` has a comment
    pointing at `validate_indexing_fence` as the canonical description of the
    flow. `[[indexing-pipeline]]` documents the indexing-specific version of this
-   same pattern; `[[permission-sync]]` documents the doc-permission and
-   external-group-sync versions.
+   same pattern; `[[permission-sync]]` describes the lease that replaced
+   this pattern for doc permission and external group syncs.
 
 ### 4.3 Task startup and teardown, mechanically
 
@@ -336,7 +358,17 @@ is so long-running headless-agent task runs do not compete for Heavy's slots
 other workers. Light is the exception: it reads
 `CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER`, default 8.
 
+Scheduled-task creation and edits save action policies through
+`backend/onyx/db/action_policy.py`. New tasks start with all apps disabled.
+Enabling an app first copies personal settings; later toggles retain its saved choices. The proxy reads task settings for each
+request while the run is RUNNING; workers do not grant blanket app approval.
+Scheduling, queue selection, and dispatch locking are unchanged. See
+[[craft-scheduled-tasks]] for permission ownership and approval outcomes.
+
 ---
+
+Scheduled-task updates lock and authorize the task through `get_scheduled_task` before saving action policies.
+Policy writes receive that task; they do not repeat task ownership queries.
 
 ## 5. Contracts and invariants
 
@@ -415,8 +447,9 @@ See [[document-index]] for the cached admin warnings it supplies.
 **Depended on by**
 - [[indexing-pipeline]]: docfetching/docprocessing queues, the indexing fence
   and generator-task pattern this document generalizes.
-- [[permission-sync]]: doc-permission and external-group-sync fences, run on
-  Heavy, monitored the same way as pruning.
+- [[permission-sync]]: doc permission and external group syncs run on Heavy.
+  They use no fence: the open attempt row is the lock (see [[permission-sync]]
+  §5.9).
 - [[connectors]] and [[cc-pairs-and-credentials]]: pruning, deletion, and
   hierarchy-fetching all run as Celery tasks scoped to a cc_pair.
 - [[file-store-and-user-files]]: the `user_file_processing` worker and its three
@@ -424,7 +457,12 @@ See [[document-index]] for the cached admin warnings it supplies.
   fallback path.
 - [[chat-persistence]]: `chat_ttl_deletion` queue (Light worker).
 - [[observability]]: `monitoring` worker, Prometheus metrics, `BackgroundError`
-  rows.
+  rows. The per-tenant `collect-fleet-telemetry` beat entry runs
+  `tasks/monitoring/tasks.py:collect_fleet_telemetry` on the `monitoring` queue,
+  which reads `SyncRecord` rows (`db/fleet_telemetry.py:job_rows`).
+  `monitor_celery_queues` also sends the queue depths to the fleet
+  (`tasks/monitoring/tasks.py:_report_queue_depths`). `DISABLE_TELEMETRY` removes
+  only the fleet entry; the other `monitoring` tasks still run.
 
 ---
 
@@ -433,7 +471,7 @@ See [[document-index]] for the cached admin warnings it supplies.
 | If your change... | Also check |
 |---|---|
 | adds a new task | which worker's `-Q` list (supervisord.conf and every relevant Helm `celery-worker-*.yaml`) includes its queue; whether it needs an `expires=`; whether it needs `tenant_id` propagated explicitly if not beat-scheduled |
-| changes a queue name (an `OnyxCeleryQueues` constant) | every `-Q` list in `backend/supervisord.conf` and `deployment/helm/charts/onyx/templates/celery-worker-*.yaml`; every `send_task`/`apply_async` call that references the old name; the queue-length metric mapping in `tasks/monitoring/tasks.py:_collect_queue_metrics` |
+| changes a queue name (an `OnyxCeleryQueues` constant) | every `-Q` list in `backend/supervisord.conf` and `deployment/helm/charts/onyx/templates/celery-worker-*.yaml`; every `send_task`/`apply_async` call that references the old name |
 | changes the beat schedule (`beat_schedule.py` or the EE equivalent) | whether the task is per-tenant or cloud-wide (wrong list changes whether `beat_multiplier` applies); the `expires` value; whether `DISABLE_VECTOR_DB` filtering needs the task name added to `_VECTOR_DB_BEAT_TASK_NAMES` |
 | changes a fence or lock (key name, TTL, payload schema) | the checker task's fence-validation pass for that fence family (mirror `validate_pruning_fences`); `on_task_postrun`/`on_task_revoked` taskset cleanup, which matches on key prefix; `ACTIVE_FENCES` membership add/remove sites |
 | adds a worker | its `apps/<name>.py`, `versioned_apps/<name>.py`, `configs/<name>.py`; an entry in `backend/supervisord.conf`; a Helm `celery-worker-<name>.yaml` (plus HPA/ScaledObject if it should autoscale); an entry in `background/README.md`'s worker table (keep it truthful, see §9); whether it needs an EE counterpart under `ee/onyx/background/celery/apps/` |
@@ -520,10 +558,6 @@ shared machinery, not feature correctness.
   `expires`) with no error, no log on the sending side, and no exception
   anywhere. The only symptom is "this never happened." Cross-check §2's table
   whenever you touch a queue name.
-- **`monitoring`'s queue-length metrics do not cover every queue.** `_collect_queue_metrics`
-  (`tasks/monitoring/tasks.py`) maps roughly twenty queues to Prometheus
-  metrics, but `scheduled_tasks` is not among them, so a backlog on that queue
-  produces no queue-length signal today.
 - **`BackgroundError` is not a general failure-surfacing mechanism.** It is
   written from exactly two call sites (both under `ee/onyx`, both in
   external-group/permission-sync code), and nothing reads it back through an

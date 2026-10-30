@@ -52,7 +52,7 @@ export function InputBar({
   const insets = useSafeAreaInsets();
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  const isBusy = chatState === "loading" || chatState === "streaming";
+  const isBusy = chatState !== "input" && chatState !== "uploading";
   const hasFiles = attachments.files.length > 0;
 
   const canSend =

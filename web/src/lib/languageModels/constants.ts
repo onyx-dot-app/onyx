@@ -18,11 +18,15 @@ import {
   SvgGoogle,
   SvgNebius,
   SvgPortkey,
+  SvgTypeSafe,
   SvgVercel,
+  SvgZoom,
 } from "@opal/logos";
 import { ZAIIcon } from "@/components/icons/icons";
 import { LLMProviderName } from "@/lib/languageModels/types";
 import OpenAIModal from "@/sections/modals/languageModels/OpenAIModal";
+import TypeSafeModal from "@/sections/modals/languageModels/TypeSafeModal";
+import ZoomDecisionModal from "@/sections/modals/languageModels/ZoomDecisionModal";
 import AnthropicModal from "@/sections/modals/languageModels/AnthropicModal";
 import OllamaModal from "@/sections/modals/languageModels/OllamaModal";
 import AzureModal from "@/sections/modals/languageModels/AzureModal";
@@ -42,6 +46,20 @@ import type { ProviderEntry } from "@/lib/languageModels/types";
 // ─── Text (LLM) providers ────────────────────────────────────────────────────
 
 export const PROVIDERS: Record<string, ProviderEntry> = {
+  [LLMProviderName.TYPESAFE]: {
+    decisionOnly: true,
+    icon: SvgTypeSafe,
+    productName: "System One",
+    companyName: "TypeSafe AI",
+    Modal: TypeSafeModal,
+  },
+  [LLMProviderName.ZOOM_AI]: {
+    decisionOnly: true,
+    icon: SvgZoom,
+    productName: "Zoom AI Decisions",
+    companyName: "Zoom",
+    Modal: ZoomDecisionModal,
+  },
   [LLMProviderName.OPENAI]: {
     icon: SvgOpenAI,
     productName: "GPT",
@@ -110,8 +128,9 @@ export const PROVIDERS: Record<string, ProviderEntry> = {
   },
   [LLMProviderName.OPENAI_COMPATIBLE]: {
     icon: SvgPlug,
-    productName: "OpenAI-Compatible",
-    companyName: "OpenAI-Compatible",
+    productName: LLMProviderName.OPENAI_COMPATIBLE,
+    companyName: LLMProviderName.OPENAI_COMPATIBLE,
+    copyKey: "openAICompatible",
     Modal: OpenAICompatibleModal,
   },
   [LLMProviderName.NEBIUS_TOKENFACTORY]: {
@@ -134,8 +153,9 @@ export const PROVIDERS: Record<string, ProviderEntry> = {
   },
   [LLMProviderName.CUSTOM]: {
     icon: SvgServer,
-    productName: "Custom Models",
-    companyName: "models from other LiteLLM-compatible providers",
+    productName: LLMProviderName.CUSTOM,
+    companyName: LLMProviderName.CUSTOM,
+    copyKey: "custom",
     Modal: CustomModal,
   },
 };
@@ -178,6 +198,8 @@ export const AGGREGATOR_PROVIDERS = new Set([
 // ─── Model icons ─────────────────────────────────────────────────────────────
 
 export const MODEL_ICON_MAP: Record<string, IconFunctionComponent> = {
+  [LLMProviderName.TYPESAFE]: SvgTypeSafe,
+  [LLMProviderName.ZOOM_AI]: SvgZoom,
   [LLMProviderName.OPENAI]: SvgOpenAI,
   [LLMProviderName.ANTHROPIC]: SvgClaude,
   [LLMProviderName.OLLAMA_CHAT]: SvgOllama,

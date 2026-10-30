@@ -27,8 +27,11 @@ conversation) instead of generating from scratch.
 An admin configures the capability at `/admin/image-generation`: pick a
 provider (OpenAI, Azure, or Vertex AI), supply credentials, and choose it as
 default. The model list in the admin form includes the GPT Image 2.5 variants
-(`gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`) next to `gpt-image-2`, `gpt-image-1.5`, and
-`gpt-image-1` (`web/src/views/admin/ImageGenerationPage/constants.ts`).
+(`gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`) next to `gpt-image-2` and `gpt-image-1.5`
+(`web/src/views/admin/ImageGenerationPage/constants.ts`). A card with `deprecated: true` (for
+example `gpt-image-1`, which OpenAI shut down) shows only while it is connected, so an admin can
+disconnect it. While such a card is connected, the page shows a warning that tells the admin to
+switch to another model. Onyx does not change a saved config automatically.
 Until an admin does this, the tool does not appear at all. Missing or
 incomplete configuration hides the tool. A rejected API key does not, and it
 fails only when the tool runs. The exception is EE tenant provisioning, which creates a default config from the OpenAI key (`ee/onyx/server/tenants/provisioning.py`). The tool does not appear in a deployment without a default config; the model
@@ -44,7 +47,7 @@ never sees an image generation tool it cannot use, and a user is never told
 | Method | Path | Handler | Notes |
 |---|---|---|---|
 | POST | `/admin/image-generation/test` | `test_image_generation` (`server/manage/image_generation/api.py`) | Validates a candidate provider/credentials pair by generating a test image. |
-| POST | `/admin/image-generation/config` | `create_config` | Creates a config; clone mode (reuse an existing LLM provider's credentials) or new-credentials mode. |
+| POST | `/admin/image-generation/config` | `create_config` | Creates a config from a provider and its credentials. |
 | GET | `/admin/image-generation/config` | `get_all_configs` | Lists configs for the admin table. |
 | GET | `/admin/image-generation/config/{image_provider_id}/credentials` | `get_config_credentials` | Returns credentials with the API key masked (`models.py:_mask_api_key`). |
 | PUT | `/admin/image-generation/config/{image_provider_id}` | `update_config` | |
@@ -112,14 +115,15 @@ All provider calls are wrapped in
 ### Admin configuration
 
 `create_config` / `update_config` (`server/manage/image_generation/api.py`)
-accept either a "clone" mode (reuse credentials from an existing
-`LLMProvider` via `source_llm_provider_id`) or a "new credentials" mode (raw
-`api_key`/`api_base`/etc). Either way the backend creates a fresh `LLMProvider`
-row and `ModelConfiguration` row, then an `ImageGenerationConfig` pointing at
-them (`db/image_generation.py:create_image_generation_config__no_commit`).
-In new-credentials mode, `_build_llm_provider_request` calls
-`validate_credentials` (`image_gen/factory.py`) before persisting. Clone mode
-copies the API key from the source provider and skips that check.
+take a provider and its credentials (`api_key`/`api_base`/etc). The backend
+creates a fresh `LLMProvider` row and `ModelConfiguration` row, then an
+`ImageGenerationConfig` pointing at them
+(`db/image_generation.py:create_image_generation_config__no_commit`).
+`_build_llm_provider_request` calls `validate_credentials`
+(`image_gen/factory.py`) before persisting. An update with an unchanged (masked)
+key keeps the old provider's key. These `LLMProvider` rows are left out of the
+admin LLM provider list unless the caller passes `include_image_gen=true`, as
+the Terraform provider does (`db/llm.py:fetch_existing_llm_providers`).
 `test_image_generation` is a separate, optional step: it lets an admin
 generate a throwaway test image before saving.
 
@@ -173,12 +177,12 @@ for use as a fast pre-check.
 ### Turn-level effect: a stopping tool
 
 `ImageGenerationTool.NAME` is listed in `tools/built_in_tools.py:STOPPING_TOOLS_NAMES`.
-In `chat/llm_loop.py`, once any tool call in a cycle matches a stopping tool
+In `backend/onyx/chat/agent.py:ChatAgent`, once any tool call in a cycle matches a stopping tool
 name, `ran_image_gen` is set `True` for the rest of that turn; the next cycle
 forces `tool_choice = ToolChoiceOptions.NONE` and offers no tools
-(`llm_loop.py:run_llm_loop`, the `elif out_of_cycles or ran_image_gen` branch), and the reminder text injected before that final answer is
+(`backend/onyx/chat/agent.py:ChatAgent._prepare_step`, the `state.step.is_last or self.ran_image_gen` branch), and the reminder text injected before that final answer is
 `IMAGE_GEN_REMINDER` instead of the normal citation/file reminder
-(`llm_loop.py:select_reminder_text`). After that cycle, the model must answer
+(`backend/onyx/chat/prompt_utils.py:build_chat_reminder`). After that cycle, the model must answer
 without another tool-calling cycle. Other tool calls returned in the same cycle
 still run.
 
@@ -234,8 +238,7 @@ the returned base64 data.
   registered/gated the same way every other tool is; `is_available` is the
   hook this component uses.
 - [[llm-providers]]: image generation credentials are `LLMProvider` rows,
-  reusing that encrypted-credential storage and the clone-from-existing-provider
-  admin flow.
+  reusing that encrypted-credential storage.
 - [[file-store-and-user-files]]: generated and reference images are saved and
   loaded through the shared file store (`save_files`, `load_chat_file_by_id`).
 - [[streaming-protocol]]: `ImageGenerationToolStart`, `ImageGenerationToolHeartbeat`,
@@ -245,7 +248,7 @@ the returned base64 data.
   `LLMFlow.IMAGE_GENERATION` / `LLMFlow.IMAGE_EDIT`.
 
 **Depended on by**
-- [[core-chat-loop]]: `llm_loop.py` special-cases this tool via
+- [[core-chat-loop]]: `backend/onyx/chat/agent.py:ChatAgent` special-cases this tool via
   `STOPPING_TOOLS_NAMES` and `IMAGE_GEN_REMINDER`, so a change to the tool's
   name or registration affects turn control flow, not just tool behavior.
 - [[chat-frontend]]: `ImageToolRenderer` and the packet processor consume this
@@ -259,7 +262,7 @@ the returned base64 data.
 |---|---|
 | adds a fourth image provider | `image_gen/factory.py:PROVIDERS`, `web/src/views/admin/ImageGenerationPage/forms/` (needs a matching form + `getImageGenForm.tsx`), and whether it needs `supports_reference_images`/`max_reference_images` overrides |
 | changes the packet schema (`ImageGenerationToolStart`, `Heartbeat`, `Final`, `GeneratedImage`) | `web/src/app/app/services/streamingModels.ts`'s `PacketType` string values (they must match `StreamingType` in `streaming_models.py` exactly) and `ImageToolRenderer.tsx` |
-| changes what counts as a "stopping tool" or removes `ImageGenerationTool` from `STOPPING_TOOLS_NAMES` | `llm_loop.py`'s cycle-forcing logic and `IMAGE_GEN_REMINDER` text; a tool leaving this list can now chain further tool calls in the same turn |
+| changes what counts as a "stopping tool" or removes `ImageGenerationTool` from `STOPPING_TOOLS_NAMES` | `backend/onyx/chat/agent.py:ChatAgent`'s cycle-forcing logic and `IMAGE_GEN_REMINDER` text; a tool leaving this list can now chain further tool calls in the same turn |
 | changes how a config becomes "default" | `db/image_generation.py:set_default_image_generation_config`'s atomic clear-then-set; a race here would let two configs claim default simultaneously |
 | touches `FileOrigin.CHAT_IMAGE_GEN` access rules | [[file-store-and-user-files]] and [[access-control]]; `access.py:_user_can_access_chat_image_gen_file` grants the session owner, or anyone when the session is public and not deleted, so any change must preserve that scoping |
 

@@ -10,7 +10,6 @@ from urllib.parse import urlsplit
 
 import msal
 import requests
-from office365.graph_client import GraphClient
 from office365.sharepoint.client_context import ClientContext
 from office365.teams.team import Team
 
@@ -30,6 +29,7 @@ from onyx.connectors.microsoft_utils.drive_items import (
     iter_drive_items_paged,
 )
 from onyx.connectors.microsoft_utils.graph_auth import acquire_token_for_rest
+from onyx.connectors.microsoft_utils.sharepoint_rest import SharepointRestReads
 from onyx.connectors.models import (
     BasicExpertInfo,
     ConnectorFailure,
@@ -255,20 +255,27 @@ class FileSource:
         by_site[site_url] = (context, time.monotonic())
         return context
 
+    def permission_reader(self) -> SharepointRestReads:
+        """SharePoint permission reads for the calling thread. An SDK query
+        queues on the client it was built from, so the Graph client is this
+        thread's as well."""
+        return SharepointRestReads(
+            self.rest_context,
+            self._session.graph_for_thread(),
+            self._session.graph_api_client(),
+        )
+
     def _file_access(
         self, library: ChannelLibrary, item: DriveItemData, for_indexing: bool
     ) -> ExternalAccess:
         """The file's own readers from SharePoint, expanded through site and
         Entra groups. Empty without the enterprise permission code, as for
         SharePoint documents, so the pair's access type decides on those builds."""
-        # The lookup fetches a list item Graph did not name through the drive
-        # item's own client, so that client must be this thread's as well.
-        graph_client: GraphClient = self._session.graph_for_thread()
         access = get_sharepoint_external_access(
-            ctx=self.rest_context(library.site_url),
-            graph_client=graph_client,
+            reader=self.permission_reader(),
+            site_url=library.site_url,
             permission_cache=self._permission_cache,
-            drive_item=item.to_sdk_driveitem(graph_client),
+            drive_item=item,
             list_id=library.list_id,
         )
         return ExternalAccess(

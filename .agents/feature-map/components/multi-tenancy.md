@@ -153,7 +153,7 @@ Physical layout (Postgres):
 ### 4.1 An HTTP request: from cookie to a tenant-scoped session
 
 ```
-add_api_server_tenant_id_middleware              ee/onyx/server/middleware/tenant_tracking.py
+tenant_id_middleware              ee/onyx/server/middleware/tenant_tracking.py
   (registered only in EE's app; CE's onyx/main.py does not register any
    tenant-resolving middleware, because in CE MULTI_TENANT is always False)
   └─ _get_tenant_id_from_request
@@ -174,16 +174,22 @@ get_session() / get_session_with_current_tenant()             db/engine/sql_engi
   └─ Session(bind=connection)
 ```
 
+Tenant tracking, tier gating, and license enforcement use pure ASGI middleware.
+Tenant tracking runs before tier gating. It keeps tenant context through response
+streaming and restores the caller's context in `finally`, including on cancellation.
+Errors after response start propagate; they cannot replace the response with JSON.
+The model server's header-based tenant middleware also restores context in `finally`.
+
 Every source in `_get_tenant_id_from_request` is signed or server-issued (a PAT, a
 Redis-backed session token, a JWT). None of them lets an unauthenticated caller name
 an arbitrary tenant; an unauthenticated request resolves to `POSTGRES_DEFAULT_SCHEMA`,
 which owns no tenant data.
 
-**Where this breaks:** `onyx/utils/middleware.py:add_onyx_tenant_id_middleware`
+**Where this breaks:** `onyx/utils/middleware.py:tenant_header_middleware`
 also sets `CURRENT_TENANT_ID_CONTEXTVAR` from a raw `X-Onyx-Tenant-ID` request
 header, with no signature and no validation. It is wired up only in
 `backend/model_server/main.py`, not in the API server
-(`grep -rn "add_onyx_tenant_id_middleware" backend/` finds exactly those two files).
+(tests also register this middleware in isolated applications).
 The model server is an internal service, not directly internet-facing, which is the
 implicit justification; this document cannot verify the network topology that makes
 that safe, and a change that exposes the model server externally, or that reuses
@@ -217,7 +223,7 @@ shape:
 
 - `background/indexing/job_client.py` (indexing subprocess dispatch)
 - `background/periodic_poller.py`
-- `background/celery/tasks/docprocessing/tasks.py`, `monitoring/tasks.py`
+- `background/celery/tasks/docprocessing/tasks.py`
 - `tracing/processors/user_usage_processor.py`
 - `sandbox_proxy/resolvers/mcp_server.py`
 - `onyxbot/slack/listener.py`, `onyxbot/slack/utils.py`, `onyxbot/discord/cache.py`,
@@ -264,7 +270,7 @@ The risk is a new call site that crosses a raw thread boundary without copying.
    (`sql_engine.py`), which is explicitly pinned to `public` for catalog tables.
 2. **The tenant comes from the authenticated context, never from client input.**
    The only place a header (`X-Onyx-Tenant-ID`) directly sets the contextvar is
-   `onyx/utils/middleware.py:add_onyx_tenant_id_middleware`, wired only into the
+   `onyx/utils/middleware.py:tenant_header_middleware`, wired only into the
    model server (§4.1, §9). No API-server endpoint accepts a tenant ID as a request
    body or query parameter; `is_valid_schema_name`/`TENANT_ID_PATTERN` validate
    every tenant ID that does cross a boundary (a JWT claim, a Redis-cached session,
@@ -284,6 +290,9 @@ The risk is a new call site that crosses a raw thread boundary without copying.
    that must exist exactly once, not once per tenant) must inherit `PublicBase`
    and go in `alembic_tenants/`, or it will be silently duplicated into every
    tenant schema instead of shared.
+   `OAuthProviderClient` remains catalog-owned in cloud. On single-tenant installs,
+   its explicit schema is `POSTGRES_DEFAULT_SCHEMA`, so client registration works
+   before login without creating a table in `public` when a custom schema is set.
 5. **The index's tenant filter must never be dropped.** `_get_search_filters`
    (`document_index/opensearch/search.py`) adds a `{"term": {TENANT_ID_FIELD_NAME:
    ...}}` clause whenever `tenant_state.multitenant` is true, independently of and
@@ -314,6 +323,18 @@ The risk is a new call site that crosses a raw thread boundary without copying.
    `AuditAction.IMPERSONATE` via `emit_audit_event` on both success and failure.
    A new cross-tenant capability that skips either the scoping or the audit call
    is a security regression, not a style issue.
+9. **A tenant migration's search_path is pinned per transaction, not per
+   connection.** Tenant provisioning (`/auth/register` and the pool top-up task)
+   runs the `alembic/` chain through the API and Celery `POSTGRES_HOST`, which
+   in cloud is PgBouncer in transaction pooling. After a migration commits
+   mid-run, the next transaction can run on another server connection.
+   `alembic/env.py` therefore calls
+   `onyx/db/engine/migration_search_path.py:pin_search_path_per_transaction`,
+   which starts every transaction with `SET LOCAL search_path`. Do not replace
+   it with a one-time `SET`: later unqualified DDL would go to whatever schema
+   that server connection has, while `alembic_version` (schema-qualified) still
+   records the tenant as migrated. `SET LOCAL` also keeps the tenant schema off
+   the pooled server connection after the migration ends.
 
 ---
 
@@ -459,7 +480,7 @@ PGPASSWORD="${POSTGRES_PASSWORD:-password}" psql -h "${POSTGRES_HOST:-localhost}
   builds a Redis client inside itself is reading or writing against the wrong
   tenant, or raising, not against "no tenant" safely. `asyncio.create_task` and
   `asyncio.to_thread` copy the context and are not affected.
-- **`onyx/utils/middleware.py:add_onyx_tenant_id_middleware` trusts a bare
+- **`onyx/utils/middleware.py:tenant_header_middleware` trusts a bare
   `X-Onyx-Tenant-ID` header with no signature check.** It is wired into
   `backend/model_server/main.py` only, never the API server. The exposure is
   currently bounded by a second fact: the model server never reads the value back.
@@ -504,7 +525,7 @@ PGPASSWORD="${POSTGRES_PASSWORD:-password}" psql -h "${POSTGRES_HOST:-localhost}
 
 - Whether the model server (`backend/model_server/`) is genuinely unreachable from
   outside the cluster in every deployment topology, which is the implicit
-  justification for `add_onyx_tenant_id_middleware` trusting a raw header. Not
+  justification for `tenant_header_middleware` trusting a raw header. Not
   verified from the code in this repository.
 - The full list of `MULTI_TENANT`-conditional behaviors below is a representative
   sample (`grep -rn "MULTI_TENANT" backend/onyx backend/ee | grep -v test` returns

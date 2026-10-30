@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.enums import ActionPolicy, ExternalAppType
 from onyx.external_apps.providers.actions import RestRoute, path_matches
 from onyx.external_apps.providers.gmail import GmailAction
 from onyx.external_apps.providers.registry import get_endpoint_catalog
@@ -60,16 +60,16 @@ def test_route_resolves_to_exactly_one_action(
 @pytest.mark.parametrize(
     "action, expected_policy",
     [
-        (GmailAction.DRAFTS_READ, EndpointPolicy.ALWAYS),
-        (GmailAction.DRAFTS_CREATE, EndpointPolicy.ALWAYS),
-        (GmailAction.DRAFTS_UPDATE, EndpointPolicy.ALWAYS),
-        (GmailAction.THREADS_READ, EndpointPolicy.ALWAYS),
-        (GmailAction.ATTACHMENTS_READ, EndpointPolicy.ALWAYS),
+        (GmailAction.DRAFTS_READ, ActionPolicy.ALWAYS),
+        (GmailAction.DRAFTS_CREATE, ActionPolicy.ALWAYS),
+        (GmailAction.DRAFTS_UPDATE, ActionPolicy.ALWAYS),
+        (GmailAction.THREADS_READ, ActionPolicy.ALWAYS),
+        (GmailAction.ATTACHMENTS_READ, ActionPolicy.ALWAYS),
         # Writes that delete or send real email require approval out of the box.
-        (GmailAction.DRAFTS_DELETE, EndpointPolicy.ASK),
-        (GmailAction.DRAFTS_SEND, EndpointPolicy.ASK),
+        (GmailAction.DRAFTS_DELETE, ActionPolicy.ASK),
+        (GmailAction.DRAFTS_SEND, ActionPolicy.ASK),
     ],
 )
-def test_default_policies(action: GmailAction, expected_policy: EndpointPolicy) -> None:
+def test_default_policies(action: GmailAction, expected_policy: ActionPolicy) -> None:
     by_id = {endpoint.id: endpoint for endpoint in _CATALOG}
     assert by_id[action].default_policy == expected_policy

@@ -4,25 +4,40 @@ Only an organizer is guaranteed to see limited-access folders, so selection
 prefers one and marks the result incomplete when it has to settle for less.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-from googleapiclient.errors import HttpError  # type: ignore[import-untyped]
 
 from onyx.connectors.google_drive.drive_access import (
     DriveMember,
-    DriveReachability,
     DriveRole,
     OrganizerChoice,
     PrincipalType,
-    check_drive_reachable,
     list_drive_members,
     select_drive_organizer,
+)
+from onyx.connectors.google_drive.source_operations import (
+    GoogleDriveHttpError,
+    GoogleDriveSourceOperations,
 )
 
 _DOMAIN = "onyx-test.com"
 _DRIVE = "drive_1"
-_MOD = "onyx.connectors.google_drive.drive_access"
+
+
+def _http_error(status: int) -> GoogleDriveHttpError:
+    return GoogleDriveHttpError(
+        status_code=status,
+        reasons=(),
+        access_denied=status in (403, 404),
+        message=f"HTTP {status}",
+    )
+
+
+def _ops(**list_drive_members_behavior: object) -> MagicMock:
+    ops = MagicMock(spec=GoogleDriveSourceOperations)
+    ops.list_drive_members.configure_mock(**list_drive_members_behavior)
+    return ops
 
 
 def _member(
@@ -182,41 +197,6 @@ def test_selection_is_stable_across_member_order() -> None:
     assert _select(members).email == _select(list(reversed(members))).email
 
 
-def _service_raising(status: int) -> MagicMock:
-    resp = MagicMock()
-    resp.status = status
-    service = MagicMock()
-    service.drives().get().execute.side_effect = HttpError(resp, b"boom")
-    return service
-
-
-def test_missing_drive_is_unreachable_not_empty() -> None:
-    """shared_drive_3 lists zero files but 404s on drives.get.
-
-    Reading that as an empty drive would prune everything indexed from it.
-    """
-    assert (
-        check_drive_reachable(_service_raising(404), _DRIVE)
-        is DriveReachability.UNREACHABLE
-    )
-
-
-@pytest.mark.parametrize("status", [403, 500])
-def test_other_errors_are_unknown_rather_than_unreachable(status: int) -> None:
-    assert (
-        check_drive_reachable(_service_raising(status), _DRIVE)
-        is DriveReachability.UNKNOWN
-    )
-
-
-def test_successful_get_is_reachable() -> None:
-    service = MagicMock()
-
-    assert check_drive_reachable(service, _DRIVE) is DriveReachability.REACHABLE
-    service.drives().get.assert_called_once_with(driveId=_DRIVE, fields="id")
-    service.drives().get().execute.assert_called_once_with()
-
-
 def test_members_with_unrecognized_role_or_type_are_skipped() -> None:
     """Google can add roles or types; an unknown one must not crash discovery."""
     raw = [
@@ -225,11 +205,8 @@ def test_members_with_unrecognized_role_or_type_are_skipped() -> None:
         {"emailAddress": f"bot@{_DOMAIN}", "type": "brandNewType", "role": "reader"},
         {"type": "domain", "domain": _DOMAIN, "role": "reader"},
     ]
-    service = MagicMock()
-    with patch(
-        f"{_MOD}.execute_paginated_retrieval", return_value=iter(raw)
-    ) as retrieval:
-        members = list_drive_members(service, _DRIVE)
+    ops = _ops(return_value=iter(raw))
+    members = list_drive_members(ops, _DRIVE)
 
     assert [(m.email, m.role, m.principal_type) for m in members] == [
         (f"boss@{_DOMAIN}", DriveRole.ORGANIZER, PrincipalType.USER),
@@ -237,23 +214,14 @@ def test_members_with_unrecognized_role_or_type_are_skipped() -> None:
     ]
     # Domain admin access is the whole reason this works for drives the admin
     # is not a member of; without it files.list would 403 and discovery stops.
-    assert (
-        retrieval.call_args.kwargs["retrieval_function"] is service.permissions().list
+    ops.list_drive_members.assert_called_once_with(
+        drive_id=_DRIVE, use_domain_admin_access=True
     )
-    assert retrieval.call_args.kwargs["useDomainAdminAccess"] is True
-    assert retrieval.call_args.kwargs["supportsAllDrives"] is True
-    assert retrieval.call_args.kwargs["fileId"] == _DRIVE
 
 
 def test_foreign_domain_drive_yields_no_members() -> None:
     """Domain admin access only covers our own drives; elsewhere it 404s."""
-    resp = MagicMock()
-    resp.status = 404
-    with patch(
-        f"{_MOD}.execute_paginated_retrieval",
-        side_effect=HttpError(resp, b"not found"),
-    ):
-        assert list_drive_members(MagicMock(), _DRIVE) == []
+    assert list_drive_members(_ops(side_effect=_http_error(404)), _DRIVE) == []
 
 
 @pytest.mark.parametrize("status", [403, 500])
@@ -263,11 +231,5 @@ def test_unexpected_member_lookup_errors_are_not_silently_empty(status: int) -> 
     Returning [] here would make selection report "no impersonable principal"
     and skip the drive without surfacing the failure.
     """
-    resp = MagicMock()
-    resp.status = status
-    with patch(
-        f"{_MOD}.execute_paginated_retrieval",
-        side_effect=HttpError(resp, b"boom"),
-    ):
-        with pytest.raises(HttpError):
-            list_drive_members(MagicMock(), _DRIVE)
+    with pytest.raises(GoogleDriveHttpError):
+        list_drive_members(_ops(side_effect=_http_error(status)), _DRIVE)

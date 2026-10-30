@@ -60,11 +60,9 @@ same package, or a manual bump PR overlapping a bot one.
 
 These PRs aren't in a rush. Wait for every check to complete — required and
 advisory alike — and treat any red check as a failure to classify, never as
-noise to skip. Two advisory checks matter here even though the queue ignores
-them:
+noise to skip. One advisory check matters here even though the queue ignores
+it:
 
-- `storybook-build` (`pr-storybook-build.yml`) on `web/**` changes — never
-  gates the queue, but pages Slack if broken post-merge.
 - `audit` (`audit.yml`) — runs on every lockfile, `pyproject.toml`,
   `.github/workflows/**`, and `tools/ods/**` change, so it runs on almost every
   Dependabot PR. Treat it as **required for this skill**: a Dependabot PR does

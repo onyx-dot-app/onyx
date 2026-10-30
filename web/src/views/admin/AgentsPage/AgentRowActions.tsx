@@ -5,11 +5,12 @@ import { useTranslations } from "next-intl";
 import {
   Button,
   Dropdown,
+  Text,
   useCreateModal,
   type DropdownMenuItem,
 } from "@opal/components";
 // TODO(@raunakab): migrate to Opal LineItemButton once it supports danger variant
-import { cn, escapeMarkdown, markdown } from "@opal/utils";
+import { cn, escapeMarkdown, markdown, richNodes } from "@opal/utils";
 import {
   SvgMoreHorizontal,
   SvgEdit,
@@ -22,7 +23,6 @@ import {
   SvgTrash,
 } from "@opal/icons";
 import { ConfirmationModalLayout } from "@opal/layouts";
-import Text from "@/refresh-components/texts/Text";
 import { toast } from "@opal/layouts";
 import { useRouter } from "next/navigation";
 import {
@@ -32,8 +32,8 @@ import {
 } from "@/lib/agents/svc";
 import type { Agent } from "@/lib/agents/types";
 import { ShareAgentModal } from "@/lib/agents/components";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import { can } from "@/lib/permissions/resource-actions";
 
 // ---------------------------------------------------------------------------
@@ -274,15 +274,17 @@ export default function AgentRowActions({
             </Button>
           }
         >
-          <Text as="p" text03>
-            {t.rich("deleteModal.confirmation.description", {
-              name: agent.name,
-              emphasis: (chunks) => (
-                <Text as="span" text05>
-                  {chunks}
-                </Text>
-              ),
-            })}
+          <Text as="p" color="text-03">
+            {richNodes(
+              t.rich("deleteModal.confirmation.description", {
+                name: agent.name,
+                emphasis: (chunks) => (
+                  <Text as="span" color="text-05">
+                    {richNodes(chunks)}
+                  </Text>
+                ),
+              })
+            )}
           </Text>
         </ConfirmationModalLayout>
       )}
@@ -313,14 +315,14 @@ export default function AgentRowActions({
           }
         >
           <div className="flex flex-col gap-2">
-            <Text as="p" text03>
+            <Text as="p" color="text-03">
               {agent.is_featured
                 ? t("featuredModal.removeBody.description", {
                     name: agent.name,
                   })
                 : t("featuredModal.addBody.description")}
             </Text>
-            <Text as="p" text03>
+            <Text as="p" color="text-03">
               {t("modals.accessNote.description")}
             </Text>
           </div>
@@ -349,10 +351,10 @@ export default function AgentRowActions({
           }
         >
           <div className="flex flex-col gap-2">
-            <Text as="p" text03>
+            <Text as="p" color="text-03">
               {t("unlistModal.body.description")}
             </Text>
-            <Text as="p" text03>
+            <Text as="p" color="text-03">
               {t("modals.accessNote.description")}
             </Text>
           </div>

@@ -77,8 +77,9 @@ cross-link, not a sidebar entry: the connector catalog
 (`web/src/views/admin/connectors/CatalogPage.tsx`) routes there for a source that
 already has a federated connector,
 `web/src/app/admin/documents/sets/page.tsx` links to it from a document set's
-linked federated connector, and `CCPairIndexingStatusTable.tsx` links to it
-alongside regular cc-pairs. `web/src/lib/admin-routes.ts` lists `/admin/federated`
+linked federated connector, and the indexing status page
+(`web/src/views/admin/connectors/IndexingStatusPage/ConnectorList.tsx`) lists it
+after the regular cc-pairs for admins and links to it. `web/src/lib/admin-routes.ts` lists `/admin/federated`
 only inside `VECTOR_DB_REQUIRED_ROUTE_PREFIXES`, not as a registered `ADMIN_ROUTES` entry: there is
 no admin sidebar item and no `/admin/federated` index page, only the `[id]`
 detail page reached by the links above.
@@ -186,6 +187,12 @@ sections than be deduplicated. See §9.
 
 ### 4.2 Per-user token resolution
 
+The Slack lane uses the search tool's primary session client for date extraction
+and query expansion. Neither CHAT_NAMING nor SEARCH_SELECTION changes these calls.
+Both calls use the default reasoning options and retain existing prompt limits and fallbacks.
+Retrieved Slack sections later enter the same independent SEARCH_SELECTION and
+context-expansion path as indexed sections.
+
 `SearchTool._prefetch_slack_data` (`search_tool.py`) runs once inside the
 single DB session opened at the top of `run()`, before any parallel lane starts:
 
@@ -205,7 +212,7 @@ single DB session opened at the top of `run()`, before any parallel lane starts:
    still raise.
 
 The prefetch runs only when `SearchTool.enable_slack_search` is true or the call has a
-`slack_context`. In chat, `process_message._should_enable_slack_search` sets the flag. It is
+`slack_context`. In chat, `execution.py:create_chat_agent` sets the flag. It is
 true for the default persona with no source filter, or when the source filter includes
 Slack. The `/search` API always sets it true. The lane also drops when the resolved search
 scope excludes `DocumentSource.SLACK`. The sole gate on `_run_slack_search` is then

@@ -98,6 +98,8 @@ def make_all_cc_pairs_public__no_commit(db_session: Session) -> list[int]:
                 auto_sync_options=null(),
                 last_time_perm_sync=None,
                 last_time_external_group_sync=None,
+                # A public pair awaits no permission sync.
+                perm_sync_pending_since=None,
             )
         )
         mark_cc_pair_documents_for_sync__no_commit(db_session, cc_pair_ids)

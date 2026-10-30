@@ -12,6 +12,7 @@
 
 export { default as createSharedHook } from "@opal/hooks/createSharedHook";
 export { default as useContainerCenter } from "@opal/hooks/useContainerCenter";
+export { default as useDebouncedValue } from "@opal/hooks/useDebouncedValue";
 export { default as useFocusOnMount } from "@opal/hooks/useFocusOnMount";
 export {
   default as useGridNavigation,
@@ -37,3 +38,4 @@ export {
   type UseImageDropzoneReturn,
 } from "@opal/hooks/useImageDropzone";
 export { default as usePresence } from "@opal/hooks/usePresence";
+export { default as useWindowFileDrag } from "@opal/hooks/useWindowFileDrag";

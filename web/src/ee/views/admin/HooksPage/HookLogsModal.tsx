@@ -29,12 +29,7 @@ interface HookLogsModalProps {
 // TODO(@raunakab): replace this with a proper, opalified `Separator` component (when it lands).
 function SectionHeader({ label }: { label: string }) {
   return (
-    <Section
-      flexDirection="row"
-      alignItems="center"
-      height="fit"
-      className="py-1"
-    >
+    <Section flexDirection="row" alignItems="center" height="fit">
       <Text font="secondary-body" color="text-03">
         {label}
       </Text>
@@ -53,7 +48,6 @@ function LogRow({ log, group }: { log: HookExecutionRecord; group: string }) {
         alignItems="start"
         gap={2}
         height="fit"
-        className="py-2"
       >
         {/* 1. Timestamp */}
         <span className="shrink-0 text-code-code">
@@ -123,7 +117,7 @@ export default function HookLogsModal({ hook, spec }: HookLogsModalProps) {
         />
         <Modal.Body>
           {isLoading ? (
-            <Section justifyContent="center" height="fit" className="py-6">
+            <Section justifyContent="center" height="fit">
               <IconLoader />
             </Section>
           ) : error ? (

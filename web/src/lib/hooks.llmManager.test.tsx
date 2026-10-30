@@ -1,6 +1,6 @@
 import { act, renderHook } from "@tests/setup/test-utils";
 import { useLlmManager } from "@/lib/hooks";
-import { ChatSession, ChatSessionSharedStatus } from "@/app/app/interfaces";
+import { ChatSession, ChatSessionSharedStatus } from "@/app/app/types";
 import { ReasoningEffortOverride } from "@/lib/languageModels/types";
 import {
   updateReasoningEffortForChatSession,

@@ -681,8 +681,13 @@ class TestOpenSearchClient:
         # Under test and postcondition.
         # Bulk index the same docs again without update_if_exists - should
         # raise.
-        with pytest.raises(BulkIndexError, match="already exists"):
+        with pytest.raises(BulkIndexError) as exc_info:
             test_client.bulk_index_documents(documents=docs, tenant_state=tenant_state)
+        # The message carries counts by error type; the raw items stay on .errors.
+        assert "5x op=create status=409 type=version_conflict_engine_exception" in str(
+            exc_info.value
+        )
+        assert len(exc_info.value.errors) == 5
 
         # Sanity check: passing update_if_exists=True does not raise.
         test_client.bulk_index_documents(
@@ -2727,8 +2732,8 @@ class TestOpenSearchClient:
         Tests semantic search with filters for ACL, hidden documents, and tenant
         isolation.
 
-        The exact score assertions also check that quantized fields are
-        rescored with the full-precision vectors.
+        The score assertions check that quantized fields are rescored with
+        full-precision vectors, allowing floating-point rounding.
         """
         # Precondition.
         _patch_global_tenant_state(monkeypatch, True)
@@ -2842,7 +2847,7 @@ class TestOpenSearchClient:
                 for k in DocumentChunkWithoutVectors.model_fields
             }
         )
-        assert results[0].score == 1.0
+        assert results[0].score == pytest.approx(1.0, rel=0, abs=1e-6)
         # Same for the second result.
         assert results[1].document_chunk.document_id == "private-doc-user-a"
         assert results[1].document_chunk == DocumentChunkWithoutVectors(

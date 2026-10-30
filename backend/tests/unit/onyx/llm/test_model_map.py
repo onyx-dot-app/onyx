@@ -29,28 +29,28 @@ def test_partial_match_in_model_map() -> None:
     model_map = _fresh_model_map()
     try:
         _EXPECTED_FIELDS = {
-            "max_input_tokens": 128000,
-            "max_output_tokens": 16384,
-            "max_tokens": 128000,
+            "max_input_tokens": 922000,
+            "max_output_tokens": 128000,
+            "max_tokens": 1050000,
             "supports_function_calling": True,
-            "supports_reasoning": False,
+            "supports_reasoning": True,
             "supports_response_schema": True,
             "supports_vision": True,
             "litellm_provider": "openai",
         }
 
-        # ollama_chat carries no gpt-4o, so both names resolve through the
-        # bare-key pass: "openai/gpt-4o" as a provider-scoped key, then
-        # "gpt-4o" as a bare key owned by openai.
+        # ollama_chat carries no gpt-6-sol, so both names resolve through the
+        # bare-key pass: "openai/gpt-6-sol" as a provider-scoped key, then
+        # "gpt-6-sol" as a bare key owned by openai.
         result1 = find_model_obj(
-            model_map, LlmProviderNames.OLLAMA_CHAT, "openai/gpt-4o"
+            model_map, LlmProviderNames.OLLAMA_CHAT, "openai/gpt-6-sol"
         )
         assert result1 is not None
         for key, value in _EXPECTED_FIELDS.items():
             assert key in result1
             assert result1[key] == value, "Unexpected value for key: {}".format(key)
 
-        result2 = find_model_obj(model_map, LlmProviderNames.OLLAMA_CHAT, "gpt-4o")
+        result2 = find_model_obj(model_map, LlmProviderNames.OLLAMA_CHAT, "gpt-6-sol")
         assert result2 is not None
         for key, value in _EXPECTED_FIELDS.items():
             assert key in result2
@@ -65,8 +65,8 @@ def test_bare_key_prefers_canonical_owner() -> None:
     mock_catalog = {
         "openai": {
             "models": {
-                "gpt-4o": {
-                    "name": "GPT-4o",
+                "gpt-6-sol": {
+                    "name": "GPT-6 Sol",
                     "reasoning": False,
                     "limit": {"context": 128000},
                 }
@@ -75,8 +75,8 @@ def test_bare_key_prefers_canonical_owner() -> None:
         },
         "azure": {
             "models": {
-                "gpt-4o": {
-                    "name": "GPT-4o",
+                "gpt-6-sol": {
+                    "name": "GPT-6 Sol",
                     "reasoning": True,
                     "limit": {"context": 999},
                 }
@@ -88,12 +88,12 @@ def test_bare_key_prefers_canonical_owner() -> None:
     with patch.object(model_catalog, "_catalog", return_value=mock_catalog):
         model_map = _fresh_model_map()
         try:
-            bare = find_model_obj(model_map, "custom_provider", "gpt-4o")
+            bare = find_model_obj(model_map, "custom_provider", "gpt-6-sol")
             assert bare is not None
             assert bare["litellm_provider"] == "openai"
             assert bare["max_tokens"] == 128000
 
-            scoped = find_model_obj(model_map, LlmProviderNames.AZURE, "gpt-4o")
+            scoped = find_model_obj(model_map, LlmProviderNames.AZURE, "gpt-6-sol")
             assert scoped is not None
             assert scoped["litellm_provider"] == "azure"
             assert scoped["max_tokens"] == 999
@@ -107,9 +107,9 @@ def test_model_is_reasoning_model_handles_none_in_model_map() -> None:
     mock_catalog = {
         "openai": {
             "models": {
-                "gpt-4o": {"reasoning": None},
+                "gpt-6-sol": {"reasoning": None},
                 "o3": {"reasoning": True},
-                "gpt-4o-mini": {},
+                "gpt-6-luna": {},
             },
             "aliases": {},
         },
@@ -125,13 +125,13 @@ def test_model_is_reasoning_model_handles_none_in_model_map() -> None:
         _fresh_model_map()
         try:
             # None in map — should fall through to the probe
-            assert model_is_reasoning_model("gpt-4o", "openai") is False
+            assert model_is_reasoning_model("gpt-6-sol", "openai") is False
 
             # True in map — should return True without probing
             assert model_is_reasoning_model("o3", "openai") is True
 
             # Missing key — should fall through to the probe
-            assert model_is_reasoning_model("gpt-4o-mini", "openai") is False
+            assert model_is_reasoning_model("gpt-6-luna", "openai") is False
         finally:
             _reset_caches()
 
@@ -253,7 +253,7 @@ def test_chat_only_accepts_responses_mode_entries() -> None:
     mock_catalog: dict[str, Any] = {
         "openai": {
             "models": {
-                "gpt-5-pro": {
+                "gpt-6-astra": {
                     "mode": "responses",
                     "limit": {"context": 400_000, "output": 272_000},
                 },
@@ -265,7 +265,7 @@ def test_chat_only_accepts_responses_mode_entries() -> None:
     with patch.object(model_catalog, "_catalog", return_value=mock_catalog):
         model_map = _fresh_model_map()
         try:
-            obj = find_model_obj(model_map, "openai", "gpt-5-pro", chat_only=True)
+            obj = find_model_obj(model_map, "openai", "gpt-6-astra", chat_only=True)
             assert obj is not None
             assert obj["max_tokens"] == 400_000
             assert obj["max_output_tokens"] == 272_000
@@ -479,3 +479,142 @@ def test_twelvelabs_pegasus_override_present() -> None:
         assert model_obj["supports_reasoning"] is False
     finally:
         _reset_caches()
+
+
+def test_modeless_non_chat_ids_infer_mode_from_name() -> None:
+    """Providers vendored from sources without a mode concept (e.g.
+    vercel_ai_gateway) ship no mode field; embed/rerank ids must infer a
+    non-chat mode or gateway model lists would offer them as chat models."""
+    mock_catalog = {
+        "vercel_ai_gateway": {
+            "models": {
+                "cohere/embed-v5.0-fast": {
+                    "limit": {"context": 512, "output": 512},
+                },
+                "cohere/rerank-v4-pro": {
+                    "limit": {"context": 128_000, "output": 0},
+                },
+                "cohere/command-a": {
+                    "limit": {"context": 256_000, "output": 8_000},
+                },
+            },
+            "aliases": {},
+        },
+    }
+
+    with (
+        patch.object(model_catalog, "_catalog", return_value=mock_catalog),
+        patch.object(
+            model_catalog,
+            "_fetch_provider_file",
+            side_effect=model_catalog.httpx.ConnectError("offline"),
+        ),
+    ):
+        model_catalog.reset_remote_cache()
+        model_map = _fresh_model_map()
+        try:
+            mode_expectations = {
+                "cohere/embed-v5.0-fast": "embedding",
+                "cohere/rerank-v4-pro": "rerank",
+            }
+            for name, want_mode in mode_expectations.items():
+                obj = find_model_obj(model_map, "vercel_ai_gateway", name)
+                assert obj is not None
+                assert obj["mode"] == want_mode
+                assert (
+                    find_model_obj(model_map, "vercel_ai_gateway", name, chat_only=True)
+                    is None
+                )
+                assert model_catalog.is_non_chat_model_name(name) is True
+                assert name not in model_catalog.iter_models(
+                    "vercel_ai_gateway", mode="chat"
+                )
+                assert name in model_catalog.iter_models(
+                    "vercel_ai_gateway", mode=want_mode
+                )
+
+            chat = find_model_obj(model_map, "vercel_ai_gateway", "cohere/command-a")
+            assert chat is not None
+            assert chat["mode"] == "chat"
+            assert model_catalog.resolve_model_mode("cohere/command-a") == "chat"
+        finally:
+            _reset_caches()
+            model_catalog.reset_remote_cache()
+
+
+def test_explicit_mode_wins_over_name_heuristic() -> None:
+    """A vendored mode beats the name fallback — an upstream 'chat' entry
+    named *-embed stays chat."""
+    mock_catalog = {
+        "wandb": {
+            "models": {
+                "vendor/embed-named-chat": {
+                    "mode": "chat",
+                    "limit": {"context": 8_000},
+                },
+            },
+            "aliases": {},
+        },
+    }
+
+    with (
+        patch.object(model_catalog, "_catalog", return_value=mock_catalog),
+        patch.object(
+            model_catalog,
+            "_fetch_provider_file",
+            side_effect=model_catalog.httpx.ConnectError("offline"),
+        ),
+    ):
+        model_catalog.reset_remote_cache()
+        model_map = _fresh_model_map()
+        try:
+            obj = find_model_obj(model_map, "wandb", "vendor/embed-named-chat")
+            assert obj is not None
+            assert obj["mode"] == "chat"
+        finally:
+            _reset_caches()
+            model_catalog.reset_remote_cache()
+
+
+def test_remote_catalog_malformed_entry_falls_back_to_vendored() -> None:
+    """A remote entry _compat_entry can't render is a remote miss, not an
+    error — the vendored floor still resolves the lookup."""
+    vendored = {
+        "wandb": {
+            "models": {
+                "vendor/model": {
+                    "mode": "chat",
+                    "limit": {"context": 8_000},
+                    "cost": {"input": 1.5, "output": 3.0},
+                },
+            },
+            "aliases": {},
+        }
+    }
+    remote_section = {
+        "models": {"vendor/model": "not-an-entry"},
+        "aliases": {},
+    }
+
+    with (
+        patch.object(model_catalog, "_catalog", return_value=vendored),
+        patch.object(
+            model_catalog,
+            "_fetch_provider_file",
+            return_value=_remote_response(remote_section),
+        ),
+    ):
+        model_catalog.reset_remote_cache()
+        model_map = _fresh_model_map()
+        try:
+            obj = find_model_obj(model_map, "wandb", "vendor/model")
+            assert obj is not None
+            assert obj["litellm_provider"] == "wandb"
+            assert obj["max_tokens"] == 8_000
+            # Cost/limit lookups also fall back to the vendored entry rather
+            # than returning the malformed remote payload.
+            cost = model_catalog.find_model_cost("wandb", "vendor/model")
+            assert cost == {"input": 1.5, "output": 3.0}
+        finally:
+            _reset_caches()
+            model_catalog.reset_remote_cache()

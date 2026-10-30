@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@opal/utils";
+import { cn, richNodes } from "@opal/utils";
 import { FieldContext } from "@opal/form";
 import {
   ControlProps,
@@ -15,7 +15,7 @@ import React, { useId, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { useFieldContext } from "@opal/form";
 import { Slot } from "@radix-ui/react-slot";
-import Text from "../texts/Text";
+import { Text } from "@opal/components";
 import { FieldMessage } from "@opal/form";
 
 export const FormFieldRoot: React.FC<FormFieldRootProps> = ({
@@ -80,13 +80,17 @@ export const FormFieldLabel: React.FC<LabelProps> = ({
       {leftIcon && <span className="flex items-center">{leftIcon}</span>}
       {children}
       {required ? (
-        <Text as="p" text03 mainUiMuted className="mx-0.5">
-          {t("required.label")}
-        </Text>
+        <span className="mx-0.5">
+          <Text font="main-ui-muted" color="text-03">
+            {t("required.label")}
+          </Text>
+        </span>
       ) : optional ? (
-        <Text as="p" text03 mainUiMuted className="mx-0.5">
-          {t("optional.label")}
-        </Text>
+        <span className="mx-0.5">
+          <Text font="main-ui-muted" color="text-03">
+            {t("optional.label")}
+          </Text>
+        </span>
       ) : null}
       {rightIcon && <span className="flex items-center">{rightIcon}</span>}
       {rightAction && (
@@ -126,22 +130,16 @@ export const FormFieldControl: React.FC<ControlProps> = ({
 export const FormFieldDescription: React.FC<DescriptionProps> = ({
   className,
   children,
-  ...props
 }) => {
   const { baseId } = useFieldContext();
   const content = children;
   if (!content) return null;
   return (
-    <Text
-      as="p"
-      id={`${baseId}-desc`}
-      text03
-      secondaryBody
-      className={cn("ms-0.5", className)}
-      {...props}
-    >
-      {content}
-    </Text>
+    <div className={cn("ms-0.5", className)}>
+      <Text as="p" id={`${baseId}-desc`} font="secondary-body" color="text-03">
+        {typeof content === "string" ? content : richNodes(content)}
+      </Text>
+    </div>
   );
 };
 

@@ -78,3 +78,27 @@ it("gives screen readers the tooltip's reason while disabled, as plain text", ()
   );
   expect(screen.queryByText("Select an account first")).not.toBeInTheDocument();
 });
+
+it("keeps the children mounted across a toggle when a tooltip is given", async () => {
+  const user = userEvent.setup();
+  function Harness() {
+    const [locked, setLocked] = useState(false);
+    return (
+      <TooltipProvider>
+        <button onClick={() => setLocked((value) => !value)}>toggle</button>
+        <Disabled disabled={locked} tooltip="Select an account first">
+          <input aria-label="name" />
+        </Disabled>
+      </TooltipProvider>
+    );
+  }
+  render(<Harness />);
+
+  const input = screen.getByRole("textbox", { name: "name" });
+  await user.type(input, "kept");
+  await user.click(screen.getByRole("button", { name: "toggle" }));
+  await user.click(screen.getByRole("button", { name: "toggle" }));
+
+  expect(screen.getByRole("textbox", { name: "name" })).toBe(input);
+  expect(input).toHaveValue("kept");
+});

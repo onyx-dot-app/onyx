@@ -1,12 +1,10 @@
 "use client";
 
 import React from "react";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
+import { getSourceMetadata } from "@/lib/connectors/utils";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
-import Text from "@/refresh-components/texts/Text";
-import Truncated from "@/refresh-components/texts/Truncated";
-import { getSourceMetadata } from "@/lib/sources";
 import type {
   ConnectedSource,
   HierarchyNodeSearchSummary,
@@ -14,11 +12,13 @@ import type {
 import type { SearchDocWithContent } from "@/lib/search/types";
 import type { ValidSources } from "@/lib/connectors/types/source";
 import {
+  Text,
   Button,
   InputCheckbox,
   Divider,
   InputTypeIn,
   LineItemButton,
+  OverflowText,
 } from "@opal/components";
 import {
   SvgArrowLeft,
@@ -122,6 +122,7 @@ export function KnowledgeSearchSidebar({
   vectorDbEnabled,
 }: KnowledgeSearchSidebarProps) {
   const t = useTranslations("knowledge");
+  const format = useFormatter();
   const totalCount = Array.from(resultCountBySource.values()).reduce(
     (a, b) => a + b,
     0
@@ -137,8 +138,8 @@ export function KnowledgeSearchSidebar({
         onClick={() => onSourceFilterClick(null)}
         rightChildren={
           totalCount > 0 ? (
-            <Text mainUiAction className="text-action-selection-05">
-              {totalCount}
+            <Text font="main-ui-action" color="action-selection-05">
+              {format.number(totalCount)}
             </Text>
           ) : undefined
         }
@@ -159,8 +160,8 @@ export function KnowledgeSearchSidebar({
               onClick={() => onSourceFilterClick(cs.source)}
               rightChildren={
                 count > 0 ? (
-                  <Text mainUiAction className="text-action-selection-05">
-                    {count}
+                  <Text font="main-ui-action" color="action-selection-05">
+                    {format.number(count)}
                   </Text>
                 ) : undefined
               }
@@ -210,7 +211,7 @@ export function KnowledgeSearchResultsPanel({
         aria-label="search-empty-state"
       >
         <SvgSearch size={32} className="stroke-text-04" />
-        <Text secondaryBody text03>
+        <Text font="secondary-body" color="text-03">
           {t("search.prompt.description")}
         </Text>
       </GeneralLayouts.Section>
@@ -224,7 +225,7 @@ export function KnowledgeSearchResultsPanel({
         justifyContent="center"
         aria-label="search-loading"
       >
-        <Text secondaryBody text03>
+        <Text font="secondary-body" color="text-03">
           {t("search.loading.description")}
         </Text>
       </GeneralLayouts.Section>
@@ -239,7 +240,7 @@ export function KnowledgeSearchResultsPanel({
         gap={2}
         aria-label="search-error"
       >
-        <Text secondaryBody text03>
+        <Text font="secondary-body" color="text-03">
           {t("search.error.description")}
         </Text>
       </GeneralLayouts.Section>
@@ -264,7 +265,7 @@ export function KnowledgeSearchResultsPanel({
         gap={2}
         aria-label="search-no-results"
       >
-        <Text secondaryBody text03>
+        <Text font="secondary-body" color="text-03">
           {activeSourceFilter
             ? t("search.noResultsInSource.description", {
                 source: getSourceMetadata(activeSourceFilter).displayName,
@@ -277,12 +278,12 @@ export function KnowledgeSearchResultsPanel({
         <TableLayouts.TableRow>
           <TableLayouts.CheckboxCell />
           <TableLayouts.TableCell flex>
-            <Text secondaryBody text03>
+            <Text font="secondary-body" color="text-03">
               {t("table.columns.name.header")}
             </Text>
           </TableLayouts.TableCell>
           <TableLayouts.TableCell width={8}>
-            <Text secondaryBody text03>
+            <Text font="secondary-body" color="text-03">
               {t("table.columns.sources.header")}
             </Text>
           </TableLayouts.TableCell>
@@ -322,19 +323,31 @@ export function KnowledgeSearchResultsPanel({
                       <GeneralLayouts.Section
                         flexDirection="column"
                         justifyContent="start"
-                        alignItems="start"
+                        alignItems="stretch"
                         gap={0}
                         height="auto"
                         className="min-w-0 grow"
                       >
-                        <Truncated>{node.title}</Truncated>
+                        <OverflowText
+                          as="p"
+                          textPosition="text-start"
+                          font="main-ui-body"
+                          color="text-05"
+                        >
+                          {node.title}
+                        </OverflowText>
                         {node.link && (
-                          <Truncated text03 secondaryBody>
+                          <OverflowText
+                            as="p"
+                            textPosition="text-start"
+                            font="secondary-body"
+                            color="text-03"
+                          >
                             {node.link
                               .replace(/^https?:\/\//i, "")
                               .replace(/^www\./i, "")
                               .replace(/\/+$/, "")}
-                          </Truncated>
+                          </OverflowText>
                         )}
                       </GeneralLayouts.Section>
                       <Button
@@ -387,16 +400,28 @@ export function KnowledgeSearchResultsPanel({
                     <GeneralLayouts.Section
                       flexDirection="column"
                       justifyContent="start"
-                      alignItems="start"
+                      alignItems="stretch"
                       gap={0}
                       height="auto"
                       className="min-w-0 grow"
                     >
-                      <Truncated>{doc.semantic_identifier}</Truncated>
+                      <OverflowText
+                        as="p"
+                        textPosition="text-start"
+                        font="main-ui-body"
+                        color="text-05"
+                      >
+                        {doc.semantic_identifier}
+                      </OverflowText>
                       {doc.blurb && (
-                        <Truncated text03 secondaryBody>
+                        <OverflowText
+                          as="p"
+                          textPosition="text-start"
+                          font="secondary-body"
+                          color="text-03"
+                        >
                           {doc.blurb}
-                        </Truncated>
+                        </OverflowText>
                       )}
                     </GeneralLayouts.Section>
                   </GeneralLayouts.Section>
@@ -432,7 +457,7 @@ export function KnowledgeSearchResultsPanel({
           justifyContent="center"
           className="absolute inset-0 z-10"
         >
-          <Text secondaryBody text03>
+          <Text font="secondary-body" color="text-03">
             {t("search.stale.description")}
           </Text>
         </GeneralLayouts.Section>

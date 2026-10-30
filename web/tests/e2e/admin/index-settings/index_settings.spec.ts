@@ -2,7 +2,10 @@ import { expect, test } from "@playwright/test";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import type { Page } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
-import { IndexSettingsPage } from "./IndexSettingsPage";
+import {
+  ENABLE_FORWARD_DIALOG_TITLE,
+  IndexSettingsPage,
+} from "./IndexSettingsPage";
 
 const INDEX_SETTINGS_URL = ADMIN_ROUTES.INDEX_SETTINGS.path;
 const EMBEDDING_PROVIDER_API = "**/api/admin/embedding/embedding-provider**";
@@ -47,7 +50,6 @@ interface TestSearchSettings {
 
 interface TestSettings {
   image_extraction_and_analysis_enabled?: boolean | null;
-  image_analysis_max_size_mb?: number | null;
   [key: string]: unknown;
 }
 
@@ -115,6 +117,8 @@ function modelDisplayName(model: TestModelConfiguration): string {
 // Helpers shared across both describe blocks
 // ---------------------------------------------------------------------------
 
+// Legacy self-hosted models are not rendered unless current, so the first
+// "Select Model" is always one of the selectable models.
 async function stageNonCurrentSelfHostedModel(page: Page): Promise<void> {
   await expandModelPicker(page);
   await page.getByRole("tab", { name: /self.hosted/i }).click();
@@ -307,9 +311,17 @@ test.describe("Index Settings Page @exclusive", () => {
       const modal = page.getByRole("dialog", { name: /manage openai/i });
       await expect(modal).toBeVisible({ timeout: 10000 });
 
-      // API key field should show a masked value (not be blank)
+      // The stored API key shows as a masked tag; the input itself stays
+      // empty until the user types a replacement.
       const apiKeyInput = modal.getByLabel(/api key/i);
-      await expect(apiKeyInput).not.toHaveValue("");
+      await expect(apiKeyInput).toHaveValue("");
+      await expect(
+        modal
+          .locator(".opal-input")
+          // `has` searches inside each match, so it takes a locator that is
+          // not rooted at the dialog.
+          .filter({ has: page.getByLabel(/api key/i) })
+      ).toContainText(/\*{2,}|•|\.\.\./);
 
       await modal.getByRole("button", { name: /cancel/i }).click();
       await expect(modal).not.toBeVisible({ timeout: 10000 });
@@ -357,7 +369,7 @@ test.describe("Index Settings Page @exclusive", () => {
   });
 });
 
-test.describe("Index Settings — contextual LLM updates @exclusive", () => {
+test.describe("Index Settings: contextual LLM updates @exclusive", () => {
   test.beforeEach(async ({ page }) => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
@@ -523,6 +535,78 @@ test.describe("Index Settings — contextual LLM updates @exclusive", () => {
     expect(body.model_name).toBe(current.model_name);
     expect(setNewRequestCount).toBe(0);
   });
+
+  test("turns Contextual Retrieval on only for new and updated documents", async ({
+    page,
+  }) => {
+    const current = (await getCurrentSearchSettings(
+      page
+    )) as TestSearchSettings;
+    const models = getVisibleLlmModels(await getLlmProviderResponse(page));
+    test.skip(models.length === 0, "A visible LLM model is required");
+    const contextualModel = models[0]!;
+
+    let servedSettings: TestSearchSettings = {
+      ...current,
+      enable_contextual_rag: false,
+      contextual_rag_model_configuration_id: null,
+    };
+    let setNewRequestCount = 0;
+
+    await page.route(CURRENT_SEARCH_SETTINGS_API, async (route) => {
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify(servedSettings),
+      });
+    });
+    await page.route(SECONDARY_SEARCH_SETTINGS_API, async (route) => {
+      await route.fulfill({ status: 200, body: "null" });
+    });
+    await page.route(SET_NEW_SETTINGS_API, async (route) => {
+      setNewRequestCount += 1;
+      await route.fulfill({ status: 200, body: JSON.stringify({ id: 1 }) });
+    });
+
+    const updateBodyPromise = new Promise<TestSearchSettings>((resolve) => {
+      void page.route(UPDATE_INFERENCE_SETTINGS_API, async (route) => {
+        const body = JSON.parse(
+          route.request().postData() ?? "{}"
+        ) as TestSearchSettings;
+        servedSettings = body;
+        resolve(body);
+        await route.fulfill({
+          status: 200,
+          body: JSON.stringify({
+            contextual_rag_model_configuration_id:
+              body.contextual_rag_model_configuration_id,
+          }),
+        });
+      });
+    });
+
+    const indexSettingsPage = new IndexSettingsPage(page);
+    await indexSettingsPage.goto();
+    await indexSettingsPage.enableContextualRetrieval();
+    await indexSettingsPage.stageContextualModel(
+      modelDisplayName(contextualModel)
+    );
+    await indexSettingsPage.expectBannerTitle(
+      "Choose how to turn on Contextual Retrieval"
+    );
+    await indexSettingsPage.expectContextualModelActions();
+    await indexSettingsPage.openForwardOnlyConfirmation(
+      ENABLE_FORWARD_DIALOG_TITLE
+    );
+    await indexSettingsPage.confirmForwardOnlyUpdate(
+      ENABLE_FORWARD_DIALOG_TITLE
+    );
+
+    const body = await updateBodyPromise;
+    expect(body.enable_contextual_rag).toBe(true);
+    expect(body.contextual_rag_model_configuration_id).toBe(contextualModel.id);
+    expect(body.model_name).toBe(current.model_name);
+    expect(setNewRequestCount).toBe(0);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -605,7 +689,6 @@ async function mockImageProcessing(
   let servedSettings: TestSettings = {
     ...settings,
     image_extraction_and_analysis_enabled: options.imageOn,
-    image_analysis_max_size_mb: 20,
   };
   let servedSearchSettings: TestSearchSettings =
     options.contextualModelId === undefined
@@ -678,7 +761,7 @@ async function mockImageProcessing(
   return mocks;
 }
 
-test.describe("Index Settings — image processing @exclusive", () => {
+test.describe("Index Settings: image processing @exclusive", () => {
   test.beforeEach(async ({ page }) => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
@@ -703,12 +786,11 @@ test.describe("Index Settings — image processing @exclusive", () => {
 
     await indexSettings.applyWithoutReindexButton.click();
     await expect.poll(() => mocks!.calls.length).toBe(2);
-    // The model lands first, then the toggle and size.
+    // The model lands first, then the toggle.
     expect(mocks!.calls).toEqual(["vision", "settings"]);
     expect(mocks!.visionBodies[0]?.model_name).toBe(mocks!.visionModel.name);
     expect(mocks!.settingsBodies[0]).toMatchObject({
       image_extraction_and_analysis_enabled: true,
-      image_analysis_max_size_mb: 20,
     });
 
     // The form rebased onto the saved settings: clean banner, switch still on.
@@ -872,7 +954,7 @@ test.describe("Index Settings — image processing @exclusive", () => {
 // Switchover strategy tests
 // ---------------------------------------------------------------------------
 
-test.describe("Index Settings — switchover strategies @exclusive", () => {
+test.describe("Index Settings: switchover strategies @exclusive", () => {
   test.beforeEach(async ({ page }) => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
@@ -890,7 +972,7 @@ test.describe("Index Settings — switchover strategies @exclusive", () => {
     await expect(applyButton).toBeEnabled();
 
     // Dropdown should show the REINDEX option as selected
-    await expect(page.getByRole("combobox").first()).toHaveValue(
+    await expect(new IndexSettingsPage(page).strategySelect).toHaveValue(
       /re-index all connectors/i
     );
   });
@@ -945,7 +1027,7 @@ test.describe("Index Settings — switchover strategies @exclusive", () => {
       await stageNonCurrentSelfHostedModel(page);
 
       // Open the strategy dropdown and pick the target option
-      await page.getByRole("combobox").first().click();
+      await new IndexSettingsPage(page).strategySelect.click();
       await page.getByRole("option", { name: label }).click();
 
       await page.getByRole("button", { name: "Apply & Re-index" }).click();
@@ -977,16 +1059,62 @@ test.describe("Index Settings — switchover strategies @exclusive", () => {
   });
 });
 
-test.describe("Index Settings — vector quantization @exclusive", () => {
+test.describe("Index Settings: vector quantization @exclusive", () => {
   test.beforeEach(async ({ page }) => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
   });
 
-  test("the vector quantization control is hidden", async ({ page }) => {
-    const indexSettings = new IndexSettingsPage(page);
+  test("a quantization change re-indexes with the chosen level", async ({
+    page,
+  }) => {
+    // Start from a known level so picking 1-bit is always a change.
+    const current = (await getCurrentSearchSettings(
+      page
+    )) as TestSearchSettings;
+    const servedSettings: TestSearchSettings = {
+      ...current,
+      vector_quantization: "none",
+    };
+    await page.route(CURRENT_SEARCH_SETTINGS_API, async (route) => {
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify(servedSettings),
+      });
+    });
+    await page.route(SECONDARY_SEARCH_SETTINGS_API, async (route) => {
+      await route.fulfill({ status: 200, body: "null" });
+    });
+    const bodyPromise: Promise<Record<string, unknown>> = new Promise<
+      Record<string, unknown>
+    >((resolve) => {
+      void page.route(SET_NEW_SETTINGS_API, async (route) => {
+        resolve(
+          JSON.parse(route.request().postData() ?? "{}") as Record<
+            string,
+            unknown
+          >
+        );
+        await route.fulfill({ status: 200, body: JSON.stringify({ id: 1 }) });
+      });
+    });
+
+    const indexSettings: IndexSettingsPage = new IndexSettingsPage(page);
     await indexSettings.goto();
-    await indexSettings.expectVectorQuantizationHidden();
+    await indexSettings.selectVectorQuantization("1-bit");
+
+    // Only quantization changed, so the banner says the index is rebuilt from
+    // the stored vectors rather than fully re-indexed.
+    await indexSettings.expectQuantizationRebuildBanner();
+
+    // Quantization is part of the index mapping, so only the re-index
+    // strategies are offered.
+    await indexSettings.expectStrategy(/re-index all connectors/i);
+    await indexSettings.expectStrategyOptionAbsent("Do Not Re-index");
+
+    await indexSettings.applyReindex();
+    const body: Record<string, unknown> = await bodyPromise;
+    expect(body.vector_quantization).toBe("scalar_1_bit");
   });
 
   test("a re-index keeps the saved quantization level", async ({ page }) => {
@@ -1006,7 +1134,9 @@ test.describe("Index Settings — vector quantization @exclusive", () => {
     await page.route(SECONDARY_SEARCH_SETTINGS_API, async (route) => {
       await route.fulfill({ status: 200, body: "null" });
     });
-    const bodyPromise = new Promise<Record<string, unknown>>((resolve) => {
+    const bodyPromise: Promise<Record<string, unknown>> = new Promise<
+      Record<string, unknown>
+    >((resolve) => {
       void page.route(SET_NEW_SETTINGS_API, async (route) => {
         resolve(
           JSON.parse(route.request().postData() ?? "{}") as Record<
@@ -1018,12 +1148,12 @@ test.describe("Index Settings — vector quantization @exclusive", () => {
       });
     });
 
-    const indexSettings = new IndexSettingsPage(page);
+    const indexSettings: IndexSettingsPage = new IndexSettingsPage(page);
     await indexSettings.goto();
     await stageNonCurrentSelfHostedModel(page);
     await indexSettings.applyReindex();
 
-    const body = await bodyPromise;
+    const body: Record<string, unknown> = await bodyPromise;
     expect(body.vector_quantization).toBe("scalar_1_bit");
   });
 });
@@ -1046,6 +1176,7 @@ interface EmptyRegistryProviderCase {
   // Fills the credential fields unique to this provider via the page object
   // (the shared model-spec fields are filled by the test body).
   fillCredentials: (indexSettings: IndexSettingsPage) => Promise<void>;
+  reducedDimension?: number;
 }
 
 const EMPTY_REGISTRY_PROVIDERS: EmptyRegistryProviderCase[] = [
@@ -1069,9 +1200,21 @@ const EMPTY_REGISTRY_PROVIDERS: EmptyRegistryProviderCase[] = [
         deploymentName: "my-deployment",
       }),
   },
+  {
+    providerType: "openai_compatible",
+    displayName: "OpenAI-Compatible",
+    fillCredentials: async (indexSettings) => {
+      await indexSettings.fillLiteLLMCredentials({
+        apiBaseUrl: "http://localhost:8000/v1",
+        apiKey: "sk-test-key",
+      });
+      await indexSettings.fillReducedDimension(512);
+    },
+    reducedDimension: 512,
+  },
 ];
 
-test.describe("Index Settings — empty-registry providers @exclusive", () => {
+test.describe("Index Settings: empty-registry providers @exclusive", () => {
   test.beforeEach(async ({ page }) => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
@@ -1081,6 +1224,7 @@ test.describe("Index Settings — empty-registry providers @exclusive", () => {
     providerType,
     displayName,
     fillCredentials,
+    reducedDimension,
   } of EMPTY_REGISTRY_PROVIDERS) {
     test(`connecting ${displayName} stages its model and applies with provider_type="${providerType}"`, async ({
       page,
@@ -1142,6 +1286,136 @@ test.describe("Index Settings — empty-registry providers @exclusive", () => {
       // sent as provider_type=null (which the backend treats as self-hosted
       // and would ignore the credentials we just saved).
       expect(body.provider_type).toBe(providerType);
+      expect(body.reduced_dimension).toBe(reducedDimension ?? null);
     });
   }
+});
+
+// ---------------------------------------------------------------------------
+// Bring-your-own model cards (ENG-4417)
+//
+// LiteLLM, Azure and Bifrost list no registry models. The picker must still
+// show the configured model as a card.
+// ---------------------------------------------------------------------------
+
+const BIFROST_MODEL = "openai/text-embedding-3-small";
+const BIFROST_API_URL = "http://bifrost.example.com:8080";
+
+test.describe("Index Settings: bring-your-own model cards @exclusive", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.context().clearCookies();
+    await loginAs(page, "admin");
+  });
+
+  test("connecting Bifrost shows its model as a selected card", async ({
+    page,
+  }) => {
+    await page.route(TEST_EMBEDDING_API, async (route) => {
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify({ dimension: 1536 }),
+      });
+    });
+    let bifrostSaved = false;
+    await page.route(EMBEDDING_PROVIDER_API, async (route) => {
+      const method = route.request().method();
+      if (method === "PUT") {
+        bifrostSaved = true;
+        await route.fulfill({
+          status: 200,
+          body: JSON.stringify({ provider_type: "bifrost" }),
+        });
+      } else if (method === "GET") {
+        await route.fulfill({
+          status: 200,
+          body: JSON.stringify(
+            bifrostSaved
+              ? [
+                  {
+                    provider_type: "bifrost",
+                    api_key: null,
+                    api_url: BIFROST_API_URL,
+                    api_version: null,
+                    deployment_name: null,
+                  },
+                ]
+              : []
+          ),
+        });
+      } else {
+        await route.continue();
+      }
+    });
+
+    const indexSettings = new IndexSettingsPage(page);
+    await indexSettings.goto();
+    await indexSettings.expandModelPicker();
+    await indexSettings.switchToCloudTab();
+
+    await indexSettings.openProviderSetup("Bifrost");
+    await indexSettings.fillBifrostCredentials({
+      apiBaseUrl: BIFROST_API_URL,
+      modelName: BIFROST_MODEL,
+    });
+    await indexSettings.submitProviderSetup();
+
+    await indexSettings.expectModelStaged();
+    await indexSettings.expectModelCardState(
+      "bifrost",
+      BIFROST_MODEL,
+      "Selected"
+    );
+    await indexSettings.expectBannerTitle(
+      `Switching to Bifrost / ${BIFROST_MODEL}. A full re-index will run.`
+    );
+  });
+
+  test("a current Bifrost model shows as its card", async ({ page }) => {
+    const current = await getCurrentSearchSettings(page);
+    await page.route(CURRENT_SEARCH_SETTINGS_API, async (route) => {
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify({
+          ...current,
+          model_name: BIFROST_MODEL,
+          model_dim: 1536,
+          normalize: false,
+          query_prefix: "",
+          passage_prefix: "",
+          provider_type: "bifrost",
+        }),
+      });
+    });
+    await page.route(SECONDARY_SEARCH_SETTINGS_API, async (route) => {
+      await route.fulfill({ status: 200, body: "null" });
+    });
+    await page.route(EMBEDDING_PROVIDER_API, async (route) => {
+      if (route.request().method() === "GET") {
+        await route.fulfill({
+          status: 200,
+          body: JSON.stringify([
+            {
+              provider_type: "bifrost",
+              api_key: null,
+              api_url: BIFROST_API_URL,
+              api_version: null,
+              deployment_name: null,
+            },
+          ]),
+        });
+      } else {
+        await route.continue();
+      }
+    });
+
+    const indexSettings = new IndexSettingsPage(page);
+    await indexSettings.goto();
+    await indexSettings.expandModelPicker();
+
+    await indexSettings.expectModelCardState(
+      "bifrost",
+      BIFROST_MODEL,
+      "Current Model"
+    );
+  });
 });

@@ -37,7 +37,7 @@ import FrostedDiv from "@/refresh-components/FrostedDiv";
 import {
   Button,
   Dropdown,
-  OpenButton,
+  SelectButton,
   Text,
   type DropdownMenuItem,
   type DropdownView,
@@ -66,8 +66,8 @@ import type { AppMode } from "@/providers/QueryControllerProvider";
 import { useAppDocumentTitle, useCustomFooterContent } from "@/lib/app/hooks";
 import { useAppPosition } from "@/lib/position/hooks";
 import { useQueryController } from "@/providers/QueryControllerProvider";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import { useFullWidthChat } from "@/providers/FullWidthChatProvider";
 import { useIncognito } from "@/providers/IncognitoProvider";
 
@@ -402,14 +402,15 @@ function Header() {
                 )}
                 {incognitoEnabled &&
                   (appPosition.isChat() || appPosition.isNewSession()) && (
-                    <OpenButton
+                    <SelectButton
+                      chevron
                       disabled
                       icon={SvgEyeOff}
                       aria-label={t("incognitoPill.ariaLabel")}
                       data-testid="incognito-chat-pill"
                     >
                       {t("incognitoPill.label")}
-                    </OpenButton>
+                    </SelectButton>
                   )}
                 {businessTier &&
                   isSearchModeAvailable &&
@@ -421,7 +422,8 @@ function Header() {
                       onOpenChange={setModePopoverOpen}
                     >
                       <Dropdown.Trigger asChild>
-                        <OpenButton
+                        <SelectButton
+                          chevron
                           aria-label={t("modeButton.ariaLabel")}
                           icon={
                             effectiveMode === "search"
@@ -433,7 +435,7 @@ function Header() {
                           {effectiveMode === "search"
                             ? t("mode.search.label")
                             : t("mode.chat.label")}
-                        </OpenButton>
+                        </SelectButton>
                       </Dropdown.Trigger>
                       <Dropdown.Data
                         label={t("modeButton.ariaLabel")}

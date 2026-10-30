@@ -2,7 +2,7 @@
 them can leave unread."""
 
 import threading
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import date, datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock, call
@@ -200,11 +200,27 @@ def test_a_walk_with_readers_gives_each_channel_its_own_rest_context_and_client(
     both_reading = threading.Barrier(2, timeout=5)
     seen: list[tuple[int, Any, Any]] = []
 
+    class _Reader:
+        """Records what the reader was built from, in place of the real one."""
+
+        def __init__(
+            self, rest_context: Callable[[str], Any], graph_client: Any, _: Any
+        ) -> None:
+            self.rest_context = rest_context
+            self.graph_client = graph_client
+
     def access(**kwargs: Any) -> ExternalAccess:
         # Each reader waits for the other, so readers one channel at a time
         # break the barrier.
         both_reading.wait()
-        seen.append((threading.get_ident(), kwargs["ctx"], kwargs["graph_client"]))
+        reader = kwargs["reader"]
+        seen.append(
+            (
+                threading.get_ident(),
+                reader.rest_context(kwargs["site_url"]),
+                reader.graph_client,
+            )
+        )
         return ExternalAccess(
             external_user_emails=set(), external_user_group_ids=set(), is_public=False
         )
@@ -223,11 +239,11 @@ def test_a_walk_with_readers_gives_each_channel_its_own_rest_context_and_client(
 
     monkeypatch.setattr(files_module, "iter_drive_items_paged", one_file)
     monkeypatch.setattr(files_module, "get_sharepoint_external_access", access)
+    monkeypatch.setattr(files_module, "SharepointRestReads", _Reader)
     monkeypatch.setattr(
         files_module, "ClientContext", MagicMock(side_effect=lambda _: MagicMock())
     )
     monkeypatch.setattr(files_module, "acquire_token_for_rest", MagicMock())
-    monkeypatch.setattr(DriveItemData, "to_sdk_driveitem", lambda self, _client: self)
     teams_connector = connector(client, include_attachments=True)
     teams_connector._acquire_token = lambda: {"access_token": "token"}
 

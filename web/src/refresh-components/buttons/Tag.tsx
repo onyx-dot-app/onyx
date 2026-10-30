@@ -2,7 +2,7 @@
 
 import React from "react";
 import { cn, clickOnKeyDown } from "@opal/utils";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import type { IconProps } from "@opal/types";
 
@@ -10,12 +10,12 @@ const variantStyles = {
   display: {
     container: "flex items-center p-1",
     icon: "size-4 stroke-text-03",
-    text: { secondaryBody: true, text03: true },
+    text: { font: "secondary-body", color: "text-03" },
   },
   editable: {
     container: "flex items-center gap-1 px-2 py-1",
     icon: "size-3 stroke-text-03",
-    text: { mainUiBody: true, text04: true },
+    text: { font: "main-ui-body", color: "text-04" },
   },
 } as const;
 

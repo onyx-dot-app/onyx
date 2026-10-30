@@ -1,7 +1,7 @@
 @reference "#reference.css";
 
 .opal-content-action {
-  @apply flex flex-row w-full items-stretch gap-4;
+  @apply flex flex-row w-full items-stretch;
 }
 
 .opal-content-action[data-centered="true"] {
@@ -25,6 +25,21 @@
 .opal-content-action-right[data-fill] {
   @apply flex-1 min-w-0;
   max-width: var(--block-width-form-input-column-max);
+}
+
+/* Responsive form-input rows: on desktop, the control column grows to the
+   input column max instead of hugging its content. The responsive branch
+   hands the control to ContentMd's stacked grid, so this widens that grid's
+   control column. 724px is ContentMd's desktop breakpoint. */
+@media (min-width: 724px) {
+  /* `> *` skips the wrapper `Content` puts around `ContentMd`. */
+  .opal-content-action-responsive[data-fill]
+    > *
+    > .opal-content-md[data-stacked] {
+    grid-template-columns:
+      minmax(0, 1fr)
+      minmax(12rem, var(--block-width-form-input-column-max));
+  }
 }
 
 .opal-content-action[data-centered="true"] .opal-content-action-right {
