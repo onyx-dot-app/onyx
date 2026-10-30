@@ -385,10 +385,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const messageHistory = useCurrentMessageHistory();
   const messageTree = useCurrentMessageTree();
   // A chat opened for the first time has nothing to show until its fetch
-  // returns. A cached chat keeps rendering while it refreshes.
+  // returns. A cached chat keeps rendering while it refreshes. The store takes
+  // the URL's chat one effect late, so that frame counts as loading too.
   const isFetchingChatMessages = useIsFetchingChatMessages();
+  const storeSessionId = useChatSessionStore((state) => state.currentSessionId);
   const showFirstOpenLoader =
-    isFetchingChatMessages && messageHistory.length === 0;
+    messageHistory.length === 0 &&
+    (isFetchingChatMessages || storeSessionId !== currentChatSessionId);
 
   // The mode pins on creation, so lock the toggle whenever a session exists,
   // even an empty one: submitting would reuse it with its pinned mode.
@@ -919,8 +922,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
               >
                 {/* ── Top row: ChatUI / WelcomeMessage / ProjectUI ── */}
                 {/* No horizontal padding: the scroll container reaches the edge so
-                    its scrollbar sits flush; non-chat siblings add their own px. */}
-                <div className="row-start-1 min-h-0 overflow-hidden flex flex-col items-center">
+                    its scrollbar sits flush; non-chat siblings add their own px.
+                    A leaving view leaves the flow, so the entering one does
+                    not start below it and jump up when it unmounts. */}
+                <div className="row-start-1 min-h-0 overflow-hidden flex flex-col items-center relative *:data-[presence-phase=leaving]:absolute *:data-[presence-phase=leaving]:inset-0">
                   {/* ChatUI */}
                   <Presence
                     show={
