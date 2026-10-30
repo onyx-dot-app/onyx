@@ -29,8 +29,8 @@ def _supplement_errors() -> list[str]:
                 continue
             if entry["status"] != "deprecated":
                 errors.append(f"{provider}/{model_id}: status must be 'deprecated'")
-            upstream_entry = upstream.get(model_id)
-            if upstream_entry and upstream_entry.get("mode") != "image_generation":
+            catalog_entry = upstream.get(model_id) or entry
+            if catalog_entry.get("mode") != "image_generation":
                 errors.append(
                     f"{provider}/{model_id}: only image generation models can be retired"
                 )
