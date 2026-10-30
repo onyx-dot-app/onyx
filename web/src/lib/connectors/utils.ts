@@ -342,6 +342,15 @@ export function createConnectorValidationSchema(
   configuration: ConnectionConfiguration = connectorConfigs[connector]
 ): Yup.ObjectSchema<Record<string, any>> {
   const fields = [...configuration.values, ...configuration.advanced_values];
+  const projectKeyLabel = fields
+    .flatMap((field) =>
+      field.type === "tab" ? field.tabs.flatMap((tab) => tab.fields) : [field]
+    )
+    .find((field) => field.name === "project_key")?.label;
+  const resolvedProjectKeyLabel =
+    typeof projectKeyLabel === "function"
+      ? projectKeyLabel(null)
+      : projectKeyLabel;
 
   const fieldSchemas = fields.reduce<Record<string, Yup.Schema>>(
     (acc, field) => {
@@ -393,7 +402,8 @@ export function createConnectorValidationSchema(
         is: "project",
         then: (schema) =>
           schema.required(
-            messages.required?.("Project Key") ?? "Project Key is required"
+            messages.required?.(resolvedProjectKeyLabel ?? "Project Key") ??
+              "Project Key is required"
           ),
       });
   }

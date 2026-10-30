@@ -1,16 +1,26 @@
 import {
+  connectorConfigs,
+  translateConfiguration,
+} from "@/lib/connectors/connectors";
+import {
   createConnectorInitialValues,
   createConnectorValidationSchema,
 } from "@/lib/connectors/utils";
 import { ValidSources } from "@/lib/connectors/types/source";
 
 const PROJECT_KEY_REQUIRED = "Project Key is required";
+const CONFIG = translateConfiguration(
+  connectorConfigs[ValidSources.JiraServiceManagement],
+  (key) =>
+    key === "connectors.jira.fields.project_key.label" ? "Project Key" : key
+);
 
 function schema() {
   return createConnectorValidationSchema(
     ValidSources.JiraServiceManagement,
     false,
-    { required: (field) => `${field} is required` }
+    { required: (field) => `${field} is required` },
+    CONFIG
   );
 }
 

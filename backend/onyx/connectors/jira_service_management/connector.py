@@ -14,9 +14,10 @@ a clear validation error instead of indexing incomplete data.
 from __future__ import annotations
 
 from collections.abc import Generator, Iterable, Iterator
-from typing import Any, TypeVar
+from typing import Any
 
 import requests
+from more_itertools import chunked
 
 from onyx.configs.app_configs import (
     INDEX_BATCH_SIZE,
@@ -66,19 +67,6 @@ _JSM_PAGE_LIMIT = 50
 _JSM_MAX_PAGES = 10_000
 # Jira's bulk-fetch endpoint accepts at most 100 issue ids per request.
 _BULK_FETCH_LIMIT = 100
-
-_Item = TypeVar("_Item")
-
-
-def _chunks(items: Iterable[_Item], size: int) -> Iterator[list[_Item]]:
-    chunk: list[_Item] = []
-    for item in items:
-        chunk.append(item)
-        if len(chunk) == size:
-            yield chunk
-            chunk = []
-    if chunk:
-        yield chunk
 
 
 class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector):
@@ -385,7 +373,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         self, jql: str, desk_by_project: dict[str, str]
     ) -> GenerateDocumentsOutput:
         batch: list[Document | HierarchyNode] = []
-        for issue_ids in _chunks(self._iter_issue_ids(jql), _BULK_FETCH_LIMIT):
+        for issue_ids in chunked(self._iter_issue_ids(jql), _BULK_FETCH_LIMIT):
             issues = self._fetch_issues(issue_ids)
             for document in self._documents(issues, desk_by_project):
                 batch.append(document)
@@ -449,7 +437,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         desks = self._desks_or_raise()
         desk_by_project = self._desk_by_project(desks)
         batch: list[SlimDocument | HierarchyNode] = []
-        for issue_ids in _chunks(
+        for issue_ids in chunked(
             self._iter_issue_ids(self._project_jql(desk_by_project)),
             _BULK_FETCH_LIMIT,
         ):

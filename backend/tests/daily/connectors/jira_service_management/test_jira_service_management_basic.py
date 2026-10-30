@@ -44,8 +44,14 @@ def _make_connector(
     return connector
 
 
+def _has_explicit_scope() -> bool:
+    return bool(
+        _service_desk_ids() or os.environ.get("JIRA_SERVICE_MANAGEMENT_PROJECT_KEY")
+    )
+
+
 def _skip_if_fixture_has_no_desks(error: ConnectorValidationError) -> None:
-    if _NO_VISIBLE_DESK in str(error):
+    if _NO_VISIBLE_DESK in str(error) and not _has_explicit_scope():
         pytest.skip("The Jira test site has no service desk visible to the account.")
     raise error
 
@@ -55,11 +61,16 @@ def test_jira_service_management_connector(
 ) -> None:
     connector = _make_connector(test_secrets)
     documents: list[Document] = []
+    polled_documents: list[Document] = []
     slim_ids: set[str] = set()
     try:
         connector.validate_connector_settings()
         for batch in connector.load_from_state():
             documents.extend(item for item in batch if isinstance(item, Document))
+        for batch in connector.poll_source(0, time.time()):
+            polled_documents.extend(
+                item for item in batch if isinstance(item, Document)
+            )
         slim_ids = {
             item.id
             for batch in connector.retrieve_all_slim_docs(start=0, end=time.time())
@@ -73,11 +84,14 @@ def test_jira_service_management_connector(
     assert slim_ids, "The service desk scope returned no slim documents."
 
     base_url = test_secrets[TestSecret.JIRA_BASE_URL].strip().rstrip("/")
+    loaded_ids: set[str] = set()
     for document in documents:
         assert document.source is DocumentSource.JIRA_SERVICE_MANAGEMENT
         assert document.metadata["key"]
         assert document.metadata["project"]
         assert document.metadata["jsm_service_desk_id"]
         assert document.id == f"{base_url}/browse/{document.metadata['key']}"
+        loaded_ids.add(document.id)
 
-    assert {document.id for document in documents} <= slim_ids
+    assert {document.id for document in polled_documents} == loaded_ids
+    assert slim_ids == loaded_ids
