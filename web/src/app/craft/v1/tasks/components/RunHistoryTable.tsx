@@ -271,7 +271,7 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
   );
 
   const { data: unviewedProbe } = useSWR<ScheduledRunListResponse>(
-    `${SWR_KEYS.scheduledTaskRuns(taskId)}?limit=1&unviewed=true`,
+    SWR_KEYS.scheduledTaskHasUnviewedRuns(taskId),
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
