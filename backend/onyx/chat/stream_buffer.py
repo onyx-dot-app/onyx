@@ -1,35 +1,40 @@
-"""Transient cross-pod buffer of a chat run's outbound stream.
+"""Deliver live chat packets and retain resumable chunks in the shared cache.
 
-The run's writer appends the exact NDJSON lines the SSE endpoint sends, stored in
-the shared cache as zlib-compressed, sequence-numbered chunks so any api-server
-pod can replay and tail an in-flight run. The cache is the only coordination
-channel available on every deployment flavor (Redis, or Postgres on lite).
-
-Chunks can disappear before the meta says the stream is over (allkeys-lru
-eviction, TTL expiry): readers must treat a missing chunk as a gap and fall back
-to the DB-rendered message rather than replaying a broken sequence.
+Missing chunks require fallback to persisted conversation history.
 """
 
+import queue
+import threading
+import time
 import zlib
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from concurrent.futures import Future
+from enum import Enum
 from uuid import UUID
 
 from pydantic import BaseModel, ValidationError
 
+from onyx.agents.concurrency import EventDispatcher
 from onyx.cache.interface import CacheBackend
+from onyx.chat.models import AnswerStreamPart
 from onyx.configs.chat_configs import (
+    CHAT_HEARTBEAT_INTERVAL_S,
     CHAT_STREAM_BUFFER_DONE_TTL_S,
     CHAT_STREAM_BUFFER_MAX_BYTES,
     CHAT_STREAM_BUFFER_TTL_S,
 )
+from onyx.server.query_and_chat.streaming_models import StreamingError, heartbeat_packet
+from onyx.server.utils import get_json_line
+from onyx.utils.fleet_query_telemetry import QueryObservation
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 _PREFIX = "chatstream"
-# Flush once this much uncompressed data is pending; the run's writer thread also
-# flushes on every idle tick, so flush latency stays at the tick interval.
+# Idle flushes bound latency below the chunk-size threshold.
 _FLUSH_THRESHOLD_BYTES = 32 * 1024
+_REPLAY_BACKLOG_MAX_BYTES = 4 * 1024 * 1024
+_TRUNCATION_RETRY_INTERVAL_S = 1.0
 
 
 class StreamBufferMeta(BaseModel):
@@ -44,6 +49,7 @@ class StreamChunkRead(BaseModel):
 
     blocks: list[str]
     next_cursor: int
+    chunk_count: int
     done: bool
     gap: bool
 
@@ -85,6 +91,8 @@ class StreamBufferWriter:
         # if the run never reaches completion.
         self._session_ended = session_ended
         self._meta = StreamBufferMeta()
+        self._truncation_persisted = False
+        self._next_truncation_retry_at = 0.0
         self._pending: list[str] = []
         self._pending_bytes = 0
         self._compressed_total = 0
@@ -92,6 +100,10 @@ class StreamBufferWriter:
     @property
     def stream_id(self) -> int:
         return self._stream_id
+
+    @property
+    def truncated(self) -> bool:
+        return self._meta.truncated
 
     def append_line(self, line: str) -> None:
         if self._meta.truncated or self._meta.done:
@@ -102,7 +114,12 @@ class StreamBufferWriter:
             self.flush()
 
     def flush(self) -> None:
-        if not self._pending or self._meta.truncated or self._meta.done:
+        if self._meta.done:
+            return
+        if self._meta.truncated:
+            self.mark_truncated()
+            return
+        if not self._pending:
             return
         if self._session_ended is not None and self._session_ended():
             self._pending = []
@@ -151,6 +168,24 @@ class StreamBufferWriter:
                     self._stream_id,
                 )
 
+    def mark_truncated(self) -> None:
+        """Require persisted-history fallback when stream delivery loses data."""
+        if self._meta.done or self._truncation_persisted:
+            return
+        if time.monotonic() < self._next_truncation_retry_at:
+            return
+        self._meta.truncated = True
+        self._pending.clear()
+        self._pending_bytes = 0
+        try:
+            self._write_meta(CHAT_STREAM_BUFFER_TTL_S)
+        except Exception:
+            logger.exception(
+                "stream buffer truncation update failed for session %s stream %d",
+                self._chat_session_id,
+                self._stream_id,
+            )
+
     def mark_done(self) -> None:
         if self._delete_on_done:
             if self._meta.done:
@@ -188,11 +223,16 @@ class StreamBufferWriter:
             )
 
     def _write_meta(self, ttl: int) -> None:
+        if self._meta.truncated:
+            self._next_truncation_retry_at = (
+                time.monotonic() + _TRUNCATION_RETRY_INTERVAL_S
+            )
         self._cache.set(
             _meta_key(self._chat_session_id, self._stream_id),
             self._meta.model_dump_json(),
             ex=ttl,
         )
+        self._truncation_persisted = self._meta.truncated
 
 
 def has_stream_buffer(
@@ -251,4 +291,193 @@ def read_stream_chunks(
             break
         chunk_n += 1
 
-    return StreamChunkRead(blocks=blocks, next_cursor=chunk_n, done=meta.done, gap=gap)
+    return StreamChunkRead(
+        blocks=blocks,
+        next_cursor=chunk_n,
+        chunk_count=meta.chunk_count,
+        done=meta.done,
+        gap=gap,
+    )
+
+
+class _StreamStatus(str, Enum):
+    DONE = "done"
+
+
+class ChatStream(Iterator[AnswerStreamPart]):
+    """Buffer live packets until consumed; closing detaches only the reader."""
+
+    def __init__(self) -> None:
+        self._queue: queue.Queue[AnswerStreamPart | _StreamStatus] = queue.Queue()
+        self._lock = threading.Lock()
+        self._closed = False
+
+    def publish(self, item: AnswerStreamPart | _StreamStatus) -> None:
+        with self._lock:
+            if self._closed:
+                return
+            self._queue.put_nowait(item)
+
+    def __next__(self) -> AnswerStreamPart:
+        try:
+            item = self._queue.get(timeout=CHAT_HEARTBEAT_INTERVAL_S)
+        except queue.Empty:
+            return heartbeat_packet()
+        if item is _StreamStatus.DONE:
+            self.close()
+            raise StopIteration
+        return item
+
+    def close(self) -> None:
+        with self._lock:
+            self._closed = True
+            while True:
+                try:
+                    self._queue.get_nowait()
+                except queue.Empty:
+                    break
+            self._queue.put_nowait(_StreamStatus.DONE)
+
+
+class ChatDelivery:
+    """Own live packets and replay storage for one chat turn.
+
+    One worker delivers agent events to packet producers and flushes replay batches.
+    Direct control packets use the same publication lock to preserve replay order.
+    """
+
+    def __init__(
+        self,
+        buffer: StreamBufferWriter | None,
+        *,
+        query_observation: QueryObservation | None = None,
+    ) -> None:
+        self._query_observation = query_observation
+        self.reader = ChatStream()
+        self.finished: Future[None] = Future()
+        self._buffer = buffer
+        self._pending_replay: list[str] = []
+        self._pending_replay_bytes = 0
+        self._finished = threading.Event()
+        self._closing = False
+        self._live_gap_reported = False
+        self._replay_unavailable = threading.Event()
+        self._publish_lock = threading.RLock()
+        self.events = EventDispatcher(flush=self._flush_replay)
+
+    @property
+    def is_closing(self) -> bool:
+        with self._publish_lock:
+            return self._closing
+
+    def publish(self, item: AnswerStreamPart) -> None:
+        line = (
+            get_json_line(item.model_dump())
+            if self._buffer is not None and not self._replay_unavailable.is_set()
+            else None
+        )
+        # Concurrent model writers must produce the same order in both destinations.
+        with self._publish_lock:
+            if self._finished.is_set():
+                return
+            if self._query_observation is not None:
+                self._query_observation.observe_packet(item)
+            self.reader.publish(item)
+            if line is None or self._replay_unavailable.is_set():
+                return
+            pending_bytes = self._pending_replay_bytes + len(line.encode("utf-8"))
+            if pending_bytes > _REPLAY_BACKLOG_MAX_BYTES:
+                logger.warning(
+                    "Chat cache delivery exceeded its %d-byte backlog limit",
+                    _REPLAY_BACKLOG_MAX_BYTES,
+                )
+                self._replay_unavailable.set()
+                self._pending_replay.clear()
+                self._pending_replay_bytes = 0
+                return
+            self._pending_replay.append(line)
+            self._pending_replay_bytes = pending_bytes
+            flush_replay = pending_bytes >= _FLUSH_THRESHOLD_BYTES
+        # Control publishers must not wait for cache I/O.
+        if flush_replay and self.events.is_dispatch_thread:
+            self._flush_replay(False)
+
+    def report_gap(self) -> None:
+        with self._publish_lock:
+            if self._live_gap_reported:
+                return
+            self._live_gap_reported = True
+            self._replay_unavailable.set()
+            self._pending_replay.clear()
+            self._pending_replay_bytes = 0
+            error = StreamingError(
+                error="The live stream is incomplete. Reload this conversation.",
+                error_code="STREAM_GAP",
+                is_retryable=True,
+            )
+            if self._query_observation is not None:
+                self._query_observation.observe_packet(error)
+            self.reader.publish(error)
+
+    def finish(self) -> None:
+        with self._publish_lock:
+            if self._closing:
+                return
+            self._closing = True
+        try:
+            self.events.close()
+        except Exception:
+            logger.exception("Chat delivery could not finalize")
+            self.report_gap()
+            self._flush_replay(final=True)
+            return
+        if not self.events.has_pending_events:
+            self._finish_live()
+
+    def _finish_live(self) -> None:
+        with self._publish_lock:
+            if self._finished.is_set():
+                return
+            self._finished.set()
+        if self._query_observation is not None:
+            self._query_observation.finish()
+        self.reader.publish(_StreamStatus.DONE)
+
+    def _flush_replay(self, final: bool) -> None:
+        with self._publish_lock:
+            if self.finished.done():
+                return
+            # Seal publication before taking the final replay batch.
+            if final:
+                self._finish_live()
+            lines = self._pending_replay
+            self._pending_replay = []
+            self._pending_replay_bytes = 0
+        # Cache I/O must leave control and error packet producers free to publish.
+        buffer = self._buffer
+        try:
+            if buffer is not None:
+                for line in lines:
+                    if self._replay_unavailable.is_set():
+                        break
+                    buffer.append_line(line)
+                if self._replay_unavailable.is_set() and not buffer.truncated:
+                    buffer.mark_truncated()
+                buffer.flush()
+                if buffer.truncated:
+                    self._replay_unavailable.set()
+        except Exception:
+            logger.exception("Chat cache delivery failed")
+            self._replay_unavailable.set()
+        if not final:
+            return
+        try:
+            if buffer is not None:
+                if self._replay_unavailable.is_set() and not buffer.truncated:
+                    buffer.mark_truncated()
+                buffer.mark_done()
+        except Exception:
+            logger.exception("Chat cache delivery could not finalize")
+            self._replay_unavailable.set()
+        finally:
+            self.finished.set_result(None)

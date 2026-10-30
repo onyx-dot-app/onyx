@@ -1,421 +1,321 @@
 # Citations
 
-> The thin-looking, long chain that turns a retrieved document into a numbered marker
-> the model emits, and turns that marker back into a clickable source in the UI. It
-> crosses the prompt, the search tools, the stream parser, the database, and the
-> renderer, so it breaks silently at any single point.
+> The chain that turns a retrieved document into a numbered marker the model
+> emits, and turns that marker back into a clickable source in the UI. A break at
+> any point in the tools, prompt, stream parser, database or renderer fails
+> without an error.
 
-**Verified against:** `268e4d5a3d` (2026-10-05)
-**Domain:** core-loop
+**Verified against:** `6bac4e012f` (2026-10-29)
 **Edition:** CE
-**Owns:**
-`backend/onyx/chat/citation_processor.py`, `citation_utils.py`
-**Contributes to (owned by neighbours):**
-`backend/onyx/chat/llm_loop.py`, `chat_state.py`, `save_chat.py` ([[core-chat-loop]]),
-`backend/onyx/tools/tool_runner.py`, `tool_implementations/utils.py` ([[tools-framework]]),
-`backend/onyx/chat/prompt_utils.py`, `backend/onyx/prompts/chat_prompts.py`
-([[context-assembly]]), `backend/onyx/server/query_and_chat/streaming_models.py`
-([[streaming-protocol]]), `backend/onyx/server/query_and_chat/session_loading.py`
-([[chat-persistence]]), `web/src/app/app/services/packetUtils.ts`,
-`web/src/app/app/message/MemoizedTextComponents.tsx`,
-`web/src/app/app/message/messageComponents/markdownUtils.tsx`,
-`web/src/app/app/message/messageComponents/MessageToolbar.tsx` ([[chat-frontend]])
-
-**Read first:** `backend/onyx/chat/README.md`, the paragraphs on the `document` JSON key
-and on reminder placement (search "citations reliable"). This document maps that
-rationale to the code and adds verification guidance.
 
 ---
 
-## 1. What the user experiences
+## User experience
 
-When the assistant searches and answers, numbers like `[1]` and `[2]` appear inline in
-the streamed text. Each number is hoverable and clickable: hovering shows a small
-source card (title, source icon, snippet), and clicking opens the document, either in
-a preview or in the documents sidebar. A "Sources" tag in the message toolbar
-(`MessageToolbar.tsx:SourcesTagWrapper`) also lists every cited document for the
-message as a whole, independent of where in the text it was cited.
+When the assistant answers from search results, numbered markers such as `[1]`
+appear in the text as it streams. Hovering a marker shows a source card with
+the title, source and a snippet. Clicking it opens the document in a preview or
+in the documents sidebar. The "Sources" tag under the message lists every
+document the message cites. A reloaded chat shows the same numbers pointing to
+the same documents. A temporary (incognito) chat saves citations like an
+ordinary chat unless it records usage only (`db/enums.py:IncognitoRecordMode`);
+a usage-only chat saves none.
 
-A working citation always resolves to a real, currently-displayed document. A broken
-one does not show an error or a bare number: the marker resolves to nothing and the
-surrounding text simply looks like it never had a citation there
-(`MemoizedTextComponents.tsx:MemoizedAnchor`, the `<></>` branch). This is deliberate
-during streaming, since the mapping may not have arrived yet, but it means a real bug
-in the citation pipeline looks identical to a transient rendering gap: missing
-decoration, not a visible failure.
+A caller can turn citations off (`include_citations=False`), for example a
+public bot. The answer then has no markers.
 
----
-
-## 2. Surfaces
-
-Citations have no HTTP endpoints of their own. They ride the same turn described in
-[[core-chat-loop]] and the same packet stream described in [[streaming-protocol]].
-
-| Surface | Where | Notes |
-|---|---|---|
-| `include_citations` | `SendMessageRequest.include_citations` (`server/query_and_chat/models.py`), default `True` | Per-request switch. `llm_loop.py:run_llm_loop` maps it to `CitationMode.HYPERLINK` (default) or `CitationMode.REMOVE`. Callers that must not expose links to the end surface (for example a public bot) set it `False`. |
-| `CitationMode` | `chat/citation_processor.py:CitationMode` | `HYPERLINK` (format and emit `CitationInfo`), `KEEP_MARKERS` (preserve `[1]` verbatim, emit no `CitationInfo`, used by the research agent's intermediate reports, `tools/fake_tools/research_agent.py`, ahead of `collapse_citations`), `REMOVE` (strip markers entirely, emit no `CitationInfo`, driven by `include_citations=False`). All three track mapped citations via `get_seen_citations`. A marker with no mapping is skipped. |
-| `CitationInfo` packet | `server/query_and_chat/streaming_models.py:CitationInfo` | The wire-visible surface for ordinary inline citations. Research-agent reports also emit `IntermediateReportCitedDocs` (`tools/fake_tools/research_agent.py`). Carries `citation_number` and `document_id`. See [[streaming-protocol]] §4.1. |
+When the chain breaks, the user sees no error. The marker disappears, and the
+answer looks as if it never cited that source
+([[#unresolved-citation-silent]]).
 
 ---
 
-## 3. Data model
+## Scope
 
-Citations add no tables of their own. They write into columns [[chat-persistence]] owns:
+This component owns citation numbering, the stream parser that turns markers
+into links, the helpers that register tool results with the parser, and the
+rules that connect them. It has no endpoints or tables of its own.
 
-- `ChatMessage.citations` (`db/models.py:ChatMessage`): `dict[int, int]`, citation
-  number to `SearchDoc.id` (the DB primary key, not the connector document id).
-  `None` when a turn cited nothing.
-- `SearchDoc` (`db/models.py:SearchDoc`): one row per unique retrieved document
-  version. A citation-only document (for example a project file cited but never
-  shown as a tool-call result) still gets a row here, created on demand in
-  `save_chat.py:save_chat_turn`. Only project-file rows are also linked to the
-  message. Other citation-only rows are not in the message's document list.
-- `ChatMessage__SearchDoc` and `ToolCall__SearchDoc` (`db/models.py`): the join
-  tables linking a message's full document set, and a specific tool call's result
-  set, to `SearchDoc` rows. A citation can point at a `SearchDoc` that is linked to
-  the message but to no tool call, if it came from a project file.
-
-No citation state is cached in Redis. The only durable artifact between the live
-turn and a later replay is `ChatMessage.citations` itself.
+Its neighbours own the parts it passes through:
+- [[tools-framework]]: gives each tool call in a step its call index.
+- [[context-assembly]]: places the citation guidance in the prompt.
+- [[streaming-protocol]]: the `CitationInfo` packet.
+- [[chat-persistence]]: `ChatMessage.citations` and the `SearchDoc` links.
+- [[chat-frontend]]: the message view that hosts link resolution and the
+  "Sources" toolbar tag.
 
 ---
 
-## 4. How it works
-
-### 4.1 The full chain
+## Architecture
 
 ```
-retrieval (internal_search / web_search / open_url)          [[internal-search]], [[web-search]]
-   │  InferenceSection[] per tool call
-   ▼
-convert_inference_sections_to_llm_string                     tools/tool_implementations/utils.py
-   │  assigns citation numbers starting at starting_citation_num (per-tool-call range)
-   │  returns (llm_facing_json_string, citation_mapping: dict[citation_num -> document_id])
-   ▼
-system prompt + citation reminder                             chat/prompt_utils.py, prompts/chat_prompts.py
-   │  teaches the model to emit [1], [2], ... referencing the "document" field
-   ▼
-model emits answer text containing [1], [2], [1,3], [[4]], ...
-   ▼
-DynamicCitationProcessor.process_token (streaming, token by token)   chat/citation_processor.py
-   │  matches citation_pattern / possible_citation_pattern
-   │  looks up citation_to_doc[num] -> SearchDoc
-   │  HYPERLINK mode: rewrites "[1]" to "[[1]](link)", yields CitationInfo(num, doc_id)
-   ▼
-Emitter.emit(CitationInfo packet)  +  state_container.set_citation_mapping(...)   llm_step.py, llm_loop.py, chat_state.py
-   │  CitationInfo goes out over the wire; citation_to_doc and _emitted_citations accumulate
-   ▼
-save_chat_turn                                                 chat/save_chat.py
-   │  persists ChatMessage.citations = {citation_num: SearchDoc.id}, only for emitted citations
-   │  links tool-call SearchDocs and citation-only project-file SearchDocs to the ChatMessage
-   ▼
-frontend: getCitations(packets) -> CitationMap                 services/packetUtils.ts, app/interfaces.ts
-   │  {citation_num: document_id}, deduped by document_id
-   ▼
-MemoizedAnchor: markdown link "[1]" -> citations[1] -> docs.find(document_id) -> OnyxDocument   MemoizedTextComponents.tsx
-   │  resolved -> SourceTag card; unresolved -> renders nothing
-   ▼
-replay: translate_assistant_message_to_packets reconstructs the same CitationInfo packets
-         from ChatMessage.citations, in citation-order-of-first-appearance                     session_loading.py
+search tool returns InferenceSections               [[internal-search]], [[web-search]]
+  -> convert_inference_sections_to_llm_string       numbers each unique document_id from the
+                                                    call's start number; returns the JSON
+                                                    for the model + {number: document_id}
+  -> ChatAgent._update_tool_context                 registers the numbers after the step
+                                                    (chat/agent.py, via message_citation_sources)
+  -> ChatAgent._prepare_step                        copies all numbers into the next step's
+                                                    ChatMessageMetadata.sources
+  -> reminder message teaches "[1]" syntax          chat/prompt_utils.py:build_chat_reminder
+  -> model emits "[1]", "[1, 3]", "[[4]]", "【1】"
+  -> ResponsePresenter.consume (MessageStartEvent)  chat/presentation.py; one MessageRenderer per
+                                                    step, from message_presentation/message_documents
+  -> MessageRenderer._content -> process_token      chat/renderer.py; maps number -> SearchDoc,
+                                                    rewrites the marker as a link, emits CitationInfo
+  -> chat/persistence.py -> project_response        re-renders the run snapshot for the emitted set
+  -> chat/history_store.py -> save_chat_response_to_db -> save_chat_turn
+                                                    stores {number: SearchDoc.id} for emitted numbers
+  -> handleCitationPacket -> MemoizedAnchor (web)   {number: document_id} -> displayed doc
+  -> replay_response                                re-renders the saved text on reload
 ```
 
-### 4.2 Numbering: `convert_inference_sections_to_llm_string`
+`backend/onyx/chat/README.md` gives the prompt-design reasons for the document
+format and the reminder placement.
 
-`tool_implementations/utils.py:convert_inference_sections_to_llm_string` assigns one
-citation number per unique `document_id`, counting up from `citation_start`
-(`SearchToolOverrideKwargs.starting_citation_num` / equivalent for web search and
-open URL). It returns both the JSON string the model reads and the parallel
-`citation_mapping: dict[int, str]` (citation number to document id), which is the
-`SearchDocsResponse.citation_mapping` field described in [[internal-search]] §4.7.
+**Numbering.** `chat/agent.py:ChatAgent` owns the prompt's number space. It
+seeds its processor with the sources of every earlier message in history, so
+numbers stay unique across turns. Each step passes
+`ToolContext.next_citation_num`, and each citeable tool starts at
+`next_citation_num + CITATIONS_PER_TOOL_CALL * invocation.call_index`
+(`tools/interface.py:CITATIONS_PER_TOOL_CALL`). The call index is the call's
+position in the step (`agents/tool_execution.py:ToolBatch`), so parallel
+searches never share a number. One exception: `ToolBatch` can merge same-tool
+calls with compatible arguments into one execution (tools that set
+`merge_list_argument`, such as search, web search and `open_url`). That
+execution numbers from the first call's block, and every call in the group
+shares its result and numbers. The numbered documents come from the expanded
+queries that ran. Saved history keeps only the model's own arguments, not
+those queries ([[chat-persistence]]).
+Project files reuse the number they had earlier in the session, by file ID;
+new files take unused numbers
+(`chat/citation_utils.py:build_context_file_citation_mapping`). When project
+files are inline or searched, `chat/prompt_utils.py:build_chat_prompt` turns
+on citation guidance from the first step. `open_url` does not always take a
+new number: `OpenURLTool` reuses the number that a URL already has in
+`ToolContext.citation_mapping`. `ChatAgent._tool_context` is a snapshot from the
+end of the previous step, so this reuse works only across steps. Two tools in
+one step that return the same document give it two numbers.
 
-Each document entry in the JSON is built as `{"document": citation_id, "title": ...,
-..., "content": ..., "metadata": ...}` (`utils.py:convert_inference_sections_to_llm_string`,
-the `result = {...}` block). The key is `document`, not `citation_id` or `id`. The
-integer comes first, followed by short fields such as the title, then `content`. The
-optional `metadata` field comes last. `backend/onyx/chat/README.md` states why: naming it `document` avoids
-the model narrating "I should reference citation_id: 5"-style artifacts, and putting
-the number first exploits models' stronger local attention even though they have
-full context access.
+**Web rendering.** Inline links resolve through
+`web/src/app/app/message/messageComponents/timeline/hooks/packetProcessor.ts:handleCitationPacket`,
+which builds `citationMap`.
+`web/src/app/app/message/messageComponents/AgentMessage.tsx` merges it with
+`chatState.citations` as `mergedCitations` and passes the map to
+`MemoizedAnchor`. `app/app/services/packetUtils.ts:getCitations` feeds only the
+documents sidebar.
 
-### 4.3 Range allocation: `tool_runner.py`
+**Two processors, two mappings.** The `ChatAgent` processor holds every number
+the model could cite and copies it into each step's `ChatMessageMetadata.sources`
+before the step runs. `chat/presentation.py:ResponsePresenter` builds a new
+`chat/renderer.py:MessageRenderer` for each step from that metadata, so the
+display mapping is fixed for the step. The renderer records only the
+`CitationInfo` it emitted. At save, `chat/presentation.py:project_response`
+rebuilds the full mapping and re-renders the snapshot to get the emitted set.
+The emitted set comes from the answer step only, or from the last rendered
+answer-mode step when the run did not complete (a cancelled turn keeps its
+partial text). Citations in text before a tool call stream live but are not in
+`ChatMessage.citations`. `db/chat_response.py:save_chat_response_to_db` passes
+both to `save_chat_turn`.
 
-`tools/tool_runner.py:run_tool_calls` allocates a **distinct** `starting_citation_num`
-per tool call in a parallel batch, advancing by 100 after each `SearchTool`,
-`WebSearchTool`, or `OpenURLTool` call (`starting_citation_num += 100`). This is why
-two concurrent searches never collide: `internal_search` might get the range
-starting at 1, a concurrent `web_search` starts at 101, an `open_url` at 201, and so
-on, regardless of how many documents any one call actually returns.
+**Reload.** For a message with an execution record,
+`server/query_and_chat/session_loading.py:translate_assistant_message_to_packets`
+calls `chat/presentation.py:replay_response`. It re-renders every saved step
+with the saved `MessageRendering.citation_documents` and the documents from
+`db/chat_response.py:read_response_replay_data` (`ChatMessage.search_docs` and
+the tool calls' search docs). It does not read `ChatMessage.citations`. That
+column feeds `ChatMessageDetail.citations`, which the web merges as
+`chatState.citations`, and the replay of older messages with no execution record.
+On the next turn, `chat/response.py:restore_response_sources` puts the saved
+numbers back on history messages before the agent reads them.
 
-### 4.4 Teaching the format: prompt and reminder
-
-`chat/prompt_utils.py:build_system_prompt` appends citation guidance
-(`REQUIRE_CITATION_GUIDANCE`, `prompts/chat_prompts.py`) to the system prompt when
-`should_cite_documents` is set and the persona's prompt template did not already
-include the placeholder (`apply_prompt_placeholders`,
-`append_citation_if_missing=True`). Separately, `llm_loop.py:select_reminder_text`
-appends `CITATION_REMINDER` plus `ANSWER_COMPLETENESS_REMINDER` (and
-`LAST_CYCLE_CITATION_REMINDER` on the final cycle) to the reminder message whenever `should_cite_documents or always_cite_documents` is
-true, via `prompt_utils.py:build_reminder_message`. The citation reminder strings tell the
-model to cite the `"document"` field using `[1]`, `[2]`, `[3]` syntax.
-
-Per [[core-chat-loop]] §4.4, the reminder is always the **last** message in the
-assembled context, because models attend hardest to the final tokens. A citation
-reminder placed anywhere else degrades citation reliability; this is measured
-behavior, not a style preference (`backend/onyx/chat/README.md`).
-
-### 4.5 Parsing the stream: `DynamicCitationProcessor`
-
-`llm_loop.py:run_llm_loop` creates one `DynamicCitationProcessor` per turn (mode
-`HYPERLINK` unless `include_citations=False`), seeds it with any project-file
-citation mapping (`_build_context_file_citation_mapping`), and updates it after every
-tool response via `citation_utils.py:update_citation_processor_from_tool_response`,
-which turns a `SearchDocsResponse.citation_mapping` (`dict[int, str]`, number to
-document id) into a `dict[int, SearchDoc]` by matching against
-`search_docs_response.search_docs`.
-
-`llm_step.py:run_llm_step` feeds every answer token to
-`citation_processor.process_token` (`_emit_citation_results`). The processor holds
-back text that might be a partial citation (`possible_citation_pattern`). It skips
-markers inside fenced code blocks, which `CodeFenceTracker` tracks line by line.
-Once a
-complete match is found (`citation_pattern`, which also accepts `[1, 2]`, `[[1]]`,
-and the unicode bracket variants `【1】`/`［1］`), it looks up each number in
-`citation_to_doc`, rewrites the marker to `[[n]](link)`, and yields a `CitationInfo`
-**before** the rewritten text so the frontend has the mapping in hand before it
-needs to render the link (`citation_processor.py:_process_citation`, the "Yield
-CitationInfo objects BEFORE the citation text" comment).
-
-`_emit_citation_results` (`llm_step.py`) also calls
-`state_container.add_emitted_citation(result.citation_number)` for every
-`CitationInfo` actually yielded.
-
-### 4.6 State container: two mappings, two purposes
-
-`ChatStateContainer` (`chat_state.py`) tracks:
-
-- `citation_to_doc` (`set_citation_mapping` / `get_citation_to_doc`): the **full**
-  citation-number-to-`SearchDoc` mapping known at any point, refreshed after every
-  LLM step (`llm_loop.py`, `state_container.set_citation_mapping(citation_processor.citation_to_doc)`).
-  This includes numbers the model was given the *option* to cite but never did.
-- `_emitted_citations` (`add_emitted_citation` / `get_emitted_citations`): the
-  **subset** of citation numbers that actually appeared in streamed text.
-
-The split matters at save time: `save_chat_turn` persists only citations in
-`emitted_citations`, so `ChatMessage.citations` reflects what the user actually saw
-cited, not the full universe of documents the model could have cited. Passing
-`citation_to_doc` alone would persist unused numbers; passing neither would lose the
-mapping entirely if the turn is stopped mid-stream.
-
-### 4.7 Persistence: `save_chat_turn`
-
-`save_chat.py:save_chat_turn` (see also [[chat-persistence]]):
-
-1. Creates a `SearchDoc` DB row for every document in `all_search_docs` (the
-   pre-deduplicated set gathered from tool calls).
-2. Builds `tool_call_to_search_doc_ids` so each `ToolCall` links to the `SearchDoc`
-   rows it displayed.
-3. For each `(citation_num, SearchDoc)` in `citation_to_doc`, skips it if
-   `emitted_citations` is provided and the number is not in it, otherwise resolves
-   or creates the matching DB `SearchDoc` row and records
-   `citation_number_to_search_doc_id[citation_num] = db_search_doc_id`. A citation
-   doc missing from `all_search_docs` is expected for project files
-   (`source_type == FILE`) and logged as a warning otherwise, since it can indicate
-   an upstream bug.
-4. Links every tool-call `SearchDoc` and every citation-only project-file `SearchDoc` to the
-   `ChatMessage` via `add_search_docs_to_chat_message`.
-5. Sets `assistant_message.citations = citation_number_to_search_doc_id or None`.
-
-An incognito, content-free turn (`persist_content=False`) blanks
-`citation_to_doc`, `all_search_docs`, and `emitted_citations` before any of this
-runs, so no citation state survives for an incognito turn.
-
-### 4.8 Frontend resolution
-
-`web/src/app/app/services/packetUtils.ts:getCitations` folds every `CitationInfo`
-packet in a message's packet list into a `StreamingCitation[]`, deduped by
-`document_id` (a document cited twice keeps only its first citation number).
-`usePacketProcessor.ts` turns that into a `CitationMap` (`{citation_num:
-document_id}`, `app/interfaces.ts:CitationMap`) stored on the packet-processing
-state.
-
-`markdownUtils.tsx:useMarkdownComponents` wires every markdown anchor to
-`MemoizedTextComponents.tsx:MemoizedAnchor`, passing `citations` (the `CitationMap`)
-and `docs` (the turn's `OnyxDocument[]`). `MemoizedAnchor` matches link text against
-`/\[(D|Q)?(\d+)\]/`: a bare number resolves through `citations[n] -> document_id ->
-docs.find(document_id)`; a `D`-prefixed number is also a document citation and resolves the same way. Only a
-`Q`-prefixed number is a sub-question link: it indexes `subQuestions[n - 1]` (used by
-deep research). If neither an `associatedDoc` nor an `associatedSubQuestion` is found, it
-returns `<></>`: nothing is rendered, by design, because during streaming the
-`CitationInfo` packet may simply not have arrived yet.
-
-`markdownUtils.tsx:processContent` strips a trailing incomplete `[[n]](url...` or a
-bare `[[`/`[[n]`/`[[n]]` at the very end of the accumulated content before handing it
-to the markdown parser, so a half-typed citation link never flashes as broken
-markdown mid-stream.
-
-`MessageToolbar.tsx:SourcesTagWrapper` is a second, independent consumer of the same
-citation data: it converts the message's citations plus its document map into a flat
-`SourceInfo[]` (`citationsToSourceInfoArray`) for the toolbar's "Sources" button,
-which toggles the documents sidebar rather than resolving an inline link.
-
-### 4.9 Replay
-
-`session_loading.py:translate_assistant_message_to_packets` reconstructs a saved
-turn's packet stream without re-running it. For citations specifically: it reads
-`chat_message.citations` (`dict[citation_num, search_doc_id]`), looks up each
-`SearchDoc` by id (`get_db_search_doc_by_id`), and builds one `CitationInfo` per
-entry. It then sorts them by first appearance in the saved text
-(`citation_utils.py:extract_citation_order_from_text`), and appends them, via
-`create_citation_packets`, **after** the full `AgentResponseStart`/`AgentResponseDelta`
-block for the message, not interleaved with it the way the live stream interleaves
-`CitationInfo` with token deltas. The frontend does not care about this difference:
-`getCitations` folds all `CitationInfo` packets into the map regardless of position,
-and by the time a replayed message's full text is available, its citation map is too.
+**Modes.** `CitationMode.HYPERLINK` is the default. `REMOVE` strips markers when
+a request sets `include_citations=False`, for example a public bot.
+`KEEP_MARKERS` keeps raw markers for the research agent's intermediate reports
+(`deep_research/research_agent.py`, and `chat/presentation.py:message_presentation`
+for their display). `KEEP_MARKERS` emits no `CitationInfo`, but a report still
+lists the sources it cites in `IntermediateReportCitedDocs`
+(`chat/renderer.py:MessageRenderer.finish`).
+`chat/citation_utils.py:collapse_citations` renumbers those markers when
+`deep_research/agent.py` merges the reports. In `REMOVE` mode,
+`MessageRenderer.complete` does not re-send unrendered final text, so an answer
+of only markers stays empty.
 
 ---
 
-## 5. Contracts and invariants
+## Contracts and traps
 
-1. **Citation numbering ranges must not collide across parallel tool calls.**
-   `tool_runner.py:run_tool_calls` advances `starting_citation_num` by 100 per
-   citeable tool call in one batch. Sharing one counter, or reusing a range across
-   calls, silently merges two documents' citations.
-2. **The number in the LLM-facing document JSON is the number the model is asked to
-   emit.** `convert_inference_sections_to_llm_string`'s `citation_id` and the prompt
-   guidance's `[1], [2], [3]` instructions must refer to the same numbering scheme;
-   they are produced from the same `citation_start` / `starting_citation_num`
-   value passed down the same call.
-3. **A `CitationInfo` packet must precede or accompany the text that references
-   it, or the frontend renders nothing.** `_process_citation` yields `CitationInfo`
-   objects before the rewritten citation text specifically so the client has the
-   mapping before it needs to resolve the link. A change that reorders this breaks
-   live rendering, though not replay (§4.9).
-4. **The persisted mapping must reproduce the live rendering on replay.**
-   `ChatMessage.citations` plus `SearchDoc` rows must be sufficient for
-   `translate_assistant_message_to_packets` to regenerate the same `CitationInfo`
-   set a live turn would have emitted. Only `emitted_citations` are persisted
-   (§4.6); a change to what counts as "emitted" changes what a reload shows.
-5. **The citation reminder must stay last** in the assembled context
-   (`llm_loop.py:select_reminder_text`, `prompt_utils.py:build_reminder_message`).
-   See [[core-chat-loop]] §5.9.
-6. **The document JSON key name and field order are deliberate and must not be
-   "tidied".** The key is `document`, not `citation_id` or `id`
-   (`convert_inference_sections_to_llm_string`), specifically to avoid the model
-   producing reasoning artifacts about "citation_id". The integer field comes
-   before title/metadata/content specifically for local-attention reasons
-   (`backend/onyx/chat/README.md`). Renaming the key or moving the field requires
-   re-validating citation accuracy with an eval, not just a unit test.
-7. **`citation_to_doc` and `_emitted_citations` are not interchangeable.**
-   `save_chat_turn` must receive both; using only the full mapping persists
-   citations the user never actually saw, using only the emitted set without the
-   mapping loses the `SearchDoc` to attach them to.
-8. **Duplicate citation numbers across tools favor the first-registered mapping.**
-   `DynamicCitationProcessor.update_citation_mapping(update_duplicate_keys=False)`
-   is the default used in the loop; if `OpenURLTool` and `WebSearchTool` ever
-   produce the same number, the existing (web search) mapping wins. Do not flip
-   this default without checking that call site's comment.
-
----
-
-## 6. Relationships
-
-**Depends on**
-- [[internal-search]] and [[web-search]]: produce the `InferenceSection`s and
-  `SearchDocsResponse.citation_mapping` that citations are built from.
-- [[tools-framework]]: `tool_runner.py` allocates the citation-number range per
-  tool call as part of running the tool batch.
-- [[context-assembly]]: places the system prompt's citation guidance and the
-  reminder message that teaches the format.
-- [[streaming-protocol]]: `CitationInfo` is one packet type in that vocabulary,
-  subject to the same `Placement`/`Emitter` rules as every other packet.
-- [[core-chat-loop]]: `llm_loop.py` drives the citation processor once per turn;
-  `ChatStateContainer` holds the mapping until save.
-
-**Depended on by**
-- [[chat-persistence]]: `save_chat_turn` writes `ChatMessage.citations` and the
-  `SearchDoc` links this component computes.
-- [[chat-frontend]]: `MemoizedAnchor`, `processContent`, and `SourcesTagWrapper` are
-  the sole consumers of `CitationInfo` on web; there is no dedicated citation
-  renderer, only markdown-link resolution.
-- Research agent intermediate reports (`tools/fake_tools/research_agent.py`) reuse
-  `DynamicCitationProcessor` in `KEEP_MARKERS` mode plus `citation_utils.collapse_citations`
-  to renumber citations when merging sub-agent output.
-
----
-
-## 7. Blast radius
-
-| If your change… | Also check |
-|---|---|
-| changes the LLM-facing document JSON format (`convert_inference_sections_to_llm_string`) | the citation guidance text in `prompts/chat_prompts.py`; every citeable tool (`SearchTool`, `WebSearchTool`, `OpenURLTool`); run a citation eval, not just a unit test, since this is a behavior-sensitive prompt surface |
-| adds a new citing tool | `tools/tool_runner.py:MERGEABLE_TOOL_FIELDS` and the `starting_citation_num += 100` block; `citation_utils.py:update_citation_processor_from_tool_response`'s `CITEABLE_TOOLS_NAMES` check (`tools/built_in_tools.py`); [[tools-framework]] |
-| changes `CitationInfo` or adds a citation-adjacent packet type | [[streaming-protocol]] §5 and §7 in full: `StreamingType`, both hand-mirrored frontend enums, `findRenderer` |
-| changes markdown or link rendering (`MemoizedAnchor`, `processContent`, `useMarkdownComponents`) | the `[Q]` sub-question link path shares the same anchor component; verify ordinary numeric citations are unaffected |
-| changes what `save_chat` persists for citations | `session_loading.py:translate_assistant_message_to_packets`; a saved-session reload must still reproduce the live citation set |
-| reorders the assembled prompt (system prompt, reminder, tool responses) | citation quality is the most common casualty; see [[core-chat-loop]] §7 |
-| changes citation regex patterns (`citation_pattern`, `possible_citation_pattern`) | the ReDoS-safety comment in `citation_processor.py` above `possible_citation_pattern`; keep the comma-separated digit-run form, do not reintroduce nested unbounded quantifiers |
-
----
-
-## 8. How to verify a change
-
-### Tests
-
-```bash
-cd backend && uv run pytest tests/unit/onyx/chat/test_citation_processor.py -v
-cd backend && uv run pytest tests/unit/onyx/chat/test_citation_utils.py -v
-cd backend && uv run pytest tests/unit/onyx/chat/test_llm_loop.py -v
-cd backend && uv run pytest tests/unit/onyx/chat/test_save_chat.py -v
-cd backend && uv run pytest tests/unit/onyx/prompts/test_prompt_utils.py -v
-cd backend && uv run pytest tests/unit/onyx/tools/test_search_llm_json.py -v
-```
-
-See `backend/AGENTS.md` for the authoritative commands and required env.
-
-### Manual reproduction
-
-1. Confirm services are up: `tail -f backend/log/api_server_debug.log`.
-2. Open `http://localhost:3000`, sign in as `admin_user@example.com` /
-   `TestPassword123!`.
-3. Ask a question that forces a search, for example "what does our onboarding doc
-   say".
-4. As the answer streams, confirm every numbered marker resolves to a hoverable
-   source card, and that the "Sources" tag in the message toolbar lists the same
-   documents.
-5. Reload the session from the sidebar (`GET /chat/get-chat-session/{id}`).
-   Confirm every citation in the replayed view resolves exactly as it did live,
-   same numbers, same documents.
-
-### What "working" looks like
-
-- Every citation number in the rendered answer resolves to a real, displayed
-  document. None resolve to documents outside `displayed_docs` for that turn.
-- Two concurrent search-like tool calls never produce colliding citation numbers.
-- The replayed view of a saved session is visually identical to the live stream.
+1. `unresolved-citation-silent` **An unresolved citation renders as nothing,
+   not as an error.**
+   `web/src/app/app/message/MemoizedTextComponents.tsx:MemoizedAnchor` returns
+   an empty fragment when a number has no document. During streaming this is
+   correct, because the mapping can arrive late. It also hides real bugs. If
+   citations disappear, suspect the pipeline before the model.
+2. `citation-info-any-order` **A client must accept `CitationInfo` before or
+   after the text that uses it.** `chat/citation_processor.py:DynamicCitationProcessor.process_token`
+   yields the packet before the rewritten marker, but
+   `chat/renderer.py:MessageRenderer._content` sends each batch's text first
+   and its `CitationInfo` after. `replay_response` keeps that order, but the
+   replay of a message with no execution record sends all `CitationInfo` after
+   the answer. This works only because
+   `handleCitationPacket` and `getCitations` fold packets into a map in any
+   order
+   (`app/app/message/messageComponents/timeline/hooks/packetProcessor.ts:handleCitationPacket`,
+   `app/app/services/packetUtils.ts:getCitations`) and the link renders as
+   nothing until its number arrives ([[#unresolved-citation-silent]]). Keep
+   both properties. Only `HYPERLINK` mode yields `CitationInfo`; the other
+   modes save no citations.
+3. `number-block-per-tool-call` **Do not share one number range across parallel
+   tool calls.** Each citeable tool adds the
+   `CITATIONS_PER_TOOL_CALL * invocation.call_index` offset to
+   `context.next_citation_num`, as
+   `tools/tool_implementations/web_search/web_search_tool.py` does. A tool
+   that skips the offset gives two documents the same number, and one
+   citation points at the wrong source.
+4. `persist-emitted-subset` **Persist the emitted subset, with the full mapping
+   to resolve it.** `db/chat_response.py:save_chat_turn` needs both. With only
+   the full mapping, it stores citations the user never saw. With only the
+   emitted set, it cannot find the `SearchDoc` for each number. Each new save
+   path must pass both, from `chat/presentation.py:project_response`. If
+   `project_response` fails to collect tool history or to render, it only logs
+   the error, and the turn saves with no citations and no renderings. With
+   `persist_content=False` (temporary chats), `save_chat_turn` saves no
+   citations or search docs. `chat/history_store.py:RedisChatHistoryStore`
+   keeps those numbers in Redis instead, with `sources_by_run` for child agents.
+   A new save path must cover both history stores.
+5. `document-key-prompt-design` **The document JSON key and field order are
+   prompt design.** The key is `document`, not `citation_id`, so the model does
+   not write reasoning such as "I should reference citation_id: 5". The number
+   comes first because models attend most to nearby text. A change to either
+   needs a citation eval, not only a unit test. The body key differs by source:
+   search results use `content` with `metadata` last
+   (`tools/tool_implementations/utils.py:convert_inference_sections_to_llm_string`),
+   and project files use `contents`
+   (`chat/prompt_utils.py:_create_context_files_message`).
+   `backend/onyx/chat/README.md` shows both formats.
+6. `guidance-in-reminder` **Citation guidance lives only in the reminder.**
+   The reminder is the last message, where the model attends most, and the
+   system prompt must stay byte-stable for the prompt cache.
+   [[context-assembly#no-citation-guidance-in-system-prompt]] and
+   [[context-assembly#reminder-last-head-stable]] own the rule and how the
+   `{{CITATION_GUIDANCE}}` tag resolves.
+7. `first-mapping-wins` **When two tools produce the same number, the first
+   mapping wins.**
+   `chat/citation_processor.py:DynamicCitationProcessor.update_citation_mapping`
+   with `update_duplicate_keys=False` is the default for tool results in
+   `chat/agent.py:ChatAgent._update_tool_context`. History answers and project
+   files pass `True`, so their saved numbers win. Do not change either without
+   checking the call sites.
+8. `not-every-bracket-is-a-citation` **Not every bracketed number is a document
+   citation.** `app/app/message/MemoizedTextComponents.tsx:MemoizedAnchor`
+   matches `[n]`, `[Dn]` and `[Qn]`. `[Qn]` is a
+   deep-research sub-question link indexed by list position, not by the
+   citation map.
+9. `parser-regex-linear` **The parser regex must stay linear.**
+   `citation_pattern` and `possible_citation_pattern`
+   (`chat/citation_processor.py:DynamicCitationProcessor.__init__`) accept
+   comma-separated
+   digit runs and the `【】` and `［］` brackets. Do not nest unbounded
+   quantifiers. The comment above `possible_citation_pattern` explains the
+   exponential backtracking risk.
+10. `partial-link-hidden` **`processContent` hides a partial link at the end of
+    the text.**
+    `web/src/app/app/message/messageComponents/markdownUtils.tsx:processContent`
+    strips a trailing incomplete `[[n]](url`, so a broken link does not flash
+    during streaming. A citation that never completes because of a backend bug
+    looks the same as one that is still streaming.
+11. `code-block-markers-skipped` **A marker inside a fenced code block is not a
+    citation.** `process_token` asks its
+    `chat/citation_processor.py:CodeFenceTracker` whether each match
+    sits in a code block, and leaves such markers as text with no
+    `CitationInfo`. A change to fence tracking can turn code such as `a[1]`
+    into a citation, or drop real citations after an unclosed fence.
+12. `history-owns-numbers` **Saved history must bring its citation numbers
+    back.** `chat/agent.py:ChatAgent` starts new numbers after the highest
+    number in history. Saved tool results keep `citation_mapping` but no
+    documents; `chat/response.py:restore_response_sources` refills them, and
+    the answer's sources come from its saved `MessageRendering.citation_documents`.
+    A source that a history path drops lets a later search reuse its number,
+    and an old marker then points at a new document. Chat and deep research
+    both read these saved sources, so a mode switch keeps the links.
+13. `restored-turn-keeps-numbers` **A resumed turn takes its numbers from the
+    checkpoint, not from history.** `chat/agent.py:ChatAgent.capture_state`
+    saves `citation_sources` and `citation_mapping` in
+    `chat/models.py:ChatFeatureState`, and `restore_state` writes them back.
+    The research agents do the same with their own feature state. Put new
+    citation state in that feature state, or a resumed turn reuses numbers. A
+    changed `include_citations` makes the restoration fail.
 
 ---
 
-## 9. Footguns
+## Known issues
 
-- **An unresolved citation renders as nothing, not an error.** A broken mapping
-  looks exactly like missing text. If citations silently vanish from an answer,
-  suspect the pipeline before suspecting the model.
-- **Citation numbers use turn-wide, ascending ranges.** Each citeable tool call
-  reserves 100 numbers, starting at the next free number (§4.3). Later batches start
-  after the highest existing number. Do not assume one call owns the whole turn.
-- **History keeps the model's original query arguments**, but the documents it
-  cites come from whatever actually ran after expansion (see [[internal-search]]
-  §9). The citation numbering is tied to that expanded, executed search, not to
-  the user's literal question.
-- **`processContent` hides partial citation markup during streaming.** This is
-  correct for the typewriter effect, but it can also mask a real parsing bug: a
-  citation that never completes because of a backend regex or mapping error looks
-  identical, on screen, to one that is simply still streaming.
-- **`citation_to_doc` (full mapping) and `_emitted_citations` (streamed subset)
-  answer different questions.** Reading the wrong one when adding a new save path
-  either persists citations nobody saw or drops citations that were shown.
-- **`[Q#]` is not an internal-search citation.** `MemoizedAnchor` treats it as a
-  deep-research sub-question link, keyed by list index rather than by the citation
-  map. `[D#]` still resolves through the citation map like a bare `[#]`. Do not assume every bracket-number pattern in the text goes
-  through the citation pipeline described here.
+- **Older answers bring back no numbers.** For a message with no
+  `response_status`, `chat/chat_utils.py:capture_chat_history` uses
+  `_legacy_tool_messages` and a plain answer with no sources, so
+  `message_citation_sources` finds nothing. A new search in a session that
+  started before the agent runtime can reuse `[1]` while an older answer also
+  shows `[1]` ([[#history-owns-numbers]]).
+
+---
+
+## Dependencies
+
+- [[internal-search]]: produces the sections and
+  `SearchDocsResponse.citation_mapping`.
+- [[web-search]]: produces web sections and reuses numbers in `open_url`.
+- [[tools-framework]]: the call index that offsets each tool's number range.
+- [[context-assembly]]: places the citation reminder last.
+- [[core-chat-loop]]: `ChatAgent` holds the prompt mapping, and the renderer
+  and `project_response` produce the emitted set for save.
+- [[streaming-protocol]]: the `CitationInfo` packet.
+- [[chat-persistence]]: stores the emitted mapping and replays it on reload.
+
+---
+
+## Recipes
+
+- `citeable-tool` **A new citeable tool.** Copy how `WebSearchTool` is wired; list the
+  current set in `tools/constants.py:CITEABLE_TOOLS_NAMES`. Add the tool name
+  there. It turns on the citation reminder in `build_chat_reminder`, and
+  `chat/citation_utils.py:message_citation_sources` registers numbers only for
+  tools on that list. Without it, the numbers never reach the processor and the
+  markers render as nothing. Start its numbers at the offset in
+  [[#number-block-per-tool-call]]. Return a `SearchDocsResponse` with
+  `citation_mapping`, and put every cited document in `search_docs`;
+  `message_citation_sources` drops numbers whose document is not there. If the
+  tool sets `merge_list_argument`, expect merged calls to share one number block.
+- `save-path` **A new save path.** Copy the call in
+  `db/chat_response.py:save_chat_response_to_db`; list the
+  callers with `git grep -n 'save_chat_turn(' backend/onyx`. Pass both
+  mappings ([[#persist-emitted-subset]]). Confirm that a reload through
+  `server/query_and_chat/session_loading.py:translate_assistant_message_to_packets`
+  shows the same citations as the live stream, and that the next turn does not
+  reuse a number ([[#history-owns-numbers]]).
+- `investigate-missing-citations` **Investigate "citations disappear" or "a
+  citation opens the wrong source".** Capture the stream in the browser network tab. If no
+  `citation_info` packet arrives for a number that the text shows, the
+  processor had no mapping: check that the tool is in `CITEABLE_TOOLS_NAMES`
+  and returns `citation_mapping` with its documents in `search_docs`. If the packet arrives but the marker renders
+  as nothing, the document is missing from the message's documents
+  ([[#unresolved-citation-silent]]). If a number points at the wrong source,
+  look for two tools that share a number block ([[#number-block-per-tool-call]],
+  [[#first-mapping-wins]]), or a number reused from an earlier turn
+  ([[#history-owns-numbers]], [[#restored-turn-keeps-numbers]]). If the live
+  answer is right and the reload is wrong, check the saved rendering's
+  `citation_documents` and `ChatMessage.search_docs`, which drive the replay.
+  Check `ChatMessage.citations` after that, for `chatState.citations` and older
+  messages. If a turn saved no citations at all, look in the logs for a
+  `project_response` failure ([[#persist-emitted-subset]]).
+
+---
+
+## Verification
+
+- Unit tests in `backend/tests/unit/onyx/chat/` cover the processor and the
+  citation helpers. The web renderer tests sit beside
+  `web/src/app/app/message/MemoizedTextComponents.tsx`. Prompt or format
+  changes also need a citation eval.
+- By hand, ask a question that forces a search. Each marker must open a source
+  card, and the toolbar "Sources" tag must list the same documents. Reload the
+  session: the same numbers must resolve to the same documents.

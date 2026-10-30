@@ -5,6 +5,7 @@ import json
 import os
 import re
 import tempfile
+import time
 import zipfile
 from collections.abc import Callable, Iterator, Sequence
 from email.parser import Parser as EmailParser
@@ -26,6 +27,7 @@ from onyx.configs.constants import ONYX_METADATA_FILENAME
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.file_processing.file_types import (
     PRESENTATION_MIME_TYPE,
+    SPREADSHEET_MIME_TYPES,
     WORD_PROCESSING_MIME_TYPE,
     OnyxFileExtensions,
     OnyxMimeTypes,
@@ -49,6 +51,12 @@ if TYPE_CHECKING:
 logger = setup_logger()
 
 TEXT_SECTION_SEPARATOR = "\n\n"
+
+# A full collection costs about 0.1 s in a loaded worker. One follows every
+# spreadsheet (openpyxl leaves cycles) and otherwise at most one per interval,
+# which bounds the cyclic garbage the other parsers leave in a long-lived worker.
+GC_COLLECT_INTERVAL_SECONDS = 10.0
+_last_gc_collect_at = 0.0
 
 _MARKITDOWN_CONVERTER: Optional["MarkItDown"] = None
 
@@ -140,8 +148,10 @@ def load_files_from_zip(
 ) -> Iterator[tuple[zipfile.ZipInfo, IO[Any]]]:
     """
     Iterates through files in a zip archive, yielding (ZipInfo, file handle) pairs.
+    Raises ZipSizeLimitError if the archive exceeds the decompression limits.
     """
     with zipfile.ZipFile(zip_file_io, "r") as zip_file:
+        assert_zip_within_limits(zip_file)
         for file_info in zip_file.infolist():
             if ignore_dirs and file_info.is_dir():
                 continue
@@ -152,6 +162,7 @@ def load_files_from_zip(
             ) or file_info.filename == ONYX_METADATA_FILENAME:
                 continue
 
+            # zipfile caps each read at the declared size checked above.
             with zip_file.open(file_info.filename, "r") as subfile:
                 # Try to match by exact filename first
                 yield file_info, subfile
@@ -336,13 +347,19 @@ def read_pdf_file(
             )
 
         if extract_images:
-            images = iter_pdf_extracted_images(pdf_reader, MAX_EMBEDDED_IMAGES_PER_FILE)
-            if image_callback is None:
-                extracted_images.extend(images)
-            else:
-                # Stream each image out immediately
-                for img_bytes, image_name in images:
-                    image_callback(img_bytes, image_name)
+            # Images are best-effort: a failure here must not discard the text.
+            try:
+                images = iter_pdf_extracted_images(
+                    pdf_reader, MAX_EMBEDDED_IMAGES_PER_FILE
+                )
+                if image_callback is None:
+                    extracted_images.extend(images)
+                else:
+                    # Stream each image out immediately
+                    for img_bytes, image_name in images:
+                        image_callback(img_bytes, image_name)
+            except Exception:
+                logger.exception("Failed to extract pdf images")
 
         return text, metadata, extracted_images
 
@@ -551,6 +568,9 @@ def _columns_to_keep(col_has_data: bytearray, max_empty: int) -> list[int]:
     return kept
 
 
+XLSX_TRUNCATION_MARKER = "[truncated: sheet exceeded cell limit]"
+
+
 def _sheet_to_csv(rows: Iterator[tuple[Any, ...]]) -> str:
     """Stream worksheet rows into CSV text without materializing a dense matrix.
 
@@ -558,35 +578,39 @@ def _sheet_to_csv(rows: Iterator[tuple[Any, ...]]) -> str:
     bitmap so column trimming needs no transpose or copy. Runs of empty
     rows/columns longer than 2 are collapsed; shorter runs are preserved.
 
-    Scanning stops once ``MAX_XLSX_CELLS_PER_SHEET`` non-empty cells have been
-    seen; the output gets a truncation marker row appended so downstream
-    indexing sees that the sheet was cut off.
+    Rows are stored as sparse ``(column, value)`` pairs. Scanning stops once
+    ``MAX_XLSX_CELLS_PER_SHEET`` cell positions (padding included) have been
+    seen, so sparse wide rows cannot bypass the cap; the output gets a
+    truncation marker row appended so downstream indexing sees that the sheet
+    was cut off.
     """
     MAX_EMPTY_ROWS_IN_OUTPUT = 2
     MAX_EMPTY_COLS_IN_OUTPUT = 2
-    TRUNCATION_MARKER = "[truncated: sheet exceeded cell limit]"
 
-    non_empty_rows: list[tuple[int, list[str]]] = []
+    non_empty_rows: list[tuple[int, list[tuple[int, str]]]] = []
     col_has_data = bytearray()
-    total_non_empty = 0
+    total_cells = 0
     truncated = False
 
     for row_idx, row_vals in enumerate(rows):
-        # Fast-reject empty rows before allocating a list of "".
-        if not any(v is not None and v != "" for v in row_vals):
-            continue
+        total_cells += len(row_vals)
+        cells: list[tuple[int, str]] = []
+        for i, v in enumerate(row_vals):
+            if v is None or v == "":
+                continue
+            text = str(v)
+            if text:
+                cells.append((i, text))
 
-        cells = ["" if v is None else str(v) for v in row_vals]
-        non_empty_rows.append((row_idx, cells))
-
-        if len(cells) > len(col_has_data):
-            col_has_data.extend(b"\x00" * (len(cells) - len(col_has_data)))
-        for i, v in enumerate(cells):
-            if v:
+        if cells:
+            non_empty_rows.append((row_idx, cells))
+            last_col = cells[-1][0]
+            if last_col >= len(col_has_data):
+                col_has_data.extend(b"\x00" * (last_col + 1 - len(col_has_data)))
+            for i, _ in cells:
                 col_has_data[i] = 1
-                total_non_empty += 1
 
-        if total_non_empty > MAX_XLSX_CELLS_PER_SHEET:
+        if total_cells > MAX_XLSX_CELLS_PER_SHEET:
             truncated = True
             break
 
@@ -600,25 +624,33 @@ def _sheet_to_csv(rows: Iterator[tuple[Any, ...]]) -> str:
     buf = io.StringIO()
     writer = csv.writer(buf, lineterminator="\n")
     blank_row = [""] * len(keep_cols)
+    output_col = {c: i for i, c in enumerate(keep_cols)}
     last_idx = -1
     for row_idx, cells in non_empty_rows:
         gap = row_idx - last_idx - 1
         if gap > 0:
             for _ in range(min(gap, MAX_EMPTY_ROWS_IN_OUTPUT)):
                 writer.writerow(blank_row)
-        writer.writerow([cells[c] if c < len(cells) else "" for c in keep_cols])
+        out_row = list(blank_row)
+        for c, text in cells:
+            out_row[output_col[c]] = text
+        writer.writerow(out_row)
         last_idx = row_idx
 
     if truncated:
-        writer.writerow([TRUNCATION_MARKER])
+        writer.writerow([XLSX_TRUNCATION_MARKER])
 
     return buf.getvalue().rstrip("\n")
 
 
-def _load_readonly_workbook(file: IO[Any], file_name: str) -> openpyxl.Workbook | None:
+def _load_readonly_workbook(
+    file: IO[Any], file_name: str, max_decompressed_bytes: int | None = None
+) -> openpyxl.Workbook | None:
     """Load a read-only workbook, returning None (and logging) for the BadZipFile
     / known-openpyxl-bug cases the xlsx indexers treat as skip-and-continue rather
-    than a hard failure."""
+    than a hard failure. Raises ZipSizeLimitError if the container exceeds the
+    decompression limits."""
+    assert_zip_container_within_limits(file, max_total_bytes=max_decompressed_bytes)
     try:
         return openpyxl.load_workbook(file, read_only=True, data_only=True)
     except BadZipFile as e:
@@ -639,14 +671,16 @@ def _load_readonly_workbook(file: IO[Any], file_name: str) -> openpyxl.Workbook 
         raise
 
 
-def xlsx_sheet_extraction(file: IO[Any], file_name: str = "") -> list[tuple[str, str]]:
+def xlsx_sheet_extraction(
+    file: IO[Any], file_name: str = "", max_decompressed_bytes: int | None = None
+) -> list[tuple[str, str]]:
     """
     Converts each sheet in the excel file to a csv condensed string.
     Returns a string and the worksheet title for each worksheet
 
     Returns a list of (csv_text, sheet)
     """
-    workbook = _load_readonly_workbook(file, file_name)
+    workbook = _load_readonly_workbook(file, file_name, max_decompressed_bytes)
     if workbook is None:
         return []
 
@@ -893,11 +927,29 @@ def extract_text_and_images(
     res = _extract_text_and_images(
         file, file_name, pdf_pass, content_type, image_callback
     )
-    # Clean up any temporary objects and force garbage collection
-    unreachable = gc.collect()
-    logger.info("Unreachable objects: %s", unreachable)
+    _collect_garbage_if_due(file_name, content_type)
 
     return res
+
+
+def _collect_garbage_if_due(file_name: str, content_type: str | None) -> None:
+    global _last_gc_collect_at
+    now = time.monotonic()
+    if (
+        not _is_spreadsheet(file_name, content_type)
+        and now - _last_gc_collect_at < GC_COLLECT_INTERVAL_SECONDS
+    ):
+        return
+    # Racing threads may both collect. The duplicate is harmless.
+    _last_gc_collect_at = now
+    logger.info("Unreachable objects: %s", gc.collect())
+
+
+def _is_spreadsheet(file_name: str, content_type: str | None) -> bool:
+    return (
+        get_file_ext(file_name) in OnyxFileExtensions.SPREADSHEET_EXTENSIONS
+        or content_type in SPREADSHEET_MIME_TYPES
+    )
 
 
 def _extract_text_and_images(

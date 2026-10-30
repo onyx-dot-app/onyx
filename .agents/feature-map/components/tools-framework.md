@@ -1,416 +1,424 @@
 # Tools Framework
 
-> The `Tool` abstraction and the machinery around it: the interface every tool
-> implements, the built-in tool catalogue, per-turn tool assembly, and parallel
-> tool execution.
+> The shared machinery for every tool the chat model can call: the `Tool`
+> interface, the built-in tool registry, per-model tool construction and gating,
+> and the research and coding sub-agents. Concrete tools live in their own
+> components; this one owns the rules that they all depend on.
 
-**Verified against:** `268e4d5a3d` (2026-10-05)
-**Domain:** core-loop
-**Edition:** CE, with EE additions in MCP credential resolution
-**Owns:**
-`backend/onyx/tools/interface.py`, `models.py`, `tool_constructor.py`, `tool_runner.py`,
-`built_in_tools.py`, `tool_name.py`, `constants.py`, `utils.py`,
-`backend/onyx/tools/fake_tools/`, `backend/onyx/server/features/tool/api.py`,
-`backend/onyx/db/tools.py`
-
-**Read first:** `[[core-chat-loop]]`. This component supplies the tool set that
-`run_llm_loop` calls into and executes; it does not run the LLM loop itself.
+**Verified against:** `6bac4e012f` (2026-10-29)
+**Edition:** CE
 
 ---
 
-## 1. What the user experiences
+## Callers
 
-When an agent needs to do something beyond generating text, it calls a tool: search
-the company index, search the web, open a URL, generate an image, run Python, read
-an attached file, or remember a fact about the user. The user sees a tool block in
-the transcript (queries, a spinner, then a result) while the tool runs, and the
-final answer folds the result back into prose with citations where relevant.
+The interface is `tools/interface.py:Tool`, which returns
+`llm/models.py:ToolResult`, and `tools/tool_constructor.py:construct_tools`.
+`Tool.bind` adapts a tool to the runtime's `agents/tools.py:AgentTool`, and
+`agents/tool_execution.py:ToolBatch` ([[agent-runtime]]) runs it.
 
-Admins control which tools a persona (agent) can use by attaching or detaching them
-in the persona editor. A user can also toggle tools off for a single message (for
-example, turning off web search for one question) without changing the persona.
-
-Two tools behave specially and are invisible as separate toggles: `MemoryTool` runs
-whenever the user has memory enabled, regardless of which persona is active, and
-`OpenURLTool` (link-opening) is not shown in the tool picker at all but is silently
-scoped down when web search is excluded.
-
----
-
-## 2. Surfaces
-
-### HTTP endpoints (router prefix `/tool`, `server/features/tool/api.py`)
-
-| Method | Path | Handler | Notes |
-|---|---|---|---|
-| GET | `/tool` | `list_tools` | Lists tools visible to the current user, filtered by `_may_view_tool`. |
-| GET | `/tool/{tool_id}` | `get_custom_tool` | |
-| GET | `/tool/openapi` | `list_openapi_tools` | |
-| POST | `/admin/tool/custom` | `create_custom_tool` | Creates a custom OpenAPI tool. |
-| PUT | `/admin/tool/custom/{tool_id}` | `update_custom_tool` | |
-| DELETE | `/admin/tool/custom/{tool_id}` | `delete_custom_tool` | |
-| PATCH | `/admin/tool/status` | `update_tools_status` | Enables/disables a `Tool` row (`Tool.enabled`). |
-| POST | `/admin/tool/custom/validate` | `validate_tool` | Validates an OpenAPI schema before save. |
-
-MCP tool CRUD lives under `/admin/mcp` and is covered by `[[mcp-and-custom-tools]]`,
-not here.
-
-### The per-message tool toggle
-
-`handle_send_chat_message` accepts an `allowed_tool_ids` whitelist on the request.
-When present, `tool_constructor.py:_construct_tools_impl` skips any persona tool
-whose `db_tool_model.id` is not in that list. This is how the frontend's per-message
-"turn off web search" control works. `MemoryTool` bypasses this whitelist entirely
-(see §5).
-
-### Environment configuration
-
-No dedicated env vars gate this component directly. Individual tools read their own
-env vars for availability (for example `CODE_INTERPRETER_BASE_URL` for `PythonTool`
-and `BashTool`, checked in `python_tool.py:is_available` and `bash_tool.py:is_available`).
+- **A developer who adds a tool** subclasses `Tool`, registers it, and attaches
+  it to an agent. Keep [[#built-in-needs-constructor-branch]],
+  [[#is-available-cheap-and-silent]], [[#run-errors-become-results]],
+  [[#renderer-dispatches-by-name]], [[#durable-details-registered]],
+  [[#parallel-by-default]], [[#tool-name-is-lookup-key]] and
+  [[#child-wait-cleanup]]. Checkpoint resume is not wired ([[agent-runtime]]).
+  When it is, a change to `tool_definition()` stops saved checkpoints from
+  resuming ([[agent-runtime#restored-tools-must-match]]). The concrete tools are
+  [[internal-search]], [[web-search]], [[image-generation]],
+  [[code-execution]], [[mcp-and-custom-tools]], [[chat-preferences]]
+  (`MemoryTool`) and [[file-store-and-user-files]] (`read_file`).
+- **[[core-chat-loop]]** calls `construct_tools` once per model response and
+  gives the tools to `chat/agent.py:ChatAgent` or
+  `deep_research/agent.py:DeepResearchAgent`. `ChatAgent` binds them with its
+  own `ToolContext`.
+- **The sub-agents** run on the same runtime. `DeepResearchAgent` does not bind
+  the tools. It passes them to each
+  `deep_research/research_agent.py:ResearchAgent` child, which binds them with
+  its own `ToolContext`. `coding_agent/agent.py:CodingAgent` calls `BashTool.run` from its own
+  `AgentTool`, so `Tool.run` error handling applies but no construction gate
+  does ([[code-execution#errors-are-results]]).
+- **[[citations]]** gets a block of citation numbers per search-like call.
 
 ---
 
-## 3. Data model
+## Scope
 
-- `Tool` (`backend/onyx/db/models.py:Tool`): one row per tool a persona can attach.
-  Three mutually-informative columns decide what kind of tool a row represents:
-  - `in_code_tool_id` set: a built-in tool. The value is a class name
-    (`SearchTool`, `MemoryTool`, ...) looked up in `BUILT_IN_TOOL_MAP`.
-  - `openapi_schema` set: a custom tool backed by a user-supplied OpenAPI schema
-    (`tool_constructor.py:build_custom_tools_from_openapi_schema_and_headers`).
-  - `mcp_server_id` set: an MCP tool, one row per tool exposed by that MCP server.
-  A row can have `enabled = False` without being detached from its personas; see §5.
-- `Persona__Tool` (`db/models.py:Persona__Tool`): join table recording that a tool
-  is *available* to a persona. Availability here does not imply usability; a
-  persona can list `ImageGenerationTool` while no image provider is configured.
-- `ToolCall` (owned by `[[chat-persistence]]`): the persisted record of one
-  invocation, written after `run_tool_calls` returns, not by this component.
+This component owns the `Tool` interface and `ToolContext`, tool construction
+and its gates, the built-in tool registry, the research-agent and coding-agent
+features, and the `CodingAgentTool` wrapper.
 
----
-
-## 4. How it works
-
-### 4.1 The `Tool` interface (`tools/interface.py`)
-
-`class Tool(abc.ABC, Generic[TOverride])`. Every concrete tool subclasses it,
-parameterizing `TOverride` with its own override-kwargs model (for example
-`SearchTool(Tool[SearchToolOverrideKwargs])`).
-
-Abstract members every tool must implement:
-- `id`, `name`, `description`, `display_name` (properties)
-- `tool_definition() -> dict`: the JSON schema handed to the LLM provider
-- `emit_start(placement)`: emits the tool's specific "start" packet
-- `run(placement, override_kwargs, **llm_kwargs) -> ToolResponse`: executes the tool
-
-Overridable with defaults:
-- `is_available(cls, db_session) -> bool`, default `True`. A dynamic, per-request
-  gate (does a provider key exist, is an index configured, is a service healthy).
-- `should_emit_argument_deltas(cls) -> bool`, default `False`. Controls whether the
-  LLM's streamed tool-call arguments are forwarded token-by-token.
-
-The constructor takes an optional `Emitter`; `Tool.emitter` (`interface.py:emitter`)
-raises `ValueError` if it was never set, so a tool built without an emitter fails
-loudly on first emit rather than silently dropping packets.
-
-### 4.2 `ToolResponse`: two payloads, two audiences (`tools/models.py:ToolResponse`)
-
-This is the load-bearing idea of the component. Every tool run produces exactly one
-`ToolResponse` with two fields that must never be confused:
-
-- `llm_facing_response: str`: the only thing that goes back into the LLM's message
-  history as the tool's response. Whatever the model needs to keep reasoning must
-  be in this string.
-- `rich_response`: a discriminated union used **only** for UI rendering and DB
-  persistence: `FinalImageGenerationResponse`, `SearchDocsResponse`,
-  `MemoryToolResponse`, `CustomToolCallSummary`, `PythonToolRichResponse`, a bare
-  `str`, or `None`. The LLM never sees this value; it is read by `save_chat_turn`
-  (`[[chat-persistence]]`) and by the frontend renderer.
-
-### 4.3 Built-in tool catalogue (`tools/built_in_tools.py`, `tool_name.py`)
-
-`BUILT_IN_TOOL_MAP` maps a `Tool.in_code_tool_id` string (the class name) to the
-implementation class. `TOOL_NAME_TO_CLASS` maps the LLM-facing `NAME` to the same
-class, built by walking `BUILT_IN_TOOL_MAP` (`built_in_tools.py:_build_tool_name_to_class`).
-`get_built_in_tool_by_id` (`built_in_tools.py:get_built_in_tool_by_id`) is the
-runtime lookup `tool_constructor.py` uses for every persona-attached built-in tool.
-
-| Tool | Class : file | LLM-facing `NAME` | Purpose | Availability gate |
-|---|---|---|---|---|
-| Internal search | `SearchTool` : `tool_implementations/search/search_tool.py` | `internal_search` | Query the company document index. | `is_available`: `False` if `DISABLE_VECTOR_DB`; else `True` if connectors, federated connectors, or user files exist (`search_tool.py:is_available`). |
-| Web search | `WebSearchTool` : `tool_implementations/web_search/web_search_tool.py` | `web_search` | Query an external web search provider. | `True` only if an active provider row exists (`web_search_tool.py:is_available`). |
-| Image generation | `ImageGenerationTool` : `tool_implementations/images/image_generation_tool.py` | `generate_image` | Generate an image via the configured image LLM. | `True` if a default image-generation config with credentials exists (`image_generation_tool.py:is_available`, `utils.py:is_image_generation_configured`). |
-| Open URL | `OpenURLTool` : `tool_implementations/open_url/open_url_tool.py` | `open_url` | Fetch a specific URL's content, from the live web or the index. | Always `True` (`open_url_tool.py:is_available`); its web-fetch path can still be disabled per message, see §4.4. |
-| Python / Code Interpreter | `PythonTool` : `tool_implementations/python/python_tool.py` | `run_python` | Execute Python in a sandboxed session. | `True` only if `CODE_INTERPRETER_BASE_URL` is set, the server is enabled, and its health check passes (`python_tool.py:is_available`). |
-| File reader | `FileReaderTool` : `tool_implementations/file_reader/file_reader_tool.py` | `read_file` | Read an attached or project file's contents on demand. | `DISABLE_VECTOR_DB` only, gated behind a TODO pending generalization (`file_reader_tool.py:is_available`). |
-| Memory | `MemoryTool` : `tool_implementations/memory/memory_tool.py` | `add_memory` | Persist a fact about the user across sessions. | No override; default `True`. Injection is gated by `user.enable_memory_tool`, not by `is_available` (see §5). |
-| Coding agent | `CodingAgentTool` : `tool_implementations/coding_agent/coding_agent_tool.py` | value of `CODING_AGENT_TOOL_NAME` | Runs a sub-agent loop against a cloned repo. | `True` iff `BashTool.is_available` is `True` (`coding_agent_tool.py:is_available`). |
-| Bash | `BashTool` : `tool_implementations/bash/bash_tool.py` | `bash` | Run a shell command in an isolated code-interpreter session. | `True` if `CODE_INTERPRETER_BASE_URL` is set, the server is enabled, its health check passes, and it `supports(...)` the session/bash routes (`bash_tool.py:is_available`). Not persona-attachable (see §5). |
-
-`KnowledgeGraphTool` (`tool_implementations/knowledge_graph/knowledge_graph_tool.py`)
-belongs to the knowledge graph, an incomplete feature (see INDEX.md, Incomplete
-features). It is present in `BUILT_IN_TOOL_MAP` (`built_in_tools.py`), so
-`get_built_in_tool_by_id` resolves it and `is_available` is checked for it. Its
-`run` raises `NotImplementedError`, and its dispatch branch in
-`tool_constructor.py:_construct_tools_impl` is commented out. The if/elif chain has
-no trailing `else`, so a persona row with `in_code_tool_id="KnowledgeGraphTool"`
-passes the availability check but is never added to `tool_dict`.
-
-### 4.4 Per-turn assembly: `tool_constructor.py`
-
-`construct_tools` opens a DB session (if none given) and delegates to
-`_construct_tools_impl`, returning `dict[tool_id, list[Tool]]` (a list because MCP
-tool-name disambiguation and custom-tool schemas can expand one DB row into more
-than one runtime tool).
-
-For each `db_tool_model` in `persona.tools`, in order:
-1. Skip if `db_tool_model.enabled` is `False`.
-2. Skip if `allowed_tool_ids` is given and the tool's id is not in it (the
-   per-message toggle from §2).
-3. For a built-in tool (`in_code_tool_id` set), resolve the class via
-   `get_built_in_tool_by_id`, call `tool_cls.is_available(db_session)` in a
-   `try/except` that treats a raised exception as `False`
-   (`tool_constructor.py:_construct_tools_impl`), then dispatch to a class-specific
-   constructor branch (`SearchTool`, `ImageGenerationTool`, `WebSearchTool`,
-   `OpenURLTool`, `PythonTool`, `CodingAgentTool`, `FileReaderTool`). The
-   `SearchTool` branch skips the tool when `search_usage_forcing_setting` is
-   `SearchToolUsage.DISABLED`.
-4. For a custom tool (`openapi_schema` set), resolve OAuth (per-tool OAuth config,
-   then passthrough auth using the user's own login token) and build one `Tool`
-   per operation via `build_custom_tools_from_openapi_schema_and_headers`.
-5. For an MCP tool (`mcp_server_id` set), resolve credentials via
-   `resolve_mcp_credentials`, list the server's tools via
-   `get_all_mcp_tools_for_server`, and build an `MCPTool` per tool, caching by
-   server id so a server with many tools is only queried once per turn.
-
-Two tools are force-injected **outside** this persona loop:
-- `SearchTool`, when `search_usage_forcing_setting == SearchToolUsage.ENABLED` and
-  the persona did not already attach it (`tool_constructor.py:_construct_tools_impl`,
-  the block after the main loop).
-- `MemoryTool`, whenever `user.enable_memory_tool` is set. This lookup uses
-  `get_builtin_tool(db_session, MemoryTool)` directly and **bypasses
-  `allowed_tool_ids` entirely** (see §5, §9).
-
-`should_disable_open_url_web_fetch` (`tool_constructor.py:should_disable_open_url_web_fetch`)
-returns `True` when `WebSearchTool` is explicitly excluded via `allowed_tool_ids`.
-`OpenURLTool` is then constructed with `web_fetch_disabled=True`, so live web
-fetches are cut off while its indexed-document fallback still works. `OpenURLTool`
-itself has no chat-facing toggle (`chat_selectable=False` per its docstring), so
-this is the only way to turn off its live-web behavior.
-
-Finally, `_disambiguate_mcp_tool_names` renames any `MCPTool` whose `name` collides
-with another tool's name across MCP servers.
-
-### 4.5 Execution: `tool_runner.py:run_tool_calls`
-
-Called once per LLM cycle from `[[core-chat-loop]]`'s `run_llm_loop`, given the
-tool calls the LLM just made and the constructed `Tool` instances.
-
-1. **Merge.** `_merge_tool_calls` collapses repeated calls to the same tool using
-   `MERGEABLE_TOOL_FIELDS`: `SearchTool.NAME` and `WebSearchTool.NAME` merge their
-   `queries` list; `OpenURLTool.NAME` merges its `urls` list. A merged call keeps
-   the first call's `tool_call_id` and `placement`.
-2. **Filter.** Calls naming a tool not in `tools_by_name` are dropped with a
-   warning; they do not count against `max_concurrent_tools`. `run_llm_loop` then
-   records each dropped call in history with a failure response
-   (`chat_utils.py:create_tool_call_failure_response`), so every call keeps its pair.
-3. **Cap.** If `max_concurrent_tools` is set, calls beyond the cap are dropped
-   outright (not queued for a later cycle).
-4. **Prepare overrides.** For each surviving call, `tool.emit_start(placement)`
-   fires first, then the type-specific `TOverride` is built: `SearchTool` gets
-   `original_query` (the last user message), `message_history`, memory context, and
-   `skip_query_expansion`; `WebSearchTool` and `OpenURLTool` get their own citation
-   ranges; `PythonTool` gets `chat_files`; `MemoryTool` gets user identity fields and
-   history. `SearchTool`, `WebSearchTool`, and `OpenURLTool` each consume
-   `starting_citation_num` and then advance it by 100
-   (`tool_runner.py:run_tool_calls`), so parallel citation-producing tools cannot
-   collide on citation numbers.
-5. **Run.** All prepared calls run concurrently via
-   `run_functions_tuples_in_parallel(_safe_run_single_tool, ..., allow_failures=True,
-   timeout=TOOL_EXECUTION_TIMEOUT_SECONDS)`, where
-   `TOOL_EXECUTION_TIMEOUT_SECONDS = 10 * 60`.
-6. **Per-tool wrapper.** `_safe_run_single_tool` wraps the call in a tracing
-   `function_span(tool.name)`, calls `tool.run(...)`, and converts any exception
-   into a `ToolResponse` whose `llm_facing_response` is
-   `GENERIC_TOOL_ERROR_MESSAGE.format(error=...)`:
-   - `ToolCallException`: expected (bad args, provider 4xx). Uses
-     `e.llm_facing_message`.
-   - `ToolExecutionException`: unexpected; if `e.emit_error_packet` is set, also
-     emits a `PacketException` to the stream.
-   - Bare `Exception`: unexpected, generic message, always emits a `SpanError` for
-     tracing.
-   A `SectionEnd` packet is emitted after every tool call, success or failure, so
-   the frontend always closes the tool's UI block.
-7. **Citation merge.** Results whose `rich_response` is a `SearchDocsResponse` have
-   their `citation_mapping` merged into the shared `citation_mapping` dict
-   (mutated in place and also returned).
+Neighbours own the rest:
+- Each concrete tool belongs to the component listed in Callers.
+- [[agent-runtime]] owns tool scheduling, argument merging, execution modes,
+  child-run waits and the chat renderers that turn tool events into packets.
+- [[mcp-and-custom-tools]] owns the tool HTTP API, the `Tool` table helpers,
+  the OpenAPI and MCP tool classes, and MCP credential resolution.
+- [[plugins]] owns Default Chat tool selection and the per-user tool
+  preferences that construction reads.
+- [[core-chat-loop]] owns the turn, the stopping-tool rule, and how the
+  sub-agents enter a turn.
+- [[citations]] owns the meaning of the citation number blocks.
+- [[chat-persistence]] owns how tool calls are saved and replayed, and which
+  tool results reach later turns.
+- [[web-search]] owns the rule that turning web search off for one message makes
+  `open_url` index-only (`tools/tool_constructor.py:should_disable_open_url_web_fetch`).
 
 ---
 
-## 5. Contracts and invariants
+## Architecture
 
-1. **A new built-in tool needs both `BUILT_IN_TOOL_MAP` and a DB row.** Adding the
-   class alone does nothing; `_construct_tools_impl` only sees tools present on
-   `persona.tools`, and those rows come from `Tool.in_code_tool_id` seeded via
-   alembic migration (see `backend/alembic/versions/d09fc20a3c66_seed_builtin_tools.py`,
-   `f3c9e59c3b07_seed_coding_agent_tool.py`, `d3fd499c829c_add_file_reader_tool.py`
-   for precedent).
-2. **`is_available` must be cheap and must not raise.** `tool_constructor.py`
-   wraps every call in `try/except Exception`, but a raised exception is treated as
-   "not available" and logged, silently hiding a tool rather than failing the turn.
-   A slow `is_available` runs on every tool construction, once per turn per
-   persona-attached built-in tool.
-3. **`llm_facing_response` must never carry UI-only data**, and **`rich_response`
-   must never be sent to the LLM.** These are the only two channels a `ToolResponse`
-   has; mixing them either leaks internal structure to the model or drops
-   renderable data.
-4. **Citation-number ranges must not collide.** Any new citation-producing tool run
-   through `run_tool_calls` must consume `starting_citation_num` and advance it,
-   matching the pattern for `SearchTool`/`WebSearchTool`/`OpenURLTool`.
-5. **`emit_start` must fire before `run`.** `run_tool_calls` calls them in that
-   order for every tool call; a tool that emits its own start packet inside `run`
-   instead will render out of order.
-6. **Every tool call must emit a `SectionEnd`.** `_safe_run_single_tool` emits it
-   unconditionally after `run`, including on every exception path. Do not add a new
-   early-return path that skips it.
-7. **Exceptions from `Tool.run` must never propagate out of `run_tool_calls`.**
-   `_safe_run_single_tool` converts `ToolCallException`, `ToolExecutionException`,
-   and bare `Exception` into a `ToolResponse`, keeping the turn alive.
-8. **`MemoryTool` bypasses `allowed_tool_ids`.** Its injection in
-   `_construct_tools_impl` happens after, and independently of, the persona-tool
-   loop that checks the whitelist. A change to per-message tool filtering must
-   account for this or memory will leak into a turn the user tried to restrict.
-9. **A tool with `Tool.enabled = False` stays attached to its personas.**
-   `Persona__Tool` is an availability record, not a usability one; the
-   `enabled` check happens in `_construct_tools_impl`, not at the DB relationship
-   level.
-
----
-
-## 6. Relationships
-
-**Depends on**
-- `[[streaming-protocol]]`: every tool's `emit_start`, argument-delta, and
-  `SectionEnd` packets use the shared `Placement`/`Packet` vocabulary.
-- `[[chat-persistence]]`: `ToolResponse.rich_response` is what `save_chat_turn`
-  persists as `SearchDoc` rows, `ToolCall.tool_call_response`, and generated file records.
-- `[[agents-personas]]`: `persona.tools` is the input to `construct_tools`; persona
-  fields (document sets, attached documents, hierarchy nodes) shape `SearchTool`'s
-  scope.
-- `[[llm-providers]]`: `tool.tool_definition()` output is what the provider-facing
-  request includes as callable functions.
-- `[[observability]]`: `run_tool_calls` and `_safe_run_single_tool` open a
-  `function_span(tool.name)` for every call.
-
-**Depended on by**
-- `[[core-chat-loop]]`: calls `construct_tools` once per turn and `run_tool_calls`
-  once per LLM cycle.
-- `[[internal-search]]`, `[[web-search]]`, `[[image-generation]]`,
-  `[[code-execution]]`, `[[mcp-and-custom-tools]]`: each is a concrete `Tool`
-  implementation documented separately; this component is their shared contract.
-- `[[streaming-protocol]]`'s frontend consumer: `renderMessageComponent.tsx`
-  switches on the packet types each tool emits.
-
----
-
-## 7. Blast radius
-
-| If your change… | Also check |
-|---|---|
-| adds a built-in tool | `BUILT_IN_TOOL_MAP`, a seeding migration for its `Tool` row, a construction branch in `tool_constructor.py`, a renderer case in `renderMessageComponent.tsx`, and whether it needs a `MERGEABLE_TOOL_FIELDS` entry |
-| renames a tool's `NAME` | Saved chat history stores the old name in `ToolCallSimple.tool_name`; a rename breaks replay of old sessions and the frontend's type-based renderer switch in `renderMessageComponent.tsx` |
-| changes `ToolResponse` (adds/removes a `rich_response` variant) | every tool that returns that variant, `save_chat_turn` (`[[chat-persistence]]`), and the frontend renderer that reads the persisted rich response |
-| changes `is_available` for any built-in tool | the tool-listing/admin UI, and whether the change can raise (see §5 contract 2) |
-| changes error wrapping in `_safe_run_single_tool` | the exact `GENERIC_TOOL_ERROR_MESSAGE` string other code may pattern-match on, and whether `SectionEnd` still always fires |
-| changes `allowed_tool_ids` filtering | `MemoryTool`'s bypass and `should_disable_open_url_web_fetch`, both of which sit outside the main filter |
-| changes MCP tool construction or caching | `[[mcp-and-custom-tools]]`, and `_disambiguate_mcp_tool_names` |
-| changes citation-range allocation (`starting_citation_num`) | `[[citations]]`, and every citeable tool in `CITEABLE_TOOLS_NAMES` |
-
----
-
-## 8. How to verify a change
-
-### Tests
-
-```bash
-# Integration tests are preferred for tool construction and execution behavior.
-cd backend && uv run pytest tests/integration -k tool
-# Unit tests for tool_runner merging/citation logic
-cd backend && uv run pytest tests/unit -k "tool_runner or tool_constructor"
+```
+chat/process_message.py:prepare_chat_turn    capture_persona_tool_configuration
+                                             (db/tools.py) -> PersonaToolConfiguration
+chat/execution.py:create_chat_agent          per model response
+  construct_tools                            -> {Tool row id: [Tool instances]}
+  ChatAgent / ResearchAgent                  Tool.bind(_tool_context) -> AgentTool
+agents/runtime.py                            a model step returns tool calls
+  agents/tool_execution.py:ToolBatch         merge -> run in parallel -> finalize
+    Tool.run -> _invoke_tool -> Tool._run    trace, convert errors, check cancel
+  ChatAgent._finalize_tool, ChatAgent._after_step
+chat/presentation.py:ResponsePresenter       tool events -> chat/renderer.py:ToolRenderer
 ```
 
-See `backend/AGENTS.md` for authoritative commands and required env.
+**Captured configuration.** `db/tools.py:capture_persona_tool_configuration`
+copies the agent's `Tool` rows into frozen `ToolConfiguration` models before the
+run starts. `construct_tools` opens its own short DB session, so no session
+stays open for a turn that can last minutes. MCP tool schemas come from the
+captured `mcp_input_schema`, not from a live MCP call.
 
-### Adding a new built-in tool, end to end
+**Construction per model.** `chat/execution.py:create_chat_agent` calls
+`construct_tools` for each model response, so a multi-model turn has separate
+tool instances. `tools/tool_constructor.py:_construct_tools_impl` walks the
+captured tools in order and applies these gates:
 
-1. Implement the class under `tools/tool_implementations/<name>/`, subclassing
-   `Tool[YourOverrideKwargs]` and implementing every abstract member in §4.1.
-2. Add it to `BUILT_IN_TOOL_MAP` in `built_in_tools.py`.
-3. Write an alembic migration that inserts a `Tool` row with
-   `in_code_tool_id=YourTool.__name__` (mirror
-   `backend/alembic/versions/d3fd499c829c_add_file_reader_tool.py`).
-4. Add a construction branch in `tool_constructor.py:_construct_tools_impl` if the
-   tool needs config beyond the default constructor args.
-5. If the tool produces citations, add its `NAME` to `MERGEABLE_TOOL_FIELDS` and
-   `CITEABLE_TOOLS_NAMES` as appropriate, and handle its `starting_citation_num` in
-   `run_tool_calls`.
-6. Add a renderer case in
-   `web/src/app/app/message/messageComponents/renderMessageComponent.tsx` for the
-   packet type(s) the tool emits, and a dedicated renderer component alongside the
-   existing ones (`InternalSearchToolRenderer`, `PythonToolRenderer`, etc.).
-7. Attach the tool to a persona in the admin UI or via a test fixture, then run a
-   chat turn that forces the tool to fire.
+1. `server/features/tool/tool_visibility.py:is_tool_available_for_persona`. An
+   MCP or built-in tool with `enabled=False` is skipped for every agent. An
+   OpenAPI tool with `enabled=False` is skipped only in Default Chat.
+2. `allowed_tool_ids`, the per-message list that the web client sends.
+3. For a built-in tool, `is_available(db_session)`. An exception counts as "not
+   available" and is logged.
+4. A class-specific branch builds the instance, and some branches skip the
+   tool with no error:
+   - `SearchTool` is skipped when the search usage setting from
+     `chat/files.py:determine_search_params` is `DISABLED`.
+   - `OpenURLTool` is skipped when web search is off for the message and
+     `DISABLE_VECTOR_DB` is set ([[web-search]]).
+   - An OpenAPI tool with `oauth_config_id` or `passthrough_auth` is skipped
+     for an anonymous user, with only a warning in the log.
+   - OpenAPI and MCP rows go through their own branches
+     ([[mcp-and-custom-tools]]). Both first apply the user's plugin
+     preferences ([[plugins]]), which exist only for Default Chat
+     (`DEFAULT_PERSONA_ID`). The MCP branch then applies
+     `user_can_access_mcp_server` in Default Chat only
+     ([[mcp-and-custom-tools#access-grants-default-chat-only]]), resolves
+     credentials once per server, and builds every `MCPTool` of that server
+     from the captured rows.
 
-### Manual reproduction
+Two tools are added outside this loop. `SearchTool` is added when the request
+forces search on (`SearchToolUsage.ENABLED`), `DISABLE_VECTOR_DB` is off, and
+the loop did not build it. `MemoryTool` is added when `user.enable_memory_tool`
+is set ([[#memory-tool-bypasses-filters]]). Last, `_disambiguate_mcp_tool_names`
+renames MCP tools whose names collide.
 
-1. Confirm services are up via `backend/log/api_server_debug.log`.
-2. In the admin persona editor, attach or detach a tool and confirm the change is
-   reflected the next turn (no server restart required).
-3. Send a message that forces a search, confirm a `SearchDoc`-backed tool block
-   renders, then reload the session and confirm the same block replays.
-4. Toggle a tool off for a single message using the frontend's per-message
-   control, and confirm the request's `allowed_tool_ids` excludes it while the
-   persona's other tools still run.
+**Execution.** A tool implements `_run(invocation, context)` and returns a
+`ToolResult`, or a `ChildRunWait` when it delegates to a sub-agent. Call data,
+such as arguments, `call_index`, the cancellation signal and the progress
+callback, comes in `agents/tools.py:ToolInvocation`. `invocation.update` can
+raise `AgentCancelled`; do not catch it. An update sent after `_run` returns is
+dropped, and a result that arrives after the run closes is discarded.
+Per-request data, such as chat files, memory and the next citation number,
+comes in `tools/models.py:ToolContext`. `ChatAgent._tool_context` and
+`ResearchAgent._tool_context` build it when the call starts.
 
-### What "working" looks like
+When the run completes normally, every call gets a result: `ToolBatch` answers
+an unknown tool name, malformed arguments or truncated arguments with an error
+result. On Stop or a run failure, a running call ends with no result (status
+`CANCELLED` or `ERROR`) and renders with no details. `_invoke_tool` discards a
+result that finishes after cancellation. Side effects that the tool already
+made are not undone, so check `invocation.cancellation` before irreversible
+work.
 
-- A newly added tool appears in the persona's tool list only after its `Tool` row
-  is seeded, not just after the class is registered.
-- A tool that raises inside `run` still produces a completed turn with a
-  `GENERIC_TOOL_ERROR_MESSAGE`-shaped response, not a dead stream.
-- Parallel search-like tool calls in one cycle never render overlapping citation
-  numbers.
+**Sub-agents.** `DeepResearchAgent`, `ResearchAgent` and `CodingAgent` are
+runtime agents. `DeepResearchAgent` and `CodingAgentTool` spawn a child run and
+return `ChildRunWait`; the runtime calls `result_from_children` when the child
+ends ([[#child-wait-cleanup]]). A step count bounds the coding agent, not time:
+`CodingAgentTool` gives it `MAX_CODING_AGENT_CYCLES + 1` steps.
+`coding_agent/agent.py:CodingAgent._prepare_step` forces a final answer step
+with no tools on the last step, after a `generate_answer` call, or after a step
+with no tool calls. Their control functions, such as `think_tool`, `generate_report` and
+`generate_answer`, are plain `AgentTool` objects with no `Tool` row, and
+`chat/renderer.py:HIDDEN_TOOLS` keeps them out of the stream.
 
 ---
 
-## 9. Footguns
+## Contracts and traps
 
-- **`MemoryTool` bypasses `allowed_tool_ids`.** A user who toggles off every tool
-  for a message will still get memory writes if `user.enable_memory_tool` is set.
-- **`KnowledgeGraphTool` is registered but cannot run yet.** The knowledge graph is
-  an incomplete feature. The class is in `BUILT_IN_TOOL_MAP`, but its
-  `tool_constructor.py` dispatch branch is commented out and there is no fallback
-  branch, so it is never added to a turn's tool set. Do not assume it runs because
-  the class is in the map, and do not delete it as dead code.
-- **`BashTool` is never persisted and uses a sentinel id.** The coding agent
-  constructs it directly with `BASH_TOOL_SENTINEL_ID = 0`
-  (`fake_tools/coding_agent.py`), not through `tool_constructor.py`, and it cannot
-  be attached to a persona.
-- **`fake_tools/` are not `Tool` subclasses.** `run_coding_agent_call` and
-  `run_research_agent_call` (`fake_tools/coding_agent.py`, `fake_tools/research_agent.py`)
-  are hand-rolled sub-agent loops that hand the LLM synthetic function schemas for
-  internal control signals (`think_tool`, `generate_answer`, `generate_report`
-  defined in `onyx/deep_research/tool_definitions.py` and `onyx/coding_agent/tool_definitions.py`).
-  These signals have no DB `Tool` row, never appear in `BUILT_IN_TOOL_MAP`, and
-  never go through `run_tool_calls`; the coding agent dispatches its bash calls
-  directly via `_run_bash_call`. The directory name suggests these are real tools;
-  they are not.
-- **Tool responses are dropped from saved chat history.** Only the tool-call
-  *arguments* survive into the next turn's context; the `llm_facing_response` is
-  replaced with a placeholder by `[[core-chat-loop]]`'s history construction. A
-  tool that expects the model to recall its own past output must put the durable
-  fact in the arguments or accept it will be re-fetched.
-- **Merged tool calls mean the executed call is not the call the LLM wrote.**
-  `_merge_tool_calls` collapses N calls to `SearchTool`/`WebSearchTool`/`OpenURLTool`
-  into one before execution and before it enters history, so the model later sees
-  the merged, expanded arguments rather than what it originally emitted.
+1. `memory-tool-bypasses-filters` **`MemoryTool` bypasses `allowed_tool_ids`
+   and the agent's tools.** `tools/tool_constructor.py:_construct_tools_impl`
+   adds it after the agent tool loop whenever `user.enable_memory_tool` is set.
+   A user who turns every tool off for a message can still get a memory write.
+   A change to per-message filtering must decide whether memory follows it.
+   In an incognito turn the tool is still offered, but `MemoryTool._run`
+   refuses the write when `get_current_incognito_record_mode()` is set. A new
+   tool with durable side effects outside the file store must make the same
+   check. File-store writes get the incognito cleanup stamp automatically
+   ([[file-store-and-user-files]]).
+2. `built-in-needs-constructor-branch` **A built-in tool without a constructor
+   branch is silently dropped.** The `if/elif` chain in
+   `tools/tool_constructor.py:_construct_tools_impl`
+   has no `else`. A tool in `tools/built_in_tools.py:BUILT_IN_TOOL_MAP` with no
+   branch passes `is_available` and then is never added. `KnowledgeGraphTool` is
+   in this state on purpose (Known issues). The reverse also holds: an exception
+   inside a branch is not caught, and it ends that model's answer. The web
+   search, `open_url` and image generation branches raise when their provider
+   is missing. Put each "cannot run here" check in
+   `is_available`.
+3. `is-available-cheap-and-silent` **`is_available` runs on every turn and must
+   be cheap.** It runs once per attached built-in tool per model response. Cache
+   remote checks, as
+   `tools/tool_implementations/python/code_interpreter_client.py:CodeInterpreterClient.health`
+   does with `use_cache=True`. An
+   exception hides the tool and only logs, so a bug here looks like "the model
+   never uses the tool".
+4. `two-response-channels` **Keep the two `ToolResult` channels apart.**
+   `llm/models.py:ToolResult.content` is the only text the model sees.
+   `details` is a typed object that application code reads by type:
+   `chat/agent.py:ChatAgent._update_tool_context` gathers documents and files
+   from it, `ToolRenderer` draws it, and chat saves it. Put what the model needs
+   in `content`. Some saved model text is itself a contract, such as the
+   `run_python` result JSON ([[code-execution#run-python-result-json]]).
+5. `run-errors-become-results` **`Tool._run` must not let errors stop the
+   turn, and must let cancellation through.** `Tool.run` is final and wraps
+   `_run` in `tools/interface.py:_invoke_tool`. A `ToolCallException` becomes an
+   error result with its `llm_facing_message`; raise it for errors that the
+   model can fix, such as bad arguments (`parse_tool_arguments` does this). Any
+   other exception becomes "Tool failed with error: ..." with the exception
+   text, which the model reads and chat saves. `Tool.bind` wraps
+   `result_from_children` in the same conversion and span. `ToolBatch` also
+   converts exceptions from bare `AgentTool` callbacks that have no `Tool.run`.
+   Raise
+   `ToolExecutionException(emit_error_packet=True)` when the user must see the
+   error. Cancellation is `llm/cancellation.py:AgentCancelled`, a
+   `BaseException`: never catch `BaseException` in a tool.
+6. `section-end-always` **Every rendered tool block ends with a `SectionEnd`
+   packet.** Tools emit no packets. `chat/renderer.py:ToolRenderer.complete`
+   appends `SectionEnd` on every path, and
+   `chat/presentation.py:ResponsePresenter.consume` completes each open tool
+   when its run ends. The frontend closes the tool block on it. Do not add a
+   return path that skips it.
+7. `renderer-dispatches-by-name` **A tool's packets come from `ToolRenderer`,
+   chosen by tool name and details type.** `chat/renderer.py:ToolRenderer.start`
+   picks the start packet by `call.name`, and `ToolRenderer.update` picks the
+   delta by the type of `details`. A tool with no branch renders as a custom
+   tool: `CustomToolStart` and `CustomToolArgs`, then its `content` as text for
+   a successful result only. An error shows no text unless its details are
+   `ToolExecutionError`. Return typed `details`: with `details=None`, the live
+   stream sends the text twice, because both the result update and the
+   completion emit it. Streamed argument
+   deltas go only to `run_python` (`chat/renderer.py:MessageRenderer.consume`).
+   Saved responses replay through the same renderer
+   (`chat/presentation.py:replay_response`), so a change here changes reload too.
+8. `durable-details-registered` **A new `details` type must be registered
+   twice.** Chat saves `details` through the discriminated union in
+   `db/models.py:StoredToolResult`, keyed by the model's `type` literal, and
+   checkpoints it through `chat/checkpoint.py:CHECKPOINT_PAYLOAD_TYPES`. A new
+   `type` literal missing from the union fails every save with a
+   `ValidationError`. A subclass that keeps its parent's `type` literal saves as
+   the parent and drops its own fields with no error.
+   `chat/agent.py:ChatAgent._finalize_tool` replaces each `SearchDocsResponse`
+   with `chat/models.py:ChatSearchResult` in this way, and its `staged_files`
+   are not saved. Only the unwired checkpoint handoff path reads the registry
+   ([[agent-runtime]]), so a missing registration fails only that path and its
+   tests. Saved rows and checkpoints keep the `type` value and the tag, so
+   never rename them.
+9. `parallel-by-default` **Calls in one step run in parallel and share one
+   `ToolContext`.** `agents/tool_execution.py:ToolBatch` starts every call of a
+   step together. `ChatAgent._tool_context` advances only after the step, so
+   sibling calls read the same context; citation-producing tools offset their
+   numbers by `CITATIONS_PER_TOOL_CALL * invocation.call_index`
+   ([[citations#number-block-per-tool-call]]). Calls start in call order. Each
+   pass of `ToolBatch.execute` finalizes the calls that have completed, in call
+   order, so end events follow completion order only across passes, and tab
+   placement follows call order. Each finished
+   call is finalized at once: `after_tool_call` (`ChatAgent._finalize_tool`)
+   runs one call at a time on the run's thread. `Run.finish_tool` then writes
+   the finalized result into the run record that chat saves, and publishes
+   `ToolEndEvent`. After a cancel between `Run.record_tool_results` and
+   `finish_tool`, the saved result is the raw result and no `ToolEndEvent` is
+   sent. A tool whose calls must not overlap
+   returns `ToolExecutionMode.SEQUENTIAL` from `execution_mode`, as
+   `MemoryTool` does. This orders only calls with the same name: each starts
+   after the previous one is finalized, and a call that waits for a child run
+   or input blocks the calls after it.
+10. `tool-name-is-lookup-key` **`Tool.name` is a lookup key and must be a valid
+   function name.** `ToolBatch`, `ToolRenderer` and the `tool_ids` map in
+   `chat/execution.py:ChatTurnExecution._run_response` find tools by name, so
+   two tools with one name make one unreachable. OpenAI and Bedrock accept only
+   `[a-zA-Z0-9_-]`. Tools that take user-supplied names, such as MCP and OpenAPI
+   tools, must pass them through `tools/tool_name.py:sanitize_tool_name`.
+11. `replay-by-class-name` **Replay finds a tool by its name or its class
+   name.** Saved responses replay by tool name
+   ([[#renderer-dispatches-by-name]]). Older messages with no saved response
+   replay through
+   `server/query_and_chat/session_loading.py:translate_assistant_message_to_packets`,
+   which dispatches on `Tool.in_code_tool_id`, the class name. A rename of
+   either needs a migration, or old chats lose their tool blocks.
+12. `calls-are-merged` **Merged calls share one execution and one result.**
+    `agents/tool_execution.py:ToolBatch._start_compatible_calls` merges later
+    calls to the same tool when the tool sets `merge_list_argument` and all
+    other arguments match (`tools/interface.py:merge_tool_arguments`). Both
+    lists must be non-empty string lists, and the merged list must stay within
+    `merge_list_limit` (`open_url` sets `MAX_URLS_PER_CALL`). No merge happens
+    when the run has `before_tool_call`, or when arguments are truncated or
+    invalid. A parallel tool can merge calls that are not next to each other;
+    a `SEQUENTIAL` tool merges only up to its first call that cannot merge. One
+    execution runs with the first call's `call_index`, and each merged call
+    gets every progress update and the pooled result. A merged execution must
+    return a `ToolResult`: a `ChildRunWait` fails the batch with `ValueError`.
+    Search, web search and `open_url` merge. A tool whose calls must stay
+    separate leaves `merge_list_argument` unset.
+13. `child-wait-cleanup` **A tool that returns `ChildRunWait` releases its
+    resources through the child's completion.** `_run` returns before the
+    child ends, so register cleanup with
+    `invocation.agents.add_completion_cleanup(run_id, cleanup)` during `_run`.
+    It runs on completion, cancellation or release. If `_run` fails before it
+    returns the wait, clean up in `_run`. `CodingAgentTool._run` does both for
+    its sandbox ([[code-execution]]). `result_from_children` must not depend on
+    state held from `_run`.
+
+---
+
+## Decisions
+
+- **Unusable tools are hidden, not reported.** `is_available` removes a tool
+  before the model sees its schema. The model cannot call a tool that would
+  fail, and a user is not told that a feature failed when nobody set it up. The
+  cost is that a missing tool gives no signal
+  ([[#is-available-cheap-and-silent]]).
+- **Sub-agent control signals are not `Tool`s.** "I am done, write the report"
+  has no result to persist, so it is a bare `AgentTool` with no `Tool` row.
+
+---
+
+## Known issues
+
+- **`KnowledgeGraphTool` cannot run.** It is in `BUILT_IN_TOOL_MAP`, its `_run`
+  raises `NotImplementedError`, and it has no constructor branch.
+  The knowledge graph is an incomplete feature (see `## Not mapped` in
+  PATHS.md). Do not delete it as dead code.
+- **A tool call has no time limit of its own.** When no call of a step
+  finishes within `agents/concurrency.py:OPERATION_TIMEOUT_SECONDS`,
+  `agents/runtime.py:Run.wait_for_tool_activity` raises `TimeoutError` and the
+  run fails. Nothing stops the tool's thread. A tool that ignores cancellation
+  holds the turn open after Stop, a tool timeout or the turn deadline
+  (`CHAT_EXECUTION_TIMEOUT_S`): `chat/execution.py:ChatTurnExecution._poll_responses`
+  waits for `Run.wait_for_idle`, so the stream stays open and the session
+  rejects new messages until the thread exits. Use I/O timeouts, and call
+  `invocation.cancellation.check()` in long loops.
+- **A step with more than 64 tool calls fails the run.**
+  `agents/tool_execution.py:ToolBatch` raises `ValueError` above
+  `MAX_TOOL_CALLS_PER_STEP`.
+- **A failed MCP credential lookup hides the server's tools with no user
+  error.** `_construct_tools_impl` catches `MCPCredentialsError`, logs a
+  warning and skips the server.
+- **OpenAPI tool names can collide.** `_disambiguate_mcp_tool_names` renames
+  only `MCPTool`. One OpenAPI schema rejects its own duplicate operation IDs
+  (`tools/tool_implementations/custom/openapi_parsing.py`), but nothing checks
+  across two OpenAPI tools on one agent, or against a built-in name. The
+  by-name maps keep the last one ([[#tool-name-is-lookup-key]]).
+- **`tools/utils.py:is_image_generation_available` has no caller,** and its
+  rule differs from the image tool's ([[image-generation]]).
+
+---
+
+## Dependencies
+
+- [[agents-personas]]: `persona.tools` is the input to the captured
+  configuration.
+- [[agent-runtime]]: `ToolBatch` runs the bound tools, and `ToolRenderer`
+  turns their events into packets.
+- [[mcp-and-custom-tools]]: the OpenAPI and MCP tool classes, credential
+  resolution, `Tool.enabled` and the `Tool` table helpers.
+- [[plugins]]: Default Chat tool selection and per-user preferences.
+- [[chat-persistence]]: `StoredToolResult` saves each result and its details.
+- [[code-execution]]: the coding agent runs `BashTool` in a Code Interpreter
+  session.
+- [[observability]]: `Tool.run` opens one `function_span` per call.
+
+---
+
+## Recipes
+
+- `built-in-tool` **A built-in tool.** Copy `FileReaderTool`
+  (`tools/tool_implementations/file_reader/`). List the current set in
+  `tools/built_in_tools.py:BUILT_IN_TOOL_MAP`. The INDEX.md Common tasks row
+  gives the recipes in other documents that the task also needs.
+  1. Put the class in `tools/tool_implementations/<name>/`, subclass `Tool`,
+     and implement `_run`. Parse arguments with
+     `tools/interface.py:parse_tool_arguments`.
+  2. Add it to `BUILT_IN_TOOL_TYPES` and `BUILT_IN_TOOL_MAP`. Define `name` on
+     the class itself (a `str` or a property), or the import of
+     `tools/built_in_tools.py` fails in `_tool_llm_name`.
+  3. Seed its `Tool` row in an Alembic migration with
+     `in_code_tool_id=YourTool.__name__`. Copy
+     `backend/alembic/versions/d3fd499c829c_add_file_reader_tool.py`.
+     Construction sees only tools attached to the agent, so the class alone does
+     nothing.
+  4. Add a branch in `_construct_tools_impl`
+     ([[#built-in-needs-constructor-branch]]).
+  5. If the tool needs request data, add a field to `ToolContext` and fill it
+     in each `_tool_context` builder. If it cites documents, results that are
+     not in the index still need a `SearchDoc` with a `source_type` and a
+     `document_id` that cannot clash with indexed IDs. Web search uses a
+     `WEB_SEARCH_PREFIX` prefix and `DocumentSource.WEB`
+     (`tools/tool_implementations/web_search/utils.py`).
+  6. Add `ToolRenderer` branches for its start packet and its `details` type
+     ([[#renderer-dispatches-by-name]]), and register the `details` type
+     ([[#durable-details-registered]]). A search-like tool can reuse the search
+     packets.
+  7. Add its ID to `web/src/lib/tools/constants.ts` and
+     `mobile/src/chat/tools.ts`.
+  8. Deep research uses only the tools whose names are in the allowed set of
+     `deep_research/research_agent.py:ResearchAgent.__init__`. Add a search tool
+     there if deep research must use it. Nothing reports a tool that is left
+     out.
+- `gate-a-tool` **Gate a tool.** Pick the narrowest gate that matches who decides:
+
+  | Who decides | Gate |
+  |---|---|
+  | The deployment cannot run it (no provider, no service) | `is_available` |
+  | An admin, per agent | persona attachment (`Persona__Tool`) |
+  | An admin, for all agents | `Tool.enabled` ([[mcp-and-custom-tools]]); built-in and MCP tools only |
+  | A user, per message | `allowed_tool_ids`; `TOOL_VISIBILITY_CONFIG` decides whether chat offers the toggle |
+
+  Do not inject a tool outside the agent tool loop as `MemoryTool` does, unless
+  it is a user-level feature. Such a tool escapes every admin and per-message
+  control.
+- `investigate-tool-not-called` **Investigate "the model never calls tool X".** Walk the gates in order.
+  Check that the tool is attached to the agent and that `Tool.enabled` is true.
+  Check the `allowed_tool_ids` that the client sent. For a built-in tool, run its
+  `is_available` in a shell, or look for "Failed checking availability" in
+  `backend/log/api_server_debug.log`; the "Skipping tool" line is at debug
+  level. Check the branch skips in gate 4: search usage `DISABLED`, an
+  anonymous user on an OAuth or passthrough OpenAPI tool, and `open_url` with
+  no vector DB. For Default Chat, check the user's plugin preferences. For MCP,
+  look for the credential warning. Last, check for a name collision (Known
+  issues).
+- `force-tool-call` **Force a tool call in a test or a reproduction.** Send `forced_tool_id` with
+  the message. Copy `backend/tests/integration/tests/tools/test_force_tool_use.py`.
+  `chat/process_message.py:prepare_chat_turn` drops a forced ID with no error
+  when the tool fails `is_tool_available_for_persona`, or when it is search and
+  search is disabled; the model then answers without the forced call. Any
+  other forced ID that construction did not build makes
+  `chat/execution.py:create_chat_agent` fail the message with `BAD_REQUEST`.
+
+---
+
+## Verification
+
+- Unit tests: `backend/tests/unit/onyx/tools/`.
+- External dependency unit tests: `backend/tests/external_dependency_unit/tools/`.
+- Integration tests: `backend/tests/integration/tests/tools/`.
+- By hand, turn web search off for one message. Other tools must still run, and
+  `open_url` must not fetch live pages.

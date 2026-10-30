@@ -13,6 +13,7 @@ import type {
 import { spacingToRem } from "@opal/shared";
 import { ContentAction } from "@opal/layouts";
 import { Card } from "@opal/components/cards/card/components";
+import { Fold } from "@opal/components/fold/components";
 import { Button, Divider } from "@opal/components";
 import {
   SvgAlertCircle,
@@ -24,7 +25,6 @@ import {
 } from "@opal/icons";
 import { useState } from "react";
 import { useOpalStrings } from "@opal/strings";
-import usePresence from "@opal/hooks/usePresence";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -207,15 +207,6 @@ function MessageCard({
   const strings = useOpalStrings();
   // Falsey content (`condition && <X />`) counts as absent, as it always has.
   const expanded = Boolean(bottomChildren);
-  const presence = usePresence(expanded, 200);
-  // Animate only once the section has come or gone, so a card that mounts
-  // with it does not play the opening on page load.
-  const [toggled, setToggled] = useState(false);
-  const [prevExpanded, setPrevExpanded] = useState(expanded);
-  if (expanded !== prevExpanded) {
-    setPrevExpanded(expanded);
-    setToggled(true);
-  }
   // The last section shown, kept so it can animate out after the caller
   // drops it.
   const [shownBottom, setShownBottom] = useState(bottomChildren);
@@ -266,21 +257,14 @@ function MessageCard({
             />
           </div>
 
-          {presence.mounted && (
-            <div
-              className="opal-message-card-bottom"
-              data-state={presence.state}
-              data-animate={toggled || undefined}
-              onAnimationEnd={presence.onAnimationEnd}
-            >
-              <div className="opal-message-card-bottom-inner">
-                <div className="opal-message-card-bottom-content">
-                  <Divider paddingParallel={3} paddingPerpendicular={0} />
-                  {expanded ? bottomChildren : shownBottom}
-                </div>
-              </div>
+          {/* Fold animates only a change, so a card that mounts with the
+              section does not play the opening on page load. */}
+          <Fold open={expanded}>
+            <div className="opal-message-card-bottom-content">
+              <Divider paddingParallel={3} paddingPerpendicular={0} />
+              {expanded ? bottomChildren : shownBottom}
             </div>
-          )}
+          </Fold>
         </div>
       </Card>
     </div>

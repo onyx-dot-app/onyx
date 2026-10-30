@@ -43,6 +43,32 @@
       "mode": "image_generation",
       "name": "1536-x-1024/gpt-image-1.5-2025-12-16"
     },
+    "chat-latest": {
+      "cost": {
+        "cache_read": 0.5,
+        "input": 5.0,
+        "output": 30.0
+      },
+      "limit": {
+        "context": 400000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "chat-latest",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
     "chatgpt-image-latest": {
       "attachment": true,
       "cost": {
@@ -73,6 +99,60 @@
       "release_date": "2025-12-16",
       "temperature": false,
       "tool_call": false
+    },
+    "daybreak-blue-latest": {
+      "cost": {
+        "cache_read": 0.39999999999999997,
+        "cache_write": 5.0,
+        "input": 4.0,
+        "output": 20.0
+      },
+      "limit": {
+        "context": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "daybreak-blue-latest",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "daybreak-red-latest": {
+      "cost": {
+        "cache_read": 1.25,
+        "cache_write": 15.625,
+        "input": 12.5,
+        "output": 75.0
+      },
+      "limit": {
+        "context": 400000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "daybreak-red-latest",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
     },
     "gpt-3.5-turbo": {
       "attachment": false,
@@ -105,7 +185,7 @@
       "tool_call": false
     },
     "gpt-4": {
-      "attachment": true,
+      "attachment": false,
       "cost": {
         "input": 30,
         "output": 60
@@ -194,6 +274,31 @@
       "temperature": true,
       "tool_call": true
     },
+    "gpt-4.1-2025-04-14": {
+      "cost": {
+        "cache_read": 0.5,
+        "input": 2.0,
+        "output": 8.0
+      },
+      "limit": {
+        "context": 1047576,
+        "output": 32768
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-4.1-2025-04-14",
+      "structured_output": true,
+      "tool_call": true
+    },
     "gpt-4.1-mini": {
       "attachment": true,
       "cost": {
@@ -223,6 +328,31 @@
       "release_date": "2025-04-14",
       "structured_output": true,
       "temperature": true,
+      "tool_call": true
+    },
+    "gpt-4.1-mini-2025-04-14": {
+      "cost": {
+        "cache_read": 0.09999999999999999,
+        "input": 0.39999999999999997,
+        "output": 1.5999999999999999
+      },
+      "limit": {
+        "context": 1047576,
+        "output": 32768
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-4.1-mini-2025-04-14",
+      "structured_output": true,
       "tool_call": true
     },
     "gpt-4.1-nano": {
@@ -377,6 +507,48 @@
       "temperature": true,
       "tool_call": true
     },
+    "gpt-4o-audio-preview-2024-12-17": {
+      "cost": {
+        "input": 2.5,
+        "output": 10.0
+      },
+      "limit": {
+        "context": 128000,
+        "output": 16384
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-4o-audio-preview-2024-12-17",
+      "tool_call": true
+    },
+    "gpt-4o-audio-preview-2025-06-03": {
+      "cost": {
+        "input": 2.5,
+        "output": 10.0
+      },
+      "limit": {
+        "context": 128000,
+        "output": 16384
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-4o-audio-preview-2025-06-03",
+      "tool_call": true
+    },
     "gpt-4o-mini": {
       "attachment": true,
       "cost": {
@@ -408,6 +580,52 @@
       "temperature": true,
       "tool_call": true
     },
+    "gpt-4o-mini-2024-07-18": {
+      "cost": {
+        "cache_read": 0.075,
+        "input": 0.15,
+        "output": 0.6
+      },
+      "limit": {
+        "context": 128000,
+        "output": 16384
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-4o-mini-2024-07-18",
+      "structured_output": true,
+      "tool_call": true
+    },
+    "gpt-4o-mini-audio-preview-2024-12-17": {
+      "cost": {
+        "input": 0.15,
+        "output": 0.6
+      },
+      "limit": {
+        "context": 128000,
+        "output": 16384
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-4o-mini-audio-preview-2024-12-17",
+      "tool_call": true
+    },
     "gpt-4o-mini-realtime-preview-2024-12-17": {
       "cost": {
         "cache_read": 0.3,
@@ -420,6 +638,31 @@
       },
       "mode": "realtime",
       "name": "gpt-4o-mini-realtime-preview-2024-12-17"
+    },
+    "gpt-4o-mini-search-preview": {
+      "cost": {
+        "cache_read": 0.075,
+        "input": 0.15,
+        "output": 0.6
+      },
+      "limit": {
+        "context": 128000,
+        "output": 16384
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-4o-mini-search-preview",
+      "structured_output": true,
+      "tool_call": true
     },
     "gpt-4o-mini-transcribe": {
       "cost": {
@@ -487,6 +730,31 @@
       "mode": "audio_speech",
       "name": "gpt-4o-mini-tts-2025-12-15"
     },
+    "gpt-4o-search-preview": {
+      "cost": {
+        "cache_read": 1.25,
+        "input": 2.5,
+        "output": 10.0
+      },
+      "limit": {
+        "context": 128000,
+        "output": 16384
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-4o-search-preview",
+      "structured_output": true,
+      "tool_call": true
+    },
     "gpt-4o-transcribe": {
       "cost": {
         "input": 2.5,
@@ -544,6 +812,32 @@
       "temperature": false,
       "tool_call": true
     },
+    "gpt-5-2025-08-07": {
+      "cost": {
+        "cache_read": 0.125,
+        "input": 1.25,
+        "output": 10.0
+      },
+      "limit": {
+        "context": 272000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-5-2025-08-07",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
     "gpt-5-mini": {
       "attachment": true,
       "cost": {
@@ -573,6 +867,32 @@
       "release_date": "2025-08-07",
       "structured_output": true,
       "temperature": false,
+      "tool_call": true
+    },
+    "gpt-5-mini-2025-08-07": {
+      "cost": {
+        "cache_read": 0.024999999999999998,
+        "input": 0.25,
+        "output": 2.0
+      },
+      "limit": {
+        "context": 272000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-5-mini-2025-08-07",
+      "reasoning": true,
+      "structured_output": true,
       "tool_call": true
     },
     "gpt-5-nano": {
@@ -606,6 +926,32 @@
       "temperature": false,
       "tool_call": true
     },
+    "gpt-5-nano-2025-08-07": {
+      "cost": {
+        "cache_read": 0.005,
+        "input": 0.049999999999999996,
+        "output": 0.39999999999999997
+      },
+      "limit": {
+        "context": 272000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-5-nano-2025-08-07",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
     "gpt-5-pro": {
       "attachment": true,
       "cost": {
@@ -634,6 +980,81 @@
       "release_date": "2025-10-06",
       "structured_output": true,
       "temperature": false,
+      "tool_call": true
+    },
+    "gpt-5-pro-2025-10-06": {
+      "cost": {
+        "input": 15.0,
+        "output": 120.0
+      },
+      "limit": {
+        "context": 400000,
+        "output": 272000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "responses",
+      "name": "gpt-5-pro-2025-10-06",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "gpt-5-search-api": {
+      "cost": {
+        "cache_read": 0.125,
+        "input": 1.25,
+        "output": 10.0
+      },
+      "limit": {
+        "context": 272000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-5-search-api",
+      "structured_output": true,
+      "tool_call": true
+    },
+    "gpt-5-search-api-2025-10-14": {
+      "cost": {
+        "cache_read": 0.125,
+        "input": 1.25,
+        "output": 10.0
+      },
+      "limit": {
+        "context": 272000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-5-search-api-2025-10-14",
+      "structured_output": true,
       "tool_call": true
     },
     "gpt-5.1": {
@@ -668,6 +1089,33 @@
       "temperature": true,
       "tool_call": true
     },
+    "gpt-5.1-2025-11-13": {
+      "cost": {
+        "cache_read": 0.125,
+        "input": 1.25,
+        "output": 10.0
+      },
+      "limit": {
+        "context": 272000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-5.1-2025-11-13",
+      "reasoning": true,
+      "structured_output": true,
+      "supports_none_reasoning_effort": true,
+      "tool_call": true
+    },
     "gpt-5.2": {
       "attachment": true,
       "cost": {
@@ -700,35 +1148,31 @@
       "temperature": true,
       "tool_call": true
     },
-    "gpt-5.2-chat-latest": {
-      "attachment": true,
+    "gpt-5.2-2025-12-11": {
       "cost": {
         "cache_read": 0.175,
         "input": 1.75,
-        "output": 14
+        "output": 14.0
       },
-      "family": "gpt-codex",
       "limit": {
-        "context": 128000,
-        "output": 16384
+        "context": 272000,
+        "output": 128000
       },
       "modalities": {
         "input": [
           "text",
-          "image"
+          "image",
+          "pdf"
         ],
         "output": [
           "text"
         ]
       },
       "mode": "chat",
-      "name": "GPT-5.2 Chat",
-      "open_weights": false,
+      "name": "gpt-5.2-2025-12-11",
       "reasoning": true,
-      "release_date": "2025-12-11",
-      "status": "deprecated",
       "structured_output": true,
-      "temperature": false,
+      "supports_none_reasoning_effort": true,
       "tool_call": true
     },
     "gpt-5.2-pro": {
@@ -761,35 +1205,29 @@
       "temperature": false,
       "tool_call": true
     },
-    "gpt-5.3-chat-latest": {
-      "attachment": true,
+    "gpt-5.2-pro-2025-12-11": {
       "cost": {
-        "cache_read": 0.175,
-        "input": 1.75,
-        "output": 14
+        "input": 21.0,
+        "output": 168.0
       },
-      "family": "gpt",
       "limit": {
-        "context": 128000,
-        "output": 16384
+        "context": 272000,
+        "output": 128000
       },
       "modalities": {
         "input": [
           "text",
-          "image"
+          "image",
+          "pdf"
         ],
         "output": [
           "text"
         ]
       },
-      "mode": "chat",
-      "name": "GPT-5.3 Chat (latest)",
-      "open_weights": false,
-      "reasoning": false,
-      "release_date": "2026-03-03",
-      "status": "deprecated",
+      "mode": "responses",
+      "name": "gpt-5.2-pro-2025-12-11",
+      "reasoning": true,
       "structured_output": true,
-      "temperature": true,
       "tool_call": true
     },
     "gpt-5.3-codex": {
@@ -821,6 +1259,7 @@
       "reasoning": true,
       "release_date": "2026-02-05",
       "structured_output": true,
+      "supports_none_reasoning_effort": true,
       "temperature": true,
       "tool_call": true
     },
@@ -904,6 +1343,33 @@
       "temperature": true,
       "tool_call": true
     },
+    "gpt-5.4-2026-03-05": {
+      "cost": {
+        "cache_read": 0.25,
+        "input": 2.5,
+        "output": 15.0
+      },
+      "limit": {
+        "context": 1050000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-5.4-2026-03-05",
+      "reasoning": true,
+      "structured_output": true,
+      "supports_none_reasoning_effort": true,
+      "tool_call": true
+    },
     "gpt-5.4-mini": {
       "attachment": true,
       "cost": {
@@ -936,6 +1402,33 @@
       "temperature": true,
       "tool_call": true
     },
+    "gpt-5.4-mini-2026-03-17": {
+      "cost": {
+        "cache_read": 0.075,
+        "input": 0.75,
+        "output": 4.5
+      },
+      "limit": {
+        "context": 272000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-5.4-mini-2026-03-17",
+      "reasoning": true,
+      "structured_output": true,
+      "supports_none_reasoning_effort": true,
+      "tool_call": true
+    },
     "gpt-5.4-nano": {
       "attachment": true,
       "cost": {
@@ -966,6 +1459,33 @@
       "structured_output": true,
       "supports_none_reasoning_effort": true,
       "temperature": true,
+      "tool_call": true
+    },
+    "gpt-5.4-nano-2026-03-17": {
+      "cost": {
+        "cache_read": 0.02,
+        "input": 0.19999999999999998,
+        "output": 1.25
+      },
+      "limit": {
+        "context": 272000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-5.4-nano-2026-03-17",
+      "reasoning": true,
+      "structured_output": true,
+      "supports_none_reasoning_effort": true,
       "tool_call": true
     },
     "gpt-5.4-pro": {
@@ -1010,6 +1530,31 @@
       "release_date": "2026-03-05",
       "structured_output": false,
       "temperature": false,
+      "tool_call": true
+    },
+    "gpt-5.4-pro-2026-03-05": {
+      "cost": {
+        "input": 30.0,
+        "output": 180.0
+      },
+      "limit": {
+        "context": 1050000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "responses",
+      "name": "gpt-5.4-pro-2026-03-05",
+      "reasoning": true,
+      "structured_output": false,
       "tool_call": true
     },
     "gpt-5.5": {
@@ -1061,6 +1606,69 @@
       "temperature": false,
       "tool_call": true
     },
+    "gpt-5.5-2026-04-23": {
+      "cost": {
+        "cache_read": 0.5,
+        "input": 5.0,
+        "output": 30.0
+      },
+      "limit": {
+        "context": 1050000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-5.5-2026-04-23",
+      "reasoning": true,
+      "structured_output": true,
+      "supports_none_reasoning_effort": true,
+      "tool_call": true
+    },
+    "gpt-5.5-cyber": {
+      "cost": {
+        "cache_read": 1.25,
+        "input": 12.5,
+        "output": 75.0
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-5.5-cyber",
+      "reasoning": true
+    },
+    "gpt-5.5-cyber-preview": {
+      "cost": {
+        "cache_read": 1.25,
+        "input": 12.5,
+        "output": 75.0
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-5.5-cyber-preview",
+      "reasoning": true
+    },
     "gpt-5.5-pro": {
       "attachment": true,
       "cost": {
@@ -1104,6 +1712,31 @@
       "release_date": "2026-04-23",
       "structured_output": true,
       "temperature": false,
+      "tool_call": true
+    },
+    "gpt-5.5-pro-2026-04-23": {
+      "cost": {
+        "input": 30.0,
+        "output": 180.0
+      },
+      "limit": {
+        "context": 1050000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "responses",
+      "name": "gpt-5.5-pro-2026-04-23",
+      "reasoning": true,
+      "structured_output": false,
       "tool_call": true
     },
     "gpt-5.6": {
@@ -1156,6 +1789,33 @@
       "structured_output": true,
       "supports_none_reasoning_effort": true,
       "temperature": false,
+      "tool_call": true
+    },
+    "gpt-5.6-cyber": {
+      "cost": {
+        "cache_read": 1.25,
+        "cache_write": 15.625,
+        "input": 12.5,
+        "output": 75.0
+      },
+      "limit": {
+        "context": 400000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-5.6-cyber",
+      "reasoning": true,
+      "structured_output": true,
       "tool_call": true
     },
     "gpt-5.6-luna": {
@@ -1518,6 +2178,173 @@
       "release_date": "2026-09-29",
       "structured_output": true,
       "temperature": false,
+      "tool_call": true
+    },
+    "gpt-6.1-terra": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.05,
+        "cache_write": 1.25,
+        "context_over_200k": {
+          "cache_read": 0.1,
+          "cache_write": 2.5,
+          "input": 2,
+          "output": 7.5
+        },
+        "input": 1,
+        "output": 5,
+        "tiers": [
+          {
+            "cache_read": 0.1,
+            "cache_write": 2.5,
+            "input": 2,
+            "output": 7.5,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-terra",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GPT-6.1 Terra",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-26",
+      "structured_output": true,
+      "supports_none_reasoning_effort": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "gpt-audio": {
+      "cost": {
+        "input": 2.5,
+        "output": 10.0
+      },
+      "limit": {
+        "context": 128000,
+        "output": 16384
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-audio",
+      "reasoning": false,
+      "structured_output": false,
+      "tool_call": true
+    },
+    "gpt-audio-1.5": {
+      "cost": {
+        "input": 2.5,
+        "output": 10.0
+      },
+      "limit": {
+        "context": 128000,
+        "output": 16384
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-audio-1.5",
+      "reasoning": false,
+      "structured_output": false,
+      "tool_call": true
+    },
+    "gpt-audio-2025-08-28": {
+      "cost": {
+        "input": 2.5,
+        "output": 10.0
+      },
+      "limit": {
+        "context": 128000,
+        "output": 16384
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-audio-2025-08-28",
+      "reasoning": false,
+      "structured_output": false,
+      "tool_call": true
+    },
+    "gpt-audio-mini": {
+      "cost": {
+        "input": 0.6,
+        "output": 2.4
+      },
+      "limit": {
+        "context": 128000,
+        "output": 16384
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-audio-mini",
+      "reasoning": false,
+      "structured_output": false,
+      "tool_call": true
+    },
+    "gpt-audio-mini-2025-12-15": {
+      "cost": {
+        "input": 0.6,
+        "output": 2.4
+      },
+      "limit": {
+        "context": 128000,
+        "output": 16384
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-audio-mini-2025-12-15",
+      "reasoning": false,
+      "structured_output": false,
       "tool_call": true
     },
     "gpt-daybreak-blue-latest": {
@@ -1931,6 +2758,40 @@
       "mode": "audio_transcription",
       "name": "gpt-realtime-whisper"
     },
+    "gpt-rosalind-discovery": {
+      "cost": {
+        "cache_read": 0.5,
+        "input": 5.0,
+        "output": 25.0
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-rosalind-discovery"
+    },
+    "gpt-rosalind-research": {
+      "cost": {
+        "cache_read": 0.5,
+        "input": 5.0,
+        "output": 25.0
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-rosalind-research"
+    },
     "gpt-transcribe": {
       "cost": {
         "second_input": 7.5e-05
@@ -2262,6 +3123,32 @@
       "temperature": false,
       "tool_call": true
     },
+    "o3-2025-04-16": {
+      "cost": {
+        "cache_read": 0.5,
+        "input": 2.0,
+        "output": 8.0
+      },
+      "limit": {
+        "context": 200000,
+        "output": 100000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "o3-2025-04-16",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
     "o3-mini": {
       "attachment": false,
       "cost": {
@@ -2319,6 +3206,31 @@
       "release_date": "2025-06-10",
       "structured_output": true,
       "temperature": false,
+      "tool_call": true
+    },
+    "o3-pro-2025-06-10": {
+      "cost": {
+        "input": 20.0,
+        "output": 80.0
+      },
+      "limit": {
+        "context": 200000,
+        "output": 100000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "responses",
+      "name": "o3-pro-2025-06-10",
+      "reasoning": true,
+      "structured_output": true,
       "tool_call": true
     },
     "o4-mini": {

@@ -71,7 +71,7 @@ def setup_chat_session(reset: None) -> tuple[DATestUser, str]:  # noqa: ARG001
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Chat history tests are enterprise only",
 )
 def test_chat_history_endpoints(
@@ -129,7 +129,7 @@ def test_chat_history_endpoints(
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Chat history tests are enterprise only",
 )
 def test_chat_history_csv_export(

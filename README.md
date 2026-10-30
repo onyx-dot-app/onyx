@@ -42,7 +42,7 @@ Beyond search, Onyx enables LLMs with advanced features like web search, sandbox
 > curl -fsSL https://onyx.app/install_onyx.sh | bash
 > ```
 
-![Onyx chat answering a question about use cases](docs/assets/onyx-chat-use-cases.png)
+![Onyx chat answering a question about use cases](.github/assets/onyx-chat-use-cases.png)
 
 ---
 
@@ -75,7 +75,7 @@ To learn more - check out our [docs](https://docs.onyx.app/welcome?utm_source=on
 
 ## Security and Data Processing
 
-![Onyx architecture: everything runs inside your environment](docs/assets/architecture.png)
+![Onyx architecture: everything runs inside your environment](.github/assets/architecture.png)
 
 When connecting up your organization's knowledge, it's critical that this sensitive IP is not leaked to the wrong parties both external and internal.
 
@@ -118,7 +118,7 @@ The Lite mode can be thought of as a lightweight AI Chat UI. It requires less re
 It is great for users who want to test out the Onyx UI quickly or for teams who are only interested in the Chat UI and Agents functionalities.
 
 > [!TIP]  
-> **To try Onyx for free without deploying, visit [Onyx Cloud](https://cloud.onyx.app/signup?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)**.
+> **To try Onyx for free without deploying, visit [Onyx Cloud](https://cloud.onyx.app/auth/signup?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)**.
 
 ---
 

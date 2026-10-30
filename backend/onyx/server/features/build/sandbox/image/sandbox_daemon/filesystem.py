@@ -6,7 +6,7 @@ import mimetypes
 from pathlib import Path
 from uuid import UUID
 
-from sandbox_daemon.contract import FilesystemListResponse, SidecarFilesystemEntry
+from sandbox_daemon.models import FilesystemEntry, FilesystemListResponse
 from sandbox_daemon.snapshot import SESSIONS_ROOT
 
 _USER_LIBRARY_LINK_TARGET = Path("/workspace/managed/user_library")
@@ -114,7 +114,7 @@ def list_session_directory(session_id: UUID, path: str) -> FilesystemListRespons
         raise FilesystemPathError("path not found or not a directory")
 
     base_path = "" if relative_path == Path(".") else relative_path.as_posix()
-    entries: list[SidecarFilesystemEntry] = []
+    entries: list[FilesystemEntry] = []
     is_listing_session_root = target_directory == session_root_resolved
     for entry_path_on_disk in target_directory.iterdir():
         name = entry_path_on_disk.name
@@ -142,7 +142,7 @@ def list_session_directory(session_id: UUID, path: str) -> FilesystemListRespons
 
         entry_path = f"{base_path}/{name}".lstrip("/")
         entries.append(
-            SidecarFilesystemEntry(
+            FilesystemEntry(
                 name=name,
                 path=entry_path,
                 is_directory=is_directory,

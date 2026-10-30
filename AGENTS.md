@@ -24,6 +24,21 @@ This file provides guidance to AI agents when working with code in this reposito
 - When making calls to the backend, always go through the frontend. E.g. make a call to `http://localhost:3000/api/persona` not `http://localhost:8080/api/persona`
 - If `.agents-local.md` exists at the repo root and its rules are not already in your context,
   read and follow it. It carries developer-local agent guidance and is never committed.
+- Before you start work, check that your branch does not need a rebase on `origin/main`.
+  Rebase if the branch has merge conflicts with main.
+  Rebase if the branch is stale: more than 3 days since it diverged from or last synced with main.
+  Keeping a branch current prevents a much more involved conflict resolution later.
+  Claude Code and Codex run this check at session start and on later prompts.
+  The hook is `.agents/hooks/ensure_latest_main.py`. It fetches at most once an hour.
+  It is silent unless a rebase is needed.
+  Other agents: run `git fetch origin +refs/heads/main:refs/remotes/origin/main`.
+  Check for conflicts with `git merge-tree --write-tree HEAD origin/main`.
+  Exit status 1 means conflicts. Other non-zero codes are errors, not conflicts.
+  Check the age with `git show -s --format=%cr $(git merge-base HEAD origin/main)`.
+  To update, run `git rebase origin/main`. Use `git merge origin/main` for a shared branch.
+  On `main`, run `git pull --ff-only origin main`.
+  If a merge or rebase is already in progress, finish it or abort it first.
+  Never discard uncommitted changes to do this.
 
 ## Project Overview
 
@@ -49,8 +64,17 @@ there:
 - `web/` — Next.js frontend. Standards (also cover `desktop/`, the Tauri shell): `web/AGENTS.md`.
 - `mobile/` — React Native + Expo app. Standards: `mobile/AGENTS.md`. Mobile differs from web on
   several points (no DOM, NativeWind, expo-router), so do **not** assume the web rules apply there.
+- `documentation/` — customer docs (Mintlify, docs.onyx.app). Standards: `documentation/AGENTS.md`. Production docs
+  follow the latest stable release, not `main`.
 
 Explore the tree with `ls` rather than relying on docs for the full package list.
+
+### Docs
+
+When you change something a customer sees or configures (UI, admin settings, connectors, environment variables, the
+public API, deployment), update the matching page in `documentation/` in the same PR. Recapture screenshots of UI you
+changed: follow `.agents/skills/docs-writing/SKILL.md` and use the local app and admin login above. Skip docs for
+internal refactors, tests, CI, and multi-tenant cloud operations, which customers cannot use.
 
 ### Feature Map
 
@@ -60,14 +84,14 @@ review a diff or PR, and when you need to know what a feature does or what a cha
 can break. The `feature-map` skill (`.agents/skills/feature-map/SKILL.md`) gives the
 procedure.
 
+- For new work, start at the Common tasks table in `.agents/feature-map/INDEX.md`.
 - Look up a code path in `.agents/feature-map/PATHS.md` to find its component.
 - The step-by-step review procedure is `.agents/feature-map/VERIFYING.md`.
 - Onyx overloads words such as Persona, Tool, turn, and SearchDoc. Read
   `.agents/feature-map/GLOSSARY.md` before trusting a name.
 
-If you change behaviour a component document describes, update that document in the
-same pull request. The `feature-map-integrity` pre-commit hook fails when a file the
-map cites is renamed or deleted.
+If your change makes a map document wrong, update it in the same pull request, as
+`.agents/feature-map/README.md` ("Keeping the map true") describes.
 
 ### Skills
 
@@ -89,11 +113,20 @@ Claude Code and Codex also run pre-commit on the files you changed in a turn whe
 you end it (`.agents/hooks/pre_commit_on_stop.py`, wired as `UserPromptSubmit` and
 `Stop` hooks in `.claude/settings.json` and `.codex/hooks.json`). Files that were
 already dirty when the turn started are skipped unless you change them. Codex runs
-the hooks only after you trust the project `.codex/` layer. If pre-commit fails, fix
-the reported problems before you finish. When the repo has the feature map
-(`.agents/feature-map/stale_docs.py`), the same hook also names any feature-map
-component whose code the turn changed but whose document the branch did not. Update
-the document if your change alters what it states.
+the hooks only after you trust the project `.codex/` layer. Committed changes come from
+local commit, amend, cherry-pick, revert, and conflict-resolution entries in the
+worktree HEAD reflog. For a merge commit, only files that differ from Git's automatic
+merge result are checked. For a rebase, the check includes every file in each commit
+resolved with `git rebase --continue`, and skips clean picks. The `--apply` rebase
+backend logs resolved conflicts as picks, so the hook skips them. Checkout, pull, clean
+merge, and clean rebase updates do not add files to the check.
+If pre-commit fails, fix the reported problems before you finish. When the repo has the feature map
+(`.agents/feature-map/stale_docs.py`), the same hook blocks the stop once with an
+editing brief: the sections and keys of the feature-map documents that cite code
+the turn changed, and changed files that `PATHS.md` does not cover. Ownership
+through `PATHS.md` alone does not block. Answer it
+with "Editing judgment" in `.agents/feature-map/README.md`. No update is a normal
+answer; edit only what the change made wrong or what a future agent needs.
 
 NOTE: Always make sure everything is strictly typed (both in Python and Typescript).
 
@@ -154,6 +187,14 @@ This is a minimal list - feel free to include more. Do NOT write code as part of
 Keep it high level. You can reference certain files or functions though.
 
 Before writing your plan, make sure to do research. Explore the relevant sections in the codebase.
+
+## Reuse Existing Standards
+
+Before you add a helper, utility, pattern or convention, search the codebase for one that does
+the same job, and use it. For example, use the existing rate limiting, caching, URL validation,
+router and settings patterns. Do not invent a parallel mechanism. If the existing one does not
+do enough, extend it so other callers get the change too. A new pattern needs a reason that the
+existing ones cannot meet.
 
 ## Best Practices
 

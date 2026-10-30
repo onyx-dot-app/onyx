@@ -2,7 +2,6 @@
 
 import { cn } from "@opal/utils";
 import type { IconProps } from "@opal/types";
-import Text from "@/refresh-components/texts/Text";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
 import { DEFAULT_AVATAR_SIZE_PX } from "@/lib/constants";
@@ -141,7 +140,13 @@ export default function CustomAgentAvatar({
   if (validFirstLetter) {
     return (
       <SvgOctagonWrapper size={size}>
-        <Text style={{ fontSize: size * 0.5 }}>{firstLetter}</Text>
+        {/* Raw span: the font size scales with the avatar, which Opal Text cannot do. */}
+        <span
+          className="font-main-ui-body text-text-05"
+          style={{ fontSize: size * 0.5 }}
+        >
+          {firstLetter}
+        </span>
       </SvgOctagonWrapper>
     );
   }

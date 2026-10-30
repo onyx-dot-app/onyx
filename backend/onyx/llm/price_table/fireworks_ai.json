@@ -1,18 +1,6 @@
 {
   "aliases": {},
   "models": {
-    "accounts/fireworks/models/": {
-      "cost": {
-        "input": 0.09999999999999999,
-        "output": 0.0
-      },
-      "limit": {
-        "context": 40960,
-        "output": 40960
-      },
-      "mode": "embedding",
-      "name": "accounts/fireworks/models/"
-    },
     "accounts/fireworks/models/SSD-1B": {
       "cost": {
         "input": 0.00013,
@@ -55,6 +43,36 @@
       "temperature": true,
       "tool_call": true
     },
+    "accounts/fireworks/models/deepseek-v4p1-flash-1017": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.006,
+        "input": 0.3,
+        "output": 1.2
+      },
+      "family": "deepseek-flash",
+      "limit": {
+        "context": 1000000,
+        "output": 384000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "DeepSeek V4.1 Flash 1017",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-17",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "accounts/fireworks/models/ember-1": {
       "attachment": true,
       "cost": {
@@ -80,6 +98,8 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-22",
+      "structured_output": true,
+      "temperature": true,
       "tool_call": true
     },
     "accounts/fireworks/models/fireworks-asr-large": {
@@ -238,6 +258,8 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2025-08-05",
+      "status": "deprecated",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -267,6 +289,8 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-07-15",
+      "status": "deprecated",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -307,7 +331,7 @@
       "name": "Kimi K3",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-07-27",
+      "release_date": "2026-07-16",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -336,7 +360,68 @@
       "name": "MiniMax-M3",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-06-12",
+      "release_date": "2026-06-01",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/models/minimax-m3p1-flash": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.015,
+        "input": 0.15,
+        "output": 0.6
+      },
+      "family": "minimax",
+      "limit": {
+        "context": 1000000,
+        "output": 512000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "MiniMax-M3.1-Flash",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-19",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/models/muse-spark-open": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.15,
+        "input": 1.25,
+        "output": 4.25
+      },
+      "family": "muse",
+      "limit": {
+        "context": 1048576,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Muse Spark Open",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-15",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -365,6 +450,8 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-06-04",
+      "status": "deprecated",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -393,6 +480,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-08-11",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -547,6 +635,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-08-03",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -586,6 +675,64 @@
       "name": "DeepSeek Flash Latest",
       "open_weights": true,
       "reasoning": true,
+      "release_date": "2026-10-17",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/routers/deepseek-v4p1-flash-1017-spot": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.0042,
+        "input": 0.21,
+        "output": 0.84
+      },
+      "family": "deepseek-flash",
+      "limit": {
+        "context": 1000000,
+        "output": 384000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "DeepSeek V4.1 Flash 1017 Spot",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-17",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/routers/deepseek-v4p1-flash-spot": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.0042,
+        "input": 0.21,
+        "output": 0.84
+      },
+      "family": "deepseek-flash",
+      "limit": {
+        "context": 1000000,
+        "output": 384000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "DeepSeek V4.1 Flash Spot",
+      "open_weights": true,
+      "reasoning": true,
       "release_date": "2026-09-10",
       "structured_output": true,
       "temperature": true,
@@ -615,7 +762,35 @@
       "name": "GLM 5.3 Fast",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-08-28",
+      "release_date": "2026-08-14",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/routers/glm-5p3-spot": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.182,
+        "input": 0.98,
+        "output": 3.08
+      },
+      "family": "glm",
+      "limit": {
+        "context": 1048573,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GLM 5.3 Spot",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-14",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -643,7 +818,7 @@
       "name": "GLM 5.3 Fast (Latest)",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-08-28",
+      "release_date": "2026-08-14",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -729,7 +904,7 @@
       "name": "Kimi Fast Latest",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-07-27",
+      "release_date": "2026-07-16",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -759,7 +934,36 @@
       "name": "Kimi K3 Fast",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-07-27",
+      "release_date": "2026-07-16",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "accounts/fireworks/routers/kimi-k3-spot": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.21,
+        "input": 2.1,
+        "output": 10.5
+      },
+      "family": "kimi-k3",
+      "limit": {
+        "context": 1048576,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Kimi K3 Spot",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-07-16",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -788,7 +992,7 @@
       "name": "Kimi Latest",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-07-27",
+      "release_date": "2026-07-16",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -816,7 +1020,8 @@
       "name": "MiniMax Latest",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-06-12",
+      "release_date": "2026-06-01",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -845,8 +1050,21 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-08-03",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
+    },
+    "accounts/fireworks/routers/rune": {
+      "cost": {
+        "cache_read": 0.008400000000000001,
+        "input": 0.041999999999999996,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 262144
+      },
+      "mode": "evaluation",
+      "name": "accounts/fireworks/routers/rune"
     }
   },
   "models_dev_providers": [

@@ -9,11 +9,14 @@ It is highly recommended for all engineers contributing to this flow to be famil
 
 The system prompt is a default prompt that comes packaged with the system. Users can edit the default prompt and it will be persisted in the database.
 
-Some parts of the system prompt are dynamically updated / inserted:
+Some parts of the system prompt are filled in when the turn starts:
 
-- Datetime of the message sent
-- Tools description of when to use certain tools depending on if the tool is available in that cycle
-- If the user has just called a search related tool, then a section about citations is included
+- The date and time, when the prompt is datetime-aware
+- When to use each tool, for the tools available in the turn
+
+The system prompt does not change between the steps of a turn, so the provider's prompt cache holds. Guidance that
+depends on the step, such as how to cite the documents a tool returned, goes into the reminder message at the end of
+the context instead (see "Reminders").
 
 ## Custom Agent Prompt
 
@@ -46,19 +49,24 @@ the system can RAG over the project files.
 
 ## How documents are represented
 
-Documents from search or uploaded Project files are represented as a json so that the LLM can easily understand it. It is represented with a prefix string to
-make the context clearer to the LLM. Note that for search results (whether web or internal, it will just be the json) and it will be a Tool Call type of
-message rather than a user message.
+Documents from search or uploaded Project files are represented as a json so that the LLM can easily understand it.
+
+Project files go in a user message with a prefix string to make the context clearer to the LLM
+(`chat/prompt_utils.py:_create_context_files_message`):
 
 ```
 Here are some documents provided for context, they may not all be relevant:
 {
     "documents": [
-        {"document": 1, "title": "Hello", "metadata": "status closed", "contents": "Foo"},
+        {"document": 1, "title": "Hello", "contents": "Foo"},
         {"document": 2, "title": "World", "contents": "Bar"}
     ]
 }
 ```
+
+Search results (web or internal) go in a Tool Call response with no prefix
+(`tools/tool_implementations/utils.py:convert_inference_sections_to_llm_string`). They use a `"results"` wrapper,
+the `content` key, and an optional JSON-string `metadata` field after `content`.
 
 Documents are represented with the `document` key so that the LLM can easily cite them with a single number. The tool returns have to be richer to be able to
 translate this into links and other UI elements. What the LLM sees is far simpler to reduce noise/hallucinations.
@@ -82,7 +90,7 @@ string saying it is no longer available. Tool Call details like the search query
 rich and generally very few tokens.
 
 > Note: in the Internal Search flow with query expansion, the Tool Call which was actually run differs from what the LLM provided as arguments.
-> What the LLM sees in the history (to be most informative for future calls) is the full set of expanded queries.
+> The tool-call arguments keep only the queries the LLM provided, and so does the model's history. The expanded queries are saved in the tool result (`SearchDocsResponse.queries`) and reach the client in `SearchToolQueriesDelta` packets, also on replay.
 
 **Possible Future Extension**:
 Instead of dropping the Tool Call response, we might summarize it using an LLM so that it is just 1-2 sentences and captures the main points. That said,
@@ -182,71 +190,84 @@ are:
 - Validates the request
 - Builds the chat history for the session
 - Fetches any additional context such as files and images
-- Prepares all of the tools for the LLM
-- Creates the state container objects for use in the loop
+- Captures tool configuration for each response worker
+- Reserves assistant response IDs
 
-### Execution (`_run_models` function):
+### Launch (`start_chat_turn`)
 
-Each model runs in its own worker thread inside a `ThreadPoolExecutor`. Workers write packets to a shared
-`merged_queue` via an `Emitter`; the main thread drains the queue and yields packets in arrival order. This
-means the top level is isolated from the LLM flow and can yield packets as soon as they are produced. If a
-worker fails, the main thread yields a `StreamingError` for that model and keeps the other models running.
-All saving and database operations are handled by the main thread after the workers complete (or by the
-workers themselves via self-completion if the drain loop exits early).
+`process_message.py` prepares chat data, launches the turn, and reads its stream.
+`prepare_chat_turn` and its request preparation helpers live beside the streaming entrypoints.
+Launch publishes processing status, creates delivery, queues response IDs, and starts the control thread.
+Initial IDs and response packets use the same live and replay delivery path.
+The recording context is copied into workers and restored on the caller before launch returns.
 
-### Emitter
+### Execution (`ChatTurnExecution`)
 
-The emitter is an object that lower levels use to send packets without needing to yield them all the way back
-up the call stack. Each `Emitter` tags every packet with a `model_index` and places it on the shared
-`merged_queue` as a `(model_idx, packet)` tuple. The drain loop in `_run_models` consumes these tuples and
-yields the packets to the caller. Both the emitter and the state container are mutating state objects used
-only to accumulate state. There should be no logic dependent on the states of these objects, especially in
-the lower levels. The emitter should only take packets and should not be used for other things.
+Each model response runs on an independent thread. One control thread per turn checks Stop requests and refreshes processing status.
+It also renews ownership for every root and child run. These cache operations run directly on the control thread.
+Storage jobs also use independent threads, so a slow save cannot block Stop checks.
+Thread startup copies tenant and tracing context. There is no process-wide response admission limit or fixed worker pool.
 
-### State Container
+The shared agent SDK executes each response. `ResponsePresenter` translates accepted run events into chat packets.
+Each response worker constructs its tools and feature agent through `create_chat_agent` in `execution.py`.
+Each `Emitter` adds response identity and model routing. `ChatDelivery` sends packets to the current reader and resumable stream buffer.
+A failed model reports its own error while other comparison responses continue.
 
-The state container is used to accumulate state during the LLM flow. Similar to the emitter, it should not be used for logic,
-only for accumulating state. It is used to gather all of the necessary information for saving the chat turn into the database.
-So it will accumulate answer tokens, reasoning tokens, tool calls, citation info, etc. This is used at the end of the flow once
-the lower level is completed whether on its own or stopped by the user. At that point, all of the state is read and stored into
-the database. The state container can be added to by any of the underlying layers, this is fine.
+### Saved responses and delivery
 
-### Stopping Generation
+The run owns accepted messages, tool results, and its terminal snapshot.
+After execution ends, chat projects that snapshot into a response and starts persistence.
+Save failures and saves that exceed their wait bound produce distinct persistence outcomes.
+Late save completion remains tracked after delivery ends.
 
-The drain loop in `_run_models` checks `check_is_connected()` every 50 ms (on queue timeout). The signal itself
-is stored in the shared cache, keyed by session and stream ID, and is set by the user calling the stop endpoint.
-A late Stop request for an earlier stream cannot stop a later stream in the same session. On disconnect, the drain loop saves
-partial state for every model, yields an `OverallStop(stop_reason="user_cancelled")` packet, and returns.
-A `drain_done` event signals emitters to stop blocking so worker threads can exit quickly. Workers that
-already completed successfully will self-complete (persist their response) if the drain loop exited before
-reaching the normal completion path.
+Closing a browser reader does not cancel execution. The non-daemon control thread stays alive until execution, storage, and delivery finish.
+API shutdown waits for active chat work before closing database and tracing services. It does not cancel responses.
+A process-wide work counter tracks completion without retaining turns or tenant data.
+Kubernetes can force termination when the pod's shutdown grace period expires.
 
-## 2. LLM Loop (run_llm_loop function)
+### Stopping generation
 
-This function handles the logic of the Turn. It's essentially a while loop where context is added and modified (according what
-is outlined in the first half of this doc). Its main functionality is:
+The control thread polls every 250 milliseconds between control passes. Slow cache calls delay the next pass.
+Stop cancels each active response, saves accepted partial content, and emits `OverallStop(stop_reason="user_cancelled")`.
+Run completion and resource cleanup are separate: the control thread waits while provider, tool, or save work drains.
 
-- Translate and truncate the context for the LLM inference
-- Add context modifiers like reminders, updates to the system prompts, etc.
-- Run tool calls and gather results
-- Build some of the objects stored in the state container.
-
-## 3. LLM Step (run_llm_step function)
-
-This function is a single inference of the LLM. It's a wrapper around the LLM stream function which handles packet translations
-so that the Emitter can emit individual tokens as soon as they arrive. It also keeps track of the different sections since they
-do not all come at once (reasoning, answers, tool calls are all built up token by token). This layer also tracks the different
-tool calls and returns that to the LLM Loop to execute.
+For the execution loop, tool calls, and cancellation contracts, see the [agent SDK](../agents/README.md).
 
 ## Things to know
 
-- Packets are labeled with a "turn_index" field as part of the Placement of the packet. This is not the same as the backend
-  concept of a turn. The turn_index for the frontend is which block does this packet belong to. So while a reasoning + tool call
-  comes from the same LLM inference (same backend LLM step), they are 2 turns to the frontend because that's how it's rendered.
+- Chat packets carry content, execution identity, and model routing. The frontend derives timeline positions.
+  See the [chat stream contract](../agents/README.md#chat-stream) for item and update types.
 
-- There are 3 representations of a message, each scoped to a different layer:
-  1. **ChatMessage** — The database model. Should be converted into ChatMessageSimple early and never passed deep into the flow.
-  2. **ChatMessageSimple** — The canonical data model used throughout the codebase. This is the rich, full-featured representation
-     of a message. Any modifications or additions to message structure should be made here.
-  3. **ChatCompletionMessage** (`onyx.llm.model_request`) — The LLM-facing representation. Intentionally minimal so the LLM interface layer stays clean and
-     easy to maintain/extend.
+- Message types serve different boundaries:
+  - **ChatMessage** stores a user message, summary, or response anchor in the session tree.
+    **ChatResponseItem** stores an assistant message or references a tool result within that response. Both live in [database models](../db/models.py).
+  - **Message** is the SDK conversation type, defined in [LLM models](../llm/models.py).
+    Storage retains these shared types; history loading filters unfinished tool calls before agent execution.
+  - **ChatCompletionMessage** is the LiteLLM request message type in [provider models](../llm/model_request.py).
+    The LLM adapter converts SDK messages into this provider format.
+
+
+## Execution and caller deadlines
+
+The internal constant `CHAT_RESPONSE_WAIT_TIMEOUT_S` limits a full-response caller's
+wait after delivery ends to 3,600 seconds. Expiry returns a caller error; it does
+not cancel execution.
+
+The internal constant `CHAT_EXECUTION_TIMEOUT_S` sets the execution deadline to
+3,600 seconds. Reaching it requests cancellation. The turn retains session ownership
+until model calls, tools, storage, and delivery drain. A disconnected browser
+only detaches its reader.
+
+## Deploying the shared runtime
+
+Deploy the session status endpoint before clients require it. A failed readiness
+check leaves input unconfirmed; clients cannot assume the session is idle.
+
+Before enabling the new runtime, stop new submissions to old generation owners
+and let their active work finish. Include API servers, Slack, and other in-process
+callers. Closing browser connections does not drain their work. Old processing
+fences and new ownership leases cannot safely coordinate overlapping writers.
+
+Stream reconnection replays cached packets. It does not restart computation.
+Only a valid suspended checkpoint, resumed through a runtime caller, restores
+computation. A cleaned-up coding sandbox cannot generally be restored.

@@ -1,12 +1,15 @@
 import { Interactive, type InteractiveStatelessProps } from "@opal/core";
 import type {
   ContainerSizeVariants,
+  DistributiveOmit,
   ExtremaSizeVariants,
   RichStr,
 } from "@opal/types";
-import { Text, type TooltipSide, Tooltip } from "@opal/components";
+import { type TooltipSide, Tooltip } from "@opal/components";
+import { ButtonLabel } from "@opal/components/buttons/button/label";
 import type { IconFunctionComponent } from "@opal/types";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
+import { resolveTriggerInteraction } from "@opal/components/buttons/trigger-interaction";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -26,7 +29,7 @@ type ButtonContentProps =
       responsiveHideText?: boolean;
     };
 
-type ButtonProps = InteractiveStatelessProps &
+type ButtonProps = DistributiveOmit<InteractiveStatelessProps, "children"> &
   ButtonContentProps & {
     /**
      * Size preset — controls gap, text size, and Container height/rounding.
@@ -61,35 +64,36 @@ function Button({
   tooltipSide = "top",
   responsiveHideText = false,
   disabled,
+  interaction,
   ...interactiveProps
 }: ButtonProps) {
   const isLarge = size === "lg";
+  // Only a popup trigger takes the open look: Popover, Dropdown and Dialog
+  // triggers set `aria-haspopup`, a Collapsible or disclosure toggle sets
+  // `data-state` but opens no popup. An open secondary trigger keeps its rest
+  // fill; the stateless styles give it an outline instead of the hover look.
+  const popup = interactiveProps["aria-haspopup"];
+  const isPopupTrigger =
+    popup !== undefined && popup !== false && popup !== "false";
+  const resolvedInteraction =
+    isPopupTrigger && interactiveProps.prominence !== "secondary"
+      ? resolveTriggerInteraction(interaction, interactiveProps)
+      : interaction;
 
   const labelEl = children ? (
-    responsiveHideText ? (
-      <span className="hidden md:inline whitespace-nowrap">
-        <Text
-          font={isLarge ? "main-ui-body" : "secondary-body"}
-          color="inherit"
-        >
-          {children}
-        </Text>
-      </span>
-    ) : (
-      <Text
-        font={isLarge ? "main-ui-body" : "secondary-body"}
-        color="inherit"
-        wordWrap="whitespace-nowrap"
-      >
-        {children}
-      </Text>
-    )
+    <ButtonLabel
+      font={isLarge ? "main-ui-body" : "secondary-body"}
+      responsiveHide={responsiveHideText}
+    >
+      {children}
+    </ButtonLabel>
   ) : null;
 
   const button = (
     <Interactive.Stateless
       type={type}
       disabled={disabled}
+      interaction={resolvedInteraction}
       {...interactiveProps}
     >
       <Interactive.Container

@@ -40,9 +40,7 @@ def test_connector_deletion(
     user_group_1: DATestUserGroup
     user_group_2: DATestUserGroup
 
-    is_ee = (
-        os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() == "true"
-    )
+    is_ee = os.environ.get("RUN_EE_TESTS", "").lower() == "true"
 
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(name="admin_user")
@@ -246,9 +244,7 @@ def test_connector_deletion_for_overlapping_connectors(
     user_group_1: DATestUserGroup
     user_group_2: DATestUserGroup
 
-    is_ee = (
-        os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() == "true"
-    )
+    is_ee = os.environ.get("RUN_EE_TESTS", "").lower() == "true"
 
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(name="admin_user")

@@ -1,0 +1,74 @@
+---
+title: "Tracing"
+description: "Send LLM call traces to observability platforms to monitor and evaluate your Onyx deployment"
+icon: "chart-line"
+---
+
+Tracing forwards every LLM call Onyx makes to an external observability platform so you can monitor latency,
+token usage, and cost, and evaluate response quality. Onyx supports [Braintrust](https://www.braintrust.dev)
+and [Langfuse](https://langfuse.com).
+
+<Note>
+  Tracing is available on **self-hosted** deployments. It is not configurable on Onyx Cloud.
+</Note>
+
+## Connect a provider
+
+<Steps>
+  <Step title="Connect Braintrust and/or Langfuse">
+    Open **Admin Panel → Usage → Tracing**.
+    You can connect either or both providers — traces are sent to every connected provider.
+
+    <Tabs tabs={["Braintrust", "Langfuse"]}>
+      <Tab title="Braintrust">
+        Create an API key in the [Braintrust dashboard](https://www.braintrust.dev/app) under **Settings → API Keys**.
+
+        In Onyx, click **Connect** on the Braintrust card and fill in:
+
+        - **API Key** — your Braintrust API key.
+        - **Project Name** *(optional)* — the Braintrust project traces are logged to. Defaults
+        to `Onyx`.
+        - **API URL** *(optional)* — only needed for self-hosted Braintrust or non-default
+        regions. Defaults to `https://api.braintrust.dev`.
+      </Tab>
+
+      <Tab title="Langfuse">
+        Create a key pair in your [Langfuse](https://cloud.langfuse.com) project settings under **Setup → API Keys**.
+
+        In Onyx, click **Connect** on the Langfuse card and fill in:
+
+        - **Secret Key** — your Langfuse secret key (`sk-...`).
+        - **Public Key** — your Langfuse public key (`pk-...`).
+        - **API Base URL** *(optional)* — defaults to the EU region
+        (`https://cloud.langfuse.com`). Set this for the US region, another region, or a self-hosted Langfuse instance.
+      </Tab>
+    </Tabs>
+
+    Onyx validates the credentials before saving. Traces begin flowing within about 30 seconds — no restart required.
+  </Step>
+</Steps>
+
+## Disconnect a provider
+
+When you disconnect a provider, Onyx stops sending new traces to it immediately.
+Traces already delivered are unaffected.
+
+## Configuring with environment variables
+
+Configuring tracing from the Admin Panel is the recommended approach,
+but Onyx also honors environment variables for backwards compatibility.
+A provider configured through the UI takes precedence over its environment variables.
+
+| Provider | Variable | Description |
+| --- | --- | --- |
+| Braintrust | `BRAINTRUST_API_KEY` | API key. Enables Braintrust tracing when set. |
+| Braintrust | `BRAINTRUST_PROJECT` | Project name traces are logged to. Defaults to `Onyx`. |
+| Braintrust | `BRAINTRUST_API_URL` | Custom API URL for self-hosted / non-default regions. |
+| Langfuse | `LANGFUSE_SECRET_KEY` | Secret key. Required (with the public key) to enable Langfuse. |
+| Langfuse | `LANGFUSE_PUBLIC_KEY` | Public key. Required (with the secret key) to enable Langfuse. |
+| Langfuse | `LANGFUSE_HOST` | Base URL for a non-default region or self-hosted Langfuse. |
+
+<Note>
+  Providers configured through environment variables appear in the Tracing dashboard as configured via environment.
+  You can adopt them into UI-managed configuration by connecting the provider from the Admin Panel.
+</Note>

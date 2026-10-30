@@ -1,0 +1,64 @@
+---
+title: "S3 Overview"
+description: "Overview of the S3 connector"
+---
+
+## How it works
+
+The **Amazon S3** connector indexes the files in one S3 bucket, or in one prefix of that bucket.
+It reads common document formats such as PDF, DOCX, PPTX, XLSX, TXT, Markdown, and HTML.
+Onyx skips files in formats it cannot read and files larger than 20 MB.
+
+Onyx checks the bucket for new and changed files on the connector's **Refresh Every** schedule.
+The default for this connector is **1 day**.
+
+## Setting up
+
+### Authorization
+
+Onyx supports three ways to authorize access to the bucket. Pick the one that fits your environment:
+
+- [AWS Access Keys](./access-keys): an IAM user's access key and secret
+- [IAM Role](./iam-role): a role that Onyx assumes from the role of its own host
+- [Assume Role](./assume-role): the IAM role already attached to the EC2 instance that runs Onyx
+
+### Indexing
+
+<Steps>
+  <Step title="Create an authentication account">
+    In Onyx, go to **Admin Panel → Connectors** and select **Amazon S3**. Under **Authentication Account**,
+    select a saved account, or select **Create New** and enter a **Display Name**.
+    Then pick the tab for your authorization method:
+
+    - **Access Key and Secret**: enter the **AWS Access Key ID** and **AWS Secret Access Key**
+    - **IAM Role**: enter the **AWS Role ARN**
+    - **Assume Role**: no fields; Onyx uses the role attached to its EC2 instance
+
+    Select **Create**. Confirm the new account is selected.
+  </Step>
+
+  <Step title="Choose the bucket">
+    Under **Connector Settings**, fill in:
+
+    - **Display Name**: a name for the connector, such as `Contracts bucket`
+    - **Bucket Name**: the S3 bucket to index
+    - **Prefix** (optional): a folder path, to index only part of the bucket
+    - **AWS Region** (optional): the region of the bucket, such as `us-east-1`. Set it for a bucket in a non-default
+    partition such as GovCloud (`us-gov-west-1`). Otherwise Onyx resolves the region itself.
+
+    Under **Document Access**, choose who can see the indexed files.
+    **Everyone in Your Organization** shows them to all Onyx users.
+    **Specific Groups** limits them to the Onyx user groups you pick. **Specific Groups** is a paid feature:
+    the Business and Enterprise tiers on Onyx Cloud, and the Enterprise Edition when self-hosted.
+    The connector does not sync bucket permissions.
+  </Step>
+
+  <Step title="Create the connector">
+    Select **Create Connector** to save the connector and start indexing.
+  </Step>
+</Steps>
+
+Open **Admin Panel → Indexing Status** and select the connector to follow the indexing runs, change the schedule,
+or edit the connector. Create one connector per bucket to index more buckets.
+
+<img className="rounded-image" src="/assets/admins/connectors/blob/s3/connector.webp" alt="Onyx S3 connector details page"/>

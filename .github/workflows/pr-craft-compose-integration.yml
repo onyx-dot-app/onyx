@@ -7,11 +7,10 @@
 # Images are built once and pushed to ECR; the lane shards per test file, each
 # shard pulling the prebuilt images onto its own compose stack.
 #
-# Always triggers on PRs + merge_group so the `craft-compose-required` job below
-# can serve as the single stable required status check in branch protection; the
-# heavy test job is gated internally by the `changes` job and is a no-op
-# when no relevant paths changed. Also runs nightly, on release tags, and on
-# demand.
+# Always triggers on PRs so the `craft-compose-integration-required` job below
+# reports one stable status. The `changes` job gates the heavy test job, which
+# is a no-op when no relevant paths changed. Also runs nightly, on release
+# tags, and on demand.
 
 name: Craft Docker-Compose Integration
 
@@ -22,10 +21,10 @@ concurrency:
 on:
   schedule:
     - cron: "0 7 * * *"   # 07:00 UTC nightly
-  merge_group:
   pull_request:
-    # NOTE: Intentionally no `paths:` filter. We always trigger and let the
-    # `changes` job below decide whether the real test job runs.
+    paths-ignore:
+      - "documentation/**"
+    # Not a required check, so docs-only PRs skip it entirely.
   push:
     tags:
       - "v*.*.*"
@@ -54,8 +53,8 @@ env:
 
 jobs:
   changes:
-    # Decides whether the heavy integration job runs. On pull_request /
-    # merge_group we use paths-filter; on schedule / push (tags) /
+    # Decides whether the heavy integration job runs. On pull_request
+    # we use paths-filter; on schedule / push (tags) /
     # workflow_dispatch the filter is skipped and the output defaults to `true`
     # so everything runs.
     runs-on: ubuntu-latest
@@ -68,13 +67,13 @@ jobs:
       craft_compose: ${{ steps.filter.outputs.craft_compose || 'true' }}
     steps:
       - name: Checkout code
-        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        if: github.event_name == 'pull_request'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
       - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
         id: filter
-        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        if: github.event_name == 'pull_request'
         with:
           filters: |
             craft_compose:
@@ -140,6 +139,10 @@ jobs:
     name: build-image (${{ matrix.image }})
     needs: changes
     if: needs.changes.outputs.craft_compose == 'true'
+    # One output per matrix leg: each leg sets only its own image's digest.
+    outputs:
+      sandbox-digest: ${{ matrix.image == 'sandbox' && steps.build.outputs.digest || '' }}
+      backend-digest: ${{ matrix.image == 'backend' && steps.build.outputs.digest || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -187,6 +190,7 @@ jobs:
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
 
       - name: Build and push ${{ matrix.image }} image
+        id: build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ${{ matrix.context }}
@@ -198,6 +202,8 @@ jobs:
             BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
             ${{ matrix.extra_build_args }}
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:craft-compose-${{ matrix.image }}-${{ github.run_id }}
+          # Reproducible builds would otherwise retag one digest every run and hit ECR's 1000-tags-per-image cap.
+          labels: ci.run-id=${{ github.run_id }}
           push: true
           # Attestations attach as ECR referrers to the image digest, which is
           # stable across runs and caps out at 100 per subject.
@@ -263,7 +269,8 @@ jobs:
       - name: Pull and tag prebuilt images
         env:
           ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
-          RUN_ID: ${{ github.run_id }}
+          SANDBOX_DIGEST: ${{ needs.build-images.outputs.sandbox-digest }}
+          BACKEND_DIGEST: ${{ needs.build-images.outputs.backend-digest }}
         run: |
           set -eo pipefail
           retag() {
@@ -271,8 +278,8 @@ jobs:
             docker pull "$src"
             docker tag "$src" "$dst"
           }
-          retag "${ECR_CACHE}:craft-compose-sandbox-${RUN_ID}" "${SANDBOX_CONTAINER_IMAGE}"
-          retag "${ECR_CACHE}:craft-compose-backend-${RUN_ID}" "onyxdotapp/onyx-backend:latest"
+          retag "${ECR_CACHE}@${SANDBOX_DIGEST}" "${SANDBOX_CONTAINER_IMAGE}"
+          retag "${ECR_CACHE}@${BACKEND_DIGEST}" "onyxdotapp/onyx-backend:latest"
 
       - name: Create compose-external resources
         # docker-compose.craft.yml declares both as external. In prod install.sh
@@ -341,7 +348,6 @@ jobs:
           # onyx.* reads these at import; DockerSandboxManager needs the
           # proxy/docker env. USER_AUTH_SECRET must match the stack's .env.
           ENABLE_CRAFT: "true"
-          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES: "true"
           USER_AUTH_SECRET: "craft-compose-ci-only-dummy-secret"
           SANDBOX_BACKEND: "docker"
           SANDBOX_PROXY_HOST: "sandbox-proxy"

@@ -11,8 +11,7 @@ import { useTranslations } from "next-intl";
 import { Hoverable } from "@opal/core";
 import { clickOnKeyDown } from "@opal/utils";
 import { SvgEdit } from "@opal/icons";
-import { Button, Tag } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { Button, Tag, Text } from "@opal/components";
 import { Tooltip } from "@opal/components";
 import EditUserModal from "./EditUserModal";
 import { useCanManageGroups } from "@/lib/permissions/hooks";
@@ -168,7 +167,7 @@ export default function GroupsCell({
               ref={containerRef}
               className="flex items-center gap-1 overflow-hidden flex-nowrap min-w-0 -me-7"
             >
-              <Text as="span" secondaryBody text03>
+              <Text as="span" font="secondary-body" color="text-03">
                 —
               </Text>
             </div>
@@ -196,7 +195,7 @@ export default function GroupsCell({
                 icon={SvgEdit}
                 prominence="tertiary"
                 tooltip={t("groupsCell.editButton.tooltip")}
-                tooltipSide="left"
+                tooltipSide="start"
                 onClick={(e) => {
                   e.stopPropagation();
                   setShowModal(true);

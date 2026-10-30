@@ -28,6 +28,16 @@
    focused item does not highlight beside the hovered one.
 ============================================================================ */
 
+/* Keyboard focus paints the hover state in place of the browser's ring,
+   as on Interactive.Stateless. */
+.interactive:is(
+  [data-interactive-variant="select-heavy"],
+  [data-interactive-variant="select-light"],
+  [data-interactive-variant="select-filter"]
+):focus-visible {
+  outline: none;
+}
+
 /* ===========================================================================
    Select-Heavy
    =========================================================================== */
@@ -47,19 +57,27 @@
   @apply bg-background-tint-00;
 }
 .interactive[data-interactive-variant="select-heavy"][data-interactive-state="empty"]:hover:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
+),
+.interactive[data-interactive-variant="select-heavy"][data-interactive-state="empty"]:focus-visible:not(
+  [data-disabled],
+  [data-opal-nav-mode="pointer"] *
 ),
 .interactive[data-interactive-variant="select-heavy"][data-interactive-state="empty"][data-interaction="hover"]:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ) {
   @apply bg-background-tint-02;
   --interactive-foreground-icon: var(--text-04);
 }
 .interactive[data-interactive-variant="select-heavy"][data-interactive-state="empty"]:active:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ),
 .interactive[data-interactive-variant="select-heavy"][data-interactive-state="empty"][data-interaction="active"]:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ) {
   @apply bg-background-neutral-00;
   --interactive-foreground: var(--text-05);
@@ -86,18 +104,26 @@
   @apply bg-background-tint-00;
 }
 .interactive[data-interactive-variant="select-heavy"][data-interactive-state="filled"]:hover:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
+),
+.interactive[data-interactive-variant="select-heavy"][data-interactive-state="filled"]:focus-visible:not(
+  [data-disabled],
+  [data-opal-nav-mode="pointer"] *
 ),
 .interactive[data-interactive-variant="select-heavy"][data-interactive-state="filled"][data-interaction="hover"]:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ) {
   @apply bg-background-tint-02;
 }
 .interactive[data-interactive-variant="select-heavy"][data-interactive-state="filled"]:active:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ),
 .interactive[data-interactive-variant="select-heavy"][data-interactive-state="filled"][data-interaction="active"]:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ) {
   @apply bg-background-tint-00;
 }
@@ -116,18 +142,26 @@
   --interactive-foreground-icon: var(--action-selection-05);
 }
 .interactive[data-interactive-variant="select-heavy"][data-interactive-state="selected"]:hover:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
+),
+.interactive[data-interactive-variant="select-heavy"][data-interactive-state="selected"]:focus-visible:not(
+  [data-disabled],
+  [data-opal-nav-mode="pointer"] *
 ),
 .interactive[data-interactive-variant="select-heavy"][data-interactive-state="selected"][data-interaction="hover"]:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ) {
   @apply bg-background-tint-02;
 }
 .interactive[data-interactive-variant="select-heavy"][data-interactive-state="selected"]:active:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ),
 .interactive[data-interactive-variant="select-heavy"][data-interactive-state="selected"][data-interaction="active"]:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ) {
   @apply bg-background-tint-00;
 }
@@ -152,23 +186,27 @@
   --interactive-foreground-icon: var(--text-03);
 }
 .interactive[data-interactive-variant="select-card"][data-interactive-state="empty"]:hover:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ),
 .interactive[data-interactive-variant="select-card"][data-interactive-state="empty"]:focus-visible:not(
   [data-disabled],
   [data-opal-nav-mode="pointer"] *
 ),
 .interactive[data-interactive-variant="select-card"][data-interactive-state="empty"][data-interaction="hover"]:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ) {
   @apply bg-background-tint-02;
   --interactive-foreground-icon: var(--text-04);
 }
 .interactive[data-interactive-variant="select-card"][data-interactive-state="empty"]:active:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ),
 .interactive[data-interactive-variant="select-card"][data-interactive-state="empty"][data-interaction="active"]:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ) {
   @apply bg-background-neutral-00;
   --interactive-foreground: var(--text-05);
@@ -189,23 +227,27 @@
   --interactive-foreground-icon: var(--text-03);
 }
 .interactive[data-interactive-variant="select-card"][data-interactive-state="filled"]:hover:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ),
 .interactive[data-interactive-variant="select-card"][data-interactive-state="filled"]:focus-visible:not(
   [data-disabled],
   [data-opal-nav-mode="pointer"] *
 ),
 .interactive[data-interactive-variant="select-card"][data-interactive-state="filled"][data-interaction="hover"]:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ) {
   @apply bg-background-tint-02;
   --interactive-foreground-icon: var(--text-04);
 }
 .interactive[data-interactive-variant="select-card"][data-interactive-state="filled"]:active:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ),
 .interactive[data-interactive-variant="select-card"][data-interactive-state="filled"][data-interaction="active"]:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ) {
   @apply bg-background-tint-00;
   --interactive-foreground: var(--text-05);
@@ -226,22 +268,26 @@
   --interactive-foreground-icon: var(--action-selection-05);
 }
 .interactive[data-interactive-variant="select-card"][data-interactive-state="selected"]:hover:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ),
 .interactive[data-interactive-variant="select-card"][data-interactive-state="selected"]:focus-visible:not(
   [data-disabled],
   [data-opal-nav-mode="pointer"] *
 ),
 .interactive[data-interactive-variant="select-card"][data-interactive-state="selected"][data-interaction="hover"]:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ) {
   @apply bg-background-tint-02;
 }
 .interactive[data-interactive-variant="select-card"][data-interactive-state="selected"]:active:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ),
 .interactive[data-interactive-variant="select-card"][data-interactive-state="selected"][data-interaction="active"]:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ) {
   @apply bg-background-tint-00;
 }
@@ -264,19 +310,27 @@
   --interactive-foreground-icon: var(--text-03);
 }
 .interactive[data-interactive-variant="select-light"][data-interactive-state="empty"]:hover:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
+),
+.interactive[data-interactive-variant="select-light"][data-interactive-state="empty"]:focus-visible:not(
+  [data-disabled],
+  [data-opal-nav-mode="pointer"] *
 ),
 .interactive[data-interactive-variant="select-light"][data-interactive-state="empty"][data-interaction="hover"]:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ) {
   @apply bg-background-tint-02;
   --interactive-foreground-icon: var(--text-04);
 }
 .interactive[data-interactive-variant="select-light"][data-interactive-state="empty"]:active:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ),
 .interactive[data-interactive-variant="select-light"][data-interactive-state="empty"][data-interaction="active"]:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ) {
   @apply bg-background-neutral-00;
   --interactive-foreground: var(--text-05);
@@ -297,18 +351,26 @@
   --interactive-foreground-icon: var(--action-selection-05);
 }
 .interactive[data-interactive-variant="select-light"][data-interactive-state="filled"]:hover:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
+),
+.interactive[data-interactive-variant="select-light"][data-interactive-state="filled"]:focus-visible:not(
+  [data-disabled],
+  [data-opal-nav-mode="pointer"] *
 ),
 .interactive[data-interactive-variant="select-light"][data-interactive-state="filled"][data-interaction="hover"]:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ) {
   @apply bg-background-tint-02;
 }
 .interactive[data-interactive-variant="select-light"][data-interactive-state="filled"]:active:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ),
 .interactive[data-interactive-variant="select-light"][data-interactive-state="filled"][data-interaction="active"]:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ) {
   @apply bg-background-tint-00;
 }
@@ -327,18 +389,26 @@
   --interactive-foreground-icon: var(--action-selection-05);
 }
 .interactive[data-interactive-variant="select-light"][data-interactive-state="selected"]:hover:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
+),
+.interactive[data-interactive-variant="select-light"][data-interactive-state="selected"]:focus-visible:not(
+  [data-disabled],
+  [data-opal-nav-mode="pointer"] *
 ),
 .interactive[data-interactive-variant="select-light"][data-interactive-state="selected"][data-interaction="hover"]:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ) {
   @apply bg-background-tint-02;
 }
 .interactive[data-interactive-variant="select-light"][data-interactive-state="selected"]:active:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ),
 .interactive[data-interactive-variant="select-light"][data-interactive-state="selected"][data-interaction="active"]:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ) {
   @apply bg-background-tint-00;
 }
@@ -358,20 +428,24 @@
   --interactive-foreground-icon: var(--text-03);
 }
 .interactive[data-interactive-variant="select-input"][data-interactive-state="empty"]:hover:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ),
 .interactive[data-interactive-variant="select-input"][data-interactive-state="empty"][data-interaction="hover"]:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ) {
   @apply bg-background-neutral-03;
   --interactive-foreground: var(--text-04);
   --interactive-foreground-icon: var(--text-03);
 }
 .interactive[data-interactive-variant="select-input"][data-interactive-state="empty"]:active:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ),
 .interactive[data-interactive-variant="select-input"][data-interactive-state="empty"][data-interaction="active"]:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ) {
   @apply bg-background-neutral-03;
   --interactive-foreground: var(--text-05);
@@ -402,11 +476,15 @@
 .interactive[data-interactive-variant="select-filter"]:is(
   [data-interactive-state="empty"],
   [data-interactive-state="filled"]
-):hover:not([data-disabled]),
+):hover:not([data-disabled], [data-passive]),
 .interactive[data-interactive-variant="select-filter"]:is(
   [data-interactive-state="empty"],
   [data-interactive-state="filled"]
-)[data-interaction="hover"]:not([data-disabled]) {
+):focus-visible:not([data-disabled], [data-opal-nav-mode="pointer"] *),
+.interactive[data-interactive-variant="select-filter"]:is(
+  [data-interactive-state="empty"],
+  [data-interactive-state="filled"]
+)[data-interaction="hover"]:not([data-disabled], [data-passive]) {
   @apply bg-background-tint-02;
   --interactive-foreground: var(--text-04);
   --interactive-foreground-icon: var(--text-04);
@@ -414,11 +492,11 @@
 .interactive[data-interactive-variant="select-filter"]:is(
   [data-interactive-state="empty"],
   [data-interactive-state="filled"]
-):active:not([data-disabled]),
+):active:not([data-disabled], [data-passive]),
 .interactive[data-interactive-variant="select-filter"]:is(
   [data-interactive-state="empty"],
   [data-interactive-state="filled"]
-)[data-interaction="active"]:not([data-disabled]) {
+)[data-interaction="active"]:not([data-disabled], [data-passive]) {
   @apply bg-background-neutral-00;
   --interactive-foreground: var(--text-05);
   --interactive-foreground-icon: var(--text-05);
@@ -441,20 +519,28 @@
   --interactive-foreground-icon: var(--text-inverted-05);
 }
 .interactive[data-interactive-variant="select-filter"][data-interactive-state="selected"]:hover:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
+),
+.interactive[data-interactive-variant="select-filter"][data-interactive-state="selected"]:focus-visible:not(
+  [data-disabled],
+  [data-opal-nav-mode="pointer"] *
 ),
 .interactive[data-interactive-variant="select-filter"][data-interactive-state="selected"][data-interaction="hover"]:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ) {
   @apply bg-background-tint-inverted-04;
   --interactive-foreground: var(--text-inverted-05);
   --interactive-foreground-icon: var(--text-inverted-05);
 }
 .interactive[data-interactive-variant="select-filter"][data-interactive-state="selected"]:active:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ),
 .interactive[data-interactive-variant="select-filter"][data-interactive-state="selected"][data-interaction="active"]:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ) {
   @apply bg-background-tint-inverted-04;
   --interactive-foreground: var(--text-inverted-04);
@@ -482,10 +568,12 @@
   --interactive-foreground-icon: var(--text-02);
 }
 .interactive[data-interactive-variant="sidebar-heavy"][data-interactive-state="empty"]:hover:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ),
 .interactive[data-interactive-variant="sidebar-heavy"][data-interactive-state="empty"][data-interaction="hover"]:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ) {
   @apply bg-background-tint-03;
 }
@@ -499,10 +587,12 @@
   --interactive-foreground-icon: var(--text-02);
 }
 .interactive[data-interactive-variant="sidebar-heavy"][data-interactive-state="filled"]:hover:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ),
 .interactive[data-interactive-variant="sidebar-heavy"][data-interactive-state="filled"][data-interaction="hover"]:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ) {
   @apply bg-background-tint-03;
 }
@@ -516,10 +606,12 @@
   --interactive-foreground-icon: var(--text-03);
 }
 .interactive[data-interactive-variant="sidebar-heavy"][data-interactive-state="selected"]:hover:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ),
 .interactive[data-interactive-variant="sidebar-heavy"][data-interactive-state="selected"][data-interaction="hover"]:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ) {
   @apply bg-background-tint-03;
 }
@@ -547,10 +639,12 @@
   --interactive-foreground-icon: var(--text-02);
 }
 .interactive[data-interactive-variant="sidebar-light"][data-interactive-state="empty"]:hover:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ),
 .interactive[data-interactive-variant="sidebar-light"][data-interactive-state="empty"][data-interaction="hover"]:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ) {
   @apply bg-background-tint-03;
 }
@@ -564,10 +658,12 @@
   --interactive-foreground-icon: var(--text-02);
 }
 .interactive[data-interactive-variant="sidebar-light"][data-interactive-state="filled"]:hover:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ),
 .interactive[data-interactive-variant="sidebar-light"][data-interactive-state="filled"][data-interaction="hover"]:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ) {
   @apply bg-background-tint-03;
 }
@@ -581,10 +677,12 @@
   --interactive-foreground-icon: var(--text-02);
 }
 .interactive[data-interactive-variant="sidebar-light"][data-interactive-state="selected"]:hover:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ),
 .interactive[data-interactive-variant="sidebar-light"][data-interactive-state="selected"][data-interaction="hover"]:not(
-  [data-disabled]
+  [data-disabled],
+  [data-passive]
 ) {
   @apply bg-background-tint-03;
 }

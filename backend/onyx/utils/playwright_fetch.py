@@ -11,10 +11,19 @@ Two consumers:
   one-shot navigation per URL.
 """
 
+import base64
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import NotRequired, TypedDict, cast
+from urllib.parse import urlsplit
 
-from playwright.sync_api import BrowserContext, Playwright, sync_playwright
+from playwright.sync_api import (
+    BrowserContext,
+    CDPSession,
+    Page,
+    Playwright,
+    sync_playwright,
+)
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel
 
@@ -62,6 +71,7 @@ DEFAULT_BOT_CHALLENGE_GRACE_MS = 5000
 # Total per-navigation budget for Playwright `goto` / wait_for_load_state.
 # Generous because we *want* to absorb a Cloudflare interstitial.
 DEFAULT_NAVIGATION_TIMEOUT_MS = 30000
+MAX_RENDERED_DOCUMENT_BYTES = 20 * 1024 * 1024
 
 
 class RenderedPage(BaseModel):
@@ -85,6 +95,7 @@ def start_playwright() -> tuple[Playwright, BrowserContext]:
     browser = playwright.chromium.launch(
         headless=True,
         args=[
+            "--block-new-web-contents",
             "--disable-blink-features=AutomationControlled",
             "--disable-features=IsolateOrigins,site-per-process",
             "--disable-site-isolation-trials",
@@ -100,8 +111,8 @@ def start_playwright() -> tuple[Playwright, BrowserContext]:
         has_touch=False,
         java_script_enabled=True,
         color_scheme="light",
-        bypass_csp=True,
         ignore_https_errors=True,
+        service_workers="block",
     )
 
     context.set_extra_http_headers(
@@ -133,27 +144,28 @@ def start_playwright() -> tuple[Playwright, BrowserContext]:
         });
     """)
 
-    if (
+    return playwright, context
+
+
+def get_connector_oauth_header() -> str | None:
+    if not (
         WEB_CONNECTOR_OAUTH_CLIENT_ID
         and WEB_CONNECTOR_OAUTH_CLIENT_SECRET
         and WEB_CONNECTOR_OAUTH_TOKEN_URL
     ):
-        # Imported lazily so the OAuth deps don't get pulled in unless configured.
-        from oauthlib.oauth2 import BackendApplicationClient
-        from requests_oauthlib import OAuth2Session
+        return None
 
-        client = BackendApplicationClient(client_id=WEB_CONNECTOR_OAUTH_CLIENT_ID)
-        oauth = OAuth2Session(client=client)
-        token = oauth.fetch_token(
-            token_url=WEB_CONNECTOR_OAUTH_TOKEN_URL,
-            client_id=WEB_CONNECTOR_OAUTH_CLIENT_ID,
-            client_secret=WEB_CONNECTOR_OAUTH_CLIENT_SECRET,
-        )
-        context.set_extra_http_headers(
-            {"Authorization": "Bearer {}".format(token["access_token"])}
-        )
+    from oauthlib.oauth2 import BackendApplicationClient
+    from requests_oauthlib import OAuth2Session
 
-    return playwright, context
+    client = BackendApplicationClient(client_id=WEB_CONNECTOR_OAUTH_CLIENT_ID)
+    oauth = OAuth2Session(client=client)
+    token = oauth.fetch_token(
+        token_url=WEB_CONNECTOR_OAUTH_TOKEN_URL,
+        client_id=WEB_CONNECTOR_OAUTH_CLIENT_ID,
+        client_secret=WEB_CONNECTOR_OAUTH_CLIENT_SECRET,
+    )
+    return f"Bearer {token['access_token']}"
 
 
 @contextmanager
@@ -231,6 +243,201 @@ def looks_like_cloudflare_challenge(html: str) -> bool:
     )
 
 
+def _ssrf_allows(
+    url: str, *, allow_private_network: bool, allow_loopback: bool = False
+) -> bool:
+    """Does `url` pass the outbound destination policy for a rendered fetch?"""
+    try:
+        validate_outbound_http_url(
+            url,
+            allow_private_network=allow_private_network,
+            block_loopback_and_link_local=not allow_loopback,
+            block_link_local_only=True,
+        )
+        return True
+    except (SSRFException, ValueError):
+        return False
+
+
+class _ResponseStream(TypedDict):
+    stream: str
+
+
+class _StreamChunk(TypedDict):
+    data: str
+    eof: bool
+    base64Encoded: NotRequired[bool]
+
+
+def _read_document_body(session: CDPSession, request_id: str) -> str | None:
+    stream = cast(
+        _ResponseStream,
+        session.send("Fetch.takeResponseBodyAsStream", {"requestId": request_id}),
+    )["stream"]
+    body = bytearray()
+    try:
+        while True:
+            chunk = cast(
+                _StreamChunk,
+                session.send("IO.read", {"handle": stream, "size": 64 * 1024}),
+            )
+            data = (
+                base64.b64decode(chunk["data"])
+                if chunk.get("base64Encoded")
+                else chunk["data"].encode()
+            )
+            if len(body) + len(data) > MAX_RENDERED_DOCUMENT_BYTES:
+                return None
+            body.extend(data)
+            if chunk["eof"]:
+                return base64.b64encode(body).decode()
+    finally:
+        session.send("IO.close", {"handle": stream})
+
+
+class _Header(TypedDict):
+    name: str
+    value: str
+
+
+class _InterceptedRequest(TypedDict):
+    url: str
+    headers: dict[str, str]
+
+
+class _PausedRequest(TypedDict):
+    requestId: str
+    request: _InterceptedRequest
+    responseStatusCode: NotRequired[int]
+    responseHeaders: NotRequired[list[_Header]]
+
+
+def _url_origin(url: str) -> tuple[str, str | None, int | None]:
+    parsed = urlsplit(url)
+    port = parsed.port
+    return (
+        parsed.scheme,
+        parsed.hostname,
+        port if port is not None else {"https": 443, "http": 80}.get(parsed.scheme),
+    )
+
+
+def install_ssrf_guard(
+    page: Page,
+    *,
+    allow_private_network: bool,
+    allow_loopback: bool = False,
+    authorization_header: str | None = None,
+    authorization_url: str | None = None,
+) -> None:
+    if allow_private_network:
+        page.context.grant_permissions(["local-network-access"])
+    session = page.context.new_cdp_session(page)
+    session.send("Network.setCacheDisabled", {"cacheDisabled": True})
+
+    def guard_request(event: _PausedRequest) -> None:
+        if "responseStatusCode" in event:
+            headers = event.get("responseHeaders", []) + [
+                _Header(name="Content-Security-Policy", value="worker-src 'none'")
+            ]
+            if 300 <= event["responseStatusCode"] < 400 or event[
+                "responseStatusCode"
+            ] in (204, 205):
+                session.send(
+                    "Fetch.continueResponse", {"requestId": event["requestId"]}
+                )
+                return
+            # Shared workers use browser-side CSP, which header-only overrides do not update.
+            body = _read_document_body(session, event["requestId"])
+            if body is None:
+                session.send(
+                    "Fetch.failRequest",
+                    {"requestId": event["requestId"], "errorReason": "BlockedByClient"},
+                )
+                return
+            session.send(
+                "Fetch.fulfillRequest",
+                {
+                    "requestId": event["requestId"],
+                    "responseCode": event["responseStatusCode"],
+                    "responseHeaders": headers,
+                    "body": body,
+                },
+            )
+            return
+
+        url = event["request"]["url"]
+        if not _ssrf_allows(
+            url,
+            allow_private_network=allow_private_network,
+            allow_loopback=allow_loopback,
+        ):
+            session.send(
+                "Fetch.failRequest",
+                {"requestId": event["requestId"], "errorReason": "BlockedByClient"},
+            )
+            return
+
+        if authorization_header is not None:
+            headers = [
+                _Header(name=name, value=value)
+                for name, value in event["request"]["headers"].items()
+                if not (
+                    name.lower() == "authorization" and value == authorization_header
+                )
+            ]
+            if authorization_url is not None and _url_origin(url) == _url_origin(
+                authorization_url
+            ):
+                headers = [
+                    header
+                    for header in headers
+                    if header["name"].lower() != "authorization"
+                ]
+                headers.append(
+                    _Header(name="Authorization", value=authorization_header)
+                )
+            session.send(
+                "Fetch.continueRequest",
+                {"requestId": event["requestId"], "headers": headers},
+            )
+        else:
+            session.send("Fetch.continueRequest", {"requestId": event["requestId"]})
+
+    # Playwright route handlers do not run for subsequent HTTP redirect hops.
+    session.on("Fetch.requestPaused", guard_request)
+    session.send(
+        "Fetch.enable",
+        {
+            "patterns": [
+                {"urlPattern": "*", "requestStage": "Request"},
+                {
+                    "urlPattern": "*",
+                    "resourceType": "Document",
+                    "requestStage": "Response",
+                },
+            ]
+        },
+    )
+
+
+def read_bounded_page_html(page: Page) -> str | None:
+    html = cast(
+        str | None,
+        page.evaluate(
+            """(limit) => {
+                const html = (document.doctype ? new XMLSerializer().serializeToString(document.doctype) : "")
+                    + (document.documentElement ? document.documentElement.outerHTML : "");
+                return html.length > limit ? null : html;
+            }""",
+            MAX_RENDERED_DOCUMENT_BYTES,
+        ),
+    )
+    if html is None or len(html.encode("utf-8")) > MAX_RENDERED_DOCUMENT_BYTES:
+        return None
+    return html
+
+
 def fetch_rendered_html(
     url: str,
     *,
@@ -261,21 +468,14 @@ def fetch_rendered_html(
     # the URL here before letting Chromium navigate to it. Note: there is a
     # small TOCTOU window between validation and the actual navigation, the
     # same window that ssrf_safe_get accepts for HTTPS URLs.
-    try:
-        validate_outbound_http_url(
-            url,
-            allow_private_network=allow_private_network,
-            block_loopback_and_link_local=True,
-        )
-    except (SSRFException, ValueError) as exc:
-        logger.warning(
-            "Refusing Playwright fallback for %s (%s)", url, exc.__class__.__name__
-        )
+    if not _ssrf_allows(url, allow_private_network=allow_private_network):
+        logger.warning("Refusing Playwright fallback for %s", url)
         return None
 
     try:
         with playwright_session() as context:
             page = context.new_page()
+            install_ssrf_guard(page, allow_private_network=allow_private_network)
             try:
                 # Use "commit" instead of "domcontentloaded" to avoid hanging
                 # on bot-detection pages that may never fire domcontentloaded.
@@ -299,8 +499,18 @@ def fetch_rendered_html(
                 except PlaywrightTimeoutError:
                     pass
 
-                html = page.content()
                 final_url = page.url
+                if not _ssrf_allows(
+                    final_url, allow_private_network=allow_private_network
+                ):
+                    logger.warning(
+                        "Playwright fallback ended on a disallowed destination"
+                    )
+                    return None
+
+                html = read_bounded_page_html(page)
+                if html is None:
+                    return None
                 last_modified = (
                     response.header_value("Last-Modified") if response else None
                 )

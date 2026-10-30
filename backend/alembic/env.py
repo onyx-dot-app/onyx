@@ -1,5 +1,6 @@
 from onyx.db.engine.iam_auth import make_provide_iam_token_async
 from onyx.db.engine.migration_lock import schema_migration_lock
+from onyx.db.engine.migration_search_path import pin_search_path_per_transaction
 from onyx.db.engine.pg_ssl import create_pg_ssl_context
 from onyx.configs.app_configs import USE_IAM_AUTH
 from onyx.configs.app_configs import POSTGRES_HOST
@@ -37,11 +38,11 @@ from celery.backends.database.session import (
     ResultModelBase,  # ty: ignore[unresolved-import]
 )
 from onyx.db.engine.sql_engine import SqlEngine
-from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
+from onyx.utils.variable_functionality import set_is_ee_if_available
 
 # Match the app processes' edition so migrations that use versioned
 # implementations (e.g. encrypt_string_to_bytes) resolve the EE variants.
-set_is_ee_based_on_env_variable()
+set_is_ee_if_available()
 
 # Make sure in alembic.ini [logger_root] level=INFO is set or most logging will be
 # hidden! (defaults to level=WARN)
@@ -251,7 +252,9 @@ def do_run_migrations(
     if create_schema:
         connection.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}"'))
 
-    connection.execute(text(f'SET search_path TO "{schema_name}"'))
+    # Per transaction, not once: a migration that commits mid-run may continue
+    # on another server connection behind PgBouncer transaction pooling.
+    pin_search_path_per_transaction(connection, schema_name)
 
     context.configure(
         connection=connection,
@@ -528,8 +531,7 @@ def run_migrations_online() -> None:
 
         # pytest-alembic passes an Engine, we need to get a connection from it
         with connectable.connect() as connection:
-            # Set search path for the schema
-            connection.execute(text(f'SET search_path TO "{schema_name}"'))
+            pin_search_path_per_transaction(connection, schema_name)
 
             context.configure(
                 connection=connection,

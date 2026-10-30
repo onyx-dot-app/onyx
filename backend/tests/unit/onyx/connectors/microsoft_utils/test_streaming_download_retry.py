@@ -9,6 +9,7 @@ per-document failure (which then trips the indexing failure threshold).
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -18,9 +19,12 @@ import requests
 from onyx.connectors.microsoft_utils import drive_items as drive_items_module
 from onyx.connectors.microsoft_utils import graph_client as graph_client_module
 from onyx.connectors.microsoft_utils.drive_items import (
+    DriveItemData,
     SizeCapExceeded,
+    download_graph_url_with_cap,
     download_via_graph_api,
     download_with_cap,
+    extract_drive_item_content,
     redact_url_for_logging,
     scrub_url_credentials,
 )
@@ -106,7 +110,7 @@ def test_download_via_graph_api_retries_on_chunked_encoding_error(
     mock_get.side_effect = [failing_resp, succeeding_resp]
 
     result = download_via_graph_api(
-        access_token="tok",
+        lambda: "tok",
         drive_id="drive-1",
         item_id="item-1",
         cap=CAP,
@@ -177,7 +181,7 @@ def test_size_cap_exceeded_is_not_retried_during_download(
 def test_http_error_from_raise_for_status_is_not_retried(
     mock_get: MagicMock, mock_time: MagicMock
 ) -> None:
-    """HTTPError (4xx/5xx) is intentionally outside the transport-retry scope."""
+    """A 4xx is final: only Graph's retryable statuses are retried."""
     mock_get.return_value = _make_response(status=404)
 
     with pytest.raises(requests.HTTPError):
@@ -336,3 +340,81 @@ def test_download_with_cap_does_not_log_tempauth_token(
     blob = " ".join(str(a) for a in all_log_args)
     assert _FAKE_TEMPAUTH not in blob
     assert "tempauth" not in blob
+
+
+@patch("onyx.connectors.microsoft_utils.drive_items.time")
+@patch("onyx.connectors.microsoft_utils.drive_items.requests.get")
+def test_a_throttled_download_waits_retry_after_and_succeeds(
+    mock_get: MagicMock, mock_time: MagicMock
+) -> None:
+    """A throttled or gateway-failed download retries with Retry-After, so one
+    429 on a file or an image does not fail the indexing attempt."""
+    throttled: MagicMock = _make_response(status=429, headers={"Retry-After": "7"})
+    mock_get.side_effect = [throttled, _make_response(chunks=[b"file bytes"])]
+
+    def sleep_after_the_socket_closed(_seconds: float) -> None:
+        assert throttled.__exit__.called
+
+    mock_time.sleep.side_effect = sleep_after_the_socket_closed
+
+    assert download_graph_url_with_cap(
+        lambda: "tok", "https://graph.example/content", CAP, "f"
+    ) == (b"file bytes")
+    assert mock_time.sleep.call_count == 1
+    assert mock_time.sleep.call_args.args == (7,)
+
+
+@patch("onyx.connectors.microsoft_utils.drive_items.time")
+@patch("onyx.connectors.microsoft_utils.drive_items.requests.get")
+def test_a_download_throttled_past_the_retries_raises(
+    mock_get: MagicMock, mock_time: MagicMock
+) -> None:
+    mock_get.side_effect = [
+        _make_response(status=429, headers={"Retry-After": "1"}) for _ in range(4)
+    ]
+
+    with pytest.raises(requests.HTTPError):
+        download_graph_url_with_cap(
+            lambda: "tok", "https://graph.example/content", CAP, "f"
+        )
+
+    assert mock_get.call_count == 4
+    assert mock_time.sleep.call_count == 3
+
+
+@patch("onyx.connectors.microsoft_utils.drive_items.time")
+@patch("onyx.connectors.microsoft_utils.drive_items.requests.get")
+def test_a_refused_download_url_falls_back_to_graph_content_without_a_wait(
+    mock_get: MagicMock, mock_time: MagicMock
+) -> None:
+    """The downloadUrl attempt keeps its transport retries only: a 503 there
+    goes straight to the Graph /content fallback, which is the second chance,
+    so a throttled file waits once and not twice."""
+    mock_get.side_effect = [
+        _make_response(status=503, headers={"Retry-After": "9"}),
+        # Empty on purpose: the item is then returned without extraction.
+        _make_response(chunks=[]),
+    ]
+    item: DriveItemData = DriveItemData(
+        id="item-1",
+        name="Plan.txt",
+        web_url="https://example/Plan.txt",
+        size=10,
+        mime_type="text/plain",
+        created_datetime=datetime(2026, 9, 1, tzinfo=timezone.utc),
+        last_modified_datetime=datetime(2026, 9, 2, tzinfo=timezone.utc),
+        drive_id="drive-1",
+        download_url="https://example/download?tempauth=x",
+    )
+
+    content = extract_drive_item_content(
+        item,
+        size_threshold=CAP,
+        graph_api_base="https://graph.example/v1.0",
+        access_token="token",
+    )
+
+    assert content is not None
+    assert mock_get.call_count == 2
+    assert "/drives/drive-1/items/item-1/content" in mock_get.call_args_list[1].args[0]
+    mock_time.sleep.assert_not_called()

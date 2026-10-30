@@ -16,3 +16,14 @@ Anyone who can reach these services in the cluster can use these passwords.
 Set strong values, or point auth.<name>.existingSecret at a Secret you manage
 (for example the one that externalSecret creates).
 {{- end }}
+{{- with include "onyx.objectStore.legacyCopyJobName" . }}
+
+MinIO files are moving to the object store. The app serves from both stores
+while Job {{ . }} copies them. Watch it with:
+
+  kubectl logs -f -n {{ $.Release.Namespace }} job/{{ . }}
+
+It logs "Legacy MinIO copy complete" once every file is copied. Rollback
+and retiring MinIO are in
+https://github.com/onyx-dot-app/onyx/blob/main/deployment/helm/MIGRATION.md
+{{- end }}

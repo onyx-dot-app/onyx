@@ -647,4 +647,32 @@ describe("usePacedTurnGroups", () => {
       expect(result.current.pacedTurnGroups.length).toBe(1);
     });
   });
+  test("restored steps skip pacing while new steps retain it", () => {
+    const first = createStep(0, 0);
+    const second = createStep(1, 0);
+    const third = createStep(2, 0);
+    const restored = new Map([
+      [first.key, 0],
+      [second.key, 0],
+    ]);
+    const { result, rerender } = renderHook(
+      ({ groups }) => usePacedTurnGroups(groups, [], false, 1, false, restored),
+      {
+        initialProps: {
+          groups: [createTurnGroup([first]), createTurnGroup([second])],
+        },
+      }
+    );
+    expect(result.current.pacedTurnGroups).toHaveLength(2);
+    rerender({
+      groups: [
+        createTurnGroup([first]),
+        createTurnGroup([second]),
+        createTurnGroup([third]),
+      ],
+    });
+    expect(result.current.pacedTurnGroups).toHaveLength(2);
+    act(() => jest.advanceTimersByTime(200));
+    expect(result.current.pacedTurnGroups).toHaveLength(3);
+  });
 });

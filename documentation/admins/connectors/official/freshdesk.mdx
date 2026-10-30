@@ -1,0 +1,51 @@
+---
+title: "Freshdesk"
+description: "Access tickets from Freshdesk"
+---
+
+## How it works
+
+The Freshdesk connector indexes the tickets in your Freshdesk account.
+Each ticket becomes one document with the ticket description as its text. The document carries the subject, status,
+priority, source, type, and the contact emails as metadata.
+
+Onyx checks Freshdesk for new and updated tickets every 30 minutes by default.
+You can change **Refresh Every** on the connector.
+
+Permission sync is not available for Freshdesk.
+Everyone who can see the connector's documents in Onyx can see every indexed ticket.
+
+## Setting up
+
+### Authorization
+
+<Steps>
+  <Step title="Open your profile settings">
+    Log in to Freshdesk as a verified agent, admin, or account owner.
+    Click your profile avatar and select **Profile settings**.
+
+    <img className="rounded-image" src="/assets/admins/connectors/freshdesk/freshdesk_1.webp" alt="Freshdesk profile menu"/>
+  </Step>
+
+  <Step title="Copy the API key">
+    Select **View API Key** and copy the key.
+
+    <img className="rounded-image" src="/assets/admins/connectors/freshdesk/freshdesk_2.webp" alt="Freshdesk API key in profile settings"/>
+  </Step>
+</Steps>
+
+### Indexing
+
+<Steps>
+  <Step title="Create the account">
+    In the Onyx admin panel, go to **Connectors** and select **Freshdesk**. Under **Authentication Account**,
+    click **Create New**. Enter the **Freshdesk Domain**, for example `acme` for `acme.freshdesk.com`,
+    and the key as the **API Token**.
+  </Step>
+
+  <Step title="Choose document access">
+    Under **Document Access**, select who can see the indexed tickets.
+    **Specific Groups** is available on the Business and Enterprise plans and on Onyx Cloud.
+    Then click **Create Connector**.
+  </Step>
+</Steps>

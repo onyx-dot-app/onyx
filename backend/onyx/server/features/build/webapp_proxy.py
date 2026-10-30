@@ -1,6 +1,7 @@
 import asyncio
 from collections.abc import AsyncGenerator
 from pathlib import Path
+from typing import Literal
 from urllib.parse import parse_qsl, urlencode
 from uuid import UUID
 
@@ -33,6 +34,8 @@ from onyx.server.features.build.db.build_session import (
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.nextjs_dev import webapp_base_path
 from onyx.utils.logger import setup_logger
+
+HmrEndpoint = Literal["hmr", "webpack-hmr"]
 
 logger = setup_logger()
 
@@ -243,13 +246,13 @@ def _webapp_hmr_query_string(query_string: str) -> str:
 
 
 def _webapp_hmr_websocket_url(
-    session_id: UUID, base_url: str, query_string: str
+    session_id: UUID, base_url: str, query_string: str, endpoint: HmrEndpoint
 ) -> str:
     scheme = "wss" if base_url.startswith("https://") else "ws"
     host_and_path = base_url.split("://", 1)[1].rstrip("/")
     target_url = (
         f"{scheme}://{host_and_path}/"
-        f"{_webapp_next_path(session_id, '_next/webpack-hmr')}"
+        f"{_webapp_next_path(session_id, f'_next/{endpoint}')}"
     )
     hmr_query_string = _webapp_hmr_query_string(query_string)
     if hmr_query_string:
@@ -282,9 +285,13 @@ async def _pump_upstream_to_webapp(
             await websocket.send_bytes(message)
 
 
-async def _proxy_webapp_hmr_websocket(session_id: UUID, websocket: WebSocket) -> None:
+async def _proxy_webapp_hmr_websocket(
+    session_id: UUID, websocket: WebSocket, endpoint: HmrEndpoint
+) -> None:
     base_url = await _get_sandbox_url(session_id)
-    upstream_url = _webapp_hmr_websocket_url(session_id, base_url, websocket.url.query)
+    upstream_url = _webapp_hmr_websocket_url(
+        session_id, base_url, websocket.url.query, endpoint
+    )
     logger.debug("Proxying websocket to: %s", upstream_url)
 
     try:
@@ -384,9 +391,10 @@ async def get_webapp(
         raise
 
 
-@public_build_router.websocket("/sessions/{session_id}/webapp/_next/webpack-hmr")
+@public_build_router.websocket("/sessions/{session_id}/webapp/_next/{hmr_endpoint}")
 async def websocket_webapp_hmr(
     session_id: UUID,
+    hmr_endpoint: HmrEndpoint,
     websocket: WebSocket,
     user: User = Depends(current_user_from_websocket_cookie),
 ) -> None:
@@ -395,4 +403,4 @@ async def websocket_webapp_hmr(
     except HTTPException:
         raise WebSocketException(code=1008)
 
-    await _proxy_webapp_hmr_websocket(session_id, websocket)
+    await _proxy_webapp_hmr_websocket(session_id, websocket, hmr_endpoint)

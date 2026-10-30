@@ -1,3 +1,4 @@
+import type { ConnectorManageRole } from "@/lib/connectors/accessType";
 import type { UUID } from "crypto";
 import type { PermissionsOf } from "@/lib/permissions/resource-actions";
 import type {
@@ -7,6 +8,7 @@ import type {
   ValidStatuses,
 } from "@/lib/types";
 import type { Connector } from "@/lib/connectors/types/connector";
+import type { CapabilityCheckResult } from "@/lib/connectors/checks/types";
 import type { Credential } from "@/lib/credentials/types";
 
 export enum ConnectorCredentialPairStatus {
@@ -50,6 +52,9 @@ export interface CCPairFullInfo {
   last_indexed: string | null;
   last_pruned: string | null;
   last_full_permission_sync: string | null;
+  // Last successful sync of each kind, null until one succeeds.
+  last_time_perm_sync: string | null;
+  last_time_external_group_sync: string | null;
   overall_indexing_speed: number | null;
   latest_checkpoint_description: string | null;
 
@@ -58,16 +63,80 @@ export interface CCPairFullInfo {
   permission_syncing: boolean;
   last_permission_sync_attempt_finished: string | null;
   last_permission_sync_attempt_error_message: string | null;
+  // The source syncs document permissions, so a sync can be started.
+  supports_doc_permission_sync: boolean;
 
   // True if the connector implements `Resolver.reindex` (targeted reindex).
   // False -> Resolve All falls back to a full connector reindex.
   supports_targeted_reindex: boolean;
+
+  // Backfills that applied edits requested, until an attempt of each succeeds.
+  pending_backfills: PendingBackfillSnapshot[];
+
+  // The source names checks of its own, which can run on a schedule.
+  has_named_checks: boolean;
+  // Why the first index attempt waits, or null once it can start.
+  indexing_hold: IndexingHold | null;
 }
 
+/** Mirrors `IndexingHoldReason` in `backend/onyx/connectors/capability_checks/indexing_hold_models.py`. */
+export type IndexingHoldReason =
+  | "checks_running"
+  | "checks_failed_to_run"
+  | "required_checks_failed";
+
+/** A required check that failed. Mirrors `HeldCheck`. */
+export interface HeldCheck {
+  check_id: string;
+  capability: string;
+  display_name: string;
+  message: string;
+  remediation: string | null;
+  docs_link: string | null;
+}
+
+/** Mirrors `IndexingHold`. */
+export interface IndexingHold {
+  reason: IndexingHoldReason;
+  failed_checks: HeldCheck[];
+  index_attempt_id: number | null;
+}
+
+/** Mirrors `CCPairDataAccess` in `backend/ee/onyx/server/documents/models.py`. */
+export interface CCPairDataAccess {
+  /** Only the groups the caller can see. */
+  groups: { id: number; name: string; is_default: boolean }[];
+}
+
+/** Mirrors `CCPairManageAccessRow` in `backend/ee/onyx/server/documents/manage_access.py`. */
+export interface CCPairManageAccessRow {
+  group_id: number;
+  group_name: string;
+  role: ConnectorManageRole;
+  /** Granted by a global connector-management grant: not stored, cannot be removed. */
+  is_fixed: boolean;
+  /** The group's size, for the row's description. */
+  member_count: number;
+  manager_count: number;
+}
+
+/** Mirrors `PendingBackfillSnapshot` in `backend/onyx/server/documents/models.py`. */
+export interface PendingBackfillSnapshot {
+  window_start: string;
+  window_end: string;
+  requested_at: string;
+  /** It runs with a config other than the saved one. */
+  scoped: boolean;
+  attempt_id: number | null;
+  failure_count: number;
+  /** A failed backfill is retried after this time. */
+  retry_after: string | null;
+}
+
+/** Mirrors `PaginatedReturn[IndexAttemptSnapshot]`. */
 export interface PaginatedIndexAttempts {
-  index_attempts: IndexAttemptSnapshot[];
-  page: number;
-  total_pages: number;
+  items: IndexAttemptSnapshot[];
+  total_items: number;
 }
 
 /**
@@ -111,24 +180,146 @@ export interface ExternalGroupSyncAttemptSnapshot {
   time_finished: string | null;
 }
 
-/**
- * Response wrapper used by both per-cc-pair sync-attempt endpoints
- * (`/permission-sync-attempts` and `/external-group-sync-attempts`).
- * Mirrors `CCPairSyncAttemptsResponse` in
- * `backend/onyx/server/documents/models.py`.
- *
- * `applicable === false` means the cc-pair's source does not run this
- * kind of sync job at all (e.g. Salesforce has no doc sync; Slack has
- * no group sync) and `items` will always be `[]`. The frontend MUST
- * use this flag to render the explanatory "this connector does not use
- * a separate ... syncing job" message rather than the generic empty
- * state — the two cases are different and `items.length === 0` alone
- * does NOT distinguish them.
- */
-export interface CCPairSyncAttemptsResponse<T> {
-  applicable: boolean;
-  items: T[];
+/** Mirrors `CCPairRunKind` in `backend/onyx/db/enums.py`. */
+export type CCPairRunKind =
+  | "indexing"
+  | "doc_permission_sync"
+  | "group_sync"
+  | "pruning"
+  | "checks";
+
+/** Mirrors `SyncStatus`: how a prune stands. */
+export type PruneRunStatus = "in_progress" | "success" | "failed" | "canceled";
+
+/** Mirrors `CapabilityCheckRunStatus`. `failed` means a required check failed. */
+export type CheckRunStatus = "running" | "passed" | "failed" | "failed_to_run";
+
+/** One prune of the pair. Mirrors `PruneRunSnapshot` in `backend/onyx/server/documents/models.py`. */
+export interface PruneRunSnapshot {
+  id: number;
+  status: PruneRunStatus;
+  docs_removed: number;
+  docs_failed: number;
+  error_message: string | null;
+  time_created: string;
+  time_started: string | null;
+  time_finished: string | null;
+}
+
+/** One run of the pair's connector checks. Mirrors `CheckRunSnapshot`. */
+export interface CheckRunSnapshot {
+  id: number;
+  status: CheckRunStatus;
+  trigger: string;
+  /** Empty until the run completes, and for a run that broke. */
+  check_results: CapabilityCheckResult[];
+  /** Why a run broke. */
+  error_message: string | null;
+  time_created: string;
+  time_started: string | null;
+  time_finished: string | null;
+}
+
+/** Mirrors `CCPairRunStatusGroup`: how the run list buckets every kind's statuses. */
+export type CCPairRunStatusGroup =
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "canceled";
+
+/** Mirrors `HierarchyNodeType` in `backend/onyx/db/enums.py`. */
+export type HierarchyNodeType =
+  | "folder"
+  | "source"
+  | "stub"
+  | "shared_drive"
+  | "my_drive"
+  | "space"
+  | "page"
+  | "project"
+  | "database"
+  | "workspace"
+  | "site"
+  | "drive"
+  | "channel"
+  | "mailbox";
+
+/** One breakdown row: a node the config names or the hierarchy has, and the pair's documents under it. Mirrors `HierarchyBreakdownEntry`. */
+export interface HierarchyBreakdownEntry {
+  /** The id the connector config uses for the node, such as a Confluence space key. */
+  raw_node_id: string;
+  /** `null` when the config names a node the hierarchy does not have. */
+  display_name: string | null;
+  link: string | null;
+  /** `null` when the config names the node but no document sits under it. `0` for a node the config does not name. */
+  doc_count: number | null;
+}
+
+/** Where a pair's documents come from, by node type. Mirrors `CCPairHierarchyBreakdown`. */
+export interface CCPairHierarchyBreakdown {
+  nodes_by_type: Partial<Record<HierarchyNodeType, HierarchyBreakdownEntry[]>>;
+  /** Documents in no listed node's subtree. Rows can overlap (a page inside a listed space), so rows plus this can exceed the pair's total. */
+  other_doc_count: number;
+  /** Config fields whose values the rows list, so the page shows no row for them. */
+  config_fields: string[];
+}
+
+/** Mirrors `CCPairRunErrors`: runs with open document errors, with all of them resolved, or with none. */
+export type CCPairRunErrors = "unresolved" | "resolved" | "none";
+
+/** How a run left the open failures and errors, on every run: when an admin resolved it, and whether a newer run of its kind superseded it. A closed run keeps its status. */
+interface CCPairRunClosure {
+  resolved_at: string | null;
+  superseded: boolean;
+}
+
+/** One run of a pair, told apart by `kind`. Mirrors `CCPairRun`. */
+export type CCPairRun = CCPairRunClosure &
+  (
+    | { kind: "indexing"; time_created: string; attempt: IndexAttemptSnapshot }
+    | {
+        kind: "doc_permission_sync";
+        time_created: string;
+        attempt: DocPermissionSyncAttemptSnapshot;
+      }
+    | {
+        kind: "group_sync";
+        time_created: string;
+        attempt: ExternalGroupSyncAttemptSnapshot;
+      }
+    | { kind: "pruning"; time_created: string; attempt: PruneRunSnapshot }
+    | { kind: "checks"; time_created: string; attempt: CheckRunSnapshot }
+  );
+
+/** Mirrors `CCPairRunsResponse`. `status_counts` ignores the status filter. */
+export interface CCPairRunsResponse {
+  items: CCPairRun[];
   total_items: number;
+  kinds: CCPairRunKind[];
+  status_counts: Record<CCPairRunStatusGroup, number>;
+}
+
+/** An activity level that holds open runs, as the batch resolve routes take it. */
+export type CCPairRunLevel = "failures" | "errors";
+
+/** The run list's query, as `GET /admin/cc-pair/{id}/runs` takes it. */
+export interface CCPairRunsQuery {
+  pageNum: number;
+  pageSize: number;
+  /** ISO time. Runs created before it are left out. */
+  since: string | null;
+  /** ISO time. Runs created at or after it are left out. */
+  until: string | null;
+  kinds: CCPairRunKind[] | null;
+  statusGroups: CCPairRunStatusGroup[] | null;
+  /** Matched against error messages. */
+  q: string;
+  /** Keeps only runs with document errors, open or resolved, or only runs without any. */
+  errors: CCPairRunErrors | null;
+  /** Leaves out (`false`) or keeps only (`true`) the runs a newer run of their kind superseded: failed runs, and a full-pass kind's runs with errors. With `errors`, `true` keeps the runs either matches. */
+  superseded: boolean | null;
+  /** Reads the runs an admin resolved the way `superseded` reads the superseded ones. */
+  resolved: boolean | null;
 }
 
 export interface IndexAttemptError {
@@ -137,6 +328,8 @@ export interface IndexAttemptError {
 
   document_id: string | null;
   document_link: string | null;
+  /** The indexed document's title, `null` until the document lands. */
+  document_name: string | null;
 
   entity_id: string | null;
   failed_time_range_start: string | null;
@@ -187,4 +380,16 @@ export interface TargetedReindexJobStatus {
   still_failing_count: number;
   skipped_count: number;
   resolved_summary: { id: number; document_id: string }[];
+}
+
+/** How far back a throughput chart reaches. `all` reaches the oldest run kept. */
+export type CCPairThroughputWindow = "1h" | "24h" | "7d" | "all";
+
+/** Mirrors `CCPairThroughputResponse`: an estimate of the documents per equal slice of the window, oldest first. Each run's total is spread evenly over its span. */
+export interface CCPairThroughputResponse {
+  window_start: string;
+  window_end: string;
+  docs_indexed: number[];
+  /** `ended` is null while the run is still going. */
+  runs: { started: string; ended: string | null; status: ValidStatuses }[];
 }

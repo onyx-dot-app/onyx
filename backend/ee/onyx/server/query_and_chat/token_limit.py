@@ -1,8 +1,6 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy.orm import Session
-
 from onyx.configs.constants import TokenRateLimitScope
 from onyx.db.api_key import is_api_key_email_address
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -74,7 +72,9 @@ def _user_is_rate_limited(user_id: UUID) -> None:
         ]
         if token_limits:
             user_cutoff_time = _get_cutoff_time(token_limits)
-            user_usage = _fetch_user_usage(user_id, user_cutoff_time, db_session)
+            user_usage = get_user_token_buckets_since(
+                db_session, str(user_id), user_cutoff_time
+            )
             token_reset = _token_budget_reset(user_rate_limits, user_usage)
 
         cost_reset: datetime | None = None
@@ -89,12 +89,6 @@ def _user_is_rate_limited(user_id: UUID) -> None:
             cost_reset = _cost_budget_reset(user_rate_limits, cost_buckets)
 
         _raise_for_latest_reset(TokenRateLimitScope.USER, token_reset, cost_reset)
-
-
-def _fetch_user_usage(
-    user_id: UUID, cutoff_time: datetime, db_session: Session
-) -> list[TokenUsageBucket]:
-    return get_user_token_buckets_since(db_session, str(user_id), cutoff_time)
 
 
 """
@@ -121,8 +115,8 @@ def _user_is_rate_limited_by_group(user_id: UUID) -> None:
                 if limit.token_budget is not None and limit.token_budget > 0
             ]
             token_cutoff = _get_cutoff_time(token_limits)
-            group_token_usage = _fetch_user_group_usage(
-                user_group_ids, token_cutoff, db_session
+            group_token_usage = get_group_token_buckets_since(
+                db_session, user_group_ids, token_cutoff
             )
 
         group_cost_usage: dict[int, list[tuple[datetime, float]]] = {}
@@ -150,9 +144,3 @@ def _user_is_rate_limited_by_group(user_id: UUID) -> None:
             group_resets.append(max(resets))
 
         raise_rate_limited(TokenRateLimitScope.USER_GROUP, min(group_resets))
-
-
-def _fetch_user_group_usage(
-    user_group_ids: list[int], cutoff_time: datetime, db_session: Session
-) -> dict[int, list[TokenUsageBucket]]:
-    return get_group_token_buckets_since(db_session, user_group_ids, cutoff_time)

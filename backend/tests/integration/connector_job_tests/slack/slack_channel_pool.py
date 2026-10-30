@@ -32,9 +32,14 @@ _LOCK_CHANNEL_NAME = f"{_POOL_CHANNEL_PREFIX}-locks"
 _CLAIM_TTL_SECONDS = 30 * 60
 # Time for a concurrent claim to show in the lock channel history.
 _CLAIM_SETTLE_SECONDS = 3.0
-# Upper bound on concurrent runs per workspace, and so on pool channels.
-_MAX_POOL_SLOTS = 20
-_ALL_SLOTS_BUSY_WAIT_SECONDS = 15.0
+# Upper bound on concurrent runs per workspace. All runs share one Slack app's rate
+# limits, and at about 9 concurrent runs every call got a 429. Other runs wait for a slot.
+_MAX_POOL_SLOTS = 3
+# Each waiting run reads the lock channel once per wait, which counts against the
+# conversations.history rate limit that the running tests also use.
+_ALL_SLOTS_BUSY_WAIT_SECONDS = 30.0
+# A claim is held for one test (usually 1-3 minutes), so this queues a run behind
+# several full turns of the pool.
 _CLAIM_TIMEOUT_SECONDS = 10 * 60
 
 
@@ -151,11 +156,16 @@ def _try_claim_slot(
         channel=lock_channel_id, text=claim.model_dump_json()
     )
     posted = PostedClaim(claim=claim, ts=response["ts"])
-    time.sleep(_CLAIM_SETTLE_SECONDS)
-
-    winner = _winning_claims(_read_live_claims(slack_client, lock_channel_id)).get(
-        claim.slot
-    )
+    # Until the caller owns the claim, release it on any failure, so it does not
+    # hold one of the few slots until the TTL.
+    try:
+        time.sleep(_CLAIM_SETTLE_SECONDS)
+        winner = _winning_claims(_read_live_claims(slack_client, lock_channel_id)).get(
+            claim.slot
+        )
+    except BaseException:
+        _release_claim(slack_client, lock_channel_id, posted.ts)
+        raise
     if winner and winner.ts == posted.ts:
         return posted
     _release_claim(slack_client, lock_channel_id, posted.ts)

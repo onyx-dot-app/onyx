@@ -11,11 +11,12 @@ from onyx.llm.model_capabilities import (
     model_identity_names,
 )
 
+TOKEN_COUNT_CACHE_SIZE = 1024
+
 
 class TokenBudget(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    input_tokens: int
     max_output_tokens: int | None
     context_tokens: int | None
     safety_tokens: int
@@ -52,19 +53,20 @@ def resolve_token_budget(llm: LLM) -> TokenBudget:
     safety_tokens = raw_input_tokens - input_tokens
     model_map = get_model_map()
     for model_name in model_identity_names(config.model_name, config.deployment_name):
-        model_obj = find_model_obj(model_map, config.model_provider, model_name) or {}
+        model_obj = (
+            find_model_obj(model_map, config.model_provider, model_name, chat_only=True)
+            or {}
+        )
         model_input = _positive_int(model_obj.get("max_input_tokens"))
         model_output = _positive_int(model_obj.get("max_output_tokens"))
         if model_input is not None and model_output is not None:
             return TokenBudget(
-                input_tokens=input_tokens,
                 max_output_tokens=model_output,
                 context_tokens=_positive_int(model_obj.get("max_context_tokens"))
                 or model_input,
                 safety_tokens=safety_tokens,
             )
     return TokenBudget(
-        input_tokens=input_tokens,
         max_output_tokens=None,
         context_tokens=None,
         safety_tokens=safety_tokens,

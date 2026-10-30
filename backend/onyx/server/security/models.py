@@ -15,7 +15,8 @@ class SSRFProtectionLevel(str, Enum):
     web connector's former WEB_CONNECTOR_VALIDATE_URLS toggle."""
 
     # Default. Most restrictive: every outbound path (incl. web connectors)
-    # blocks private/internal IPs.
+    # blocks private/internal IPs, except self-hosted custom tools, which may
+    # reach private ranges (accepted risk, ENG-4421).
     VALIDATE_ALL = "validate_all"
     # LLM-initiated fetches (open_url, MCP, OAuth) are validated; admin-configured
     # connectors may still reach private IPs.
@@ -69,10 +70,11 @@ def outbound_allow_private_network(level: SSRFProtectionLevel) -> bool:
     return level == SSRFProtectionLevel.DISABLED
 
 
-def web_connector_ssrf_enforced(level: SSRFProtectionLevel) -> bool:
-    """Whether the web connector validates crawl targets. Only the most
-    restrictive level guards connectors; at VALIDATE_LLM admin-configured
-    connectors may still reach private IPs."""
+def connector_ssrf_enforced(level: SSRFProtectionLevel) -> bool:
+    """The shared SSRF policy for admin-configured connector endpoints (web
+    crawl targets, self-hosted server URLs, SharePoint sites). Only the most
+    restrictive level guards connectors; at VALIDATE_LLM and above they may
+    reach private IPs."""
     return level == SSRFProtectionLevel.VALIDATE_ALL
 
 
@@ -132,6 +134,10 @@ class SecuritySettingsOverrides(BaseModel):
     allow_same_provider_subject_relink: bool | None = Field(
         default=None, json_schema_extra=_tenant_editable()
     )
+    # Claim window for renamed accounts after an SSO provider delete. KV-backed.
+    allow_renamed_account_claim: bool | None = Field(
+        default=None, json_schema_extra=_tenant_editable()
+    )
     incognito_availability: IncognitoAvailability | None = Field(
         default=None, json_schema_extra=_tenant_editable()
     )
@@ -139,6 +145,9 @@ class SecuritySettingsOverrides(BaseModel):
         default=None, json_schema_extra=_tenant_editable()
     )
     allow_connector_group_restrictions: bool | None = Field(
+        default=None, json_schema_extra=_tenant_editable()
+    )
+    allow_connector_check_findings: bool | None = Field(
         default=None, json_schema_extra=_tenant_editable()
     )
     ssrf_protection_level: SSRFProtectionLevel | None = Field(
@@ -244,9 +253,11 @@ class SecuritySettings(BaseModel):
     user_directory_admin_only: bool
     track_external_idp_expiry: bool
     allow_same_provider_subject_relink: bool
+    allow_renamed_account_claim: bool
     incognito_availability: IncognitoAvailability
     incognito_record_mode: IncognitoRecordMode
     allow_connector_group_restrictions: bool
+    allow_connector_check_findings: bool
     ssrf_protection_level: SSRFProtectionLevel
     mask_credential_prefix: bool
     llm_custom_config_env_injection: bool

@@ -1,8 +1,6 @@
 import copy
-import re
 from collections.abc import Generator, Iterable
 from datetime import datetime, timedelta, timezone
-from enum import Enum
 from typing import Any
 from urllib.parse import quote
 
@@ -21,6 +19,12 @@ from onyx.connectors.confluence.access import (
     get_all_space_permissions,
     get_page_restrictions,
     get_page_restrictions_with_per_ancestor_fetch,
+)
+from onyx.connectors.confluence.config import (
+    ConfluenceIndexingMode,
+    extract_page_id_from_url,
+    get_indexing_mode,
+    parse_scope_keys,
 )
 from onyx.connectors.confluence.source_operations import (
     Confcloud77618Error,
@@ -129,15 +133,6 @@ PRUNING_EXPANSION_FIELDS = [
 _SLIM_DOC_BATCH_SIZE = 5000
 _SLIM_ATTACHMENT_MAX_ATTEMPTS = 3
 
-# Confluence document_id is the page URL. Reindex inputs come from
-# IndexAttemptError rows (also URLs). Two URL shapes show up in the wild:
-#   - /spaces/KEY/pages/<id>/Title-slug  (Cloud + modern Server/DC)
-#   - /pages/viewpage.action?pageId=<id> (legacy Server)
-_PAGE_ID_FROM_URL_PATTERNS = [
-    re.compile(r"/pages/(\d+)(?:/|$)"),
-    re.compile(r"[?&]pageId=(\d+)"),
-]
-
 ONE_HOUR = 3600
 ONE_DAY = ONE_HOUR * 24
 
@@ -155,26 +150,31 @@ def _http_status(e: HTTPError) -> int | None:
     return e.response.status_code if e.response is not None else None
 
 
-class ConfluenceIndexingMode(str, Enum):
-    CQL = "cql"
-    PAGE = "page"
-    SPACE = "space"
-    EVERYTHING = "everything"
+def _cql_list(values: tuple[str, ...]) -> str:
+    return ",".join(f"'{value}'" for value in values)
 
 
-def get_indexing_mode(
-    *, space: str, page_id: str, cql_query: str | None
-) -> ConfluenceIndexingMode:
-    """The scope the connector indexes. The config can hold values for several
-    modes (the form sends every tab's fields); the first set one wins, in this
-    order: CQL query, page id, space, everything. Blank values are not set."""
-    if cql_query and cql_query.strip():
-        return ConfluenceIndexingMode.CQL
-    if page_id.strip():
-        return ConfluenceIndexingMode.PAGE
-    if space.strip():
-        return ConfluenceIndexingMode.SPACE
-    return ConfluenceIndexingMode.EVERYTHING
+def _spaces_clause(spaces: tuple[str, ...]) -> list[str]:
+    if not spaces:
+        return []
+    keys = tuple(quote(space) for space in spaces)
+    if len(keys) == 1:
+        return [f"space='{keys[0]}'"]
+    return [f"space in ({_cql_list(keys)})"]
+
+
+def _pages_clause(page_ids: tuple[str, ...], index_recursively: bool) -> list[str]:
+    if not page_ids:
+        return []
+    if len(page_ids) == 1:
+        page_id = page_ids[0]
+        if index_recursively:
+            return [f"(ancestor='{page_id}' or id='{page_id}')"]
+        return [f"id='{page_id}'"]
+    ids = _cql_list(page_ids)
+    if index_recursively:
+        return [f"(ancestor in ({ids}) or id in ({ids}))"]
+    return [f"id in ({ids})"]
 
 
 def build_base_page_cql(
@@ -184,13 +184,16 @@ def build_base_page_cql(
     match get_indexing_mode(space=space, page_id=page_id, cql_query=cql_query):
         case ConfluenceIndexingMode.CQL:
             return (cql_query or "").strip()
-        case ConfluenceIndexingMode.PAGE:
-            page_id = page_id.strip()
-            if index_recursively:
-                return f"type=page and (ancestor='{page_id}' or id='{page_id}')"
-            return f"type=page and id='{page_id}'"
-        case ConfluenceIndexingMode.SPACE:
-            return f"type=page and space='{quote(space.strip())}'"
+        case ConfluenceIndexingMode.PAGE | ConfluenceIndexingMode.SPACE:
+            # The union of the spaces and the pages. One space or one page
+            # keeps the query it had before lists were allowed.
+            clauses = [
+                *_spaces_clause(parse_scope_keys(space)),
+                *_pages_clause(parse_scope_keys(page_id), index_recursively),
+            ]
+            if len(clauses) == 1:
+                return f"type=page and {clauses[0]}"
+            return f"type=page and ({' or '.join(clauses)})"
         case ConfluenceIndexingMode.EVERYTHING:
             return "type=page"
 
@@ -250,14 +253,6 @@ class ConfluenceCheckpoint(ConnectorCheckpoint):
     next_page_url: str | None
 
 
-def _extract_page_id_from_url(doc_id: str) -> str | None:
-    for pat in _PAGE_ID_FROM_URL_PATTERNS:
-        match = pat.search(doc_id)
-        if match:
-            return match.group(1)
-    return None
-
-
 class ConfluenceConnector(
     CheckpointedConnector[ConfluenceCheckpoint],
     SlimConnector,
@@ -265,6 +260,8 @@ class ConfluenceConnector(
     CredentialsConnector,
     Resolver,
 ):
+    slim_listing_honors_indexing_start = True
+
     def __init__(
         self,
         wiki_base: str,
@@ -327,7 +324,7 @@ class ConfluenceConnector(
         self,
     ) -> Generator[HierarchyNode, None, None]:
         """Yield hierarchy nodes for all spaces we're indexing."""
-        space_keys = [self.space] if self.space else None
+        space_keys = list(parse_scope_keys(self.space)) or None
 
         for space in self.source_operations.list_spaces(
             space_keys=space_keys,
@@ -997,7 +994,7 @@ class ConfluenceConnector(
             if failure.failed_document is None:
                 continue
             doc_id = failure.failed_document.document_id
-            page_id = _extract_page_id_from_url(doc_id)
+            page_id = extract_page_id_from_url(doc_id)
             if page_id is None:
                 yield ConnectorFailure(
                     failed_document=DocumentFailure(
@@ -1413,12 +1410,12 @@ class ConfluenceConnector(
                 "there truly are no spaces in this Confluence instance."
             )
 
-        if self.space:
+        for space_key in parse_scope_keys(self.space):
             try:
-                self.source_operations.get_space(space_key=self.space, fast=True)
+                self.source_operations.get_space(space_key=space_key, fast=True)
             except ConfluenceSpaceNotFoundError as e:
                 raise ConnectorValidationError(
-                    "Invalid Confluence space key provided"
+                    f"Invalid Confluence space key provided: {space_key}"
                 ) from e
 
     def probe_rest_space_permissions_admin_access(self) -> None:

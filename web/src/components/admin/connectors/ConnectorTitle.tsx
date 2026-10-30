@@ -7,7 +7,7 @@ import type {
   SlackConfig,
   ZulipConfig,
 } from "@/lib/connectors/types";
-import { getSourceMetadata } from "@/lib/sources";
+import { getSourceMetadata } from "@/lib/connectors/utils";
 import { useTranslations } from "next-intl";
 
 import Link from "next/link";

@@ -96,7 +96,8 @@ class RunCodingAgentTest(unittest.TestCase):
         )
         self.assertIn("Fix the issue; keep ${OTHER}.", command)
         self.assertIn("--restricted", command)
-        self.assertIn("--bare", command)
+        self.assertIn("--safe-mode", command)
+        self.assertNotIn("--bare", command)
         self.assertIn("--strict-mcp-config", command)
         self.assertEqual(
             command[command.index("--settings") + 1], '{"disableAllHooks":true}'

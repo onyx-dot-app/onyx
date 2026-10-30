@@ -80,11 +80,10 @@ _SANDBOX_ERROR_MESSAGES: dict[SandboxProxyError, str] = {
         "not be completed due to an internal error and stop retrying."
     ),
     SandboxProxyError.POLICY_DENIED: (
-        "This request targets an integration that the workspace administrator "
-        "has set to always deny, so it was blocked by policy. Retrying will not "
-        "help and the policy cannot be overridden from here. Tell the user this "
-        "integration is disabled by policy and look for an approach that does "
-        "not depend on it."
+        "The current action policies block this request, so it was not performed. "
+        "Do not retry the same request. Tell the user the action was blocked "
+        "and ask whether they want to review their app or task settings. "
+        "Only an administrator can change workspace restrictions."
     ),
     SandboxProxyError.CREDENTIAL_ERROR: (
         "The proxy could not obtain the credentials needed to authenticate this "

@@ -1,6 +1,28 @@
 {
   "aliases": {},
   "models": {
+    "deepseek-coder": {
+      "cost": {
+        "cache_read": 0.014,
+        "input": 0.14,
+        "output": 0.28
+      },
+      "limit": {
+        "context": 128000,
+        "output": 4096
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "deepseek-coder",
+      "tool_call": true
+    },
     "deepseek-flash": {
       "attachment": true,
       "cost": {
@@ -12,7 +34,7 @@
       },
       "family": "deepseek-flash",
       "limit": {
-        "context": 1000000,
+        "context": 1048576,
         "output": 393216
       },
       "modalities": {
@@ -25,12 +47,81 @@
         ]
       },
       "mode": "chat",
-      "name": "DeepSeek V4.1 Flash",
+      "name": "DeepSeek V4.1 Flash 1017",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-09-10",
+      "release_date": "2026-10-17",
       "structured_output": true,
       "temperature": true,
+      "tool_call": true
+    },
+    "deepseek-r1": {
+      "cost": {
+        "cache_read": 0.14,
+        "input": 0.55,
+        "output": 2.1900000000000004
+      },
+      "limit": {
+        "context": 65536,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "deepseek-r1",
+      "reasoning": true,
+      "tool_call": true
+    },
+    "deepseek-v3": {
+      "cost": {
+        "cache_read": 0.07,
+        "cache_write": 0.0,
+        "input": 0.27,
+        "output": 1.1
+      },
+      "limit": {
+        "context": 65536,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "deepseek-v3",
+      "tool_call": true
+    },
+    "deepseek-v3.2": {
+      "cost": {
+        "cache_read": 0.028,
+        "input": 0.28,
+        "output": 0.39999999999999997
+      },
+      "limit": {
+        "context": 163840,
+        "output": 163840
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "deepseek-v3.2",
+      "reasoning": true,
       "tool_call": true
     },
     "deepseek-v4-flash": {
@@ -44,7 +135,7 @@
       },
       "family": "deepseek-flash",
       "limit": {
-        "context": 1000000,
+        "context": 1048576,
         "output": 393216
       },
       "modalities": {
@@ -60,7 +151,7 @@
       "name": "DeepSeek V4 Flash",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-09-10",
+      "release_date": "2026-10-17",
       "status": "deprecated",
       "structured_output": true,
       "temperature": true,
@@ -77,7 +168,7 @@
       },
       "family": "deepseek-flash",
       "limit": {
-        "context": 1000000,
+        "context": 1048576,
         "output": 393216
       },
       "modalities": {
@@ -93,7 +184,7 @@
       "name": "DeepSeek V4 Flash Vision Exp",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-09-10",
+      "release_date": "2026-10-17",
       "status": "deprecated",
       "structured_output": true,
       "temperature": true,
@@ -110,7 +201,7 @@
       },
       "family": "deepseek-thinking",
       "limit": {
-        "context": 1000000,
+        "context": 1048576,
         "output": 393216
       },
       "modalities": {
@@ -125,10 +216,14 @@
       "name": "DeepSeek V4 Pro",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-08-12",
+      "release_date": "2026-08-13",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
+    },
+    "search": {
+      "mode": "search",
+      "name": "search"
     }
   },
   "models_dev_providers": [

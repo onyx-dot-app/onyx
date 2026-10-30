@@ -1,12 +1,11 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
+import { getSourceMetadata } from "@/lib/connectors/utils";
 import * as TableLayouts from "@/layouts/table-layouts";
-import Text from "@/refresh-components/texts/Text";
-import { getSourceMetadata } from "@/lib/sources";
 import type { ConnectedSource } from "@/lib/hierarchy/types";
 import type { ValidSources } from "@/lib/connectors/types/source";
-import { Divider, LineItemButton } from "@opal/components";
+import { Text, Divider, LineItemButton } from "@opal/components";
 import { SvgFiles, SvgFolder } from "@opal/icons";
 
 import type { KnowledgeView } from "@/sections/knowledge/agent-knowledge/types";
@@ -39,6 +38,7 @@ export function KnowledgeSidebar({
   vectorDbEnabled,
 }: KnowledgeSidebarProps) {
   const t = useTranslations("knowledge");
+  const format = useFormatter();
   return (
     <TableLayouts.SidebarLayout aria-label="knowledge-sidebar">
       <LineItemButton
@@ -56,8 +56,8 @@ export function KnowledgeSidebar({
         aria-label="knowledge-sidebar-files"
         rightChildren={
           selectedFileIds.length > 0 ? (
-            <Text mainUiAction className="text-action-selection-05">
-              {selectedFileIds.length}
+            <Text font="main-ui-action" color="action-selection-05">
+              {format.number(selectedFileIds.length)}
             </Text>
           ) : undefined
         }
@@ -81,8 +81,8 @@ export function KnowledgeSidebar({
             aria-label="knowledge-sidebar-document-sets"
             rightChildren={
               selectedDocumentSetIds.length > 0 ? (
-                <Text mainUiAction className="text-action-selection-05">
-                  {selectedDocumentSetIds.length}
+                <Text font="main-ui-action" color="action-selection-05">
+                  {format.number(selectedDocumentSetIds.length)}
                 </Text>
               ) : undefined
             }
@@ -116,8 +116,8 @@ export function KnowledgeSidebar({
                 aria-label={`knowledge-sidebar-source-${connectedSource.source}`}
                 rightChildren={
                   selectionCount > 0 ? (
-                    <Text mainUiAction className="text-action-selection-05">
-                      {selectionCount}
+                    <Text font="main-ui-action" color="action-selection-05">
+                      {format.number(selectionCount)}
                     </Text>
                   ) : undefined
                 }

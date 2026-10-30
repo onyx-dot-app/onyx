@@ -13,7 +13,7 @@ import {
   type DropdownViews,
 } from "@opal/components";
 import { SvgEdit, SvgPlus, SvgUploadCloud, SvgX } from "@opal/icons";
-import { SvgGithub } from "@opal/logos";
+import { SvgGitHub } from "@opal/logos";
 import useUserSkills from "@/hooks/useUserSkills";
 import type { Skill } from "@/lib/skills/types";
 import type { ExternalAppAdminResponse } from "@/app/craft/v1/apps/registry";
@@ -273,7 +273,7 @@ export default function AssociatedSkillsEditor({
                 {
                   kind: "action",
                   id: "github",
-                  icon: SvgGithub,
+                  icon: SvgGitHub,
                   title: t("create.github.label"),
                   description: t("create.github.description"),
                   disabled: true,

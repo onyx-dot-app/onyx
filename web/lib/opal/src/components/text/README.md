@@ -58,6 +58,8 @@ numbers are progressively fainter.
 | Fixed light / dark | `text-light-03`, `text-light-05`, `text-dark-03`, `text-dark-05` | A fixed light or dark text color that does **not** flip with the theme                            |
 | Status — error     | `status-error-01`, `status-error-02`, `status-error-05`          | Error / destructive messaging (e.g. validation errors)                                            |
 | Status — success   | `status-success-01`, `status-success-02`, `status-success-05`    | Success / confirmation messaging                                                                  |
+| Status — warning   | `status-warning-05`                                              | Warnings that need attention without reading as an error                                          |
+| Theme — amber      | `theme-amber-05`                                                 | The paused state, plus legacy warnings not yet moved to `status-warning-05`                       |
 | Special            | `inherit`                                                        | Inherit the surrounding text color (no color class applied) — useful when a parent sets the color |
 
 ## Usage Examples
@@ -171,9 +173,3 @@ Rules of thumb:
 - `RichNodes` is accepted **only** by `Text` children. Props typed `string | RichStr`
   (`title`, `description`, `tooltip`, …) must stay plain-string-derivable for truncation and
   aria labels, so do not widen them.
-
-## Compatibility
-
-`@/refresh-components/texts/Text` is an independent legacy component that implements the same
-font/color presets via a boolean-flag API. It is **not** a wrapper around this component. New
-code should import directly from `@opal/components`.

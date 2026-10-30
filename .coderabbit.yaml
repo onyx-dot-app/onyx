@@ -1,0 +1,6 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+reviews:
+  auto_review:
+    # PRs labeled skip-coderabbit get no automatic CodeRabbit review.
+    labels:
+      - "!skip-coderabbit"

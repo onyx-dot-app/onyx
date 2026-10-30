@@ -37,19 +37,13 @@ REQUIRE_EMAIL_VERIFICATION=False
 # every time.
 GEN_AI_API_KEY=<REPLACE THIS>
 OPENAI_API_KEY=<REPLACE THIS>
-# If answer quality isn't important for dev, use gpt-4o-mini since it's cheaper.
-GEN_AI_MODEL_VERSION=gpt-4o
+# Default dev model; set another OpenAI model here if needed.
+GEN_AI_MODEL_VERSION=gpt-6-luna
 
 
 # Python stuff
 PYTHONPATH=../backend
 PYTHONUNBUFFERED=1
-
-
-# Enable the full set of Onyx Enterprise Edition features.
-# NOTE: DO NOT ENABLE THIS UNLESS YOU HAVE A PAID ENTERPRISE LICENSE (or if you
-# are using this for local testing/development).
-ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=False
 
 
 # S3 File Store Configuration (the bundled object store for local development)

@@ -47,6 +47,11 @@ def settings_write_lock() -> Iterator[None]:
         yield
 
 
+def resolve_user_language(stored_language: str | None) -> str:
+    """The stored language wins, else the workspace default."""
+    return stored_language or load_settings().default_language.value
+
+
 def load_settings(raise_on_error: bool = False) -> Settings:
     kv_store = get_kv_store()
     try:
@@ -118,6 +123,16 @@ def load_settings(raise_on_error: bool = False) -> Settings:
         settings.user_file_max_upload_size_mb = MAX_ALLOWED_UPLOAD_SIZE_MB
 
     return settings
+
+
+def clear_chat_retention() -> None:
+    """Stops the retention task from deleting chats. Raises if the stored
+    settings cannot be read, so a failed read never passes for cleared."""
+    with settings_write_lock():
+        settings: Settings = load_settings(raise_on_error=True)
+        if settings.maximum_chat_retention_days is not None:
+            settings.maximum_chat_retention_days = None
+            store_settings(settings)
 
 
 def store_settings(settings: Settings) -> None:

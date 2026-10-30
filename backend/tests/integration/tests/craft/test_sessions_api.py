@@ -272,7 +272,7 @@ def test_pre_provisioned_check_returns_invalid_after_first_message(
     assert payload["session_id"] is None
 
 
-def test_rename_session_with_null_name_no_message_uses_id_fallback(
+def test_rename_session_with_null_name_rejects_empty_session(
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
 ) -> None:
@@ -285,9 +285,15 @@ def test_rename_session_with_null_name_no_message_uses_id_fallback(
         headers=admin_user.headers,
         cookies=admin_user.cookies,
     )
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["name"] == f"Build Session {session_id[:8]}"
+    assert response.status_code == 400
+    assert response.json()["error_code"] == "INVALID_INPUT"
+    session_response = client.get(
+        f"{API_SERVER_URL}/build/sessions/{session_id}",
+        headers=admin_user.headers,
+        cookies=admin_user.cookies,
+    )
+    assert session_response.status_code == 200
+    assert session_response.json()["name"] is None
 
 
 def test_rename_session_with_null_name_falls_back_when_llm_call_fails(

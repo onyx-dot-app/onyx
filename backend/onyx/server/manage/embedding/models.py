@@ -26,6 +26,10 @@ class TestEmbeddingRequest(BaseModel):
     model_config = {"protected_namespaces": ()}
 
 
+class TestEmbeddingResponse(BaseModel):
+    dimension: int
+
+
 class CloudEmbeddingProvider(BaseModel):
     provider_type: EmbeddingProvider
     api_key: str | None = None

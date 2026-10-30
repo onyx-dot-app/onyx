@@ -16,7 +16,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from onyx.server.features.build.connect_app import ConnectAppRequest
+from onyx.server.features.build.connect_app import ConnectAppPending, ConnectAppRequest
 from onyx.server.features.build.packets import (
     ApprovalRequestedPacket,
     ConnectAppRequestPacket,
@@ -52,7 +52,7 @@ def _stub_get_cache_backend(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         streaming_mod,
         "get_cache_backend",
-        lambda tenant_id: MagicMock(),  # noqa: ARG005 — kwarg name must match production caller
+        lambda tenant_id: MagicMock(get=lambda _key: None),  # noqa: ARG005 — kwarg name must match production caller
     )
 
 
@@ -64,6 +64,77 @@ def _always_none(_session_id: UUID, timeout_s: int, cache: Any) -> UUID | None: 
     # Honor the timeout so the poll loop doesn't spin while events produces.
     time.sleep(min(0.05, float(timeout_s)))
     return None
+
+
+@pytest.mark.parametrize("failed_read", ["restore", "validate"])
+def test_connect_card_cache_failure_retries_without_closing_stream(
+    monkeypatch: pytest.MonkeyPatch,
+    failed_read: str,
+) -> None:
+    session_id = uuid4()
+    request = ConnectAppRequest(request_id="retry-card", external_app_id=42)
+    pending = ConnectAppPending(
+        build_session_id=str(session_id),
+        opencode_session_id="oc-1",
+        perm_id="perm-1",
+        directory="/workspace",
+        request=request,
+    )
+    announcement_consumed = False
+    failed = False
+    restored_after_failure = False
+    card_enqueued = threading.Event()
+
+    def restore(*_: object) -> list[ConnectAppRequest]:
+        nonlocal failed, restored_after_failure
+        if failed_read == "restore" and not failed:
+            failed = True
+            raise RuntimeError("Cache temporarily unavailable")
+        if failed:
+            restored_after_failure = True
+            return [request]
+        return []
+
+    def validate(*_: object) -> ConnectAppPending:
+        nonlocal failed
+        if failed_read == "validate" and not failed:
+            failed = True
+            raise RuntimeError("Cache temporarily unavailable")
+        return pending
+
+    def pop(*_args: object, **_kwargs: object) -> ConnectAppRequest | None:
+        nonlocal announcement_consumed
+        if not announcement_consumed:
+            announcement_consumed = True
+            return request
+        if restored_after_failure:
+            card_enqueued.set()
+        time.sleep(0.02)
+        return None
+
+    _stub_get_cache_backend(monkeypatch)
+    _stub_pop_announcement(monkeypatch, _always_none)
+    monkeypatch.setattr(streaming_mod.connect_app, "list_pending_requests", restore)
+    monkeypatch.setattr(streaming_mod.connect_app, "load_pending", validate)
+    monkeypatch.setattr(streaming_mod.connect_app, "pop_announcement", pop)
+
+    def events() -> Generator[str, None, None]:
+        yield "before-recovery"
+        assert card_enqueued.wait(timeout=3)
+        yield "after-recovery"
+
+    out = _collect_with_timeout(
+        streaming_mod.merge_events_with_announces(events(), session_id, "public"),
+        timeout_s=4,
+    )
+    assert [item for item in out if isinstance(item, str)] == [
+        "before-recovery",
+        "after-recovery",
+    ]
+    cards = [item for item in out if isinstance(item, ConnectAppRequestPacket)]
+    assert len(cards) == 1
+    assert cards[0].request_id == request.request_id
+    assert failed and restored_after_failure
 
 
 def test_events_only_pass_through(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -133,12 +204,12 @@ def test_announce_emitted_as_approval_requested_packet(
     assert parsed["session_id"] == str(session_id)
 
 
-def test_connect_app_announce_emitted_as_packet(
+@pytest.mark.parametrize("source", ["live", "restored", "both"])
+def test_connect_app_request_emitted_once(
     monkeypatch: pytest.MonkeyPatch,
+    source: str,
 ) -> None:
-    """A connect-app announce is injected into the stream as a
-    ConnectAppRequestPacket (the turn-driving worker can't reach the browser, so
-    the card crosses over via this announce)."""
+    """Restore consumed requests and deduplicate cards also announced live."""
     session_id = uuid4()
     request = ConnectAppRequest(
         request_id="req-9", external_app_id=42, reason="post a message"
@@ -148,7 +219,7 @@ def test_connect_app_announce_emitted_as_packet(
 
     def pop_connect(_sid: str, timeout_s: int, cache: Any) -> ConnectAppRequest | None:  # noqa: ARG001 — kwarg name must match production caller
         calls.append(1)
-        if len(calls) == 1:
+        if len(calls) == 1 and source != "restored":
             return request
         announce_enqueued.set()
         time.sleep(min(0.02, float(timeout_s)))
@@ -156,6 +227,19 @@ def test_connect_app_announce_emitted_as_packet(
 
     _stub_get_cache_backend(monkeypatch)
     _stub_pop_announcement(monkeypatch, _always_none)  # approval pump: nothing
+    pending = ConnectAppPending(
+        build_session_id=str(session_id),
+        opencode_session_id="oc-1",
+        perm_id="perm-1",
+        directory="/workspace",
+        request=request,
+    )
+    monkeypatch.setattr(streaming_mod.connect_app, "load_pending", lambda *_: pending)
+    monkeypatch.setattr(
+        streaming_mod.connect_app,
+        "list_pending_requests",
+        lambda *_: [request] if source != "live" else [],
+    )
     monkeypatch.setattr(streaming_mod.connect_app, "pop_announcement", pop_connect)
 
     def events() -> Generator[str, None, None]:
@@ -182,6 +266,49 @@ def test_connect_app_announce_emitted_as_packet(
     assert parsed["type"] == "connect_app_request"
     assert parsed["request_id"] == "req-9"
     assert parsed["external_app_id"] == 42
+
+
+@pytest.mark.parametrize("pending_session", [None, "another-session"])
+def test_connect_app_request_excludes_resolved_or_other_session(
+    monkeypatch: pytest.MonkeyPatch,
+    pending_session: str | None,
+) -> None:
+    session_id = uuid4()
+    request = ConnectAppRequest(request_id="stale-request", external_app_id=42)
+    pending = (
+        ConnectAppPending(
+            build_session_id=pending_session,
+            opencode_session_id="oc-1",
+            perm_id="perm-1",
+            directory="/workspace",
+            request=request,
+        )
+        if pending_session is not None
+        else None
+    )
+    checked = threading.Event()
+
+    def pop(*_args: object, **_kwargs: object) -> None:
+        # The restoration pass has finished before live polling starts.
+        checked.set()
+        time.sleep(0.02)
+
+    _stub_get_cache_backend(monkeypatch)
+    _stub_pop_announcement(monkeypatch, _always_none)
+    monkeypatch.setattr(
+        streaming_mod.connect_app, "list_pending_requests", lambda *_: [request]
+    )
+    monkeypatch.setattr(streaming_mod.connect_app, "load_pending", lambda *_: pending)
+    monkeypatch.setattr(streaming_mod.connect_app, "pop_announcement", pop)
+
+    def events() -> Generator[str, None, None]:
+        assert checked.wait(timeout=2)
+        yield "events-end"
+
+    out = _collect_with_timeout(
+        streaming_mod.merge_events_with_announces(events(), session_id, "public")
+    )
+    assert out == ["events-end"]
 
 
 def test_interleaving_events_and_announce(

@@ -60,29 +60,18 @@
   transform: rotate(90deg);
 }
 
-/* ── Fold ───────────────────────────────────────────────────────────────────── */
+/* Start chevron: a passive text-02 glyph at rest, one step lighter than the
+   internal button's text-03; the button's hover rule still wins on hover. */
+.opal-divider-chevron[data-position="start"]
+  .interactive[data-interactive-prominence="internal"] {
+  --interactive-foreground-icon: var(--text-02);
+}
 
-/* Grid rows animate between 0fr and 1fr without a measured height, so the
-   fold closes as smoothly as it opens and never needs a mount or unmount.
-   The chevron above turns on the same clock. */
-.opal-divider-fold {
-  display: grid;
-  grid-template-rows: 0fr;
-  opacity: 0;
-  transition:
-    grid-template-rows 200ms ease-in-out,
-    opacity 200ms ease-in-out;
+/* Start chevron: a down chevron, turned to point right while folded unless the folded chevron stays down. */
+.opal-divider-chevron[data-position="start"][data-open="false"][data-folded-chevron="right"] {
+  transform: rotate(-90deg);
 }
-.opal-divider-fold[data-open="true"] {
-  grid-template-rows: 1fr;
-  opacity: 1;
-}
-.opal-divider-fold-inner {
-  min-height: 0;
-  overflow: hidden;
-}
-@media (prefers-reduced-motion: reduce) {
-  .opal-divider-fold {
-    transition: none;
-  }
+
+.opal-divider-chevron[data-position="start"][data-open="true"] {
+  transform: none;
 }

@@ -25,7 +25,7 @@ from tests.integration.common_utils.permission_state import (
 from tests.integration.common_utils.test_models import DATestUser, DATestUserGroup
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Custom group permissions are enterprise only",
 )
 

@@ -9,6 +9,10 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import Persona, Project__UserFile, User, UserFile
+from onyx.file_store.models import ChatFileInput, FileDescriptor, UserFileMetadata
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 def fetch_chunk_counts_for_user_files(
@@ -113,6 +117,21 @@ def get_user_file_by_id(
     """Fetch a UserFile row by id. Accepts str for callers whose input may not
     even be a UserFile id (e.g. a storage file_id) — those resolve to None."""
     return db_session.query(UserFile).filter(UserFile.id == user_file_id).first()
+
+
+def capture_user_file_metadata(
+    user_files: Sequence[UserFile],
+) -> list[UserFileMetadata]:
+    """Copy loaded fields while the caller owns the database session."""
+    return [UserFileMetadata.model_validate(user_file) for user_file in user_files]
+
+
+def get_user_file_metadata(user_file_id: UUID, db_session: Session) -> UserFileMetadata:
+    """Capture one file for content loading after the session closes."""
+    user_file: UserFile | None = get_user_file_by_id(user_file_id, db_session)
+    if user_file is None:
+        raise ValueError(f"User file with id {user_file_id} not found")
+    return UserFileMetadata.model_validate(user_file)
 
 
 def get_file_id_by_user_file_id(user_file_id: str, db_session: Session) -> str | None:
@@ -382,3 +401,46 @@ def any_user_file_reconcile_pending_for_users(
             )
         )
     )
+
+
+def get_user_file_processing_info(
+    file_ids: list[UUID], db_session: Session
+) -> dict[str, tuple[int, UserFileStatus]]:
+    """Read token counts and processing status without loading ORM relationships."""
+    if not file_ids:
+        return {}
+    rows = db_session.execute(
+        select(UserFile.id, UserFile.token_count, UserFile.status).where(
+            UserFile.id.in_(file_ids)
+        )
+    )
+    return {str(file_id): (tokens or 0, status) for file_id, tokens, status in rows}
+
+
+def prepare_chat_file_inputs(
+    descriptors: list[FileDescriptor], db_session: Session
+) -> list[ChatFileInput]:
+    """Capture processing status before reading attachment content."""
+    user_file_ids: list[UUID] = []
+    for descriptor in descriptors:
+        raw_id = descriptor.get("user_file_id")
+        if raw_id:
+            try:
+                user_file_ids.append(UUID(raw_id))
+            except ValueError:
+                logger.warning("Invalid user-file ID: %s", raw_id)
+    metadata = get_user_file_processing_info(user_file_ids, db_session)
+    inputs: list[ChatFileInput] = []
+    for descriptor in descriptors:
+        tokens, status = metadata.get(
+            descriptor.get("user_file_id") or "", (0, UserFileStatus.COMPLETED)
+        )
+        inputs.append(
+            ChatFileInput(
+                descriptor=descriptor,
+                token_count=tokens,
+                content_pending=status
+                in (UserFileStatus.PROCESSING, UserFileStatus.INDEXING),
+            )
+        )
+    return inputs

@@ -1,14 +1,16 @@
 from collections.abc import Sequence
 from datetime import datetime, timezone
-from enum import Enum
-from typing import Any
+from enum import Enum, StrEnum
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from onyx.configs.constants import DocumentSource
-from onyx.db.models import SearchSettings
 from onyx.indexing.models import BaseChunk, IndexingSetting
 from onyx.tools.tool_implementations.web_search.models import WEB_SEARCH_PREFIX
+
+if TYPE_CHECKING:
+    from onyx.db.models import SearchSettings
 
 
 class QueryExpansions(BaseModel):
@@ -28,7 +30,7 @@ class SearchSettingsCreationRequest(IndexingSetting):
 
     @classmethod
     def from_db_model(
-        cls, search_settings: SearchSettings
+        cls, search_settings: "SearchSettings"
     ) -> "SearchSettingsCreationRequest":
         indexing_setting = IndexingSetting.from_db_model(search_settings)
         return cls(**indexing_setting.model_dump())
@@ -40,7 +42,7 @@ class SavedSearchSettings(IndexingSetting):
     use_port_flow: bool | None = None
 
     @classmethod
-    def from_db_model(cls, search_settings: SearchSettings) -> "SavedSearchSettings":
+    def from_db_model(cls, search_settings: "SearchSettings") -> "SavedSearchSettings":
         return cls(
             # Indexing Setting
             model_name=search_settings.model_name,
@@ -61,7 +63,8 @@ class SavedSearchSettings(IndexingSetting):
 
 
 class ContextualRagModelUpdateResponse(BaseModel):
-    contextual_rag_model_configuration_id: int
+    # PRESENT's model after the update. Turning Contextual Retrieval off keeps it.
+    contextual_rag_model_configuration_id: int | None
 
 
 class Tag(BaseModel):
@@ -151,8 +154,9 @@ class AssistantKnowledgeFilters(BaseModel):
 
 
 class CCPairAccessMode(str, Enum):
-    # The cc-pair filter is off. It is built only to hide SYNC_RESTRICTED
-    # pairs from the old ACL filter.
+    # The cc-pair filter is off. It is built only to hide guarded pairs
+    # (SYNC_RESTRICTED, or awaiting a first permission sync) from the old ACL
+    # filter.
     OFF = "off"
     # Results use the old ACL filter; the cc-pair filter is only compared.
     SHADOW = "shadow"
@@ -171,9 +175,10 @@ class CCPairAccessFilter(BaseModel):
     # The user's user_email: and external_group: entries. No group: entries,
     # since group access comes from open_cc_pair_ids.
     user_acl: list[str]
-    # SYNC_RESTRICTED pairs that grant the user nothing. The old ACL filter
-    # cannot express the restriction, so it hides their chunks unless an open
-    # or ACL pair of the chunk grants access.
+    # Guarded pairs that grant the user nothing: SYNC_RESTRICTED pairs, and
+    # pairs awaiting a first permission sync, whose chunks can still be
+    # public. The old ACL filter cannot express this, so it hides their chunks
+    # unless an open or ACL pair of the chunk grants access.
     hidden_restricted_cc_pair_ids: list[int] = []
 
 
@@ -440,6 +445,11 @@ class SearchDoc(BaseModel):
 
 
 class SearchDocsResponse(BaseModel):
+    type: Literal["search_result"] = "search_result"
+    queries: list[str] = Field(default_factory=list)
+    sources: list[str] = Field(default_factory=list)
+    time_filter_start: datetime | None = None
+    time_filter_end: datetime | None = None
     search_docs: list[SearchDoc]
     # Maps the citation number to the document id
     # Since these are no longer just links on the frontend but instead document cards, mapping it to the
@@ -525,3 +535,42 @@ class PersonaSearchInfo(BaseModel):
     search_start_date: datetime | None
     attached_document_ids: list[str]
     hierarchy_node_ids: list[int]
+
+
+class SearchCycle(BaseModel):
+    """One internal_search cycle this turn, as context for the next decision."""
+
+    cycle_number: int
+    queries: list[str]
+    searched_sources: list[str]
+
+
+class DocumentTimeField(StrEnum):
+    CREATED_AT = "created_at"
+    UPDATED_AT = "updated_at"
+
+
+class TimeFilter(BaseModel):
+    """The document date the conversation scopes on (created vs updated) and
+    the inclusive (start, end) window; either bound may be None (open)."""
+
+    field: DocumentTimeField
+    start: datetime | None = None
+    end: datetime | None = None
+
+    def apply_to(self, filters: BaseFilters) -> BaseFilters:
+        """Return a copy of `filters` with this window intersected onto the
+        matching range field, so the inferred window can narrow but never widen
+        a caller-selected restriction. A disjoint inferred window is dropped —
+        the explicit range wins over silently matching nothing."""
+        filters = filters.model_copy()
+        window = TimeRange(start=self.start, end=self.end)
+        if self.field is DocumentTimeField.CREATED_AT:
+            merged = window.intersect(filters.created_at_range)
+            if not merged.is_empty():
+                filters.created_at_range = merged
+        else:
+            merged = window.intersect(filters.updated_at_range)
+            if not merged.is_empty():
+                filters.updated_at_range = merged
+        return filters

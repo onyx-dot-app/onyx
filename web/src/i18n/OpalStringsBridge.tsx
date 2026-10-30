@@ -3,6 +3,7 @@
 import { useMemo, type ReactNode } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { OpalStringsProvider, type OpalStrings } from "@opal/strings";
+import { getCurrencyParts } from "@opal/components";
 import { createLocaleIntegerParser } from "@/i18n/numbers";
 
 interface OpalStringsBridgeProps {
@@ -22,13 +23,22 @@ export default function OpalStringsBridge({
       close: t("common.close"),
       loading: t("common.loading"),
       settingsHeaderCancel: t("settingsHeader.cancel"),
+      settingsBodyErrorTitle: (page) => t("settingsBody.error.title", { page }),
+      settingsBodyErrorDescription: t("settingsBody.error.description"),
       loadingPage: t("common.loadingPage"),
       copy: t("common.copy"),
       copied: t("common.copied"),
       copyCode: t("common.copyCode"),
       clear: t("common.clear"),
-      attachFile: t("inputFile.attachFile"),
       clearFile: t("inputFile.clearFile"),
+      inputUploadPlaceholder: t("inputUpload.placeholder"),
+      inputMultiUploadPlaceholder: t("inputMultiUpload.placeholder"),
+      inputMultiUploadDropToAdd: t("inputMultiUpload.dropToAdd"),
+      inputMultiUploadDropToAddMore: t("inputMultiUpload.dropToAddMore"),
+      inputUploadPasted: t("inputUpload.pasted"),
+      inputUploadAttached: t("inputUpload.attached"),
+      inputUploadDropToAdd: t("inputUpload.dropToAdd"),
+      inputUploadDropToReplace: t("inputUpload.dropToReplace"),
       clearFilter: t("common.clearFilter"),
       date: t("common.date"),
       dateRange: t("dateRange.label"),
@@ -47,6 +57,7 @@ export default function OpalStringsBridge({
       remove: t("common.remove"),
       removeItem: (title) => t("common.removeItem", { title }),
       showFullMessage: t("common.showFullMessage"),
+      toastMoreCount: (count) => t("toast.moreCount", { count }),
       selectAnOption: t("common.selectAnOption"),
       openCalendar: t("common.openCalendar"),
       month: t("input.month"),
@@ -66,6 +77,9 @@ export default function OpalStringsBridge({
         t("collapsible.foldSection", { title }),
       collapsibleExpandSection: (title) =>
         t("collapsible.expandSection", { title }),
+      sidebarOpen: t("sidebar.open"),
+      sidebarClose: t("sidebar.close"),
+      dividerViewAll: t("divider.viewAll"),
       contentOptional: t("common.optional"),
       previousPage: t("pagination.previousPage"),
       nextPage: t("pagination.nextPage"),
@@ -101,6 +115,7 @@ export default function OpalStringsBridge({
       selectEmptySet: t("select.emptySet"),
       selectInvalidOption: t("select.invalidOption"),
       selectSearchPlaceholder: t("select.searchPlaceholder"),
+      iconTooltipLabel: t("iconTooltip.label"),
       keyValueKey: t("keyValue.key"),
       keyValueValue: t("keyValue.value"),
       keyValueAddLine: t("keyValue.addLine"),
@@ -117,11 +132,21 @@ export default function OpalStringsBridge({
       keyValueGroup: (keyTitle, valueTitle) =>
         t("keyValue.group", { keyTitle, valueTitle }),
       keyValueInput: (label, index) => t("keyValue.input", { label, index }),
+      inputNumberOutOfRange: (min, max) =>
+        min !== undefined && max !== undefined
+          ? t("inputNumber.outOfRange", { min, max })
+          : min !== undefined
+            ? t("inputNumber.belowMin", { min })
+            : t("inputNumber.aboveMax", { max: max ?? 0 }),
       keyValuePairFallback: t("keyValue.pairFallback"),
       keyValueRemovePair: (label, index) =>
         t("keyValue.removePair", { label, index }),
       formatNumber: (value) => digits.format(value),
       parseNumber: createLocaleIntegerParser(digits),
+      inputCurrencyAmount: t("inputCurrency.amount"),
+      inputCurrencyWhole: t("inputCurrency.whole"),
+      inputCurrencyFraction: t("inputCurrency.fraction"),
+      inputCurrencyParts: (currency) => getCurrencyParts(locale, currency),
       showing: (range, total) =>
         t.rich("table.showing", { range: () => range, total: () => total }),
       rangeOfTotal: (range, total) =>

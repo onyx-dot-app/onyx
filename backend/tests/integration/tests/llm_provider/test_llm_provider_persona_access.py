@@ -16,7 +16,7 @@ from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="LLM provider persona access is enterprise only",
 )
 
@@ -92,7 +92,7 @@ def test_authorized_persona_access_returns_filtered_providers(
         name="Restricted Provider",
         provider=LlmProviderNames.OPENAI,
         api_key="test-key",
-        default_model_name="gpt-4o",
+        default_model_name="gpt-6-luna",
         is_public=False,
         groups=[],
         personas=[accessible_persona.id],
@@ -125,7 +125,7 @@ def test_persona_id_zero_applies_rbac(
         name="Group2 Only Provider",
         provider=LlmProviderNames.OPENAI,
         api_key="test-key",
-        default_model_name="gpt-4o",
+        default_model_name="gpt-6-luna",
         is_public=False,
         groups=[group2_id],
         personas=[],
@@ -167,7 +167,7 @@ def test_admin_can_query_any_persona(
         name="Admin Test Provider",
         provider=LlmProviderNames.OPENAI,
         api_key="test-key",
-        default_model_name="gpt-4o",
+        default_model_name="gpt-6-luna",
         is_public=False,
         groups=[],
         personas=[restricted_persona.id],
@@ -200,7 +200,7 @@ def test_public_persona_accessible_to_all(
         name="Public Provider",
         provider=LlmProviderNames.OPENAI,
         api_key="test-key",
-        default_model_name="gpt-4o",
+        default_model_name="gpt-6-luna",
         is_public=True,
         set_as_default=True,
     )

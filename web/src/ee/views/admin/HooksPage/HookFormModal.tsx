@@ -367,7 +367,7 @@ export default function HookFormModal({
                     <div className="[&_input::placeholder]:!font-main-ui-muted w-full">
                       <InputTypeInField
                         name="endpoint_url"
-                        placeholder="https://your-api-endpoint.com"
+                        placeholder={t("placeholders.endpointUrl")}
                         variant={isSubmitting ? "disabled" : undefined}
                       />
                     </div>
@@ -402,7 +402,6 @@ export default function HookFormModal({
                       justifyContent="start"
                       height="fit"
                       gap={4}
-                      className="px-0.5"
                     >
                       <div className="p-0.5 shrink-0">
                         {isConnected ? (

@@ -24,8 +24,10 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-# Catalog cost blocks carry a context_over_200k tier when a provider charges
-# more past a large-context threshold. The threshold is always 200k tokens.
+# Catalog cost blocks carry long-context tiers when a provider charges more
+# past a threshold: `context_over_200k` (legacy single tier at 200k) or
+# `tiers` entries carrying arbitrary `{"type": "context", "size": N}`
+# thresholds (e.g. claude-haiku-5-5's 5x rates above 100k).
 _LONG_CONTEXT_THRESHOLD_TOKENS = 200_000
 
 _LOCALLY_HOSTED_PROVIDERS = frozenset(
@@ -55,6 +57,9 @@ def _is_locally_hosted(model: str, provider: str | None) -> bool:
 class ModelPrice(BaseModel):
     model: str
     provider: str | None
+    # The saved model configuration this price is for, when known. Providers of
+    # one type can price the same model name differently (admin overrides).
+    model_configuration_id: int | None = None
     input_per_mtok: float | None
     output_per_mtok: float | None
     cache_per_mtok: float | None
@@ -65,11 +70,14 @@ def get_model_price_per_million(
     model: str,
     provider: str | None,
     db_session: Session | None = None,
+    model_configuration_id: int | None = None,
 ) -> ModelPrice:
-    """Return override-aware USD per million tokens without raising."""
-    if db_session is not None:
+    """Return override-aware USD per million tokens without raising.
+
+    An admin override applies only to a known model configuration."""
+    if db_session is not None and model_configuration_id is not None:
         try:
-            rates = cost_overrides.get_override(db_session, model, provider or "")
+            rates = cost_overrides.get_override(db_session, model_configuration_id)
         except Exception:
             logger.exception("Override lookup failed for model %s", model)
             rates = None
@@ -77,6 +85,7 @@ def get_model_price_per_million(
             return ModelPrice(
                 model=model,
                 provider=provider,
+                model_configuration_id=model_configuration_id,
                 input_per_mtok=rates.input_cost_per_mtok,
                 output_per_mtok=rates.output_cost_per_mtok,
                 cache_per_mtok=rates.cache_read_cost_per_mtok,
@@ -86,6 +95,7 @@ def get_model_price_per_million(
         return ModelPrice(
             model=model,
             provider=provider,
+            model_configuration_id=model_configuration_id,
             input_per_mtok=0.0,
             output_per_mtok=0.0,
             cache_per_mtok=None,
@@ -100,6 +110,7 @@ def get_model_price_per_million(
         return ModelPrice(
             model=model,
             provider=provider,
+            model_configuration_id=model_configuration_id,
             input_per_mtok=None,
             output_per_mtok=None,
             cache_per_mtok=None,
@@ -111,6 +122,7 @@ def get_model_price_per_million(
     return ModelPrice(
         model=model,
         provider=provider,
+        model_configuration_id=model_configuration_id,
         input_per_mtok=_to_float(cost.get("input")),
         output_per_mtok=_to_float(cost.get("output")),
         cache_per_mtok=_to_float(cost.get("cache_read")),
@@ -173,19 +185,38 @@ def _catalog_cost_cents(
     Cache reads bill at cache_read (missing rate = undiscounted, bills at
     input); cache writes bill at cache_write (missing rate = no write
     premium, bills at input). Providers charging a long-context premium get
-    their context_over_200k rates applied to every bucket.
+    their tier rates applied to every bucket.
     """
+    # Most specific applicable rate card wins: the highest long-context
+    # threshold the prompt clears. `context_over_200k` is the legacy single
+    # tier; `tiers` entries carry arbitrary context thresholds. Upstream
+    # vendors the legacy block verbatim next to `tiers` — sometimes with a
+    # different (correct) tier threshold — so explicit tiers win and the
+    # legacy block only applies when no context tiers exist.
+    candidates: list[tuple[float, dict[str, Any]]] = []
+    for tier_entry in cost.get("tiers") or []:
+        tier_meta: dict[str, Any] = tier_entry.get("tier") or {}
+        size: Any = tier_meta.get("size")
+        if tier_meta.get("type") == "context" and isinstance(size, (int, float)):
+            candidates.append((float(size), tier_entry))
+    legacy_tier: dict[str, Any] | None = cost.get("context_over_200k")
+    if legacy_tier and not candidates:
+        candidates.append((_LONG_CONTEXT_THRESHOLD_TOKENS, legacy_tier))
     rates = cost
-    if prompt_tokens > _LONG_CONTEXT_THRESHOLD_TOKENS:
-        tier = cost.get("context_over_200k")
-        if tier:
-            rates = tier
+    best: float = -1.0
+    for threshold, tier_rates in candidates:
+        if prompt_tokens > threshold and threshold > best:
+            best = threshold
+            rates = tier_rates
 
     def _rate(key: str, fallback: float | None = None) -> float:
-        value = rates.get(key)
-        if value is None:
-            value = cost.get(key)
-        return float(value) if value is not None else (fallback or 0.0)
+        # Negative rates are upstream "unknown price" sentinels, never real —
+        # a negative tier rate defers to the base rate like a missing one.
+        for block in (rates, cost):
+            value = block.get(key)
+            if isinstance(value, (int, float)) and value >= 0:
+                return float(value)
+        return fallback or 0.0
 
     input_rate = _rate("input")
     output_rate = _rate("output")
@@ -219,11 +250,17 @@ def compute_cost_cents(
     flow: LLMFlow | str | None = None,
     image_count: int = 1,
     db_session: Session | None = None,
+    served_model: str | None = None,
+    model_configuration_id: int | None = None,
 ) -> tuple[float, float]:
     """Return (input_cost_cents, output_cost_cents) for an LLM call.
 
     prompt_tokens is the cache-inclusive provider total; the cache counts are
     subsets of it, not additions to it.
+
+    served_model is the model a router (openrouter/auto) actually served; the
+    catalog is priced by it. model_configuration_id is the configured model
+    (the router itself, for a router); an admin override on it wins.
 
     Resolution order: image pricing → admin override → model catalog → default
     fallback rates (0 unless set). Never raises (usage hot path)."""
@@ -242,9 +279,10 @@ def compute_cost_cents(
             prompt_tokens,
         )
 
-    if db_session is not None:
+    catalog_model: str = served_model or model
+    if db_session is not None and model_configuration_id is not None:
         try:
-            rates = cost_overrides.get_override(db_session, model, provider or "")
+            rates = cost_overrides.get_override(db_session, model_configuration_id)
         except Exception:
             logger.exception("Override lookup failed for model %s", model)
             rates = None
@@ -261,9 +299,9 @@ def compute_cost_cents(
         return 0.0, 0.0
 
     try:
-        cost = find_model_cost(provider or "", model)
+        cost = find_model_cost(provider or "", catalog_model)
     except Exception:
-        logger.exception("Catalog lookup failed for model %s", model)
+        logger.exception("Catalog lookup failed for model %s", catalog_model)
         cost = None
 
     if cost is not None:

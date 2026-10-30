@@ -5,10 +5,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import LLMModelFlowType
 from onyx.db.llm import (
     can_user_access_llm_provider,
     fetch_user_group_ids,
-    update_default_provider,
+    update_default_model,
     upsert_llm_provider,
 )
 from onyx.db.models import LLMProvider as LLMProviderModel
@@ -35,7 +36,7 @@ from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="LLM provider access control is enterprise only",
 )
 
@@ -67,7 +68,12 @@ def _create_llm_provider(
         db_session=db_session,
     )
     if is_default:
-        update_default_provider(_provider.id, default_model_name, db_session)
+        update_default_model(
+            provider_id=_provider.id,
+            model=default_model_name,
+            db_session=db_session,
+            flow_type=LLMModelFlowType.CHAT,
+        )
 
     provider = db_session.get(LLMProviderModel, _provider.id)
     if not provider:
@@ -80,7 +86,7 @@ def _create_persona(
     *,
     name: str,
     provider: LLMProviderModel,
-    model_name: str = "gpt-4o-mini",
+    model_name: str = "gpt-6-luna",
 ) -> Persona:
     model_config = db_session.scalar(
         select(ModelConfiguration).where(
@@ -126,7 +132,7 @@ def test_can_user_access_llm_provider_or_logic(
         default_provider = _create_llm_provider(
             db_session,
             name="default-provider",
-            default_model_name="gpt-4o",
+            default_model_name="gpt-6-luna",
             is_public=True,
             is_default=True,
         )
@@ -134,7 +140,7 @@ def test_can_user_access_llm_provider_or_logic(
         locked_provider = _create_llm_provider(
             db_session,
             name="locked-provider",
-            default_model_name="gpt-4o",
+            default_model_name="gpt-6-luna",
             is_public=False,
             is_default=False,
         )
@@ -142,7 +148,7 @@ def test_can_user_access_llm_provider_or_logic(
         restricted_provider = _create_llm_provider(
             db_session,
             name="restricted-provider",
-            default_model_name="gpt-4o-mini",
+            default_model_name="gpt-6-sol",
             is_public=False,
             is_default=False,
         )
@@ -151,11 +157,13 @@ def test_can_user_access_llm_provider_or_logic(
             db_session,
             name="allowed-persona",
             provider=restricted_provider,
+            model_name="gpt-6-sol",
         )
         blocked_persona = _create_persona(
             db_session,
             name="blocked-persona",
             provider=restricted_provider,
+            model_name="gpt-6-sol",
         )
 
         access_group = UserGroup(name="access-group")
@@ -272,7 +280,7 @@ def test_public_provider_with_persona_restrictions(
         public_restricted = _create_llm_provider(
             db_session,
             name="public-persona-restricted",
-            default_model_name="gpt-4o",
+            default_model_name="gpt-6-luna",
             is_public=True,
             is_default=True,
         )
@@ -335,7 +343,7 @@ def test_public_provider_without_persona_restrictions(
         public_unrestricted = _create_llm_provider(
             db_session,
             name="public-unrestricted",
-            default_model_name="gpt-4o",
+            default_model_name="gpt-6-luna",
             is_public=True,
             is_default=True,
         )
@@ -375,14 +383,14 @@ def test_get_llm_for_persona_falls_back_when_access_denied(
         default_provider = _create_llm_provider(
             db_session,
             name="default-provider",
-            default_model_name="gpt-4o",
+            default_model_name="gpt-6-luna",
             is_public=True,
             is_default=True,
         )
         restricted_provider = _create_llm_provider(
             db_session,
             name="restricted-provider",
-            default_model_name="gpt-4o-mini",
+            default_model_name="gpt-6-sol",
             is_public=False,
             is_default=False,
         )
@@ -391,6 +399,7 @@ def test_get_llm_for_persona_falls_back_when_access_denied(
             db_session,
             name="fallback-persona",
             provider=restricted_provider,
+            model_name="gpt-6-sol",
         )
 
         access_group = UserGroup(name="persona-group")
@@ -457,7 +466,7 @@ def test_list_llm_provider_basics_excludes_non_public_unrestricted(
         name="public-provider",
         is_public=True,
         set_as_default=True,
-        default_model_name="gpt-4o",
+        default_model_name="gpt-6-luna",
         user_performing_action=admin_user,
     )
 
@@ -510,7 +519,7 @@ def test_provider_delete_clears_persona_references(
         name="default-provider",
         is_public=True,
         set_as_default=True,
-        default_model_name="gpt-4o",
+        default_model_name="gpt-6-luna",
         user_performing_action=admin_user,
     )
 

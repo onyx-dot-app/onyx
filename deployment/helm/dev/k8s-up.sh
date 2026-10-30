@@ -2,7 +2,7 @@
 #
 # k8s-up.sh — bring up an Onyx dev cluster on the local machine.
 #
-# Idempotent. See docs/craft/dev/local-kubernetes.md for the full workflow.
+# Idempotent. See deployment/helm/dev/README.md for the full workflow.
 #
 # Usage:
 #   deployment/helm/dev/k8s-up.sh
@@ -12,7 +12,7 @@
 #   --cluster-name <name>          kind cluster name (default: onyx-dev)
 #   --namespace <ns>               k8s namespace (default: onyx)
 #   --opensearch-password <pw>     admin password on first install
-#                                  (default: generated, printed at the end)
+#                                  (default: generated and stored in a Secret)
 #   --skip-cluster-create          skip kind create (use an existing cluster)
 #   --skip-helm                    only create the cluster, don't install Onyx
 #
@@ -34,7 +34,7 @@ require() {
   local bin="$1"
   if ! command -v "$bin" >/dev/null 2>&1; then
     echo "error: '$bin' is required but not on PATH" >&2
-    echo "see docs/craft/dev/local-kubernetes.md for installation" >&2
+    echo "see deployment/helm/dev/README.md for installation" >&2
     exit 1
   fi
 }
@@ -58,8 +58,12 @@ while [[ $# -gt 0 ]]; do
 done
 
 require kind
-require helm
+if [[ "$SKIP_HELM" -eq 0 ]]; then
+  require helm
+  require telepresence
+fi
 require kubectl
+require python3
 
 # ---- 1. kind cluster ----
 
@@ -84,6 +88,13 @@ if [[ "$CURRENT_CTX" != "$EXPECTED_CTX" ]]; then
   echo "expected '$EXPECTED_CTX' — pass --cluster-name to target a different kind cluster" >&2
   exit 1
 fi
+
+# Kindnet handles network-policy packets; a CPU cap can stall sandbox egress.
+echo "removing the kindnet CPU limit ..."
+kubectl --context "$EXPECTED_CTX" -n kube-system patch daemonset kindnet \
+  --type=strategic \
+  -p '{"spec":{"template":{"spec":{"containers":[{"name":"kindnet-cni","resources":{"limits":{"cpu":null}}}]}}}}'
+kubectl --context "$EXPECTED_CTX" -n kube-system rollout status daemonset/kindnet --timeout=120s
 
 # ---- 2. helm install / upgrade ----
 
@@ -125,7 +136,7 @@ helm repo add code-interpreter https://onyx-dot-app.github.io/python-sandbox/  >
 helm repo update >/dev/null
 
 echo "updating chart dependencies ..."
-helm dependency update "$CHART_DIR" >/dev/null
+helm dependency build "$CHART_DIR" >/dev/null
 
 # Generate a password on first install only; upgrades reuse the existing Secret.
 PW_FLAG=()
@@ -133,7 +144,7 @@ if ! kubectl -n "$NAMESPACE" get secret onyx-opensearch >/dev/null 2>&1; then
   if [[ -z "$OPENSEARCH_PASSWORD" ]]; then
     # Prefix 'Aa1!' satisfies OpenSearch's complexity rule (upper/lower/digit/symbol).
     OPENSEARCH_PASSWORD="Aa1!$(openssl rand -hex 12)"
-    echo "generated opensearch admin password: $OPENSEARCH_PASSWORD"
+    echo "generated an OpenSearch admin password (value not printed)"
     echo "(stored in k8s Secret onyx-opensearch — retrieve with:"
     echo "  kubectl -n $NAMESPACE get secret onyx-opensearch -o jsonpath='{.data.opensearch_admin_password}' | base64 -d)"
   fi
@@ -154,6 +165,7 @@ for attempt in $(seq 1 "$HELM_ATTEMPTS"); do
   if helm upgrade --install onyx "$CHART_DIR" \
       -n "$NAMESPACE" \
       -f "$VALUES_OVERLAY" \
+      --set-string "configMap.SANDBOX_CONTAINER_IMAGE=${SANDBOX_IMAGE:-onyxdotapp/sandbox:dev}" \
       ${PW_FLAG[@]+"${PW_FLAG[@]}"}; then
     break
   fi
@@ -192,46 +204,18 @@ if command -v telepresence >/dev/null 2>&1; then
       else
         echo "  traffic-manager install failed after $TP_ATTEMPTS attempts; run manually:" >&2
         echo "    telepresence helm install --context kind-$CLUSTER_NAME" >&2
+        exit 1
       fi
     done
   fi
-else
-  echo "note: telepresence CLI not found; skipping traffic-manager install."
-  echo "  install the OSS binary:"
-  echo "    curl -fLo /opt/homebrew/bin/telepresence \\"
-  echo "      https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-darwin-arm64"
-  echo "    chmod +x /opt/homebrew/bin/telepresence"
-  echo "  see docs/craft/dev/local-kubernetes.md for the full setup"
+
 fi
 
-# ---- 4. next steps ----
+# ---- 4. wait for usable infrastructure ----
 
-cat <<EOF
+python3 "$SCRIPT_DIR/dev.py" --cluster-name "$CLUSTER_NAME" --namespace "$NAMESPACE" \
+  ready --stage infrastructure
 
-cluster: kind-$CLUSTER_NAME
-namespace: $NAMESPACE
-context: $(kubectl config current-context)
-
-next steps:
-  1. watch pods come up:
-       kubectl -n $NAMESPACE get pods -w
-
-  2. (optional) connect your host to cluster DNS so you can run api_server
-     locally and have it reach in-cluster services. Traffic-manager was
-     installed above; just connect:
-       telepresence connect -n $NAMESPACE
-
-  3. for features that depend on api_server-source pod identity (e.g.
-     NetworkPolicies, in-pod auth via injected env), intercept instead:
-       telepresence intercept onyx-api-server \\
-         --namespace $NAMESPACE \\
-         --port 8080:8080
-
-  4. open vscode and run the "Run All Onyx Services" launch profile.
-     Before first run, copy .vscode/.env.k8s.template to .vscode/.env.k8s
-     and fill in the <REPLACE THIS> values.
-
-teardown:
-  deployment/helm/dev/k8s-down.sh
-
-EOF
+echo "Cluster: kind-$CLUSTER_NAME; namespace: $NAMESPACE"
+echo "Start local services with the VS Code (k8s) profiles or make craft-api."
+echo "Run make craft-ready after starting the API and frontend."

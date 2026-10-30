@@ -28,6 +28,10 @@ inputs:
     description: "Set to 'true' to disable docker build cache"
     required: false
     default: "false"
+outputs:
+  digest:
+    description: "Digest of the pushed image. Consumers pull <runs-on-ecr-cache>@<digest>, never the mutable tag."
+    value: ${{ steps.build.outputs.digest }}
 runs:
   using: "composite"
   steps:
@@ -55,6 +59,7 @@ runs:
         ecr-registry: ${{ inputs.ecr-registry }}
 
     - name: Build and push Devcontainer Docker image
+      id: build
       uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
       with:
         context: .devcontainer
@@ -63,14 +68,18 @@ runs:
         build-args: |
           BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
         tags: ${{ inputs.runs-on-ecr-cache }}:${{ inputs.tag-prefix }}-${{ inputs.run-id }}
+        # Reproducible builds would otherwise retag one digest every run and hit ECR's 1000-tags-per-image cap.
+        labels: ci.run-id=${{ inputs.run-id }}
         # Attestations attach as ECR referrers to the image digest, which is
         # stable across runs and caps out at 100 per subject.
         provenance: false
         sbom: false
+        # Any pull_request job can push to the RunsOn ECR cache, so only fork PR runs,
+        # which get no secrets, import it. Other runs import only the published image.
         cache-from: |
-          type=registry,ref=${{ inputs.runs-on-ecr-cache }}:devcontainer-cache-${{ inputs.github-sha }}
-          type=registry,ref=${{ inputs.runs-on-ecr-cache }}:devcontainer-cache-${{ steps.format-branch.outputs.cache-suffix }}
-          type=registry,ref=${{ inputs.runs-on-ecr-cache }}:devcontainer-cache
+          ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:devcontainer-cache-{1}', inputs.runs-on-ecr-cache, inputs.github-sha) || '' }}
+          ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:devcontainer-cache-{1}', inputs.runs-on-ecr-cache, steps.format-branch.outputs.cache-suffix) || '' }}
+          ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:devcontainer-cache', inputs.runs-on-ecr-cache) || '' }}
           type=registry,ref=${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/onyx-devcontainer:latest
         cache-to: |
           type=registry,ref=${{ inputs.runs-on-ecr-cache }}:devcontainer-cache-${{ inputs.github-sha }},mode=max

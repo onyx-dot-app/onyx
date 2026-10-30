@@ -1,26 +1,41 @@
+from collections.abc import Callable, Mapping
 from functools import partial
+from typing import cast
 from unittest.mock import MagicMock, patch
+
+import pytest
+from litellm.types.utils import ModelResponse as LiteLLMModelResponse
+from pydantic import JsonValue
 
 from onyx.chat.incognito import (
     BIFROST_DISABLE_CONTENT_LOGGING_HEADER,
     incognito_llm_extra_headers,
     incognito_llm_request_policy,
 )
-from onyx.db.enums import IncognitoRecordMode
+from onyx.db.enums import IncognitoRecordMode, LLMModelFlowType
+from onyx.db.models import LLMModelFlow, ModelConfiguration
+from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.llm.constants import LlmProviderNames
+from onyx.llm.decisions.client import DecisionClient
 from onyx.llm.factory import (
     _build_provider_extra_headers,
+    get_decision_client,
     get_default_llm,
+    get_default_utility_llm,
     get_llm,
     get_llm_for_persona,
+    get_search_selection_llm,
     llm_from_provider,
 )
-from onyx.llm.interfaces import LlmRequestPolicy
+from onyx.llm.interfaces import LLM, LLMConfig, LlmRequestPolicy
+from onyx.llm.models import GenerationRequest, ReasoningEffort, UserMessage
+from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.well_known_providers.constants import (
     BIFROST_PROVIDER_NAME,
     LM_STUDIO_API_KEY_CONFIG_KEY,
 )
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
+from onyx.utils.sensitive import SensitiveValue
 
 
 def test_build_provider_extra_headers_adds_bearer_for_lm_studio_api_key() -> None:
@@ -89,9 +104,205 @@ def _build_provider_view(
     )
 
 
+def test_search_selection_unset_preserves_fallback_instance() -> None:
+    fallback = MagicMock(spec=LLM)
+    with (
+        patch("onyx.llm.factory.get_session_with_current_tenant"),
+        patch("onyx.llm.factory.fetch_default_model", return_value=None),
+        patch("onyx.llm.factory.llm_from_provider") as build_llm,
+        patch("onyx.llm.factory.check_llm_cost_limit_for_provider") as check_cost,
+    ):
+        assert get_search_selection_llm(fallback=fallback) is fallback
+    build_llm.assert_not_called()
+    check_cost.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("resolve", "flow_type"),
+    [
+        (
+            partial(get_default_utility_llm, LLMModelFlowType.CHAT_NAMING),
+            LLMModelFlowType.CHAT_NAMING,
+        ),
+        (get_search_selection_llm, LLMModelFlowType.SEARCH_SELECTION),
+    ],
+)
+def test_utility_llm_uses_designated_provider_policy_headers_and_cost_key(
+    resolve: Callable[..., LLM | None], flow_type: LLMModelFlowType
+) -> None:
+    utility_llm = MagicMock(spec=LLM)
+    model = MagicMock()
+    model.name = "test-model"
+    provider = _build_provider_view(LlmProviderNames.OPENAI, 16384)
+    provider.api_key = "utility-provider-key"
+    headers = {"X-Request-ID": "utility-request"}
+    policy_fn = partial(incognito_llm_request_policy, IncognitoRecordMode.USAGE_ONLY)
+    with (
+        patch("onyx.llm.factory.get_session_with_current_tenant") as session_factory,
+        patch("onyx.llm.factory.fetch_default_model", return_value=model) as fetch,
+        patch("onyx.llm.factory.LLMProviderView.from_model", return_value=provider),
+        patch("onyx.llm.factory.llm_from_provider", return_value=utility_llm) as build,
+        patch("onyx.llm.factory.check_llm_cost_limit_for_provider") as check_cost,
+        patch("onyx.llm.factory.get_current_tenant_id", return_value="utility-tenant"),
+        patch("onyx.llm.factory.can_user_access_llm_provider") as check_visibility,
+    ):
+        if flow_type == LLMModelFlowType.SEARCH_SELECTION:
+            result = resolve(
+                fallback=MagicMock(spec=LLM),
+                additional_headers=headers,
+                policy_fn=policy_fn,
+            )
+        else:
+            result = resolve(additional_headers=headers, policy_fn=policy_fn)
+        assert result is utility_llm
+        session = session_factory.return_value.__enter__.return_value
+        fetch.assert_called_once_with(session, flow_type)
+        check_cost.assert_called_once_with(
+            db_session=session,
+            tenant_id="utility-tenant",
+            llm_provider_api_key="utility-provider-key",
+        )
+        build.assert_called_once_with(
+            model_name="test-model",
+            llm_provider=provider,
+            additional_headers=headers,
+            policy_fn=policy_fn,
+        )
+        check_visibility.assert_not_called()
+
+
+def test_search_selection_unset_does_not_use_naming_designation() -> None:
+    fallback = MagicMock(spec=LLM)
+    with (
+        patch("onyx.llm.factory.get_session_with_current_tenant") as sessions,
+        patch(
+            "onyx.llm.factory.fetch_default_model",
+            side_effect=lambda _, flow: (
+                MagicMock() if flow == LLMModelFlowType.CHAT_NAMING else None
+            ),
+        ) as fetch,
+        patch("onyx.llm.factory.llm_from_provider") as build,
+        patch("onyx.llm.factory.check_llm_cost_limit_for_provider") as cost,
+    ):
+        assert get_search_selection_llm(fallback=fallback) is fallback
+    fetch.assert_called_once_with(
+        sessions.return_value.__enter__.return_value, LLMModelFlowType.SEARCH_SELECTION
+    )
+    build.assert_not_called()
+    cost.assert_not_called()
+
+
+def test_decision_client_unset_has_no_fallback() -> None:
+    with (
+        patch("onyx.llm.factory.get_session_with_current_tenant") as sessions,
+        patch("onyx.llm.factory.fetch_default_model", return_value=None) as fetch,
+        patch("onyx.llm.factory.get_default_llm") as fallback,
+        patch("onyx.llm.factory.DecisionClient") as client,
+    ):
+        assert get_decision_client() is None
+    fetch.assert_called_once_with(
+        sessions.return_value.__enter__.return_value, LLMModelFlowType.DECISION
+    )
+    fallback.assert_not_called()
+    client.assert_not_called()
+
+
+def test_decision_client_uses_selected_provider_and_model() -> None:
+    model = ModelConfiguration(id=22, name="typesafe/jev-latest", is_visible=False)
+    LLMProviderModel(
+        id=12,
+        provider="openrouter",
+        api_key=SensitiveValue(
+            encrypted_bytes=b"test-key", decrypt_fn=lambda value: value.decode()
+        ),
+        api_base="https://openrouter.ai/api/v1",
+        model_configurations=[model],
+    )
+    with (
+        patch("onyx.llm.factory.get_session_with_current_tenant"),
+        patch("onyx.llm.factory.fetch_default_model", return_value=model),
+        patch("onyx.llm.factory.check_llm_cost_limit_for_provider") as cost,
+        patch(
+            "onyx.llm.decisions.factory.DecisionClient", wraps=DecisionClient
+        ) as build,
+    ):
+        client = get_decision_client(additional_headers={"X-Test": "value"})
+    assert client is not None
+    assert client.model == "typesafe/jev-latest"
+    assert client.url == "https://openrouter.ai/api/alpha/decisions"
+    assert build.call_args.kwargs["api_key"] == "test-key"
+    assert build.call_args.kwargs["extra_headers"]["X-Test"] == "value"
+    assert build.call_args.kwargs["extra_headers"]["HTTP-Referer"] == "https://onyx.app"
+    cost.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "resolve",
+    [
+        partial(get_default_utility_llm, LLMModelFlowType.CHAT_NAMING),
+        get_search_selection_llm,
+    ],
+)
+def test_utility_llm_preserves_selected_dated_model_configuration(
+    resolve: Callable[..., LLM | None],
+) -> None:
+    model = ModelConfiguration(
+        id=2,
+        name="gpt-6-luna-2024-07-18",
+        is_visible=False,
+        max_input_tokens=2048,
+        temperature_default=0.4,
+        reasoning_effort_default=ReasoningEffort.LOW,
+        reasoning_effort_max=ReasoningEffort.HIGH,
+        is_router=True,
+        llm_model_flows=[
+            LLMModelFlow(llm_model_flow_type=LLMModelFlowType.CHAT),
+            LLMModelFlow(llm_model_flow_type=LLMModelFlowType.REASONING),
+        ],
+    )
+    LLMProviderModel(
+        id=1,
+        name="test-provider",
+        provider=LlmProviderNames.OPENAI,
+        is_public=True,
+        is_auto_mode=False,
+        model_configurations=[
+            ModelConfiguration(
+                id=1,
+                name="gpt-6-luna",
+                is_visible=True,
+                max_input_tokens=128000,
+                is_router=False,
+            ),
+            model,
+        ],
+    )
+    with (
+        patch("onyx.llm.factory.get_session_with_current_tenant"),
+        patch("onyx.llm.factory.fetch_default_model", return_value=model),
+        patch("onyx.llm.factory.check_llm_cost_limit_for_provider"),
+        patch("onyx.llm.factory.get_current_tenant_id", return_value="utility-tenant"),
+        patch("onyx.llm.factory.get_llm") as build,
+    ):
+        result = (
+            resolve(fallback=MagicMock(spec=LLM))
+            if resolve is get_search_selection_llm
+            else resolve()
+        )
+        assert result is build.return_value
+    kwargs = build.call_args.kwargs
+    assert kwargs["model"] == "gpt-6-luna-2024-07-18"
+    assert kwargs["max_input_tokens"] == 2048
+    assert kwargs["temperature"] == 0.4
+    assert kwargs["reasoning_effort_default"] == ReasoningEffort.LOW
+    assert kwargs["reasoning_effort_max"] == ReasoningEffort.HIGH
+    assert kwargs["supports_reasoning"] is True
+    assert kwargs["is_router"] is True
+
+
 def test_get_llm_sets_ollama_num_ctx_model_kwarg() -> None:
     with patch("onyx.llm.factory.LitellmLLM") as mock_litellm_llm:
-        get_llm(
+        model = get_llm(
             provider=LlmProviderNames.OLLAMA_CHAT,
             model="test-model",
             deployment_name=None,
@@ -99,6 +310,7 @@ def test_get_llm_sets_ollama_num_ctx_model_kwarg() -> None:
             model_kwargs={"num_ctx": 8192},
         )
 
+        assert model is mock_litellm_llm.return_value
         kwargs = mock_litellm_llm.call_args.kwargs
         assert kwargs["model_kwargs"] == {"num_ctx": 8192}
 
@@ -107,7 +319,7 @@ def test_get_llm_does_not_set_ollama_num_ctx_for_non_ollama_provider() -> None:
     with patch("onyx.llm.factory.LitellmLLM") as mock_litellm_llm:
         get_llm(
             provider=LlmProviderNames.OPENAI,
-            model="gpt-4o-mini",
+            model="gpt-6-luna",
             deployment_name=None,
             max_input_tokens=4096,
         )
@@ -186,7 +398,7 @@ def test_get_llm_policy_headers_win_over_every_other_source() -> None:
     ):
         get_llm(
             provider=BIFROST_PROVIDER_NAME,
-            model="gpt-4o",
+            model="gpt-6-sol",
             deployment_name=None,
             max_input_tokens=4096,
             additional_headers={header: "false"},
@@ -201,7 +413,7 @@ def test_get_llm_without_policy_headers_keeps_the_existing_merge() -> None:
     with patch("onyx.llm.factory.LitellmLLM") as mock_litellm_llm:
         get_llm(
             provider="openai",
-            model="gpt-4o",
+            model="gpt-6-sol",
             deployment_name=None,
             max_input_tokens=4096,
             additional_headers={"x-request-scoped": "a"},
@@ -221,7 +433,7 @@ def test_llm_from_provider_resolves_policy_headers_for_the_winning_provider() ->
 
     with patch("onyx.llm.factory.get_llm") as mock_get_llm:
         llm_from_provider(
-            model_name="gpt-4o",
+            model_name="gpt-6-sol",
             llm_provider=provider,
             policy_fn=partial(
                 incognito_llm_request_policy, IncognitoRecordMode.USAGE_ONLY
@@ -241,7 +453,7 @@ def test_llm_from_provider_without_policy_fn_passes_none() -> None:
     )
 
     with patch("onyx.llm.factory.get_llm") as mock_get_llm:
-        llm_from_provider(model_name="gpt-4o", llm_provider=provider)
+        llm_from_provider(model_name="gpt-6-sol", llm_provider=provider)
 
         assert mock_get_llm.call_args.kwargs["policy_headers"] is None
 
@@ -347,7 +559,7 @@ class TestPolicyFnForwarding:
     def test_get_default_llm_forwards(self) -> None:
         with (
             patch("onyx.llm.factory.get_session_with_current_tenant"),
-            patch("onyx.llm.factory.fetch_default_llm_model", return_value=MagicMock()),
+            patch("onyx.llm.factory.fetch_default_model", return_value=MagicMock()),
             patch("onyx.llm.factory.LLMProviderView"),
             patch("onyx.llm.factory.llm_from_provider") as mock_from_provider,
         ):
@@ -355,3 +567,205 @@ class TestPolicyFnForwarding:
             assert (
                 mock_from_provider.call_args.kwargs["policy_fn"] is _sentinel_policy_fn
             )
+
+
+def test_client_config_resolves_capabilities() -> None:
+    from onyx.llm.multi_llm import LitellmLLM
+
+    with patch(
+        "onyx.llm.multi_llm.get_model_map",
+        return_value={"custom-model": {"supports_vision": True}},
+    ):
+        client: LitellmLLM = LitellmLLM(
+            api_key="secret-key",
+            model_provider="openai",
+            model_name="custom-model",
+            max_input_tokens=1000,
+        )
+    metadata: LLMConfig = client.config
+    assert client.config == metadata
+    assert client.config is not metadata
+    assert metadata.supports_images is True
+    assert metadata.api_key == "secret-key"
+
+
+def test_factory_carries_configured_vision_support_to_client() -> None:
+    provider: LLMProviderView = _build_provider_view("openai", 4096)
+    provider.model_configurations[0].supports_image_input = True
+    with patch("onyx.llm.factory.LitellmLLM") as create_client:
+        llm_from_provider("test-model", provider)
+    assert create_client.call_args.kwargs["supports_images"] is True
+
+
+def test_factory_falls_back_to_catalog_without_configured_vision() -> None:
+    provider: LLMProviderView = _build_provider_view("openai", 4096)
+    provider.model_configurations[0].supports_image_input = False
+    with patch(
+        "onyx.llm.multi_llm.get_model_map",
+        return_value={"test-model": {"supports_vision": True}},
+    ):
+        client: LitellmLLM = llm_from_provider("test-model", provider)
+    assert client.config.supports_images is True
+
+
+def test_client_config_is_a_defensive_snapshot() -> None:
+    from onyx.llm.multi_llm import LitellmLLM
+
+    settings: dict[str, str] = {"custom_api_key": "original-key"}
+    client: LitellmLLM = LitellmLLM(
+        api_key="secret-key",
+        model_provider="openai",
+        model_name="gpt-6-astra",
+        max_input_tokens=1000,
+        custom_config=settings,
+    )
+    settings["custom_api_key"] = "changed-input"
+    snapshot: LLMConfig = client.config
+    assert snapshot.custom_config == {"custom_api_key": "original-key"}
+    snapshot.custom_config["custom_api_key"] = "changed-snapshot"
+    assert client.config.custom_config == {"custom_api_key": "original-key"}
+
+
+@pytest.mark.parametrize(
+    "catalog, override, expected",
+    [
+        ({}, None, None),
+        ({"supports_vision": None}, None, None),
+        ({"supports_vision": False}, None, False),
+        ({"supports_vision": True}, False, False),
+        ({"supports_vision": False}, True, True),
+    ],
+)
+def test_client_image_capability_fallback(
+    catalog: dict[str, bool | None], override: bool | None, expected: bool | None
+) -> None:
+    with patch(
+        "onyx.llm.multi_llm.get_model_map", return_value={"test-model": catalog}
+    ) as model_map:
+        client: LitellmLLM = get_llm(
+            provider="openai",
+            model="test-model",
+            deployment_name=None,
+            max_input_tokens=4096,
+            supports_images=override,
+        )
+    assert client.config.supports_images is expected
+    if override is not None:
+        model_map.assert_not_called()
+    else:
+        model_map.assert_called_once()
+
+
+def test_client_resolves_image_capability_from_deployment_name() -> None:
+    with patch(
+        "onyx.llm.multi_llm.get_model_map",
+        return_value={"known-model": {"supports_vision": True}},
+    ):
+        client: LitellmLLM = get_llm(
+            provider="openai",
+            model="deployment-alias",
+            deployment_name="known-model",
+            max_input_tokens=4096,
+        )
+    assert client.config.supports_images is True
+
+
+def test_factory_captures_nested_request_and_policy_settings() -> None:
+    metadata: dict[str, JsonValue] = {"source": "caller"}
+    kwargs: dict[str, JsonValue] = {"metadata": metadata}
+    policy_body: dict[str, JsonValue] = {"store": False}
+    policy_kwargs: dict[str, JsonValue] = {"extra_body": policy_body}
+    client: LitellmLLM = get_llm(
+        provider="openai",
+        model="gpt-6-astra",
+        deployment_name=None,
+        max_input_tokens=4096,
+        model_kwargs=kwargs,
+        policy_model_kwargs=policy_kwargs,
+    )
+    metadata["source"] = "changed"
+    policy_body["store"] = True
+    response: LiteLLMModelResponse = LiteLLMModelResponse(
+        id="captured-settings",
+        created=1,
+        choices=[
+            {
+                "message": {"role": "assistant", "content": "done"},
+                "finish_reason": "stop",
+            }
+        ],
+    )
+    with (
+        patch("onyx.llm.multi_llm._env_injection_enabled", return_value=False),
+        patch("litellm.completion", return_value=response) as completion,
+    ):
+        assert (
+            client.invoke(
+                GenerationRequest(messages=[UserMessage(content="test")])
+            ).text
+            == "done"
+        )
+    sent: Mapping[str, object] = completion.call_args.kwargs
+    assert sent["metadata"] == {"source": "caller"}
+    body: Mapping[str, object] = cast(Mapping[str, object], sent["extra_body"])
+    assert body["store"] is False
+
+
+def test_client_does_not_modify_caller_model_kwargs() -> None:
+    metadata: dict[str, JsonValue] = {"source": "caller"}
+    kwargs: dict[str, JsonValue] = {"metadata": metadata}
+    LitellmLLM(
+        api_key=None,
+        model_provider="ollama_chat",
+        model_name="unknown-model",
+        max_input_tokens=4096,
+        model_kwargs=kwargs,
+    )
+    assert kwargs == {"metadata": {"source": "caller"}}
+
+
+def test_client_captures_nested_deployment_settings_after_merging() -> None:
+    deployment: list[JsonValue] = ["original"]
+    defaults: dict[str, JsonValue] = {"enabled": True}
+    deployment_body: dict[str, JsonValue] = {
+        "metadata": {"deployment": deployment, "source": "deployment"},
+        "default_only": defaults,
+    }
+    request_metadata: dict[str, JsonValue] = {"source": "request"}
+    kwargs: dict[str, JsonValue] = {
+        "extra_body": {"metadata": request_metadata},
+    }
+    client: LitellmLLM = LitellmLLM(
+        api_key="secret-key",
+        model_provider="openai",
+        model_name="gpt-6-astra",
+        max_input_tokens=4096,
+        extra_body=deployment_body,
+        model_kwargs=kwargs,
+    )
+    assert deployment_body == {
+        "metadata": {"deployment": ["original"], "source": "deployment"},
+        "default_only": {"enabled": True},
+    }
+    assert kwargs == {"extra_body": {"metadata": {"source": "request"}}}
+    deployment.append("changed")
+    defaults["enabled"] = False
+    request_metadata["source"] = "changed"
+    response: LiteLLMModelResponse = LiteLLMModelResponse(
+        choices=[{"message": {"role": "assistant", "content": "done"}}],
+    )
+    with (
+        patch("onyx.llm.multi_llm._env_injection_enabled", return_value=False),
+        patch("litellm.completion", return_value=response) as completion,
+    ):
+        assert (
+            client.invoke(
+                GenerationRequest(messages=[UserMessage(content="test")])
+            ).text
+            == "done"
+        )
+    sent: Mapping[str, object] = completion.call_args.kwargs
+    assert sent["extra_body"] == {
+        "metadata": {"deployment": ["original"], "source": "request"},
+        "default_only": {"enabled": True},
+    }

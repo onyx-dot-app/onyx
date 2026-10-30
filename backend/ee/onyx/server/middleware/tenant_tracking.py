@@ -1,10 +1,11 @@
 import asyncio
 import logging
 import sys
-from collections.abc import Awaitable, Callable
+from contextvars import Token
 
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from ee.onyx.auth.users import decode_anonymous_user_jwt_token
 from ee.onyx.configs.multi_tenant_gating_config import (
@@ -15,6 +16,12 @@ from onyx.auth.utils import extract_tenant_from_auth_header
 from onyx.configs.constants import ANONYMOUS_USER_COOKIE_NAME
 from onyx.db.engine.sql_engine import is_valid_schema_name
 from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import (
+    OnyxError,
+    log_onyx_error,
+    onyx_error_to_json_response,
+)
+from onyx.oauth_provider.auth import oauth_provider_tenant_from_request
 from onyx.redis.redis_pool import (
     retrieve_auth_token_data_from_bearer,
     retrieve_auth_token_data_from_redis,
@@ -26,36 +33,45 @@ from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 # Unauthenticated, non-tenant-scoped endpoints (LB/Prometheus probes, API docs),
 # so tenant resolution is skipped for them.
 TENANT_RESOLUTION_SKIP_PATHS = frozenset(
-    {"/health", "/health/ready", "/metrics", "/openapi.json"}
+    {
+        "/health",
+        "/health/ready",
+        "/metrics",
+        "/openapi.json",
+        "/oauth-provider/metadata",
+        "/oauth-provider/register",
+        "/oauth-provider/authorize",
+        "/oauth-provider/token",
+        "/oauth-provider/revoke",
+    }
 )
 
 
-def add_api_server_tenant_id_middleware(
-    app: FastAPI, logger: logging.LoggerAdapter
-) -> None:
-    @app.middleware("http")
-    async def set_tenant_id(
-        request: Request, call_next: Callable[[Request], Awaitable[Response]]
-    ) -> Response:
-        """Extracts the tenant id from multiple locations and sets the context var.
+def tenant_id_middleware(app: ASGIApp, logger: logging.LoggerAdapter) -> ASGIApp:
+    async def middleware(scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await app(scope, receive, send)
+            return
 
-        This is very specific to the api server and probably not something you'd want
-        to use elsewhere.
-        """
+        request = Request(scope)
+        response_started = False
+        token: Token[str | None] | None = None
+
+        async def send_with_status(message: Message) -> None:
+            nonlocal response_started
+            if message["type"] == "http.response.start":
+                response_started = True
+            await send(message)
+
         try:
-            # Strip the prefix first: with APP_API_PREFIX set these arrive as
-            # /<prefix>/health, which would otherwise miss the skip list and
-            # send probes through the Redis session lookup.
-            if strip_api_prefix(request.url.path) in TENANT_RESOLUTION_SKIP_PATHS:
-                CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA)
-                return await call_next(request)
-
-            if MULTI_TENANT:
+            skip_resolution = (
+                strip_api_prefix(request.url.path) in TENANT_RESOLUTION_SKIP_PATHS
+            )
+            if MULTI_TENANT and not skip_resolution:
                 tenant_id = await _get_tenant_id_from_request(request, logger)
             else:
                 tenant_id = POSTGRES_DEFAULT_SCHEMA
-
-            CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+            token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
             # Block tenants whose subscription has lapsed (`application_status =
             # GATED_ACCESS` in the cloud control plane → `gated_tenants` Redis
@@ -91,7 +107,7 @@ def add_api_server_tenant_id_middleware(
                         request.url.path,
                     )
                     code, status = OnyxErrorCode.SUBSCRIPTION_INACTIVE.value
-                    return JSONResponse(
+                    response = JSONResponse(
                         status_code=status,
                         content={
                             "error_code": code,
@@ -99,11 +115,24 @@ def add_api_server_tenant_id_middleware(
                         },
                     )
 
-            return await call_next(request)
+                    await response(scope, receive, send_with_status)
+                    return
 
-        except Exception as e:
-            logger.exception("Error in tenant ID middleware: %s", str(e))
+            await app(scope, receive, send_with_status)
+        except OnyxError as error:
+            if response_started:
+                raise
+            log_onyx_error(error)
+            await onyx_error_to_json_response(error)(scope, receive, send)
+        except Exception as exc:
+            if not response_started:
+                logger.exception("Error in tenant ID middleware: %s", str(exc))
             raise
+        finally:
+            if token is not None:
+                CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+    return middleware
 
 
 def _is_path_allowed(path: str) -> bool:
@@ -123,6 +152,10 @@ async def _get_tenant_id_from_request(
     it has not authenticated to. An unauthenticated request resolves to the
     default schema, which owns no workspace data.
     """
+    mcp_tenant = await oauth_provider_tenant_from_request(request)
+    if mcp_tenant is not None:
+        return mcp_tenant
+
     # Check for API key or PAT in Authorization header
     tenant_id = extract_tenant_from_auth_header(request)
     if tenant_id is not None:

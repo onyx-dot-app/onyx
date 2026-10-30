@@ -1,6 +1,14 @@
+import json
+from pathlib import Path
 from typing import Any
 
-from scripts.sync_price_table import merge_litellm
+import pytest
+from scripts.sync_price_table import (
+    _build_provider_section,
+    _preserve_unbounded_flags,
+    merge_litellm,
+    merge_openrouter,
+)
 
 
 def _providers() -> dict[str, Any]:
@@ -43,7 +51,7 @@ def test_merge_litellm_skips_non_gap_fill_chat_models() -> None:
         {
             "bedrock/ai21.j2-mid-v1": _chat_entry("bedrock"),
             "ft:gpt-4.1-2025-04-14": _chat_entry("openai"),
-            "eu/gpt-5": _chat_entry("openai"),
+            "eu/gpt-6-sol": _chat_entry("openai"),
             "gpt-retired": _chat_entry("openai", deprecation_date="2020-01-01"),
             "gpt-unpriced": _chat_entry("openai", output_cost_per_token=None),
         },
@@ -68,3 +76,180 @@ def test_merge_litellm_keeps_existing_rates() -> None:
         "output": 15.0,
         "cache_read": 0.3,
     }
+
+
+def _or_model(
+    model_id: str,
+    *,
+    tokenizer: str = "GPT",
+    context_length: int | None = 1_000_000,
+    price: str = "0.000001",
+) -> dict[str, Any]:
+    return {
+        "id": model_id,
+        "context_length": context_length,
+        "architecture": {"tokenizer": tokenizer},
+        "top_provider": {"context_length": context_length},
+        "pricing": {"prompt": price, "completion": price},
+        "supported_parameters": ["tools"],
+    }
+
+
+def _openrouter_section() -> dict[str, Any]:
+    return {"openrouter": {"models": {}, "aliases": {}}}
+
+
+def test_merge_openrouter_flags_endpointless_routers() -> None:
+    providers: dict[str, Any] = _openrouter_section()
+    models: dict[str, Any] = providers["openrouter"]["models"]
+    models["vendor/free-router"] = {"mode": "chat"}  # already vendored
+    models["vendor/real-model"] = {"mode": "chat", "unbounded": True}
+    merge_openrouter(
+        providers,
+        [
+            _or_model(
+                "vendor/free-router",
+                tokenizer="Router",
+                context_length=None,
+                price="0",
+            ),
+            _or_model("vendor/new-router", tokenizer="Router", context_length=None),
+            # Same tokenizer but a declared endpoint: not unbounded, and a
+            # stale flag on an existing entry is cleared.
+            _or_model("vendor/real-model", tokenizer="Router"),
+            _or_model("vendor/boring-model"),
+        ],
+    )
+
+    assert models["vendor/free-router"]["unbounded"] is True
+    assert models["vendor/new-router"]["unbounded"] is True
+    assert "unbounded" not in models["vendor/real-model"]
+    assert "unbounded" not in models["vendor/boring-model"]
+
+
+def test_preserve_unbounded_flags_survives_feed_outage(tmp_path: Path) -> None:
+    """A failed OpenRouter fetch must not drop router flags the merge can no
+    longer re-derive — they carry over from the vendored file."""
+    providers: dict[str, Any] = _openrouter_section()
+    models: dict[str, Any] = providers["openrouter"]["models"]
+    models["openrouter/auto"] = {"mode": "chat"}
+    models["vendor/real-model"] = {"mode": "chat"}
+    (tmp_path / "openrouter.json").write_text(
+        json.dumps({"models": {"openrouter/auto": {"unbounded": True}}})
+    )
+
+    _preserve_unbounded_flags(providers, tmp_path)
+
+    assert models["openrouter/auto"]["unbounded"] is True
+    assert "unbounded" not in models["vendor/real-model"]
+
+
+def test_preserve_unbounded_flags_fails_on_corrupt_vendored(tmp_path: Path) -> None:
+    """A missing vendored file is fine (first sync); an unreadable one must
+    fail loudly rather than silently dropping flags."""
+    providers: dict[str, Any] = _openrouter_section()
+
+    # No vendored file at all — returns without touching entries.
+    _preserve_unbounded_flags(providers, tmp_path)
+
+    (tmp_path / "openrouter.json").write_text("{not json")
+    with pytest.raises(json.JSONDecodeError):
+        _preserve_unbounded_flags(providers, tmp_path)
+
+
+def test_merge_openrouter_drops_negative_prices() -> None:
+    """Upstream's -1 'unknown price' sentinel must not land as a real rate."""
+    providers: dict[str, Any] = _openrouter_section()
+    models: dict[str, Any] = providers["openrouter"]["models"]
+    mixed: dict[str, Any] = _or_model("vendor/mixed", price="0.000001")
+    mixed["pricing"]["prompt"] = "-1"
+    merge_openrouter(
+        providers,
+        [
+            _or_model("vendor/paid-model", price="0.000001"),
+            mixed,
+            _or_model("vendor/sentinel-only", price="-1"),
+        ],
+    )
+
+    assert models["vendor/paid-model"]["cost"] == {"input": 1.0, "output": 1.0}
+    # Sentinel field dropped; the real rate stays.
+    assert models["vendor/mixed"]["cost"] == {"output": 1.0}
+    # Both rates sentinel -> vendored without a cost block (limits and
+    # router flags still carry over).
+    assert "cost" not in models["vendor/sentinel-only"]
+
+
+def test_merge_litellm_drops_negative_cost_fields() -> None:
+    providers = _providers()
+    entry: dict[str, Any] = _chat_entry(
+        "anthropic",
+        cache_read_input_token_cost=-1.0,
+    )
+    providers["anthropic"]["models"]["claude-x"] = {"mode": "chat"}
+    merge_litellm(providers, {"claude-x": entry})
+
+    cost: dict[str, Any] = providers["anthropic"]["models"]["claude-x"]["cost"]
+    assert cost["input"] == 2.0
+    assert cost["output"] == 10.0
+    assert "cache_read" not in cost
+
+
+def test_build_provider_section_drops_negative_costs_and_empty_ids() -> None:
+    api: dict[str, Any] = {
+        "mistral": {
+            "models": {
+                "mistral-large": {
+                    "name": "Mistral Large",
+                    "cost": {"input": -1.0, "output": 2.0},
+                    "limit": {"context": 128000, "output": 8192},
+                },
+                "": {"name": "junk"},
+                "vendor/models/": {"name": "also junk"},
+            }
+        }
+    }
+
+    section: dict[str, Any] | None = _build_provider_section(api, ["mistral"])
+
+    assert section is not None
+    assert list(section["models"]) == ["mistral-large"]
+    # The -1 sentinel field is dropped; the real rate stays.
+    assert section["models"]["mistral-large"]["cost"] == {"output": 2.0}
+
+
+def test_build_provider_section_drops_nested_negative_rates() -> None:
+    """Sentinel rates nested inside tiers / context_over_200k must be cleaned
+    too — top-level cleanup alone lets -1 rates reach compute_cost_cents."""
+    api: dict[str, Any] = {
+        "mistral": {
+            "models": {
+                "mistral-large": {
+                    "name": "Mistral Large",
+                    "cost": {
+                        "input": 2.0,
+                        "output": 10.0,
+                        "context_over_200k": {"input": -1.0, "output": 15.0},
+                        "tiers": [
+                            {
+                                "tier": {"type": "context", "size": 272000},
+                                "input": -1.0,
+                                "output": 15.0,
+                            }
+                        ],
+                    },
+                    "limit": {"context": 128000, "output": 8192},
+                },
+            }
+        }
+    }
+
+    section: dict[str, Any] | None = _build_provider_section(api, ["mistral"])
+
+    assert section is not None
+    cost: dict[str, Any] = section["models"]["mistral-large"]["cost"]
+    assert cost["input"] == 2.0
+    assert cost["context_over_200k"] == {"output": 15.0}
+    assert cost["tiers"] == [
+        {"tier": {"type": "context", "size": 272000}, "output": 15.0}
+    ]

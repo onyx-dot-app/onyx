@@ -42,7 +42,7 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "onyx.serviceAccountName" . }}
+      serviceAccountName: {{ include "onyx.apiServerServiceAccountName" . }}
       {{- with .Values.api.terminationGracePeriodSeconds }}
       terminationGracePeriodSeconds: {{ . }}
       {{- end }}
@@ -63,6 +63,10 @@ spec:
       {{- with .Values.api.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if eq (include "onyx.objectStore.enabled" .) "true" }}
+      initContainers:
+        {{- include "onyx.objectStore.waitInitContainer" (dict "ctx" . "resources" .Values.api.resources "securityContext" .Values.api.securityContext) | nindent 8 }}
       {{- end }}
       containers:
         - name: api-server
@@ -110,6 +114,10 @@ spec:
                 name: {{ . }}
             {{- end }}
           env:
+            {{- if eq (include "onyx.logExportKubernetesEnabled" .) "true" }}
+            - name: LOG_EXPORT_KUBERNETES_ENABLED
+              value: "true"
+            {{- end }}
             {{- if .Values.api.threadpoolSize }}
             - name: ONYX_API_THREADPOOL_SIZE
               value: "{{ .Values.api.threadpoolSize }}"

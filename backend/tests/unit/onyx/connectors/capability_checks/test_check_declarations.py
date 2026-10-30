@@ -16,7 +16,7 @@ from onyx.connectors.capability_checks.models import (
     CredentialCapability,
 )
 from onyx.connectors.capability_checks.registry import get_capability_checks
-from onyx.connectors.capability_checks.runner import run_capability_checks
+from onyx.connectors.capability_checks.runner import run_capability_checks, run_order
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.connectors.slack.config import SlackConnectorConfig
 from onyx.db.enums import AccessType
@@ -207,8 +207,26 @@ def test_binding_checks_require_only_bound_fields(source: DocumentSource) -> Non
     for check in _registered_checks(source):
         if not check.validates_binding:
             continue
-        assert binding_class is not None, check.check_id
-        assert check.requires_fields <= set(binding_class.model_fields), check.check_id
+        bound_fields = set(binding_class.model_fields) if binding_class else set()
+        assert check.requires_fields <= bound_fields, check.check_id
+
+
+@pytest.mark.parametrize("source", sorted(CONNECTOR_CLASS_MAP, key=str))
+def test_dependencies_name_registered_checks_without_a_cycle(
+    source: DocumentSource,
+) -> None:
+    checks = _registered_checks(source)
+    check_ids = {check.check_id for check in checks}
+    # Discovery checks start after every validation check, so none can be a
+    # validation check's dependency.
+    discovery_ids = {check.check_id for check in checks if check.discovery}
+    for check in checks:
+        assert set(check.dependency_ids) <= check_ids, check.check_id
+        assert check.check_id not in check.dependency_ids, check.check_id
+        if not check.discovery:
+            assert not discovery_ids & set(check.dependency_ids), check.check_id
+    # Raises on a cycle.
+    run_order(checks)
 
 
 def test_confluence_declares_its_binding_checks() -> None:
@@ -221,3 +239,49 @@ def test_confluence_declares_its_binding_checks() -> None:
         "confluence_scoped_token_auth",
         "confluence_spaces_visible",
     }
+
+
+# The sign-in checks of each source with named checks. A pass of one unlocks
+# the create form, whether or not the source has credential-bound fields.
+_SIGN_IN_CHECK_IDS: dict[DocumentSource, frozenset[str]] = {
+    DocumentSource.ASANA: frozenset({"asana_token"}),
+    DocumentSource.CONFLUENCE: frozenset(
+        {"confluence_auth", "confluence_scoped_token_auth"}
+    ),
+    DocumentSource.GITHUB: frozenset({"github_auth"}),
+    DocumentSource.GOOGLE_DRIVE: frozenset({"google_drive_auth"}),
+    DocumentSource.HUBSPOT: frozenset({"hubspot_token"}),
+    DocumentSource.JIRA: frozenset({"jira_auth", "jira_scoped_token_auth"}),
+    DocumentSource.LINEAR: frozenset({"linear_token"}),
+    DocumentSource.NOTION: frozenset({"notion_auth"}),
+    DocumentSource.ONEDRIVE: frozenset({"onedrive_token_auth"}),
+    DocumentSource.OUTLOOK: frozenset({"outlook_token_auth"}),
+    DocumentSource.SHAREPOINT: frozenset({"sharepoint_token_auth"}),
+    DocumentSource.SLACK: frozenset({"slack_token_auth"}),
+    DocumentSource.YOUTRACK: frozenset({"youtrack_token"}),
+    DocumentSource.AZURE_DATALAKE: frozenset({"adls_sign_in"}),
+}
+
+
+def test_every_source_with_named_checks_names_its_sign_in_checks() -> None:
+    named: set[DocumentSource] = {
+        source
+        for source in DocumentSource
+        if any(not check.is_fallback for check in get_capability_checks(source))
+    }
+    assert named == set(_SIGN_IN_CHECK_IDS)
+
+
+@pytest.mark.parametrize("source", sorted(_SIGN_IN_CHECK_IDS, key=str))
+def test_the_sign_in_check_unlocks_the_form(source: DocumentSource) -> None:
+    checks: list[CapabilityCheck[Any]] = get_capability_checks(source)
+    sign_in: frozenset[str] = _SIGN_IN_CHECK_IDS[source]
+    unlocking: set[str] = {
+        check.check_id for check in checks if check.validates_binding
+    }
+    assert sign_in <= unlocking
+    # Another unlocking check (e.g. "List users") runs after one that unlocks.
+    for check in checks:
+        if check.check_id in unlocking - sign_in:
+            assert set(check.depends_on) & unlocking, check.check_id
+            assert not check.discovery, check.check_id

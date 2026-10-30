@@ -68,7 +68,11 @@ def _post_decision(
     url = f"{API_SERVER_URL}/build/approvals/{approval_id}/decision"
     return client.post(
         url,
-        json={"decision": decision.value},
+        json={
+            "decision": "reject"
+            if decision == ApprovalDecision.REJECTED
+            else "approve_once"
+        },
         headers=user.headers,
         cookies=user.cookies,
     )
@@ -194,7 +198,7 @@ def test_reject_decision_returns_403_user_rejected(
         curl_proc.kill()
 
 
-def test_ask_with_uninvokable_app_forwards_bare(
+def test_ask_without_credentials_still_requires_approval(
     slack_external_app: None,  # noqa: ARG001 -- side-effect fixture
     gated_session: DockerGatedSession,
     docker_exec: DockerExec,
@@ -216,24 +220,19 @@ def test_ask_with_uninvokable_app_forwards_bare(
     try:
         curl_proc = _start_slack_post_via_proxy(container, session_id)
         try:
+            approval = BuildApprovalsManager.wait_for_pending(
+                user, session_id, timeout_s=30.0
+            )
+            response = _post_decision(
+                user, str(approval.approval_id), ApprovalDecision.REJECTED
+            )
+            response.raise_for_status()
             stdout, _stderr = curl_proc.communicate(timeout=60)
-            assert stdout.strip() == "200", (
-                "Uninvokable ASK should forward bare to Slack and Slack should "
-                f"200 with invalid_auth in the body, got {stdout!r}"
+            assert stdout.strip() == "403"
+            payload = json.loads(
+                docker_exec(container, ["cat", "/tmp/slack_out"]).stdout
             )
-            body = docker_exec(container, ["cat", "/tmp/slack_out"]).stdout
-            payload = json.loads(body)
-            assert payload.get("error") == "invalid_auth", (
-                f"Bare-forwarded request should reach slack.com and get "
-                f"invalid_auth, got {payload!r}"
-            )
-
-            live_url = f"{API_SERVER_URL}/build/approvals/sessions/{session_id}/live"
-            resp = client.get(live_url, headers=user.headers, cookies=user.cookies)
-            resp.raise_for_status()
-            assert resp.json().get("items") == [], (
-                "Uninvokable ASK must not mint an approval row."
-            )
+            assert payload.get("error") == "user_rejected"
         finally:
             curl_proc.kill()
     finally:

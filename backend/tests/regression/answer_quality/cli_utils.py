@@ -126,7 +126,6 @@ def set_env_variables(
 ) -> None:
     env_vars: dict = {}
     env_vars["ENV_SEED_CONFIGURATION"] = json.dumps({"llms": [llm_config]})
-    env_vars["ENABLE_PAID_ENTERPRISE_EDITION_FEATURES"] = "true"
     if use_cloud_gpu:
         env_vars["MODEL_SERVER_HOST"] = remote_server_ip
         env_vars["MODEL_SERVER_PORT"] = remote_server_port

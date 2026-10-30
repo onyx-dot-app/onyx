@@ -5,16 +5,16 @@ import { cn } from "@opal/utils";
 import { Text } from "@opal/components";
 import {
   SvgConfluence,
-  SvgGithub,
+  SvgGitHub,
   SvgGoogleDrive,
-  SvgHubspot,
+  SvgHubSpot,
   SvgNotion,
   SvgSlack,
 } from "@opal/logos";
 import { SvgChevronRight } from "@opal/icons";
 import useCCPairs from "@/hooks/useCCPairs";
 import { useUser } from "@/providers/UserProvider";
-import { hasPermission } from "@/lib/permissions";
+import { hasPermission } from "@/lib/permissions/utils";
 import { Permission } from "@/lib/types";
 
 interface ConnectDataBannerProps {
@@ -94,7 +94,7 @@ export default function ConnectDataBanner({
         <div className="flex items-center -space-x-2">
           <div className="transition-transform duration-200 group-hover:-translate-x-4 rtl:group-hover:translate-x-4">
             <IconWrapper>
-              <SvgGithub size={16} />
+              <SvgGitHub size={16} />
             </IconWrapper>
           </div>
           <div className="transition-transform duration-200 group-hover:-translate-x-2 rtl:group-hover:translate-x-2">
@@ -104,7 +104,7 @@ export default function ConnectDataBanner({
           </div>
           <div>
             <IconWrapper>
-              <SvgHubspot size={16} />
+              <SvgHubSpot size={16} />
             </IconWrapper>
           </div>
         </div>

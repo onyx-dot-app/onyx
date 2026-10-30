@@ -1,20 +1,21 @@
 "use client";
 
+import { OverflowText, Text } from "@opal/components";
 import React from "react";
 import { useTranslations } from "next-intl";
 import type { Components } from "react-markdown";
-import Text from "@/refresh-components/texts/Text";
-import Truncated from "@/refresh-components/texts/Truncated";
 import { ensureHrefProtocol } from "@/lib/utils";
-import { cn } from "@opal/utils";
+import { cn, richNodes } from "@opal/utils";
 import { SvgOnyxLogo } from "@opal/logos";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 
 const previewMarkdownComponents = {
   p: ({ children }) => (
-    <Text as="p" text03 figureSmallValue className="my-0! text-center">
-      {children}
-    </Text>
+    <div className="text-center">
+      <Text font="figure-small-value" color="text-03">
+        {richNodes(children)}
+      </Text>
+    </div>
   ),
   a: ({ node, href, className, children, ...rest }) => {
     const fullHref = ensureHrefProtocol(href);
@@ -26,8 +27,8 @@ const previewMarkdownComponents = {
         {...rest}
         className={cn(className, "underline underline-offset-2")}
       >
-        <Text text03 figureSmallValue>
-          {children}
+        <Text font="figure-small-value" color="text-03">
+          {richNodes(children)}
         </Text>
       </a>
     );
@@ -112,13 +113,15 @@ function PreviewChat({
               highlightTarget === "chat_header" && "bg-highlight-match"
             )}
           >
-            <Text
-              figureSmallLabel
-              text03
-              className="max-w-full whitespace-normal wrap-break-word text-center"
-            >
-              {chat_header_content}
-            </Text>
+            <div className="max-w-full">
+              <Text
+                font="figure-small-label"
+                color="text-03"
+                wordWrap="wrap-break-word"
+              >
+                {chat_header_content}
+              </Text>
+            </div>
           </div>
         </div>
       </div>
@@ -206,9 +209,14 @@ function PreviewStart({
             )}
             {(logoDisplayStyle === "logo_and_name" ||
               logoDisplayStyle === "name_only") && (
-              <Truncated mainUiAction text04 nowrap>
+              <OverflowText
+                as="p"
+                textPosition="text-start"
+                font="main-ui-action"
+                color="text-04"
+              >
                 {applicationDisplayName || "Onyx"}
-              </Truncated>
+              </OverflowText>
             )}
           </div>
         </div>
@@ -225,13 +233,15 @@ function PreviewStart({
               )}
             >
               <PreviewLogo logoSrc={logoSrc} size={18} />
-              <Text
-                text04
-                headingH3
-                className="max-w-[260px] whitespace-normal wrap-break-word text-center"
-              >
-                {greeting_message}
-              </Text>
+              <div className="max-w-[260px]">
+                <Text
+                  font="heading-h3"
+                  color="text-04"
+                  wordWrap="wrap-break-word"
+                >
+                  {greeting_message}
+                </Text>
+              </div>
             </div>
             <InputPreview />
           </div>

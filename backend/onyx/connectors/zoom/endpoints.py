@@ -111,25 +111,11 @@ PAST_MEETING_OCCURRENCES = ZoomEndpoint(
     operation="pastMeetings",
 )
 
-PAST_MEETING_PARTICIPANTS = ZoomEndpoint(
-    path="/past_meetings/{identifier}/participants",
-    tier=ZoomRateLimitTier.MEDIUM,
-    describes="the participants of meeting {identifier}",
-    operation="pastMeetingParticipants",
-)
-
 MEETING_DETAILS = ZoomEndpoint(
     path="/meetings/{identifier}",
     tier=ZoomRateLimitTier.LIGHT,
     describes="the details for meeting {identifier}",
     operation="meeting",
-)
-
-MEETING_REGISTRANTS = ZoomEndpoint(
-    path="/meetings/{identifier}/registrants",
-    tier=ZoomRateLimitTier.MEDIUM,
-    describes="the registrants of meeting {identifier}",
-    operation="meetingRegistrants",
 )
 
 WEBINAR_DETAILS = ZoomEndpoint(
@@ -146,30 +132,6 @@ PAST_WEBINAR_OCCURRENCES = ZoomEndpoint(
     describes="the occurrences for webinar {identifier}",
     requires=ZoomEntitlement.WEBINAR,
     operation="pastWebinars",
-)
-
-PAST_WEBINAR_PARTICIPANTS = ZoomEndpoint(
-    path="/past_webinars/{identifier}/participants",
-    tier=ZoomRateLimitTier.MEDIUM,
-    describes="the participants of webinar {identifier}",
-    requires=ZoomEntitlement.WEBINAR,
-    operation="listWebinarParticipants",
-)
-
-WEBINAR_REGISTRANTS = ZoomEndpoint(
-    path="/webinars/{identifier}/registrants",
-    tier=ZoomRateLimitTier.MEDIUM,
-    describes="the registrants of webinar {identifier}",
-    requires=ZoomEntitlement.WEBINAR,
-    operation="webinarRegistrants",
-)
-
-WEBINAR_PANELISTS = ZoomEndpoint(
-    path="/webinars/{identifier}/panelists",
-    tier=ZoomRateLimitTier.MEDIUM,
-    describes="the panelists of webinar {identifier}",
-    requires=ZoomEntitlement.WEBINAR,
-    operation="webinarPanelists",
 )
 
 GROUP_MEMBERS = ZoomEndpoint(

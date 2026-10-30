@@ -1,0 +1,67 @@
+---
+title: "Overview"
+description: "An Overview of Administering Onyx"
+icon: "chart-simple"
+---
+
+## Admin Panel
+
+Click your profile icon and select **Admin Panel**.
+
+<Note>
+  The first user in your Onyx deployment is automatically an Admin. Only Admins can make other users Admins.
+</Note>
+
+<img className="rounded-image" src="/assets/admins/admin_panel_overview.webp" alt="Onyx Admin Panel Overview"/>
+
+## Editions
+
+Some Admin Panel pages depend on your edition. Onyx has four editions:
+
+- **Community Edition (CE)**: free, self-hosted, no license.
+- **Business**: adds groups, permission sync, SSO, usage dashboards, theming, and the LLM Gateway.
+- **Enterprise**: adds SCIM, custom analytics, hook extensions, and other advanced controls.
+- **Cloud**: hosted by Onyx with Business or Enterprise features depending on your plan.
+
+Pages that need a higher edition stay visible in the sidebar with a lock.
+See [Plans & Billing](/admins/billing/overview) for details.
+
+## Core Admin Features
+
+<Columns cols={2}>
+  <Card title="Language Models" icon="plug" href="/admins/ai_models/overview">
+    Configure the language model providers and models available to your users.
+  </Card>
+
+  <Card title="Connectors" icon="plug" href="/admins/connectors/overview">
+    Configure your connectors to index your organization's data in Onyx.
+  </Card>
+
+  <Card title="Plugins" icon="plug" href="/admins/plugins/overview">
+    Add MCP servers, OpenAPI plugins, and Craft Apps for your agents.
+  </Card>
+
+  <Card title="Agents" icon="robot" href="/admins/agents/overview">
+    Feature, list, and manage the custom Agents in your organization.
+  </Card>
+
+  <Card title="Slack Integration" icon="slack" href="/admins/getting_started/slack_bot_setup">
+    Connect OnyxBot to Slack so users can ask questions from Slack channels and DMs.
+  </Card>
+
+  <Card title="User Management" icon="users" href="/admins/user_management/users_and_groups">
+    Manage users, groups, and API keys.
+  </Card>
+
+  <Card title="Usage & Analytics" icon="chart-line" href="/admins/analytics/overview">
+    Monitor usage, feedback, and query history across your workspace.
+  </Card>
+
+  <Card title="Advanced Configs" icon="gear" href="/admins/advanced_configs/search_configs">
+    Configure search, processing, multilingual settings, rate limits, and branding.
+  </Card>
+
+  <Card title="Plans & Billing" icon="wallet" href="/admins/billing/overview">
+    Subscribe to a plan, manage seats, and view your billing details.
+  </Card>
+</Columns>

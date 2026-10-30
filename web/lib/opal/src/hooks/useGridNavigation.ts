@@ -198,14 +198,11 @@ export default function useGridNavigation(
 
     // `:focus-visible` is the browser's own test for focus the keyboard
     // brought, so Tab and the arrows enter keyboard mode and a click does
-    // not.
+    // not. Any element counts, not only items: Tab to a control inside an
+    // item must show its focus too.
     function handleFocusIn(event: FocusEvent) {
-      const item = event.target;
-      if (
-        item instanceof HTMLElement &&
-        item.matches(itemSelector) &&
-        item.matches(":focus-visible")
-      ) {
+      const target = event.target;
+      if (target instanceof HTMLElement && target.matches(":focus-visible")) {
         setMode("keyboard");
       }
     }

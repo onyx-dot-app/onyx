@@ -1,19 +1,14 @@
-import json
 import time
-from datetime import timedelta
 from itertools import islice
-from typing import Any, Literal, cast
+from typing import cast
 
 import psutil
 from celery import Task, shared_task
 from celery.exceptions import SoftTimeLimitExceeded
-from pydantic import BaseModel
 from redis import Redis
 from redis.lock import Lock as RedisLock
-from sqlalchemy import select, text
-from sqlalchemy.orm import Session
+from sqlalchemy import text
 
-from onyx import __version__
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_redis import (
     celery_get_broker_client,
@@ -21,7 +16,6 @@ from onyx.background.celery.celery_redis import (
     celery_get_unacked_task_ids,
 )
 from onyx.background.celery.memory_monitoring import emit_process_memory
-from onyx.configs.app_configs import DISABLE_TELEMETRY
 from onyx.configs.constants import (
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
     ONYX_CLOUD_TENANT_ID,
@@ -30,745 +24,30 @@ from onyx.configs.constants import (
     OnyxRedisLocks,
 )
 from onyx.db.engine.sql_engine import (
-    get_session_with_current_tenant,
     get_session_with_shared_schema,
 )
 from onyx.db.engine.tenant_utils import (
     get_all_tenant_ids,
     validate_tenant_id,
 )
-from onyx.db.engine.time_utils import get_db_current_time
-from onyx.db.enums import IndexingStatus, SyncStatus, SyncType
-from onyx.db.models import (
-    ConnectorCredentialPair,
-    DocumentSet,
-    IndexAttempt,
-    SyncRecord,
-    UserGroup,
-)
-from onyx.db.search_settings import get_active_search_settings_list
+from onyx.document_index.opensearch.resource_health import refresh_resource_health
 from onyx.redis.redis_pool import (
     get_redis_client,
-    get_shared_redis_client,
     redis_lock_dump,
 )
-from onyx.redis.tenant_redis_client import TenantRedisClient
+from onyx.utils.fleet_telemetry import (
+    CELERY_QUEUES,
+    QUEUE_INTERVAL_SECONDS,
+    emit_telemetry,
+    get_sender,
+    poll_due,
+)
+from onyx.utils.fleet_telemetry_collector import collect_snapshots
 from onyx.utils.platform_utils import is_running_in_container, is_running_in_kubernetes
-from onyx.utils.telemetry import RecordType, optional_telemetry
 from shared_configs.configs import MULTI_TENANT
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 _MONITORING_SOFT_TIME_LIMIT = 60 * 5  # 5 minutes
 _MONITORING_TIME_LIMIT = _MONITORING_SOFT_TIME_LIMIT + 60  # 6 minutes
-
-# Queue lengths are broker-global, so they are emitted by at most one tenant per
-# window rather than once per tenant every cycle. Keep the lease shorter than the
-# 5-minute monitor beat so it expires before the next cycle and never blocks it.
-_GLOBAL_QUEUE_METRICS_LEASE = "monitoring_global_queue_metrics_lease"
-_GLOBAL_QUEUE_METRICS_LEASE_TTL = 60 * 4  # 4 minutes
-
-_CONNECTOR_INDEX_ATTEMPT_START_LATENCY_KEY_FMT = (
-    "monitoring_connector_index_attempt_start_latency:{cc_pair_id}:{index_attempt_id}"
-)
-
-_CONNECTOR_INDEX_ATTEMPT_RUN_SUCCESS_KEY_FMT = (
-    "monitoring_connector_index_attempt_run_success:{cc_pair_id}:{index_attempt_id}"
-)
-
-_FINAL_METRIC_KEY_FMT = "sync_final_metrics:{sync_type}:{entity_id}:{sync_record_id}"
-
-_SYNC_START_LATENCY_KEY_FMT = (
-    "sync_start_latency:{sync_type}:{entity_id}:{sync_record_id}"
-)
-
-_CONNECTOR_START_TIME_KEY_FMT = "connector_start_time:{cc_pair_id}:{index_attempt_id}"
-_CONNECTOR_END_TIME_KEY_FMT = "connector_end_time:{cc_pair_id}:{index_attempt_id}"
-_SYNC_START_TIME_KEY_FMT = "sync_start_time:{sync_type}:{entity_id}:{sync_record_id}"
-_SYNC_END_TIME_KEY_FMT = "sync_end_time:{sync_type}:{entity_id}:{sync_record_id}"
-
-
-def _mark_metric_as_emitted(redis_std: TenantRedisClient, key: str) -> None:
-    """Mark a metric as having been emitted by setting a Redis key with expiration"""
-    redis_std.set(key, "1", ex=24 * 60 * 60)  # Expire after 1 day
-
-
-def _has_metric_been_emitted(redis_std: TenantRedisClient, key: str) -> bool:
-    """Check if a metric has been emitted by checking for existence of Redis key"""
-    return bool(redis_std.exists(key))
-
-
-class Metric(BaseModel):
-    key: (
-        str | None
-    )  # only required if we need to store that we have emitted this metric
-    name: str
-    value: Any
-    tags: dict[str, str]
-
-    def log(self) -> None:
-        """Log the metric in a standardized format"""
-        data = {
-            "metric": self.name,
-            "value": self.value,
-            "tags": self.tags,
-        }
-        task_logger.info(json.dumps(data))
-
-    def emit(self, tenant_id: str) -> None:
-        # Convert value to appropriate type based on the input value
-        bool_value = None
-        float_value = None
-        int_value = None
-        string_value = None
-        # NOTE: have to do bool first, since `isinstance(True, int)` is true
-        # e.g. bool is a subclass of int
-        if isinstance(self.value, bool):
-            bool_value = self.value
-        elif isinstance(self.value, int):
-            int_value = self.value
-        elif isinstance(self.value, float):
-            float_value = self.value
-        elif isinstance(self.value, str):
-            string_value = self.value
-        else:
-            task_logger.error(
-                f"Invalid metric value type: {type(self.value)} ({self.value}) for metric {self.name}."
-            )
-            return
-
-        # don't send None values over the wire
-        data = {
-            k: v
-            for k, v in {
-                "metric_name": self.name,
-                "float_value": float_value,
-                "int_value": int_value,
-                "string_value": string_value,
-                "bool_value": bool_value,
-                "tags": self.tags,
-            }.items()
-            if v is not None
-        }
-        task_logger.info(f"Emitting metric: {data}")
-        optional_telemetry(
-            record_type=RecordType.METRIC,
-            data=data,
-            tenant_id=tenant_id,
-        )
-
-
-def _collect_queue_metrics(redis_celery: Redis) -> list[Metric]:
-    """Collect metrics about queue lengths for different Celery queues"""
-    metrics = []
-    queue_mappings = {
-        "celery_queue_length": OnyxCeleryQueues.PRIMARY,
-        "docprocessing_queue_length": OnyxCeleryQueues.DOCPROCESSING,
-        "port_queue_length": OnyxCeleryQueues.PORT,
-        "docfetching_queue_length": OnyxCeleryQueues.CONNECTOR_DOC_FETCHING,
-        "sync_queue_length": OnyxCeleryQueues.VESPA_METADATA_SYNC,
-        "deletion_queue_length": OnyxCeleryQueues.CONNECTOR_DELETION,
-        "pruning_queue_length": OnyxCeleryQueues.CONNECTOR_PRUNING,
-        "permissions_sync_queue_length": OnyxCeleryQueues.CONNECTOR_DOC_PERMISSIONS_SYNC,
-        "external_group_sync_queue_length": OnyxCeleryQueues.CONNECTOR_EXTERNAL_GROUP_SYNC,
-        "permissions_upsert_queue_length": OnyxCeleryQueues.DOC_PERMISSIONS_UPSERT,
-        "hierarchy_fetching_queue_length": OnyxCeleryQueues.CONNECTOR_HIERARCHY_FETCHING,
-        "llm_model_update_queue_length": OnyxCeleryQueues.LLM_MODEL_UPDATE,
-        "checkpoint_cleanup_queue_length": OnyxCeleryQueues.CHECKPOINT_CLEANUP,
-        "index_attempt_cleanup_queue_length": OnyxCeleryQueues.INDEX_ATTEMPT_CLEANUP,
-        "index_reclaim_queue_length": OnyxCeleryQueues.INDEX_RECLAIM,
-        "chat_ttl_deletion_queue_length": OnyxCeleryQueues.CHAT_TTL_DELETION,
-        "csv_generation_queue_length": OnyxCeleryQueues.CSV_GENERATION,
-        "capability_checks_queue_length": OnyxCeleryQueues.CAPABILITY_CHECKS,
-        "capability_checks_draft_queue_length": OnyxCeleryQueues.CAPABILITY_CHECKS_DRAFT,
-        "user_file_processing_queue_length": OnyxCeleryQueues.USER_FILE_PROCESSING,
-        "user_file_project_sync_queue_length": OnyxCeleryQueues.USER_FILE_PROJECT_SYNC,
-        "user_file_delete_queue_length": OnyxCeleryQueues.USER_FILE_DELETE,
-        "user_file_port_queue_length": OnyxCeleryQueues.USER_FILE_PORT,
-        "monitoring_queue_length": OnyxCeleryQueues.MONITORING,
-        "sandbox_queue_length": OnyxCeleryQueues.SANDBOX,
-    }
-
-    for name, queue in queue_mappings.items():
-        metrics.append(
-            Metric(
-                key=None,
-                name=name,
-                value=celery_get_queue_length(queue, redis_celery),
-                tags={"queue": name},
-            )
-        )
-
-    return metrics
-
-
-def _build_connector_start_latency_metric(
-    cc_pair: ConnectorCredentialPair,
-    recent_attempt: IndexAttempt,
-    second_most_recent_attempt: IndexAttempt | None,
-    redis_std: TenantRedisClient,
-) -> Metric | None:
-    if not recent_attempt.time_started:
-        return None
-
-    # check if we already emitted a metric for this index attempt
-    metric_key = _CONNECTOR_INDEX_ATTEMPT_START_LATENCY_KEY_FMT.format(
-        cc_pair_id=cc_pair.id,
-        index_attempt_id=recent_attempt.id,
-    )
-    if _has_metric_been_emitted(redis_std, metric_key):
-        task_logger.info(
-            f"Skipping metric for connector {cc_pair.connector.id} "
-            f"index attempt {recent_attempt.id} because it has already been "
-            "emitted"
-        )
-        return None
-
-    # Connector start latency
-    # first run case - we should start as soon as it's created
-    if not second_most_recent_attempt:
-        desired_start_time = cc_pair.connector.time_created
-    else:
-        if not cc_pair.connector.refresh_freq:
-            task_logger.debug(
-                "Connector has no refresh_freq and this is a non-initial index attempt. "
-                "Assuming user manually triggered indexing, so we'll skip start latency metric."
-            )
-            return None
-
-        desired_start_time = second_most_recent_attempt.time_updated + timedelta(
-            seconds=cc_pair.connector.refresh_freq
-        )
-
-    start_latency = (recent_attempt.time_started - desired_start_time).total_seconds()
-
-    task_logger.info(
-        f"Start latency for index attempt {recent_attempt.id}: {start_latency:.2f}s "
-        f"(desired: {desired_start_time}, actual: {recent_attempt.time_started})"
-    )
-
-    job_id = build_job_id("connector", str(cc_pair.id), str(recent_attempt.id))
-
-    return Metric(
-        key=metric_key,
-        name="connector_start_latency",
-        value=start_latency,
-        tags={
-            "job_id": job_id,
-            "connector_id": str(cc_pair.connector.id),
-            "source": str(cc_pair.connector.source),
-        },
-    )
-
-
-def _build_connector_final_metrics(
-    cc_pair: ConnectorCredentialPair,
-    recent_attempts: list[IndexAttempt],
-    redis_std: TenantRedisClient,
-) -> list[Metric]:
-    """
-    Final metrics for connector index attempts:
-      - Boolean success/fail metric
-      - If success, emit:
-          * duration (seconds)
-          * doc_count
-    """
-    metrics = []
-    for attempt in recent_attempts:
-        metric_key = _CONNECTOR_INDEX_ATTEMPT_RUN_SUCCESS_KEY_FMT.format(
-            cc_pair_id=cc_pair.id,
-            index_attempt_id=attempt.id,
-        )
-        if _has_metric_been_emitted(redis_std, metric_key):
-            task_logger.info(
-                f"Skipping final metrics for connector {cc_pair.connector.id} index attempt {attempt.id}, already emitted."
-            )
-            continue
-
-        # We only emit final metrics if the attempt is in a terminal state
-        if attempt.status not in [
-            IndexingStatus.SUCCESS,
-            IndexingStatus.FAILED,
-            IndexingStatus.CANCELED,
-        ]:
-            # Not finished; skip
-            continue
-
-        job_id = build_job_id("connector", str(cc_pair.id), str(attempt.id))
-        success = attempt.status == IndexingStatus.SUCCESS
-        metrics.append(
-            Metric(
-                key=metric_key,  # We'll mark the same key for any final metrics
-                name="connector_run_succeeded",
-                value=success,
-                tags={
-                    "job_id": job_id,
-                    "connector_id": str(cc_pair.connector.id),
-                    "source": str(cc_pair.connector.source),
-                    "status": attempt.status.value,
-                },
-            )
-        )
-
-        if success:
-            # Make sure we have valid time_started
-            if attempt.time_started and attempt.time_updated:
-                duration_seconds = (
-                    attempt.time_updated - attempt.time_started
-                ).total_seconds()
-                metrics.append(
-                    Metric(
-                        key=None,  # No need for a new key, or you can reuse the same if you prefer
-                        name="connector_index_duration_seconds",
-                        value=duration_seconds,
-                        tags={
-                            "job_id": job_id,
-                            "connector_id": str(cc_pair.connector.id),
-                            "source": str(cc_pair.connector.source),
-                        },
-                    )
-                )
-            else:
-                task_logger.error(
-                    f"Index attempt {attempt.id} succeeded but has missing time "
-                    f"(time_started={attempt.time_started}, time_updated={attempt.time_updated})."
-                )
-
-            # For doc counts, choose whichever field is more relevant
-            doc_count = attempt.total_docs_indexed or 0
-            metrics.append(
-                Metric(
-                    key=None,
-                    name="connector_index_doc_count",
-                    value=doc_count,
-                    tags={
-                        "job_id": job_id,
-                        "connector_id": str(cc_pair.connector.id),
-                        "source": str(cc_pair.connector.source),
-                    },
-                )
-            )
-
-    return metrics
-
-
-def _collect_connector_metrics(
-    db_session: Session, redis_std: TenantRedisClient
-) -> list[Metric]:
-    """Collect metrics about connector runs from the past hour"""
-    one_hour_ago = get_db_current_time(db_session) - timedelta(hours=1)
-
-    # Get all connector credential pairs
-    cc_pairs = db_session.scalars(select(ConnectorCredentialPair)).all()
-    # Might be more than one search setting, or just one
-    active_search_settings_list = get_active_search_settings_list(db_session)
-
-    metrics = []
-
-    # If you want to process each cc_pair against each search setting:
-    for cc_pair in cc_pairs:
-        for search_settings in active_search_settings_list:
-            recent_attempts = (
-                db_session.query(IndexAttempt)
-                .filter(
-                    IndexAttempt.connector_credential_pair_id == cc_pair.id,
-                    IndexAttempt.search_settings_id == search_settings.id,
-                    IndexAttempt.targeted_reindex_job_id.is_(None),
-                )
-                .order_by(IndexAttempt.time_created.desc())
-                .limit(2)
-                .all()
-            )
-
-            if not recent_attempts:
-                continue
-
-            most_recent_attempt = recent_attempts[0]
-            second_most_recent_attempt = (
-                recent_attempts[1] if len(recent_attempts) > 1 else None
-            )
-
-            if one_hour_ago > most_recent_attempt.time_created:
-                continue
-
-            # Build a job_id for correlation
-            job_id = build_job_id(
-                "connector", str(cc_pair.id), str(most_recent_attempt.id)
-            )
-
-            # Add raw start time metric if available
-            if most_recent_attempt.time_started:
-                start_time_key = _CONNECTOR_START_TIME_KEY_FMT.format(
-                    cc_pair_id=cc_pair.id,
-                    index_attempt_id=most_recent_attempt.id,
-                )
-                metrics.append(
-                    Metric(
-                        key=start_time_key,
-                        name="connector_start_time",
-                        value=most_recent_attempt.time_started.timestamp(),
-                        tags={
-                            "job_id": job_id,
-                            "connector_id": str(cc_pair.connector.id),
-                            "source": str(cc_pair.connector.source),
-                        },
-                    )
-                )
-
-            # Add raw end time metric if available and in terminal state
-            if (
-                most_recent_attempt.status.is_terminal()
-                and most_recent_attempt.time_updated
-            ):
-                end_time_key = _CONNECTOR_END_TIME_KEY_FMT.format(
-                    cc_pair_id=cc_pair.id,
-                    index_attempt_id=most_recent_attempt.id,
-                )
-                metrics.append(
-                    Metric(
-                        key=end_time_key,
-                        name="connector_end_time",
-                        value=most_recent_attempt.time_updated.timestamp(),
-                        tags={
-                            "job_id": job_id,
-                            "connector_id": str(cc_pair.connector.id),
-                            "source": str(cc_pair.connector.source),
-                        },
-                    )
-                )
-
-            # Connector start latency
-            start_latency_metric = _build_connector_start_latency_metric(
-                cc_pair, most_recent_attempt, second_most_recent_attempt, redis_std
-            )
-
-            if start_latency_metric:
-                metrics.append(start_latency_metric)
-
-            # Connector run success/failure
-            final_metrics = _build_connector_final_metrics(
-                cc_pair, recent_attempts, redis_std
-            )
-            metrics.extend(final_metrics)
-
-    return metrics
-
-
-def _collect_sync_metrics(
-    db_session: Session, redis_std: TenantRedisClient
-) -> list[Metric]:
-    """
-    Collect metrics for document set and group syncing:
-      - Success/failure status
-      - Start latency (for doc sets / user groups)
-      - Duration & doc count (only if success)
-      - Throughput (docs/min) (only if success)
-      - Raw start/end times for each sync
-    """
-
-    one_hour_ago = get_db_current_time(db_session) - timedelta(hours=1)
-
-    # Get all sync records that ended in the last hour
-    recent_sync_records = db_session.scalars(
-        select(SyncRecord)
-        .where(SyncRecord.sync_end_time.isnot(None))
-        .where(SyncRecord.sync_end_time >= one_hour_ago)
-        .order_by(SyncRecord.sync_end_time.desc())
-    ).all()
-
-    task_logger.info(
-        f"Collecting sync metrics for {len(recent_sync_records)} sync records"
-    )
-
-    metrics = []
-
-    for sync_record in recent_sync_records:
-        # Build a job_id for correlation
-        job_id = build_job_id("sync_record", str(sync_record.id))
-
-        # Add raw start time metric
-        start_time_key = _SYNC_START_TIME_KEY_FMT.format(
-            sync_type=sync_record.sync_type,
-            entity_id=sync_record.entity_id,
-            sync_record_id=sync_record.id,
-        )
-        metrics.append(
-            Metric(
-                key=start_time_key,
-                name="sync_start_time",
-                value=sync_record.sync_start_time.timestamp(),
-                tags={
-                    "job_id": job_id,
-                    "sync_type": str(sync_record.sync_type),
-                },
-            )
-        )
-
-        # Add raw end time metric if available
-        if sync_record.sync_end_time:
-            end_time_key = _SYNC_END_TIME_KEY_FMT.format(
-                sync_type=sync_record.sync_type,
-                entity_id=sync_record.entity_id,
-                sync_record_id=sync_record.id,
-            )
-            metrics.append(
-                Metric(
-                    key=end_time_key,
-                    name="sync_end_time",
-                    value=sync_record.sync_end_time.timestamp(),
-                    tags={
-                        "job_id": job_id,
-                        "sync_type": str(sync_record.sync_type),
-                    },
-                )
-            )
-
-        # Emit a SUCCESS/FAIL boolean metric
-        #    Use a single Redis key to avoid re-emitting final metrics
-        final_metric_key = _FINAL_METRIC_KEY_FMT.format(
-            sync_type=sync_record.sync_type,
-            entity_id=sync_record.entity_id,
-            sync_record_id=sync_record.id,
-        )
-        if not _has_metric_been_emitted(redis_std, final_metric_key):
-            # Evaluate success
-            sync_succeeded = sync_record.sync_status == SyncStatus.SUCCESS
-
-            metrics.append(
-                Metric(
-                    key=final_metric_key,
-                    name="sync_run_succeeded",
-                    value=sync_succeeded,
-                    tags={
-                        "job_id": job_id,
-                        "sync_type": str(sync_record.sync_type),
-                        "status": str(sync_record.sync_status),
-                    },
-                )
-            )
-
-            # If successful, emit additional metrics
-            if sync_succeeded:
-                if sync_record.sync_end_time and sync_record.sync_start_time:
-                    duration_seconds = (
-                        sync_record.sync_end_time - sync_record.sync_start_time
-                    ).total_seconds()
-                else:
-                    task_logger.error(
-                        f"Invalid times for sync record {sync_record.id}: "
-                        f"start={sync_record.sync_start_time}, end={sync_record.sync_end_time}"
-                    )
-                    duration_seconds = None
-
-                doc_count = sync_record.num_docs_synced or 0
-
-                sync_speed = None
-                if duration_seconds and duration_seconds > 0:
-                    duration_mins = duration_seconds / 60.0
-                    sync_speed = (
-                        doc_count / duration_mins if duration_mins > 0 else None
-                    )
-
-                # Emit duration, doc count, speed
-                if duration_seconds is not None:
-                    metrics.append(
-                        Metric(
-                            key=final_metric_key,
-                            name="sync_duration_seconds",
-                            value=duration_seconds,
-                            tags={
-                                "job_id": job_id,
-                                "sync_type": str(sync_record.sync_type),
-                            },
-                        )
-                    )
-                else:
-                    task_logger.error(
-                        f"Invalid sync record {sync_record.id} with no duration"
-                    )
-
-                metrics.append(
-                    Metric(
-                        key=final_metric_key,
-                        name="sync_doc_count",
-                        value=doc_count,
-                        tags={
-                            "job_id": job_id,
-                            "sync_type": str(sync_record.sync_type),
-                        },
-                    )
-                )
-
-                if sync_speed is not None:
-                    metrics.append(
-                        Metric(
-                            key=final_metric_key,
-                            name="sync_speed_docs_per_min",
-                            value=sync_speed,
-                            tags={
-                                "job_id": job_id,
-                                "sync_type": str(sync_record.sync_type),
-                            },
-                        )
-                    )
-                else:
-                    task_logger.error(
-                        f"Invalid sync record {sync_record.id} with no duration"
-                    )
-
-        # Emit start latency
-        start_latency_key = _SYNC_START_LATENCY_KEY_FMT.format(
-            sync_type=sync_record.sync_type,
-            entity_id=sync_record.entity_id,
-            sync_record_id=sync_record.id,
-        )
-        if not _has_metric_been_emitted(redis_std, start_latency_key):
-            # Get the entity's last update time based on sync type
-            entity: DocumentSet | UserGroup | None = None
-            if sync_record.sync_type == SyncType.DOCUMENT_SET:
-                entity = db_session.scalar(
-                    select(DocumentSet).where(DocumentSet.id == sync_record.entity_id)
-                )
-            elif sync_record.sync_type == SyncType.USER_GROUP:
-                entity = db_session.scalar(
-                    select(UserGroup).where(UserGroup.id == sync_record.entity_id)
-                )
-            else:
-                # Only user groups and document set sync records have
-                #  an associated entity we can use for latency metrics
-                continue
-
-            if entity is None:
-                task_logger.error(
-                    f"Sync record of type {sync_record.sync_type} doesn't have an entity "
-                    f"associated with it (id={sync_record.entity_id}). Skipping start latency metric."
-                )
-
-            # Calculate start latency in seconds:
-            #    (actual sync start) - (last modified time)
-            if (
-                entity is not None
-                and entity.time_last_modified_by_user
-                and sync_record.sync_start_time
-            ):
-                start_latency = (
-                    sync_record.sync_start_time - entity.time_last_modified_by_user
-                ).total_seconds()
-
-                if start_latency < 0:
-                    task_logger.error(
-                        f"Negative start latency for sync record {sync_record.id} "
-                        f"(start={sync_record.sync_start_time}, entity_modified={entity.time_last_modified_by_user})"
-                    )
-                    continue
-
-                metrics.append(
-                    Metric(
-                        key=start_latency_key,
-                        name="sync_start_latency_seconds",
-                        value=start_latency,
-                        tags={
-                            "job_id": job_id,
-                            "sync_type": str(sync_record.sync_type),
-                        },
-                    )
-                )
-
-    return metrics
-
-
-def build_job_id(
-    job_type: Literal["connector", "sync_record"],
-    primary_id: str,
-    secondary_id: str | None = None,
-) -> str:
-    if job_type == "connector":
-        if secondary_id is None:
-            raise ValueError(
-                "secondary_id (attempt_id) is required for connector job_type"
-            )
-        return f"connector:{primary_id}:attempt:{secondary_id}"
-    elif job_type == "sync_record":
-        return f"sync_record:{primary_id}"
-
-
-@shared_task(  # ty: ignore[invalid-argument-type]
-    name=OnyxCeleryTask.MONITOR_BACKGROUND_PROCESSES,
-    ignore_result=True,
-    soft_time_limit=_MONITORING_SOFT_TIME_LIMIT,
-    time_limit=_MONITORING_TIME_LIMIT,
-    queue=OnyxCeleryQueues.MONITORING,
-    bind=True,
-)
-def monitor_background_processes(self: Task, *, tenant_id: str) -> None:
-    """Collect and emit metrics about background processes.
-    This task runs periodically to gather metrics about:
-    - Queue lengths for different Celery queues
-    - Connector run metrics (start latency, success rate)
-    - Syncing speed metrics
-    - Worker status and task counts
-    """
-    if tenant_id is not None:
-        CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
-
-    task_logger.info("Starting background monitoring")
-    r = get_redis_client()
-
-    lock_monitoring: RedisLock = r.lock(
-        OnyxRedisLocks.MONITOR_BACKGROUND_PROCESSES_LOCK,
-        timeout=_MONITORING_SOFT_TIME_LIMIT,
-    )
-
-    # these tasks should never overlap
-    if not lock_monitoring.acquire(blocking=False):
-        task_logger.info("Skipping monitoring task because it is already running")
-        return None
-
-    try:
-        redis_std = get_redis_client()
-
-        # Collect queue metrics with broker connection
-        r_celery = celery_get_broker_client(self.app)
-
-        # Queue lengths are broker-global. Emit them from only one tenant per
-        # short window by taking a cross-tenant lease, so the same values are not
-        # re-sent once per tenant. The lease is intentionally left to expire on
-        # its own so the next window re-acquires it.
-        queue_metrics: list[Metric] = []
-        queue_lease = get_shared_redis_client().lock(
-            _GLOBAL_QUEUE_METRICS_LEASE, timeout=_GLOBAL_QUEUE_METRICS_LEASE_TTL
-        )
-        if queue_lease.acquire(blocking=False):
-            queue_metrics = _collect_queue_metrics(r_celery)
-
-        # Collect remaining metrics (no broker connection needed)
-        with get_session_with_current_tenant() as db_session:
-            all_metrics: list[Metric] = queue_metrics
-            all_metrics.extend(_collect_connector_metrics(db_session, redis_std))
-            all_metrics.extend(_collect_sync_metrics(db_session, redis_std))
-
-            for metric in all_metrics:
-                if metric.key is None or not _has_metric_been_emitted(
-                    redis_std, metric.key
-                ):
-                    metric.log()
-                    metric.emit(tenant_id)
-
-                if metric.key is not None:
-                    _mark_metric_as_emitted(redis_std, metric.key)
-
-        task_logger.info("Successfully collected background metrics")
-    except SoftTimeLimitExceeded:
-        task_logger.info(
-            "Soft time limit exceeded, task is being terminated gracefully."
-        )
-    except Exception as e:
-        task_logger.exception("Error collecting background process metrics")
-        raise e
-    finally:
-        if lock_monitoring.owned():
-            lock_monitoring.release()
-
-        task_logger.info("Background monitoring task finished")
 
 
 @shared_task(
@@ -1024,6 +303,28 @@ def monitor_celery_queues_helper(
         f"monitoring={n_monitoring} "
         f"sandbox={n_sandbox} "
     )
+    _report_queue_depths(r_celery)
+
+
+_last_queue_report: float | None = None
+
+
+def _report_queue_depths(r_celery: Redis) -> None:
+    """Fleet telemetry: the depth of every queue, at most every QUEUE_INTERVAL_SECONDS."""
+    global _last_queue_report
+    now: float = time.monotonic()
+    if get_sender() is None or not poll_due(
+        _last_queue_report, now, QUEUE_INTERVAL_SECONDS
+    ):
+        return
+    _last_queue_report = now
+    try:
+        for queue in CELERY_QUEUES:
+            depth: int = celery_get_queue_length(queue, r_celery)
+            emit_telemetry("queue", {"queue": queue, "depth": depth, "shared": True})
+    except Exception:
+        # Telemetry never fails the queue monitor.
+        pass
 
 
 """Memory monitoring"""
@@ -1164,43 +465,22 @@ def cloud_monitor_celery_pidbox(
     # task_logger.info(f"Deleted idle pidbox: pidbox={key_str}")
 
 
-"""Version telemetry heartbeat"""
-
-_VERSION_TELEMETRY_EMITTED_KEY = "monitoring_version_telemetry_emitted"
-_VERSION_TELEMETRY_TTL_SECONDS = 24 * 60 * 60
+"""OpenSearch resource health"""
 
 
 @shared_task(
-    name=OnyxCeleryTask.EMIT_VERSION_TELEMETRY,
+    name=OnyxCeleryTask.MONITOR_OPENSEARCH_RESOURCES,
     ignore_result=True,
     queue=OnyxCeleryQueues.MONITORING,
 )
-def emit_version_telemetry(*, tenant_id: str) -> None:
-    """Daily heartbeat reporting the running build of self-hosted instances.
+def monitor_opensearch_resources(*, tenant_id: str | None = None) -> None:  # noqa: ARG001
+    refresh_resource_health()
 
-    Scheduled hourly (beat schedule state doesn't survive restarts, so a daily
-    interval could never fire); the 1-day-TTL Redis marker enforces the daily
-    cadence.
-    """
-    if MULTI_TENANT or DISABLE_TELEMETRY:
-        return
 
-    redis_std = get_redis_client(tenant_id=tenant_id)
-    # atomically claim the daily slot so overlapping runs can't double-report
-    if not redis_std.set(
-        _VERSION_TELEMETRY_EMITTED_KEY,
-        "1",
-        nx=True,
-        ex=_VERSION_TELEMETRY_TTL_SECONDS,
-    ):
-        return
-
-    delivered = optional_telemetry(
-        record_type=RecordType.VERSION,
-        data={"version": __version__},
-        tenant_id=tenant_id,
-        blocking=True,
-    )
-    if not delivered:
-        # release the slot so the next hourly tick retries
-        redis_std.delete(_VERSION_TELEMETRY_EMITTED_KEY)
+@shared_task(
+    name=OnyxCeleryTask.COLLECT_FLEET_TELEMETRY,
+    ignore_result=True,
+    queue=OnyxCeleryQueues.MONITORING,
+)
+def collect_fleet_telemetry(*, tenant_id: str) -> None:
+    collect_snapshots(tenant_id)

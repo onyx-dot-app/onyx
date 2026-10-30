@@ -1,11 +1,17 @@
-import asyncio
 import time
+from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 
 import pytest
 from mcp.server.auth.provider import AuthorizationParams
-from redis.asyncio import Redis
 
+from onyx.auth.oauth_provider import (
+    parse_oauth_provider_code_tenant,
+    parse_oauth_provider_token,
+)
+from onyx.cache.interface import CacheBackend
+from onyx.cache.postgres_backend import PostgresCacheBackend
+from onyx.cache.redis_backend import RedisCacheBackend
 from onyx.oauth_provider import attempts
 from onyx.oauth_provider.attempts import (
     bind_authorization_request,
@@ -21,8 +27,37 @@ from onyx.oauth_provider.models import (
     PendingOAuthProviderAuthorization,
     StoredOAuthProviderCode,
 )
+from onyx.redis.redis_pool import redis_pool
+from shared_configs.configs import DEFAULT_REDIS_PREFIX, POSTGRES_DEFAULT_SCHEMA
 
-pytestmark = pytest.mark.asyncio(loop_scope="module")
+
+@pytest.fixture(params=["redis", "postgres"])
+def cache(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> CacheBackend:
+    """The shared cache. On Redis each tenant gets its own namespace; the
+    PostgreSQL cache backs single-tenant deployments, so every tenant maps to the
+    default schema there."""
+    if request.param == "redis":
+        backend: CacheBackend = RedisCacheBackend(
+            redis_pool.get_client(DEFAULT_REDIS_PREFIX)
+        )
+
+        def tenant_cache(tenant_id: str) -> CacheBackend:
+            return RedisCacheBackend(redis_pool.get_client(tenant_id))
+
+    else:
+        request.getfixturevalue("db_session")
+        backend = PostgresCacheBackend(POSTGRES_DEFAULT_SCHEMA)
+
+        def tenant_cache(tenant_id: str) -> CacheBackend:  # noqa: ARG001
+            return backend
+
+    monkeypatch.setattr(attempts, "get_shared_cache_backend", lambda: backend)
+    monkeypatch.setattr(
+        attempts, "get_cache_backend", lambda *, tenant_id: tenant_cache(tenant_id)
+    )
+    return backend
 
 
 def _authorization() -> PendingOAuthProviderAuthorization:
@@ -54,31 +89,37 @@ def _code_record(
     )
 
 
-async def _delete_request(redis: Redis, handle: str) -> None:
+def _tenant_cache(tenant_id: str) -> CacheBackend:
+    return attempts.get_cache_backend(tenant_id=tenant_id)
+
+
+def _delete_request(cache: CacheBackend, handle: str) -> None:
     keys = attempts._request_keys(handle)
     assert keys is not None
-    await redis.delete(*keys)
+    pending_key, claim_key, _ = keys
+    cache.delete(pending_key)
+    cache.delete(claim_key)
 
 
-async def _delete_code(redis: Redis, code: str) -> None:
-    key = attempts._code_key(code)
-    assert key is not None
-    await redis.delete(key)
+def _delete_code(code: str) -> None:
+    tenant_id = parse_oauth_provider_code_tenant(code)
+    assert tenant_id is not None
+    _tenant_cache(tenant_id).delete(attempts._code_key(code))
 
 
-async def test_authorization_request_lifecycle_binds_and_approves(
-    redis_client: Redis,
+def test_authorization_request_lifecycle_binds_and_approves(
+    cache: CacheBackend,
 ) -> None:
     authorization = _authorization()
-    handle = await store_authorization_request(authorization)
+    handle = store_authorization_request(authorization)
     user_id = uuid4()
     tenant_id = f"tenant-{uuid4().hex}"
     session_hash = f"session-{uuid4().hex}"
 
     try:
-        assert await get_authorization_request(handle) == authorization
+        assert get_authorization_request(handle) == authorization
 
-        binding = await bind_authorization_request(
+        binding = bind_authorization_request(
             handle,
             user_id=user_id,
             tenant_id=tenant_id,
@@ -88,7 +129,7 @@ async def test_authorization_request_lifecycle_binds_and_approves(
         assert "csrf_token" not in repr(binding)
 
         assert (
-            await consume_authorization_request(
+            consume_authorization_request(
                 handle,
                 user_id=user_id,
                 tenant_id=tenant_id,
@@ -97,9 +138,9 @@ async def test_authorization_request_lifecycle_binds_and_approves(
             )
             is None
         )
-        assert await get_authorization_request(handle) == authorization
+        assert get_authorization_request(handle) == authorization
 
-        consumed = await consume_authorization_request(
+        consumed = consume_authorization_request(
             handle,
             user_id=user_id,
             tenant_id=tenant_id,
@@ -107,21 +148,21 @@ async def test_authorization_request_lifecycle_binds_and_approves(
             csrf_token=binding.csrf_token,
         )
         assert consumed == authorization
-        assert await get_authorization_request(handle) is None
+        assert get_authorization_request(handle) is None
     finally:
-        await _delete_request(redis_client, handle)
+        _delete_request(cache, handle)
 
 
-async def test_non_ascii_csrf_fails_without_consuming_request(
-    redis_client: Redis,
+def test_non_ascii_csrf_fails_without_consuming_request(
+    cache: CacheBackend,
 ) -> None:
     authorization = _authorization()
-    handle = await store_authorization_request(authorization)
+    handle = store_authorization_request(authorization)
     user_id = uuid4()
     tenant_id = f"tenant-{uuid4().hex}"
     session_hash = f"session-{uuid4().hex}"
     try:
-        binding = await bind_authorization_request(
+        binding = bind_authorization_request(
             handle,
             user_id=user_id,
             tenant_id=tenant_id,
@@ -130,7 +171,7 @@ async def test_non_ascii_csrf_fails_without_consuming_request(
         assert binding is not None
 
         assert (
-            await consume_authorization_request(
+            consume_authorization_request(
                 handle,
                 user_id=user_id,
                 tenant_id=tenant_id,
@@ -139,10 +180,10 @@ async def test_non_ascii_csrf_fails_without_consuming_request(
             )
             is None
         )
-        assert await get_authorization_request(handle) == authorization
+        assert get_authorization_request(handle) == authorization
 
         assert (
-            await consume_authorization_request(
+            consume_authorization_request(
                 handle,
                 user_id=user_id,
                 tenant_id=tenant_id,
@@ -152,20 +193,20 @@ async def test_non_ascii_csrf_fails_without_consuming_request(
             == authorization
         )
     finally:
-        await _delete_request(redis_client, handle)
+        _delete_request(cache, handle)
 
 
 @pytest.mark.parametrize("wrong_field", ["user", "tenant", "session"])
-async def test_wrong_binding_identity_cannot_consume_request(
-    redis_client: Redis,
+def test_wrong_binding_identity_cannot_consume_request(
+    cache: CacheBackend,
     wrong_field: str,
 ) -> None:
-    handle = await store_authorization_request(_authorization())
+    handle = store_authorization_request(_authorization())
     user_id = uuid4()
     tenant_id = f"tenant-{uuid4().hex}"
     session_hash = f"session-{uuid4().hex}"
     try:
-        binding = await bind_authorization_request(
+        binding = bind_authorization_request(
             handle,
             user_id=user_id,
             tenant_id=tenant_id,
@@ -174,7 +215,7 @@ async def test_wrong_binding_identity_cannot_consume_request(
         assert binding is not None
 
         assert (
-            await consume_authorization_request(
+            consume_authorization_request(
                 handle,
                 user_id=uuid4() if wrong_field == "user" else user_id,
                 tenant_id=(
@@ -191,7 +232,7 @@ async def test_wrong_binding_identity_cannot_consume_request(
         )
 
         assert (
-            await consume_authorization_request(
+            consume_authorization_request(
                 handle,
                 user_id=user_id,
                 tenant_id=tenant_id,
@@ -201,25 +242,25 @@ async def test_wrong_binding_identity_cannot_consume_request(
             is not None
         )
     finally:
-        await _delete_request(redis_client, handle)
+        _delete_request(cache, handle)
 
 
-async def test_binding_first_writer_wins_and_owner_must_match(
-    redis_client: Redis,
+def test_binding_first_writer_wins_and_owner_must_match(
+    cache: CacheBackend,
 ) -> None:
-    handle = await store_authorization_request(_authorization())
+    handle = store_authorization_request(_authorization())
     user_id = uuid4()
     tenant_id = f"tenant-{uuid4().hex}"
     session_hash = f"session-{uuid4().hex}"
     try:
-        first = await bind_authorization_request(
+        first = bind_authorization_request(
             handle,
             user_id=user_id,
             tenant_id=tenant_id,
             session_hash=session_hash,
         )
         assert first is not None
-        second = await bind_authorization_request(
+        second = bind_authorization_request(
             handle,
             user_id=user_id,
             tenant_id=tenant_id,
@@ -227,7 +268,7 @@ async def test_binding_first_writer_wins_and_owner_must_match(
         )
         assert second == first
         assert (
-            await bind_authorization_request(
+            bind_authorization_request(
                 handle,
                 user_id=uuid4(),
                 tenant_id=tenant_id,
@@ -236,48 +277,48 @@ async def test_binding_first_writer_wins_and_owner_must_match(
             is None
         )
     finally:
-        await _delete_request(redis_client, handle)
+        _delete_request(cache, handle)
 
 
-async def test_request_keys_are_hashed_and_ttl_bound(redis_client: Redis) -> None:
-    handle = await store_authorization_request(_authorization())
+def test_request_keys_are_hashed_and_ttl_bound(cache: CacheBackend) -> None:
+    handle = store_authorization_request(_authorization())
     try:
         keys = attempts._request_keys(handle)
         assert keys is not None
-        pending_key, binding_key = keys
-        assert handle not in pending_key
-        assert handle not in binding_key
+        pending_key, claim_key, binding_key = keys
+        assert all(handle not in key for key in keys)
 
-        pending_ttl = await redis_client.ttl(pending_key)
+        pending_ttl = cache.ttl(pending_key)
         assert 0 < pending_ttl <= attempts.AUTHORIZATION_REQUEST_TTL_SECONDS
 
-        binding = await bind_authorization_request(
+        tenant_id = f"tenant-{uuid4().hex}"
+        binding = bind_authorization_request(
             handle,
             user_id=uuid4(),
-            tenant_id=f"tenant-{uuid4().hex}",
+            tenant_id=tenant_id,
             session_hash=f"session-{uuid4().hex}",
         )
         assert binding is not None
-        binding_ttl = await redis_client.pttl(binding_key)
-        remaining_pending_ttl = await redis_client.pttl(pending_key)
-        assert 0 < binding_ttl <= remaining_pending_ttl + 100
+        assert cache.get(claim_key) == tenant_id.encode()
+        binding_ttl = _tenant_cache(tenant_id).ttl(binding_key)
+        assert 0 < binding_ttl <= cache.ttl(pending_key) + 1
     finally:
-        await _delete_request(redis_client, handle)
+        _delete_request(cache, handle)
 
 
-async def test_expired_request_cannot_be_read_or_bound(
-    redis_client: Redis,
+def test_expired_request_cannot_be_read_or_bound(
+    cache: CacheBackend,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(attempts, "AUTHORIZATION_REQUEST_TTL_SECONDS", 1)
-    handle = await store_authorization_request(_authorization())
+    handle = store_authorization_request(_authorization())
     try:
         keys = attempts._request_keys(handle)
         assert keys is not None
-        await redis_client.expire(keys[0], 0)
-        assert await get_authorization_request(handle) is None
+        cache.expire(keys[0], 0)
+        assert get_authorization_request(handle) is None
         assert (
-            await bind_authorization_request(
+            bind_authorization_request(
                 handle,
                 user_id=uuid4(),
                 tenant_id=f"tenant-{uuid4().hex}",
@@ -286,18 +327,18 @@ async def test_expired_request_cannot_be_read_or_bound(
             is None
         )
     finally:
-        await _delete_request(redis_client, handle)
+        _delete_request(cache, handle)
 
 
-async def test_exactly_one_concurrent_request_approval_succeeds(
-    redis_client: Redis,
+def test_exactly_one_concurrent_request_approval_succeeds(
+    cache: CacheBackend,
 ) -> None:
-    handle = await store_authorization_request(_authorization())
+    handle = store_authorization_request(_authorization())
     user_id = uuid4()
     tenant_id = f"tenant-{uuid4().hex}"
     session_hash = f"session-{uuid4().hex}"
     try:
-        binding = await bind_authorization_request(
+        binding = bind_authorization_request(
             handle,
             user_id=user_id,
             tenant_id=tenant_id,
@@ -305,126 +346,128 @@ async def test_exactly_one_concurrent_request_approval_succeeds(
         )
         assert binding is not None
 
-        results = await asyncio.gather(
-            consume_authorization_request(
-                handle,
-                user_id=user_id,
-                tenant_id=tenant_id,
-                session_hash=session_hash,
-                csrf_token=binding.csrf_token,
-            ),
-            consume_authorization_request(
-                handle,
-                user_id=user_id,
-                tenant_id=tenant_id,
-                session_hash=session_hash,
-                csrf_token=binding.csrf_token,
-            ),
-        )
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(
+                pool.map(
+                    lambda _: consume_authorization_request(
+                        handle,
+                        user_id=user_id,
+                        tenant_id=tenant_id,
+                        session_hash=session_hash,
+                        csrf_token=binding.csrf_token,
+                    ),
+                    range(2),
+                )
+            )
         assert sum(result is not None for result in results) == 1
     finally:
-        await _delete_request(redis_client, handle)
+        _delete_request(cache, handle)
 
 
-async def test_authorization_code_lifecycle_and_hashed_storage(
-    redis_client: Redis,
+def test_authorization_code_lifecycle_and_hashed_storage(
+    cache: CacheBackend,
 ) -> None:
     record = _code_record()
-    code = await store_authorization_code(record)
+    code = store_authorization_code(record)
     try:
         key = attempts._code_key(code)
-        assert key is not None
         assert code not in key
+        assert record.tenant_id in code
 
-        raw_payload = await redis_client.get(key)
+        tenant_cache = _tenant_cache(record.tenant_id)
+        raw_payload = tenant_cache.get(key)
         assert isinstance(raw_payload, bytes)
         assert code.encode() not in raw_payload
+        if tenant_cache is not cache:
+            assert cache.get(key) is None
 
-        ttl = await redis_client.ttl(key)
+        ttl = tenant_cache.ttl(key)
         assert 0 < ttl <= attempts.AUTHORIZATION_CODE_TTL_SECONDS
-        assert await get_authorization_code(code) == record
-        assert await consume_authorization_code(code) == record
-        assert await get_authorization_code(code) is None
+        assert get_authorization_code(code) == record
+        assert consume_authorization_code(code) == record
+        assert get_authorization_code(code) is None
     finally:
-        await _delete_code(redis_client, code)
+        _delete_code(code)
 
 
-async def test_code_store_rejects_expired_or_overlong_records() -> None:
+def test_code_store_rejects_expired_or_overlong_records() -> None:
     with pytest.raises(ValueError, match="already expired"):
-        await store_authorization_code(_code_record(expires_in=-1))
+        store_authorization_code(_code_record(expires_in=-1))
     with pytest.raises(ValueError, match="exceeds maximum"):
-        await store_authorization_code(
+        store_authorization_code(
             _code_record(expires_in=attempts.AUTHORIZATION_CODE_TTL_SECONDS + 1)
         )
 
 
-async def test_expired_code_cannot_be_read_or_consumed(redis_client: Redis) -> None:
-    code = await store_authorization_code(_code_record())
+@pytest.mark.usefixtures("cache")
+def test_expired_code_cannot_be_read_or_consumed() -> None:
+    record = _code_record()
+    code = store_authorization_code(record)
     try:
-        key = attempts._code_key(code)
-        assert key is not None
-        await redis_client.set(
-            key, _code_record(expires_in=-1).model_dump_json(), ex=60
+        expired = record.model_copy(update={"expires_at": time.time() - 1})
+        _tenant_cache(record.tenant_id).set(
+            attempts._code_key(code), expired.model_dump_json(), ex=60
         )
-        assert await get_authorization_code(code) is None
-        assert await consume_authorization_code(code) is None
+        assert get_authorization_code(code) is None
+        assert consume_authorization_code(code) is None
     finally:
-        await _delete_code(redis_client, code)
+        _delete_code(code)
 
 
-async def test_exactly_one_concurrent_code_exchange_succeeds(
-    redis_client: Redis,
-) -> None:
-    code = await store_authorization_code(_code_record())
+@pytest.mark.usefixtures("cache")
+def test_exactly_one_concurrent_code_exchange_succeeds() -> None:
+    code = store_authorization_code(_code_record())
     try:
-        results = await asyncio.gather(
-            consume_authorization_code(code),
-            consume_authorization_code(code),
-        )
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(
+                pool.map(lambda _: consume_authorization_code(code), range(2))
+            )
         assert sum(result is not None for result in results) == 1
     finally:
-        await _delete_code(redis_client, code)
+        _delete_code(code)
 
 
-async def test_malformed_stored_records_fail_closed(redis_client: Redis) -> None:
-    handle = await store_authorization_request(_authorization())
-    code = await store_authorization_code(_code_record())
+def test_malformed_stored_records_fail_closed(cache: CacheBackend) -> None:
+    handle = store_authorization_request(_authorization())
+    record = _code_record()
+    code = store_authorization_code(record)
     try:
         request_keys = attempts._request_keys(handle)
-        code_key = attempts._code_key(code)
         assert request_keys is not None
-        assert code_key is not None
-        await redis_client.set(request_keys[0], b"{not-json", ex=60)
-        await redis_client.set(code_key, b'{"expires_at": "not-a-record"}', ex=60)
+        cache.set(request_keys[0], b"{not-json", ex=60)
+        _tenant_cache(record.tenant_id).set(
+            attempts._code_key(code), b'{"expires_at": "not-a-record"}', ex=60
+        )
 
-        assert await get_authorization_request(handle) is None
-        assert await get_authorization_code(code) is None
+        assert get_authorization_request(handle) is None
+        assert get_authorization_code(code) is None
     finally:
-        await _delete_request(redis_client, handle)
-        await _delete_code(redis_client, code)
+        _delete_request(cache, handle)
+        _delete_code(code)
 
 
-async def test_random_handle_collision_fails_loudly(
-    redis_client: Redis,
+def test_random_handle_collision_fails_loudly(
+    cache: CacheBackend,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     handle = "a" * 43
     keys = attempts._request_keys(handle)
     assert keys is not None
-    await redis_client.set(keys[0], "occupied", ex=60)
+    cache.set(keys[0], "occupied", ex=60)
     monkeypatch.setattr(attempts.secrets, "token_urlsafe", lambda _: handle)
     try:
         with pytest.raises(RuntimeError, match="collision"):
-            await store_authorization_request(_authorization())
+            store_authorization_request(_authorization())
     finally:
-        await redis_client.delete(*keys)
+        for key in keys:
+            cache.delete(key)
 
 
-async def test_invalid_handles_do_not_touch_redis() -> None:
+def test_invalid_handles_do_not_touch_the_cache() -> None:
     bad_handle = "not-valid"
-    assert await get_authorization_request(bad_handle) is None
+    assert get_authorization_request(bad_handle) is None
     assert (
-        await bind_authorization_request(
+        bind_authorization_request(
             bad_handle,
             user_id=uuid4(),
             tenant_id="tenant",
@@ -433,7 +476,7 @@ async def test_invalid_handles_do_not_touch_redis() -> None:
         is None
     )
     assert (
-        await consume_authorization_request(
+        consume_authorization_request(
             bad_handle,
             user_id=uuid4(),
             tenant_id="tenant",
@@ -442,5 +485,63 @@ async def test_invalid_handles_do_not_touch_redis() -> None:
         )
         is None
     )
-    assert await get_authorization_code(bad_handle) is None
-    assert await consume_authorization_code(bad_handle) is None
+    assert get_authorization_code(bad_handle) is None
+    assert consume_authorization_code(bad_handle) is None
+
+
+def test_first_tenant_to_open_consent_owns_the_request(cache: CacheBackend) -> None:
+    authorization = _authorization()
+    handle = store_authorization_request(authorization)
+    owner = {
+        "user_id": uuid4(),
+        "tenant_id": f"tenant-{uuid4().hex}",
+        "session_hash": f"session-{uuid4().hex}",
+    }
+    intruder = {
+        "user_id": uuid4(),
+        "tenant_id": f"tenant-{uuid4().hex}",
+        "session_hash": f"session-{uuid4().hex}",
+    }
+    try:
+        binding = bind_authorization_request(handle, **owner)
+        assert binding is not None
+        assert bind_authorization_request(handle, **intruder) is None
+        assert (
+            consume_authorization_request(
+                handle, **intruder, csrf_token=binding.csrf_token
+            )
+            is None
+        )
+        assert (
+            consume_authorization_request(
+                handle, **owner, csrf_token=binding.csrf_token
+            )
+            == authorization
+        )
+    finally:
+        _delete_request(cache, handle)
+
+
+@pytest.mark.usefixtures("cache")
+def test_editing_a_code_tenant_misses() -> None:
+    record = _code_record()
+    code = store_authorization_code(record)
+    other_tenant = f"tenant-{uuid4().hex}"
+    tampered = code.replace(record.tenant_id, other_tenant, 1)
+    try:
+        assert parse_oauth_provider_code_tenant(tampered) == other_tenant
+        assert get_authorization_code(tampered) is None
+        assert consume_authorization_code(tampered) is None
+        assert consume_authorization_code(code) == record
+    finally:
+        _delete_code(code)
+
+
+@pytest.mark.usefixtures("cache")
+def test_codes_are_not_access_or_refresh_tokens() -> None:
+    record = _code_record()
+    code = store_authorization_code(record)
+    try:
+        assert parse_oauth_provider_token(code) is None
+    finally:
+        _delete_code(code)

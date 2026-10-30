@@ -1,14 +1,21 @@
+from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 from uuid import UUID
 
 from mcp.shared.auth import OAuthClientInformationFull
-from sqlalchemy import select, update
+from sqlalchemy import delete, or_, select, tuple_, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
+from onyx.auth.constants import (
+    OAUTH_PROVIDER_ACCESS_LIFETIME,
+    OAUTH_PROVIDER_CLIENT_IDLE_LIFETIME,
+    OAUTH_PROVIDER_GRANT_LIFETIME,
+    OAUTH_PROVIDER_SCOPE,
+)
 from onyx.auth.oauth_provider import (
     OAuthProviderTokenKind,
     generate_oauth_provider_token,
@@ -25,16 +32,18 @@ from onyx.db.models import (
     OAuthProviderGrant,
     OAuthProviderToken,
     User,
+    UserTenantMapping,
+    UserTenantMappingOAuthAccount,
 )
 from onyx.oauth_provider.models import (
     OAuthProviderGrantInfo,
+    OAuthProviderOwner,
     OAuthProviderTokenInfo,
     OAuthProviderTokenPair,
 )
+from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import get_current_tenant_id
 
-OAUTH_PROVIDER_ACCESS_LIFETIME = timedelta(minutes=15)
-OAUTH_PROVIDER_GRANT_LIFETIME = timedelta(days=30)
 OAUTH_PROVIDER_STORAGE_ERRORS = (
     SQLAlchemyError,
     ShardConfigurationError,
@@ -158,7 +167,7 @@ def create_oauth_provider_grant__no_commit(
         client_id=client_id,
         client_name=client_name,
         resource=resource,
-        scopes=[Permission.READ_SEARCH.value],
+        scopes=[OAUTH_PROVIDER_SCOPE],
         created_at=now,
         expires_at=now
         + (
@@ -251,6 +260,13 @@ def rotate_oauth_provider_refresh__no_commit(
         return None
     now = datetime.now(timezone.utc)
     token.consumed_at = now
+    session.execute(
+        delete(OAuthProviderToken).where(
+            OAuthProviderToken.grant_id == grant.id,
+            OAuthProviderToken.kind == "access",
+            OAuthProviderToken.expires_at <= now,
+        )
+    )
     return _issue_tokens(session, grant, issue_refresh=True, now=now)
 
 
@@ -340,3 +356,141 @@ def revoke_oauth_provider_grant__no_commit(
     if grant.revoked_at is None:
         grant.revoked_at = datetime.now(timezone.utc)
     return True
+
+
+def oauth_provider_tenant_has_members(tenant_id: str) -> bool:
+    """Whether ``tenant_id`` names a workspace with at least one active member.
+
+    Used to reject OAuth tokens whose embedded tenant does not exist before any
+    tenant schema is queried."""
+    if not MULTI_TENANT:
+        return tenant_id == POSTGRES_DEFAULT_SCHEMA
+    if tenant_id == POSTGRES_DEFAULT_SCHEMA:
+        return False
+    with get_catalog_session() as session:
+        return (
+            session.scalar(
+                select(UserTenantMapping.tenant_id)
+                .where(
+                    UserTenantMapping.tenant_id == tenant_id,
+                    UserTenantMapping.active.is_(True),
+                )
+                .limit(1)
+            )
+            is not None
+        )
+
+
+def oauth_provider_owner_is_member(
+    tenant_id: str, email: str, identities: Sequence[tuple[str, str]]
+) -> bool:
+    """Whether a grant owner still belongs to ``tenant_id``.
+
+    The owner counts as a member through an active catalog mapping for their
+    email or for one of their linked OAuth identities."""
+    if not MULTI_TENANT:
+        return tenant_id == POSTGRES_DEFAULT_SCHEMA
+    subject_membership = (
+        select(UserTenantMappingOAuthAccount.oauth_name)
+        .where(
+            UserTenantMappingOAuthAccount.tenant_id == UserTenantMapping.tenant_id,
+            UserTenantMappingOAuthAccount.email == UserTenantMapping.email,
+            tuple_(
+                UserTenantMappingOAuthAccount.oauth_name,
+                UserTenantMappingOAuthAccount.account_id,
+            ).in_(identities),
+        )
+        .exists()
+    )
+    with get_catalog_session() as session:
+        return (
+            session.scalar(
+                select(UserTenantMapping.tenant_id)
+                .where(
+                    UserTenantMapping.tenant_id == tenant_id,
+                    UserTenantMapping.active.is_(True),
+                    or_(UserTenantMapping.email == email.lower(), subject_membership),
+                )
+                .limit(1)
+            )
+            is not None
+        )
+
+
+def oauth_provider_owner_snapshot(user: User) -> OAuthProviderOwner:
+    """Copy the fields the membership check needs, so it can run after the
+    tenant session that loaded ``user`` has closed."""
+    return OAuthProviderOwner(
+        user_id=user.id,
+        email=user.email,
+        oauth_identities=tuple(
+            (account.oauth_name, account.account_id) for account in user.oauth_accounts
+        ),
+    )
+
+
+def get_oauth_provider_owner(
+    session: Session, user_id: UUID
+) -> OAuthProviderOwner | None:
+    """Snapshot of the active user ``user_id``, or None if they are gone or inactive."""
+    user = session.get(User, user_id, populate_existing=True)
+    if user is None or not user.is_active:
+        return None
+    return oauth_provider_owner_snapshot(user)
+
+
+def get_oauth_provider_token_owner(
+    session: Session,
+    raw_token: str,
+    *,
+    client_id: str,
+    resource: str,
+) -> OAuthProviderOwner | None:
+    """Snapshot of the active user who owns ``raw_token`` for this client and
+    resource, in the current tenant. Accepts access and refresh tokens."""
+    parsed = parse_oauth_provider_token(raw_token)
+    if parsed is None or parsed.tenant_id != get_current_tenant_id():
+        return None
+    user = (
+        session.scalars(
+            select(User)
+            .join(OAuthProviderGrant, OAuthProviderGrant.user_id == User.id)
+            .join(
+                OAuthProviderToken, OAuthProviderToken.grant_id == OAuthProviderGrant.id
+            )
+            .where(
+                OAuthProviderToken.token_hash == parsed.token_hash,
+                OAuthProviderToken.kind == parsed.kind.value,
+                OAuthProviderGrant.client_id == client_id,
+                OAuthProviderGrant.resource == resource,
+                User.__table__.c.is_active.is_(True),
+            )
+        )
+        .unique()
+        .one_or_none()
+    )
+    if user is None:
+        return None
+    return oauth_provider_owner_snapshot(user)
+
+
+def delete_expired_oauth_provider_grants__no_commit(
+    session: Session, *, now: datetime
+) -> int:
+    # Token rows cascade with their grant.
+    result = session.execute(
+        delete(OAuthProviderGrant).where(OAuthProviderGrant.expires_at <= now)
+    )
+    return cast(CursorResult[Any], result).rowcount or 0
+
+
+def delete_idle_oauth_provider_clients__no_commit(
+    session: Session, *, now: datetime
+) -> int:
+    result = session.execute(
+        delete(OAuthProviderClient).where(
+            OAuthProviderClient.last_used_at
+            <= now - OAUTH_PROVIDER_CLIENT_IDLE_LIFETIME
+        )
+    )
+    return cast(CursorResult[Any], result).rowcount or 0

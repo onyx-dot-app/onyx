@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR from "swr";
-import { InputPrompt } from "@/app/app/interfaces";
+import { InputPrompt } from "@/app/app/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 

@@ -20,6 +20,9 @@ from tests.integration.common_utils.constants import (
     MOCK_CONNECTOR_SERVER_HOST,
     MOCK_CONNECTOR_SERVER_PORT,
 )
+from tests.integration.common_utils.document_index import (
+    mark_cc_pair_ids_backfill_complete,
+)
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
@@ -30,7 +33,7 @@ from tests.integration.common_utils.test_models import (
 )
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="User groups are enterprise only",
 )
 
@@ -259,6 +262,7 @@ def group_restrictions_on(
 
 
 def _restricted_pair(admin: DATestUser, data_access: list[int]) -> DATestCCPair:
+    mark_cc_pair_ids_backfill_complete()
     return CCPairManager.create_from_scratch(
         source=DocumentSource.MOCK_CONNECTOR,
         input_type=InputType.POLL,

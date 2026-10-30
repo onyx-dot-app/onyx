@@ -1,28 +1,30 @@
 from collections.abc import Callable
-from typing import Any
+from functools import lru_cache
 
+from pydantic import JsonValue
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import Permission
+from onyx.db.enums import LLMModelFlowType, Permission
 from onyx.db.llm import (
     can_user_access_llm_provider,
-    fetch_default_contextual_rag_model,
-    fetch_default_llm_model,
-    fetch_default_vision_model,
+    fetch_default_model,
     fetch_existing_llm_provider,
     fetch_model_configuration_by_id,
     fetch_user_group_ids,
 )
 from onyx.db.models import LLMProvider as LLMProviderModel
-from onyx.db.models import Persona, SearchSettings, User
+from onyx.db.models import ModelConfiguration, Persona, SearchSettings, User
 from onyx.llm.constants import LlmProviderNames
+from onyx.llm.decisions.client import DEFAULT_DECISION_TIMEOUT_S, DecisionClient
+from onyx.llm.decisions.factory import build_decision_client
 from onyx.llm.interfaces import LLM, LlmRequestPolicy
 from onyx.llm.models import ReasoningEffort, UserChatDefaults
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.override_models import LLMOverride
+from onyx.llm.token_budget import TOKEN_COUNT_CACHE_SIZE
 from onyx.llm.utils import (
     get_max_input_tokens_from_llm_provider,
     model_supports_image_input,
@@ -32,8 +34,10 @@ from onyx.llm.well_known_providers.constants import (
 )
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
+from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.utils.headers import build_llm_extra_headers
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -77,8 +81,8 @@ def _get_model_configuration(
 def _build_model_kwargs(
     provider: str,
     configured_max_input_tokens: int | None,
-) -> dict[str, Any]:
-    model_kwargs: dict[str, Any] = {}
+) -> dict[str, JsonValue]:
+    model_kwargs: dict[str, JsonValue] = {}
     if (
         provider == LlmProviderNames.OLLAMA_CHAT
         and configured_max_input_tokens
@@ -250,7 +254,7 @@ def get_default_llm_with_vision(
     model nobody chose.
     """
     with get_session_with_current_tenant() as db_session:
-        default_model = fetch_default_vision_model(db_session)
+        default_model = fetch_default_model(db_session, LLMModelFlowType.VISION)
         if default_model is None:
             logger.warning(
                 "No default vision model is set — image summarization will be "
@@ -295,6 +299,8 @@ def llm_from_provider(
     model_configuration = _get_model_configuration(
         llm_provider=llm_provider, model_name=model_name
     )
+    if model_configuration is not None and not model_configuration.supports_chat:
+        raise ValueError("This model does not support chat requests")
     configured_max_input_tokens = (
         model_configuration.max_input_tokens if model_configuration else None
     )
@@ -331,6 +337,11 @@ def llm_from_provider(
         model_kwargs=model_kwargs,
         policy_headers=policy.headers if policy else None,
         policy_model_kwargs=policy.model_kwargs if policy else None,
+        supports_images=(
+            True
+            if model_configuration and model_configuration.supports_image_input
+            else None
+        ),
         reasoning_effort_default=(
             model_configuration.reasoning_effort_default
             if model_configuration
@@ -345,12 +356,14 @@ def llm_from_provider(
         supports_reasoning=(
             model_configuration.supports_reasoning if model_configuration else False
         ),
+        is_router=model_configuration.is_router if model_configuration else False,
+        model_configuration_id=(
+            model_configuration.id if model_configuration else None
+        ),
     )
 
 
 def get_llm_for_contextual_rag(model_configuration_id: int) -> LLM:
-    from onyx.db.models import ModelConfiguration
-
     with get_session_with_current_tenant() as db_session:
         mc = db_session.get(ModelConfiguration, model_configuration_id)
         if not mc:
@@ -371,7 +384,7 @@ def get_contextual_rag_llm_for_search_settings(
     mc_id = search_settings.contextual_rag_model_configuration_id
     if mc_id is None:
         with get_session_with_current_tenant() as db_session:
-            mc = fetch_default_contextual_rag_model(db_session)
+            mc = fetch_default_model(db_session, LLMModelFlowType.CONTEXTUAL_RAG)
         mc_id = mc.id if mc else None
     return get_llm_for_contextual_rag(mc_id) if mc_id is not None else None
 
@@ -383,7 +396,7 @@ def get_default_llm(
     user_defaults: UserChatDefaults | None = None,
 ) -> LLM:
     with get_session_with_current_tenant() as db_session:
-        model = fetch_default_llm_model(db_session)
+        model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
 
         if not model:
             raise ValueError("No default LLM model found")
@@ -398,6 +411,81 @@ def get_default_llm(
         )
 
 
+def get_default_utility_llm(
+    flow_type: LLMModelFlowType,
+    additional_headers: dict[str, str] | None = None,
+    policy_fn: Callable[[str], LlmRequestPolicy] | None = None,
+) -> LLM | None:
+    with get_session_with_current_tenant() as db_session:
+        model = fetch_default_model(db_session, flow_type)
+        if model is None:
+            return None
+        provider = LLMProviderView.from_model(
+            model.llm_provider, model_configurations=[model]
+        )
+        model_name = model.name
+        check_llm_cost_limit_for_provider(
+            db_session=db_session,
+            tenant_id=get_current_tenant_id(),
+            llm_provider_api_key=provider.api_key,
+        )
+
+    return llm_from_provider(
+        model_name=model_name,
+        llm_provider=provider,
+        additional_headers=additional_headers,
+        policy_fn=policy_fn,
+    )
+
+
+def get_decision_client(
+    additional_headers: dict[str, str] | None = None,
+    timeout: float = DEFAULT_DECISION_TIMEOUT_S,
+) -> DecisionClient | None:
+    with get_session_with_current_tenant() as db_session:
+        model = fetch_default_model(db_session, LLMModelFlowType.DECISION)
+        if model is None:
+            return None
+        provider = model.llm_provider
+        api_key = (
+            provider.api_key.get_value(apply_mask=False) if provider.api_key else ""
+        )
+        check_llm_cost_limit_for_provider(
+            db_session=db_session,
+            tenant_id=get_current_tenant_id(),
+            llm_provider_api_key=api_key,
+        )
+        return build_decision_client(
+            provider=provider.provider,
+            model=model.name,
+            api_key=api_key,
+            api_base=provider.api_base,
+            zoom_voice_provider_id=provider.zoom_voice_provider_id,
+            extra_headers={
+                **build_llm_extra_headers(additional_headers),
+                **_build_provider_extra_headers(
+                    provider.provider, provider.custom_config
+                ),
+            },
+            model_configuration_id=model.id,
+            timeout=timeout,
+        )
+
+
+def get_search_selection_llm(
+    *,
+    fallback: LLM,
+    additional_headers: dict[str, str] | None = None,
+    policy_fn: Callable[[str], LlmRequestPolicy] | None = None,
+) -> LLM:
+    return (
+        get_default_utility_llm(
+            LLMModelFlowType.SEARCH_SELECTION, additional_headers, policy_fn
+        )
+        or fallback
+    )
+
+
 def get_llm(
     provider: str,
     model: str,
@@ -409,14 +497,19 @@ def get_llm(
     custom_config: dict[str, str] | None = None,
     temperature: float | None = None,
     additional_headers: dict[str, str] | None = None,
-    model_kwargs: dict[str, Any] | None = None,
+    model_kwargs: dict[str, JsonValue] | None = None,
     policy_headers: dict[str, str] | None = None,
-    policy_model_kwargs: dict[str, Any] | None = None,
+    policy_model_kwargs: dict[str, JsonValue] | None = None,
     reasoning_effort_default: ReasoningEffort | None = None,
     reasoning_effort_user_default: ReasoningEffort | None = None,
     reasoning_effort_max: ReasoningEffort | None = None,
     supports_reasoning: bool = False,
+    supports_images: bool | None = None,
+    is_router: bool = False,
+    model_configuration_id: int | None = None,
 ) -> LitellmLLM:
+    if provider == LlmProviderNames.TYPESAFE:
+        raise ValueError("TypeSafe AI does not support chat generation")
     if temperature is None:
         temperature = GEN_AI_TEMPERATURE
 
@@ -454,6 +547,9 @@ def get_llm(
         reasoning_effort_user_default=reasoning_effort_user_default,
         reasoning_effort_max=reasoning_effort_max,
         supports_reasoning=supports_reasoning,
+        supports_images=supports_images,
+        is_router=is_router,
+        model_configuration_id=model_configuration_id,
     )
 
 
@@ -478,4 +574,10 @@ def get_llm_tokenizer_encode_func(llm: LLM) -> Callable[[str], list[int]]:
 
 def get_llm_token_counter(llm: LLM) -> Callable[[str], int]:
     tokenizer_encode_func = get_llm_tokenizer_encode_func(llm)
-    return lambda text: len(tokenizer_encode_func(text))
+
+    # Keep prompt content local to this counter, never in a process-wide cache.
+    @lru_cache(maxsize=TOKEN_COUNT_CACHE_SIZE)
+    def count(text: str) -> int:
+        return len(tokenizer_encode_func(text))
+
+    return count

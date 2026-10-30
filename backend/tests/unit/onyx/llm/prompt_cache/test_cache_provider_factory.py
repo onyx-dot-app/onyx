@@ -52,7 +52,7 @@ def test_portkey_messages_surface_gets_anthropic_adapter() -> None:
 def test_gateway_non_anthropic_model_stays_noop() -> None:
     for provider in ("litellm_proxy", "bifrost", "openai_compatible", "portkey"):
         adapter: PromptCacheProvider = get_provider_adapter(
-            _config(provider, "gpt-5-mini")
+            _config(provider, "gpt-6-luna")
         )
         assert isinstance(adapter, NoOpPromptCacheProvider), provider
 
@@ -72,9 +72,52 @@ def test_gateway_substring_lookalikes_stay_noop() -> None:
         assert isinstance(adapter, NoOpPromptCacheProvider), name
 
 
+def test_bedrock_cache_capable_models_get_anthropic_adapter() -> None:
+    # LiteLLM translates cache_control into Converse cachePoint blocks, so the
+    # Anthropic-style marker works for any cache-capable Bedrock model.
+    for provider in ("bedrock", "bedrock_converse"):
+        adapter: PromptCacheProvider = get_provider_adapter(
+            _config(provider, "anthropic.claude-sonnet-4-5-20250929-v1:0")
+        )
+        assert isinstance(adapter, AnthropicPromptCacheProvider), provider
+
+        # Cross-region inference profile names resolve too.
+        adapter = get_provider_adapter(
+            _config(provider, "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
+        )
+        assert isinstance(adapter, AnthropicPromptCacheProvider), provider
+
+
+def test_bedrock_nova_models_get_anthropic_adapter() -> None:
+    for provider in ("bedrock", "bedrock_converse"):
+        adapter: PromptCacheProvider = get_provider_adapter(
+            _config(provider, "amazon.nova-pro-v1:0")
+        )
+        assert isinstance(adapter, AnthropicPromptCacheProvider), provider
+
+
+def test_bedrock_non_cacheable_models_stay_noop() -> None:
+    # Claude 3.5 Sonnet v1 predates prompt caching — a name-substring match
+    # would mark it anyway and the Converse call would fail on cachePoint.
+    for provider in ("bedrock", "bedrock_converse"):
+        for name in (
+            "anthropic.claude-3-5-sonnet-20240620-v1:0",
+            "meta.llama3-3-70b-instruct-v1:0",
+        ):
+            adapter: PromptCacheProvider = get_provider_adapter(_config(provider, name))
+            assert isinstance(adapter, NoOpPromptCacheProvider), (provider, name)
+
+
+def test_bedrock_unknown_model_stays_noop() -> None:
+    adapter: PromptCacheProvider = get_provider_adapter(
+        _config("bedrock", "some.custom-fine-tune")
+    )
+    assert isinstance(adapter, NoOpPromptCacheProvider)
+
+
 def test_direct_providers_unchanged() -> None:
     assert isinstance(
-        get_provider_adapter(_config("openai", "gpt-5-mini")),
+        get_provider_adapter(_config("openai", "gpt-6-luna")),
         OpenAIPromptCacheProvider,
     )
     assert isinstance(
@@ -86,7 +129,7 @@ def test_direct_providers_unchanged() -> None:
         AnthropicPromptCacheProvider,
     )
     assert isinstance(
-        get_provider_adapter(_config("openrouter", "openai/gpt-5-mini")),
+        get_provider_adapter(_config("openrouter", "openai/gpt-6-luna")),
         OpenAIPromptCacheProvider,
     )
     assert isinstance(

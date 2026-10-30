@@ -1,327 +1,245 @@
 # Craft Webapp Proxy
 
-> Lets a user watch the web app their Craft session is building, live, inside
-> Onyx. It proxies HTTP and one websocket into the sandbox's Next.js dev
-> server, and it is the trust boundary between the sandbox and the viewer's
-> browser.
+> Lets a user see, inside Onyx, the web app that their Craft session builds and
+> the static HTML files it writes; it is the trust boundary between code that an
+> LLM wrote and the viewer's browser.
 
-**Verified against:** `268e4d5a3d` (2026-10-05)
-**Domain:** craft
-**Edition:** CE (Craft ships in both editions; no EE-specific code in this path)
-**Owns:**
-`backend/onyx/server/features/build/webapp_proxy.py`,
-`backend/onyx/server/features/build/sandbox/nextjs_dev.py`,
-`web/src/app/craft/components/output-panel/PreviewTab.tsx`,
-`web/src/app/craft/components/OutputPanel.tsx`
-
-**Read first:** `docs/craft/lazy-webapp-provisioning.md`. It is the design
-plan for on-demand dev-server startup and the tamper-hardened bootstrap
-script this document's provisioning section maps to code.
+**Verified against:** `a4e97fcea1` (2026-10-29)
+**Edition:** CE
 
 ---
 
-## 1. What the user experiences
+## User experience
 
-A user asks Craft to build a web app. As the agent writes code, a Preview tab
-in the session view shows the running app in an iframe, hot-reloading as the
-agent edits files. The user never runs a command to see this; the dev server
-starts the first time the agent (or the user, via a documented fallback
-script) needs it.
+A user asks Craft to build a web app. The agent starts the dev server the first
+time it needs it. The app opens in a Browser tab of the output panel and
+updates when the agent edits its source. The user can share the session with
+the organization. Then any signed-in user in the same tenant who has the
+preview URL can open the live app, but not the transcript.
 
-Only the session owner can load the Preview tab, because `get_webapp_info`
-verifies ownership. The proxy also admits any authenticated tenant user who
-knows the proxy URL when the sharing scope is `PUBLIC_ORG`. A logged-in viewer
-without access gets a 404, not a broken frame.
-A logged-out viewer is redirected to `/auth/login`.
+A static `.html` file under `outputs/` also opens as a live page. Its relative
+CSS, images, scripts and JSON load. Root-relative URLs (`/style.css`) do not
+load, because the preview does not rewrite them. Forms, pop-ups and top-level
+navigation do not work.
 
----
-
-## 2. Surfaces
-
-### HTTP and websocket endpoints (router prefix `/build`, `webapp_proxy.py`)
-
-| Method | Path | Handler | Notes |
-|---|---|---|---|
-| GET | `/build/sessions/{session_id}/webapp` and `/build/sessions/{session_id}/webapp/{path:path}` | `get_webapp` | Proxies to the session's Next.js dev server. Public endpoint spec (exempt from the global auth middleware); auth is enforced inside the handler. |
-| WS | `/build/sessions/{session_id}/webapp/_next/webpack-hmr` | `websocket_webapp_hmr` | Proxies the Next.js Hot Module Replacement websocket. |
-
-`backend/onyx/server/features/build/session/api.py:get_webapp_info` (GET
-`/build/sessions/{session_id}/webapp-info`) is a separate, authenticated
-endpoint that reports `has_webapp`, `webapp_url`, and `ready`; the frontend
-polls it to decide when to show the Preview tab and what iframe URL to pass
-it (`web/src/app/craft/components/OutputPanel.tsx`).
-
-### Cache keys (`webapp_proxy.py`)
-
-| Key | TTL | Meaning |
-|---|---|---|
-| `craft:webapp:url:{session_id}` | 60 s | Cached sandbox base URL, so a hot proxy path skips a DB round trip. |
-| `craft:webapp:access:{session_id}:{user_id}` | 30 s | Cached "this user may view this session's webapp" grant. Only grants are cached; a 404 or 401 always re-checks. |
-
-Both live in the configured `CacheBackend` (`get_cache_backend`: Redis, or
-PostgreSQL when `CACHE_BACKEND=postgres`). They are shared by all API server
-replicas, so the cache is consistent across them.
+When it fails:
+- a dev server that is down or not reachable shows an "offline" page, not a raw
+  gateway error;
+- a signed-in viewer without access gets a 404;
+- a signed-out viewer goes to the login page;
+- a crashed dev server stays down until the agent starts it again, usually
+  after it reads `nextjs.log` and fixes the code.
 
 ---
 
-## 3. Data model
+## Scope
 
-This component reads but does not own session state. `[[craft-sessions]]`
-owns the `BuildSession` row this proxy resolves through
-(`get_webapp_target_async`, `get_webapp_access_async` in
-`onyx/server/features/build/db/build_session.py`): the session's
-`sharing_scope`, owner id, sandbox id, and allocated `nextjs_port`.
+This component owns the HTTP and hot-reload (HMR) websocket proxy into the
+sandbox's Next.js dev server, the preview access check, static HTML preview
+capabilities, the dev-server base path, and the scripts that start the dev
+server and start it again after a restore.
 
-`[[craft-sandboxes]]` owns the sandbox itself and the port allocation
-(`SANDBOX_NEXTJS_PORT_START`/`_END`, `reserve_nextjs_port__no_commit`).
-
----
-
-## 4. How it works
-
-### 4.1 Resolving the target
-
-`_get_sandbox_url` (`webapp_proxy.py`) resolves a session to a base URL:
-
-1. Check the cache backend (`craft:webapp:url:{session_id}`).
-2. On a miss, load `(sandbox_id, nextjs_port)` via
-   `get_webapp_target_async`. Missing session, unallocated port, or missing
-   sandbox each raise a distinct HTTP error (404, 503, 404).
-3. Call `get_sandbox_manager().get_webapp_url(sandbox_id, nextjs_port)`.
-   On Kubernetes this returns an in-cluster service URL,
-   `http://{pod_name}.{namespace}.svc.cluster.local:{port}`
-   (`kubernetes_sandbox_manager.py:_get_nextjs_url`, called from
-   `get_webapp_url`). The URL is never reachable from outside the cluster
-   except through this proxy.
-4. Cache the resolved URL for 60 seconds.
-
-### 4.2 Authorizing the viewer
-
-`_check_webapp_access` (`webapp_proxy.py`) runs before every proxied request
-and before the websocket is accepted:
-
-1. If the viewer has a cached grant for this session, allow immediately.
-2. Otherwise load `(sharing_scope, owner_id)` via `get_webapp_access_async`.
-   Missing session: 404. No authenticated user: 401 on the HTTP path (the
-   route handler turns that into a redirect to `/auth/login`, since a
-   preview iframe or top-level navigation should not just render a bare
-   401 page); the websocket path raises `WebSocketException(code=1008)`
-   directly, since a websocket handshake has no redirect.
-3. `SharingScope` has two values. `PRIVATE` (the column default) admits only
-   the owner. `PUBLIC_ORG` (the "Organization" option in `ShareButton.tsx`)
-   admits any authenticated user in the tenant, by design. The DB session and
-   the cache are both tenant-scoped, so no grant crosses tenants.
-4. A grant is cached for 30 seconds so a burst of asset requests for one
-   page load does not re-hit the database per file. The cache key is per
-   viewer, so `set_build_session_sharing_scope` does not evict it: a viewer
-   who already loaded a `PUBLIC_ORG` preview keeps access for up to 30
-   seconds after the owner sets it back to `PRIVATE`.
-
-**The security answer:** a preview is reachable by the session owner,
-or by any other authenticated tenant user while the sharing scope is not
-`PRIVATE`. A cached grant can stay valid for up to 30 seconds after the scope
-changes back to `PRIVATE`. There is no separate "preview link" credential. `PUBLIC_ORG`
-grants access to the live app only. Transcript and session routes still
-require session ownership (`db/build_session.py:get_build_session`). A
-logged-in viewer without the right sharing scope gets a 404. An authenticated non-owner
-cannot distinguish "session does not exist" from "session exists but is
-private." An unauthenticated viewer can: a missing session returns 404, and
-an existing session returns a redirect to `/auth/login`.
-
-### 4.3 Proxying a request
-
-`_proxy_request` builds the upstream path with `_webapp_next_path`, which
-prefixes every request with the session's base path,
-`webapp_base_path(session_id)` = `/api/build/sessions/{session_id}/webapp`
-(`sandbox/nextjs_dev.py:webapp_base_path`). Next.js's dev server is started
-configured with that same base path (`ONYX_WEBAPP_BASE_PATH`, see §4.5), so
-responses pass through unmodified: no URL rewriting, no HTML injection to
-patch relative links.
-
-Request headers are filtered through `EXCLUDED_REQUEST_HEADERS`
-(`webapp_proxy.py`) before forwarding: the viewer's Onyx cookie,
-`Authorization`, CSRF tokens, and the explicitly listed client-identity
-headers (`forwarded`, named `x-forwarded-*` headers, `x-real-ip`,
-`cf-connecting-ip`, and the IDP user and email headers) are stripped. The
-filter also drops every `x-onyx-*` and `sec-fetch-*` header by prefix. A
-header that is in neither list reaches the sandbox. The sandbox runs LLM-generated code; it must never see the
-viewer's Onyx credentials. Response headers are filtered through
-`EXCLUDED_HEADERS`: hop-by-hop headers are dropped, and `set-cookie` is
-stripped so app code running in the sandbox cannot set a cookie on the
-parent Onyx domain.
-
-On a proxy-level failure (502/503/504), the handler evicts the cached
-sandbox URL (it may point at a dead or recreated pod) and returns a
-friendly offline page (`templates/webapp_offline.html`) instead of a raw
-gateway error.
-
-### 4.4 Proxying the HMR websocket
-
-`websocket_webapp_hmr` requires an authenticated user
-(`current_user_from_websocket_cookie`, `onyx/auth/users.py`). That dependency
-checks the websocket origin and reads the session cookie. On multi-tenant
-deployments it resolves the tenant from the session token in Redis and sets
-the tenant context before it loads the user. It also requires
-`Permission.BASIC_ACCESS`. The handler then runs the same access check, then
-`_proxy_webapp_hmr_websocket` opens a second websocket to the sandbox's
-`/_next/webpack-hmr` endpoint and pumps messages both directions
-(`_pump_webapp_to_upstream`, `_pump_upstream_to_webapp`) until either side
-closes.
-
-### 4.5 Lazy provisioning
-
-The dev server does not start at session setup. `session_workspace.py`
-writes a self-contained, `chmod 444` script, `start-webapp.sh`, built by
-`build_webapp_bootstrap_script` (`sandbox/nextjs_dev.py`). The agent (via
-the opencode `webapp` tool) or a documented `bash start-webapp.sh` fallback
-runs it the first time a web app is actually being built:
-
-1. Scaffold `outputs/web` from the template if `outputs/web/package.json`
-   is missing, then `bun install`.
-2. `build_nextjs_start_script` writes the port to `.nextjs-port`, exports
-   `ONYX_WEBAPP_PORT`, `ONYX_WEBAPP_BASE_PATH`, and
-   `ONYX_WEBAPP_ALLOWED_DEV_ORIGINS` (`allowed_dev_origins`, derived from
-   `WEB_DOMAIN`, satisfies Next 16's `allowedDevOrigins` cross-origin
-   check), then starts `bun run dev` under `flock` so a concurrent replay
-   cannot spawn a second server for the same session
-   (`sandbox/nextjs_dev.py:build_nextjs_start_script`).
-3. On snapshot restore, `build_webapp_restore_script` rewrites the script
-   with the re-allocated port and auto-starts it only if the restored
-   snapshot's `outputs/web/package.json` exists
-   (`kubernetes_sandbox_manager.py` `restore_snapshot`).
-
-Port allocation is per-user and per-session: `reserve_nextjs_port__no_commit`
-(`db/build_session.py`) allocates one port from
-`[SANDBOX_NEXTJS_PORT_START, SANDBOX_NEXTJS_PORT_END)` for
-`SessionOrigin.INTERACTIVE` sessions only, persisted on
-`build_session.nextjs_port`. Headless sessions (scheduled-task fires; see
-`[[craft-scheduled-tasks]]`) get `nextjs_port=None` and skip webapp
-provisioning entirely, since nothing will view them live.
+Neighbours own the rest:
+- [[craft-sessions]]: the `BuildSession` row, its `sharing_scope` and its
+  `nextjs_port`, and `get_webapp_info`, which the panel polls for readiness.
+- [[craft-sandboxes]]: the pod, the port range, the session workspace, and
+  how a `(sandbox, port)` pair becomes a URL (`get_webapp_url`).
+- [[craft-frontend]]: the output panel, Browser tabs, and file viewers.
+- [[auth-and-identity]]: the optional cookie user and the websocket cookie
+  user.
 
 ---
 
-## 5. Contracts and invariants
+## Architecture
 
-1. **A preview must only be reachable by someone entitled to that session.**
-   `_check_webapp_access` must run before every proxied HTTP request and
-   before the HMR websocket is accepted. A new route added to this router
-   without that check is a direct information leak into a user's sandbox.
-2. **The sandbox must never receive the viewer's Onyx credentials.**
-   `EXCLUDED_REQUEST_HEADERS` strips cookies, `Authorization`, CSRF tokens,
-   and the listed identity headers before every forwarded request. A new header the
-   sandbox should not see must be added there, not assumed absent.
-3. **The proxy must not cache content-volatile dev assets.** Only
-   `_next/static/media/*` is content-hashed and safe to cache immutably;
-   everything else, including JS chunks and CSS, is stable-URL-but-mutable
-   in dev and must pass through uncached (`_proxy_request`, §9).
-4. **`set-cookie` from the sandbox must never reach the viewer's browser
-   under the Onyx origin.** Stripped unconditionally in `EXCLUDED_HEADERS`.
-5. **The base path must match on both ends.** `webapp_base_path(session_id)`
-   is used by the proxy's upstream path construction, the start script's
-   `ONYX_WEBAPP_BASE_PATH`, and the template `next.config.ts`. A change to
-   one without the others breaks every asset URL Next.js emits.
-
----
-
-## 6. Relationships
-
-**Depends on**
-- [[craft-sessions]]: session ownership, sharing scope, and the
-  `nextjs_port` field this proxy resolves through.
-- [[craft-sandboxes]]: the sandbox manager that turns a `(sandbox_id, port)`
-  pair into a reachable URL, and that runs the bootstrap/restore scripts.
-- [[auth-and-identity]]: `optional_user`, `current_user_from_websocket_cookie`.
-- [[multi-tenancy]]: sessions and sandboxes are tenant-scoped. The HTTP path
-  gets its tenant from the request middleware. The websocket path has no
-  such middleware, so `current_user_from_websocket_cookie` sets the tenant
-  context itself from the session token.
-
-**Depended on by**
-- [[craft-external-apps]]: unrelated egress path, but shares the theme of
-  "the sandbox is untrusted and must be firewalled from Onyx credentials."
-- [[craft-scheduled-tasks]]: scheduled (headless) sessions deliberately skip
-  this component; `nextjs_port` stays `None` for them.
-
----
-
-## 7. Blast radius
-
-| If your change... | Also check |
-|---|---|
-| adds a new proxied path or method | `EXCLUDED_REQUEST_HEADERS`/`EXCLUDED_HEADERS` still apply; `_check_webapp_access` still runs first |
-| changes what is cached or its TTL | the cache-eviction-on-502/503/504 path in `get_webapp`, and whether a stale grant could outlive a sharing-scope change |
-| changes `webapp_base_path` | `nextjs_dev.py`'s start script, the template `next.config.ts`, and every place `_webapp_next_path` builds an upstream path |
-| changes port allocation | `[[craft-sandboxes]]`, and whether headless (scheduled) sessions still correctly skip provisioning |
-| touches the HMR websocket proxy | verify hydration still works; this is the trap in §9, and it fails silently, not loudly |
-| changes response header filtering | re-check `set-cookie` stripping and cache-control handling together; a change to one filter can undo the other's intent |
-
----
-
-## 8. How to verify a change
-
-### Tests
-
-```bash
-cd backend && uv run pytest tests/unit/onyx/server/features/craft/test_webapp_proxy_header_stripping.py
-cd backend && uv run pytest tests/unit/onyx/server/features/craft/session/test_webapp_info.py
-cd backend && uv run pytest tests/external_dependency_unit/craft/test_webapp_hmr_websocket_auth.py
-cd backend && uv run pytest tests/integration/tests/craft/test_webapp_proxy.py
-cd backend && uv run pytest tests/integration/tests/craft/k8s/test_webapp_preview.py
-cd backend && uv run pytest tests/integration/tests/craft/docker_e2e/test_webapp_preview_docker.py
+```
+browser iframe  GET /api/build/sessions/{id}/webapp/{path}
+  webapp_proxy.py:get_webapp                 public route, auth inside the handler
+    _check_webapp_access                     cached grant, else DB scope check
+    _proxy_request                           GET only, headers filtered
+      _get_sandbox_url                       cached URL, else get_webapp_target_async
+        SandboxManager.get_webapp_url        in-cluster address of the pod
+  WS /api/build/sessions/{id}/webapp/_next/{hmr|webpack-hmr}
+    websocket_webapp_hmr                     cookie user, same access check
 ```
 
-Use manual reproduction for the cache and hot-reload behaviour below.
+**One base path on both ends.**
+`server/features/build/sandbox/nextjs_dev.py:webapp_base_path` is
+`/api/build/sessions/{id}/webapp`. The dev server runs with that base path, so
+the proxy passes responses through with no URL rewriting or script injection.
 
-### Manual reproduction
+**Lazy dev server.** Session setup writes `start-webapp.sh` (read-only) from
+`build_webapp_bootstrap_script`. The agent runs it when it builds an app,
+usually through the `webapp` tool
+(`server/features/build/sandbox/image/opencode-plugins/webapp.ts`), which can
+also report status, show logs and restart the server. The script copies the
+template if the app has no `package.json`, installs dependencies, and
+starts `bun run dev` on the session's port under `flock`, so two runs cannot
+start two servers. On snapshot restore, `build_webapp_restore_script` writes
+the script again with the new port and starts the server in the background
+only if the app exists.
 
-1. Confirm services are up: `tail -f backend/log/api_server_debug.log`.
-2. In a Craft session, ask the agent to scaffold a simple Next.js page.
-3. Open the Preview tab. Confirm the app renders and that editing a
-   component (ask the agent to change some visible text) hot-reloads
-   without a manual refresh. If it renders once but never updates after an
-   edit, the HMR websocket is not reaching the sandbox; check
-   `_next/webpack-hmr` in the browser's network panel for a failed
-   upgrade.
-4. Open the same session URL as a second, unrelated user account (or in an
-   incognito window with no session). Confirm the second user gets a 404
-   and the logged-out window is redirected to `/auth/login`, not rendered.
-5. Edit a file that changes a CSS class or a JS chunk's content, then
-   reload the preview without restarting the dev server. Confirm the new
-   styling/behavior shows immediately, not a stale cached version.
+**Port lifecycle.** Each session that can show a preview holds a port, unique
+per user (`server/features/build/db/build_session.py:reserve_nextjs_port__no_commit`).
+Sleep clears all of a user's ports (`clear_nextjs_ports_for_user`).
+`server/features/build/session/session_ready.py:ensure_session_ready` reserves
+a port for any session that has none when it rebuilds the session workspace,
+whatever the session's origin. Session creation skips the port for
+non-interactive origins (`SessionManager.create_session`) and for `headless`
+requests. Such a session gets a port only when a later rebuild reserves one.
+Until then its preview shows the offline page, because `_get_sandbox_url`
+returns 503 for a session with no port.
 
-Drive the browser with `claude-in-chrome` against the user's real Chrome.
-
-### What "working" looks like
-
-- An unauthorized logged-in viewer gets a 404 and a logged-out viewer gets a
-  redirect to `/auth/login`. Neither sees a rendered frame.
-- Hot reload works after a file edit without a manual page reload.
-- No stale JS/CSS after an edit, confirmed by a hard content check, not
-  just "the page still looks fine."
+**Static previews.** `server/features/build/static_preview.py:create_static_preview`
+checks session ownership, reads the output inventory, and stores a grant in
+the shared cache for one hour. The grant names the tenant, the owner, the
+session, the folder, and each allowed file with its size and revision.
+`read_static_preview` needs no cookie. It loads the grant by token, sets the
+tenant from it, checks that the owner is still active and has Craft, and
+serves only listed files at the granted revision. Asset bytes are cached by
+tenant, session, path and revision.
 
 ---
 
-## 9. Footguns
+## Contracts and traps
 
-- **Websocket upgrade is required for hydration, and failing to provide it
-  does not look like an error.** Next.js 16 with Turbopack and React 19
-  needs the `/_next/webpack-hmr` websocket connected for the page to
-  hydrate correctly in dev. If a deployment's proxy or ingress fails to
-  upgrade that connection, the page still renders (the initial HTML and
-  JS load fine over plain HTTP), but no event handlers attach: dropdowns
-  don't open, buttons don't respond. This looks like a broken feature in
-  the generated app, not a proxy problem. `websocket_webapp_hmr`
-  (`webapp_proxy.py`) is confirmed to implement the upgrade and pump both
-  directions; a regression here would reproduce exactly this symptom.
-- **Only `_next/static/media/*` is safe to cache immutably.** `_proxy_request`
-  checks `rel_path.startswith("_next/static/media/")` before setting
-  `cache-control: public, max-age=31536000, immutable`; every other path,
-  including dev JS chunks and CSS, is passed through with whatever
-  cache-control Next.js's dev server itself sets. Dev chunk and CSS URLs
-  are stable in shape but their content changes as the agent edits files,
-  so caching them would serve stale code after an edit that looks
-  unrelated to caching at all.
-- **The upstream base URL is an internal cluster address, not a public
-  one.** `get_webapp_url` on Kubernetes returns a
-  `*.svc.cluster.local` URL. This proxy is the only path a browser can use
-  to reach it; there is no direct-to-pod fallback for a viewer.
+1. `preview-access-model` **The preview access model.** The owner can always
+   open the preview. While `sharing_scope` is `PUBLIC_ORG`, any authenticated
+   user in the tenant can too
+   (`server/features/build/webapp_proxy.py:_check_webapp_access`). There is no
+   separate preview-link credential. The transcript and session routes still
+   require ownership. Three consequences:
+   - a grant is cached per viewer for 30 seconds, so a viewer keeps access for
+     up to 30 seconds after the owner sets the scope back to `PRIVATE`;
+   - a signed-in viewer without access gets 404, so they cannot tell a missing
+     session from a private one;
+   - a signed-out viewer can tell: a missing session gives 404, and an existing
+     one redirects to `/auth/login`.
+2. `public-router-checks-access` **Every route on `public_build_router` must
+   call `_check_webapp_access` first.** The webapp GET paths are in
+   `backend/onyx/server/auth_check.py:PUBLIC_ENDPOINT_SPECS`, so the startup check
+   (`check_router_auth`) accepts them with only `optional_user`, and the
+   handler can redirect signed-out browsers. No middleware checks auth on these
+   paths: the handler is the only check. A new handler without
+   `_check_webapp_access` exposes the sandbox. A new HTTP path that uses
+   `optional_user` must also go into that list, or the API server fails at
+   startup. The static preview read route is also in the list, but it is on
+   its own router and its token is the credential
+   ([[#static-preview-bearer-token]]).
+3. `strip-viewer-credentials` **The sandbox must never see the viewer's
+   credentials.**
+   `server/features/build/webapp_proxy.py:EXCLUDED_REQUEST_HEADERS` strips cookies, `Authorization`,
+   CSRF tokens, `Origin` and client-identity headers, and the filter drops
+   every `x-onyx-*` and `sec-fetch-*` header. A header that is in neither list
+   reaches the sandbox. Add new sensitive headers there.
+4. `strip-set-cookie` **`set-cookie` from the sandbox never reaches the
+   browser.** `server/features/build/webapp_proxy.py:EXCLUDED_HEADERS` strips it, so app code cannot set a cookie on
+   the Onyx domain. Check this filter and the cache-control rule together.
+5. `immutable-only-static-media` **Only paths under `/_next/static/media/` are
+   cached as immutable.** Those files have content hashes. Dev JS chunks and
+   CSS keep the same URL while the agent edits them. Caching them would serve
+   stale code after an edit (`server/features/build/webapp_proxy.py:_proxy_request`).
+6. `base-path-three-places` **The base path must match in three places:**
+   `server/features/build/sandbox/nextjs_dev.py:webapp_base_path`, the start
+   script's `ONYX_WEBAPP_BASE_PATH`
+   (`server/features/build/sandbox/nextjs_dev.py:build_nextjs_start_script`), and the
+   template's
+   `server/features/build/sandbox/image/templates/outputs/web/next.config.ts`.
+   A change to one breaks every asset URL.
+7. `managed-port-routing` **The managed port is the routing contract.** The
+   start script
+   (`server/features/build/sandbox/nextjs_dev.py:build_nextjs_start_script`) never moves the server to another port, and nothing restarts a
+   crashed server automatically. Only the agent restarts it, through the
+   `webapp` tool or the script. The proxy cannot reach a server on any other
+   port. The start script writes the port to `.nextjs-port`, so a hand-run
+   `bun run dev` with the template's `dev` script still binds it.
+8. `static-preview-bearer-token` **A static preview token is a bearer
+   credential.**
+   `server/features/build/static_preview.py:read_static_preview` serves it.
+   Anyone with the URL can read the listed files until the grant
+   expires. Each read still checks that the owner is active, has Craft, and
+   owns the session. The response CSP allows scripts but no same-origin
+   access, and limits `fetch` to the capability's own URLs.
+9. `start-script-protection` **`start-webapp.sh` is protected only by its mode
+   and the agent config.** It is `chmod 444`, so a rewrite must unlink it
+   first. `server/features/build/sandbox/util/opencode_config.py` denies agent
+   edits to it and allows only `bash start-webapp.sh`.
+10. `url-cache-cleared-on-gateway-error` **The upstream URL cache is cleared
+    only on a gateway error.**
+    `server/features/build/webapp_proxy.py:_get_sandbox_url` caches the pod URL for
+    `_SANDBOX_URL_TTL` seconds. Sleep and wake can move the session to a new
+    port or pod, so the cached URL can name a dead target.
+    `server/features/build/webapp_proxy.py:get_webapp` deletes
+    the cache key when `_proxy_request` raises 502, 503 or 504, then serves the
+    offline page, so the next request resolves again. The HMR websocket handler
+    does not clear the key. A new proxied route or a change to this error
+    handling must keep the delete, or the preview stays offline until the
+    entry expires.
+11. `hmr-paths-both` **The HMR websocket accepts both Next.js paths,
+    `/_next/hmr` and `/_next/webpack-hmr`.** The path differs by Next.js
+    version. `server/features/build/webapp_proxy.py:websocket_webapp_hmr` and
+    the rewrite in `web/next.config.js` must accept the same set.
+
+---
+
+## Known issues
+
+- **The HTTP proxy forwards GET only.** A generated app that posts a form or
+  calls a non-GET API route in the preview fails.
+- **Initial render and hot reload need different things.** The managed
+  scaffold sets `experimental.reactDebugChannel` to false, so first render
+  does not need the HMR websocket. Live updates still do. An app with a custom
+  config that turns the channel on can hang on hydration when the websocket
+  fails.
+
+---
+
+## Dependencies
+
+- [[craft-sessions]]: session ownership, `sharing_scope`, `nextjs_port`, and
+  readiness through `get_webapp_info`.
+- [[craft-sandboxes]]: the pod address, the port range, and the setup and
+  restore code that runs the scripts.
+- [[auth-and-identity]]: `optional_user` and
+  `current_user_from_websocket_cookie`. The websocket has no tenant
+  middleware, so that dependency sets the tenant from the session token.
+
+---
+
+## Recipes
+
+- `new-preview-route` **A new route on the preview router.** Copy `get_webapp` in
+  `server/features/build/webapp_proxy.py`. List the routes with
+  `git grep -n '@public_build_router' backend/onyx/server/features/build/`.
+  Add the path to `backend/onyx/server/auth_check.py:PUBLIC_ENDPOINT_SPECS`. Call
+  `_check_webapp_access` first ([[#public-router-checks-access]]), turn a 401
+  into the login redirect, and keep the URL cache delete on gateway errors
+  ([[#url-cache-cleared-on-gateway-error]]).
+- `new-static-preview-type` **A new file type for static preview.** Add the extension to
+  `server/features/build/static_preview.py:STATIC_EXTENSIONS`, next to `.css`.
+  Keep the grant's file list and revision check, and keep the CSP
+  ([[#static-preview-bearer-token]]).
+- `investigate-preview-offline` **Investigate a preview that stays offline.** Read
+  `GET http://localhost:3000/api/build/sessions/<id>/webapp-info` as the
+  owner. `has_webapp` null means the sandbox is not `RUNNING`. `has_webapp`
+  false means the agent has not built an app. `has_webapp`
+  true with a null `webapp_url` means no port is reserved: a non-interactive
+  or headless session waits for a rebuild. `ready` false with a URL means the
+  dev server is down: read `nextjs.log` in the session workspace. If the
+  server is ready but the preview is offline, look for a stale URL cache entry after sleep and wake
+  ([[#url-cache-cleared-on-gateway-error]]).
+
+---
+
+## Verification
+
+- Unit: `backend/tests/unit/onyx/server/features/craft/` (header stripping,
+  static preview, the dev-server scripts).
+- External dependency: `backend/tests/external_dependency_unit/craft/` (HMR
+  websocket auth).
+- Integration: `backend/tests/integration/tests/craft/`, including the
+  `k8s/` preview suite.
+- By hand: open the preview as a second user and as a signed-out window. The
+  first must get 404 and the second the login page. Ask the agent to change a
+  CSS class, and confirm that the page shows the change without a dev server
+  restart.

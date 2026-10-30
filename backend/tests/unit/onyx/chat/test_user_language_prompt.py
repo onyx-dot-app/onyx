@@ -11,8 +11,9 @@ from onyx.chat.prompt_utils import (
     build_system_prompt,
     with_language_section,
 )
+from onyx.context.models import UserInfo, UserMemoryContext
 from onyx.db.enums import SUPPORTED_LANGUAGE_ENGLISH_NAMES, SupportedLanguage
-from onyx.db.memory import UserInfo, UserMemoryContext, supported_language_or_none
+from onyx.db.memory import supported_language_or_none
 from onyx.prompts.deep_research.orchestration_layer import CLARIFICATION_PROMPT
 from onyx.prompts.deep_research.research_agent import (
     RESEARCH_REPORT_PROMPT,

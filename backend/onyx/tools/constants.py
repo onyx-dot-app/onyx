@@ -1,4 +1,4 @@
-"""Tool name and ID constants matching frontend definitions."""
+"""Tool names, IDs, and invocation limits."""
 
 # Tool names as referenced by tool results / tool calls
 SEARCH_TOOL_NAME = "run_search"
@@ -28,3 +28,5 @@ CITEABLE_TOOLS_NAMES: list[str] = [
     WEB_SEARCH_TOOL_NAME,
     OPEN_URL_TOOL_NAME,
 ]
+
+FILE_READER_MAX_CHARS = 16000

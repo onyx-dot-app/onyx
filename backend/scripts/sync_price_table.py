@@ -152,14 +152,37 @@ def _alias_candidates(model_id: str) -> list[str]:
 
 
 def _normalize_model(entry: dict[str, Any]) -> dict[str, Any]:
-    out: dict[str, Any] = {}
-    for field in _SCALAR_FIELDS:
-        if field in entry:
-            out[field] = entry[field]
-    for field in _DICT_FIELDS:
-        if entry.get(field) is not None:
-            out[field] = entry[field]
+    out = {field: entry[field] for field in _SCALAR_FIELDS if field in entry}
+    out.update(
+        {field: entry[field] for field in _DICT_FIELDS if entry.get(field) is not None}
+    )
+    cost = out.get("cost")
+    if isinstance(cost, dict):
+        # Negative rates are upstream "unknown price" sentinels, not prices.
+        cost = _drop_negative_rates(cost)
+        if cost:
+            out["cost"] = cost
+        else:
+            del out["cost"]
     return out
+
+
+def _drop_negative_rates(value: Any) -> Any:
+    """Strip negative-rate sentinels at any depth — top-level cost fields
+    and rate blocks nested inside ``tiers``/``context_over_200k``."""
+    if isinstance(value, dict):
+        return {
+            k: _drop_negative_rates(v)
+            for k, v in value.items()
+            if not _is_negative_rate(v)
+        }
+    if isinstance(value, list):
+        return [_drop_negative_rates(item) for item in value]
+    return value
+
+
+def _is_negative_rate(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and value < 0
 
 
 # Entry fields models.dev publishes that we deliberately do not vendor. New
@@ -234,6 +257,9 @@ def _build_provider_section(
     models: dict[str, Any] = {}
     for slug in slugs:
         for model_id, entry in (api.get(slug, {}).get("models") or {}).items():
+            # Junk upstream keys with an empty model id (e.g. ".../models/").
+            if not model_id or model_id.endswith("/"):
+                continue
             models.setdefault(model_id, _normalize_model(entry))
     if not models:
         return None
@@ -382,11 +408,16 @@ def _litellm_cost(entry: dict[str, Any]) -> dict[str, float]:
     for src_key, dst_key in _LITELLM_TOKEN_COST_FIELDS.items():
         value = entry.get(src_key)
         if value is not None:
-            cost[dst_key] = float(value) * 1_000_000
+            # Negative rates are upstream "unknown price" sentinels.
+            amount: float = float(value)
+            if amount >= 0:
+                cost[dst_key] = amount * 1_000_000
     for src_key, dst_key in _LITELLM_UNIT_COST_FIELDS.items():
         value = entry.get(src_key)
         if value is not None:
-            cost[dst_key] = float(value)
+            amount = float(value)
+            if amount >= 0:
+                cost[dst_key] = amount
     return cost
 
 
@@ -505,6 +536,15 @@ def merge_litellm(providers: dict[str, Any], litellm_map: dict[str, Any]) -> Non
 # ---------------------------------------------------------------------------
 
 
+def _is_unbounded_router(raw: dict[str, Any]) -> bool:
+    """OpenRouter meta-model with no declared upstream endpoint: tokenizer
+    "Router" and a null top_provider context, so its advertised limits are
+    the pool maximum rather than a per-request guarantee."""
+    if (raw.get("architecture") or {}).get("tokenizer") != "Router":
+        return False
+    return (raw.get("top_provider") or {}).get("context_length") is None
+
+
 def _openrouter_entry(raw: dict[str, Any]) -> dict[str, Any] | None:
     pricing = raw.get("pricing") or {}
     try:
@@ -515,9 +555,12 @@ def _openrouter_entry(raw: dict[str, Any]) -> dict[str, Any] | None:
     if prompt == 0 and completion == 0:
         return None
 
+    # Negative rates are upstream "unknown price" sentinels — not real prices;
+    # skip those fields so they land as "unknown" rather than negative spend.
     cost: dict[str, float] = {
-        "input": prompt * 1_000_000,
-        "output": completion * 1_000_000,
+        k: v * 1_000_000
+        for k, v in (("input", prompt), ("output", completion))
+        if v >= 0
     }
     for src_key, dst_key in (
         ("input_cache_read", "cache_read"),
@@ -526,17 +569,23 @@ def _openrouter_entry(raw: dict[str, Any]) -> dict[str, Any] | None:
         try:
             value = pricing.get(src_key)
             if value is not None:
-                cost[dst_key] = float(value) * 1_000_000
+                amount: float = float(value)
+                if amount >= 0:
+                    cost[dst_key] = amount * 1_000_000
         except (TypeError, ValueError):
             continue
     # pricing.image is USD per image, not per token.
     try:
         if pricing.get("image") is not None:
-            cost["image_input"] = float(pricing["image"])
+            amount = float(pricing["image"])
+            if amount >= 0:
+                cost["image_input"] = amount
     except (TypeError, ValueError):
         pass
 
-    entry: dict[str, Any] = {"name": raw.get("name") or raw["id"], "cost": cost}
+    entry: dict[str, Any] = {"name": raw.get("name") or raw["id"]}
+    if cost:
+        entry["cost"] = cost
     context = raw.get("context_length")
     max_out = (raw.get("top_provider") or {}).get("max_completion_tokens")
     if context or max_out:
@@ -559,6 +608,8 @@ def _openrouter_entry(raw: dict[str, Any]) -> dict[str, Any] | None:
         "response_format" in params
     )
     entry["reasoning"] = "reasoning" in params
+    if _is_unbounded_router(raw):
+        entry["unbounded"] = True
     return entry
 
 
@@ -574,22 +625,58 @@ def merge_openrouter(
         model_id = raw.get("id")
         if not model_id:
             continue
-        merged = _openrouter_entry(raw)
-        if merged is None:
-            continue
         existing = models.get(model_id)
         if existing is None:
             existing = models.get(section["aliases"].get(model_id, ""))
+        # Router status is independent of pricing — a free router still has
+        # no declared endpoint.
+        if existing is not None:
+            if _is_unbounded_router(raw):
+                existing["unbounded"] = True
+            else:
+                existing.pop("unbounded", None)
+        merged = _openrouter_entry(raw)
+        if merged is None:
+            continue
         if existing is None:
             models[model_id] = merged
             added += 1
             continue
-        cost = existing.setdefault("cost", {})
-        for key, value in merged["cost"].items():
+        for key, value in (merged.get("cost") or {}).items():
+            cost = existing.setdefault("cost", {})
             if key not in cost:
                 cost[key] = value
                 filled += 1
     print(f"openrouter merge: filled {filled} missing rates, added {added} models")
+
+
+def _preserve_unbounded_flags(providers: dict[str, Any], output_dir: Path) -> None:
+    """Carry `unbounded` router flags over from the vendored openrouter.json
+    when the OpenRouter feed is unreachable and the merge cannot re-derive
+    them — a transient outage must not silently restore bogus output limits."""
+    section: dict[str, Any] | None = providers.get("openrouter")
+    if section is None:
+        return
+    try:
+        vendored_text: str = (output_dir / "openrouter.json").read_text()
+    except FileNotFoundError:
+        # First sync has no vendored file to carry flags over from.
+        return
+    # Anything else (unreadable or corrupt file) must surface, not silently
+    # drop the flags — the sync is about to rewrite this file.
+    vendored: dict[str, Any] = json.loads(vendored_text)
+    vendored_models: dict[str, Any] = vendored.get("models") or {}
+    restored: int = 0
+    for model_id, entry in section["models"].items():
+        if (vendored_models.get(model_id) or {}).get("unbounded"):
+            entry["unbounded"] = True
+            restored += 1
+    if restored:
+        print(
+            f"OpenRouter feed unavailable: preserved unbounded flags on "
+            f"{restored} vendored entries",
+            file=sys.stderr,
+        )
 
 
 def _check_litellm_schema(litellm_map: dict[str, Any]) -> None:
@@ -718,6 +805,8 @@ def main() -> int:
     if openrouter_models:
         _check_openrouter_schema(openrouter_models)
         merge_openrouter(providers, openrouter_models)
+    else:
+        _preserve_unbounded_flags(providers, args.output_dir)
 
     table = {
         "schema_version": 2,

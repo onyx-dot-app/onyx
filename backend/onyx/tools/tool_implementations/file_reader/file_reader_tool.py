@@ -1,26 +1,25 @@
 import io
-import json
-from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
-from onyx.chat.emitter import Emitter
+from onyx.agents.tools import ToolInvocation
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.user_file import get_user_file_metadata
 from onyx.file_processing.extract_file_text import extract_file_text
-from onyx.file_store.models import ChatFileType, InMemoryChatFile
-from onyx.file_store.utils import load_chat_file_by_id, load_user_file
-from onyx.llm.models import ToolDefinition
-from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import (
-    FileReaderResult,
-    FileReaderStart,
-    Packet,
+from onyx.file_store.models import ChatFileType, InMemoryChatFile, UserFileMetadata
+from onyx.file_store.utils import load_chat_file_by_id, load_user_file_content
+from onyx.llm.models import ToolDefinition, ToolResult
+from onyx.tools.constants import FILE_READER_MAX_CHARS
+from onyx.tools.interface import Tool, parse_tool_arguments
+from onyx.tools.models import (
+    FileReaderArguments,
+    FileReadResult,
+    ToolCallException,
+    ToolContext,
 )
-from onyx.tools.interface import Tool
-from onyx.tools.models import ToolCallException, ToolResponse
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -29,16 +28,10 @@ FILE_ID_FIELD = "file_id"
 START_CHAR_FIELD = "start_char"
 NUM_CHARS_FIELD = "num_chars"
 
-MAX_NUM_CHARS = 16000
-DEFAULT_NUM_CHARS = MAX_NUM_CHARS
 PREVIEW_CHARS = 500
 
 
-class FileReaderToolOverrideKwargs:
-    """No override kwargs needed for the file reader tool."""
-
-
-class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
+class FileReaderTool(Tool):
     NAME = "read_file"
     DISPLAY_NAME = "File Reader"
     DESCRIPTION = (
@@ -49,11 +42,9 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
     def __init__(
         self,
         tool_id: int,
-        emitter: Emitter,
         user_file_ids: list[UUID],
         chat_file_ids: list[UUID],
     ) -> None:
-        super().__init__(emitter=emitter)
         self._id = tool_id
         self._user_file_ids = set(user_file_ids)
         self._chat_file_ids = set(chat_file_ids)
@@ -109,14 +100,6 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
             },
         )
 
-    def emit_start(self, placement: Placement) -> None:
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=FileReaderStart(),
-            )
-        )
-
     def _validate_file_id(self, raw_file_id: str) -> UUID:
         try:
             file_id = UUID(raw_file_id)
@@ -139,16 +122,12 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
     def _load_file(self, file_id: UUID) -> InMemoryChatFile:
         if file_id in self._user_file_ids:
             with get_session_with_current_tenant() as db_session:
-                return load_user_file(file_id, db_session)
+                metadata: UserFileMetadata = get_user_file_metadata(file_id, db_session)
+            return load_user_file_content(metadata)
         return load_chat_file_by_id(str(file_id))
 
-    def run(
-        self,
-        placement: Placement,
-        override_kwargs: FileReaderToolOverrideKwargs,  # noqa: ARG002
-        **llm_kwargs: Any,
-    ) -> ToolResponse:
-        if FILE_ID_FIELD not in llm_kwargs:
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+        if FILE_ID_FIELD not in invocation.arguments:
             raise ToolCallException(
                 message=f"Missing required '{FILE_ID_FIELD}' parameter",
                 llm_facing_message=(
@@ -157,12 +136,13 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
                 ),
             )
 
-        raw_file_id = cast(str, llm_kwargs[FILE_ID_FIELD])
+        arguments = parse_tool_arguments(FileReaderArguments, invocation.arguments)
+        raw_file_id = arguments.file_id
         file_id = self._validate_file_id(raw_file_id)
-        start_char = max(0, int(llm_kwargs.get(START_CHAR_FIELD, 0)))
+        start_char = max(0, arguments.start_char)
         num_chars = min(
-            MAX_NUM_CHARS,
-            max(1, int(llm_kwargs.get(NUM_CHARS_FIELD, DEFAULT_NUM_CHARS))),
+            FILE_READER_MAX_CHARS,
+            max(1, arguments.num_chars),
         )
 
         chat_file = self._load_file(file_id)
@@ -210,20 +190,14 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
         preview_start = section[:PREVIEW_CHARS]
         preview_end = section[-PREVIEW_CHARS:] if len(section) > PREVIEW_CHARS else ""
 
-        # Emit result packet so the frontend can display what was read
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=FileReaderResult(
-                    file_name=file_name,
-                    file_id=str(file_id),
-                    start_char=start_char,
-                    end_char=end_char,
-                    total_chars=total_chars,
-                    preview_start=preview_start,
-                    preview_end=preview_end,
-                ),
-            )
+        summary = FileReadResult(
+            file_name=file_name,
+            file_id=str(file_id),
+            start_char=start_char,
+            end_char=end_char,
+            total_chars=total_chars,
+            preview_start=preview_start,
+            preview_end=preview_end,
         )
 
         has_more = end_char < total_chars
@@ -235,22 +209,7 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
 
         llm_response = f"{header}\n\n{section}"
 
-        # Build a lightweight summary for DB storage (avoids saving full text).
-        # The LLM-facing response carries the real content; the rich_response
-        # is what gets persisted and re-hydrated on page reload.
-        saved_summary = json.dumps(
-            {
-                "file_name": file_name,
-                "file_id": str(file_id),
-                "start_char": start_char,
-                "end_char": end_char,
-                "total_chars": total_chars,
-                "preview_start": preview_start,
-                "preview_end": preview_end,
-            }
-        )
-
-        return ToolResponse(
-            rich_response=saved_summary,
-            llm_facing_response=llm_response,
+        return ToolResult(
+            details=summary,
+            content=llm_response,
         )

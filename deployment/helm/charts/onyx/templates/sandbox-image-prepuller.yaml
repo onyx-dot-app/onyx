@@ -1,9 +1,32 @@
 {{/*
 Pre-pulls the sandbox image onto every node in the sandbox pool so a user's
-first sandbox there doesn't pay the pull. See docs/craft/sandbox/image-and-spinup.md.
+first sandbox there doesn't pay the pull (~30s cold, inside the provisioning
+timeout). Each constraint below fails silently if broken: the DaemonSet goes
+Ready while sandboxes still cold-pull. Render tests in
+backend/tests/external_dependency_unit/craft_helm/test_sandbox_image_prepuller.py
+cover them.
 
-This template renders NAMESPACED objects only. It deliberately no longer ships a
-PriorityClass; see the docs above before adding one back.
+- A DaemonSet, not a Job: kubelet image GC spares only images that a running
+  pod uses, and a DaemonSet also covers nodes that join later.
+- Image ref AND pull policy come from the same helpers as the sandbox
+  PodTemplate. A drifted tag or policy pins a digest that sandboxes do not use.
+- Scheduling mirrors sandboxPod (nodeSelector + tolerations).
+- Pull credentials come only from the sandbox ServiceAccount, like the
+  PodTemplate. Chart-level imagePullSecrets live in the release namespace and
+  do not resolve here.
+- A portable idle loop, not `sleep infinity` (GNU-only). A crashlooping
+  prepuller unpins the image.
+- Labelled component=sandbox-image-prepuller, not sandbox, so the sandbox
+  NetworkPolicies do not select it. It gets its own deny-all policy instead.
+- NAMESPACED objects only, and no PriorityClass. PriorityClass.value is
+  immutable and `helm upgrade` patches, so a changed value failed every
+  upgrade. Preempting a 10m/32Mi pod also frees nothing a sandbox needs.
+  Operators can set sandboxImagePrepull.priorityClassName to their own class.
+
+Pin global.version to an immutable tag: with a mutable tag the DaemonSet spec
+does not change on a repoint, so nodes keep the first digest they pulled.
+Node autoscale-up is not covered: the new node and the sandbox pull at the
+same time.
 */}}
 {{- $prepull := .Values.sandboxImagePrepull | default dict }}
 {{- $res := $prepull.resources | default dict }}
@@ -45,6 +68,9 @@ spec:
         admission.datadoghq.com/enabled: "false"
     spec:
       {{- /* Same placement as the sandbox pods, or the wrong nodes get warmed. */}}
+      {{- with $sandboxPod.runtimeClassName }}
+      runtimeClassName: {{ . | quote }}
+      {{- end }}
       nodeSelector:
         {{- (index $sandboxPod "nodeSelector" | default (dict "onyx.app/workload" "sandbox")) | toYaml | nindent 8 }}
       tolerations:

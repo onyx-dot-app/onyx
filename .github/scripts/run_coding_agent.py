@@ -82,7 +82,7 @@ class _ClaudeCodeAdapter(_HarnessAdapter):
             "-p",
             prompt,
             "--restricted",
-            "--bare",
+            "--safe-mode",
             "--strict-mcp-config",
             "--settings",
             '{"disableAllHooks":true}',

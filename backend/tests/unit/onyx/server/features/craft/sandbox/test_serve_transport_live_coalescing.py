@@ -14,6 +14,7 @@ from onyx.server.features.build.packets import SubagentStartedPacket
 from onyx.server.features.build.sandbox import serve_transport
 from onyx.server.features.build.sandbox.event_schema import (
     AgentMessageChunk,
+    AgentThoughtChunk,
     PromptResponse,
 )
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
@@ -138,6 +139,20 @@ def test_subscribe_to_opencode_session_coalesces_adjacent_text_deltas(
     _dispatch_assistant_text_delta(bus, "lo")
     bus._dispatch(
         {
+            "type": "message.part.updated",
+            "properties": {
+                "sessionID": _SESSION,
+                "part": {
+                    "id": "part1",
+                    "messageID": "msg1",
+                    "type": "text",
+                    "text": "Hello",
+                },
+            },
+        }
+    )
+    bus._dispatch(
+        {
             "type": "session.idle",
             "properties": {"sessionID": _SESSION},
         }
@@ -146,10 +161,17 @@ def test_subscribe_to_opencode_session_coalesces_adjacent_text_deltas(
     thread.join(timeout=3.0)
     assert not thread.is_alive()
 
-    assert len(events) == 2
+    assert len(events) == 3
     assert isinstance(events[0], AgentMessageChunk)
     assert getattr(events[0].content, "text", None) == "Hello"  # ods: ignore[getattr]
-    assert isinstance(events[1], PromptResponse)
+    assert events[0].model_dump(by_alias=True)["_meta"] == {"partId": "part1"}
+    assert isinstance(events[1], AgentMessageChunk)
+    assert events[1].content.text == ""
+    assert events[1].model_dump(by_alias=True)["_meta"] == {
+        "partId": "part1",
+        "snapshotText": "Hello",
+    }
+    assert isinstance(events[2], PromptResponse)
 
 
 def test_subscribe_to_opencode_session_forwards_child_events(
@@ -233,7 +255,41 @@ def test_subscribe_to_opencode_session_forwards_child_events(
         == "child streamed text"
     )
     assert child_chunks[0].field_meta == {
+        "partId": "part_child",
         "sessionId": child_session,
         "parentSessionId": _SESSION,
     }
     assert isinstance(events[-1], PromptResponse)
+
+
+@pytest.mark.parametrize("event_class", [AgentMessageChunk, AgentThoughtChunk])
+def test_live_text_coalescing_preserves_part_and_snapshot_boundaries(
+    event_class: type[AgentMessageChunk] | type[AgentThoughtChunk],
+) -> None:
+    def chunk(
+        text: str, metadata: dict[str, str]
+    ) -> AgentMessageChunk | AgentThoughtChunk:
+        return event_class.model_validate(
+            {
+                "sessionUpdate": "agent_message_chunk"
+                if event_class is AgentMessageChunk
+                else "agent_thought_chunk",
+                "content": {"type": "text", "text": text},
+                "_meta": metadata,
+            }
+        )
+
+    pending = chunk("Hello", {"partId": "part1"})
+    merged = serve_transport._merge_text_chunk(
+        pending, chunk(" world", {"partId": "part1"})
+    )
+    assert isinstance(merged, event_class)
+    assert merged.content.text == "Hello world"
+    assert merged.field_meta == {"partId": "part1"}
+    assert (
+        serve_transport._merge_text_chunk(pending, chunk("next", {"partId": "part2"}))
+        is None
+    )
+    snapshot = chunk("", {"partId": "part1", "snapshotText": "Hello world"})
+    assert serve_transport._merge_text_chunk(pending, snapshot) is None
+    assert serve_transport._merge_text_chunk(snapshot, snapshot) is None

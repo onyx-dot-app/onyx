@@ -25,7 +25,8 @@ from ee.onyx.server.documents.manage_access import (
     CCPairManageAccessRow,
     CCPairManageAccessUpdateRequest,
     apply_manage_access_change__no_commit,
-    fixed_manage_access_rows,
+    fixed_manage_access_groups,
+    manage_access_rows,
 )
 from ee.onyx.server.documents.models import (
     CCPairDataAccess,
@@ -41,12 +42,19 @@ from onyx.db.connector_credential_pair import (
     verify_user_has_access_to_cc_pair,
 )
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import AccessType, ConnectorManageRole, Permission
-from onyx.db.models import User
+from onyx.db.enums import (
+    AccessType,
+    ConnectorCredentialPairStatus,
+    ConnectorManageRole,
+    Permission,
+)
+from onyx.db.models import ConnectorCredentialPair, User
+from onyx.db.permission_sync_attempt import (
+    get_open_doc_permission_sync_attempt,
+    get_open_external_group_sync_attempt,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.redis.redis_connector import RedisConnector
-from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import manage_access_by_group
 from onyx.server.models import StatusResponse
 from onyx.utils.audit import (
@@ -60,6 +68,14 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 router = APIRouter(prefix="/manage")
+
+
+def _assert_perm_synced(cc_pair: ConnectorCredentialPair) -> None:
+    if not cc_pair.access_type.is_perm_synced():
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Permission sync is only available for connectors with synced access.",
+        )
 
 
 @router.get("/admin/cc-pair/{cc_pair_id}/sync-permissions")
@@ -107,11 +123,17 @@ def sync_cc_pair(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "Connection not found for current user's permissions",
         )
+    _assert_perm_synced(cc_pair)
 
-    r = get_redis_client()
+    # Attempt creation refuses a paused pair. Give the reason here instead of
+    # the generic creation failure below.
+    if cc_pair.status == ConnectorCredentialPairStatus.PAUSED:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "The connector is paused. Resume it to sync permissions.",
+        )
 
-    redis_connector = RedisConnector(tenant_id, cc_pair_id)
-    if redis_connector.permissions.fenced:
+    if get_open_doc_permission_sync_attempt(cc_pair_id, db_session) is not None:
         raise OnyxError(
             OnyxErrorCode.CONFLICT,
             "Permissions sync task already in progress.",
@@ -124,16 +146,16 @@ def sync_cc_pair(
         cc_pair.credential_id,
         cc_pair.connector.name,
     )
-    payload_id = try_creating_permissions_sync_task(
-        client_app, cc_pair_id, r, tenant_id
-    )
-    if not payload_id:
+    attempt_id = try_creating_permissions_sync_task(client_app, cc_pair_id, tenant_id)
+    if attempt_id is None:
         raise OnyxError(
             OnyxErrorCode.INTERNAL_ERROR,
             "Permissions sync task creation failed.",
         )
 
-    logger.info("Permissions sync queued: cc_pair=%s id=%s", cc_pair_id, payload_id)
+    logger.info(
+        "Permissions sync queued: cc_pair=%s attempt=%s", cc_pair_id, attempt_id
+    )
 
     return StatusResponse(
         success=True,
@@ -186,11 +208,9 @@ def sync_cc_pair_groups(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "Connection not found for current user's permissions",
         )
+    _assert_perm_synced(cc_pair)
 
-    r = get_redis_client()
-
-    redis_connector = RedisConnector(tenant_id, cc_pair_id)
-    if redis_connector.external_group_sync.fenced:
+    if get_open_external_group_sync_attempt(cc_pair_id, db_session) is not None:
         raise OnyxError(
             OnyxErrorCode.CONFLICT,
             "External group sync task already in progress.",
@@ -203,16 +223,18 @@ def sync_cc_pair_groups(
         cc_pair.credential_id,
         cc_pair.connector.name,
     )
-    payload_id = try_creating_external_group_sync_task(
-        client_app, cc_pair_id, r, tenant_id
+    attempt_id = try_creating_external_group_sync_task(
+        client_app, cc_pair_id, tenant_id
     )
-    if not payload_id:
+    if attempt_id is None:
         raise OnyxError(
             OnyxErrorCode.INTERNAL_ERROR,
             "External group sync task creation failed.",
         )
 
-    logger.info("External group sync queued: cc_pair=%s id=%s", cc_pair_id, payload_id)
+    logger.info(
+        "External group sync queued: cc_pair=%s attempt=%s", cc_pair_id, attempt_id
+    )
 
     return StatusResponse(
         success=True,
@@ -305,8 +327,8 @@ def _manage_access_rows(
     """The fixed rows, then the stored rows of groups the caller can see
     (``visible_group_ids``, None: all). A stored row of a group that is also
     fixed is left out: the fixed Editor row already covers it."""
-    fixed_rows = fixed_manage_access_rows(db_session)
-    fixed_group_ids = {row.group_id for row in fixed_rows}
+    fixed_groups = fixed_manage_access_groups(db_session)
+    fixed_group_ids = {group.id for group in fixed_groups}
     roles = fetch_manage_roles_for_cc_pair(db_session, cc_pair_id)
     shown_group_ids = {
         group_id
@@ -316,15 +338,14 @@ def _manage_access_rows(
     groups = fetch_user_groups(
         db_session, only_up_to_date=False, restrict_to_group_ids=shown_group_ids
     )
-    return fixed_rows + [
-        CCPairManageAccessRow(
-            group_id=group.id,
-            group_name=group.name,
-            role=roles[group.id],
-            is_fixed=False,
-        )
-        for group in sorted(groups, key=lambda group: group.id)
-    ]
+    return manage_access_rows(
+        db_session,
+        fixed_groups,
+        [
+            (group, roles[group.id])
+            for group in sorted(groups, key=lambda group: group.id)
+        ],
+    )
 
 
 @router.get("/admin/cc-pair/{cc_pair_id}/manage-access")
@@ -423,8 +444,8 @@ def get_manage_access_prefill(
 ) -> list[CCPairManageAccessRow]:
     """Starting manage access for the create form: groups with global Manage Connectors
     are fixed Editors, and the chosen data-access groups become Operators."""
-    fixed_rows = fixed_manage_access_rows(db_session)
-    fixed_group_ids = {row.group_id for row in fixed_rows}
+    fixed_groups = fixed_manage_access_groups(db_session)
+    fixed_group_ids = {group.id for group in fixed_groups}
     visible_group_ids = get_visible_user_group_ids(user, db_session)
     operator_group_ids = {
         group_id
@@ -438,12 +459,11 @@ def get_manage_access_prefill(
         include_default=False,
         restrict_to_group_ids=operator_group_ids,
     )
-    return fixed_rows + [
-        CCPairManageAccessRow(
-            group_id=group.id,
-            group_name=group.name,
-            role=ConnectorManageRole.OPERATOR,
-            is_fixed=False,
-        )
-        for group in sorted(operator_groups, key=lambda group: group.id)
-    ]
+    return manage_access_rows(
+        db_session,
+        fixed_groups,
+        [
+            (group, ConnectorManageRole.OPERATOR)
+            for group in sorted(operator_groups, key=lambda group: group.id)
+        ],
+    )

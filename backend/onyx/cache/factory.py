@@ -70,6 +70,10 @@ def get_cache_backend(
 
 def get_shared_cache_backend() -> CacheBackend:
     """Return a ``CacheBackend`` in the shared (cross-tenant) namespace."""
-    from shared_configs.configs import DEFAULT_REDIS_PREFIX
+    from shared_configs.configs import DEFAULT_REDIS_PREFIX, POSTGRES_DEFAULT_SCHEMA
 
+    # The PostgreSQL backend maps the tenant to a schema, and only the default
+    # schema exists in the single-tenant deployments that use it.
+    if CACHE_BACKEND == CacheBackendType.POSTGRES:
+        return get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA)
     return get_cache_backend(tenant_id=DEFAULT_REDIS_PREFIX)

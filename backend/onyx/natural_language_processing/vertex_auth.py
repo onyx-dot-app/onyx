@@ -5,7 +5,7 @@ from typing import Literal
 import google.auth
 from google.auth.credentials import Credentials
 from google.oauth2 import service_account
-from pydantic import BaseModel, ConfigDict, JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 from typing_extensions import TypedDict
 
 from shared_configs.configs import MULTI_TENANT
@@ -23,7 +23,8 @@ class VertexEmbeddingConfig(BaseModel):
         "service_account_json"
     )
     project_id: str | None = None
-    location: str | None = None
+    # The client builds its hostname from the location, so it must stay a region name.
+    location: str | None = Field(default=None, pattern=r"^\s*[a-z0-9-]*\s*$")
 
 
 class VertexEmbeddingCredentials(BaseModel):
