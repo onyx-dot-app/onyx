@@ -24,8 +24,7 @@ export class ChatPage {
 
   // Model picker: the "Add Model" button, then one pill per selected model
   readonly modelSelector: Locator;
-  readonly addModelButton: Locator;
-  /** A pill opens its model's settings pane, not the list. */
+  /** A pill opens its switch list, where a row replaces that model. */
   readonly modelPills: Locator;
   readonly modelPopover: Locator;
   readonly modelSearchInput: Locator;
@@ -39,10 +38,6 @@ export class ChatPage {
     this.aiMessages = page.getByTestId("onyx-ai-message");
     this.usageLimitBanner = page.getByText(/you've reached the usage budget/i);
     this.modelSelector = page.getByTestId("model-selector");
-    this.addModelButton = this.modelSelector.getByRole("button", {
-      name: "Add Model",
-      exact: true,
-    });
     this.modelPills = this.modelSelector.locator(
       "button:not([aria-label='Add Model'])"
     );
@@ -226,9 +221,9 @@ export class ChatPage {
     return (await pill.innerText()).trim();
   }
 
-  /** Opens the model list from the add button and returns the popover. */
+  /** Opens the first pill's switch list and returns the popover. */
   async openModelList(): Promise<Locator> {
-    await this.addModelButton.click();
+    await this.modelPills.first().click();
     await expect(this.modelSearchInput).toBeVisible({ timeout: 10000 });
     return this.modelPopover;
   }
@@ -238,38 +233,19 @@ export class ChatPage {
     await expect(this.modelPopover).toBeHidden();
   }
 
+  /** The settings button shows only while its row is hovered. */
   async openModelSettings(modelName: string): Promise<void> {
     await this.modelPill(modelName).click();
-  }
-
-  /** The x is the pill's last icon and renders only while several are selected. */
-  async removeLastModelPill(): Promise<void> {
-    const count = await this.modelPills.count();
-    await this.modelPills
-      .last()
-      .locator(".interactive-foreground-icon")
-      .last()
+    await this.modelPopover.getByText(modelName, { exact: true }).hover();
+    await this.modelPopover
+      .getByRole("button", { name: `${modelName} settings`, exact: true })
       .click();
-    await expect(this.modelPills).toHaveCount(count - 1);
   }
 
-  /**
-   * Makes a row of the open model list the only selected model. A row click
-   * adds its model as the first pill and the list stays open, so this closes
-   * the list and then removes the older pills with their x.
-   */
+  /** Picks a row of the open switch list, which closes it, and returns the first pill's text. */
   async chooseModelOption(option: Locator): Promise<string> {
-    if ((await option.getAttribute("data-interactive-state")) !== "selected") {
-      const before = await this.modelPills.count();
-      await option.click();
-      await expect(this.modelPills).toHaveCount(before + 1);
-    }
-    await this.closeModelPicker();
-
-    while ((await this.modelPills.count()) > 1) {
-      await this.removeLastModelPill();
-    }
-
+    await option.click();
+    await expect(this.modelPopover).toBeHidden();
     return this.readModelPillText();
   }
 
