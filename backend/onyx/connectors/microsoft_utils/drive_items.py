@@ -231,6 +231,7 @@ class DriveItemData(BaseModel):
     last_modified_by_display_name: str | None = None
     last_modified_by_email: str | None = None
     parent_reference_path: str | None = None
+    parent_id: str | None = None
     drive_id: str | None = None
     list_item_id: str | None = None
 
@@ -261,6 +262,7 @@ class DriveItemData(BaseModel):
                 or last_modified_by.get("userPrincipalName")
             ),
             parent_reference_path=parent_ref.get("path"),
+            parent_id=parent_ref.get("id"),
             drive_id=parent_ref.get("driveId"),
             list_item_id=sharepoint_ids.list_item_id if sharepoint_ids else None,
         )
