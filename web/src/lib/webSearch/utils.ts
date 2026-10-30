@@ -3,6 +3,7 @@ import {
   SvgExa,
   SvgFirecrawl,
   SvgGoogle,
+  SvgOllama,
   SvgSearXNG,
   SvgSerper,
   SvgTavily,
@@ -56,6 +57,12 @@ export const SEARCH_PROVIDER_DETAILS: Record<
     label: "SearXNG",
     subtitle: "SearXNG",
     logo: SvgSearXNG,
+  },
+  ollama: {
+    label: "Ollama",
+    subtitle: "Ollama",
+    logo: SvgOllama,
+    apiKeyUrl: "https://ollama.com/settings/keys",
   },
   tavily: {
     label: "Tavily",
@@ -122,6 +129,10 @@ const SEARCH_PROVIDER_CAPABILITIES: Record<
     requiresApiKey: false,
     requiredConfigKeys: ["searxng_base_url"],
     storedConfigAliases: { searxng_base_url: ["searxng_base_url"] },
+  },
+  ollama: {
+    requiresApiKey: true,
+    requiredConfigKeys: [],
   },
   tavily: {
     requiresApiKey: true,
