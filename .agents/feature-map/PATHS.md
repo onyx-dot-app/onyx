@@ -90,6 +90,7 @@ here. Read the component that documents the setting in its env table.
 | Path | Component(s) |
 |---|---|
 | `backend/onyx/connectors/` | connectors |
+| `backend/tests/unit/onyx/connectors/jira/test_jira_service_management.py` | connectors |
 | `backend/onyx/indexing/` | indexing-pipeline |
 | `backend/onyx/background/indexing/`, `backend/onyx/db/index_attempt*.py`, `db/indexing_coordination.py` | indexing-pipeline |
 | `backend/onyx/db/connector.py`, `db/credentials.py`, `db/connector_credential_pair.py`, `db/credential_capability.py`, `db/connector_alerts.py` | cc-pairs-and-credentials |

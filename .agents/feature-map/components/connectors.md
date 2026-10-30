@@ -100,6 +100,11 @@ capability check) goes through
 source. User-file ingestion is the exception: it builds `LocalFileConnector`
 directly in `user_file_processing/tasks.py:_load_user_file_documents`. See §4.
 
+Jira Service Management project issues use the existing Jira source and Jira
+platform APIs. See `backend/onyx/connectors/jira/SERVICE_MANAGEMENT.md` for setup
+and limits. The Jira connector includes internal comments returned to its
+credential. It does not implement customer-portal or comment-level access.
+
 ### The `DocumentSource` enum: the canonical list
 
 `backend/onyx/configs/constants.py:DocumentSource` has 62 members and is the
