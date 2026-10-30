@@ -28,7 +28,8 @@ import {
   type SelectDivider,
 } from "@opal/components";
 import { Button, MessageCard, Text } from "@opal/components";
-import { Content, toast } from "@opal/layouts";
+import { Content, IllustrationContent, toast } from "@opal/layouts";
+import { SvgEmpty } from "@opal/illustrations";
 import { SvgSlash, SvgUnplug } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import { getImageGenForm } from "@/views/admin/ImageGenerationPage/forms";
@@ -282,7 +283,7 @@ export default function ImageGenerationContent() {
     }
   }, [disconnectProvider]);
 
-  if (configError || llmProvidersError) {
+  if (configError) {
     return <div className="text-error">{t("loadError.message")}</div>;
   }
 
@@ -320,13 +321,19 @@ export default function ImageGenerationContent() {
           <MessageCard variant="info" title={t("emptyState.title")} />
         )}
 
-        {linkedGroups.length === 0 && legacyGroups.length === 0 && (
-          <MessageCard
-            variant="info"
-            title={t("noImageModels.title")}
-            description={t("noImageModels.description")}
-          />
+        {llmProvidersError && (
+          <MessageCard variant="error" title={t("loadError.message")} />
         )}
+
+        {!llmProvidersError &&
+          linkedGroups.length === 0 &&
+          legacyGroups.length === 0 && (
+            <IllustrationContent
+              illustration={SvgEmpty}
+              title={t("noImageModels.title")}
+              description={t("noImageModels.description")}
+            />
+          )}
 
         {connectedDeprecatedProviders.map((provider) => (
           <MessageCard
@@ -398,7 +405,7 @@ export default function ImageGenerationContent() {
         ))}
 
         {legacyGroups.map((group) => (
-          <div key={group.name} className="flex flex-col gap-2">
+          <Section key={group.name} alignItems="stretch" gap={0.5}>
             <Content title={group.name} sizePreset="secondary" variant="body" />
             {group.providers.map((provider) => (
               <ProviderCard
@@ -424,7 +431,7 @@ export default function ImageGenerationContent() {
                 }
               />
             ))}
-          </div>
+          </Section>
         ))}
       </div>
 
