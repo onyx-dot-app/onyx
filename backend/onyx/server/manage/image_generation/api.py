@@ -36,7 +36,11 @@ from onyx.image_gen.factory import (
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
 from onyx.llm.exceptions import litellm_exception_to_safe_error
 from onyx.llm.model_capabilities import get_max_input_tokens
-from onyx.llm.model_catalog import iter_image_generation_models, resolve_model_mode
+from onyx.llm.model_catalog import (
+    find_model_entry,
+    iter_image_generation_models,
+    resolve_model_mode,
+)
 from onyx.llm.utils import collect_credential_values
 from onyx.server.manage.image_generation.models import (
     ImageGenerationConfigCreate,
@@ -340,7 +344,7 @@ def list_llm_provider_image_models(
                     is_recommended=(
                         name in recommended_models
                         or (
-                            name not in catalog_models
+                            find_model_entry(llm_provider.provider, name) is None
                             and resolve_model_mode(name) == "image_generation"
                         )
                     ),

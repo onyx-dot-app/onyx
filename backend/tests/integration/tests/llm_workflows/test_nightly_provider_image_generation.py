@@ -2,6 +2,7 @@ import base64
 import io
 from uuid import uuid4
 
+import pytest
 from PIL import Image
 
 from onyx.llm.model_catalog import iter_image_generation_models
@@ -61,9 +62,22 @@ def _recommended_image_models(
     return []
 
 
+def _default_image_provider_id(admin_user: DATestUser) -> str | None:
+    response = client.get(
+        f"{API_SERVER_URL}/admin/image-generation/config",
+        headers=admin_user.headers,
+    )
+    response.raise_for_status()
+    for config in response.json():
+        if config["is_default"]:
+            return config["image_provider_id"]
+    return None
+
+
 def _link_and_generate(
     admin_user: DATestUser, llm_provider_id: int, model_name: str
 ) -> None:
+    previous_default = _default_image_provider_id(admin_user)
     link_response = client.post(
         f"{API_SERVER_URL}/admin/image-generation/config/link",
         headers=admin_user.headers,
@@ -103,6 +117,11 @@ def _link_and_generate(
             f"{API_SERVER_URL}/admin/image-generation/config/{image_provider_id}",
             headers=admin_user.headers,
         )
+        if previous_default:
+            client.post(
+                f"{API_SERVER_URL}/admin/image-generation/config/{previous_default}/default",
+                headers=admin_user.headers,
+            )
 
 
 def test_nightly_provider_image_generation(admin_user: DATestUser) -> None:
@@ -137,7 +156,6 @@ def test_nightly_provider_image_generation(admin_user: DATestUser) -> None:
         )
 
     if failures:
-        skip_or_fail(
-            config.strict,
-            "Nightly provider image generation failures:\n" + "\n".join(failures),
+        pytest.fail(
+            "Nightly provider image generation failures:\n" + "\n".join(failures)
         )
