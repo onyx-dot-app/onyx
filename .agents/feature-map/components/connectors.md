@@ -273,6 +273,14 @@ downloaded file with
 
 ## Known issues
 
+- **A model swap can lose pushed events.** `check_for_indexing` can run a
+  PRESENT and a FUTURE attempt for one pair, and both drain
+  `connector_event_inbox`. The claim is exclusive, so whichever attempt takes
+  a row indexes it into its own index alone and the other index never sees
+  that change. A polled source re-reads and recovers; a queue consumed once
+  does not. Unreachable while no source is registered. Resolve it before the
+  first one is: either scope the claim per index, or keep event pairs out of
+  the two-run path.
 - **`backend/onyx/connectors/README.md` lags the code.** It names `connectors/factory.py`
   for the source mapping (in `connectors/registry.py`) and omits configs and gateways.
   Do not follow it as the add-a-connector checklist; use the recipe below.
