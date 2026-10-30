@@ -61,11 +61,11 @@ export default function MultiModelSelector({
   const t = useTranslations("chat.modelSelector");
   const [open, setOpen] = useState(false);
   const [replacingIndex, setReplacingIndex] = useState<number | null>(null);
+  const [closedByRemoval, setClosedByRemoval] = useState<boolean>(false);
   const rowRef = useRef<HTMLDivElement>(null);
 
   // The anchor node can unmount while the popover stays open (settings at max,
-  // replace) or while the closing pane still measures it (remove), so a detached
-  // anchor measures the selector row instead.
+  // replace), so a detached anchor measures the selector row instead.
   const anchorFor = (element: Element | null): PopoverAnchor => ({
     getBoundingClientRect: () => {
       const target = element?.isConnected ? element : rowRef.current;
@@ -190,12 +190,31 @@ export default function MultiModelSelector({
     if (!nextOpen) setReplacingIndex(null);
   };
 
-  const handlePillClick = (index: number, element: HTMLElement) => {
+  const openPicker = (element: HTMLElement, index: number | null) => {
     // `pointer-events-none` only blocks the mouse; guard the keyboard path too.
     if (noModelsToSelect) return;
     anchorRef.current = anchorFor(element);
     setReplacingIndex(index);
+    setClosedByRemoval(false);
     setOpen(true);
+  };
+
+  // Unmounts the pane outright: an exit animation would outlive its anchor pill.
+  // Runs on pointer-down too, which would otherwise dismiss the pane first.
+  const closeForRemoval = () => {
+    setClosedByRemoval(true);
+    handleOpenChange(false);
+  };
+
+  const isRemoveIconEvent = (e: React.SyntheticEvent): boolean => {
+    if (!isMultiModel) return false;
+    const icons = e.currentTarget.querySelectorAll(
+      ".interactive-foreground-icon"
+    );
+    const lastIcon = icons[icons.length - 1];
+    return (
+      !!lastIcon && e.target instanceof Node && lastIcon.contains(e.target)
+    );
   };
 
   return (
@@ -220,12 +239,7 @@ export default function MultiModelSelector({
               size="sm"
               tooltip={t("multiModel.addModelButton.label")}
               aria-label={t("multiModel.addModelButton.label")}
-              onClick={(e) => {
-                if (noModelsToSelect) return;
-                anchorRef.current = anchorFor(e.currentTarget);
-                setReplacingIndex(null);
-                setOpen(true);
-              }}
+              onClick={(e) => openPicker(e.currentTarget, null)}
             />
           )}
 
@@ -268,23 +282,16 @@ export default function MultiModelSelector({
                         state="empty"
                         variant="select-input"
                         size="lg"
-                        onClick={(e: React.MouseEvent) => {
-                          if (isMultiModel) {
-                            const target = e.target as HTMLElement;
-                            const btn = e.currentTarget as HTMLElement;
-                            const icons = btn.querySelectorAll(
-                              ".interactive-foreground-icon"
-                            );
-                            const lastIcon = icons[icons.length - 1];
-                            if (lastIcon && lastIcon.contains(target)) {
-                              onRemove(index);
-                              return;
-                            }
+                        onPointerDown={(e: React.PointerEvent<HTMLElement>) => {
+                          if (isRemoveIconEvent(e)) closeForRemoval();
+                        }}
+                        onClick={(e: React.MouseEvent<HTMLElement>) => {
+                          if (isRemoveIconEvent(e)) {
+                            closeForRemoval();
+                            onRemove(index);
+                            return;
                           }
-                          handlePillClick(
-                            index,
-                            e.currentTarget as HTMLElement
-                          );
+                          openPicker(e.currentTarget, index);
                         }}
                       >
                         {isAutoModel ? t("autoItem.label") : model.displayName}
@@ -302,15 +309,17 @@ export default function MultiModelSelector({
           model (or completes a replacement at max) must not unmount the pane
           it just opened. Opening at max is still blocked at the entry points:
           the add button hides and pill clicks set replacingIndex. */}
-      <Popover.Content side="top" align="end" width={70}>
-        <ModelSelectorContent
-          onSelect={handleSelect}
-          isSelected={isSelected}
-          isDisabled={isDisabled}
-          modelDetail={modelDetail}
-          onDetailSelect={handleDetailSelect}
-        />
-      </Popover.Content>
+      {!closedByRemoval && (
+        <Popover.Content side="top" align="end" width={70}>
+          <ModelSelectorContent
+            onSelect={handleSelect}
+            isSelected={isSelected}
+            isDisabled={isDisabled}
+            modelDetail={modelDetail}
+            onDetailSelect={handleDetailSelect}
+          />
+        </Popover.Content>
+      )}
     </Popover>
   );
 }
