@@ -70,6 +70,9 @@ def pair_and_attempt(db_session: Session) -> Generator[tuple[int, int], None, No
     try:
         yield pair.id, attempt.id
     finally:
+        # A failed test leaves the session unusable, and the deletes below
+        # would then raise and mask it.
+        db_session.rollback()
         # Attempts first: the pair's FK on index_attempt is NOT NULL, so the
         # ORM's SET NULL on delete would fail instead of cascading.
         db_session.query(IndexAttempt).filter_by(
