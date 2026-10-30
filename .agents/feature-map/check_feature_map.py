@@ -386,10 +386,6 @@ def resolve_token(token: str, repo: Repo) -> list[str]:
     return found
 
 
-def resolve_row(tokens: Iterable[str], repo: Repo) -> list[str]:
-    return [path for token in tokens for path in resolve_token(token, repo)]
-
-
 def _check_header(doc: Doc) -> tuple[list[str], str | None]:
     """Errors and the summary text of a component header."""
     rel = doc.rel
