@@ -620,12 +620,16 @@ export default function AppSidebar() {
           <div data-testid="AppSidebar/new-session">
             <SidebarTab
               icon={SvgEditBig}
-              href="/app"
+              href={activeSidebarTab.linkToNewSession().href}
               selected={activeSidebarTab.isNewSession()}
-              onClick={() => {
-                if (!activeSidebarTab.isNewSession()) return;
-                setAppMode(defaultAppMode);
-                reset();
+              onClick={(event) => {
+                // Already on a new session: start it over instead.
+                if (activeSidebarTab.isNewSession()) {
+                  setAppMode(defaultAppMode);
+                  reset();
+                  return;
+                }
+                activeSidebarTab.linkToNewSession().onClick(event);
               }}
             >
               {t("appSidebar.newSession.label")}
