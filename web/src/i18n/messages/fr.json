@@ -1352,6 +1352,9 @@
         "jira": {
           "description": "Suivi des tickets Atlassian"
         },
+        "jiraServiceManagement": {
+          "description": "Gestion des services Atlassian"
+        },
         "productboard": {
           "description": "Gestion de produit"
         },
@@ -4177,6 +4180,29 @@
             "comment_email_blacklist": {
               "label": "Liste noire d'e-mails des commentaires",
               "description": "Utile en général pour ignorer certains bots. Ajoutez les e-mails des utilisateurs dont les commentaires ne doivent PAS être indexés."
+            }
+          }
+        },
+        "jiraServiceManagement": {
+          "description": "Configurer le connecteur Jira Service Management",
+          "subtext": "Configurez les demandes Jira Service Management à indexer. Vous pouvez indexer tous les centres de services visibles ou indiquer un projet Jira.",
+          "fields": {
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "Tout"
+                },
+                "project": {
+                  "label": "Projet"
+                }
+              }
+            },
+            "everything": {
+              "label": "Indexe les demandes de tous les centres de services que le compte peut lire",
+              "description": "Onyx indexe les demandes de tous les centres de services que le compte sélectionné peut lire. Pour en indexer moins, choisissez l'onglet Projet."
+            },
+            "project_key": {
+              "description": "La clé du projet Jira associé à un centre de services (par ex. 'PROJ')."
             }
           }
         },

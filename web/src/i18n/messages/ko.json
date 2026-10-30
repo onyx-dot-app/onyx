@@ -1352,6 +1352,9 @@
         "jira": {
           "description": "Atlassian 이슈 트래커"
         },
+        "jiraServiceManagement": {
+          "description": "Atlassian 서비스 관리"
+        },
         "productboard": {
           "description": "제품 관리"
         },
@@ -4177,6 +4180,29 @@
             "comment_email_blacklist": {
               "label": "댓글 이메일 차단 목록",
               "description": "특정 봇을 무시할 때 유용합니다. 댓글을 인덱싱하지 않을 사용자의 이메일을 추가하세요."
+            }
+          }
+        },
+        "jiraServiceManagement": {
+          "description": "Jira Service Management 커넥터 구성",
+          "subtext": "인덱싱할 Jira Service Management 요청을 구성합니다. 표시되는 모든 서비스 데스크를 인덱싱하거나 특정 Jira 프로젝트를 지정할 수 있습니다.",
+          "fields": {
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "전체"
+                },
+                "project": {
+                  "label": "프로젝트"
+                }
+              }
+            },
+            "everything": {
+              "label": "계정이 읽을 수 있는 모든 서비스 데스크의 요청을 색인합니다",
+              "description": "Onyx는 선택한 계정이 읽을 수 있는 모든 서비스 데스크의 요청을 색인합니다. 범위를 줄이려면 프로젝트 탭을 선택하세요."
+            },
+            "project_key": {
+              "description": "서비스 데스크를 지원하는 Jira 프로젝트의 키입니다(예: 'PROJ')."
             }
           }
         },
