@@ -298,6 +298,17 @@ dummy checkpoint (`run_docfetching.py`).
 [[indexing-pipeline]] owns everything from "batch of `Document` objects
 received" onward: chunking, embedding, and the index write.
 
+A `CorpusEstimateConnector` (`interfaces.py`) can also count what a window holds
+while the run fetches it: `estimate_corpus(start, end, should_stop, on_progress)`
+returns a `models.py:CorpusEstimate` (a total, a count and bytes per
+`DocumentTypeLabel`, and whether the pass was stopped or skipped a scope). Each
+source counts its own way, a listing, an API's own totals or repository metadata,
+and maps its file types onto the shared labels so counts compare across sources.
+Docfetching runs the count beside the fetch ([[indexing-pipeline]] §4.2) and reports
+it to fleet telemetry ([[indexing-pipeline]] §4.10). A source that lists in parallel paces its workers
+with `threadpool_concurrency.py:AdaptiveConcurrency`, fed by the pushback its retry
+wrappers record through `PUSHBACK_OBSERVER`.
+
 ### 4.5 Pruning: the slim diff
 
 `backend/onyx/background/celery/tasks/pruning/tasks.py:connector_pruning_generator_task`

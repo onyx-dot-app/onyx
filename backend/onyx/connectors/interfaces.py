@@ -1,5 +1,5 @@
 import abc
-from collections.abc import Generator, Iterator
+from collections.abc import Callable, Generator, Iterator
 from types import TracebackType
 from typing import Any, ClassVar, Generic, TypeAlias, TypeVar
 
@@ -9,6 +9,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import (
     ConnectorCheckpoint,
     ConnectorFailure,
+    CorpusEstimate,
     Document,
     HierarchyNode,
     SlimDocument,
@@ -261,6 +262,29 @@ class CredentialsConnector(BaseConnector):
     def set_credentials_provider(
         self, credentials_provider: CredentialsProviderInterface
     ) -> None:
+        raise NotImplementedError
+
+
+class CorpusEstimateConnector(BaseConnector):
+    """A connector that can count what a run will fetch.
+
+    Docfetching calls ``estimate_corpus`` on an instance of its own beside the
+    fetch, for a window it starts clean, and reports the count to fleet
+    telemetry. The pass reads metadata
+    only and runs to the end unless ``should_stop`` says otherwise, when it
+    returns a lower bound. How a source counts is its own business: a listing,
+    an API's own totals, or repository metadata."""
+
+    @abc.abstractmethod
+    def estimate_corpus(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        should_stop: Callable[[], bool],
+        on_progress: Callable[[CorpusEstimate], None],
+    ) -> CorpusEstimate:
+        """``on_progress`` gets the running count every few seconds, as a
+        partial estimate."""
         raise NotImplementedError
 
 
