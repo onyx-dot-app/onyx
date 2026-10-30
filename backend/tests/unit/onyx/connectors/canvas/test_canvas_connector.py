@@ -1408,6 +1408,84 @@ class TestLoadFromCheckpoint:
         assert new_cp.next_url is None
         assert new_cp.has_more is True
 
+    def test_course_check_error_after_404_is_a_stage_failure(self) -> None:
+        """If the course check itself fails, record a stage failure and
+        continue instead of failing the whole attempt."""
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True,
+            course_ids=[1, 2],
+            current_course_index=0,
+            stage=CanvasStage.PAGES,
+        )
+
+        with (
+            patch.object(
+                connector,
+                "_fetch_stage_page",
+                side_effect=OnyxError(
+                    OnyxErrorCode.NOT_FOUND,
+                    "not found",
+                    status_code_override=404,
+                ),
+            ),
+            patch.object(
+                connector,
+                "_course_exists",
+                side_effect=OnyxError(
+                    OnyxErrorCode.BAD_GATEWAY,
+                    "boom",
+                    status_code_override=500,
+                ),
+            ),
+        ):
+            items, new_cp = _run_checkpoint(connector, cp)
+
+        assert len(items) == 1
+        assert isinstance(items[0], ConnectorFailure)
+        assert items[0].failed_entity is not None
+        assert items[0].failed_entity.entity_id == "canvas-pages-1"
+        assert new_cp.current_course_index == 0
+        assert new_cp.stage == CanvasStage.ASSIGNMENTS
+
+    @pytest.mark.parametrize(
+        ("status_code", "expected_error"),
+        [(401, CredentialExpiredError), (403, InsufficientPermissionsError)],
+    )
+    def test_course_check_auth_error_after_404_fails_the_run(
+        self, status_code: int, expected_error: type[Exception]
+    ) -> None:
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True,
+            course_ids=[1],
+            current_course_index=0,
+            stage=CanvasStage.PAGES,
+        )
+
+        with (
+            patch.object(
+                connector,
+                "_fetch_stage_page",
+                side_effect=OnyxError(
+                    OnyxErrorCode.NOT_FOUND,
+                    "not found",
+                    status_code_override=404,
+                ),
+            ),
+            patch.object(
+                connector,
+                "_course_exists",
+                side_effect=OnyxError(
+                    OnyxErrorCode.UNAUTHENTICATED,
+                    "denied",
+                    status_code_override=status_code,
+                ),
+            ),
+            pytest.raises(expected_error),
+        ):
+            _run_checkpoint(connector, cp)
+
     def test_404_on_later_page_is_a_stage_failure(self) -> None:
         """A 404 while resuming from a pagination link is not a disabled
         tool. Record a stage failure instead of silently skipping the rest

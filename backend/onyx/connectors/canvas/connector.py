@@ -892,15 +892,23 @@ class CanvasConnector(
             if oe.status_code in (401, 403):
                 _handle_canvas_api_error(oe)  # NoReturn — always raises
 
-            course_gone = (
-                oe.status_code == _NOT_FOUND_STATUS_CODE
-                and not self._course_exists(course_id)
-            )
-            if (
-                oe.status_code == _NOT_FOUND_STATUS_CODE
-                and not course_gone
-                and new_checkpoint.next_url is None
-            ):
+            # None when the status is not 404, or when the course check
+            # itself fails; both fall through to the stage failure below.
+            course_exists: bool | None = None
+            if oe.status_code == _NOT_FOUND_STATUS_CODE:
+                try:
+                    course_exists = self._course_exists(course_id)
+                except Exception as probe_error:
+                    if isinstance(probe_error, OnyxError) and (
+                        probe_error.status_code in (401, 403)
+                    ):
+                        _handle_canvas_api_error(probe_error)  # NoReturn
+                    logger.warning(
+                        "Could not check whether Canvas course %s exists: %s",
+                        course_id,
+                        probe_error,
+                    )
+            if course_exists and new_checkpoint.next_url is None:
                 # A 404 on the first page of a course that exists means the
                 # tool is disabled for it. The other stages are unaffected,
                 # so skip only this one and record no failure: counting it as
@@ -914,7 +922,7 @@ class CanvasConnector(
                     oe,
                 )
                 new_checkpoint.advance_stage()
-            elif course_gone:
+            elif course_exists is False:
                 # The course itself is gone. Its other stages would hit the
                 # same 404, so skip the whole course.
                 logger.warning(
