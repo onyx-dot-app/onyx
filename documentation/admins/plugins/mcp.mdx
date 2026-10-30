@@ -86,7 +86,7 @@ OAuth is the best choice for most hosted vendor servers, such as Linear, Notion,
 | --- | --- |
 | **Set up automatically** | Onyx registers an OAuth client with the server's published settings. Use this when the server supports dynamic client registration. |
 | **Use your own OAuth client** | Enter a client ID from your provider. Add a client secret only if the provider requires it. |
-| **Use client metadata document** | The provider fetches the Onyx client metadata document over the public internet. Onyx checks this when it checks the server, and turns this setting off when the provider cannot fetch the document. Onyx then uses automatic client registration. |
+| **Use client metadata document** | The provider fetches the Onyx client metadata document over the public internet. Onyx checks this when it checks the server, and turns this setting off when the provider cannot fetch the document. Onyx then tries automatic client registration. If the connection still fails with a client metadata error, turn this setting off and connect again. |
 
 If you create your own OAuth client, set its redirect URI to:
 
