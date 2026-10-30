@@ -2,6 +2,7 @@ import os
 from typing import Any
 
 from kubernetes import client, config
+from kubernetes.config import incluster_config, kube_config
 from urllib3.util.retry import Retry
 
 from onyx.utils.logger import setup_logger
@@ -29,6 +30,26 @@ class _DeadlinedApiClient(client.ApiClient):
         if _request_timeout is None:
             _request_timeout = _REQUEST_TIMEOUT_S
         return super().request(*args, _request_timeout=_request_timeout, **kwargs)
+
+
+def kube_config_available() -> bool:
+    """Whether `load_kube_config` has a config to load, without loading it.
+
+    Mirrors the two sources it tries: the in-cluster service account, then the
+    kubeconfig files named by `KUBECONFIG` (default `~/.kube/config`).
+    """
+    if (
+        os.environ.get(incluster_config.SERVICE_HOST_ENV_NAME)
+        and os.environ.get(incluster_config.SERVICE_PORT_ENV_NAME)
+        and os.path.isfile(incluster_config.SERVICE_TOKEN_FILENAME)
+        and os.path.isfile(incluster_config.SERVICE_CERT_FILENAME)
+    ):
+        return True
+    return any(
+        os.path.isfile(os.path.expanduser(path))
+        for path in kube_config.KUBE_CONFIG_DEFAULT_LOCATION.split(os.pathsep)
+        if path
+    )
 
 
 def load_kube_config() -> None:
