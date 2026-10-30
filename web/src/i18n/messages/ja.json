@@ -16720,7 +16720,10 @@
         "label": "管理パネル"
       },
       "agents": {
-        "title": "エージェント"
+        "title": "エージェント",
+        "loading": {
+          "ariaLabel": "エージェントを読み込み中"
+        }
       },
       "craft": {
         "label": "Craft"
@@ -16742,13 +16745,19 @@
         "label": "新しいセッション"
       },
       "projects": {
-        "title": "プロジェクト"
+        "title": "プロジェクト",
+        "loading": {
+          "ariaLabel": "プロジェクトを読み込み中"
+        }
       },
       "recents": {
         "empty": {
           "text": "メッセージを送信してみましょう。チャット履歴がここに表示されます。"
         },
-        "title": "最近の項目"
+        "title": "最近の項目",
+        "loading": {
+          "ariaLabel": "チャットを読み込み中"
+        }
       },
       "searchChats": {
         "label": "チャットを検索"

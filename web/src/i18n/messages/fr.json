@@ -16720,7 +16720,10 @@
         "label": "Panneau d'administration"
       },
       "agents": {
-        "title": "Agents"
+        "title": "Agents",
+        "loading": {
+          "ariaLabel": "Chargement des agents"
+        }
       },
       "craft": {
         "label": "Craft"
@@ -16742,13 +16745,19 @@
         "label": "Nouvelle session"
       },
       "projects": {
-        "title": "Projets"
+        "title": "Projets",
+        "loading": {
+          "ariaLabel": "Chargement des projets"
+        }
       },
       "recents": {
         "empty": {
           "text": "Essayez d'envoyer un message ! Votre historique de discussions apparaîtra ici."
         },
-        "title": "Récents"
+        "title": "Récents",
+        "loading": {
+          "ariaLabel": "Chargement des discussions"
+        }
       },
       "searchChats": {
         "label": "Rechercher des discussions"

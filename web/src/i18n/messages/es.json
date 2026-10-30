@@ -16720,7 +16720,10 @@
         "label": "Panel de administración"
       },
       "agents": {
-        "title": "Agentes"
+        "title": "Agentes",
+        "loading": {
+          "ariaLabel": "Cargando agentes"
+        }
       },
       "craft": {
         "label": "Craft"
@@ -16742,13 +16745,19 @@
         "label": "Nueva sesión"
       },
       "projects": {
-        "title": "Proyectos"
+        "title": "Proyectos",
+        "loading": {
+          "ariaLabel": "Cargando proyectos"
+        }
       },
       "recents": {
         "empty": {
           "text": "¡Prueba a enviar un mensaje! Tu historial de chats aparecerá aquí."
         },
-        "title": "Recientes"
+        "title": "Recientes",
+        "loading": {
+          "ariaLabel": "Cargando chats"
+        }
       },
       "searchChats": {
         "label": "Buscar chats"

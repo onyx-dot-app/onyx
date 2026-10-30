@@ -16720,7 +16720,10 @@
         "label": "Admin-Bereich"
       },
       "agents": {
-        "title": "Agenten"
+        "title": "Agenten",
+        "loading": {
+          "ariaLabel": "Agenten werden geladen"
+        }
       },
       "craft": {
         "label": "Craft"
@@ -16742,13 +16745,19 @@
         "label": "Neue Sitzung"
       },
       "projects": {
-        "title": "Projekte"
+        "title": "Projekte",
+        "loading": {
+          "ariaLabel": "Projekte werden geladen"
+        }
       },
       "recents": {
         "empty": {
           "text": "Senden Sie eine Nachricht! Ihr Chat-Verlauf erscheint hier."
         },
-        "title": "Zuletzt verwendet"
+        "title": "Zuletzt verwendet",
+        "loading": {
+          "ariaLabel": "Chats werden geladen"
+        }
       },
       "searchChats": {
         "label": "Chats durchsuchen"

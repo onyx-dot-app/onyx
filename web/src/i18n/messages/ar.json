@@ -16720,7 +16720,10 @@
         "label": "لوحة الإدارة"
       },
       "agents": {
-        "title": "الوكلاء"
+        "title": "الوكلاء",
+        "loading": {
+          "ariaLabel": "جارٍ تحميل الوكلاء"
+        }
       },
       "craft": {
         "label": "Craft"
@@ -16742,13 +16745,19 @@
         "label": "جلسة جديدة"
       },
       "projects": {
-        "title": "المشاريع"
+        "title": "المشاريع",
+        "loading": {
+          "ariaLabel": "جارٍ تحميل المشاريع"
+        }
       },
       "recents": {
         "empty": {
           "text": "جرب إرسال رسالة! سيظهر سجل محادثاتك هنا."
         },
-        "title": "الأحدث"
+        "title": "الأحدث",
+        "loading": {
+          "ariaLabel": "جارٍ تحميل المحادثات"
+        }
       },
       "searchChats": {
         "label": "البحث في المحادثات"
