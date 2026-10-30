@@ -42,14 +42,18 @@ from onyx.server.query_and_chat.token_limit import (
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 
-def _check_spend_limits(user: User, model_configuration_id: int | None) -> None:
-    # Shared principals carry traffic for many callers, so only the workspace
-    # pool applies to them.
-    if (
+def is_shared_spend_principal(user: User) -> bool:
+    """Shared principals carry traffic for many callers, so only the workspace
+    pool applies to them."""
+    return (
         user.is_anonymous
         or user.account_type == AccountType.SERVICE_ACCOUNT
         or is_api_key_email_address(user.email)
-    ):
+    )
+
+
+def _check_spend_limits(user: User, model_configuration_id: int | None) -> None:
+    if is_shared_spend_principal(user):
         _user_is_rate_limited_by_global(model_configuration_id)
         return
 

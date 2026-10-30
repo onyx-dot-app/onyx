@@ -746,6 +746,48 @@ def test_manager_cannot_delete_token_limit_on_unmanaged_group(env: _ScopedEnv) -
     )
 
 
+# Disabled, like the token limits above: these tests check the permission gate.
+_SPENDING_LIMIT_CARD: dict[str, Any] = {
+    "enabled": False,
+    "limits": [{"period": "MONTHLY", "cost_budget_cents": 500}],
+}
+
+
+def test_manager_sets_pool_on_managed_group(env: _ScopedEnv) -> None:
+    group_path = f"/admin/spending-limits/groups/{env.managed_group.id}"
+    _assert_manager(env, "PUT", f"{group_path}/pool", "allowed", _SPENDING_LIMIT_CARD)
+    _assert_manager(env, "GET", group_path, "allowed")
+
+
+def test_manager_cannot_lift_member_allowances(env: _ScopedEnv) -> None:
+    """A group allowance beats the workspace per-user default, so only a full
+    admin may set or delete one, even on the manager's own group."""
+    group_path = f"/admin/spending-limits/groups/{env.managed_group.id}"
+    _assert_manager(
+        env, "PUT", f"{group_path}/per-member", "denied", _SPENDING_LIMIT_CARD
+    )
+    _assert_manager(env, "DELETE", group_path, "denied")
+
+
+@pytest.mark.parametrize("card", ["pool", "per-member"])
+def test_manager_cannot_set_spending_limits_on_unmanaged_group(
+    env: _ScopedEnv, card: str
+) -> None:
+    group_path = f"/admin/spending-limits/groups/{env.other_group.id}"
+    _assert_manager(env, "PUT", f"{group_path}/{card}", "denied", _SPENDING_LIMIT_CARD)
+    _assert_manager(env, "GET", group_path, "denied")
+    _assert_manager(env, "DELETE", group_path, "denied")
+
+
+def test_manager_cannot_set_workspace_spending_limits(env: _ScopedEnv) -> None:
+    for path in (
+        "/admin/spending-limits/workspace/pool",
+        "/admin/spending-limits/workspace/per-user",
+    ):
+        _assert_manager(env, "PUT", path, "denied", _SPENDING_LIMIT_CARD)
+    _assert_manager(env, "GET", "/admin/spending-limits", "denied")
+
+
 def test_manager_action_listing_scoped_to_own_and_agent_connected(
     env: _ScopedEnv,
 ) -> None:
