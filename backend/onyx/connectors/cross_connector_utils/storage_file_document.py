@@ -11,7 +11,7 @@ from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     extract_and_stage_tabular_file,
     is_tabular_file,
 )
-from onyx.connectors.models import Document, ImageSection, TextSection
+from onyx.connectors.models import Document, TextSection
 from onyx.file_processing.extract_file_text import extract_text_and_images, get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.image_utils import store_image_and_create_section
@@ -94,12 +94,9 @@ def build_storage_file_document(
     )
     onyx_metadata, custom_tags = process_onyx_metadata(extraction_result.metadata)
     link = onyx_metadata.link or link
-    sections: list[TextSection | ImageSection] = []
-    if text := extraction_result.text_content.strip():
-        sections.append(TextSection(link=link, text=text))
     return Document(
         id=document_id,
-        sections=sections or [TextSection(link=link, text="")],
+        sections=[TextSection(link=link, text=extraction_result.text_content.strip())],
         source=onyx_metadata.source_type or source,
         semantic_identifier=onyx_metadata.file_display_name or file_name,
         doc_updated_at=onyx_metadata.doc_updated_at or last_modified,

@@ -9,7 +9,14 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.storage_file_document import (
     build_storage_file_document,
 )
-from onyx.connectors.models import Document, ImageSection, TabularSection, TextSection
+from onyx.connectors.models import (
+    BasicExpertInfo,
+    Document,
+    ImageSection,
+    TabularSection,
+    TextSection,
+)
+from onyx.file_processing.extract_file_text import ExtractionResult
 from onyx.file_store.staging import RawFileCallback
 
 MODULE = "onyx.connectors.cross_connector_utils.storage_file_document"
@@ -91,3 +98,36 @@ def test_tabular_file_is_staged() -> None:
 
 def test_tabular_file_without_callback_is_skipped() -> None:
     assert _build("table.csv", b"name,value\nalpha,1\n") is None
+
+
+def test_onyx_metadata_overrides_the_storage_fields() -> None:
+    extraction = ExtractionResult(
+        text_content="body",
+        embedded_images=[],
+        metadata={
+            "link": "https://override.example.com/doc",
+            "connector_type": "web",
+            "file_display_name": "Override Name",
+            "doc_updated_at": "2025-05-06T07:08:09Z",
+            "primary_owners": ["alice@example.com"],
+            "secondary_owners": ["bob@example.com"],
+            "team": "search",
+        },
+    )
+    with patch(f"{MODULE}.extract_text_and_images", return_value=extraction):
+        document = _build("notes.txt", b"ignored")
+
+    assert document is not None
+    assert document.sections == [
+        TextSection(link="https://override.example.com/doc", text="body")
+    ]
+    assert document.source == DocumentSource.WEB
+    assert document.semantic_identifier == "Override Name"
+    assert document.doc_updated_at == datetime(2025, 5, 6, 7, 8, 9, tzinfo=timezone.utc)
+    assert document.primary_owners == [
+        BasicExpertInfo(display_name="alice@example.com")
+    ]
+    assert document.secondary_owners == [
+        BasicExpertInfo(display_name="bob@example.com")
+    ]
+    assert document.metadata == {"team": "search"}
