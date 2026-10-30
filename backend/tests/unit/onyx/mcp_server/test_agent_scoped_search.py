@@ -30,6 +30,7 @@ class _Stub:
     agents: list[dict[str, Any]]
     sources: list[str]
     document_sets: list[dict[str, Any]]
+    search_results: list[dict[str, Any]]
     inventory_status: int | None = None
 
 
@@ -51,6 +52,7 @@ async def stub(monkeypatch: pytest.MonkeyPatch) -> AsyncGenerator[_Stub, None]:
             {"name": "Engineering Wiki", "description": "eng"},
             {"name": "Sales Playbook", "description": "sales"},
         ],
+        search_results=[],
     )
 
     def _handler(request: httpx.Request) -> httpx.Response:
@@ -68,7 +70,7 @@ async def stub(monkeypatch: pytest.MonkeyPatch) -> AsyncGenerator[_Stub, None]:
             return httpx.Response(200, json=state.agents)
         if path.endswith("/search"):
             state.search_requests.append(json.loads(request.content))
-            return httpx.Response(200, json={"results": []})
+            return httpx.Response(200, json={"results": state.search_results})
         return httpx.Response(404, json={"detail": f"unexpected path {path}"})
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(_handler))
@@ -191,6 +193,50 @@ async def test_valid_filters_pass_through(stub: _Stub) -> None:
     sent = stub.search_requests[0]
     assert sent["sources"] == ["github"]
     assert sent["document_sets"] == ["Engineering Wiki"]
+
+
+@pytest.mark.asyncio
+async def test_tags_and_metadata_pass_through(stub: _Stub) -> None:
+    metadata = '{"reporter": "Ada", "assignee": "Grace"}'
+    stub.search_results = [
+        {
+            "citation_id": 1,
+            "title": "Jira issue",
+            "content": "Fix search",
+            "link": "https://example.com/issue",
+            "source_type": "jira",
+            "updated_at": None,
+            "metadata": metadata,
+        }
+    ]
+
+    payload = await search_module.search_indexed_documents(
+        query="issue",
+        tags=[search_module.Tag(tag_key="reporter", tag_value="Ada")],
+    )
+
+    assert stub.search_requests[0]["tags"] == [
+        {"tag_key": "reporter", "tag_value": "Ada"}
+    ]
+    assert payload["results"][0]["metadata"] == metadata
+
+
+@pytest.mark.asyncio
+async def test_older_search_response_has_no_metadata(stub: _Stub) -> None:
+    stub.search_results = [
+        {
+            "citation_id": 1,
+            "title": "Old result",
+            "content": "Text",
+            "link": None,
+            "source_type": "github",
+            "updated_at": None,
+        }
+    ]
+
+    payload = await search_module.search_indexed_documents(query="result")
+
+    assert payload["results"][0]["metadata"] is None
 
 
 @pytest.mark.asyncio

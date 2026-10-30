@@ -57,6 +57,11 @@ downstream, so it should not hand-craft time or source scoping into the query te
 | POST | `/admin/search` | `admin_search` (`server/query_and_chat/query_backend.py`) | Admin-only. Calls `document_index.keyword_retrieval` or `random_retrieval` directly, bypassing this whole pipeline. Used for admin document inspection, not for chat. |
 | GET | `/query/valid-tags` | `get_tags` (`server/query_and_chat/query_backend.py`) | Tag autocomplete for the filter UI. |
 
+The MCP `search_indexed_documents` tool (`mcp_server/tools/search.py`) calls
+`/search`. It passes tag filters to `SearchRequest` and returns each selected
+section's metadata when the source provides it. The metadata field is a JSON
+string, as in the LLM-facing search result, or `null` when absent.
+
 The EE Search UI backend (`ee/onyx/server/query_and_chat/search_backend.py`,
 `ee/onyx/search/process_search_query.py`) is a **separate, lighter pipeline**. It
 calls `search_pipeline()` directly with its own query expansion

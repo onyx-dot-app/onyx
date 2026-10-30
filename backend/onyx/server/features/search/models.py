@@ -45,6 +45,7 @@ class SearchResult(BaseModel):
     link: str | None
     source_type: str
     updated_at: str | None
+    metadata: str | None = None
 
 
 class SearchResponse(BaseModel):

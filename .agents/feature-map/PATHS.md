@@ -77,6 +77,7 @@ here. Read the component that documents the setting in its env table.
 | `backend/onyx/server/manage/search_settings.py`, `server/manage/embedding/` | document-index |
 | `backend/shared_configs/embedding_models.py`, `backend/model_server/embedding_model_loader.py`, `backend/model_server/voyage_nano.py` | document-index |
 | `backend/onyx/server/features/search/`, `server/query_and_chat/query_backend.py`, `backend/ee/onyx/server/query_and_chat/search_backend.py`, `backend/ee/onyx/search/` | internal-search |
+| `backend/onyx/mcp_server/tools/search.py` | internal-search |
 | `backend/ee/onyx/server/query_and_chat/token_limit.py` | rate-and-usage-limits |
 | `backend/onyx/access/`, `backend/ee/onyx/access/`, `backend/onyx/db/document_access.py`, `db/permissions.py`, `db/scoped_permissions.py` | access-control |
 | `backend/onyx/db/document_set.py`, `db/user_group.py`, `server/features/document_set/` | access-control |
