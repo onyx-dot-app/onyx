@@ -25,6 +25,7 @@ from onyx.db.enums import (
     ConnectorCredentialPairStatus,
     ConnectorEventStatus,
     ConnectorEventType,
+    IndexingStatus,
 )
 from onyx.db.models import (
     Connector,
@@ -152,8 +153,10 @@ def test_drain_yields_documents_and_settles_them(
     assert failures == []
     assert checkpoint.has_more is False
     assert checkpoint.drained == 3
+    # Claimed, not completed: the runner has not stored these documents yet,
+    # so the rows wait for this attempt's outcome.
     assert count_events_by_status(db_session, pair_id) == {
-        ConnectorEventStatus.COMPLETED: 3
+        ConnectorEventStatus.IN_PROGRESS: 3
     }
 
 
@@ -209,7 +212,7 @@ def test_a_delete_settles_without_a_document(
     assert documents == []
     assert failures == []
     assert count_events_by_status(db_session, pair_id) == {
-        ConnectorEventStatus.COMPLETED: 1
+        ConnectorEventStatus.IN_PROGRESS: 1
     }
 
 
@@ -222,13 +225,14 @@ def test_a_rejected_event_fails_its_row_and_spares_the_batch(
     attempt could claim it, so the event was lost without a trace.
     """
     pair_id, attempt_id = pair_and_attempt
+    bad_event = ParsedEvent(document_id=BAD_DOCUMENT, event_key="k-bad")
     record_events(
         db_session,
         pair_id,
         SOURCE,
         [
             ParsedEvent(document_id="doc-ok", event_key="k-ok"),
-            ParsedEvent(document_id=BAD_DOCUMENT, event_key="k-bad"),
+            bad_event,
         ],
     )
     db_session.commit()
@@ -244,10 +248,17 @@ def test_a_rejected_event_fails_its_row_and_spares_the_batch(
     assert failures[0].failed_document.document_id == BAD_DOCUMENT
 
     assert count_events_by_status(db_session, pair_id) == {
-        ConnectorEventStatus.COMPLETED: 1,
+        ConnectorEventStatus.IN_PROGRESS: 1,
         ConnectorEventStatus.FAILED: 1,
     }
-    rejected = db_session.query(ConnectorEventInbox).filter_by(event_key="k-bad").one()
+    rejected = (
+        db_session.query(ConnectorEventInbox)
+        .filter_by(
+            connector_credential_pair_id=pair_id,
+            event_key=bad_event.resolved_event_key(),
+        )
+        .one()
+    )
     assert rejected.last_error == "payload could not be read"
 
 
@@ -295,3 +306,76 @@ def test_drain_without_its_context_refuses_to_run(
 
     with pytest.raises(RuntimeError, match="event context"):
         _drain(EventInboxConnector(), EventInboxCheckpoint(has_more=True))
+
+
+def test_a_successful_attempt_completes_the_rows_it_claimed(
+    db_session: Session, pair_and_attempt: tuple[int, int]
+) -> None:
+    """Completion waits for the attempt, because the runner stores the last
+    documents only after the generator returns."""
+    pair_id, attempt_id = pair_and_attempt
+    record_events(
+        db_session, pair_id, SOURCE, [ParsedEvent(document_id="doc-1", event_key="k-1")]
+    )
+    db_session.commit()
+    _drain(
+        _connector(pair_id, attempt_id, batch_size=10),
+        EventInboxCheckpoint(has_more=True),
+    )
+
+    db_session.query(IndexAttempt).filter_by(id=attempt_id).update(
+        {"status": IndexingStatus.SUCCESS}
+    )
+    db_session.commit()
+
+    # The next run of the pair observes the outcome.
+    next_attempt = IndexAttempt(
+        connector_credential_pair_id=pair_id, from_beginning=False, status="in_progress"
+    )
+    db_session.add(next_attempt)
+    db_session.commit()
+    _drain(
+        _connector(pair_id, next_attempt.id, batch_size=10),
+        EventInboxCheckpoint(has_more=True),
+    )
+
+    assert count_events_by_status(db_session, pair_id) == {
+        ConnectorEventStatus.COMPLETED: 1
+    }
+
+
+def test_a_stopped_attempt_returns_its_rows_to_the_queue(
+    db_session: Session, pair_and_attempt: tuple[int, int]
+) -> None:
+    """Without this the rows stay claimed and no later attempt can take
+    them, so the change a source reported is lost silently."""
+    pair_id, attempt_id = pair_and_attempt
+    record_events(
+        db_session, pair_id, SOURCE, [ParsedEvent(document_id="doc-1", event_key="k-1")]
+    )
+    db_session.commit()
+    _drain(
+        _connector(pair_id, attempt_id, batch_size=10),
+        EventInboxCheckpoint(has_more=True),
+    )
+
+    db_session.query(IndexAttempt).filter_by(id=attempt_id).update(
+        {"status": IndexingStatus.FAILED}
+    )
+    db_session.commit()
+
+    next_attempt = IndexAttempt(
+        connector_credential_pair_id=pair_id, from_beginning=False, status="in_progress"
+    )
+    db_session.add(next_attempt)
+    db_session.commit()
+    documents, _, _ = _drain(
+        _connector(pair_id, next_attempt.id, batch_size=10),
+        EventInboxCheckpoint(has_more=True),
+    )
+
+    # Released and then re-claimed by the new attempt in the same pass.
+    assert [document.id for document in documents] == ["doc-1"]
+    assert count_events_by_status(db_session, pair_id) == {
+        ConnectorEventStatus.IN_PROGRESS: 1
+    }

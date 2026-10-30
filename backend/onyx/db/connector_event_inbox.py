@@ -14,8 +14,8 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.event_models import ParsedEvent
-from onyx.db.enums import ConnectorEventStatus
-from onyx.db.models import ConnectorEventInbox
+from onyx.db.enums import ConnectorEventStatus, IndexingStatus
+from onyx.db.models import ConnectorEventInbox, IndexAttempt
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -226,3 +226,45 @@ def mark_events_failed(
             for event_id, error in failures
         ],
     )
+
+
+def settle_events_from_finished_attempts(
+    db_session: Session, cc_pair_id: int
+) -> tuple[int, int]:
+    """Resolve rows whose claiming attempt has since finished.
+
+    A row is claimed inside a run but cannot be completed there: the runner
+    buffers documents and flushes them after the generator returns, so a row
+    marked COMPLETED while the generator is still going would be settled
+    before its document was stored, and a failed store would lose the change
+    with no way to claim it again.
+
+    So completion waits for the attempt's own outcome, which the next run of
+    the pair observes. An attempt that succeeded completes its rows; one that
+    failed, was canceled or was interrupted returns them to the queue. Rows
+    of an attempt still running belong to it and are left alone.
+
+    Returns (completed, released). Does not commit.
+    """
+    claimed = (
+        select(ConnectorEventInbox.id, IndexAttempt.status)
+        .join(IndexAttempt, ConnectorEventInbox.index_attempt_id == IndexAttempt.id)
+        .where(
+            ConnectorEventInbox.connector_credential_pair_id == cc_pair_id,
+            ConnectorEventInbox.status == ConnectorEventStatus.IN_PROGRESS,
+        )
+    )
+
+    to_complete: list[int] = []
+    to_release: list[int] = []
+    for event_id, attempt_status in db_session.execute(claimed).tuples().all():
+        if attempt_status == IndexingStatus.SUCCESS:
+            to_complete.append(event_id)
+        elif attempt_status.is_terminal():
+            to_release.append(event_id)
+
+    mark_events_completed(db_session, to_complete)
+    release_events_to_pending(
+        db_session, to_release, error="the claiming attempt did not finish"
+    )
+    return len(to_complete), len(to_release)

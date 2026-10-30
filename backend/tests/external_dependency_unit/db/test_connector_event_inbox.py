@@ -301,7 +301,7 @@ def test_completing_a_row_stamps_when_it_settled(
     mark_events_completed(db_session, [event.id for event in claimed])
     db_session.commit()
 
-    settled = get_event_by_key(db_session, cc_pair_id, "k-1")
+    settled = get_event_by_key(db_session, cc_pair_id, claimed[0].event_key)
     assert settled is not None
     assert settled.status == ConnectorEventStatus.COMPLETED
     assert settled.processed_at is not None
