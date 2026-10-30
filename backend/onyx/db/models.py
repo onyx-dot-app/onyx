@@ -67,6 +67,7 @@ from onyx.configs.constants import (
     MilestoneRecordType,
     NotificationType,
     SearchFeedbackType,
+    TokenRateLimitAction,
     TokenRateLimitPeriod,
     TokenRateLimitScope,
 )
@@ -5738,6 +5739,9 @@ NOTE: `TokenRateLimit` is partially an MIT feature (global rate limit)
 
 
 class TokenRateLimit(Base):
+    """One spending limit: a budget for one period, for all models or one model.
+    At most one enabled row per (scope, group, model, period, action, threshold)."""
+
     __tablename__ = "token_rate_limit"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -5754,26 +5758,55 @@ class TokenRateLimit(Base):
     scope: Mapped[TokenRateLimitScope] = mapped_column(
         Enum(TokenRateLimitScope, native_enum=False)
     )
+    # Set exactly for the group scopes.
+    user_group_id: Mapped[int | None] = mapped_column(
+        ForeignKey("user_group.id", ondelete="CASCADE"), nullable=True
+    )
+    # None: the limit counts usage of every model.
+    model_configuration_id: Mapped[int | None] = mapped_column(
+        ForeignKey("model_configuration.id", ondelete="CASCADE"), nullable=True
+    )
+    action: Mapped[TokenRateLimitAction] = mapped_column(
+        Enum(TokenRateLimitAction, native_enum=False),
+        nullable=False,
+        default=TokenRateLimitAction.BLOCK,
+        server_default=TokenRateLimitAction.BLOCK.value,
+    )
+    # An ALERT_ONLY row's percentage of the BLOCK value for the same bucket, in
+    # place of absolute budgets.
+    threshold_percent: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
 
     __table_args__ = (
         CheckConstraint(
-            "token_budget IS NOT NULL OR cost_budget_cents IS NOT NULL",
+            "token_budget IS NOT NULL OR cost_budget_cents IS NOT NULL "
+            "OR threshold_percent IS NOT NULL",
             name="ck_token_rate_limit_budget_set",
         ),
-    )
-
-
-class TokenRateLimit__UserGroup(Base):
-    __tablename__ = "token_rate_limit__user_group"
-
-    rate_limit_id: Mapped[int] = mapped_column(
-        ForeignKey("token_rate_limit.id"), primary_key=True
-    )
-    user_group_id: Mapped[int] = mapped_column(
-        ForeignKey("user_group.id"), primary_key=True
+        CheckConstraint(
+            "threshold_percent IS NULL OR (action = 'ALERT_ONLY' "
+            "AND token_budget IS NULL AND cost_budget_cents IS NULL "
+            "AND threshold_percent BETWEEN 1 AND 100)",
+            name="ck_token_rate_limit_threshold",
+        ),
+        CheckConstraint(
+            "(scope IN ('USER_GROUP', 'USER_GROUP_MEMBER')) = (user_group_id IS NOT NULL)",
+            name="ck_token_rate_limit_group",
+        ),
+        # Nullable key columns are coalesced: Postgres before 15 has no NULLS NOT DISTINCT.
+        Index(
+            "uq_token_rate_limit_bucket",
+            "scope",
+            text("COALESCE(user_group_id, 0)"),
+            text("COALESCE(model_configuration_id, 0)"),
+            "period",
+            "action",
+            text("COALESCE(threshold_percent, 0)"),
+            unique=True,
+            postgresql_where=text("enabled"),
+        ),
     )
 
 

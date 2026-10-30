@@ -423,9 +423,23 @@ class MessageType(str, Enum):
 
 
 class TokenRateLimitScope(str, Enum):
+    """GLOBAL: a workspace pool. USER: the workspace per-user default.
+    USER_GROUP: a pool shared by a group's members. USER_GROUP_MEMBER: an
+    allowance each member of a group gets on their own."""
+
     USER = "user"
     USER_GROUP = "user_group"
     GLOBAL = "global"
+    USER_GROUP_MEMBER = "user_group_member"
+
+
+# TODO(evan-onyx): deliver alert-only notifications and expose ALERT_ONLY in the admin UI.
+class TokenRateLimitAction(str, Enum):
+    """BLOCK rows are enforced. ALERT_ONLY rows are stored, and nothing reads
+    them yet."""
+
+    BLOCK = "BLOCK"
+    ALERT_ONLY = "ALERT_ONLY"
 
 
 class TokenRateLimitPeriod(str, Enum):

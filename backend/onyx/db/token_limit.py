@@ -3,10 +3,12 @@ from collections.abc import Sequence
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import TokenRateLimitScope
-from onyx.db.models import TokenRateLimit, TokenRateLimit__UserGroup, User__UserGroup
+from onyx.db.models import TokenRateLimit, User__UserGroup
+from onyx.db.utils import is_unique_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.token_rate_limits.models import (
@@ -14,6 +16,22 @@ from onyx.server.token_rate_limits.models import (
     TokenRateLimitArgs,
     TokenRateLimitUpdateArgs,
 )
+
+TOKEN_RATE_LIMIT_BUCKET_INDEX = "uq_token_rate_limit_bucket"
+
+
+def commit_token_rate_limit(db_session: Session) -> None:
+    """Commit, turning a second enabled limit for the same bucket into a 409."""
+    try:
+        db_session.commit()
+    except IntegrityError as e:
+        db_session.rollback()
+        if not is_unique_violation(e, TOKEN_RATE_LIMIT_BUCKET_INDEX):
+            raise
+        raise OnyxError(
+            OnyxErrorCode.DUPLICATE_RESOURCE,
+            "An enabled limit with this period already exists. Edit it instead.",
+        ) from e
 
 
 def fetch_all_user_token_rate_limits(
@@ -39,18 +57,17 @@ def fetch_user_group_token_rate_limits(
     user_id: UUID,
     enabled_only: bool = True,
 ) -> dict[int, list[TokenRateLimit]]:
-    """The user-group rate limits a user is subject to, keyed by group id."""
+    """The group pool limits a user is subject to, keyed by group id."""
     query = (
         select(TokenRateLimit, User__UserGroup.user_group_id)
         .join(
-            TokenRateLimit__UserGroup,
-            TokenRateLimit.id == TokenRateLimit__UserGroup.rate_limit_id,
-        )
-        .join(
             User__UserGroup,
-            User__UserGroup.user_group_id == TokenRateLimit__UserGroup.user_group_id,
+            User__UserGroup.user_group_id == TokenRateLimit.user_group_id,
         )
-        .where(User__UserGroup.user_id == user_id)
+        .where(
+            User__UserGroup.user_id == user_id,
+            TokenRateLimit.scope == TokenRateLimitScope.USER_GROUP,
+        )
     )
     if enabled_only:
         query = query.where(TokenRateLimit.enabled.is_(True))
@@ -92,7 +109,7 @@ def insert_user_token_rate_limit(
         scope=TokenRateLimitScope.USER,
     )
     db_session.add(token_limit)
-    db_session.commit()
+    commit_token_rate_limit(db_session)
 
     return token_limit
 
@@ -109,30 +126,19 @@ def insert_global_token_rate_limit(
         scope=TokenRateLimitScope.GLOBAL,
     )
     db_session.add(token_limit)
-    db_session.commit()
+    commit_token_rate_limit(db_session)
 
     return token_limit
 
 
-def get_token_rate_limit_scope_and_group_ids(
+def get_token_rate_limit_scope_and_group_id(
     db_session: Session, token_rate_limit_id: int
-) -> tuple[TokenRateLimitScope, list[int]]:
-    """Scope + every group id a rate limit is attached to (empty unless USER_GROUP). Raises
-    ValueError if the id is unknown. The API attaches a limit to one group today, but the schema
-    allows many-to-many, so an authorizing caller must check every group returned, not just one."""
+) -> tuple[TokenRateLimitScope, int | None]:
+    """Raises ValueError if the id is unknown."""
     token_limit = db_session.get(TokenRateLimit, token_rate_limit_id)
     if token_limit is None:
         raise ValueError(f"TokenRateLimit with id '{token_rate_limit_id}' not found")
-    if token_limit.scope != TokenRateLimitScope.USER_GROUP:
-        return token_limit.scope, []
-    group_ids = list(
-        db_session.scalars(
-            select(TokenRateLimit__UserGroup.user_group_id).where(
-                TokenRateLimit__UserGroup.rate_limit_id == token_rate_limit_id
-            )
-        ).all()
-    )
-    return token_limit.scope, group_ids
+    return token_limit.scope, token_limit.user_group_id
 
 
 def update_token_rate_limit(
@@ -158,7 +164,7 @@ def update_token_rate_limit(
     token_limit.token_budget = token_rate_limit_settings.token_budget
     token_limit.cost_budget_cents = token_rate_limit_settings.cost_budget_cents
     token_limit.period = token_rate_limit_settings.period
-    db_session.commit()
+    commit_token_rate_limit(db_session)
 
     return token_limit
 
@@ -170,10 +176,6 @@ def delete_token_rate_limit(
     token_limit = db_session.get(TokenRateLimit, token_rate_limit_id)
     if token_limit is None:
         raise ValueError(f"TokenRateLimit with id '{token_rate_limit_id}' not found")
-
-    db_session.query(TokenRateLimit__UserGroup).filter(
-        TokenRateLimit__UserGroup.rate_limit_id == token_rate_limit_id
-    ).delete()
 
     db_session.delete(token_limit)
     db_session.commit()

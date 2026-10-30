@@ -62,7 +62,7 @@ from onyx.db.models import (
     Persona,
     Persona__User,
     Persona__UserGroup,
-    TokenRateLimit__UserGroup,
+    TokenRateLimit,
     User,
     User__UserGroup,
     UserGroup,
@@ -178,19 +178,14 @@ def _handle_owned_personas_for_group_deletion__no_commit(
         persona.owner_group_id = None
 
 
-def _cleanup_token_rate_limit__user_group_relationships__no_commit(
+def _delete_token_rate_limits_for_group__no_commit(
     db_session: Session, user_group_id: int
 ) -> None:
-    """NOTE: does not commit the transaction."""
-    token_rate_limit__user_group_relationships = db_session.scalars(
-        select(TokenRateLimit__UserGroup).where(
-            TokenRateLimit__UserGroup.user_group_id == user_group_id
-        )
-    ).all()
-    for (
-        token_rate_limit__user_group_relationship
-    ) in token_rate_limit__user_group_relationships:
-        db_session.delete(token_rate_limit__user_group_relationship)
+    """A group marked for deletion stops limiting its members at once; the FK
+    cascade would only remove its limits when the row itself goes."""
+    db_session.execute(
+        delete(TokenRateLimit).where(TokenRateLimit.user_group_id == user_group_id)
+    )
 
 
 def _cleanup_user_group__cc_pair_relationships__no_commit(
@@ -1191,7 +1186,7 @@ def prepare_user_group_for_deletion(db_session: Session, user_group_id: int) -> 
     _cleanup_user__user_group_relationships__no_commit(
         db_session=db_session, user_group_id=user_group_id
     )
-    _cleanup_token_rate_limit__user_group_relationships__no_commit(
+    _delete_token_rate_limits_for_group__no_commit(
         db_session=db_session, user_group_id=user_group_id
     )
     _cleanup_document_set__user_group_relationships__no_commit(

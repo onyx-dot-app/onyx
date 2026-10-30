@@ -107,7 +107,6 @@ def engine() -> Generator[Engine, None, None]:
     finally:
         upgrade_postgres(database="postgres", config_name="alembic", revision="head")
         with engine.begin() as conn:
-            conn.execute(text("DELETE FROM token_rate_limit__user_group"))
             conn.execute(text("DELETE FROM token_rate_limit"))
             conn.execute(
                 text("DELETE FROM user_group WHERE name = :name"), {"name": GROUP_NAME}
