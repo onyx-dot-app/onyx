@@ -668,14 +668,17 @@ describe("MultiModelSelector", () => {
       expect(searchInput()).toHaveValue("Model");
     });
 
-    // The pane sizes the slider by its own model, not the session's selected one.
-    test("an unselected model's pane takes its own temperature cap", async () => {
+    // One session temperature is validated against the active model on save,
+    // so another model's pane takes the active model's cap.
+    test("an unselected model's pane takes the active model's temperature cap", async () => {
       mockUser = { preferences: { temperature_override_enabled: true } };
       const user = setupUser();
+      const updateTemperature = jest.fn();
       const temperatureManager: TemperatureManager = {
         temperature: 0.5,
-        updateTemperature: jest.fn(),
-        hasTemperatureOverride: false,
+        updateTemperature,
+        maxTemperature: 1,
+        hasTemperatureOverride: true,
       };
       render(
         <Harness
@@ -690,7 +693,13 @@ describe("MultiModelSelector", () => {
 
       expectPane("Model G");
       const [temperature] = within(openPopper()).getAllByRole("slider");
-      expect(temperature).toHaveAttribute("aria-valuemax", "2");
+      expect(temperature).toHaveAttribute("aria-valuemax", "1");
+      expect(temperature).toHaveAttribute("aria-valuenow", "0.5");
+
+      act(() => temperature!.focus());
+      await user.keyboard("{End}");
+      expect(temperature).toHaveAttribute("aria-valuenow", "1");
+      expect(updateTemperature).toHaveBeenLastCalledWith(1);
     });
 
     // The default group follows the first group holding a selected model; it
