@@ -15,7 +15,6 @@ import {
 import { InputVertical, Section } from "@opal/layouts";
 import { SvgCheck, SvgMinus, SvgX } from "@opal/icons";
 import { IconLoader } from "@opal/loaders";
-import { cn } from "@opal/utils";
 import type { RichStr } from "@opal/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useDefaultAssistantConfiguration } from "@/lib/agents/hooks";
@@ -75,41 +74,50 @@ function endpoint(value: string): string | null {
 interface ProbeStageProps {
   stage: string;
   state: "idle" | MCPProbeProgress["state"];
-  label: string;
-  value?: string;
+  label: string | RichStr;
+  value?: string | RichStr;
 }
 
 function ProbeStage({ stage, state, label, value }: ProbeStageProps) {
   return (
-    <div
-      className={cn(
-        "grid grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-3",
-        styles.stage
-      )}
+    <Section
+      flexDirection="row"
+      justifyContent="between"
+      height="auto"
+      gap={3}
+      className={styles.stage}
       data-stage={stage}
       data-state={state}
     >
-      <span aria-hidden="true" className={styles.statusIcon}>
-        <span data-icon="idle">
-          <SvgMinus className="size-4 text-text-02" />
+      <Section
+        flexDirection="row"
+        justifyContent="start"
+        width="auto"
+        height="auto"
+        gap={3}
+      >
+        <span aria-hidden="true" className={styles.statusIcon}>
+          <span data-icon="idle">
+            <SvgMinus className="size-4 text-text-02" />
+          </span>
+          <span data-icon="pending">
+            <IconLoader size={16} />
+          </span>
+          <span data-icon="success">
+            <SvgCheck className="size-4 text-status-success-05" />
+          </span>
+          <span data-icon="error">
+            <SvgX className="size-4 text-status-error-05" />
+          </span>
         </span>
-        <span data-icon="pending">
-          <IconLoader size={16} />
-        </span>
-        <span data-icon="success">
-          <SvgCheck className="size-4 text-status-success-05" />
-        </span>
-        <span data-icon="error">
-          <SvgX className="size-4 text-status-error-05" />
-        </span>
-      </span>
-      <Text font="secondary-body" color="text-04">
-        {label}
-      </Text>
+        <Text font="secondary-body" color="text-04">
+          {label}
+        </Text>
+      </Section>
       <Text font="secondary-body" color="text-03">
         {value}
       </Text>
-    </div>
+    </Section>
   );
 }
 
