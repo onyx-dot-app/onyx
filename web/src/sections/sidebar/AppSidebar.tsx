@@ -48,6 +48,7 @@ import { MoveCustomAgentChatModal } from "@/lib/agents/components";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { removeChatSessionFromProject } from "@/lib/projects/svc";
 import type { Project } from "@/lib/projects/types";
+import { SidebarLoader } from "@opal/loaders";
 import { SidebarLayouts, useSidebarState } from "@opal/layouts";
 import { renderSidebarLogo } from "@/lib/sidebar/utils";
 import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
@@ -81,7 +82,6 @@ import {
   SvgSearchMenu,
   SvgSettings,
 } from "@opal/icons";
-import SidebarTabSkeleton from "@/refresh-components/skeletons/SidebarTabSkeleton";
 import BuildModeIntroBackground from "@/app/craft/components/IntroBackground";
 import BuildModeIntroContent from "@/app/craft/components/IntroContent";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
@@ -117,28 +117,6 @@ function buildVisibleAgents(
   return [visibleAgents, currentAgentIsPinned];
 }
 
-const SKELETON_WIDTHS_BASE = ["w-4/5", "w-4/5", "w-3/5"];
-
-function shuffleWidths(): string[] {
-  return [...SKELETON_WIDTHS_BASE].sort(() => Math.random() - 0.5);
-}
-
-interface SectionSkeletonProps {
-  label: string;
-  widths: string[];
-}
-
-/** Stands in for a sidebar section's tabs until its data loads. */
-function SectionSkeleton({ label, widths }: SectionSkeletonProps) {
-  return (
-    <div role="status" aria-label={label}>
-      {widths.map((width, i) => (
-        <SidebarTabSkeleton key={i} textWidth={width} />
-      ))}
-    </div>
-  );
-}
-
 interface RecentsSectionProps {
   chatSessions: ChatSession[];
   isLoading: boolean;
@@ -161,9 +139,6 @@ function RecentsSection({
       type: DRAG_TYPES.RECENTS,
     },
   });
-
-  // Re-shuffle skeleton widths each time loaded session count changes
-  const skeletonWidths = useMemo(shuffleWidths, [chatSessions.length]);
 
   // Sentinel ref for IntersectionObserver-based infinite scroll
   const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -204,10 +179,7 @@ function RecentsSection({
     >
       <SidebarLayouts.Section title={t("appSidebar.recents.title")}>
         {isLoading ? (
-          <SectionSkeleton
-            label={t("appSidebar.recents.loading.ariaLabel")}
-            widths={["w-4/5", "w-3/5", "w-4/5", "w-2/3", "w-3/5"]}
-          />
+          <SidebarLoader count={5} />
         ) : chatSessions.length === 0 ? (
           <div className="px-3">
             <Text as="p" color="text-01">
@@ -223,19 +195,17 @@ function RecentsSection({
                 draggable
               />
             ))}
-            {hasMore &&
-              skeletonWidths.map((width, i) => (
-                <div
-                  key={i}
-                  ref={i === 0 ? sentinelRef : undefined}
-                  className={cn(
-                    "transition-opacity duration-300",
-                    isLoadingMore ? "opacity-100" : "opacity-40"
-                  )}
-                >
-                  <SidebarTabSkeleton textWidth={width} />
-                </div>
-              ))}
+            {hasMore && (
+              <div
+                ref={sentinelRef}
+                className={cn(
+                  "transition-opacity duration-300",
+                  isLoadingMore ? "opacity-100" : "opacity-40"
+                )}
+              >
+                <SidebarLoader count={3} />
+              </div>
+            )}
           </>
         )}
       </SidebarLayouts.Section>
@@ -734,10 +704,7 @@ export default function AppSidebar() {
                   strategy={verticalListSortingStrategy}
                 >
                   {isLoadingAgentList ? (
-                    <SectionSkeleton
-                      label={t("appSidebar.agents.loading.ariaLabel")}
-                      widths={["w-3/5", "w-4/5", "w-1/2"]}
-                    />
+                    <SidebarLoader count={3} />
                   ) : (
                     visibleAgents.map((visibleAgent) => (
                       <AgentButton key={visibleAgent.id} agent={visibleAgent} />
@@ -772,10 +739,7 @@ export default function AppSidebar() {
                 }
               >
                 {isLoadingProjects ? (
-                  <SectionSkeleton
-                    label={t("appSidebar.projects.loading.ariaLabel")}
-                    widths={["w-2/3", "w-1/2"]}
-                  />
+                  <SidebarLoader count={2} />
                 ) : (
                   <>
                     {projects.map((project) => (

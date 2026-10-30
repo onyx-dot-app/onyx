@@ -16720,10 +16720,7 @@
         "label": "관리자 패널"
       },
       "agents": {
-        "title": "에이전트",
-        "loading": {
-          "ariaLabel": "에이전트 불러오는 중"
-        }
+        "title": "에이전트"
       },
       "craft": {
         "label": "Craft"
@@ -16745,19 +16742,13 @@
         "label": "새 세션"
       },
       "projects": {
-        "title": "프로젝트",
-        "loading": {
-          "ariaLabel": "프로젝트 불러오는 중"
-        }
+        "title": "프로젝트"
       },
       "recents": {
         "empty": {
           "text": "메시지를 보내 보세요! 채팅 기록이 여기에 표시됩니다."
         },
-        "title": "최근 항목",
-        "loading": {
-          "ariaLabel": "채팅 불러오는 중"
-        }
+        "title": "최근 항목"
       },
       "searchChats": {
         "label": "채팅 검색"

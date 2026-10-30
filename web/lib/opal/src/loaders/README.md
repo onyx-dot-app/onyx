@@ -1,6 +1,6 @@
 # Loaders
 
-**Import:** `import { PageLoader, CardLoader, ChatMessageLoader, DropdownLoader, LineLoader, TextLoader, IconLoader } from "@opal/loaders";`
+**Import:** `import { PageLoader, CardLoader, ChatMessageLoader, DropdownLoader, LineLoader, SidebarLoader, TextLoader, IconLoader } from "@opal/loaders";`
 
 | Loader              | Use it for                                                                                                                                      |
 | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -9,10 +9,11 @@
 | `ChatMessageLoader` | A chat message that has not loaded: shimmering lines shaped like a user message (a bubble, at the inline end) or a reply (at the inline start). |
 | `DropdownLoader`    | A select or combo box that has not loaded: the input's chrome with a shimmering icon and label.                                                 |
 | `LineLoader`        | Lines of text that have not loaded: shimmering rectangles.                                                                                      |
+| `SidebarLoader`     | Sidebar tabs that have not loaded: shimmering labels in a tab's footprint, or icons when folded.                                                |
 | `TextLoader`        | Real text for a status still in progress: the text itself shimmers.                                                                             |
 | `IconLoader`        | An inline spinner, e.g. beside a label or in a row.                                                                                             |
 
-`LineLoader`, `CardLoader`, `DropdownLoader` and `TextLoader` share one wave: 40% of the length but at least 40px, a 2s crossing whatever the length, then a 1s pause. Only the colours differ. The shimmer and the spinner hold still under `prefers-reduced-motion`. `CardLoader`, `DropdownLoader`, `LineLoader` and `IconLoader` announce themselves to screen readers with the Opal loading label; `TextLoader` shows real text, so it says nothing extra.
+`LineLoader`, `CardLoader`, `DropdownLoader` and `TextLoader` share one wave: 40% of the length but at least 40px, a 2s crossing whatever the length, then a 1s pause. Only the colours differ. The shimmer and the spinner hold still under `prefers-reduced-motion`. `CardLoader`, `DropdownLoader`, `LineLoader`, `SidebarLoader` and `IconLoader` announce themselves to screen readers with the Opal loading label; `TextLoader` shows real text, so it says nothing extra.
 
 ## CardLoader
 
@@ -56,6 +57,15 @@ No props. The input's resting chrome (border, background, radius, padding) holdi
 ```
 
 Props: `lines` (default `1`), `width` of the last line (`"full" | "3/4" | "2/3" | "1/2" | "1/3" | "1/4"`, default `"full"`), `height` of each line as a `LineHeight` step (`3 | 4 | 5 | 6 | 7 | 8 | 9 | 12`, default `5`, 20px). Each bar keeps its own height and sits centred in its line, so the loader is as tall as what it replaces: `height={9}` (36px) stands in for a select.
+
+## SidebarLoader
+
+```tsx
+<SidebarLoader count={3} />   // three tabs, e.g. a section that is loading
+<SidebarLoader folded />      // the folded sidebar's icon-only tab
+```
+
+Props: `count` (default `1`), the number of tabs; `folded` (default `false`), a shimmering icon in place of each label. Each tab has a sidebar tab's footprint, so the real tabs replace it without a shift. The labels cycle through three widths, so a stack reads as a list. The stack announces itself once, with the Opal loading label.
 
 ## TextLoader
 

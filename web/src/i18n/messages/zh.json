@@ -16720,10 +16720,7 @@
         "label": "管理面板"
       },
       "agents": {
-        "title": "智能体",
-        "loading": {
-          "ariaLabel": "正在加载智能体"
-        }
+        "title": "智能体"
       },
       "craft": {
         "label": "Craft"
@@ -16745,19 +16742,13 @@
         "label": "新建会话"
       },
       "projects": {
-        "title": "项目",
-        "loading": {
-          "ariaLabel": "正在加载项目"
-        }
+        "title": "项目"
       },
       "recents": {
         "empty": {
           "text": "试着发送一条消息吧！您的对话历史将显示在这里。"
         },
-        "title": "最近",
-        "loading": {
-          "ariaLabel": "正在加载聊天"
-        }
+        "title": "最近"
       },
       "searchChats": {
         "label": "搜索对话"
