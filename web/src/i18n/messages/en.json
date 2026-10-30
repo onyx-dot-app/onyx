@@ -412,8 +412,7 @@
       },
       "cimd": {
         "label": "Use client metadata document",
-        "description": "When on, the provider fetches {appName}'s client metadata document over the public internet. Turn this off if this {appName} instance is private. {appName} then uses automatic client registration instead.",
-        "turnOff": "Turn off client metadata document"
+        "description": "When on, the provider fetches {appName}'s client metadata document over the public internet. Turn this off if this {appName} instance is private. {appName} then uses automatic client registration instead."
       },
       "discovery": {
         "checking": "Checking automatic setup…",
@@ -1115,18 +1114,6 @@
         "openapi": "Add OpenAPI plugin"
       },
       "catalog": {
-        "slack": {
-          "summary": "Search conversations and send messages",
-          "description": "Search conversations and send messages. Requires a registered Slack app."
-        },
-        "hubspot": {
-          "summary": "Work with contacts and deals",
-          "description": "Work with contacts and deals. Requires a HubSpot MCP connector."
-        },
-        "asana": {
-          "summary": "Manage tasks and projects",
-          "description": "Manage tasks and projects. Requires a registered OAuth client."
-        },
         "linear": {
           "summary": "Manage issues, projects, and teams",
           "description": "Manage issues, projects, and teams."
@@ -1218,6 +1205,10 @@
       "blocked": "This URL is blocked by your outbound security settings.",
       "publicDetected": "No authentication required",
       "oauthDetected": "OAuth detected",
+      "clientMetadata": "Client metadata document",
+      "clientMetadataSupported": "Supported",
+      "clientMetadataUnsupported": "Not supported",
+      "clientMetadataUnknown": "Not checked",
       "manualRequired": "Choose authentication manually",
       "chooseAuthentication": "We could not determine how this server authenticates. Choose a method below.",
       "connect": "Connect",

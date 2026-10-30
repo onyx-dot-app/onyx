@@ -547,6 +547,7 @@ class MCPOAuthDiscoveryRequest(BaseModel):
 class MCPOAuthDiscoveryResponse(BaseModel):
     status: Literal["metadata_found", "metadata_missing", "unreachable"]
     supports_automatic_registration: bool | None = None
+    supports_client_metadata: bool | None = None
     authorization_endpoint: str | None = None
     token_endpoint: str | None = None
 

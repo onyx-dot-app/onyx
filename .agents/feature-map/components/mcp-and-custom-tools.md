@@ -931,7 +931,15 @@ credentials, a Client ID Metadata Document (CIMD), or Dynamic Client
 Registration (DCR), as supported by the provider. CIMD needs the provider to
 fetch the deployment's metadata document, so `MCPServer.oauth_cimd_enabled`
 lets an admin turn it off per server. Automatic discovery then registers
-through DCR, which a private deployment needs. Tool discovery follows
+through DCR, which a private deployment needs. The setup probe checks this
+first: `server/features/mcp/oauth_discovery.py:_client_metadata_accepted` sends a
+status-only authorization request with the CIMD client ID and reports
+`supports_client_metadata`. A network error, a timeout or HTTP 429 gives `null`
+(unknown). The setup page sets the CIMD switch from that result, unless the admin
+already changed the switch.
+`server/features/mcp/oauth_flow.py:validate_client_metadata_authorization`
+repeats the check at connect time and fails with `client_metadata_rejected`. The
+setup page then turns CIMD off and retries with DCR. Tool discovery follows
 authentication; it is separate from OAuth discovery.
 
 1. **Connect.** The frontend calls `POST /mcp/oauth/connect` (user) or
