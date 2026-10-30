@@ -113,7 +113,8 @@
 
       /* Toasts and modals are fixed to the viewport; keep them below the
          titlebar so it never covers them. */
-      .opal-toast-viewport {
+      .opal-toast-viewport,
+      [data-testid="toast-container"] {
         top: calc(var(--onyx-desktop-titlebar-height) + 0.5rem) !important;
       }
 
