@@ -17,6 +17,8 @@ from onyx.db.llm import (
 )
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import ModelConfiguration, Persona, SearchSettings, User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.decisions.client import DEFAULT_DECISION_TIMEOUT_S, DecisionClient
 from onyx.llm.decisions.factory import build_decision_client
@@ -151,6 +153,15 @@ def _resolve_provider_and_model(
 
     if not provider_model or not model_name:
         return None
+    if model_version_override and not any(
+        mc.name == model_name for mc in provider_model.model_configurations
+    ):
+        # A name with no saved configuration runs outside everything an admin
+        # attaches to one: visibility, price overrides and usage attribution.
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Model '{model_name}' is not configured on this provider.",
+        )
     return provider_model, model_name
 
 
