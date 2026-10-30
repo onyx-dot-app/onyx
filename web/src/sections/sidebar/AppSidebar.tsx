@@ -510,20 +510,21 @@ export default function AppSidebar() {
     (user?.preferences?.default_app_mode?.toLowerCase() as "chat" | "search") ??
     "chat";
 
-  // While agents load, assume some exist, so the label does not flip for
-  // most users.
-  const hasVisibleAgents = isLoadingAgentList || visibleAgents.length > 0;
   const moreAgentsButton = (
     <div data-testid="AppSidebar/more-agents">
       <SidebarTab
-        icon={folded || !hasVisibleAgents ? SvgOnyxOctagon : SvgMoreHorizontal}
+        icon={
+          folded || visibleAgents.length === 0
+            ? SvgOnyxOctagon
+            : SvgMoreHorizontal
+        }
         href="/app/agents"
         selected={activeSidebarTab.isMoreAgents()}
         variant={folded ? "sidebar-heavy" : "sidebar-light"}
       >
-        {hasVisibleAgents
-          ? t("appSidebar.moreAgents.label")
-          : t("appSidebar.exploreAgents.label")}
+        {visibleAgents.length === 0
+          ? t("appSidebar.exploreAgents.label")
+          : t("appSidebar.moreAgents.label")}
       </SidebarTab>
     </div>
   );
@@ -711,7 +712,7 @@ export default function AppSidebar() {
                     ))
                   )}
                 </SortableContext>
-                {moreAgentsButton}
+                {!isLoadingAgentList && moreAgentsButton}
               </SidebarLayouts.Section>
             </DndContext>
 

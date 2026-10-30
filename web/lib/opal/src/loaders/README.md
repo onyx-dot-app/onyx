@@ -65,7 +65,7 @@ Props: `lines` (default `1`), `width` of the last line (`"full" | "3/4" | "2/3" 
 <SidebarLoader folded />      // the folded sidebar's icon-only tab
 ```
 
-Props: `count` (default `1`), the number of tabs; `folded` (default `false`), a shimmering icon in place of each label. Each tab has a sidebar tab's footprint, so the real tabs replace it without a shift. The labels cycle through three widths, so a stack reads as a list. The stack announces itself once, with the Opal loading label.
+Props: `count` (default `1`), the number of tabs; `folded` (default `false`), a shimmering icon in place of each label. Each tab has a sidebar tab's footprint, so the real tabs replace it without a shift. The labels cycle through three widths, so a stack reads as a list. Its bars are a step darker (`tint-03`) than other shimmers, so they stay visible on the sidebar's `tint-02`. The stack announces itself once, with the Opal loading label.
 
 ## TextLoader
 

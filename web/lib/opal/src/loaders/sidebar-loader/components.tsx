@@ -23,7 +23,13 @@ interface SidebarLoaderProps {
 function SidebarLoader({ count = 1, folded = false }: SidebarLoaderProps) {
   const strings = useOpalStrings();
   return (
-    <Section role="status" aria-label={strings.loading} height="fit" gap={0}>
+    <Section
+      role="status"
+      aria-label={strings.loading}
+      height="fit"
+      gap={0}
+      className="opal-sidebar-loader"
+    >
       {Array.from({ length: count }, (_, index) => (
         <Section
           key={index}
