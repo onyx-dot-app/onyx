@@ -1,9 +1,11 @@
 import time
 from typing import Any
+
 import requests
 from requests.auth import HTTPBasicAuth
 
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_after import parse_retry_after_seconds
 
 logger = setup_logger()
 
@@ -65,15 +67,11 @@ class JsmClient:
                         status_code=429,
                     )
                     raw_retry_after = response.headers.get("Retry-After")
-                    try:
-                        retry_after = (
-                            int(raw_retry_after)
-                            if raw_retry_after
-                            else _BASE_BACKOFF_SECONDS * (attempt + 1)
-                        )
-                    except (TypeError, ValueError):
-                        retry_after = _BASE_BACKOFF_SECONDS * (attempt + 1)
-                    retry_after = min(max(retry_after, 1), 60)
+                    parsed_retry_after = parse_retry_after_seconds(raw_retry_after)
+                    if parsed_retry_after is not None and parsed_retry_after > 0:
+                        retry_after = min(parsed_retry_after, 60.0)
+                    else:
+                        retry_after = float(_BASE_BACKOFF_SECONDS * (attempt + 1))
                     if attempt < _MAX_RETRY_ATTEMPTS - 1:
                         logger.warning(
                             "JSM rate limited (429). Retrying after %ss.",
@@ -98,7 +96,9 @@ class JsmClient:
                 else:
                     break
 
-        raise JsmApiError(f"Failed JSM request after {_MAX_RETRY_ATTEMPTS} attempts: {last_exception}")
+        raise JsmApiError(
+            f"Failed JSM request after {_MAX_RETRY_ATTEMPTS} attempts: {last_exception}"
+        )
 
     def get_service_desks(self) -> list[dict[str, Any]]:
         endpoint = "/rest/servicedeskapi/servicedesk"
@@ -106,9 +106,7 @@ class JsmClient:
         service_desks: list[dict[str, Any]] = []
 
         while True:
-            res = self._request(
-                "GET", endpoint, params={"start": start, "limit": 50}
-            )
+            res = self._request("GET", endpoint, params={"start": start, "limit": 50})
             values = res.get("values", [])
             service_desks.extend(values)
 

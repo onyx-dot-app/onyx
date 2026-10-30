@@ -1,4 +1,5 @@
 from typing import Annotated, ClassVar
+
 from pydantic import field_validator
 
 from onyx.connectors.connector_config import (
@@ -22,6 +23,7 @@ class JiraServiceManagementCredentialBinding(CredentialBinding):
     @classmethod
     def _strip_slash(cls, value: str) -> str:
         return value.rstrip("/")
+
 
 class JiraServiceManagementConnectorConfig(
     JiraServiceManagementCredentialBinding, ConnectorConfig

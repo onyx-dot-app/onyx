@@ -1,21 +1,28 @@
-import time
+from typing import Any
 from unittest.mock import MagicMock, create_autospec, patch
+
 import pytest
 import responses
-from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.jira_service_management.client import JsmClient, JsmApiError
+from onyx.connectors.jira_service_management.client import JsmApiError, JsmClient
 from onyx.connectors.jira_service_management.config import (
     JiraServiceManagementConnectorConfig,
 )
 from onyx.connectors.jira_service_management.connector import (
     JiraServiceManagementConnector,
 )
-from onyx.connectors.models import ConnectorMissingCredentialError, Document, SlimDocument
+from onyx.connectors.models import (
+    ConnectorMissingCredentialError,
+    Document,
+    SlimDocument,
+    TextSection,
+)
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 
 
 @pytest.fixture
-def sample_requests_response():
+def sample_requests_response() -> dict[str, Any]:
     return {
         "size": 2,
         "start": 0,
@@ -44,7 +51,10 @@ def sample_requests_response():
                 },
                 "requestFieldValues": [
                     {"fieldId": "summary", "value": "Cannot connect to VPN"},
-                    {"fieldId": "description", "value": "VPN client fails with TLS error."},
+                    {
+                        "fieldId": "description",
+                        "value": "VPN client fails with TLS error.",
+                    },
                 ],
                 "_links": {
                     "web": "https://company.atlassian.net/servicedesk/customer/portal/1/IT-101",
@@ -79,7 +89,7 @@ def sample_requests_response():
 
 
 @pytest.fixture
-def sample_comments_response():
+def sample_comments_response() -> dict[str, Any]:
     return {
         "values": [
             {
@@ -98,7 +108,7 @@ def sample_comments_response():
     }
 
 
-def test_jsm_config_validation():
+def test_jsm_config_validation() -> None:
     config = JiraServiceManagementConnectorConfig(
         jira_base_url="https://company.atlassian.net/",
         project_key="it",
@@ -109,21 +119,30 @@ def test_jsm_config_validation():
     assert config.include_internal_comments is True
 
 
-def test_load_credentials_missing():
-    connector = JiraServiceManagementConnector(jira_base_url="https://company.atlassian.net")
+def test_load_credentials_missing() -> None:
+    connector = JiraServiceManagementConnector(
+        jira_base_url="https://company.atlassian.net"
+    )
     with pytest.raises(ConnectorMissingCredentialError):
         connector.load_credentials({})
 
 
-def test_load_credentials_valid():
-    connector = JiraServiceManagementConnector(jira_base_url="https://company.atlassian.net")
-    connector.load_credentials({"user_email": "admin@example.com", "api_token": "secret123"})
+def test_load_credentials_valid() -> None:
+    connector = JiraServiceManagementConnector(
+        jira_base_url="https://company.atlassian.net"
+    )
+    connector.load_credentials(
+        {"user_email": "admin@example.com", "api_token": "secret123"}
+    )
     assert connector.client is not None
     assert connector.client.base_url == "https://company.atlassian.net"
 
 
 @responses.activate
-def test_load_from_state(sample_requests_response, sample_comments_response):
+def test_load_from_state(
+    sample_requests_response: dict[str, Any],
+    sample_comments_response: dict[str, Any],
+) -> None:
     base_url = "https://company.atlassian.net"
 
     # Mock service desk endpoint
@@ -162,7 +181,9 @@ def test_load_from_state(sample_requests_response, sample_comments_response):
         project_key="IT",
         include_internal_comments=True,
     )
-    connector.load_credentials({"user_email": "admin@example.com", "api_token": "token123"})
+    connector.load_credentials(
+        {"user_email": "admin@example.com", "api_token": "token123"}
+    )
 
     doc_batches = list(connector.load_from_state())
     assert len(doc_batches) == 1
@@ -173,21 +194,29 @@ def test_load_from_state(sample_requests_response, sample_comments_response):
     doc1 = docs[0]
     assert isinstance(doc1, Document)
     assert doc1.source == DocumentSource.JIRA_SERVICE_MANAGEMENT
+    assert doc1.doc_created_at is not None
+    assert doc1.doc_created_at.timestamp() == 1700000000
     assert doc1.semantic_identifier == "Cannot connect to VPN"
     assert doc1.metadata["status"] == "In Progress"
     assert doc1.metadata["ticket_id"] == "IT-101"
     assert doc1.metadata["reporter_email"] == "alice@example.com"
+    assert doc1.primary_owners is not None
     assert doc1.primary_owners[0].display_name == "Alice Smith"
 
     # Verify comments and internal notes are present
-    combined_text = "\n".join(s.text for s in doc1.sections)
+    combined_text = "\n".join(
+        s.text for s in doc1.sections if isinstance(s, TextSection)
+    )
     assert "VPN client fails with TLS error." in combined_text
     assert "Public Comment by IT Support" in combined_text
     assert "Internal Note by Tier 2 Agent" in combined_text
 
 
+@patch("time.sleep")
 @responses.activate
-def test_poll_source(sample_requests_response):
+def test_poll_source(
+    mock_sleep: MagicMock, sample_requests_response: dict[str, Any]
+) -> None:
     base_url = "https://company.atlassian.net"
 
     responses.add(
@@ -210,18 +239,23 @@ def test_poll_source(sample_requests_response):
     )
 
     connector = JiraServiceManagementConnector(jira_base_url=base_url)
-    connector.load_credentials({"user_email": "admin@example.com", "api_token": "token123"})
+    connector.load_credentials(
+        {"user_email": "admin@example.com", "api_token": "token123"}
+    )
 
     # Filter range only covering IT-101 (updated at 1700001000), not IT-102 (1700003000)
     batches = list(connector.poll_source(start=1700000500, end=1700001500))
     assert len(batches) == 1
     polled_docs = batches[0]
     assert len(polled_docs) == 1
-    assert polled_docs[0].metadata["ticket_id"] == "IT-101"
+    doc = polled_docs[0]
+    assert isinstance(doc, Document)
+    assert doc.metadata["ticket_id"] == "IT-101"
+    mock_sleep.assert_not_called()
 
 
 @responses.activate
-def test_retrieve_all_slim_docs(sample_requests_response):
+def test_retrieve_all_slim_docs(sample_requests_response: dict[str, Any]) -> None:
     base_url = "https://company.atlassian.net"
 
     responses.add(
@@ -232,7 +266,9 @@ def test_retrieve_all_slim_docs(sample_requests_response):
     )
 
     connector = JiraServiceManagementConnector(jira_base_url=base_url)
-    connector.load_credentials({"user_email": "admin@example.com", "api_token": "token123"})
+    connector.load_credentials(
+        {"user_email": "admin@example.com", "api_token": "token123"}
+    )
 
     callback = create_autospec(IndexingHeartbeatInterface, instance=True)
     slim_batches = list(connector.retrieve_all_slim_docs(callback=callback))
@@ -240,8 +276,15 @@ def test_retrieve_all_slim_docs(sample_requests_response):
     slim_docs = slim_batches[0]
     assert len(slim_docs) == 2
     assert isinstance(slim_docs[0], SlimDocument)
-    assert slim_docs[0].id == "https://company.atlassian.net/servicedesk/customer/portal/1/IT-101"
-    assert slim_docs[1].id == "https://company.atlassian.net/servicedesk/customer/portal/1/IT-102"
+    assert isinstance(slim_docs[1], SlimDocument)
+    assert (
+        slim_docs[0].id
+        == "https://company.atlassian.net/servicedesk/customer/portal/1/IT-101"
+    )
+    assert (
+        slim_docs[1].id
+        == "https://company.atlassian.net/servicedesk/customer/portal/1/IT-102"
+    )
     callback.progress.assert_called_once_with("jsm_retrieve_all_slim_docs", 2)
 
 
@@ -252,7 +295,12 @@ def test_client_retry_after(mock_sleep: MagicMock) -> None:
     endpoint = f"{base_url}/rest/servicedeskapi/servicedesk"
     # First call returns 429 with Retry-After 1s, second returns 200
     responses.add(responses.GET, endpoint, status=429, headers={"Retry-After": "1"})
-    responses.add(responses.GET, endpoint, json={"values": [{"id": "1", "projectKey": "IT"}]}, status=200)
+    responses.add(
+        responses.GET,
+        endpoint,
+        json={"values": [{"id": "1", "projectKey": "IT"}]},
+        status=200,
+    )
 
     client = JsmClient(base_url=base_url, user_email="a@b.com", api_token="tok")
     desks = client.get_service_desks()
@@ -260,6 +308,154 @@ def test_client_retry_after(mock_sleep: MagicMock) -> None:
     assert desks[0]["projectKey"] == "IT"
     assert len(responses.calls) == 2
     mock_sleep.assert_called_once_with(1)
+
+
+@patch("time.sleep")
+@responses.activate
+def test_client_retry_after_http_date(mock_sleep: MagicMock) -> None:
+    base_url = "https://company.atlassian.net"
+    endpoint = f"{base_url}/rest/servicedeskapi/servicedesk"
+    # HTTP-date format for far future
+    future_date = "Wed, 21 Oct 2099 07:28:00 GMT"
+    responses.add(
+        responses.GET, endpoint, status=429, headers={"Retry-After": future_date}
+    )
+    responses.add(
+        responses.GET,
+        endpoint,
+        json={"values": [{"id": "1", "projectKey": "IT"}]},
+        status=200,
+    )
+
+    client = JsmClient(base_url=base_url, user_email="a@b.com", api_token="tok")
+    desks = client.get_service_desks()
+    assert len(desks) == 1
+    # Capped at 60s
+    mock_sleep.assert_called_once_with(60.0)
+
+
+@patch("time.sleep")
+@responses.activate
+def test_client_retry_after_invalid_fallback(mock_sleep: MagicMock) -> None:
+    base_url = "https://company.atlassian.net"
+    endpoint = f"{base_url}/rest/servicedeskapi/servicedesk"
+    # Invalid format falls back to default backoff (2 * 1 = 2.0s)
+    responses.add(
+        responses.GET, endpoint, status=429, headers={"Retry-After": "invalid-date"}
+    )
+    responses.add(
+        responses.GET,
+        endpoint,
+        json={"values": [{"id": "1", "projectKey": "IT"}]},
+        status=200,
+    )
+
+    client = JsmClient(base_url=base_url, user_email="a@b.com", api_token="tok")
+    desks = client.get_service_desks()
+    assert len(desks) == 1
+    mock_sleep.assert_called_once_with(2.0)
+
+
+@patch("time.sleep")
+@responses.activate
+def test_client_retry_after_exhausted_raises(mock_sleep: MagicMock) -> None:
+    base_url = "https://company.atlassian.net"
+    endpoint = f"{base_url}/rest/servicedeskapi/servicedesk"
+    for _ in range(3):
+        responses.add(responses.GET, endpoint, status=429, headers={"Retry-After": "1"})
+
+    client = JsmClient(base_url=base_url, user_email="a@b.com", api_token="tok")
+    with pytest.raises(JsmApiError) as exc_info:
+        client.get_service_desks()
+    assert "Rate limited (429)" in str(exc_info.value)
+    assert mock_sleep.call_count == 2
+
+
+@patch("time.sleep")
+@responses.activate
+def test_poll_source_incremental_comment_and_early_filter(
+    mock_sleep: MagicMock,
+) -> None:
+    base_url = "https://company.atlassian.net"
+
+    # Request IT-201: statusDate in past (1700000000), but updatedDate in window (1700002000)
+    # Request IT-202: statusDate and updatedDate in past (1700000000), outside window
+    requests_data = {
+        "size": 2,
+        "start": 0,
+        "limit": 50,
+        "isLastPage": True,
+        "values": [
+            {
+                "issueId": "2001",
+                "issueKey": "IT-201",
+                "serviceDeskId": "1",
+                "createdDate": {"epochMillis": 1699999000000},
+                "currentStatus": {
+                    "status": "Open",
+                    "statusDate": {"epochMillis": 1700000000000},
+                },
+                "updatedDate": {"epochMillis": 1700002000000},
+                "requestFieldValues": [
+                    {"fieldId": "summary", "value": "Updated by comment"}
+                ],
+                "_links": {"web": f"{base_url}/servicedesk/customer/portal/1/IT-201"},
+            },
+            {
+                "issueId": "2002",
+                "issueKey": "IT-202",
+                "serviceDeskId": "1",
+                "createdDate": {"epochMillis": 1699999000000},
+                "currentStatus": {
+                    "status": "Open",
+                    "statusDate": {"epochMillis": 1700000000000},
+                },
+                "requestFieldValues": [{"fieldId": "summary", "value": "Old ticket"}],
+                "_links": {"web": f"{base_url}/servicedesk/customer/portal/1/IT-202"},
+            },
+        ],
+    }
+
+    responses.add(
+        responses.GET,
+        f"{base_url}/rest/servicedeskapi/request",
+        json=requests_data,
+        status=200,
+    )
+    # Only IT-201 comments should be requested; IT-202 must be skipped early before comment fetch
+    responses.add(
+        responses.GET,
+        f"{base_url}/rest/servicedeskapi/request/IT-201/comment",
+        json={
+            "values": [
+                {
+                    "id": "99",
+                    "body": "New comment",
+                    "created": {"epochMillis": 1700002000000},
+                }
+            ]
+        },
+        status=200,
+    )
+
+    connector = JiraServiceManagementConnector(jira_base_url=base_url)
+    connector.load_credentials(
+        {"user_email": "admin@example.com", "api_token": "token123"}
+    )
+
+    # Polling window [1700001000, 1700003000]
+    batches = list(connector.poll_source(start=1700001000, end=1700003000))
+    assert len(batches) == 1
+    docs = batches[0]
+    assert len(docs) == 1
+    doc = docs[0]
+    assert isinstance(doc, Document)
+    assert doc.metadata["ticket_id"] == "IT-201"
+    assert doc.doc_created_at is not None
+    assert doc.doc_updated_at is not None
+    mock_sleep.assert_not_called()
+    assert doc.doc_updated_at.timestamp() == 1700002000
+
 
 @responses.activate
 def test_comments_multi_page_pagination() -> None:
@@ -272,7 +468,9 @@ def test_comments_multi_page_pagination() -> None:
         endpoint,
         json={
             "isLastPage": False,
-            "values": [{"id": "1", "body": "Comment 1", "author": {"displayName": "User 1"}}],
+            "values": [
+                {"id": "1", "body": "Comment 1", "author": {"displayName": "User 1"}}
+            ],
         },
         status=200,
     )
@@ -282,7 +480,9 @@ def test_comments_multi_page_pagination() -> None:
         endpoint,
         json={
             "isLastPage": True,
-            "values": [{"id": "2", "body": "Comment 2", "author": {"displayName": "User 2"}}],
+            "values": [
+                {"id": "2", "body": "Comment 2", "author": {"displayName": "User 2"}}
+            ],
         },
         status=200,
     )

@@ -1,4 +1,3 @@
-from collections.abc import Generator
 from datetime import datetime, timezone
 from typing import Any
 
@@ -16,6 +15,7 @@ from onyx.connectors.models import (
     BasicExpertInfo,
     ConnectorMissingCredentialError,
     Document,
+    HierarchyNode,
     SlimDocument,
     TextSection,
 )
@@ -23,6 +23,19 @@ from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+def _extract_field_values(field_values: list[dict[str, Any]]) -> tuple[str, str]:
+    summary = ""
+    description = ""
+    for f in field_values:
+        field_id = f.get("fieldId", "")
+        val = f.get("value")
+        if field_id == "summary" and isinstance(val, str):
+            summary = val
+        elif field_id == "description" and isinstance(val, str):
+            description = val
+    return summary, description
 
 
 class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector):
@@ -36,7 +49,9 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
     ) -> None:
         self.jira_base_url = jira_base_url.rstrip("/")
         self.project_key = project_key.upper() if project_key else None
-        self.service_desk_id = str(service_desk_id) if service_desk_id is not None else None
+        self.service_desk_id = (
+            str(service_desk_id) if service_desk_id is not None else None
+        )
         self.include_internal_comments = include_internal_comments
         self.batch_size = batch_size
         self.client: JsmClient | None = None
@@ -69,7 +84,9 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
 
     def _ensure_client(self) -> JsmClient:
         if self.client is None:
-            raise ConnectorMissingCredentialError("JsmClient is not initialized. Call load_credentials first.")
+            raise ConnectorMissingCredentialError(
+                "JsmClient is not initialized. Call load_credentials first."
+            )
         return self.client
 
     def _resolve_service_desk_id(self, client: JsmClient) -> str | None:
@@ -80,15 +97,27 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
             try:
                 desks = client.get_service_desks()
                 for d in desks:
-                    if d.get("projectKey") == self.project_key or d.get("projectId") == self.project_key:
+                    if (
+                        d.get("projectKey") == self.project_key
+                        or d.get("projectId") == self.project_key
+                    ):
                         self.service_desk_id = str(d.get("id"))
                         return self.service_desk_id
             except JsmApiError as e:
-                logger.warning(f"Could not resolve service desk for project {self.project_key}: {e}")
-
+                logger.warning(
+                    "Could not resolve service desk for project %s: %s",
+                    self.project_key,
+                    e,
+                )
         return None
 
-    def _extract_request_document(self, req: dict[str, Any], client: JsmClient) -> Document | None:
+    def _extract_request_document(
+        self,
+        req: dict[str, Any],
+        client: JsmClient,
+        start_time: datetime | None = None,
+        end_time: datetime | None = None,
+    ) -> Document | None:
         issue_key = req.get("issueKey") or req.get("issueId")
         if not issue_key:
             return None
@@ -98,17 +127,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
             return None
 
         field_values = req.get("requestFieldValues", [])
-        summary = ""
-        description = ""
-
-        for f in field_values:
-            field_id = f.get("fieldId", "")
-            val = f.get("value")
-            if field_id == "summary" and isinstance(val, str):
-                summary = val
-            elif field_id == "description" and isinstance(val, str):
-                description = val
-
+        summary, description = _extract_field_values(field_values)
         if not summary:
             summary = f"JSM Request {issue_key}"
 
@@ -123,13 +142,35 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         else:
             doc_created_at = datetime.now(timezone.utc)
 
+        # Check updatedDate/modifiedDate first, then statusDate, then fallback to createdDate
+        updated_info = req.get("updatedDate") or req.get("modifiedDate") or {}
         status_date_info = current_status.get("statusDate", {})
-        status_epoch_ms = status_date_info.get("epochMillis")
-        if status_epoch_ms:
-            doc_updated_at = datetime.fromtimestamp(status_epoch_ms / 1000.0, tz=timezone.utc)
+
+        updated_epoch_ms = (
+            updated_info.get("epochMillis") if isinstance(updated_info, dict) else None
+        )
+        status_epoch_ms = (
+            status_date_info.get("epochMillis")
+            if isinstance(status_date_info, dict)
+            else None
+        )
+
+        if updated_epoch_ms:
+            doc_updated_at = datetime.fromtimestamp(
+                updated_epoch_ms / 1000.0, tz=timezone.utc
+            )
+        elif status_epoch_ms:
+            doc_updated_at = datetime.fromtimestamp(
+                status_epoch_ms / 1000.0, tz=timezone.utc
+            )
         else:
             doc_updated_at = doc_created_at
 
+        # Early filter by time window before comment fetch
+        if start_time and doc_updated_at < start_time:
+            return None
+        if end_time and doc_updated_at > end_time:
+            return None
         # Reporter
         reporter_info = req.get("reporter", {})
         reporter_name = reporter_info.get("displayName")
@@ -137,6 +178,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
 
         # Fetch comments
         comments_text = []
+        latest_comment_dt: datetime | None = None
         try:
             comments = client.get_request_comments(
                 issue_id_or_key=issue_key,
@@ -151,16 +193,34 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
                 is_public = c.get("public", True)
                 note_label = "Public Comment" if is_public else "Internal Note"
                 comments_text.append(f"[{note_label} by {author}]:\n{body}")
+
+                comment_created = c.get("created", {})
+                if isinstance(comment_created, dict):
+                    c_epoch_ms = comment_created.get("epochMillis")
+                    if c_epoch_ms:
+                        c_dt = datetime.fromtimestamp(
+                            c_epoch_ms / 1000.0, tz=timezone.utc
+                        )
+                        if latest_comment_dt is None or c_dt > latest_comment_dt:
+                            latest_comment_dt = c_dt
         except JsmApiError:
             raise
         except Exception as e:
-            logger.warning(f"Error reading comments for {issue_key}: {e}")
-        # Assemble document sections
+            logger.warning("Error reading comments for %s: %s", issue_key, e)
+
+        if latest_comment_dt and latest_comment_dt > doc_updated_at:
+            doc_updated_at = latest_comment_dt
         sections = [
-            TextSection(text=f"Summary: {summary}\nStatus: {status_name}\n\nDescription:\n{description}")
+            TextSection(
+                text=f"Summary: {summary}\nStatus: {status_name}\n\nDescription:\n{description}"
+            )
         ]
         if comments_text:
-            sections.append(TextSection(text="Comments & Work Notes:\n" + "\n\n".join(comments_text)))
+            sections.append(
+                TextSection(
+                    text="Comments & Work Notes:\n" + "\n\n".join(comments_text)
+                )
+            )
 
         # Web link
         links = req.get("_links", {})
@@ -187,6 +247,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
             semantic_identifier=summary,
             metadata=metadata,
             doc_updated_at=doc_updated_at,
+            doc_created_at=doc_created_at,
             primary_owners=primary_owners,
         )
 
@@ -207,7 +268,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
             if not values:
                 break
 
-            docs: list[Document] = []
+            docs: list[Document | HierarchyNode] = []
             for req in values:
                 doc = self._extract_request_document(req, client)
                 if doc:
@@ -242,10 +303,16 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
             if not values:
                 break
 
-            docs: list[Document] = []
+            docs: list[Document | HierarchyNode] = []
             for req in values:
-                doc = self._extract_request_document(req, client)
-                if doc and doc.doc_updated_at and start_dt <= doc.doc_updated_at <= end_dt:
+                doc = self._extract_request_document(
+                    req, client, start_time=start_dt, end_time=end_dt
+                )
+                if (
+                    doc
+                    and doc.doc_updated_at
+                    and start_dt <= doc.doc_updated_at <= end_dt
+                ):
                     docs.append(doc)
 
             if docs:
@@ -258,8 +325,8 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
 
     def retrieve_all_slim_docs(
         self,
-        start: SecondsSinceUnixEpoch | None = None,
-        end: SecondsSinceUnixEpoch | None = None,
+        start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         client = self._ensure_client()
@@ -278,17 +345,21 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
             if not values:
                 break
 
-            slim_docs: list[SlimDocument] = []
+            slim_docs: list[SlimDocument | HierarchyNode] = []
             for req in values:
                 issue_key = req.get("issueKey") or req.get("issueId")
                 if not issue_key:
                     continue
-                if self.project_key and not str(issue_key).startswith(f"{self.project_key}-"):
+                if self.project_key and not str(issue_key).startswith(
+                    f"{self.project_key}-"
+                ):
                     continue
 
                 links = req.get("_links", {})
-                web_link = links.get("web") or f"{self.jira_base_url}/browse/{issue_key}"
-                slim_docs.append(SlimDocument(id=web_link, perm_sync_data=None))
+                web_link = (
+                    links.get("web") or f"{self.jira_base_url}/browse/{issue_key}"
+                )
+                slim_docs.append(SlimDocument(id=web_link))
 
             if slim_docs:
                 yield slim_docs
