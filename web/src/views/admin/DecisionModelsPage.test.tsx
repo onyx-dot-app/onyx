@@ -66,6 +66,7 @@ function mockApi(
           providers: hasZoomConnection ? [configuredProvider] : [],
           supported_providers: [
             "typesafe",
+            "nace",
             "openai",
             "openrouter",
             "vercel_ai_gateway",
@@ -126,10 +127,11 @@ it("shows the provider catalog without choosing a decision model", async () => {
   render(<DecisionModelsPage />);
   expect(await screen.findByText("Decision Models")).toBeInTheDocument();
   expect(await screen.findByPlaceholderText("Not configured")).toHaveValue("");
-  expect(screen.getAllByRole("button", { name: "Connect" })).toHaveLength(5);
+  expect(screen.getAllByRole("button", { name: "Connect" })).toHaveLength(6);
   expect(
     screen.getByText("TypeSafe AI", { selector: "span" })
   ).toBeInTheDocument();
+  expect(screen.getByText("Nace", { selector: "span" })).toBeInTheDocument();
   expect(screen.getByText("Vercel AI Gateway")).toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: "Clear" })
@@ -323,7 +325,7 @@ it("refetches a cached provider list that another page made stale", async () => 
     },
   });
   await waitFor(() =>
-    expect(screen.getAllByRole("button", { name: "Connect" })).toHaveLength(5)
+    expect(screen.getAllByRole("button", { name: "Connect" })).toHaveLength(6)
   );
   expect(
     screen.queryByRole("button", { name: /^Edit / })

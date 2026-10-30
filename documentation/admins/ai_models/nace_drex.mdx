@@ -1,0 +1,84 @@
+---
+title: "Nace Drex"
+description: "Configure Nace Drex as a decision model provider for Onyx"
+icon: "server"
+---
+
+import NavigateToAiModels from "/snippets/navigate-to-ai-models.mdx";
+
+## Guide
+
+Configure Onyx to use [Nace Drex](https://console.nace.ai) as a decision model provider.
+A decision model answers structured questions about text, such as "Is this document relevant to the query?".
+Drex is a decision-only provider. It does not appear in the chat model picker.
+
+<Steps>
+  <Step title="Get a Nace API Key">
+    In the [Nace console](https://console.nace.ai), create an **API Key**.
+    The key must have access to the Drex models that you want to use.
+  </Step>
+
+  <NavigateToAiModels />
+
+  <Step title="Open Decision Models">
+    Open **Admin Panel → Decision Models**. Click **Connect** on the **Drex** card from **Nace**.
+  </Step>
+
+  <Step title="Enter Your API Key">
+    Paste your Nace **API Key**. Onyx always sends requests to `https://console.nace.ai`.
+    You cannot set a different API base URL.
+  </Step>
+
+  <Step title="Load Your Models">
+    In the **Models** section, click **Refresh models**. Onyx lists the models that your key can call.
+    Select the models that you want to offer.
+  </Step>
+
+  <Step title="Connect">
+    Click **Connect**. Onyx tests the provider with one of the selected models before it saves it.
+  </Step>
+</Steps>
+
+## Models
+
+**Refresh models** lists every model that your key can call, except aliases. The list can include `drex-max`,
+`drex-max-v1.1`, `drex-v2.0`, and `drex-v1.5`, depending on your key.
+Onyx hides aliases such as `drex-latest` (an alias of `drex-v2.0`) so that each model appears once, under its own name.
+Select the models that you want to offer.
+
+Only `drex-max` and `drex-max-v1.1` accept images. Onyx sends text only for internal search.
+See the [Nace documentation](https://console.nace.ai) for current prices.
+
+## Choose the Search Decision Model
+
+Connecting Drex does not select it. To use a Drex model, select it as the decision model:
+
+- In **Admin Panel → Decision Models**, choose the model.
+- Or, in **Admin Panel → Chat Preferences**, set **Search Decision Model**.
+
+The two settings are the same setting. See [Chat Preferences](/admins/managing_features/chat#search-settings).
+
+## What Uses the Decision Model
+
+When you select a Drex model, internal search uses it in two places:
+
+- **Ranking**: Onyx sends the user query and the title and text of each candidate document in one request.
+  Drex scores every candidate, and Onyx keeps the best ones.
+- **Context expansion**: Drex decides how much of each document's surrounding text to add.
+
+These requests send document content to Nace. Internal search uses the decision model only when all of these are true:
+
+- A decision model is selected.
+- The chat turn saves its content. Incognito chats keep the language model selection.
+- The rollout flag `onyx-search-decision-rerank-expansion` is on. Self-hosted deployments without PostHog skip this check.
+
+If a decision request fails, search uses the chat's language model to pick the documents for that search.
+
+## Limits
+
+- A request holds at most 512 questions. Each question holds at most 255 options.
+  Onyx caps one ranking request at 200 questions.
+- Internal search waits up to 5 seconds for a Drex response, then uses the chat's language model.
+  The connection test waits up to 60 seconds.
+
+See the [Nace documentation](https://console.nace.ai) for account setup, billing, and current limits.

@@ -1,5 +1,6 @@
 import math
 from collections.abc import Callable
+from urllib.parse import urlsplit
 
 import httpx
 from pydantic import JsonValue
@@ -24,8 +25,11 @@ from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.traces import TraceContentMode
 from onyx.tracing.llm_utils import traced_llm_call
 
+_PROBABILITY_ROUNDING_STEP = 1e-4
+
 _ENDPOINTS = {
     DecisionProvider.TYPESAFE: ("https://api.typesafe.ai/v1", "systemone"),
+    DecisionProvider.NACE: ("https://console.nace.ai/v1", "systemone"),
     DecisionProvider.ZOOM_AI: ("https://api.zoom.us/v2", "aiservices/decisions/decide"),
     DecisionProvider.OPENAI: ("https://api.openai.com/v1", "decisions"),
     DecisionProvider.OPENROUTER: ("https://openrouter.ai/api/alpha", "decisions"),
@@ -34,6 +38,14 @@ _ENDPOINTS = {
         "decisions",
     ),
 }
+
+
+def _origin(url: str) -> tuple[str, str | None, int | None] | None:
+    try:
+        parts = urlsplit(url)
+        return parts.scheme.lower(), parts.hostname, parts.port
+    except ValueError:
+        return None
 
 
 def _system_one_request(request: DecisionRequest, model: str) -> dict[str, JsonValue]:
@@ -133,8 +145,16 @@ def _validate_answers(
                 raise ValueError(
                     "Decision score distribution does not match its levels"
                 )
+            # System One echoes the requested criteria ("Low: description");
+            # report the caller's own label instead.
+            for item in answer.probabilities:
+                item.label = question.levels[item.value].label
+        # Providers round each probability (Nace to 4 decimals), so the sum
+        # may miss 1.0 by up to half a rounding step per entry.
         if isinstance(answer, (ChoiceAnswer, ScoreAnswer)) and not math.isclose(
-            sum(item.probability for item in answer.probabilities), 1.0, abs_tol=1e-5
+            sum(item.probability for item in answer.probabilities),
+            1.0,
+            abs_tol=_PROBABILITY_ROUNDING_STEP / 2 * len(answer.probabilities) + 1e-9,
         ):
             raise ValueError("Decision probabilities must sum to one")
     response.answers = [by_name[question.name] for question in request.questions]
@@ -142,6 +162,7 @@ def _validate_answers(
 
 
 DEFAULT_DECISION_TIMEOUT_S = 30.0
+NACE_DECISION_TIMEOUT_S = 60.0
 
 
 class DecisionClient:
@@ -151,7 +172,7 @@ class DecisionClient:
         model: str,
         api_key: str,
         api_base: str | None = None,
-        timeout: float = DEFAULT_DECISION_TIMEOUT_S,
+        timeout: float | None = None,
         extra_headers: dict[str, str] | None = None,
         api_key_resolver: Callable[[], str] | None = None,
         model_configuration_id: int | None = None,
@@ -164,12 +185,25 @@ class DecisionClient:
         base, path = _ENDPOINTS[provider]
         if provider == DecisionProvider.ZOOM_AI and api_base:
             raise ValueError("Zoom Decisions uses its fixed hosted endpoint")
+        if (
+            provider == DecisionProvider.NACE
+            and api_base
+            and _origin(api_base) != _origin(base)
+        ):
+            # The Nace key must only reach the hosted Nace API.
+            raise ValueError("Nace Drex uses its fixed hosted endpoint")
         base = (api_base or base).rstrip("/")
         if provider == DecisionProvider.OPENROUTER and base.endswith("/v1"):
             base = base.removesuffix("/v1") + "/alpha"
         if provider == DecisionProvider.VERCEL_AI_GATEWAY and not base.endswith("/v1"):
             base += "/v1"
         self.url = f"{base}/{path}"
+        if timeout is None:
+            timeout = (
+                NACE_DECISION_TIMEOUT_S
+                if provider == DecisionProvider.NACE
+                else DEFAULT_DECISION_TIMEOUT_S
+            )
         self.timeout = timeout
         self._headers = {
             **(extra_headers or {}),
@@ -179,6 +213,7 @@ class DecisionClient:
     def decide(self, request: DecisionRequest, *, flow: LLMFlow) -> DecisionResponse:
         system_one = self.provider in {
             DecisionProvider.TYPESAFE,
+            DecisionProvider.NACE,
             DecisionProvider.OPENROUTER,
         }
         body = (
