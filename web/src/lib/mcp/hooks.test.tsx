@@ -9,6 +9,7 @@ import {
   type MCPServer,
 } from "@/lib/mcp/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { openOAuthAuthorization } from "@/lib/oauth/launch";
 import {
   getMCPUserOAuthNavigationUrl,
   saveMCPUserCredentials,
@@ -16,6 +17,10 @@ import {
 } from "@/lib/mcp/svc";
 
 jest.mock("@/lib/fetcher", () => ({ errorHandlingFetcher: jest.fn() }));
+jest.mock("@/lib/oauth/launch", () => ({
+  ...jest.requireActual("@/lib/oauth/launch"),
+  openOAuthAuthorization: jest.fn(),
+}));
 jest.mock("@/lib/mcp/svc", () => ({
   saveMCPUserCredentials: jest.fn(),
   startMCPUserOAuth: jest.fn(),
@@ -143,25 +148,39 @@ describe("useMcpAuthentication", () => {
       expect(result.current.credentialRequest).toBeNull();
     }
   );
-  it("keeps OAuth loading and blocks a second request while navigation is pending", async () => {
+  it("opens OAuth outside the page and refreshes when it completes", async () => {
     jest.mocked(startMCPUserOAuth).mockResolvedValue({
       status: "authorization_required",
       server_id: server.id,
-      authorization_url: "#oauth-provider",
+      authorization_url: "https://provider.example/authorize?state=s",
       redirect_url: "/app",
     });
     jest
       .mocked(getMCPUserOAuthNavigationUrl)
-      .mockReturnValue("#oauth-provider");
+      .mockReturnValue("https://provider.example/authorize?state=s");
+    let complete = () => {};
+    jest.mocked(openOAuthAuthorization).mockReturnValue(
+      new Promise<void>((resolve) => {
+        complete = resolve;
+      })
+    );
     const { result } = renderHook(() => useMcpAuthentication(0), {
       wrapper: makeWrapper(),
     });
+    await waitFor(() => expect(errorHandlingFetcher).toHaveBeenCalled());
+    const fetches = jest.mocked(errorHandlingFetcher).mock.calls.length;
     await act(() => result.current.authenticate(server));
-    expect(result.current.loadingServerId).toBe(server.id);
-    expect(window.location.hash).toBe("#oauth-provider");
-    await act(() => result.current.authenticate(server));
-    expect(startMCPUserOAuth).toHaveBeenCalledTimes(1);
-    window.history.replaceState(null, "", "/");
+    expect(openOAuthAuthorization).toHaveBeenCalledWith(
+      "https://provider.example/authorize?state=s"
+    );
+    expect(result.current.loadingServerId).toBeNull();
+    expect(window.location.pathname).toBe("/");
+    await act(async () => complete());
+    await waitFor(() =>
+      expect(
+        jest.mocked(errorHandlingFetcher).mock.calls.length
+      ).toBeGreaterThan(fetches)
+    );
   });
   it("forces a fresh OAuth grant when the server requires reauthentication", async () => {
     jest.mocked(startMCPUserOAuth).mockResolvedValue({
