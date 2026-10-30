@@ -7440,6 +7440,10 @@ class ScheduledTaskRun(Base):
     # ~120-char snippet of the final agent message, surfaced in the run
     # history table.
     summary: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Advances each time the run reaches a status with results to review.
+    version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    # Highest version opened by the task owner.
+    viewed_revision: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Relationships
     task: Mapped[ScheduledTask] = relationship("ScheduledTask", back_populates="runs")

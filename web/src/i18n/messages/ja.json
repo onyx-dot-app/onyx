@@ -15277,6 +15277,10 @@
         "trigger": {
           "runNow": "1回実行",
           "schedule": "スケジュール"
+        },
+        "markAllViewed": {
+          "label": "すべて閲覧済みにする",
+          "error": "実行を閲覧済みにできませんでした。もう一度お試しください。"
         }
       },
       "scheduleEditor": {
@@ -15308,7 +15312,8 @@
           "tue": "火",
           "wed": "水"
         }
-      }
+      },
+      "unviewedResults": "新しい結果"
     },
     "todoList": {
       "empty": {

@@ -85,6 +85,9 @@ import SidebarTabSkeleton from "@/refresh-components/skeletons/SidebarTabSkeleto
 import BuildModeIntroBackground from "@/app/craft/components/IntroBackground";
 import BuildModeIntroContent from "@/app/craft/components/IntroContent";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
+import UnseenMarker from "@/app/craft/components/UnseenMarker";
+import { Section } from "@/layouts/general-layouts";
+import { useUnviewedScheduledTaskCount } from "@/lib/scheduledTasks/hooks";
 import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import { motion, AnimatePresence } from "motion/react";
 import { NotificationType } from "@/lib/notifications/interfaces";
@@ -277,6 +280,10 @@ export default function AppSidebar() {
     combinedSettingsData?.onyx_craft_requires_upgrade === true;
   // Gated like a Business admin page: below that tier the tab is disabled.
   const hasCraftTier = useTierAtLeast(Tier.BUSINESS);
+  const tTasks = useTranslations("craft.tasks");
+  const unviewedTaskCount = useUnviewedScheduledTaskCount(
+    isOnyxCraftEnabled && hasCraftTier
+  );
   const plans = usePlans();
 
   // Fetch notifications for build mode intro
@@ -665,7 +672,17 @@ export default function AppSidebar() {
                     isOnyxCraftUpsell ? (
                       <PlanTag plan={Tier.BUSINESS} />
                     ) : (
-                      <BetaTag />
+                      <Section
+                        flexDirection="row"
+                        gap={1.5}
+                        width="fit"
+                        height="fit"
+                      >
+                        {unviewedTaskCount > 0 && (
+                          <UnseenMarker label={tTasks("unviewedResults")} />
+                        )}
+                        <BetaTag />
+                      </Section>
                     )
                   }
                 >

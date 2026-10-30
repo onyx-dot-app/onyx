@@ -15277,6 +15277,10 @@
         "trigger": {
           "runNow": "运行一次",
           "schedule": "计划"
+        },
+        "markAllViewed": {
+          "label": "全部标为已查看",
+          "error": "无法将运行标记为已查看。请重试。"
         }
       },
       "scheduleEditor": {
@@ -15308,7 +15312,8 @@
           "tue": "周二",
           "wed": "周三"
         }
-      }
+      },
+      "unviewedResults": "新结果"
     },
     "todoList": {
       "empty": {

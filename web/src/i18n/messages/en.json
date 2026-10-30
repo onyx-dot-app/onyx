@@ -15277,6 +15277,10 @@
         "trigger": {
           "runNow": "Run once",
           "schedule": "Schedule"
+        },
+        "markAllViewed": {
+          "label": "Mark all viewed",
+          "error": "Could not mark runs as viewed. Try again."
         }
       },
       "scheduleEditor": {
@@ -15308,7 +15312,8 @@
           "tue": "Tue",
           "wed": "Wed"
         }
-      }
+      },
+      "unviewedResults": "New results"
     },
     "todoList": {
       "empty": {
