@@ -11,11 +11,6 @@ from onyx.db.models import TokenRateLimit, User__UserGroup
 from onyx.db.utils import is_unique_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.token_rate_limits.models import (
-    MAX_TOKEN_BUDGET_THOUSANDS,
-    TokenRateLimitArgs,
-    TokenRateLimitUpdateArgs,
-)
 
 TOKEN_RATE_LIMIT_BUCKET_INDEX = "uq_token_rate_limit_bucket"
 
@@ -30,26 +25,8 @@ def commit_token_rate_limit(db_session: Session) -> None:
             raise
         raise OnyxError(
             OnyxErrorCode.DUPLICATE_RESOURCE,
-            "An enabled limit with this period already exists. Edit it instead.",
+            "An enabled limit for this model and period already exists.",
         ) from e
-
-
-def fetch_all_user_token_rate_limits(
-    db_session: Session,
-    enabled_only: bool = False,
-    ordered: bool = True,
-) -> Sequence[TokenRateLimit]:
-    query = select(TokenRateLimit).where(
-        TokenRateLimit.scope == TokenRateLimitScope.USER
-    )
-
-    if enabled_only:
-        query = query.where(TokenRateLimit.enabled.is_(True))
-
-    if ordered:
-        query = query.order_by(TokenRateLimit.created_at.desc())
-
-    return db_session.scalars(query).all()
 
 
 def _enforced_limits_query(
@@ -120,106 +97,3 @@ def fetch_token_rate_limits_applying_to_user(
             ),
         )
     ).all()
-
-
-def fetch_all_global_token_rate_limits(
-    db_session: Session,
-    enabled_only: bool = False,
-    ordered: bool = True,
-) -> Sequence[TokenRateLimit]:
-    query = select(TokenRateLimit).where(
-        TokenRateLimit.scope == TokenRateLimitScope.GLOBAL
-    )
-
-    if enabled_only:
-        query = query.where(TokenRateLimit.enabled.is_(True))
-
-    if ordered:
-        query = query.order_by(TokenRateLimit.created_at.desc())
-
-    token_rate_limits = db_session.scalars(query).all()
-    return token_rate_limits
-
-
-def insert_user_token_rate_limit(
-    db_session: Session,
-    token_rate_limit_settings: TokenRateLimitArgs,
-) -> TokenRateLimit:
-    token_limit = TokenRateLimit(
-        enabled=token_rate_limit_settings.enabled,
-        token_budget=token_rate_limit_settings.token_budget,
-        cost_budget_cents=token_rate_limit_settings.cost_budget_cents,
-        period=token_rate_limit_settings.period,
-        scope=TokenRateLimitScope.USER,
-    )
-    db_session.add(token_limit)
-    commit_token_rate_limit(db_session)
-
-    return token_limit
-
-
-def insert_global_token_rate_limit(
-    db_session: Session,
-    token_rate_limit_settings: TokenRateLimitArgs,
-) -> TokenRateLimit:
-    token_limit = TokenRateLimit(
-        enabled=token_rate_limit_settings.enabled,
-        token_budget=token_rate_limit_settings.token_budget,
-        cost_budget_cents=token_rate_limit_settings.cost_budget_cents,
-        period=token_rate_limit_settings.period,
-        scope=TokenRateLimitScope.GLOBAL,
-    )
-    db_session.add(token_limit)
-    commit_token_rate_limit(db_session)
-
-    return token_limit
-
-
-def get_token_rate_limit_scope_and_group_id(
-    db_session: Session, token_rate_limit_id: int
-) -> tuple[TokenRateLimitScope, int | None]:
-    """Raises ValueError if the id is unknown."""
-    token_limit = db_session.get(TokenRateLimit, token_rate_limit_id)
-    if token_limit is None:
-        raise ValueError(f"TokenRateLimit with id '{token_rate_limit_id}' not found")
-    return token_limit.scope, token_limit.user_group_id
-
-
-def update_token_rate_limit(
-    db_session: Session,
-    token_rate_limit_id: int,
-    token_rate_limit_settings: TokenRateLimitUpdateArgs,
-) -> TokenRateLimit:
-    token_limit = db_session.get(TokenRateLimit, token_rate_limit_id)
-    if token_limit is None:
-        raise ValueError(f"TokenRateLimit with id '{token_rate_limit_id}' not found")
-
-    if (
-        token_rate_limit_settings.token_budget is not None
-        and token_rate_limit_settings.token_budget > MAX_TOKEN_BUDGET_THOUSANDS
-        and token_rate_limit_settings.token_budget != token_limit.token_budget
-    ):
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "Token budgets cannot exceed 1T tokens.",
-        )
-
-    token_limit.enabled = token_rate_limit_settings.enabled
-    token_limit.token_budget = token_rate_limit_settings.token_budget
-    token_limit.cost_budget_cents = token_rate_limit_settings.cost_budget_cents
-    token_limit.period = token_rate_limit_settings.period
-    commit_token_rate_limit(db_session)
-
-    return token_limit
-
-
-def delete_token_rate_limit(
-    db_session: Session,
-    token_rate_limit_id: int,
-) -> None:
-    token_limit = db_session.get(TokenRateLimit, token_rate_limit_id)
-    if token_limit is None:
-        raise ValueError(f"TokenRateLimit with id '{token_rate_limit_id}' not found")
-
-    db_session.delete(token_limit)
-    db_session.commit()

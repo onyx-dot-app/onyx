@@ -6294,33 +6294,7 @@
         }
       },
       "tokenLimits": {
-        "addLimit": {
-          "label": "上限を追加"
-        },
-        "costLimit": {
-          "header": "コスト上限",
-          "placeholder": "コスト上限",
-          "unit": "(USD)"
-        },
-        "disabledTooltip": "token レート制限は [Onyx の Enterprise 版](/admin/billing) でのみ利用できます。",
-        "section": {
-          "description": "このグループが指定期間内に使用できる token 数を制限します。",
-          "title": "Token レート制限"
-        },
-        "timeWindow": {
-          "header": "期間",
-          "placeholder": "期間を選択",
-          "options": {
-            "DAILY": "毎日",
-            "WEEKLY": "毎週",
-            "MONTHLY": "毎月"
-          }
-        },
-        "tokenLimit": {
-          "header": "Token 上限",
-          "placeholder": "Token 上限 (千単位)",
-          "unit": "(千単位)"
-        }
+        "disabledTooltip": "token レート制限は [Onyx の Enterprise 版](/admin/billing) でのみ利用できます。"
       },
       "builtIn": {
         "admin": {
@@ -9868,170 +9842,6 @@
         "helpUrl": "https://docs.onyx.app"
       }
     },
-    "tokenRateLimits": {
-      "limits": {
-        "budget": {
-          "both": "最大 {cost} または {tokens} tokens",
-          "cost": "最大 {cost}",
-          "none": "予算は未設定",
-          "tokens": "最大 {tokens} tokens"
-        },
-        "cadence": {
-          "label": "{period, select, DAILY {毎日 UTC 午前 0 時にリセット} WEEKLY {毎週月曜日の UTC 午前 0 時にリセット} other {毎月 1 日の UTC 午前 0 時にリセット}}"
-        },
-        "deleteFailed": {
-          "error": "Token レート制限の削除に失敗しました"
-        },
-        "empty": {
-          "message": "上限はまだありません。使用量を抑えるには支出上限を作成してください。"
-        },
-        "loadFailed": {
-          "error": "Token レート制限の読み込みに失敗しました"
-        },
-        "row": {
-          "delete": {
-            "ariaLabel": "{label} を削除",
-            "tooltip": "上限を削除"
-          },
-          "disable": {
-            "ariaLabel": "{label} を無効にする"
-          },
-          "enable": {
-            "ariaLabel": "{label} を有効にする"
-          },
-          "label": "{budget}、{cadence}"
-        },
-        "updateFailed": {
-          "error": "Token レート制限の更新に失敗しました"
-        }
-      },
-      "modal": {
-        "cancel": {
-          "label": "キャンセル"
-        },
-        "costBudget": {
-          "description": "リセット期間ごとの最大支出額です。コスト予算、token 予算、またはその両方を設定してください。",
-          "placeholder": "コスト上限なし",
-          "title": "コスト予算",
-          "unit": "USD"
-        },
-        "errors": {
-          "budgetRequired": "コスト予算、token 予算、またはその両方を入力してください",
-          "costMax": "コスト予算の上限は ${amount, number} です",
-          "costMinCents": "コスト予算は $0.01 以上にしてください",
-          "costMoreThanZero": "コスト予算は 0 より大きい値にしてください",
-          "groupRequired": "ユーザーグループを選択してください",
-          "scopeRequired": "適用範囲は必須項目です",
-          "tokenIncrement": "1,000 tokens 単位で指定してください",
-          "tokenInteger": "token 数は整数で入力してください",
-          "tokenMax": "Token 予算の上限は 1 兆です",
-          "tokenMin": "1,000 tokens 以上を指定してください"
-        },
-        "groupMenu": {
-          "empty": "ユーザーグループはまだありません。「ユーザーとグループ」から作成してください。"
-        },
-        "groupPicker": {
-          "placeholder": "グループを選択"
-        },
-        "header": {
-          "title": "支出上限を作成"
-        },
-        "period": {
-          "description": "予算は UTC 午前 0 時にリセットされます",
-          "title": "リセット期間",
-          "options": {
-            "DAILY": "毎日",
-            "WEEKLY": "毎週",
-            "MONTHLY": "毎月"
-          }
-        },
-        "scope": {
-          "caption": {
-            "global": "ワークスペースの全員が 1 つの予算を共有します。",
-            "group": "{group} のメンバーが 1 つの予算を共有します。",
-            "groupUnchosen": "選択したグループのメンバーが 1 つの予算を共有します。",
-            "user": "各ユーザーが個別の予算を持ちます。"
-          },
-          "title": "適用範囲"
-        },
-        "scopeOptions": {
-          "global": {
-            "title": "ワークスペース"
-          },
-          "user": {
-            "title": "ユーザーごと"
-          },
-          "userGroup": {
-            "title": "ユーザーグループ"
-          }
-        },
-        "submit": {
-          "label": "上限を作成"
-        },
-        "summary": {
-          "budget": {
-            "both": "{cost} または {tokens} tokens",
-            "tokens": "{tokens} tokens"
-          },
-          "global": "{period, select, DAILY {ワークスペースの全員が毎日 {budget} までを共有します。期間がリセットされるまで、使用はブロックされます。} WEEKLY {ワークスペースの全員が毎週 {budget} までを共有します。期間がリセットされるまで、使用はブロックされます。} other {ワークスペースの全員が毎月 {budget} までを共有します。期間がリセットされるまで、使用はブロックされます。}}",
-          "group": "{period, select, DAILY {{group} のメンバーが毎日 {budget} までを共有します。期間がリセットされるまで、使用はブロックされます。} WEEKLY {{group} のメンバーが毎週 {budget} までを共有します。期間がリセットされるまで、使用はブロックされます。} other {{group} のメンバーが毎月 {budget} までを共有します。期間がリセットされるまで、使用はブロックされます。}}",
-          "groupUnchosen": "{period, select, DAILY {選択したグループのメンバーが毎日 {budget} までを共有します。期間がリセットされるまで、使用はブロックされます。} WEEKLY {選択したグループのメンバーが毎週 {budget} までを共有します。期間がリセットされるまで、使用はブロックされます。} other {選択したグループのメンバーが毎月 {budget} までを共有します。期間がリセットされるまで、使用はブロックされます。}}",
-          "user": "{period, select, DAILY {各ユーザーは毎日 {budget} まで使用できます。期間がリセットされるまで、使用はブロックされます。} WEEKLY {各ユーザーは毎週 {budget} まで使用できます。期間がリセットされるまで、使用はブロックされます。} other {各ユーザーは毎月 {budget} まで使用できます。期間がリセットされるまで、使用はブロックされます。}}"
-        },
-        "tokenBudget": {
-          "description": "リセット期間ごとの最大 token 数",
-          "placeholder": "Token の上限なし",
-          "title": "Token 予算",
-          "unit": "tokens"
-        },
-        "userGroup": {
-          "description": "この予算を共有するグループを選択してください",
-          "title": "ユーザーグループ"
-        }
-      },
-      "panel": {
-        "create": {
-          "label": "支出上限を作成"
-        },
-        "createFailed": {
-          "error": "支出上限の作成に失敗しました"
-        },
-        "created": {
-          "message": "支出上限を作成しました。"
-        },
-        "embedded": {
-          "description": "ワークスペース、ユーザー、グループの使用量にガードレールを設定します。上限は設定を削除せずに、有効と無効を切り替えられます。",
-          "title": "支出上限を管理"
-        },
-        "global": {
-          "description": "グローバル上限は、すべてのユーザー、ユーザーグループ、API キーに適用されます。グローバル上限に達すると、これ以上 token を消費できません。"
-        },
-        "intro": {
-          "description": "支出上限を使うと、一定の期間に消費できる token 数を制御できます。",
-          "groupLimit": "ユーザーグループに上限を設定して、チームの支出を管理します。",
-          "toggleLimit": "必要に応じて上限を有効または無効にします。",
-          "userLimit": "ユーザーに上限を設定して、1 人のユーザーが使いすぎないようにします。",
-          "workspaceLimit": "ワークスペース全体に上限を設定して、チーム全体の支出を管理します。"
-        },
-        "tabs": {
-          "global": {
-            "name": "グローバル"
-          },
-          "groups": {
-            "name": "グループ"
-          },
-          "users": {
-            "name": "ユーザー"
-          }
-        },
-        "user": {
-          "description": "ユーザー上限は、各ユーザーに個別に適用されます。ユーザーが上限に達すると、token の消費が一時的にブロックされます。"
-        },
-        "userGroup": {
-          "description": "グループ上限は、グループ内のすべてのユーザーに適用されます。ユーザーが複数のグループに所属する場合は、最も緩やかな上限が適用されます。"
-        }
-      }
-    },
     "tracing": {
       "disconnectModal": {
         "body": "LLM 呼び出しのトレースは **{label}** に送信されなくなります。すでに送信されたトレースには影響しません。",
@@ -11159,6 +10969,132 @@
         "retry": "{count, plural, other {# 回失敗しました。次の再試行: {time}。}}",
         "scoped": "追加または変更された項目のみ",
         "failures": "{count, plural, other {失敗 # 回}}"
+      }
+    },
+    "spendingLimits": {
+      "page": {
+        "description": "組織全体の LLM 支出を管理するために支出上限を設定します。",
+        "loadFailed": "支出上限を読み込めませんでした。"
+      },
+      "workspace": {
+        "title": "ワークスペースの上限",
+        "description": "この組織の全員に適用されます。",
+        "pool": {
+          "title": "共有予算",
+          "description": "期間ごとに全員で共有する予算です。コスト上限、トークン上限、またはその両方を設定します。"
+        },
+        "perUser": {
+          "title": "ユーザーごとの上限",
+          "description": "ユーザーごとの個別の予算です。同じ期間についてはグループのメンバーごとの上限が優先されます。"
+        }
+      },
+      "groups": {
+        "title": "グループの上限",
+        "description": "グループの上限がグループをまたいでブロックすることはありません。ユーザーはいずれかのグループの共有予算に余裕がある限り利用を続けられます。各期間には、ユーザーが属するグループのメンバーごとの上限のうち最大のものが適用されます。1 人だけに上限を設定するには、その人だけのグループを作成してください。",
+        "add": {
+          "label": "グループの上限を追加"
+        },
+        "picker": {
+          "placeholder": "グループを選択"
+        },
+        "members": "{count, plural, other {# 人のメンバー}}",
+        "empty": "支出上限が設定されたグループはまだありません。",
+        "pool": {
+          "title": "グループの共有予算",
+          "description": "このグループの全員で共有する予算です。"
+        },
+        "perMember": {
+          "title": "メンバーごとの上限",
+          "description": "このグループの各メンバーの個別の予算です。各期間には、ユーザーが属するグループの上限のうち最大のものが適用されます。",
+          "adminOnly": "メンバーごとの上限はメンバーをワークスペースの上限より引き上げられるため、管理者のみが変更できます。"
+        },
+        "remove": {
+          "tooltip": "このグループの上限を削除"
+        },
+        "removed": "{group} の支出上限を削除しました"
+      },
+      "groupPage": {
+        "title": "支出上限",
+        "description": "このグループが LLM の利用に使える額を制限します。"
+      },
+      "card": {
+        "enabled": {
+          "ariaLabel": "{title} のオン/オフを切り替え"
+        },
+        "addLimit": "上限を追加",
+        "addModelBudget": "モデル予算を追加",
+        "modelBudget": {
+          "title": "モデル予算",
+          "description": "特定のモデルへの支出を制限します。モデルの利用は上記の上限にも計上されます。"
+        },
+        "cancel": "キャンセル",
+        "save": "変更を保存",
+        "saved": "支出上限を保存しました",
+        "saveFailed": "支出上限を保存できませんでした: {error}"
+      },
+      "alerts": {
+        "title": "アラート",
+        "description": "API で設定されたアラートのみの上限です。利用はブロックされず、ここで保存しても変更されません。",
+        "row": "{model}、{period}: {target}",
+        "allModels": "すべてのモデル",
+        "percent": "上限の {percent}%",
+        "tokens": "{tokens} トークン"
+      },
+      "row": {
+        "model": {
+          "title": "モデル",
+          "placeholder": "モデルを選択"
+        },
+        "period": {
+          "title": "リセット期間",
+          "options": {
+            "DAILY": {
+              "title": "日次上限",
+              "description": "毎日 00:00 UTC にリセット"
+            },
+            "WEEKLY": {
+              "title": "週次上限",
+              "description": "毎週月曜日の 00:00 UTC にリセット"
+            },
+            "MONTHLY": {
+              "title": "月次上限",
+              "description": "毎月 1 日の 00:00 UTC にリセット"
+            }
+          }
+        },
+        "nextReset": "次回のリセット: {at} UTC",
+        "remove": {
+          "tooltip": "上限を削除"
+        },
+        "cost": {
+          "title": "コスト上限"
+        },
+        "tokens": {
+          "title": "トークン上限",
+          "placeholder": "トークン上限なし",
+          "suffix": "K"
+        },
+        "usage": {
+          "spent": "{amount} を使用",
+          "tokens": "{tokens} トークンを使用",
+          "percent": "{percent}%"
+        },
+        "whenReached": {
+          "title": "この上限に達したとき",
+          "blockAll": {
+            "title": "上限に達したらすべての利用をブロック",
+            "description": "チャット、検索、ボット、API 呼び出しを含むすべてのモデルの利用が、次回のリセットまで停止します。"
+          },
+          "blockModel": {
+            "title": "上限に達したらこのモデルをブロック",
+            "description": "このモデルの利用が次回のリセットまで停止します。他のモデルは引き続き利用できます。"
+          }
+        },
+        "errors": {
+          "budgetRequired": "コスト上限、トークン上限、またはその両方を設定してください。",
+          "duplicate": "この期間は別の上限ですでに使用されています。",
+          "modelRequired": "モデルを選択してください。"
+        }
       }
     }
   },
@@ -12830,6 +12766,9 @@
         },
         "tryAgainNow": {
           "text": "今すぐ再試行できます。"
+        },
+        "otherModels": {
+          "text": "他のモデルは引き続き利用できます。"
         }
       },
       "resubmit": {
@@ -16721,6 +16660,9 @@
         },
         "webSearch": {
           "label": "Web 検索"
+        },
+        "spendingLimits": {
+          "label": "支出上限"
         }
       },
       "sections": {

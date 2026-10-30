@@ -273,12 +273,10 @@ export const SWR_KEYS = {
   buildSessionApprovals: (sessionId: string) =>
     `/api/build/approvals/sessions/${sessionId}`,
 
-  // ── Token Rate Limits ─────────────────────────────────────────────────────
-  globalTokenRateLimits: "/api/admin/token-rate-limits/global",
-  userTokenRateLimits: "/api/admin/token-rate-limits/users",
-  userGroupTokenRateLimits: "/api/admin/token-rate-limits/user-groups",
-  userGroupTokenRateLimit: (groupId: number) =>
-    `/api/admin/token-rate-limits/user-group/${groupId}`,
+  // ── Spending Limits ───────────────────────────────────────────────────────
+  spendingLimits: "/api/admin/spending-limits",
+  groupSpendingLimits: (groupId: number) =>
+    `/api/admin/spending-limits/groups/${groupId}`,
 
   // ── Usage Reports ─────────────────────────────────────────────────────────
   usageReport: "/api/admin/usage-report",

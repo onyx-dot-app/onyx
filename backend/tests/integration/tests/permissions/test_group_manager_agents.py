@@ -1,4 +1,4 @@
-"""Escalation suite for scoping agents, skills, actions and token limits to
+"""Escalation suite for scoping agents, skills, actions and spending limits to
 group managers.
 
 A scoped group manager may manage these resources only within the groups they
@@ -193,15 +193,6 @@ def _persona_upsert_body(*, is_public: bool, groups: list[int]) -> dict[str, Any
         "is_public": is_public,
         "groups": groups,
     }
-
-
-# Disabled: these tests check the permission gate, and the module shares one
-# group across tests, which allows only one enabled limit per period.
-_TOKEN_LIMIT_BODY: dict[str, Any] = {
-    "enabled": False,
-    "token_budget": 1000,
-    "period": "DAILY",
-}
 
 
 def _assert_manager(
@@ -684,69 +675,7 @@ def test_manager_update_via_servers_create_denied_not_masked(
     _assert_manager(env, "POST", "/admin/mcp/servers/create", "denied", body)
 
 
-def _group_limit_path(group_id: int, limit_id: int | None = None) -> str:
-    base = f"/admin/token-rate-limits/user-group/{group_id}"
-    return base if limit_id is None else f"{base}/rate-limit/{limit_id}"
-
-
-def _create_group_token_limit(user: DATestUser, group_id: int) -> int:
-    """Create a token limit on ``group_id`` as ``user`` (must succeed); returns its id."""
-    resp = call_endpoint(
-        "POST",
-        _group_limit_path(group_id),
-        _TOKEN_LIMIT_BODY,
-        user.headers,
-        user.cookies,
-    )
-    assert resp.status_code == 200, resp.text
-    return int(resp.json()["token_id"])
-
-
-def test_manager_sets_token_limit_on_managed_group(env: _ScopedEnv) -> None:
-    path = _group_limit_path(env.managed_group.id)
-    _assert_manager(env, "POST", path, "allowed", _TOKEN_LIMIT_BODY)
-
-
-def test_manager_cannot_set_token_limit_on_unmanaged_group(env: _ScopedEnv) -> None:
-    path = _group_limit_path(env.other_group.id)
-    _assert_manager(env, "POST", path, "denied", _TOKEN_LIMIT_BODY)
-
-
-def test_manager_reads_token_limits_on_managed_group(env: _ScopedEnv) -> None:
-    _assert_manager(env, "GET", _group_limit_path(env.managed_group.id), "allowed")
-
-
-def test_manager_cannot_read_token_limits_on_unmanaged_group(env: _ScopedEnv) -> None:
-    _assert_manager(env, "GET", _group_limit_path(env.other_group.id), "denied")
-
-
-def test_manager_updates_token_limit_on_managed_group(env: _ScopedEnv) -> None:
-    limit_id = _create_group_token_limit(env.manager, env.managed_group.id)
-    path = _group_limit_path(env.managed_group.id, limit_id)
-    _assert_manager(env, "PUT", path, "allowed", _TOKEN_LIMIT_BODY)
-
-
-def test_manager_cannot_update_token_limit_on_unmanaged_group(env: _ScopedEnv) -> None:
-    limit_id = _create_group_token_limit(env.admin, env.other_group.id)
-    path = _group_limit_path(env.other_group.id, limit_id)
-    _assert_manager(env, "PUT", path, "denied", _TOKEN_LIMIT_BODY)
-
-
-def test_manager_deletes_token_limit_on_managed_group(env: _ScopedEnv) -> None:
-    limit_id = _create_group_token_limit(env.manager, env.managed_group.id)
-    _assert_manager(
-        env, "DELETE", _group_limit_path(env.managed_group.id, limit_id), "allowed"
-    )
-
-
-def test_manager_cannot_delete_token_limit_on_unmanaged_group(env: _ScopedEnv) -> None:
-    limit_id = _create_group_token_limit(env.admin, env.other_group.id)
-    _assert_manager(
-        env, "DELETE", _group_limit_path(env.other_group.id, limit_id), "denied"
-    )
-
-
-# Disabled, like the token limits above: these tests check the permission gate.
+# Disabled: these tests check the permission gate, not enforcement.
 _SPENDING_LIMIT_CARD: dict[str, Any] = {
     "enabled": False,
     "limits": [{"period": "MONTHLY", "cost_budget_cents": 500}],

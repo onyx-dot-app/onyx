@@ -483,6 +483,16 @@ export const ADMIN_ROUTES = {
     requiredTier: Tier.BUSINESS,
     visibleWhen: null,
   },
+  SPENDING_LIMITS: {
+    path: "/admin/spending-limits",
+    icon: SvgWallet,
+    title: "Spending Limits",
+    sidebarLabel: "Spending Limits",
+    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
+    section: "Usage",
+    requiredTier: Tier.ENTERPRISE,
+    visibleWhen: null,
+  },
   WORKSPACE_ANALYTICS: {
     path: "/admin/performance/analytics",
     icon: SvgActivity,

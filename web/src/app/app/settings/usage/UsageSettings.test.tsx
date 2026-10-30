@@ -2,7 +2,7 @@ import { render, screen } from "@tests/setup/test-utils";
 import userEvent from "@testing-library/user-event";
 import UsageSettings from "@/app/app/settings/usage/UsageSettings";
 import { useUserUsage } from "@/app/app/settings/usage/lib";
-import { Period } from "@/app/admin/token-rate-limits/types";
+import { Period } from "@/lib/spendingLimits/types";
 
 jest.mock("@/app/app/settings/usage/lib", () => ({
   useUserUsage: jest.fn(),

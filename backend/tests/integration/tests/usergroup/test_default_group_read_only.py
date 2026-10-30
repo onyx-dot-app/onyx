@@ -27,7 +27,11 @@ ENTERPRISE_SKIP = pytest.mark.skipif(
 )
 
 GROUP_URL = f"{API_SERVER_URL}/manage/admin/user-group"
-TOKEN_LIMIT_URL = f"{API_SERVER_URL}/admin/token-rate-limits"
+SPENDING_LIMITS_URL = f"{API_SERVER_URL}/admin/spending-limits"
+_SPENDING_LIMIT_CARD = {
+    "enabled": True,
+    "limits": [{"period": "DAILY", "token_budget": 1000}],
+}
 
 
 @ENTERPRISE_SKIP
@@ -116,20 +120,19 @@ def test_default_group_rejects_every_non_membership_write(
             headers=headers,
         ),
         "delete": client.delete(f"{GROUP_URL}/{group.id}", headers=headers),
-        # token limits live on their own router, so they need their own guard
-        "token_limit_create": client.post(
-            f"{TOKEN_LIMIT_URL}/user-group/{group.id}",
-            json={"enabled": True, "token_budget": 1000, "period": "DAILY"},
+        # spending limits live on their own router, so they need their own guard
+        "spending_limit_pool": client.put(
+            f"{SPENDING_LIMITS_URL}/groups/{group.id}/pool",
+            json=_SPENDING_LIMIT_CARD,
             headers=headers,
         ),
-        "token_limit_update": client.put(
-            f"{TOKEN_LIMIT_URL}/user-group/{group.id}/rate-limit/999999",
-            json={"enabled": False, "token_budget": 1, "period": "DAILY"},
+        "spending_limit_per_member": client.put(
+            f"{SPENDING_LIMITS_URL}/groups/{group.id}/per-member",
+            json=_SPENDING_LIMIT_CARD,
             headers=headers,
         ),
-        "token_limit_delete": client.delete(
-            f"{TOKEN_LIMIT_URL}/user-group/{group.id}/rate-limit/999999",
-            headers=headers,
+        "spending_limit_delete": client.delete(
+            f"{SPENDING_LIMITS_URL}/groups/{group.id}", headers=headers
         ),
     }
     for action, response in writes.items():

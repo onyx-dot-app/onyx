@@ -119,6 +119,9 @@ function RateLimitBanner({
         <AlertTitle>{title}</AlertTitle>
         <AlertDescription className="flex flex-col gap-y-1">
           <span>{error || t("rateLimitBanner.defaultError.text")}</span>
+          {details.model && (
+            <span>{t("rateLimitBanner.otherModels.text")}</span>
+          )}
           {resetLine && (
             <span className="text-xs text-muted-foreground">{resetLine}</span>
           )}
