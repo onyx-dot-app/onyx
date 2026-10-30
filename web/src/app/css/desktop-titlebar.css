@@ -79,7 +79,31 @@ html.onyx-desktop .opal-sidebar-root__backdrop {
   bottom: 0 !important;
 }
 
-/* Toasts are fixed to the viewport top, under the title bar's drag strip. */
+/* Toasts and modals are fixed to the viewport; keep them below the title bar. */
 html.onyx-desktop .opal-toast-viewport {
   top: calc(var(--onyx-titlebar-height) + 0.5rem) !important;
+}
+
+html.onyx-desktop .opal-modal-positioner[data-position="center"] {
+  --opal-modal-available-height: calc(
+    100dvh - var(--onyx-titlebar-height) - 2rem
+  ) !important;
+}
+
+html.onyx-desktop
+  .opal-modal-positioner[data-position="center"][data-viewport-centered] {
+  top: calc(
+    var(--onyx-titlebar-height) + (100dvh - var(--onyx-titlebar-height)) / 2
+  ) !important;
+}
+
+html.onyx-desktop .opal-modal-positioner[data-position="top"] {
+  --opal-modal-available-height: calc(
+    100dvh - var(--onyx-titlebar-height) - 72px - 1rem
+  ) !important;
+}
+
+html.onyx-desktop
+  .opal-modal-positioner[data-position="top"][data-viewport-centered] {
+  top: calc(var(--onyx-titlebar-height) + 72px) !important;
 }

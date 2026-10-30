@@ -87,8 +87,10 @@
          compiled class name via @apply (which the utility overrides miss). */
       .h-screen,
       .max-h-screen,
+      .opal-root-layout,
       .opal-sidebar-root__column,
       .opal-sidebar-root__overlay[data-variant="mobile"],
+      .opal-sidebar-root__overlay[data-variant="small"],
       .opal-sidebar-root__overlay[data-variant="medium"] {
         height: var(--onyx-desktop-safe-height) !important;
         max-height: var(--onyx-desktop-safe-height) !important;
@@ -102,10 +104,33 @@
          so inset-y-0 pins them to y=0 (under the traffic lights). Re-anchor them
          below the titlebar. */
       .opal-sidebar-root__overlay[data-variant="mobile"],
+      .opal-sidebar-root__overlay[data-variant="small"],
       .opal-sidebar-root__overlay[data-variant="medium"],
       .opal-sidebar-root__backdrop {
         top: var(--onyx-desktop-titlebar-height) !important;
         bottom: 0 !important;
+      }
+
+      /* Toasts and modals are fixed to the viewport; keep them below the
+         titlebar so it never covers them. */
+      .opal-toast-viewport {
+        top: calc(var(--onyx-desktop-titlebar-height) + 0.5rem) !important;
+      }
+
+      .opal-modal-positioner[data-position="center"] {
+        --opal-modal-available-height: calc(var(--onyx-desktop-safe-height) - 2rem) !important;
+      }
+
+      .opal-modal-positioner[data-position="center"][data-viewport-centered] {
+        top: calc(var(--onyx-desktop-titlebar-height) + var(--onyx-desktop-safe-height) / 2) !important;
+      }
+
+      .opal-modal-positioner[data-position="top"] {
+        --opal-modal-available-height: calc(var(--onyx-desktop-safe-height) - 72px - 1rem) !important;
+      }
+
+      .opal-modal-positioner[data-position="top"][data-viewport-centered] {
+        top: calc(var(--onyx-desktop-titlebar-height) + 72px) !important;
       }
 
       #${TITLEBAR_ID} {

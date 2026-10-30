@@ -66,7 +66,9 @@ is the fallback page for a missing or unreachable server. It calls the Tauri
 commands `get_bootstrap_state`, `check_server_reachable` and `set_server_url`
 (`desktop/src-tauri/src/commands.rs`), then sends the webview to the server. On
 macOS, `desktop/src-tauri/src/window.rs:eval_titlebar_script` injects
-`desktop/src/titlebar.js` on every page load. The Rust side calls the server
+`desktop/src/titlebar.js` on every page load. It reserves the titlebar strip and
+keeps the root layout, toasts and modals below it, so installed apps stay
+correct against any server version. The Rust side calls the server
 only for `/api/version` and a reachability check. The webview holds the cookie
 session.
 
