@@ -414,6 +414,38 @@ def test_pruning_helper_forwards_the_heartbeat_to_the_slim_path() -> None:
     assert _operations(connector).bulk_fetch_issues.call_count == 1
 
 
+def test_load_poll_and_slim_have_the_same_membership() -> None:
+    issues = {
+        "100": _issue("100", "TEST-100"),
+        "101": _issue("101", "TEST-101"),
+        "102": _issue("102", "TEST-102", labels=["skip-me"]),
+    }
+    issue_ids = ["100", "101", "102"]
+
+    def all_issues(jql: str, **_: Any) -> JiraIssueIdPage:
+        assert 'project in ("TEST")' in jql
+        return JiraIssueIdPage(issue_ids=issue_ids, next_page_token=None)
+
+    load_connector = _connector(
+        [_desk_page()], issues=issues, search_pages=[], labels_to_skip=["skip-me"]
+    )
+    poll_connector = _connector(
+        [_desk_page()], issues=issues, search_pages=[], labels_to_skip=["skip-me"]
+    )
+    slim_connector = _connector(
+        [_desk_page()], issues=issues, search_pages=[], labels_to_skip=["skip-me"]
+    )
+    for connector in (load_connector, poll_connector, slim_connector):
+        _operations(connector).search_issue_ids.side_effect = all_issues
+
+    loaded = _document_ids(load_connector.load_from_state())
+    polled = _document_ids(poll_connector.poll_source(0, 1_700_100_000))
+    slimmed = _slim_ids(slim_connector.retrieve_all_slim_docs())
+
+    expected = {f"{BASE}/browse/TEST-100", f"{BASE}/browse/TEST-101"}
+    assert set(loaded) == set(polled) == set(slimmed) == expected
+
+
 def test_runner_and_pruning_use_the_same_membership() -> None:
     issues = {"100": _issue("100", "TEST-100")}
     index_connector = _connector(
