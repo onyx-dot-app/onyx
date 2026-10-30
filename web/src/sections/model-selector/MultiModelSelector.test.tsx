@@ -14,7 +14,10 @@ import MultiModelSelector, {
 } from "@/sections/model-selector/MultiModelSelector";
 import type { ReasoningManager } from "@/sections/model-selector/ModelSelectorContent";
 import { llmOptionKey } from "@/lib/languageModels/options";
-import type { LLMProviderDescriptor } from "@/lib/languageModels/types";
+import type {
+  LLMProviderDescriptor,
+  ReasoningEffortOverride,
+} from "@/lib/languageModels/types";
 import { makeProvider } from "@tests/setup/llmProviderTestUtils";
 
 // Stable across renders, so memoized option lists don't churn.
@@ -64,6 +67,7 @@ interface ModelFixture {
   provider: { id: number; name: string; provider: string };
   modelName: string;
   configId: number;
+  supportedReasoningEfforts?: ReasoningEffortOverride[];
 }
 
 const PROVIDER = { id: 1, name: "Provider", provider: "openai" };
@@ -72,7 +76,13 @@ const OTHER_PROVIDER = { id: 2, name: "Provider Two", provider: "anthropic" };
 
 const MODELS: Record<string, ModelFixture> = {
   "Model A": { provider: PROVIDER, modelName: "model-1", configId: 1 },
-  "Model B": { provider: PROVIDER, modelName: "model-2", configId: 2 },
+  // Narrower than the base set, so a pane switch can expose an unsupported level.
+  "Model B": {
+    provider: PROVIDER,
+    modelName: "model-2",
+    configId: 2,
+    supportedReasoningEfforts: ["low", "medium"],
+  },
   "Model C": { provider: PROVIDER, modelName: "model-3", configId: 3 },
   "Model D": { provider: PROVIDER, modelName: "model-4", configId: 4 },
   "Model E": { provider: OTHER_PROVIDER, modelName: "model-5", configId: 5 },
@@ -93,6 +103,7 @@ const mockProviders: LLMProviderDescriptor[] = [PROVIDER, OTHER_PROVIDER].map(
           max_input_tokens: 128000,
           supports_image_input: false,
           supports_reasoning: true,
+          supported_reasoning_efforts: model.supportedReasoningEfforts,
           effectiveDisplayName: displayName,
         })),
     })
@@ -365,6 +376,11 @@ function expectPane(displayName: string) {
   expect(
     within(popper).getByText(MODELS[displayName]?.modelName ?? "")
   ).toBeInTheDocument();
+}
+
+/** The pane's reasoning slider stop; the harness passes no temperature manager. */
+function paneReasoningStop(): string | null {
+  return within(openPopper()).getByRole("slider").getAttribute("aria-valuenow");
 }
 
 /** The pane's back arrow is its first (icon-only) button. */
@@ -838,6 +854,25 @@ describe("MultiModelSelector", () => {
       await openFromAdd(user);
       expect(popperWrapper()).toBe(wrapper);
       expectList();
+    });
+
+    test("a pill click while a pane is open shows that model's own settings, not the last pane's", async () => {
+      const user = setupUser();
+      renderPicker(["Model A", "Model B"]);
+
+      await openFromPill(user, "Model A");
+      expectPane("Model A");
+      // Unset parks at medium (2). End raises A to its top stop, high (3).
+      expect(paneReasoningStop()).toBe("2");
+      const slider = within(openPopper()).getByRole("slider");
+      act(() => slider.focus());
+      await user.keyboard("{End}");
+      expect(paneReasoningStop()).toBe("3");
+
+      // B supports low and medium only, so A's high must not carry over.
+      await user.click(pill("Model B"));
+      expectPane("Model B");
+      expect(paneReasoningStop()).toBe("2");
     });
   });
 

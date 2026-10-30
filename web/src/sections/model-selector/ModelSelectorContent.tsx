@@ -708,7 +708,9 @@ export default function ModelSelectorContent({
 
   if (detailOption && modelDetail) {
     return (
+      // Keyed so a switch between models remounts with the new model's values.
       <ModelDetailPane
+        key={llmOptionKey(detailOption)}
         option={detailOption}
         managers={modelDetail}
         onBack={() => setDetailKey(null)}
