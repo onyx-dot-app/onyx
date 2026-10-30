@@ -106,8 +106,8 @@ jobs:
           failed=false
           for job_id in $(gh api "repos/${REPO}/actions/runs/${RUN_ID}/jobs?per_page=100" \
               --jq '.jobs[] | select(.conclusion == "failure") | .id'); do
-            if gh api "repos/${REPO}/actions/jobs/${job_id}/logs" \
-                | grep -Eq 'test_nightly_provider_image_generation\.py::.* FAILED|FAILED .*test_nightly_provider_image_generation\.py::'; then
+            gh api "repos/${REPO}/actions/jobs/${job_id}/logs" > job.log || continue
+            if grep -Eq 'test_nightly_provider_image_generation\.py::.* FAILED|FAILED .*test_nightly_provider_image_generation\.py::' job.log; then
               failed=true
             fi
           done
@@ -117,7 +117,7 @@ jobs:
   # nightly. An agent classifies each failure and opens a reviewed fix PR.
   maintain-image-generation-models:
     needs: [detect-image-generation-failures]
-    if: needs.detect-image-generation-failures.outputs.failed == 'true'
+    if: always() && needs.detect-image-generation-failures.outputs.failed == 'true'
     uses: ./.github/workflows/reusable-agent-task-pr.yml
     permissions:
       contents: read
