@@ -246,8 +246,9 @@ GitHub](https://github.com/onyx-dot-app/onyx/blob/main/backend/onyx/configs/onyx
 
   <Accordion title="SLACK_API_URL">
     The Slack cloud for all Slack features: the bot, the Slack connectors, and Slack OAuth.
-    Set it to `https://slack-gov.com/api/` for GovSlack. Set it on every Onyx service.
-    Onyx ignores values other than `https://slack.com/api/` and `https://slack-gov.com/api/`.
+    Set it to `https://slack-gov.com/api/` for GovSlack. Set it on every Onyx service. Onyx uses only the host,
+    so `https://slack-gov.com` also selects GovSlack.
+    Onyx ignores a value that is not `https` on `slack.com` or `slack-gov.com` and uses commercial Slack.
 
     Default: `https://slack.com/api/ (str)`
   </Accordion>
