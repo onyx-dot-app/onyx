@@ -132,16 +132,16 @@ writes the state and the steps in one transaction, and beat tasks run the
 steps. A stored plan applies only to the pair state it was computed from
 (`connectors/edit_plan/store.py:ensure_base_state_matches`).
 
-**Pushed events.** A source that pushes instead of being polled posts to the
-webhook server (`onyx/webhook_server_main.py`, `onyx/webhook_server/api.py`),
-a separate process so the endpoint stays unauthenticated and off the
-api_server. A parser turns one body into `ParsedEvent`s
-(`onyx/connectors/event_models.py`), and `onyx/db/connector_event_inbox.py`
-stores them in `connector_event_inbox`, one row per document change, keyed
-`(pair, event_key)` so a redelivery writes nothing. Nothing reads the table
-yet: the receipt route and the drain are later changes, and the server
-serves only `/health` and `/metrics` today. Single tenant only; the
-server refuses to start under `MULTI_TENANT`.
+**Pushed events.** A source that pushes instead of being polled declares one
+`WebhookSourceSpec` (`onyx/connectors/event_inbox/source_registry.py`): a
+parser, a signature verifier, and an optional handshake responder. Deliveries
+become rows in `connector_event_inbox` (`onyx/db/connector_event_inbox.py`),
+keyed `(pair, event_key)` so a redelivery writes nothing, and
+`EventInboxConnector` (`onyx/connectors/event_inbox/connector.py`) drains them
+inside an ordinary docfetching run. The factory returns that drain for an
+`EVENT` pair, so the source's own connector class is never loaded, and the run
+injects the pair and attempt ids because neither is stored config. Single
+tenant only; the webhook server refuses to start under `MULTI_TENANT`.
 
 **Source gateways.** A source can put every remote call in one
 `SourceOperations` subclass in `<source>/source_operations.py`, which indexing,
