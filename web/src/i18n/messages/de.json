@@ -154,7 +154,7 @@
         "title": "Zugriffssteuerung",
         "description": "Wählen Sie, wer diesen MCP verwenden kann.",
         "public": {
-          "label": "Gesamte Organisation",
+          "label": "Organisation",
           "description": "Alle in Ihrer Organisation können diesen MCP verwenden"
         },
         "groups": {
@@ -1920,7 +1920,7 @@
             "text": "Zugriffskontrollen werden aus dieser Bereitstellung entfernt. **Dies startet eine Neuindexierung**, damit die Suchergebnisse die Änderung widerspiegeln, was bei einem großen Index eine Weile dauern kann."
           },
           "madePublic": {
-            "text": "**Für die gesamte Organisation freigegeben:** Alle Konnektoren sowie alle Agenten, Dokumentensätze, LLM-Anbieter, MCP-Server und Skills, die mit einer Benutzergruppe geteilt wurden;"
+            "text": "**Für Ihre Organisation freigegeben:** Alle Konnektoren sowie alle Agenten, Dokumentensätze, LLM-Anbieter, MCP-Server und Skills, die mit einer Benutzergruppe geteilt wurden;"
           },
           "reset": {
             "text": "**Auf Standard zurückgesetzt:** Benutzerdefiniertes Branding und Chat-Aufbewahrungsrichtlinie."
@@ -11502,7 +11502,7 @@
           "title": "Prompt-Erinnerungen"
         },
         "public": {
-          "label": "Für Ihre gesamte Organisation verfügbar"
+          "label": "Für Ihre Organisation verfügbar"
         }
       }
     },
@@ -14082,7 +14082,7 @@
         "text": "Wird geladen..."
       },
       "makePublic": {
-        "label": "Diesen {objectName} für Ihre gesamte Organisation verfügbar machen?",
+        "label": "Diesen {objectName} für Ihre Organisation verfügbar machen?",
         "subtext": "Wenn aktiviert, kann dieser {objectName} von <b>allen {publicToWhom}</b> verwendet werden. Andernfalls haben nur <b>Administratoren</b> und <b>{publicToWhom}</b>, denen explizit Zugriff auf diesen {objectName} gewährt wurde (z. B. über eine Benutzergruppe), Zugriff."
       },
       "publicDisabled": {

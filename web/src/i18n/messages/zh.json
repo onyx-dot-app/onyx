@@ -154,7 +154,7 @@
         "title": "访问控制",
         "description": "选择谁可以使用此 MCP。",
         "public": {
-          "label": "整个组织",
+          "label": "组织",
           "description": "组织内的任何人都可以使用此 MCP"
         },
         "groups": {
@@ -1920,7 +1920,7 @@
             "text": "访问控制将从此部署中移除。**这会启动重新索引**，使搜索结果反映此更改，大型索引可能需要一段时间。"
           },
           "madePublic": {
-            "text": "**向整个组织开放：** 所有连接器，以及与用户组共享的代理、文档集、LLM 提供方、MCP 服务器和技能；"
+            "text": "**向您的组织开放：** 所有连接器，以及与用户组共享的代理、文档集、LLM 提供方、MCP 服务器和技能；"
           },
           "reset": {
             "text": "**重置为默认：** 自定义品牌和聊天保留策略。"
@@ -11502,7 +11502,7 @@
           "title": "提示词提醒"
         },
         "public": {
-          "label": "对整个组织可用"
+          "label": "对您的组织可用"
         }
       }
     },
@@ -14082,7 +14082,7 @@
         "text": "正在加载..."
       },
       "makePublic": {
-        "label": "将此{objectName}提供给整个组织？",
+        "label": "将此{objectName}提供给您的组织？",
         "subtext": "如果启用，此{objectName}将可供<b>所有{publicToWhom}</b>使用。否则，只有<b>管理员</b>和（例如通过用户组）被明确授予此{objectName}访问权限的<b>{publicToWhom}</b>才能访问。"
       },
       "publicDisabled": {

@@ -154,7 +154,7 @@
         "title": "Contrôle d’accès",
         "description": "Choisissez qui peut utiliser ce MCP.",
         "public": {
-          "label": "Toute l'organisation",
+          "label": "Organisation",
           "description": "Toute personne de votre organisation peut utiliser ce MCP"
         },
         "groups": {
@@ -1920,7 +1920,7 @@
             "text": "Les contrôles d'accès sont supprimés de ce déploiement. **Cela lance une réindexation** pour que les résultats de recherche reflètent le changement, ce qui peut prendre du temps sur un grand index."
           },
           "madePublic": {
-            "text": "**Ouverts à toute l'organisation :** tous les connecteurs, ainsi que les agents, ensembles de documents, fournisseurs LLM, serveurs MCP et compétences partagés avec un groupe d'utilisateurs ;"
+            "text": "**Ouverts à votre organisation :** tous les connecteurs, ainsi que les agents, ensembles de documents, fournisseurs LLM, serveurs MCP et compétences partagés avec un groupe d'utilisateurs ;"
           },
           "reset": {
             "text": "**Réinitialisés :** personnalisation de la marque et politique de conservation des conversations."
@@ -11502,7 +11502,7 @@
           "title": "Rappels de prompt"
         },
         "public": {
-          "label": "Disponible pour toute votre organisation"
+          "label": "Disponible pour votre organisation"
         }
       }
     },
@@ -14082,7 +14082,7 @@
         "text": "Chargement..."
       },
       "makePublic": {
-        "label": "Rendre ce {objectName} disponible pour toute votre organisation ?",
+        "label": "Rendre ce {objectName} disponible pour votre organisation ?",
         "subtext": "Si activé, ce {objectName} sera utilisable par <b>tous les {publicToWhom}</b>. Sinon, seuls les <b>administrateurs</b> et les <b>{publicToWhom}</b> ayant reçu un accès explicite à ce {objectName} (par ex. via un groupe d'utilisateurs) y auront accès."
       },
       "publicDisabled": {

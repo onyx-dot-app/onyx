@@ -189,7 +189,7 @@ beforeEach(() => {
 
 afterEach(() => jest.restoreAllMocks());
 
-test("Entire organization is the only alternative to groups and clears explicit grants", async () => {
+test("Organization is the only alternative to groups and clears explicit grants", async () => {
   const submit = renderAccess();
   const user = setupUser();
   await user.click(screen.getByRole("combobox", { name: "Access control" }));
@@ -199,7 +199,7 @@ test("Entire organization is the only alternative to groups and clears explicit 
   ).not.toBeInTheDocument();
   await user.click(
     screen.getByRole("option", {
-      name: /^Entire organization Anyone in your organization can use this MCP/,
+      name: /^Organization Anyone in your organization can use this MCP/,
     })
   );
   await user.click(screen.getByRole("button", { name: "Save access" }));
@@ -235,7 +235,7 @@ test("scoped managers can select groups only and must choose a group", async () 
   const user = setupUser();
   await user.click(screen.getByRole("combobox", { name: "Access control" }));
   expect(
-    screen.queryByRole("option", { name: /^Entire organization/ })
+    screen.queryByRole("option", { name: /^Organization/ })
   ).not.toBeInTheDocument();
   expect(
     screen.queryByRole("option", { name: /^Private/ })
@@ -797,7 +797,7 @@ describe("inline server configuration", () => {
       ).not.toBeInTheDocument();
       expect(
         screen.getByRole("combobox", { name: "Access control" })
-      ).toHaveValue("Entire organization");
+      ).toHaveValue("Organization");
       expect(
         screen.getByRole("combobox", { name: "Access control" })
       ).toBeDisabled();

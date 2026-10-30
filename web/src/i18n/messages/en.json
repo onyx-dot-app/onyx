@@ -154,7 +154,7 @@
         "title": "Access control",
         "description": "Choose who can use this MCP.",
         "public": {
-          "label": "Entire organization",
+          "label": "Organization",
           "description": "Anyone in your organization can use this MCP"
         },
         "groups": {
@@ -1920,7 +1920,7 @@
             "text": "Access controls are removed from this deployment. **This starts a re-index** so search results reflect the change, which can take a while on a large index."
           },
           "madePublic": {
-            "text": "**Opened to the entire organization:** All connectors, plus any agents, document sets, LLM providers, MCP servers, and skills shared with a user group;"
+            "text": "**Opened to your organization:** All connectors, plus any agents, document sets, LLM providers, MCP servers, and skills shared with a user group;"
           },
           "reset": {
             "text": "**Reset to defaults:** Custom branding and chat retention policy."
@@ -11502,7 +11502,7 @@
           "title": "Prompt Reminders"
         },
         "public": {
-          "label": "Available to your entire organization"
+          "label": "Available to your organization"
         }
       }
     },
@@ -14082,7 +14082,7 @@
         "text": "Loading..."
       },
       "makePublic": {
-        "label": "Make this {objectName} available to your entire organization?",
+        "label": "Make this {objectName} available to your organization?",
         "subtext": "If set, then this {objectName} will be usable by <b>All {publicToWhom}</b>. Otherwise, only <b>Admins</b> and <b>{publicToWhom}</b> who have explicitly been given access to this {objectName} (e.g. via a User Group) will have access."
       },
       "publicDisabled": {

@@ -154,7 +154,7 @@
         "title": "Control de acceso",
         "description": "Elige quién puede usar este MCP.",
         "public": {
-          "label": "Toda la organización",
+          "label": "Organización",
           "description": "Cualquier persona de tu organización puede usar este MCP"
         },
         "groups": {
@@ -1920,7 +1920,7 @@
             "text": "Los controles de acceso se eliminan de esta implementación. **Esto inicia una reindexación** para que los resultados de búsqueda reflejen el cambio, lo que puede tardar un tiempo en un índice grande."
           },
           "madePublic": {
-            "text": "**Disponible para toda la organización:** Todos los conectores, además de cualquier agente, conjunto de documentos, proveedor de LLM, servidor MCP y habilidad compartidos con un grupo de usuarios;"
+            "text": "**Disponible para tu organización:** Todos los conectores, además de cualquier agente, conjunto de documentos, proveedor de LLM, servidor MCP y habilidad compartidos con un grupo de usuarios;"
           },
           "reset": {
             "text": "**Restablecido a los valores predeterminados:** Marca personalizada y política de retención de chats."
@@ -11502,7 +11502,7 @@
           "title": "Recordatorios del prompt"
         },
         "public": {
-          "label": "Disponible para toda tu organización"
+          "label": "Disponible para tu organización"
         }
       }
     },
@@ -14082,7 +14082,7 @@
         "text": "Cargando..."
       },
       "makePublic": {
-        "label": "¿Hacer que este {objectName} esté disponible para toda tu organización?",
+        "label": "¿Hacer que este {objectName} esté disponible para tu organización?",
         "subtext": "Si se activa, este {objectName} podrá ser utilizado por <b>todos los {publicToWhom}</b>. De lo contrario, solo los <b>administradores</b> y los <b>{publicToWhom}</b> a los que se les haya dado acceso explícito a este {objectName} (p. ej., mediante un grupo de usuarios) tendrán acceso."
       },
       "publicDisabled": {

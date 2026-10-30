@@ -923,7 +923,7 @@ test("failed scoped setup retries with the edited draft without creating a parti
   await screen.findByText(copy.publicDetected, {}, { timeout: 3000 });
   const user = setupUser();
   expect(
-    screen.queryByRole("option", { name: /^Entire organization/ })
+    screen.queryByRole("option", { name: /^Organization/ })
   ).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: copy.continue })).toBeDisabled();
   const groups = screen.getByPlaceholderText("Add user groups");
