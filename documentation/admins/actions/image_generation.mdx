@@ -11,51 +11,35 @@ any chat model in Onyx can invoke the action.
 
 ## Supported Models
 
-| Model | Provider |
-| ----- | -------- |
-| GPT Image 2.5 Flare | OpenAI / Azure OpenAI |
-| GPT Image 2.5 Sunburst | OpenAI / Azure OpenAI |
-| GPT Image 2 | OpenAI / Azure OpenAI |
-| GPT Image 1.5 | OpenAI / Azure OpenAI |
-| GPT Image 1 | Azure OpenAI |
-| Gemini 2.5 Flash Image (Nano Banana) | Google Cloud Vertex AI |
-| Gemini 3 Pro Image (Nano Banana Pro) | Google Cloud Vertex AI |
+Image models come from the LLM providers you have already connected. Onyx does not ask for an API key again.
+The Image Generation page lists each connected provider that has image models, and the models it serves.
+
+By default, **Recommended image models only** is on.
+The list then shows the image models in the Onyx model catalog that the vendor has not retired, for example GPT Image,
+Gemini image (Nano Banana), Imagen, and the Bedrock image models. Turn the switch off to see every model on a provider,
+for example a new model or a model name that a gateway such as LiteLLM Proxy or OpenRouter defines.
 
 <Note>
-  OpenAI retired GPT Image 1 and Google retired Gemini 3 Pro Image Preview.
-  Onyx hides these models unless they are already connected. If one of them is still connected,
-  the page shows a warning. Connect another model, set it as the default, then disconnect the retired model.
+  Only public LLM providers can serve image generation, because the action is available to all users.
 </Note>
 
 ## Configuration
 
 <Steps>
+  <Step title="Connect an LLM Provider">
+    Connect the provider on the [AI Models](/admins/ai_models/overview) page if it is not connected yet.
+    Image generation uses the credentials of that provider. When you rotate the provider key,
+    image generation uses the new key.
+  </Step>
+
   <Step title="Connect a Model">
-    Open **Admin Panel → Image Generation** and click **Connect** on a model. Enter the provider credentials:
+    Open **Admin Panel → Image Generation** and click **Connect** on a model under its provider.
+    If no default model is set, the model becomes the default.
 
     <img className="rounded-image" src="/assets/admins/actions/image_generation_overview.webp" alt="Image Generation page in the Onyx Admin Panel"/>
 
-    <Tabs>
-      <Tab title="OpenAI">
-        - **API Key**: Your OpenAI API key.
-      </Tab>
-
-      <Tab title="Azure OpenAI">
-        - **API Key**: Your Azure OpenAI API key.
-        - **Target URI**: The endpoint target URI from Azure OpenAI. It must include the endpoint base, the
-        deployment name, and the `api-version` query parameter.
-      </Tab>
-
-      <Tab title="Google Cloud Vertex AI">
-        - **Authentication Method**: Choose **Service Account JSON** or **Workload Identity (GKE)**.
-        - **Credentials File** (Service Account JSON): Upload or paste the service account key JSON file.
-        - **GCP Project ID** (Workload Identity): The project where Vertex AI is enabled. Onyx authenticates with the
-        service account bound to its pod.
-        - **Location**: The Google Cloud region for your Vertex AI models.
-      </Tab>
-    </Tabs>
-
-    Onyx tests the credentials before it saves them.
+    Image models that you connected with their own credentials in an earlier Onyx version stay on the page until you
+    disconnect them. You can still edit their credentials.
   </Step>
 
   <Step title="Set the Default Model">
@@ -65,6 +49,7 @@ any chat model in Onyx can invoke the action.
     another default.
     - If you disconnect the current default model, the dialog asks you to choose a replacement default or
     **No Default**, which turns image generation off.
+    - Disconnecting a model does not disconnect its LLM provider.
   </Step>
 </Steps>
 
@@ -83,4 +68,5 @@ Generated images belong to the chat session that created them.
 
 To edit an image, the user attaches it to the message (or refers to an image generated earlier in the chat)
 and describes the change. The OpenAI and Azure OpenAI models accept up to 16 reference images;
-the Vertex AI models accept up to 14.
+the Vertex AI models accept up to 14. Image edits work only on providers that support them, such as OpenAI, Azure,
+Google, Vertex AI, Bedrock, OpenRouter, and LiteLLM Proxy.
