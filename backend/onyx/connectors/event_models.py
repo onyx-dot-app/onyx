@@ -6,6 +6,7 @@ shape, so a new source adds a parser and nothing else.
 """
 
 import hashlib
+import json
 from datetime import datetime
 from typing import Any
 
@@ -51,12 +52,24 @@ class ParsedEvent(BaseModel):
         return value
 
     def resolved_event_key(self) -> str:
-        """The key the unique constraint dedupes on."""
+        """The key the unique constraint dedupes on, scoped to one document.
+
+        A provider's delivery id usually covers the whole POST, and a POST
+        can report several documents, so the document is always part of the
+        key. Without it a batch of changes would collapse to one row.
+
+        With no delivery id the key is a digest of the change itself, so a
+        redelivery collapses and a different change does not. Two changes
+        that match on document, type, time and payload are indistinguishable
+        and treated as one.
+        """
         if self.event_key:
-            return self.event_key
+            return f"{self.event_key}:{self.document_id}"
+
         stamp = self.occurred_at.isoformat() if self.occurred_at else ""
+        body = json.dumps(self.payload, sort_keys=True) if self.payload else ""
         digest = hashlib.sha256(
-            f"{self.document_id}|{self.event_type.value}|{stamp}".encode()
+            f"{self.document_id}|{self.event_type.value}|{stamp}|{body}".encode()
         ).hexdigest()
         return f"derived:{digest}"
 

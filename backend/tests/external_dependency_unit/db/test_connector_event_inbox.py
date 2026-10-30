@@ -88,7 +88,8 @@ def test_partial_batch_records_only_the_new_events(
     db_session.commit()
 
     assert len(created) == 1
-    stored = get_event_by_key(db_session, cc_pair_id, "k-new")
+    new_event = mixed[-1]
+    stored = get_event_by_key(db_session, cc_pair_id, new_event.resolved_event_key())
     assert stored is not None
     assert stored.document_id == "doc-new"
 
@@ -130,3 +131,47 @@ def test_pending_events_are_oldest_first(db_session: Session, cc_pair_id: int) -
 
     pending = get_pending_events(db_session, cc_pair_id, limit=10)
     assert [event.document_id for event in pending] == ["doc-0", "doc-1", "doc-2"]
+
+
+def test_one_delivery_covering_several_documents_keeps_them_all(
+    db_session: Session, cc_pair_id: int
+) -> None:
+    """A provider's delivery id covers the POST, not one document. Without
+    the document in the key a batch would collapse to a single row."""
+    created = record_events(
+        db_session,
+        cc_pair_id,
+        SOURCE,
+        [
+            ParsedEvent(document_id="doc-1", event_key="delivery-a"),
+            ParsedEvent(document_id="doc-2", event_key="delivery-a"),
+            ParsedEvent(document_id="doc-3", event_key="delivery-a"),
+        ],
+    )
+    db_session.commit()
+
+    assert len(created) == 3
+    assert count_events_by_status(db_session, cc_pair_id) == {
+        ConnectorEventStatus.PENDING: 3
+    }
+
+
+def test_successive_changes_to_one_document_are_both_kept(
+    db_session: Session, cc_pair_id: int
+) -> None:
+    """With no delivery id and no timestamp, the change itself distinguishes
+    the rows. Collapsing them would drop the second update silently."""
+    first = ParsedEvent(document_id="doc-1", payload={"revision": 1})
+    second = ParsedEvent(document_id="doc-1", payload={"revision": 2})
+
+    assert record_events(db_session, cc_pair_id, SOURCE, [first])
+    db_session.commit()
+    assert record_events(db_session, cc_pair_id, SOURCE, [second])
+    db_session.commit()
+    # The same change again is a redelivery, and still collapses.
+    assert record_events(db_session, cc_pair_id, SOURCE, [second]) == []
+    db_session.commit()
+
+    assert count_events_by_status(db_session, cc_pair_id) == {
+        ConnectorEventStatus.PENDING: 2
+    }
