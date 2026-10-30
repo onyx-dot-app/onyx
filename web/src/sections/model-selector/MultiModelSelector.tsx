@@ -200,7 +200,6 @@ export default function MultiModelSelector({
   };
 
   // Unmounts the pane outright: an exit animation would outlive its anchor pill.
-  // Runs on pointer-down too, which would otherwise dismiss the pane first.
   const closeForRemoval = () => {
     setClosedByRemoval(true);
     handleOpenChange(false);
@@ -282,9 +281,6 @@ export default function MultiModelSelector({
                         state="empty"
                         variant="select-input"
                         size="lg"
-                        onPointerDown={(e: React.PointerEvent<HTMLElement>) => {
-                          if (isRemoveIconEvent(e)) closeForRemoval();
-                        }}
                         onClick={(e: React.MouseEvent<HTMLElement>) => {
                           if (isRemoveIconEvent(e)) {
                             closeForRemoval();
@@ -305,10 +301,11 @@ export default function MultiModelSelector({
         </div>
       </Tooltip>
 
-      {/* Always mounted while open: a settings click that adds the third
-          model (or completes a replacement at max) must not unmount the pane
-          it just opened. Opening at max is still blocked at the entry points:
-          the add button hides and pill clicks set replacingIndex. */}
+      {/* Mounted for the whole time it is open (closedByRemoval is only set on
+          the way out): a settings click that adds the third model (or
+          completes a replacement at max) must not unmount the pane it just
+          opened. Opening at max is still blocked at the entry points: the add
+          button hides and pill clicks set replacingIndex. */}
       {!closedByRemoval && (
         <Popover.Content side="top" align="end" width={70}>
           <ModelSelectorContent
