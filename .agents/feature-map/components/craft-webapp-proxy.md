@@ -271,6 +271,7 @@ Images use a neutral contrast background without changing downloaded bytes.
 Output tiles without thumbnails use shared spreadsheet, audio, or video icons by file extension.
 Uncategorized files keep the generic document icon; Craft file trees, search results, and chat output cards use the same mapping.
 DOCX previews use the shared sanitized renderer in `web/src/lib/docx/renderDocx.ts`.
+Markdown previews and output thumbnails share `MarkdownContent` in `MarkdownFilePreview.tsx`, with `prose-onyx` colors that follow the active theme.
 Text and binary file previews use a centered Onyx loading mark after 300 ms, without visible loading text.
 Rendered DOCX content is cached by blob identity and restored before paint when reopened; new bytes trigger a fresh render.
 XLSX, XLS, and ODS previews show saved cell values in a single frame with larger worksheet selectors below the table.
