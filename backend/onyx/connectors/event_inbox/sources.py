@@ -11,6 +11,7 @@ Add a source by appending its module path. That module calls
 
 import importlib
 
+from onyx.connectors.event_inbox.source_registry import _SPECS
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -36,12 +37,18 @@ def load_event_sources() -> None:
         return
 
     for module_path in EVENT_SOURCE_MODULES:
+        # A module registers partway through and can then raise, so the
+        # registry is restored rather than left holding a source whose
+        # import did not finish.
+        before = dict(_SPECS)
         try:
             importlib.import_module(module_path)
         except Exception:
-            # One broken source must not take down the server for the others,
-            # and the webhook route for the broken one will 404 rather than
-            # accept deliveries it cannot parse.
+            # One broken source must not take down the server for the
+            # others. Its route then does not exist, which is better than
+            # one serving a half-registered spec.
+            _SPECS.clear()
+            _SPECS.update(before)
             logger.exception("Could not load event source %s", module_path)
 
     _loaded = True

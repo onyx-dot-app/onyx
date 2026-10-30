@@ -17,6 +17,7 @@ from onyx.connectors.event_inbox.source_registry import (
     WebhookRequest,
     WebhookSourceSpec,
     get_webhook_source,
+    register_webhook_source,
     registered_webhook_sources,
     webhook_callback_url,
 )
@@ -118,3 +119,57 @@ def test_a_source_that_fails_to_import_does_not_stop_the_others(
 
 def test_the_callback_url_is_what_an_admin_registers() -> None:
     assert webhook_callback_url("zoom").endswith("/webhook/zoom")
+
+
+def test_a_second_source_cannot_take_a_registered_slug() -> None:
+    """A slug is a live URL, so a clash must not quietly move an endpoint."""
+    register_webhook_source(
+        WebhookSourceSpec(
+            source=SOURCE, slug="taken", parser=_parser, verifier=_verifier
+        )
+    )
+
+    with pytest.raises(ValueError, match="already registered"):
+        register_webhook_source(
+            WebhookSourceSpec(
+                source=DocumentSource.WEB,
+                slug="taken",
+                parser=_parser,
+                verifier=_verifier,
+            )
+        )
+
+
+def test_a_source_cannot_hold_two_slugs() -> None:
+    """`webhook_source_for` returns one spec, so two would make the lookups
+    disagree about where a source receives."""
+    register_webhook_source(
+        WebhookSourceSpec(
+            source=SOURCE, slug="first", parser=_parser, verifier=_verifier
+        )
+    )
+
+    with pytest.raises(ValueError, match="already receives events"):
+        register_webhook_source(
+            WebhookSourceSpec(
+                source=SOURCE, slug="second", parser=_parser, verifier=_verifier
+            )
+        )
+
+
+def test_a_source_that_registers_then_fails_leaves_nothing_behind(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Logging the failure is not enough: a half-registered spec would serve
+    a route for a module whose import never finished."""
+    _SPECS.clear()
+    half = "tests.unit.onyx.connectors.event_inbox.half_registering_source"
+    monkeypatch.setattr(sources_module, "_loaded", False)
+    monkeypatch.setattr(sources_module, "EVENT_SOURCE_MODULES", (half, STUB_MODULE))
+    try:
+        sources_module.load_event_sources()
+
+        assert get_webhook_source("half-registered") is None
+        assert get_webhook_source("registering-source") is not None
+    finally:
+        sys.modules.pop(half, None)
