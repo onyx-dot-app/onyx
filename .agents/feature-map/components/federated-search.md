@@ -29,6 +29,11 @@
   a Slack API error, the search runs without Slack and the answer has no Slack
   sources. The user must reconnect Slack after the token expires.
 
+All Slack hosts come from `SLACK_API_URL` (`configs/slack_configs.py`): the OAuth
+authorize and token URLs, the Web API base, result permalinks, and the message
+links that `extract_slack_message_urls` parses. Set it to
+`https://slack-gov.com/api/` for GovSlack.
+
 ---
 
 ## Scope

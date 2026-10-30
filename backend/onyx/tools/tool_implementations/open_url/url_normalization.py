@@ -12,6 +12,7 @@ Usage:
 from urllib.parse import urlparse, urlunparse
 
 from onyx.configs.constants import DocumentSource
+from onyx.configs.slack_configs import is_slack_host
 from onyx.connectors.factory import identify_connector_class
 from onyx.utils.logger import setup_logger
 
@@ -124,7 +125,7 @@ def _detect_source_type(url: str) -> DocumentSource | None:
         return DocumentSource.GITLAB
     if "sharepoint.com" in netloc:
         return DocumentSource.SHAREPOINT
-    if "slack.com" in netloc:
+    if is_slack_host(netloc):
         return DocumentSource.SLACK
     if "linear.app" in netloc:
         return DocumentSource.LINEAR
