@@ -4185,7 +4185,7 @@
         },
         "jiraServiceManagement": {
           "description": "Jira Service Management 커넥터 구성",
-          "subtext": "인덱싱할 Jira Service Management 요청을 구성합니다. 표시되는 모든 서비스 데스크를 인덱싱하거나 특정 Jira 프로젝트를 지정할 수 있습니다.",
+          "subtext": "인덱싱할 Jira 이슈를 구성합니다. 표시되는 모든 서비스 데스크를 인덱싱하거나 특정 Jira 프로젝트를 지정할 수 있습니다.",
           "fields": {
             "indexing_scope": {
               "tabs": {
@@ -4198,8 +4198,8 @@
               }
             },
             "everything": {
-              "label": "계정이 읽을 수 있는 모든 서비스 데스크의 요청을 색인합니다",
-              "description": "Onyx는 선택한 계정이 읽을 수 있는 모든 서비스 데스크의 요청을 색인합니다. 범위를 줄이려면 프로젝트 탭을 선택하세요."
+              "label": "계정이 읽을 수 있는 모든 서비스 데스크의 이슈를 색인합니다",
+              "description": "Onyx는 선택한 계정이 읽을 수 있는 각 서비스 데스크의 Jira 프로젝트에 있는 모든 이슈(내부 이슈 포함)를 색인합니다. 범위를 줄이려면 프로젝트 탭을 선택하세요."
             },
             "project_key": {
               "description": "서비스 데스크를 지원하는 Jira 프로젝트의 키입니다(예: 'PROJ')."

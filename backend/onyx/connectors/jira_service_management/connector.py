@@ -83,16 +83,13 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         scoped_token: bool = False,
     ) -> None:
         self.jira_base = jira_base_url.rstrip("/")
-        # Blank scope fields mean "not set", as on the create form.
-        self.service_desk_ids = (
-            [
-                str(desk_id).strip()
-                for desk_id in service_desk_ids
-                if str(desk_id).strip()
-            ]
-            if service_desk_ids
-            else None
-        )
+        # Blank scope fields mean "not set", as on the create form. A list of
+        # blank ids therefore selects every visible desk, not none.
+        self.service_desk_ids = [
+            str(desk_id).strip()
+            for desk_id in (service_desk_ids or [])
+            if str(desk_id).strip()
+        ] or None
         self.project_key = (project_key or "").strip().upper() or None
         self._comment_email_blacklist = comment_email_blacklist or []
         self.batch_size = batch_size
@@ -432,8 +429,9 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         # Slim and full indexing share the project scope, so pruning removes
-        # exactly the tickets that left that scope.
-        del start, end, callback
+        # exactly the tickets that left that scope. The time range does not
+        # limit pruning: the complete current scope is what it compares.
+        del start, end
         desks = self._desks_or_raise()
         desk_by_project = self._desk_by_project(desks)
         batch: list[SlimDocument | HierarchyNode] = []
@@ -441,7 +439,15 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
             self._iter_issue_ids(self._project_jql(desk_by_project)),
             _BULK_FETCH_LIMIT,
         ):
+            if callback is not None and callback.should_stop():
+                # A partial listing would make the pruner delete every ticket
+                # outside the part it managed to read. Abort the prune instead.
+                raise RuntimeError(
+                    "Jira Service Management slim retrieval stopped by heartbeat"
+                )
             issues = self._fetch_issues(issue_ids)
+            if callback is not None:
+                callback.progress("jira_service_management_slim", len(issues))
             for issue in issues:
                 issue_key = str(issue.get("key") or "").strip()
                 if not issue_key:

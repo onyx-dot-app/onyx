@@ -1,16 +1,16 @@
 ---
 title: "Jira Service Management"
-description: "Access requests, incidents, and customer tickets from Jira Service Management service desks"
+description: "Access issues from the Jira projects behind Jira Service Management service desks"
 ---
 
 ## How it works
 
 Jira Service Management stores each service desk in a Jira project.
 The connector lists the service desks that its account can read, maps each desk to its Jira project,
-and indexes the project's requests as Jira issues.
-Onyx checks for new and changed requests on the connector's refresh schedule. The default is every **30** minutes.
+and indexes all issues in that project, including issues that are not customer requests.
+Onyx checks for new and changed issues on the connector's refresh schedule. The default is every **30** minutes.
 
-For every request, this connector pulls:
+For every issue, this connector pulls:
 
 - Title
 - Description
@@ -93,16 +93,20 @@ create an unscoped API token and leave **Scoped API Token** off.
   <Step title="Choose what to index">
     Select one indexing mode:
 
-    - **Everything** indexes the requests in every service desk that the connector account can read.
-    - **Project** indexes the requests in one Jira project. Enter its project key, such as `PROJ`.
+    - **Everything** indexes all issues in every Jira project that backs a service desk the connector account can read.
+    - **Project** indexes all issues in one Jira project. Enter its project key, such as `PROJ`.
 
     To exclude comments from specified accounts, add their email addresses to **Comment Email Blacklist**.
+    Jira Cloud can hide comment author email addresses. When it does, the connector cannot match the address,
+    so the blacklist cannot guarantee that the comment is excluded.
   </Step>
 
   <Step title="Choose document access">
     Under **Document Access**, select **Everyone in Your Organization** or **Specific Groups**.
-    This connector does not sync Jira permissions. If a request is restricted in Jira,
-    use **Specific Groups** in Onyx to limit who can read it.
+    This connector does not sync Jira permissions. Document Access applies to the entire connector:
+    every reader can see every indexed issue and comment.
+    Choosing **Specific Groups** does not preserve Jira issue security levels or restricted comments.
+    Select only groups authorized to read all indexed content.
   </Step>
 
   <Step title="Create the connector">

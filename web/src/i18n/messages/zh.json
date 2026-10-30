@@ -4185,7 +4185,7 @@
         },
         "jiraServiceManagement": {
           "description": "配置 Jira Service Management 连接器",
-          "subtext": "配置要索引的 Jira Service Management 请求。您可以索引所有可见的服务台，也可以指定某个 Jira 项目。",
+          "subtext": "配置要索引的 Jira 问题。您可以索引所有可见的服务台，也可以指定某个 Jira 项目。",
           "fields": {
             "indexing_scope": {
               "tabs": {
@@ -4198,8 +4198,8 @@
               }
             },
             "everything": {
-              "label": "索引该账户可读取的所有服务台中的请求",
-              "description": "Onyx 会索引所选账户可读取的所有服务台中的请求。如需缩小范围，请选择“项目”标签页。"
+              "label": "索引该账户可读取的所有服务台中的问题",
+              "description": "Onyx 会索引所选账户可读取的每个服务台所对应 Jira 项目中的所有问题（包括内部问题）。如需缩小范围，请选择“项目”标签页。"
             },
             "project_key": {
               "description": "服务台所使用的 Jira 项目键（例如“PROJ”）。"
