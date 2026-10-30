@@ -246,6 +246,9 @@ def settle_events_from_finished_attempts(
 
     Returns (completed, released). Does not commit.
     """
+    # Locked, and skipping what another sweep holds: two runs reading the
+    # same rows would both release them, and the second would undo a claim
+    # the first had already made and handed to its handler.
     claimed = (
         select(ConnectorEventInbox.id, IndexAttempt.status)
         .join(IndexAttempt, ConnectorEventInbox.index_attempt_id == IndexAttempt.id)
@@ -253,6 +256,7 @@ def settle_events_from_finished_attempts(
             ConnectorEventInbox.connector_credential_pair_id == cc_pair_id,
             ConnectorEventInbox.status == ConnectorEventStatus.IN_PROGRESS,
         )
+        .with_for_update(skip_locked=True, of=ConnectorEventInbox)
     )
 
     to_complete: list[int] = []

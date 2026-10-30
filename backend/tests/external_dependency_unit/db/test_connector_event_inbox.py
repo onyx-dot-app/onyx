@@ -20,6 +20,7 @@ from onyx.db.connector_event_inbox import (
     get_pending_events,
     mark_events_completed,
     record_events,
+    settle_events_from_finished_attempts,
 )
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.enums import (
@@ -27,6 +28,7 @@ from onyx.db.enums import (
     ConnectorCredentialPairStatus,
     ConnectorEventStatus,
     ConnectorEventType,
+    IndexingStatus,
 )
 from onyx.db.models import (
     Connector,
@@ -305,3 +307,40 @@ def test_completing_a_row_stamps_when_it_settled(
     assert settled is not None
     assert settled.status == ConnectorEventStatus.COMPLETED
     assert settled.processed_at is not None
+
+
+def test_two_sweeps_do_not_undo_each_other(
+    db_session: Session, cc_pair_id: int
+) -> None:
+    """Two runs can settle the same stopped attempt at once.
+
+    Without a lock both read the rows, the first releases and reclaims them,
+    and the second releases them again — undoing a claim whose events the
+    first run is already handling.
+    """
+    record_events(
+        db_session,
+        cc_pair_id,
+        SOURCE,
+        [ParsedEvent(document_id=f"doc-{i}", event_key=f"k-{i}") for i in range(3)],
+    )
+    stopped = _attempt(db_session, cc_pair_id)
+    db_session.commit()
+    claim_events(db_session, cc_pair_id, stopped, limit=10)
+    db_session.commit()
+    db_session.query(IndexAttempt).filter_by(id=stopped).update(
+        {"status": IndexingStatus.FAILED}
+    )
+    db_session.commit()
+
+    engine = SqlEngine.get_engine()
+    with Session(engine) as session_a, Session(engine) as session_b:
+        first = settle_events_from_finished_attempts(session_a, cc_pair_id)
+        # session_a holds the rows here.
+        second = settle_events_from_finished_attempts(session_b, cc_pair_id)
+        session_a.commit()
+        session_b.commit()
+
+    assert first == (0, 3)
+    # The second sweep saw nothing to settle rather than releasing them again.
+    assert second == (0, 0)

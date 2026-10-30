@@ -16,7 +16,11 @@ from onyx.connectors.event_inbox.connector import (
     EventInboxCheckpoint,
     EventInboxConnector,
 )
-from onyx.connectors.event_inbox.handlers import _HANDLERS, register_event_handler
+from onyx.connectors.event_inbox.handlers import (
+    get_event_handler,
+    register_event_handler,
+    unregister_event_handler,
+)
 from onyx.connectors.event_models import ParsedEvent
 from onyx.connectors.models import ConnectorFailure, Document, InputType, TextSection
 from onyx.db.connector_event_inbox import count_events_by_status, record_events
@@ -101,13 +105,13 @@ def _handler(event: ConnectorEventInbox) -> Document | None:
 
 @pytest.fixture(autouse=True)
 def registered_handler() -> Generator[None, None, None]:
-    previous = _HANDLERS.get(SOURCE)
+    previous = get_event_handler(SOURCE)
     register_event_handler(SOURCE, _handler)
     try:
         yield
     finally:
         if previous is None:
-            _HANDLERS.pop(SOURCE, None)
+            unregister_event_handler(SOURCE)
         else:
             register_event_handler(SOURCE, previous)
 
@@ -269,7 +273,7 @@ def test_a_source_with_no_handler_fails_its_rows(
     db_session: Session, pair_and_attempt: tuple[int, int]
 ) -> None:
     pair_id, attempt_id = pair_and_attempt
-    _HANDLERS.pop(SOURCE, None)
+    unregister_event_handler(SOURCE)
     record_events(
         db_session,
         pair_id,

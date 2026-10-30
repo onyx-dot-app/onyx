@@ -31,5 +31,10 @@ def register_event_handler(source: DocumentSource, handler: EventHandler) -> Non
     _HANDLERS[source] = handler
 
 
+def unregister_event_handler(source: DocumentSource) -> None:
+    """Give up the drain for one source. Unknown sources are ignored."""
+    _HANDLERS.pop(source, None)
+
+
 def get_event_handler(source: DocumentSource) -> EventHandler | None:
     return _HANDLERS.get(source)
