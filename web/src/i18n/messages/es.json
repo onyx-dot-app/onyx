@@ -1254,7 +1254,7 @@
       "decisionModel": {
         "title": "Modelo de decisiones",
         "openAiDecisionsModelName": "Decisiones de OpenAI (GPT-6 Luna)",
-        "description": "Selecciona un modelo para futuras funciones de clasificación y revisión. Onyx aún no utiliza este modelo.",
+        "description": "La búsqueda interna usa este modelo para clasificar los resultados y decidir cuánto contexto agregar. También puede configurarlo en Preferencias de chat.",
         "clear": "Borrar",
         "notConfigured": "Sin configurar",
         "saveFailed": "No se pudo actualizar el modelo de decisiones"
@@ -2222,9 +2222,9 @@
         "description": "Genera los títulos de las sesiones. Un modelo rápido y económico funciona bien.",
         "title": "Modelo de nombres de chat"
       },
-      "searchSelectionModel": {
-        "description": "Selecciona y comprueba los documentos recuperados. Un modelo rápido y económico puede reducir los costes de búsqueda, pero puede afectar a la calidad de las respuestas.",
-        "title": "Modelo de selección para búsqueda"
+      "searchDecisionModel": {
+        "description": "Selecciona los documentos recuperados y decide cuánto contexto agregar. Un modelo de decisión los clasifica en una sola llamada. Un modelo de lenguaje los selecciona como antes.",
+        "title": "Modelo de decisión de búsqueda"
       },
       "taskModels": {
         "loadFailed": "No se pudieron cargar los modelos de tareas",
@@ -2405,7 +2405,7 @@
       "toasts": {
         "chatNamingUpdateFailed": "No se pudo actualizar el modelo para nombrar chats",
         "providerResolveFailed": "No se pudo resolver el proveedor",
-        "searchSelectionUpdateFailed": "No se pudo actualizar el modelo de selección de búsqueda",
+        "searchDecisionUpdateFailed": "No se pudo actualizar el modelo de decisión de búsqueda",
         "settingsUpdateFailed": "No se pudo actualizar la configuración",
         "systemPromptUpdateFailed": "No se pudo actualizar el prompt del sistema",
         "toolsUpdateFailed": "No se pudieron actualizar las herramientas",

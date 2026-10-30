@@ -32,7 +32,8 @@ Provider configuration rows show a Decision tag for decision-capable models.
 Its tooltip distinguishes decision-only models, which do not appear in chat,
 from models that support both chat and decision tasks.
 **Admin > Decision Models** manages decision providers and an optional model.
-It starts unset and never inherits a chat model. No workflow consumes it yet.
+It starts unset and never inherits a chat model. Internal search uses it to rank
+sections when it is set; on cloud, a rollout flag must also be on.
 TypeSafe appears only on this page; shared OpenAI and OpenRouter connections
 remain available on Language Models. Dedicated decision-provider saves preserve shared
 chat settings, defaults, visibility, and access. New shared models stay hidden
@@ -154,8 +155,12 @@ default chat model, model routing, and the Reasoning Control, Temperature
 Control and Hide Provider Grouping switches. Model selection for naming and
 search lives in Chat Preferences.
 `web/src/views/admin/ChatTaskModelSettings.tsx` renders the Chat Naming Model
-row (chat card) and the Search Selection Model row (search card).
-Neither selector offers hidden models; a hidden current value stays listed.
+row (chat card) and the Search Decision Model row (search card). That row
+writes SEARCH_SELECTION for a language model or DECISION for a decision model,
+and clears the other (chat-preferences, section 4).
+Neither selector offers hidden language models; a hidden current value stays
+listed. Search Decision Model lists every selected decision model, whether or
+not it is visible in chat.
 Each starts
 with a "Chat Default" row (in the Search UI, unset selection uses the workspace
 default); picking it

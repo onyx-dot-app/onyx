@@ -1254,7 +1254,7 @@
       "decisionModel": {
         "title": "Decision Model",
         "openAiDecisionsModelName": "OpenAI Decisions (GPT-6 Luna)",
-        "description": "Select a model for future classification and review features. Onyx does not use this model yet.",
+        "description": "Internal search uses this model to rank results and choose how much context to add. You can also set it in Chat Preferences.",
         "clear": "Clear",
         "notConfigured": "Not configured",
         "saveFailed": "Failed to update decision model"
@@ -2222,9 +2222,9 @@
         "description": "Generates session titles. A fast, low-cost model works well.",
         "title": "Chat Naming Model"
       },
-      "searchSelectionModel": {
-        "description": "Selects and checks retrieved documents. A fast, low-cost model can reduce search costs, but may affect answer quality.",
-        "title": "Search Selection Model"
+      "searchDecisionModel": {
+        "description": "Selects retrieved documents and decides how much context to add. A decision model ranks them in one call. A language model selects them as before.",
+        "title": "Search Decision Model"
       },
       "taskModels": {
         "loadFailed": "Could not load task models",
@@ -2405,7 +2405,7 @@
       "toasts": {
         "chatNamingUpdateFailed": "Failed to update chat naming model",
         "providerResolveFailed": "Could not resolve provider",
-        "searchSelectionUpdateFailed": "Failed to update search selection model",
+        "searchDecisionUpdateFailed": "Failed to update search decision model",
         "settingsUpdateFailed": "Failed to update settings",
         "systemPromptUpdateFailed": "Failed to update system prompt",
         "toolsUpdateFailed": "Failed to update tools",

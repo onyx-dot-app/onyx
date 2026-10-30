@@ -21,18 +21,30 @@ The page is available in all editions.
   It uses many more tokens per query than normal chat.
 - **Chat Auto-Scroll**: Scrolls the chat view to new content while the model generates a response.
   Users can override this in their personal settings.
-
-<img className="rounded-image" src="/assets/admins/chat_preferences/chat_preferences_features.webp" alt="Chat Preferences switches for Multi-Model Generation, Deep Research, and Chat Auto-Scroll"/>
-
-## Search Settings
-
-- **Search Selection Model**: The model that selects and checks retrieved documents.
-  A fast, low-cost model reduces search cost but can affect answer quality.
 - **Search Mode**: A quick document search view across your organization.
   It is available on Business and higher plans and on Onyx Cloud.
   The switch is disabled until you add at least one [connector](/admins/connectors/overview).
 - **Auto-Detect Search Filters**: Applies source and time filters that Onyx infers from the query,
   for example "in Slack" or "last quarter".
+
+<img className="rounded-image" src="/assets/admins/chat_preferences/chat_preferences_features.webp" alt="Chat Preferences switches for Multi-Model Generation, Deep Research, Chat Auto-Scroll, Search Mode, and Auto-Detect Search Filters"/>
+
+## Search Settings
+
+**Search Decision Model** sets the model that picks the retrieved documents for an answer.
+The same model decides how much of each document's surrounding text to add.
+The list shows your language models and your decision models.
+
+| Choice | How internal search picks documents |
+| --- | --- |
+| A decision model | The decision model ranks all candidate documents in one request and keeps the best ones. |
+| A language model | The language model reads the candidates and selects the documents. A fast, low-cost model reduces search cost but can affect answer quality. |
+| **Chat Default** | The default chat model selects the documents. |
+
+A model that is both a language model and a decision model works as a decision model here. To add a decision model,
+open **Admin Panel → Decision Models**. The selection on that page and **Search Decision Model** are the same setting.
+
+If a decision model request fails, search uses the chat's language model to pick the documents for that search.
 
 ## Team Information
 
