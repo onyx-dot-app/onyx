@@ -1,6 +1,7 @@
 "use client";
 
 import "@opal/layouts/sidebar/styles.css";
+import useHotkey from "@opal/hooks/useHotkey";
 import {
   createContext,
   useCallback,
@@ -58,6 +59,10 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
   const { folded, setFolded } = useSidebarState();
 
   const closeSidebar = useCallback(() => setFolded(true), [setFolded]);
+
+  // ⌘E / Ctrl+E folds a foldable sidebar. A non-foldable one ignores it, so
+  // its fold state never changes behind it.
+  useHotkey("mod+e", () => setFolded((prev) => !prev), { enabled: foldable });
 
   useEffect(() => {
     // Before mount the screen size reports desktop. Act on the real size only,

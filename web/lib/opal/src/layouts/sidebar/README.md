@@ -38,7 +38,7 @@ Sidebar entry point. Handles three viewport sizes:
 
 | Prop       | Type        | Default | Description                                      |
 | ---------- | ----------- | ------- | ------------------------------------------------ |
-| `foldable` | `boolean`   | `false` | Enable fold/unfold on desktop                    |
+| `foldable` | `boolean`   | `false` | Enable fold/unfold on desktop, and ⌘E / Ctrl+E   |
 | `children` | `ReactNode` | —       | `Header`, `Body`, `Footer`, `Section`, `Divider` |
 
 ### `SidebarLayouts.Header`
