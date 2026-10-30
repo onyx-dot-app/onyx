@@ -16,12 +16,16 @@ export class OAuthLaunchError extends Error {
 
 export interface OAuthLaunchOptions {
   signal?: AbortSignal;
+  /** Runs once the provider page is open, before the flow completes. */
+  onOpened?: () => void;
 }
 
 // "." is outside the base64url alphabet every state generator uses.
 export const DESKTOP_STATE_SUFFIX = ".desktop";
 export const DESKTOP_OAUTH_RETURN_URL = "onyx://oauth-callback";
 const LAUNCH_TIMEOUT_MS = 10 * 60 * 1000;
+// Marks a tab that `launchOAuth` opened, so only its callback closes itself.
+const LAUNCHED_TAB_KEY = "onyx:oauth-launch";
 const completionType = "onyx:oauth-complete";
 const completionSchema = yup.object({
   type: yup.mixed<typeof completionType>().oneOf([completionType]).defined(),
@@ -106,9 +110,13 @@ export function notifyOAuthComplete(state: string, ok = true): void {
  * Closes a callback tab that a waiting Onyx page opened. Returns false when
  * nothing is waiting, so the caller keeps its redirect fallback.
  */
-export function closeOAuthCallbackWindow(): boolean {
-  if (!window.opener && !window.__ONYX_DESKTOP__?.oauthCallbackWindow)
-    return false;
+export function closeOAuthCallbackWindow(state: string): boolean {
+  let launched = false;
+  try {
+    launched = window.sessionStorage.getItem(LAUNCHED_TAB_KEY) === state;
+    if (launched) window.sessionStorage.removeItem(LAUNCHED_TAB_KEY);
+  } catch {}
+  if (!launched && !window.__ONYX_DESKTOP__?.oauthCallbackWindow) return false;
   window.close();
   return true;
 }
@@ -130,7 +138,7 @@ function parseAuthorizationUrl(raw: string): URL | null {
  */
 export function launchOAuth(
   start: () => Promise<string | null>,
-  { signal }: OAuthLaunchOptions = {}
+  { signal, onOpened }: OAuthLaunchOptions = {}
 ): Promise<void> {
   if (signal?.aborted) {
     return Promise.reject(new OAuthLaunchError("cancelled"));
@@ -200,7 +208,11 @@ export function launchOAuth(
         channel = openCompletionChannel(state);
         channel?.addEventListener("message", receiveBroadcastCompletion);
         if (popup) {
+          try {
+            popup.sessionStorage.setItem(LAUNCHED_TAB_KEY, rawState);
+          } catch {}
           popup.location.href = url.href;
+          onOpened?.();
           return;
         }
         url.searchParams.set("state", rawState + DESKTOP_STATE_SUFFIX);
@@ -208,6 +220,7 @@ export function launchOAuth(
           await tauriInternals()?.invoke("plugin:shell|open", {
             path: url.href,
           });
+          onOpened?.();
         } catch {
           finish(new OAuthLaunchError("request_failed"));
         }
@@ -234,8 +247,9 @@ export function needsDesktopOAuthHandoff(state: string | null): boolean {
  * closed itself, so the caller skips its redirect.
  */
 export function reportOAuthCallback(state: string, ok: boolean): boolean {
-  notifyOAuthComplete(stripDesktopOAuthState(state), ok);
-  return closeOAuthCallbackWindow();
+  const attemptState = stripDesktopOAuthState(state);
+  notifyOAuthComplete(attemptState, ok);
+  return closeOAuthCallbackWindow(attemptState);
 }
 
 /**

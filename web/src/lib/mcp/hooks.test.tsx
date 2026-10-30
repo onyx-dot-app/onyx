@@ -9,7 +9,7 @@ import {
   type MCPServer,
 } from "@/lib/mcp/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { openOAuthAuthorization } from "@/lib/oauth/launch";
+import { launchOAuth } from "@/lib/oauth/launch";
 import {
   getMCPUserOAuthNavigationUrl,
   saveMCPUserCredentials,
@@ -19,7 +19,15 @@ import {
 jest.mock("@/lib/fetcher", () => ({ errorHandlingFetcher: jest.fn() }));
 jest.mock("@/lib/oauth/launch", () => ({
   ...jest.requireActual("@/lib/oauth/launch"),
-  openOAuthAuthorization: jest.fn(),
+  launchOAuth: jest.fn(
+    async (
+      start: () => Promise<string | null>,
+      options?: { onOpened?: () => void }
+    ) => {
+      await start();
+      options?.onOpened?.();
+    }
+  ),
 }));
 jest.mock("@/lib/mcp/svc", () => ({
   saveMCPUserCredentials: jest.fn(),
@@ -159,19 +167,22 @@ describe("useMcpAuthentication", () => {
       .mocked(getMCPUserOAuthNavigationUrl)
       .mockReturnValue("https://provider.example/authorize?state=s");
     let complete = () => {};
-    jest.mocked(openOAuthAuthorization).mockReturnValue(
-      new Promise<void>((resolve) => {
+    let openedUrl: string | null = null;
+    jest.mocked(launchOAuth).mockImplementationOnce(async (start, options) => {
+      openedUrl = await start();
+      options?.onOpened?.();
+      await new Promise<void>((resolve) => {
         complete = resolve;
-      })
-    );
+      });
+    });
     const { result } = renderHook(() => useMcpAuthentication(0), {
       wrapper: makeWrapper(),
     });
     await waitFor(() => expect(errorHandlingFetcher).toHaveBeenCalled());
     const fetches = jest.mocked(errorHandlingFetcher).mock.calls.length;
     await act(() => result.current.authenticate(server));
-    expect(openOAuthAuthorization).toHaveBeenCalledWith(
-      "https://provider.example/authorize?state=s"
+    await waitFor(() =>
+      expect(openedUrl).toBe("https://provider.example/authorize?state=s")
     );
     expect(result.current.loadingServerId).toBeNull();
     expect(window.location.pathname).toBe("/");
