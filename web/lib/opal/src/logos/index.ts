@@ -48,6 +48,7 @@ export { default as SvgGuru } from "@opal/logos/guru";
 export { default as SvgHighspot } from "@opal/logos/highspot";
 export { default as SvgHubSpot } from "@opal/logos/hubspot";
 export { default as SvgIBM } from "@opal/logos/ibm";
+export { default as SvgInworld } from "@opal/logos/inworld";
 export { default as SvgJira } from "@opal/logos/jira";
 export { default as SvgLangfuse } from "@opal/logos/langfuse";
 export { default as SvgLinear } from "@opal/logos/linear";

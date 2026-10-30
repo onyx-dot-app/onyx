@@ -3,7 +3,86 @@ import {
   setDefaultChatNamingModel,
   deleteDefaultSearchSelectionModel,
   setDefaultSearchSelectionModel,
+  fetchInworldModels,
+  fetchModels,
 } from "@/lib/languageModels/svc";
+
+describe("Inworld model discovery", () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it("preserves routing and capability metadata through the shared dispatcher", async () => {
+    const fetchSpy = jest.spyOn(global, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify([
+          {
+            name: "auto",
+            display_name: "Auto",
+            max_input_tokens: null,
+            supports_image_input: false,
+            supports_reasoning: false,
+            is_router: true,
+          },
+          {
+            name: "openai/gpt-5-mini",
+            display_name: "gpt-5-mini",
+            max_input_tokens: 400000,
+            supports_image_input: true,
+            supports_reasoning: true,
+            is_router: false,
+          },
+        ]),
+        { status: 200 }
+      )
+    );
+    const signal = new AbortController().signal;
+    const result = await fetchModels(
+      "inworld",
+      {
+        api_base: "https://api.inworld.ai/v1",
+        id: 42,
+      },
+      signal
+    );
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "/api/admin/llm/inworld/available-models",
+      expect.objectContaining({
+        body: JSON.stringify({
+          api_base: "https://api.inworld.ai/v1",
+          provider_id: 42,
+        }),
+        signal,
+      })
+    );
+    expect(result.models).toEqual([
+      expect.objectContaining({
+        name: "auto",
+        is_router: true,
+        effectiveDisplayName: "Auto",
+      }),
+      expect.objectContaining({
+        name: "openai/gpt-5-mini",
+        max_input_tokens: 400000,
+        supports_reasoning: true,
+        supports_image_input: true,
+      }),
+    ]);
+  });
+
+  it("returns the backend authentication error without usable models", async () => {
+    jest.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ detail: "Invalid Inworld key" }), {
+        status: 400,
+      })
+    );
+    await expect(
+      fetchInworldModels({
+        api_base: "https://api.inworld.ai/v1",
+        api_key: "invalid",
+      })
+    ).resolves.toEqual({ models: [], error: "Invalid Inworld key" });
+  });
+});
 
 describe("chat naming model default", () => {
   afterEach(() => {

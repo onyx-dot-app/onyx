@@ -28,6 +28,7 @@ from onyx.llm.well_known_providers.constants import (
     AZURE_PROVIDER_NAME,
     BEDROCK_PROVIDER_NAME,
     BIFROST_PROVIDER_NAME,
+    INWORLD_PROVIDER_NAME,
     LITELLM_PROXY_PROVIDER_NAME,
     LM_STUDIO_PROVIDER_NAME,
     NEBIUS_TOKENFACTORY_PROVIDER_NAME,
@@ -74,6 +75,7 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
         NEBIUS_TOKENFACTORY_PROVIDER_NAME: [],  # Dynamic - fetched from /v1/models
         PORTKEY_PROVIDER_NAME: [],  # Dynamic - fetched from the Portkey gateway
         VERCEL_AI_GATEWAY_PROVIDER_NAME: [],  # Dynamic - fetched from the public catalog
+        INWORLD_PROVIDER_NAME: [],  # Dynamic - fetched from /llm/v1alpha/models
     }
 
 
@@ -307,6 +309,7 @@ def get_provider_display_name(provider_name: str) -> str:
         NEBIUS_TOKENFACTORY_PROVIDER_NAME: "Nebius TokenFactory",
         PORTKEY_PROVIDER_NAME: "Portkey",
         VERCEL_AI_GATEWAY_PROVIDER_NAME: "Vercel AI Gateway",
+        INWORLD_PROVIDER_NAME: "Inworld Router",
     }
 
     if provider_name in _ONYX_PROVIDER_DISPLAY_NAMES:

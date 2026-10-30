@@ -88,7 +88,7 @@ Admin router, prefix `/admin/llm`:
 | GET | `/admin/llm/router-models` | `list_router_model_providers` | Providers that own `is_router` model configurations. Options for the admin "Router Model" selector; hidden and persona-restricted routers included. |
 | GET | `/admin/llm/vision-providers` | `get_vision_capable_providers` | |
 | GET | `/admin/llm/provider-contextual-cost` | `get_provider_contextual_cost` | |
-| POST | `/admin/llm/{bedrock,ollama,openrouter,lm-studio,litellm,bifrost,nebius-tokenfactory,openai-compatible,vercel-ai-gateway,portkey}/available-models` | per-vendor model discovery | Each calls the vendor's model-list API live. Several also sync the discovered models into the DB when the request carries a `provider_id` (`sync_model_configurations`). |
+| POST | `/admin/llm/{bedrock,ollama,openrouter,lm-studio,litellm,bifrost,nebius-tokenfactory,openai-compatible,vercel-ai-gateway,portkey,inworld}/available-models` | per-vendor model discovery | Each calls the vendor's model-list API live. Several also sync the discovered models into the DB when the request carries a `provider_id` (`sync_model_configurations`). |
 
 Non-admin router, prefix `/llm`:
 
@@ -148,6 +148,12 @@ the same setup form. Only a Decision Models save creates the decision provider
 and its hidden decision models. A Voice save keeps an existing link in sync but
 never creates one. Decision setup does not activate Voice or choose a decision
 model. Removing Zoom from Decision Models deletes only the decision provider.
+
+Inworld Router appears in the Gateways group with a dedicated setup modal and logo.
+`web/src/sections/modals/languageModels/InworldModal.tsx` uses the shared provider
+save and test flow. `web/src/lib/languageModels/svc.ts:fetchInworldModels` fetches
+chat models and preserves the `auto` entry's router flag. Refreshing a saved
+connection uses its stored key and keeps model selections and settings.
 
 `web/src/views/admin/LanguageModelsPage.tsx` owns provider configuration, the
 default chat model, model routing, and the Reasoning Control, Temperature
@@ -371,6 +377,20 @@ Explicit image capability overrides skip catalog lookup.
 Chat image replay uses this resolved capability; only `None` falls back to the DB/catalog lookup.
 Capability remains fixed for that client, including across model steps.
 Later caller mutations do not change the client's captured settings.
+
+Inworld Router uses the OpenAI chat completions surface. Its API key is a Base64
+`key:secret` credential. `LitellmLLM` sends it as `Authorization: Basic <key>`
+and gives the SDK a placeholder key, because the router reads Bearer as a JWT.
+With no API base, chat and discovery use `https://api.inworld.ai/v1`, so the key
+never reaches LiteLLM's default OpenAI host.
+Its model discovery reads `/llm/v1alpha/models` on the API host, because the
+public gateway does not route `/v1/models`. Discovery adds the `auto` router model
+and skips models the catalog does not mark `isSupported`.
+Reasoning support comes from the catalog's `capabilities`. Name heuristics apply
+only to entries without capability data.
+The LiteLLM request adds an `openai/` routing prefix. LiteLLM removes this prefix
+before sending the full Inworld model ID, including IDs that start with `openai/`.
+The model `auto` served is traced under its full ID.
 
 ### 4.5 Streaming contract
 
