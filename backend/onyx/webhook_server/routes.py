@@ -12,10 +12,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
-from onyx.connectors.event_inbox.source_registry import (
-    WebhookRequest,
-    WebhookSourceSpec,
-)
+from onyx.connectors.event_inbox.models import WebhookRequest, WebhookSourceSpec
 from onyx.db.connector_event_inbox import get_active_event_cc_pairs, record_events
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import ConnectorCredentialPair
