@@ -382,8 +382,16 @@ jobs:
             exit 0
           fi
 
+          # An approved path the task did not create would fail the whole add.
+          paths=()
+          for path in ${FILES}; do
+            if [ -e "${path}" ] || [ -n "$(git ls-files -- "${path}")" ]; then
+              paths+=("${path}")
+            fi
+          done
+
           git switch -C "${BRANCH}"
-          git add -- ${FILES}
+          git add -- "${paths[@]}"
           git commit -m "${PR_TITLE}"
           # Repair runs push on top of the sha the guard verified; refuse to
           # clobber the branch if someone pushed in between.
