@@ -64,12 +64,17 @@ class ParsedEvent(BaseModel):
         and treated as one.
         """
         if self.event_key:
-            return f"{self.event_key}:{self.document_id}"
+            # A JSON array, not a joined string: `("a:b", "c")` and
+            # `("a", "b:c")` would share a delimiter-joined key and one of
+            # the two changes would be dropped as a duplicate.
+            return json.dumps([self.event_key, self.document_id])
 
         stamp = self.occurred_at.isoformat() if self.occurred_at else ""
-        body = json.dumps(self.payload, sort_keys=True) if self.payload else ""
         digest = hashlib.sha256(
-            f"{self.document_id}|{self.event_type.value}|{stamp}|{body}".encode()
+            json.dumps(
+                [self.document_id, self.event_type.value, stamp, self.payload],
+                sort_keys=True,
+            ).encode()
         ).hexdigest()
         return f"derived:{digest}"
 

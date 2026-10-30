@@ -178,3 +178,22 @@ def test_successive_changes_to_one_document_are_both_kept(
     assert count_events_by_status(db_session, cc_pair_id) == {
         ConnectorEventStatus.PENDING: 2
     }
+
+
+def test_a_delimiter_in_a_delivery_id_does_not_merge_two_changes(
+    db_session: Session, cc_pair_id: int
+) -> None:
+    """The key holds two free-form strings. Joined by a delimiter they would
+    be ambiguous, and one of these two changes would be dropped."""
+    created = record_events(
+        db_session,
+        cc_pair_id,
+        SOURCE,
+        [
+            ParsedEvent(document_id="doc", event_key="delivery:part"),
+            ParsedEvent(document_id="part:doc", event_key="delivery"),
+        ],
+    )
+    db_session.commit()
+
+    assert len(created) == 2
