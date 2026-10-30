@@ -1925,6 +1925,10 @@ configMap:
   ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER: ""
   ONYX_BOT_DISPLAY_ERROR_MSGS: ""
   NOTIFY_SLACKBOT_NO_ANSWER: ""
+  # Slack cloud for all Slack features: the bot, the connector, federated
+  # search, Slack OAuth and the Craft Slack app. Default
+  # https://slack.com/api/. Set to https://slack-gov.com/api/ for GovSlack.
+  SLACK_API_URL: ""
   DISCORD_BOT_TOKEN: ""
   DISCORD_BOT_INVOKE_CHAR: ""
   # Logging
