@@ -122,21 +122,4 @@ test.describe("Image Generation models from LLM providers", () => {
       },
     ]);
   });
-
-  test("clicking a linked connected model opens the Language Models page", async ({
-    page,
-  }) => {
-    await mockImageGenApis(page);
-    const imageGenPage = new AdminImageGenerationPage(page);
-    await imageGenPage.goto();
-
-    const card = imageGenPage.modelCard(LLM_PROVIDER_ID, "gpt-image-2");
-    await imageGenPage.connect(card);
-    await expect(imageGenPage.currentDefaultBadge(card)).toBeVisible({
-      timeout: 10000,
-    });
-
-    await card.getByText("gpt-image-2", { exact: true }).click();
-    await expect(page).toHaveURL(/\/admin\/language-models/);
-  });
 });

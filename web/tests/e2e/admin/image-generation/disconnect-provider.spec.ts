@@ -100,7 +100,7 @@ test.describe("Image Generation Provider Disconnect", () => {
       name: "image-gen-disconnect-non-default-before",
     });
 
-    // Hover to reveal disconnect button, then verify
+    // Disconnect button is always visible
     await card.hover();
     const disconnectButton = card.getByRole("button", {
       name: "Disconnect GPT Image 1.5",
@@ -175,7 +175,7 @@ test.describe("Image Generation Provider Disconnect", () => {
     const defaultCard = getProviderCard(page, "openai_gpt_image_1");
     await defaultCard.waitFor({ state: "visible", timeout: 10000 });
 
-    // Hover to reveal disconnect button
+    // Disconnect button is always visible
     await defaultCard.hover();
     const disconnectButton = defaultCard.getByRole("button", {
       name: "Disconnect GPT Image 1",
