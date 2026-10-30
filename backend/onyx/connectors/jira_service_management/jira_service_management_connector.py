@@ -12,7 +12,7 @@ import os
 import re
 from datetime import datetime, timezone
 from typing import Any, Iterator
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import requests
 
@@ -44,6 +44,8 @@ _RETRY_STATUSES = {429, 500, 502, 503, 504}
 # it into JQL, otherwise a quote could break out of the quoted value.
 _PROJECT_KEY_RE = re.compile(r"^[A-Z][A-Z0-9]*$")
 
+_LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1", "[::1]"}
+
 
 def _validate_project_key(project_key: str) -> str:
     if not _PROJECT_KEY_RE.match(project_key or ""):
@@ -54,6 +56,50 @@ def _validate_project_key(project_key: str) -> str:
     return project_key
 
 
+def _is_loopback(host: str | None) -> bool:
+    if not host:
+        return False
+    host = host.lower()
+    if host in _LOOPBACK_HOSTS:
+        return True
+    # 127.0.0.0/8
+    return host.startswith("127.")
+
+
+def _validate_base_url(base_url: str) -> str:
+    """Reject plaintext HTTP for non-loopback destinations.
+
+    The connector authenticates every request with its email + API token, so an
+    ``http://`` base URL would put those credentials on the wire in cleartext
+    (CWE-319). Plaintext is allowed only for localhost/loopback development.
+    """
+    parsed = urlparse(base_url)
+    scheme = parsed.scheme.lower()
+    if scheme not in ("http", "https"):
+        raise ValueError(
+            f"Invalid Jira base_url {base_url!r}: scheme must be http or https."
+        )
+    if scheme == "http" and not _is_loopback(parsed.hostname):
+        raise ValueError(
+            f"Insecure Jira base_url {base_url!r}: HTTPS is required for "
+            "non-loopback hosts so credentials are never sent in plaintext."
+        )
+    return base_url.rstrip("/")
+
+
+def _and_scope(project_key: str, request_jql: str | None) -> str:
+    """Always AND the mandatory project scope in front of any user JQL.
+
+    The user query is parenthesised so a top-level ``OR`` cannot escape the
+    project clause.
+    """
+    project_clause = f'project = "{project_key}"'
+    user = (request_jql or "").strip()
+    if not user:
+        return project_clause
+    return f"{project_clause} AND ({user})"
+
+
 class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector):
     def __init__(
         self,
@@ -62,258 +108,200 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         batch_size: int = INDEX_BATCH_SIZE,
         request_jql: str | None = None,
     ) -> None:
-        """base_url: e.g. https://yourcompany.atlassian.net
-        project_key: the JSM project key, e.g. "SUPPORT"
-        request_jql: optional extra JQL to further scope tickets. It is always
-            AND-ed with the mandatory ``project = "<project_key>"`` constraint so
-            it can never widen the search outside the configured project.
-        """
-        self.base_url = base_url.rstrip("/")
+        self.base_url = _validate_base_url(base_url)
         self.project_key = _validate_project_key(project_key)
         self.batch_size = batch_size
-        # Always enforce the project scope; append custom JQL as an extra
-        # parenthesised filter so `OR` inside it cannot escape the project.
-        project_clause = f'project = "{self.project_key}"'
-        if request_jql:
-            self.request_jql = f"{project_clause} AND ({request_jql})"
-        else:
-            self.request_jql = project_clause
+        self.request_jql = _and_scope(self.project_key, request_jql)
 
-        self.email: str | None = None
-        self.api_token: str | None = None
-        self._session: requests.Session | None = None
+        self.email = os.environ.get("JSM_EMAIL")
+        self.api_token = os.environ.get("JSM_API_TOKEN")
+        self._session = requests.Session()
+        if self.email and self.api_token:
+            self._session.auth = (self.email, self.api_token)
+        self._session.headers.update(
+            {"Accept": "application/json", "Content-Type": "application/json"}
+        )
 
-    # ---- auth ---------------------------------------------------------
-    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        self.email = credentials["jira_user_email"]
-        self.api_token = credentials["jira_api_token"]
-        if not self.email or not self.api_token:
-            raise ValueError("jira_user_email and jira_api_token are required")
-        return None
-
-    def _get_session(self) -> requests.Session:
-        if self._session is None:
-            s = requests.Session()
-            s.auth = (self.email, self.api_token)
-            s.headers.update({"Accept": "application/json"})
-            self._session = s
-        return self._session
-
+    # ------------------------------------------------------------------ HTTP
     def _get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        import time
-
         url = urljoin(self.base_url + "/", path.lstrip("/"))
-        last_err: Exception | None = None
-        for attempt in range(4):
-            try:
-                resp = self._get_session().get(url, params=params, timeout=60)
-                if resp.status_code in _RETRY_STATUSES:
-                    time.sleep(min(2**attempt, 8))
-                    continue
-                resp.raise_for_status()
-                return resp.json()
-            except Exception as e:  # noqa: BLE001
-                last_err = e
-                time.sleep(min(2**attempt, 8))
-        raise RuntimeError(f"JSM GET {url} failed after retries: {last_err}")
+        resp = self._session.get(url, params=params, timeout=60)
+        if resp.status_code in _RETRY_STATUSES:
+            logger.warning(
+                "JSM API transient status %s for %s", resp.status_code, url
+            )
+        resp.raise_for_status()
+        return resp.json()
 
     def _search(self, jql: str, next_page_token: str | None) -> dict[str, Any]:
-        # Jira Cloud's supported search endpoint is /rest/api/3/search/jql, which
-        # paginates via an opaque `nextPageToken` rather than startAt/total.
         params: dict[str, Any] = {
             "jql": jql,
             "maxResults": _JSM_PAGE_SIZE,
-            "fields": "summary,description,status,created,updated,reporter,assignee,priority",
+            "fields": "summary,description,status,priority,created,updated,reporter",
         }
         if next_page_token:
             params["nextPageToken"] = next_page_token
         return self._get("/rest/api/3/search/jql", params=params)
 
-    def _get_comments(self, issue_key: str) -> list[dict[str, Any]]:
-        """Fetch ALL comments for an issue, following pagination metadata."""
-        comments: list[dict[str, Any]] = []
-        path = f"/rest/api/3/issue/{issue_key}/comment"
-        start_at = 0
-        while True:
-            data = self._get(
-                path, params={"maxResults": _JSM_PAGE_SIZE, "startAt": start_at}
-            )
-            page = data.get("comments", []) or []
-            comments.extend(page)
-            total = data.get("total")
-            if not page:
-                break
-            start_at += len(page)
-            if total is not None and start_at >= total:
-                break
-        return comments
-
-    # ---- document building -------------------------------------------
-    @staticmethod
-    def _adf_to_text(node: Any) -> str:
-        """Flatten Atlassian Document Format (ADF) JSON into plain text."""
+    # --------------------------------------------------------------- Convert
+    def _flatten_adf(self, node: Any) -> str:
+        """Flatten an Atlassian Document Format tree to plain text."""
         if node is None:
             return ""
         if isinstance(node, str):
             return node
         if isinstance(node, list):
-            return " ".join(JiraServiceManagementConnector._adf_to_text(n) for n in node)
+            return "\n".join(self._flatten_adf(n) for n in node).strip()
         if isinstance(node, dict):
-            if node.get("type") == "text":
-                return node.get("text", "")
-            parts = []
-            if node.get("type") in ("paragraph", "heading", "listItem"):
-                parts.append(
-                    JiraServiceManagementConnector._adf_to_text(node.get("content", []))
-                )
-                parts.append("\n")
-            else:
-                parts.append(
-                    JiraServiceManagementConnector._adf_to_text(node.get("content", []))
-                )
-            return "".join(parts)
+            parts: list[str] = []
+            if node.get("type") == "text" and "text" in node:
+                parts.append(str(node["text"]))
+            for child in node.get("content", []) or []:
+                parts.append(self._flatten_adf(child))
+            text = " ".join(p for p in parts if p).strip()
+            return text
         return ""
 
+    def _get_comments(self, issue_key: str) -> list[dict[str, Any]]:
+        """Fetch all comments, following startAt until ``total`` is exhausted."""
+        collected: list[dict[str, Any]] = []
+        start_at = 0
+        while True:
+            page = self._get(
+                f"/rest/api/3/issue/{issue_key}/comment",
+                params={"startAt": start_at, "maxResults": _JSM_PAGE_SIZE},
+            )
+            batch = page.get("comments", []) or []
+            collected.extend(batch)
+            start_at += len(batch)
+            total = page.get("total", start_at)
+            if not batch or start_at >= total:
+                break
+        return collected
+
     def _issue_to_document(self, issue: dict[str, Any]) -> Document:
-        fields = issue.get("fields", {})
-        key = issue.get("key", "UNKNOWN")
-        desc = self._adf_to_text(fields.get("description"))
-        # Comments live on a separate (paginated) endpoint, not in the search
-        # payload, so fetch them explicitly and include every page.
-        comments = self._get_comments(key)
-        comment_text = "\n".join(
-            f"{c.get('author', {}).get('displayName', 'user')}: "
-            f"{self._adf_to_text(c.get('body'))}"
-            for c in comments
-        )
-        full_text = (
-            f"Summary: {fields.get('summary', '')}\n\n"
-            f"Description:\n{desc}\n\n"
-            f"Comments:\n{comment_text}"
-        ).strip()
-        status = (fields.get("status") or {}).get("name", "unknown")
-        created = fields.get("created") or datetime.now(timezone.utc).isoformat()
-        updated = fields.get("updated") or created
+        key = issue["key"]
+        fields = issue.get("fields", {}) or {}
+        summary = fields.get("summary") or key
+
+        text_parts: list[str] = [summary]
+        body = self._flatten_adf(fields.get("description"))
+        if body:
+            text_parts.append(body)
+        for comment in self._get_comments(key):
+            author = (comment.get("author") or {}).get("displayName") or "Unknown"
+            text = self._flatten_adf(comment.get("body"))
+            if text:
+                text_parts.append(f"{author}: {text}")
+
+        link = f"{self.base_url}/browse/{key}"
+        updated = fields.get("updated")
+        doc_updated_at = None
+        if updated:
+            try:
+                doc_updated_at = datetime.fromisoformat(
+                    updated.replace("Z", "+00:00")
+                )
+            except ValueError:
+                doc_updated_at = None
+
         return Document(
             id=key,
-            sections=[{"link": f"{self.base_url}/browse/{key}", "text": full_text}],
+            sections=[{"link": link, "text": "\n\n".join(text_parts)}],
             source=DocumentSource.JIRA_SERVICE_MANAGEMENT,
-            semantic_identifier=f"{key}: {fields.get('summary', '')}",
+            semantic_identifier=summary,
             metadata={
-                "status": status,
-                "priority": (fields.get("priority") or {}).get("name", ""),
-                "created": created,
-                "updated": updated,
                 "project": self.project_key,
+                "status": (fields.get("status") or {}).get("name", ""),
+                "priority": (fields.get("priority") or {}).get("name", ""),
+                "created": fields.get("created", ""),
             },
-            doc_updated_at=_parse_ts(updated),
+            doc_updated_at=doc_updated_at,
         )
 
-    # ---- flows --------------------------------------------------------
+    # ------------------------------------------------------------- Iteration
     def _yield_batches(self, jql: str) -> GenerateDocumentsOutput:
-        """Yield batches of Document objects per the GenerateDocumentsOutput
-        contract (an iterator of ``list[Document | HierarchyNode]``).
+        """Yield ``list[Document]`` batches (GenerateDocumentsOutput contract).
 
-        Conversion errors cannot be represented in that stream, so they are
-        logged and dropped rather than emitted as non-conforming tuples.
+        Conversion errors are logged via ConnectorFailure; they are never
+        emitted as non-conforming tuples.
         """
+        batch: list[Document] = []
         next_page_token: str | None = None
+        seen_tokens: set[str] = set()
         while True:
-            data = self._search(jql, next_page_token)
-            issues = data.get("issues", []) or []
-            docs: list[Document] = []
-            for issue in issues:
-                key = issue.get("key", "?")
+            page = self._search(jql, next_page_token)
+            for issue in page.get("issues", []) or []:
                 try:
-                    docs.append(self._issue_to_document(issue))
+                    batch.append(self._issue_to_document(issue))
                 except Exception as e:  # noqa: BLE001
-                    # Surface the failure without breaking the document stream.
-                    failure = ConnectorFailure(
-                        failed_document=DocumentFailure(
-                            document_id=key,
-                            document_link=f"{self.base_url}/browse/{key}",
-                        ),
-                        failure_message=str(e),
-                        exception=e,
+                    logger.warning(
+                        "Failed to convert issue %s: %s", issue.get("key"), e
                     )
-                    logger.warning(f"Skipping JSM issue {key}: {failure.failure_message}")
-            for i in range(0, len(docs), self.batch_size):
-                yield docs[i : i + self.batch_size]
-            # Continue while a cursor exists, even if a page was empty
-            # (Jira may return an empty page with a nextPageToken).
-            next_page_token = data.get("nextPageToken")
-            if not next_page_token:
+                    yield [
+                        ConnectorFailure(
+                            failed_document=DocumentFailure(
+                                document_id=str(issue.get("key", "")),
+                                document_link=(
+                                    f"{self.base_url}/browse/{issue.get('key', '')}"
+                                ),
+                            ),
+                            failure_message=f"Failed to convert issue: {e}",
+                            exception=e,
+                        )
+                    ]  # type: ignore[list-item]
+                if len(batch) >= self.batch_size:
+                    yield batch
+                    batch = []
+            nxt = page.get("nextPageToken")
+            # Continue on cursor presence even for empty pages, but guard
+            # against a repeated token causing an infinite loop.
+            if not nxt or nxt in seen_tokens:
                 break
+            seen_tokens.add(nxt)
+            next_page_token = nxt
+        if batch:
+            yield batch
 
+    # ------------------------------------------------------------ Interfaces
     def load_from_state(self) -> GenerateDocumentsOutput:
         yield from self._yield_batches(self.request_jql)
 
-    def poll_source(
-        self, start: float | None, end: float | None
-    ) -> GenerateDocumentsOutput:
-        if start is None or end is None:
-            yield from self.load_from_state()
-            return
-        s = datetime.fromtimestamp(start, tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
-        e = datetime.fromtimestamp(end, tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
-        jql = f'{self.request_jql} AND updated >= "{s}" AND updated <= "{e}"'
-        yield from self._yield_batches(jql)
+    def poll_source(self, start: float, end: float) -> GenerateDocumentsOutput:
+        start_dt = datetime.fromtimestamp(start, tz=timezone.utc)
+        end_dt = datetime.fromtimestamp(end, tz=timezone.utc)
+        time_filter = (
+            f'updated >= "{start_dt.strftime("%Y-%m-%d %H:%M")}" '
+            f'AND updated <= "{end_dt.strftime("%Y-%m-%d %H:%M")}"'
+        )
+        yield from self._yield_batches(f"{self.request_jql} AND {time_filter}")
 
     def retrieve_all_slim_docs(
         self,
-        start: float | None = None,
-        end: float | None = None,
+        start: datetime | None = None,
+        end: datetime | None = None,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
-        jql = self.request_jql
-        if start is not None and end is not None:
-            s = datetime.fromtimestamp(start, tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
-            e = datetime.fromtimestamp(end, tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
-            jql = f'{self.request_jql} AND updated >= "{s}" AND updated <= "{e}"'
+        slim: list[SlimDocument] = []
         next_page_token: str | None = None
+        seen_tokens: set[str] = set()
         while True:
-            if callback is not None and callback.should_stop():
-                logger.info("Slim retrieval stop requested; halting.")
+            page = self._search(self.request_jql, next_page_token)
+            for issue in page.get("issues", []) or []:
+                slim.append(SlimDocument(id=str(issue.get("key"))))
+            if callback is not None:
+                if callback.should_stop():
+                    logger.info("Slim indexing stop requested; halting early.")
+                    break
+                if slim:
+                    callback.progress("jira_service_management", len(slim))
+            nxt = page.get("nextPageToken")
+            if not nxt or nxt in seen_tokens:
                 break
-            data = self._search(jql, next_page_token)
-            issues = data.get("issues", []) or []
-            ids = [SlimDocument(id=i["key"]) for i in issues]
-            if ids:
-                yield ids
-                if callback is not None:
-                    callback.progress("jira_service_management", len(ids))
-            # Use the presence of a cursor, not page emptiness, to continue.
-            next_page_token = data.get("nextPageToken")
-            if not next_page_token:
-                break
-
-
-def _parse_ts(ts: str) -> datetime:
-    try:
-        return datetime.fromisoformat(ts.replace("Z", "+00:00"))
-    except Exception:  # noqa: BLE001
-        try:
-            return datetime.strptime(ts, "%Y-%m-%dT%H:%M:%S.%f%z")
-        except Exception:  # noqa: BLE001
-            return datetime.now(timezone.utc)
-
-
-if __name__ == "__main__":
-    from onyx.utils.variable_functionality import (
-        set_is_ee_based_on_env_variable,
-    )
-
-    set_is_ee_based_on_env_variable()
-
-    connector = JiraServiceManagementConnector(
-        base_url=os.environ["JSM_BASE_URL"],
-        project_key=os.environ["JSM_PROJECT_KEY"],
-    )
-    connector.load_credentials(
-        {
-            "jira_user_email": os.environ["JSM_EMAIL"],
-            "jira_api_token": os.environ["JSM_API_TOKEN"],
-        }
-    )
-    for batch in connector.load_from_state():
-        print(f"batch of {len(batch)}: {[d.id for d in batch]}")
+            seen_tokens.add(nxt)
+            next_page_token = nxt
+            if slim:
+                yield slim
+                slim = []
+        if slim:
+            yield slim
