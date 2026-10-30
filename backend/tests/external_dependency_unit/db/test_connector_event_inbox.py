@@ -14,18 +14,26 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.event_models import ParsedEvent
 from onyx.connectors.models import InputType
 from onyx.db.connector_event_inbox import (
+    claim_events,
     count_events_by_status,
     get_event_by_key,
     get_pending_events,
+    mark_events_completed,
     record_events,
 )
+from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.enums import (
     AccessType,
     ConnectorCredentialPairStatus,
     ConnectorEventStatus,
     ConnectorEventType,
 )
-from onyx.db.models import Connector, ConnectorCredentialPair, Credential
+from onyx.db.models import (
+    Connector,
+    ConnectorCredentialPair,
+    Credential,
+    IndexAttempt,
+)
 
 SOURCE = DocumentSource.MOCK_CONNECTOR
 
@@ -58,10 +66,26 @@ def cc_pair_id(db_session: Session) -> Generator[int, None, None]:
         # A failed test leaves the session unusable, and the deletes below
         # would then raise and mask it.
         db_session.rollback()
+        # Attempts first: the pair's FK on index_attempt is NOT NULL, so the
+        # ORM's SET NULL on delete would fail instead of cascading.
+        db_session.query(IndexAttempt).filter_by(
+            connector_credential_pair_id=pair.id
+        ).delete()
         db_session.delete(pair)
         db_session.delete(connector)
         db_session.delete(credential)
         db_session.commit()
+
+
+def _attempt(db_session: Session, cc_pair_id: int) -> int:
+    attempt = IndexAttempt(
+        connector_credential_pair_id=cc_pair_id,
+        from_beginning=False,
+        status="in_progress",
+    )
+    db_session.add(attempt)
+    db_session.commit()
+    return attempt.id
 
 
 def test_redelivery_writes_no_second_row(db_session: Session, cc_pair_id: int) -> None:
@@ -197,3 +221,87 @@ def test_a_delimiter_in_a_delivery_id_does_not_merge_two_changes(
     db_session.commit()
 
     assert len(created) == 2
+
+
+def test_two_attempts_never_claim_the_same_row(
+    db_session: Session, cc_pair_id: int
+) -> None:
+    """The guarantee that lets two index attempts overlap safely.
+
+    Each claim runs in its own transaction, and the first holds its row locks
+    until it commits, so the second must skip them rather than block or
+    double-claim.
+    """
+    record_events(
+        db_session,
+        cc_pair_id,
+        SOURCE,
+        [ParsedEvent(document_id=f"doc-{i}", event_key=f"k-{i}") for i in range(6)],
+    )
+    first_attempt = _attempt(db_session, cc_pair_id)
+    second_attempt = _attempt(db_session, cc_pair_id)
+    db_session.commit()
+
+    engine = SqlEngine.get_engine()
+    with Session(engine) as session_a, Session(engine) as session_b:
+        claimed_a = {
+            event.id
+            for event in claim_events(session_a, cc_pair_id, first_attempt, limit=4)
+        }
+        # session_a still holds its locks here.
+        claimed_b = {
+            event.id
+            for event in claim_events(session_b, cc_pair_id, second_attempt, limit=4)
+        }
+        session_a.commit()
+        session_b.commit()
+
+    assert claimed_a & claimed_b == set()
+    assert len(claimed_a) == 4
+    assert len(claimed_b) == 2
+
+
+def test_claiming_stamps_the_attempt_and_counts_the_try(
+    db_session: Session, cc_pair_id: int
+) -> None:
+    record_events(
+        db_session,
+        cc_pair_id,
+        SOURCE,
+        [ParsedEvent(document_id="doc-1", event_key="k-1")],
+    )
+    attempt_id = _attempt(db_session, cc_pair_id)
+    db_session.commit()
+
+    claimed = claim_events(db_session, cc_pair_id, attempt_id, limit=10)
+    db_session.commit()
+
+    assert len(claimed) == 1
+    assert claimed[0].status == ConnectorEventStatus.IN_PROGRESS
+    assert claimed[0].index_attempt_id == attempt_id
+    assert claimed[0].attempt_count == 1
+
+    # A claimed row is no longer available to the next claimer.
+    assert claim_events(db_session, cc_pair_id, attempt_id, limit=10) == []
+
+
+def test_completing_a_row_stamps_when_it_settled(
+    db_session: Session, cc_pair_id: int
+) -> None:
+    record_events(
+        db_session,
+        cc_pair_id,
+        SOURCE,
+        [ParsedEvent(document_id="doc-1", event_key="k-1")],
+    )
+    attempt_id = _attempt(db_session, cc_pair_id)
+    db_session.commit()
+
+    claimed = claim_events(db_session, cc_pair_id, attempt_id, limit=10)
+    mark_events_completed(db_session, [event.id for event in claimed])
+    db_session.commit()
+
+    settled = get_event_by_key(db_session, cc_pair_id, "k-1")
+    assert settled is not None
+    assert settled.status == ConnectorEventStatus.COMPLETED
+    assert settled.processed_at is not None
