@@ -4,13 +4,16 @@ even when each worker dies mid-file where no except clause runs."""
 from unittest.mock import patch
 
 import pytest
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.tasks.user_file_processing.tasks import (
     process_user_file_impl,
 )
 from onyx.configs.constants import USER_FILE_PROCESSING_MAX_ATTEMPTS
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import UserFileStatus
+from onyx.db.models import UserFile
 from onyx.db.user_file import consume_user_file_processing_attempt
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.conftest import (
@@ -76,8 +79,19 @@ def test_exhausted_pickup_keeps_a_concurrent_delete(
     uf = create_processing_user_file(db_session, user.id)
     try:
         uf.processing_attempts = USER_FILE_PROCESSING_MAX_ATTEMPTS
-        uf.status = UserFileStatus.DELETING
         db_session.commit()
+        db_session.refresh(uf)
+
+        # The delete lands in another session after the worker read PROCESSING,
+        # so the worker's row object is stale when it spends the attempt.
+        with get_session_with_current_tenant() as other_session:
+            other_session.execute(
+                update(UserFile)
+                .where(UserFile.id == uf.id)
+                .values(status=UserFileStatus.DELETING)
+            )
+            other_session.commit()
+        assert uf.status == UserFileStatus.PROCESSING
 
         assert consume_user_file_processing_attempt(db_session, uf) is False
 
