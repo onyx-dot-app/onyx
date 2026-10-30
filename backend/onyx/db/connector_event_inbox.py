@@ -74,7 +74,12 @@ def record_events(
 def get_event_by_key(
     db_session: Session, cc_pair_id: int, event_key: str
 ) -> ConnectorEventInbox | None:
-    """The row a given delivery produced, for lookups and tests."""
+    """The row a given delivery produced.
+
+    `event_key` is the stored key, which is scoped to one document, so a
+    caller holding a provider's delivery id builds it with
+    `ParsedEvent.resolved_event_key()` rather than passing the id alone.
+    """
     return db_session.scalars(
         select(ConnectorEventInbox).where(
             ConnectorEventInbox.connector_credential_pair_id == cc_pair_id,
