@@ -283,7 +283,10 @@ def main() -> int:
             driver.session("/window", "POST", {"handle": popup})
             wait_for(
                 "the popup page",
-                lambda: driver.execute("return document.readyState") == "complete",
+                lambda: driver.execute(
+                    "return location.pathname === '/popup'"
+                    " && document.readyState === 'complete'"
+                ),
             )
             result = driver.execute_async(
                 "const done = arguments[arguments.length - 1];"
@@ -318,7 +321,8 @@ def main() -> int:
             wait_for(
                 "the system browser to receive the URL",
                 lambda: (
-                    opened_log.exists() and "docs.onyx.app" in opened_log.read_text()
+                    opened_log.exists()
+                    and "https://docs.onyx.app/smoke" in opened_log.read_text()
                 ),
             )
 
