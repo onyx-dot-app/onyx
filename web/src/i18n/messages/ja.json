@@ -412,8 +412,7 @@
       },
       "cimd": {
         "label": "クライアントメタデータドキュメントを使用",
-        "description": "オンの場合、プロバイダーは公開インターネット経由で {appName} のクライアントメタデータドキュメントを取得します。この {appName} インスタンスが非公開の場合はオフにしてください。その場合 {appName} は自動クライアント登録を使用します。",
-        "turnOff": "クライアントメタデータドキュメントをオフにする"
+        "description": "オンの場合、プロバイダーは公開インターネット経由で {appName} のクライアントメタデータドキュメントを取得します。この {appName} インスタンスが非公開の場合はオフにしてください。その場合 {appName} は自動クライアント登録を使用します。"
       },
       "discovery": {
         "checking": "自動設定を確認しています…",
@@ -1115,18 +1114,6 @@
         "openapi": "OpenAPI プラグインを追加"
       },
       "catalog": {
-        "slack": {
-          "summary": "会話の検索とメッセージの送信",
-          "description": "会話の検索とメッセージの送信。登録済みのSlackアプリが必要です。"
-        },
-        "hubspot": {
-          "summary": "連絡先と取引を管理",
-          "description": "連絡先と取引を管理。HubSpot MCPコネクターが必要です。"
-        },
-        "asana": {
-          "summary": "タスクとプロジェクトを管理",
-          "description": "タスクとプロジェクトを管理。登録済みのOAuthクライアントが必要です。"
-        },
         "linear": {
           "summary": "課題、プロジェクト、チームを管理します",
           "description": "課題、プロジェクト、チームを管理します。"
@@ -1218,6 +1205,10 @@
       "blocked": "このURLは送信セキュリティ設定によってブロックされています。",
       "publicDetected": "認証は不要です",
       "oauthDetected": "OAuthを検出しました",
+      "clientMetadata": "クライアントメタデータドキュメント",
+      "clientMetadataSupported": "対応",
+      "clientMetadataUnsupported": "非対応",
+      "clientMetadataUnknown": "未確認",
       "manualRequired": "認証方法を手動で選択",
       "chooseAuthentication": "このサーバーの認証方法を確認できませんでした。以下から方法を選択してください。",
       "connect": "接続",
@@ -15277,6 +15268,10 @@
         "trigger": {
           "runNow": "1回実行",
           "schedule": "スケジュール"
+        },
+        "markAllViewed": {
+          "label": "すべて閲覧済みにする",
+          "error": "実行を閲覧済みにできませんでした。もう一度お試しください。"
         }
       },
       "scheduleEditor": {
@@ -15308,7 +15303,8 @@
           "tue": "火",
           "wed": "水"
         }
-      }
+      },
+      "unviewedResults": "新しい結果"
     },
     "todoList": {
       "empty": {

@@ -23,10 +23,17 @@ import SvgLock from "@opal/icons/lock";
 import { markdown } from "@opal/utils";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { Section } from "@/layouts/general-layouts";
-import { listScheduledTaskRuns } from "@/app/craft/v1/tasks/api";
+import { toast } from "@opal/layouts";
+import UnseenMarker from "@/app/craft/components/UnseenMarker";
+import {
+  listScheduledTaskRuns,
+  markScheduledRunsViewed,
+} from "@/app/craft/v1/tasks/api";
+import { revalidateScheduledRunViews } from "@/lib/scheduledTasks/hooks";
 import { RunStatusBadge } from "@/app/craft/v1/tasks/components/StatusBadge";
 import {
   buildSessionPath,
+  RUNS_MAX_PAGE_SIZE,
   RUNS_PAGE_SIZE,
 } from "@/app/craft/v1/tasks/constants";
 import type {
@@ -38,6 +45,7 @@ import {
   formatRelativeShort,
   formatRunDuration,
   getNonClickableReason,
+  isRunUnviewed,
   type RunReasonTranslate,
 } from "@/app/craft/v1/tasks/utils";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -129,7 +137,8 @@ function SummaryCell({ row }: SummaryCellProps) {
 
 function buildColumns(
   t: RunHistoryTranslate,
-  tReason: RunReasonTranslate
+  tReason: RunReasonTranslate,
+  unviewedLabel: string
 ): TableColumn<ScheduledRunSummary>[] {
   return [
     {
@@ -140,18 +149,29 @@ function buildColumns(
       sortable: false,
       cell: (value, row) => (
         <NonClickableCell reason={getNonClickableReason(row, tReason)}>
-          <div className="flex flex-col gap-0.5">
-            <Text
-              font="main-ui-body"
-              color="text-05"
-              wordWrap="whitespace-nowrap"
-            >
-              {formatAbsolute(value)}
-            </Text>
-            <Text font="secondary-body" color="text-03">
-              {formatRelativeShort(value)}
-            </Text>
-          </div>
+          <Section
+            flexDirection="row"
+            justifyContent="start"
+            gap={2}
+            width="fit"
+            height="fit"
+          >
+            {isRunUnviewed(row) && (
+              <UnseenMarker label={unviewedLabel} className="shrink-0" />
+            )}
+            <Section alignItems="start" gap={0.5} width="fit" height="fit">
+              <Text
+                font="main-ui-body"
+                color="text-05"
+                wordWrap="whitespace-nowrap"
+              >
+                {formatAbsolute(value)}
+              </Text>
+              <Text font="secondary-body" color="text-03">
+                {formatRelativeShort(value)}
+              </Text>
+            </Section>
+          </Section>
         </NonClickableCell>
       ),
     },
@@ -250,6 +270,15 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
     }
   );
 
+  const { data: unviewedProbe } = useSWR<ScheduledRunListResponse>(
+    SWR_KEYS.scheduledTaskHasUnviewedRuns(taskId),
+    errorHandlingFetcher,
+    {
+      revalidateOnFocus: false,
+      refreshInterval: RUN_HISTORY_REFRESH_INTERVAL_MS,
+    }
+  );
+
   useEffect(() => {
     setOlderPages([]);
     setOlderNextCursor(null);
@@ -278,7 +307,13 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
   }, [mutate]);
 
   const tReason = useTranslations("craft.tasks.runHistory.nonClickable");
-  const columns = useMemo(() => buildColumns(t, tReason), [t, tReason]);
+  const tTasks = useTranslations("craft.tasks");
+  const unviewedLabel = tTasks("unviewedResults");
+  const columns = useMemo(
+    () => buildColumns(t, tReason, unviewedLabel),
+    [t, tReason, unviewedLabel]
+  );
+  const [markingViewed, setMarkingViewed] = useState(false);
 
   const allRuns = useMemo(() => {
     const runs: ScheduledRunSummary[] = [];
@@ -299,6 +334,39 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
 
     return runs;
   }, [data?.items, olderPages]);
+
+  const hasUnviewedRuns =
+    allRuns.some(isRunUnviewed) ||
+    (unviewedProbe?.items.some(isRunUnviewed) ?? false);
+
+  const markAllViewed = useCallback(async () => {
+    if (markingViewed) return;
+    setMarkingViewed(true);
+    const viewed = new Map<string, ScheduledRunSummary>();
+    try {
+      // Acknowledged runs leave the unviewed filter, so each pass reads the next batch.
+      for (;;) {
+        const page = await listScheduledTaskRuns(taskId, {
+          limit: RUNS_MAX_PAGE_SIZE,
+          unviewed: true,
+        });
+        if (page.items.length === 0) break;
+        const res = await markScheduledRunsViewed(taskId, page.items);
+        for (const run of res.items) viewed.set(run.id, run);
+        if (page.items.length < RUNS_MAX_PAGE_SIZE) break;
+      }
+    } catch {
+      toast.error(t("markAllViewed.error"));
+    } finally {
+      if (viewed.size > 0) {
+        setOlderPages((pages) =>
+          pages.map((page) => page.map((run) => viewed.get(run.id) ?? run))
+        );
+        await revalidateScheduledRunViews(taskId).catch(() => undefined);
+      }
+      setMarkingViewed(false);
+    }
+  }, [markingViewed, taskId, t]);
 
   if (isLoading && !data) {
     return (
@@ -338,6 +406,17 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
 
   return (
     <Section gap={2} alignItems="stretch">
+      <Section flexDirection="row" justifyContent="end" height="fit">
+        <Button
+          prominence="tertiary"
+          size="xs"
+          disabled={markingViewed || !hasUnviewedRuns}
+          aria-busy={markingViewed}
+          onClick={() => void markAllViewed()}
+        >
+          {t("markAllViewed.label")}
+        </Button>
+      </Section>
       <Table
         items={allRuns}
         columns={columns}

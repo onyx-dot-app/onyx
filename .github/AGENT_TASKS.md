@@ -114,12 +114,13 @@ Keep prompts, domain validation, and PR publishing outside the adapter.
 
 ## Checks
 
+`pr-coding-agent-runner-tests.yml` runs the unit tests on pull requests that change the runner or its action.
+
 ```bash
 python3 -m unittest discover -s .github/scripts -p test_run_coding_agent.py
 pre-commit run --files .github/scripts/run_coding_agent.py \
   .github/scripts/test_run_coding_agent.py \
   .github/actions/run-coding-agent/action.yml \
   .github/workflows/reusable-agent-task-pr.yml \
-  .github/workflows/cve-alerts.yml \
-  .github/workflows/pr-quality-checks.yml
+  .github/workflows/cve-alerts.yml
 ```
