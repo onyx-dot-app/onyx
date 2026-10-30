@@ -12,7 +12,24 @@ export interface ImageGenerationConfigView {
   model_name: string;
   llm_provider_id: number;
   llm_provider_name: string | null;
+  llm_provider_type: string;
+  llm_provider_owned: boolean;
   is_default: boolean;
+}
+
+export interface ImageGenerationProviderModel {
+  name: string;
+  display_name: string | null;
+  is_recommended: boolean;
+  image_provider_id: string | null;
+}
+
+export interface ImageGenerationLLMProvider {
+  llm_provider_id: number;
+  llm_provider_name: string | null;
+  provider: string;
+  is_public: boolean;
+  models: ImageGenerationProviderModel[];
 }
 
 export interface TestApiKeyResult {
@@ -145,6 +162,32 @@ export async function createImageGenerationConfig(
   if (!response.ok) {
     const error: ErrorResponseBody = await response.json();
     throw new Error(error.detail || "Failed to create config");
+  }
+
+  return response.json();
+}
+
+/**
+ * Use a model on a connected LLM provider. The config reuses that provider's credentials.
+ */
+export async function linkImageGenerationModel(
+  llmProviderId: number,
+  modelName: string,
+  isDefault: boolean
+): Promise<ImageGenerationConfigView> {
+  const response = await fetch(`${IMAGE_GEN_CONFIG_URL}/link`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      llm_provider_id: llmProviderId,
+      model_name: modelName,
+      is_default: isDefault,
+    }),
+  });
+
+  if (!response.ok) {
+    const error: ErrorResponseBody = await response.json();
+    throw new Error(error.detail || "Failed to connect model");
   }
 
   return response.json();

@@ -6578,11 +6578,27 @@
       }
     },
     "imageGeneration": {
+      "availableModels": {
+        "description": "Modelos de imagem dos seus provedores de LLM conectados. Conecte um para usá-lo no chat.",
+        "title": "Modelos disponíveis"
+      },
       "configureSuccess": {
         "message": "Provedor configurado com sucesso"
       },
+      "connectButton": {
+        "label": "Conectar"
+      },
+      "connectedModels": {
+        "title": "Modelos conectados"
+      },
+      "defaultTag": {
+        "label": "Padrão"
+      },
       "deselectError": {
         "message": "Falha ao desmarcar"
+      },
+      "disconnectButton": {
+        "ariaLabel": "Desconectar {title}"
       },
       "disconnectError": {
         "message": "Falha ao desconectar"
@@ -6600,6 +6616,9 @@
         "header": {
           "description": "Isso vai remover as credenciais armazenadas deste provedor.",
           "title": "Desconectar *{title}*"
+        },
+        "linkedHeader": {
+          "description": "O provedor de LLM e suas credenciais continuam conectados."
         },
         "noDefaultOption": {
           "description": "(Desativar a geração de imagens)",
@@ -6621,6 +6640,9 @@
       },
       "disconnectSuccess": {
         "message": "{title} desconectado"
+      },
+      "editButton": {
+        "ariaLabel": "Editar {title}"
       },
       "emptyState": {
         "title": "Conecte um modelo de geração de imagens para usar no chat."
@@ -6700,12 +6722,30 @@
         "description": "Configurações da geração de imagens no chat.",
         "title": "Geração de imagens"
       },
+      "linkError": {
+        "message": "Falha ao conectar o modelo"
+      },
+      "linkSuccess": {
+        "message": "{title} conectado"
+      },
+      "linkedModel": {
+        "description": "De {provider}"
+      },
       "loadError": {
         "message": "Falha ao carregar a configuração. Atualize a página."
       },
       "model": {
         "description": "Selecione um modelo para gerar imagens no chat.",
+        "placeholder": "Selecione um modelo padrão",
         "title": "Modelo de geração de imagens"
+      },
+      "modelFilter": {
+        "all": "Todos",
+        "recommended": "Recomendados"
+      },
+      "noImageModels": {
+        "description": "Conecte na página Modelos de linguagem um provedor de LLM que ofereça modelos de imagem. Para ver todos os modelos dos seus provedores conectados, abra a guia Todos.",
+        "title": "Nenhum modelo de imagem disponível"
       },
       "providers": {
         "azureGptImage1": {

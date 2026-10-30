@@ -6578,11 +6578,27 @@
       }
     },
     "imageGeneration": {
+      "availableModels": {
+        "description": "Bildmodelle Ihrer verbundenen LLM-Anbieter. Verbinden Sie eines, um es im Chat zu verwenden.",
+        "title": "Verfügbare Modelle"
+      },
       "configureSuccess": {
         "message": "Anbieter erfolgreich konfiguriert"
       },
+      "connectButton": {
+        "label": "Verbinden"
+      },
+      "connectedModels": {
+        "title": "Verbundene Modelle"
+      },
+      "defaultTag": {
+        "label": "Standard"
+      },
       "deselectError": {
         "message": "Auswahl konnte nicht aufgehoben werden"
+      },
+      "disconnectButton": {
+        "ariaLabel": "{title} trennen"
       },
       "disconnectError": {
         "message": "Trennung fehlgeschlagen"
@@ -6600,6 +6616,9 @@
         "header": {
           "description": "Dadurch werden die gespeicherten Anmeldedaten für diesen Anbieter entfernt.",
           "title": "*{title}* trennen"
+        },
+        "linkedHeader": {
+          "description": "Der LLM-Anbieter und seine Zugangsdaten bleiben verbunden."
         },
         "noDefaultOption": {
           "description": "(Bilderzeugung deaktivieren)",
@@ -6621,6 +6640,9 @@
       },
       "disconnectSuccess": {
         "message": "{title} getrennt"
+      },
+      "editButton": {
+        "ariaLabel": "{title} bearbeiten"
       },
       "emptyState": {
         "title": "Verbinden Sie ein Modell zur Bilderzeugung, um es im Chat zu verwenden."
@@ -6700,12 +6722,30 @@
         "description": "Einstellungen für die Bilderzeugung im Chat.",
         "title": "Bilderzeugung"
       },
+      "linkError": {
+        "message": "Modell konnte nicht verbunden werden"
+      },
+      "linkSuccess": {
+        "message": "{title} verbunden"
+      },
+      "linkedModel": {
+        "description": "Von {provider}"
+      },
       "loadError": {
         "message": "Die Konfiguration konnte nicht geladen werden. Bitte laden Sie die Seite neu."
       },
       "model": {
         "description": "Wählen Sie ein Modell, um Bilder im Chat zu erzeugen.",
+        "placeholder": "Standardmodell auswählen",
         "title": "Modell zur Bilderzeugung"
+      },
+      "modelFilter": {
+        "all": "Alle",
+        "recommended": "Empfohlen"
+      },
+      "noImageModels": {
+        "description": "Verbinden Sie auf der Seite „Sprachmodelle“ einen LLM-Anbieter, der Bildmodelle bereitstellt. Öffnen Sie den Tab „Alle“, um jedes Modell Ihrer verbundenen Anbieter zu sehen.",
+        "title": "Keine Bildmodelle verfügbar"
       },
       "providers": {
         "azureGptImage1": {

@@ -6578,11 +6578,27 @@
       }
     },
     "imageGeneration": {
+      "availableModels": {
+        "description": "연결된 LLM 공급자의 이미지 모델입니다. 채팅에서 사용하려면 연결하세요.",
+        "title": "사용 가능한 모델"
+      },
       "configureSuccess": {
         "message": "제공업체를 설정했습니다"
       },
+      "connectButton": {
+        "label": "연결"
+      },
+      "connectedModels": {
+        "title": "연결된 모델"
+      },
+      "defaultTag": {
+        "label": "기본값"
+      },
       "deselectError": {
         "message": "선택 해제에 실패했습니다"
+      },
+      "disconnectButton": {
+        "ariaLabel": "{title} 연결 해제"
       },
       "disconnectError": {
         "message": "연결 해제에 실패했습니다"
@@ -6600,6 +6616,9 @@
         "header": {
           "description": "이 제공업체에 저장된 자격 증명을 삭제합니다.",
           "title": "*{title}* 연결 해제"
+        },
+        "linkedHeader": {
+          "description": "LLM 공급자와 해당 자격 증명은 연결된 상태로 유지됩니다."
         },
         "noDefaultOption": {
           "description": "(이미지 생성 비활성화)",
@@ -6621,6 +6640,9 @@
       },
       "disconnectSuccess": {
         "message": "{title} 연결을 해제했습니다"
+      },
+      "editButton": {
+        "ariaLabel": "{title} 편집"
       },
       "emptyState": {
         "title": "채팅에서 사용할 이미지 생성 모델을 연결하세요."
@@ -6700,12 +6722,30 @@
         "description": "채팅 내 이미지 생성 설정입니다.",
         "title": "이미지 생성"
       },
+      "linkError": {
+        "message": "모델을 연결하지 못했습니다"
+      },
+      "linkSuccess": {
+        "message": "{title} 연결됨"
+      },
+      "linkedModel": {
+        "description": "{provider}에서 제공"
+      },
       "loadError": {
         "message": "구성을 불러오지 못했습니다. 페이지를 새로고침하세요."
       },
       "model": {
         "description": "채팅에서 이미지를 생성할 모델을 선택하세요.",
+        "placeholder": "기본 모델 선택",
         "title": "이미지 생성 모델"
+      },
+      "modelFilter": {
+        "all": "전체",
+        "recommended": "추천"
+      },
+      "noImageModels": {
+        "description": "언어 모델 페이지에서 이미지 모델을 제공하는 LLM 공급자를 연결하세요. 연결된 공급자의 모든 모델을 보려면 전체 탭을 여세요.",
+        "title": "사용 가능한 이미지 모델이 없습니다"
       },
       "providers": {
         "azureGptImage1": {

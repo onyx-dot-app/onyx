@@ -6578,11 +6578,27 @@
       }
     },
     "imageGeneration": {
+      "availableModels": {
+        "description": "نماذج الصور لدى موفري LLM المتصلين. اربط نموذجًا لاستخدامه في الدردشة.",
+        "title": "النماذج المتاحة"
+      },
       "configureSuccess": {
         "message": "تم تهيئة الموفر بنجاح"
       },
+      "connectButton": {
+        "label": "اتصال"
+      },
+      "connectedModels": {
+        "title": "النماذج المتصلة"
+      },
+      "defaultTag": {
+        "label": "افتراضي"
+      },
       "deselectError": {
         "message": "فشل إلغاء التحديد"
+      },
+      "disconnectButton": {
+        "ariaLabel": "قطع اتصال {title}"
       },
       "disconnectError": {
         "message": "فشل قطع الاتصال"
@@ -6600,6 +6616,9 @@
         "header": {
           "description": "سيزيل هذا بيانات الاعتماد المخزنة لهذا الموفر.",
           "title": "قطع الاتصال بـ *{title}*"
+        },
+        "linkedHeader": {
+          "description": "يبقى مزوّد LLM وبيانات اعتماده متصلين."
         },
         "noDefaultOption": {
           "description": "(تعطيل توليد الصور)",
@@ -6621,6 +6640,9 @@
       },
       "disconnectSuccess": {
         "message": "تم قطع الاتصال بـ {title}"
+      },
+      "editButton": {
+        "ariaLabel": "تعديل {title}"
       },
       "emptyState": {
         "title": "اربط نموذج توليد صور لاستخدامه في المحادثة."
@@ -6700,12 +6722,30 @@
         "description": "إعدادات توليد الصور داخل المحادثة.",
         "title": "توليد الصور"
       },
+      "linkError": {
+        "message": "تعذّر ربط النموذج"
+      },
+      "linkSuccess": {
+        "message": "تم ربط {title}"
+      },
+      "linkedModel": {
+        "description": "من {provider}"
+      },
       "loadError": {
         "message": "فشل تحميل التهيئة. يرجى تحديث الصفحة."
       },
       "model": {
         "description": "اختر نموذجًا لتوليد الصور في المحادثة.",
+        "placeholder": "اختر نموذجًا افتراضيًا",
         "title": "نموذج توليد الصور"
+      },
+      "modelFilter": {
+        "all": "الكل",
+        "recommended": "موصى بها"
+      },
+      "noImageModels": {
+        "description": "اربط موفر LLM يقدم نماذج صور في صفحة نماذج اللغة. لعرض كل النماذج لدى الموفرين المتصلين، افتح علامة التبويب الكل.",
+        "title": "لا توجد نماذج صور متاحة"
       },
       "providers": {
         "azureGptImage1": {
