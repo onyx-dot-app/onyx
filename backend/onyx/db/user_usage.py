@@ -6,17 +6,15 @@ model, flow, provider, incognito), not an append-only per-call ledger."""
 from collections import defaultdict
 from collections.abc import Iterator, Sequence
 from datetime import datetime, timedelta
-from math import ceil
-from threading import RLock
 from typing import Any, cast
 
-from cachetools import TTLCache
 from pydantic import BaseModel
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine.cursor import CursorResult
 from sqlalchemy.orm import Session
 
+from onyx.configs.constants import TokenRateLimitPeriod
 from onyx.db.enums import UsageActorKind
 from onyx.db.llm_usage import LLMUsageRecord, build_usage_upsert_values
 from onyx.db.models import (
@@ -27,23 +25,8 @@ from onyx.db.models import (
     UserUsage,
 )
 from onyx.utils.datetime import datetime_to_utc, get_window_start
-from onyx.utils.logger import setup_logger
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-
-logger = setup_logger()
 
 USER_USAGE_BUCKET_SECONDS = 24 * 60 * 60
-USER_USAGE_BUCKET_HOURS = USER_USAGE_BUCKET_SECONDS // (60 * 60)
-TOKEN_BUDGET_PERIOD_ERROR = "Token budget periods must be whole UTC days"
-COST_BUDGET_PERIOD_ERROR = "Cost budget periods must be whole UTC days"
-COST_BUDGET_PERIOD_HOURS = {24, 168, 720}
-_INVALID_COST_BUDGET_WARNING_TTL_SECONDS = 5 * 60
-_invalid_cost_budget_warning_lock = RLock()
-# Keyed by the raw contextvar value, not get_current_tenant_id, which raises when
-# the contextvar is unset (non-request callers). A warn path must never raise.
-_invalid_cost_budget_warning_cache: TTLCache[tuple[str | None, int, int], None] = (
-    TTLCache(maxsize=10_000, ttl=_INVALID_COST_BUDGET_WARNING_TTL_SECONDS)
-)
 # Not email-shaped on purpose: it can never collide with a real address.
 DELETED_USER_EXPORT_EMAIL = "(deleted user)"
 _CONFLICT_COLS = [
@@ -63,118 +46,45 @@ class TokenUsageBucket(BaseModel):
     tokens: int
 
 
-def normalize_token_period_hours(period_hours: int) -> int:
-    """Round legacy periods up to whole UTC days."""
-    return max(
-        USER_USAGE_BUCKET_HOURS,
-        ceil(period_hours / USER_USAGE_BUCKET_HOURS) * USER_USAGE_BUCKET_HOURS,
-    )
+def get_period_window_start(now: datetime, period: TokenRateLimitPeriod) -> datetime:
+    """Start of the current UTC calendar window for `period`."""
+    today = get_window_start(now, USER_USAGE_BUCKET_SECONDS)
+    if period == TokenRateLimitPeriod.DAILY:
+        return today
+    if period == TokenRateLimitPeriod.WEEKLY:
+        return today - timedelta(days=today.weekday())
+    return today.replace(day=1)
 
 
-def get_token_window_start(now: datetime, period_hours: int) -> datetime:
-    period_hours = normalize_token_period_hours(period_hours)
-    current_bucket = get_window_start(now, USER_USAGE_BUCKET_SECONDS)
-    return current_bucket - timedelta(hours=period_hours - USER_USAGE_BUCKET_HOURS)
-
-
-def _get_cost_period_seconds(period_hours: int) -> int:
-    period_seconds = period_hours * 60 * 60
-    if period_hours not in COST_BUDGET_PERIOD_HOURS:
-        raise ValueError("Cost budget periods must be daily, weekly, or monthly")
-    return period_seconds
-
-
-def _warn_for_invalid_cost_budget_period(rate_limit: TokenRateLimit) -> None:
-    cache_key = (
-        CURRENT_TENANT_ID_CONTEXTVAR.get(),
-        rate_limit.id,
-        rate_limit.period_hours,
-    )
-    with _invalid_cost_budget_warning_lock:
-        if cache_key in _invalid_cost_budget_warning_cache:
-            return
-        _invalid_cost_budget_warning_cache[cache_key] = None
-
-    logger.warning(
-        "Skipping cost budget on token_rate_limit id=%s: unsupported period_hours=%s",
-        rate_limit.id,
-        rate_limit.period_hours,
-    )
-
-
-def cost_budget_limits(rate_limits: Sequence[TokenRateLimit]) -> list[TokenRateLimit]:
-    """Return enforceable cost limits and warn about unsupported stored periods."""
-    valid: list[TokenRateLimit] = []
-    for rate_limit in rate_limits:
-        if rate_limit.cost_budget_cents is None:
-            continue
-        if rate_limit.period_hours not in COST_BUDGET_PERIOD_HOURS:
-            _warn_for_invalid_cost_budget_period(rate_limit)
-            continue
-        valid.append(rate_limit)
-    return valid
-
-
-def get_cost_window_start(now: datetime, period_hours: int) -> datetime:
-    """Start of the current fixed UTC cost-budget period."""
-    _get_cost_period_seconds(period_hours)
-    current_bucket = get_window_start(now, USER_USAGE_BUCKET_SECONDS)
-    if period_hours == 24:
-        return current_bucket
-    if period_hours == 168:
-        return current_bucket - timedelta(days=current_bucket.weekday())
-    return current_bucket.replace(day=1)
-
-
-def cost_budget_fetch_cutoff(
-    now: datetime, cost_limits: Sequence[TokenRateLimit]
-) -> datetime:
-    """Earliest window start across the limits, so one fetch covers every window."""
-    return min(get_cost_window_start(now, limit.period_hours) for limit in cost_limits)
-
-
-def get_token_window_reset(now: datetime, period_hours: int) -> datetime:
-    period_hours = normalize_token_period_hours(period_hours)
-    current_bucket = get_window_start(now, USER_USAGE_BUCKET_SECONDS)
-    return current_bucket + timedelta(hours=period_hours)
-
-
-def get_cost_window_reset(now: datetime, period_hours: int) -> datetime:
-    window_start = get_cost_window_start(now, period_hours)
-    if period_hours == 24:
+def get_period_window_reset(now: datetime, period: TokenRateLimitPeriod) -> datetime:
+    window_start = get_period_window_start(now, period)
+    if period == TokenRateLimitPeriod.DAILY:
         return window_start + timedelta(days=1)
-    if period_hours == 168:
+    if period == TokenRateLimitPeriod.WEEKLY:
         return window_start + timedelta(days=7)
     if window_start.month == 12:
         return window_start.replace(year=window_start.year + 1, month=1)
     return window_start.replace(month=window_start.month + 1)
 
 
-def earliest_window_reset(
-    now: datetime,
-    period_hours: int,
-    buckets: Sequence[tuple[datetime, float]],
-    threshold: float,
+def period_fetch_cutoff(
+    now: datetime, rate_limits: Sequence[TokenRateLimit]
 ) -> datetime:
-    """First future UTC-day boundary at which the trailing-window sum drops below
-    `threshold`, assuming no further usage.
+    """Earliest window start across the limits, so one fetch covers every window."""
+    return min(get_period_window_start(now, limit.period) for limit in rate_limits)
 
-    Usage is bucketed by whole UTC days and the window slides forward one day at
-    a time, so the reset is always a midnight. As each day rolls off, the trailing
-    sum can only drop; this returns the first boundary where it clears. Equals the
-    full-window expiry when even the current day alone is over threshold.
-    `period_hours` must be a whole number of days.
-    """
-    day = timedelta(seconds=USER_USAGE_BUCKET_SECONDS)
-    today = get_window_start(now, USER_USAGE_BUCKET_SECONDS)
-    period_days = period_hours // USER_USAGE_BUCKET_HOURS
-    window_start = today - day * (period_days - 1)
-    for days_elapsed in range(1, period_days + 1):
-        cutoff = window_start + day * days_elapsed
-        remaining = sum(amount for ws, amount in buckets if ws >= cutoff)
-        if remaining < threshold:
-            return today + day * days_elapsed
-    return today + day * period_days
+
+def token_budget_limits(rate_limits: Sequence[TokenRateLimit]) -> list[TokenRateLimit]:
+    # A non-positive budget can only come from legacy rows; never block on it.
+    return [
+        limit
+        for limit in rate_limits
+        if limit.token_budget is not None and limit.token_budget > 0
+    ]
+
+
+def cost_budget_limits(rate_limits: Sequence[TokenRateLimit]) -> list[TokenRateLimit]:
+    return [limit for limit in rate_limits if limit.cost_budget_cents is not None]
 
 
 class UserUsageByDay(BaseModel):
@@ -393,17 +303,12 @@ def get_usage_reset_window_start(
     now: datetime, rate_limits: Sequence[TokenRateLimit]
 ) -> datetime:
     """Return the earliest bucket included by any applicable limit."""
-    window_starts = [get_window_start(now, USER_USAGE_BUCKET_SECONDS)]
-    window_starts.extend(
-        get_token_window_start(now, rate_limit.period_hours)
-        for rate_limit in rate_limits
-        if rate_limit.token_budget is not None
+    return min(
+        [
+            get_window_start(now, USER_USAGE_BUCKET_SECONDS),
+            *(get_period_window_start(now, limit.period) for limit in rate_limits),
+        ]
     )
-    window_starts.extend(
-        get_cost_window_start(now, rate_limit.period_hours)
-        for rate_limit in cost_budget_limits(rate_limits)
-    )
-    return min(window_starts)
 
 
 def reset_user_usage(db_session: Session, user_id: str, window_start: datetime) -> int:

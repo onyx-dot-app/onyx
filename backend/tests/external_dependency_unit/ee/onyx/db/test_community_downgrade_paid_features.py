@@ -24,6 +24,7 @@ from onyx.configs.constants import (
     DISCORD_SERVICE_API_KEY_NAME,
     KV_CUSTOM_ANALYTICS_SCRIPT_KEY,
     FileOrigin,
+    TokenRateLimitPeriod,
     TokenRateLimitScope,
 )
 from onyx.db.enums import AccountType, HookFailStrategy, HookPoint, UserFileStatus
@@ -107,10 +108,14 @@ def test_paid_features_are_switched_off(db_session: Session) -> None:
             match_any_keywords=False,
         )
         rate_limit = TokenRateLimit(
-            token_budget=1, period_hours=1, scope=TokenRateLimitScope.GLOBAL
+            token_budget=1,
+            period=TokenRateLimitPeriod.DAILY,
+            scope=TokenRateLimitScope.GLOBAL,
         )
         group_rate_limit = TokenRateLimit(
-            token_budget=1, period_hours=1, scope=TokenRateLimitScope.USER_GROUP
+            token_budget=1,
+            period=TokenRateLimitPeriod.DAILY,
+            scope=TokenRateLimitScope.USER_GROUP,
         )
         group = UserGroup(name=f"downgrade-{uuid4().hex[:8]}")
         db_session.add_all([hook, standard_answer, rate_limit, group_rate_limit, group])

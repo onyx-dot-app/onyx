@@ -11,8 +11,6 @@ import { Button, InputSwitch, Text } from "@opal/components";
 import { SvgTrash, SvgUsers, SvgWallet } from "@opal/icons";
 import { formatCurrencyFromCents, formatTokenCount } from "@/lib/format";
 
-const HOURS_PER_DAY = 24;
-
 interface LimitRowProps {
   limit: TokenRateLimitDisplay;
   isAdmin: boolean;
@@ -41,9 +39,7 @@ function LimitRow({ limit, isAdmin, onToggle, onDelete }: LimitRowProps) {
         : tokens !== null
           ? t("limits.budget.tokens", { tokens })
           : t("limits.budget.none");
-  const cadence = t("limits.cadence.label", {
-    days: limit.period_hours / HOURS_PER_DAY,
-  });
+  const cadence = t("limits.cadence.label", { period: limit.period });
   const limitLabel = t("limits.row.label", { budget, cadence });
 
   return (
@@ -122,7 +118,7 @@ export const TokenRateLimitTable = ({
     try {
       await updateTokenRateLimit(id, {
         token_budget: tokenRateLimit.token_budget,
-        period_hours: tokenRateLimit.period_hours,
+        period: tokenRateLimit.period,
         cost_budget_cents: tokenRateLimit.cost_budget_cents,
         enabled: !tokenRateLimit.enabled,
       });

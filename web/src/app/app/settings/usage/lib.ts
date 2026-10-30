@@ -5,6 +5,7 @@ import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { formatDateForApiParam } from "@/lib/dateUtils";
 import { buildApiPath } from "@/lib/urlBuilder";
+import type { Period } from "@/app/admin/token-rate-limits/types";
 
 export interface UsagePerDayByModel {
   day: string; // "YYYY-MM-DD"
@@ -33,7 +34,7 @@ export interface UserUsageResponse {
   // The user's cost budget, remaining allowance, and next fixed reset.
   budget_cents: number | null;
   budget_remaining_cents: number | null;
-  budget_period_hours: number | null;
+  budget_period: Period | null;
   budget_reset_at: string | null;
   selected_model_price: ModelPrice | null;
   available_model_prices: ModelPrice[];

@@ -198,7 +198,7 @@ def _persona_upsert_body(*, is_public: bool, groups: list[int]) -> dict[str, Any
 _TOKEN_LIMIT_BODY: dict[str, Any] = {
     "enabled": True,
     "token_budget": 1000,
-    "period_hours": 24,
+    "period": "DAILY",
 }
 
 

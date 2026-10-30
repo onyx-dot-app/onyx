@@ -4,6 +4,7 @@ import type { ScopedMutator } from "swr";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type { UserGroup } from "@/lib/types";
+import type { Period } from "@/app/admin/token-rate-limits/types";
 
 const USER_GROUP_URL = SWR_KEYS.adminUserGroups;
 
@@ -176,13 +177,11 @@ async function updateDocSetGroupSharing(
 // Token rate limits — create / update / delete
 // ---------------------------------------------------------------------------
 
-const HOURS_PER_DAY = 24;
-
 interface TokenLimitPayload {
   tokenId?: number | null;
   enabled?: boolean;
   tokenBudget: number | null;
-  periodDays: number | null;
+  period: Period | null;
   costBudgetDollars: number | null;
 }
 
@@ -190,7 +189,7 @@ interface ExistingTokenLimit {
   token_id: number;
   enabled: boolean;
   token_budget: number | null;
-  period_hours: number;
+  period: Period;
   cost_budget_cents: number | null;
 }
 
@@ -198,7 +197,7 @@ interface ValidTokenLimit {
   tokenId: number | null;
   enabled: boolean;
   tokenBudget: number | null;
-  periodDays: number;
+  period: Period;
   costBudgetCents: number | null;
 }
 
@@ -217,14 +216,13 @@ async function saveTokenLimits(
         tokenId: l.tokenId ?? null,
         enabled: l.enabled ?? true,
         tokenBudget: l.tokenBudget,
-        periodDays: l.periodDays,
+        period: l.period,
         costBudgetCents,
       };
     })
     .filter(
       (l): l is ValidTokenLimit =>
-        l.periodDays != null &&
-        (l.tokenBudget != null || l.costBudgetCents != null)
+        l.period != null && (l.tokenBudget != null || l.costBudgetCents != null)
     );
 
   for (const limit of validLimits.filter((item) => item.tokenId !== null)) {
@@ -236,7 +234,7 @@ async function saveTokenLimits(
         body: JSON.stringify({
           enabled: limit.enabled,
           token_budget: limit.tokenBudget,
-          period_hours: limit.periodDays * HOURS_PER_DAY,
+          period: limit.period,
           cost_budget_cents: limit.costBudgetCents,
         }),
       }
@@ -255,7 +253,7 @@ async function saveTokenLimits(
         body: JSON.stringify({
           enabled: limit.enabled,
           token_budget: limit.tokenBudget,
-          period_hours: limit.periodDays * HOURS_PER_DAY,
+          period: limit.period,
           cost_budget_cents: limit.costBudgetCents,
         }),
       }

@@ -14,7 +14,7 @@ import {
   insertGroupTokenRateLimit,
   insertUserTokenRateLimit,
 } from "./lib";
-import { Scope, TokenRateLimit } from "./types";
+import { Period, Scope, TokenRateLimit } from "./types";
 import { GenericTokenRateLimitTable } from "./TokenRateLimitTables";
 import CreateRateLimitModal from "./CreateRateLimitModal";
 
@@ -24,7 +24,7 @@ const USER_GROUP_FETCH_URL = SWR_KEYS.userGroupTokenRateLimits;
 
 async function createTokenRateLimit(
   targetScope: Scope,
-  periodHours: number,
+  period: Period,
   tokenBudget: number | null,
   costBudgetCents: number | null,
   groupId: number
@@ -32,7 +32,7 @@ async function createTokenRateLimit(
   const tokenRateLimitArgs = {
     enabled: true,
     token_budget: tokenBudget,
-    period_hours: periodHours,
+    period,
     cost_budget_cents: costBudgetCents,
   };
 
@@ -74,7 +74,7 @@ export default function TokenRateLimitsPanel({
 
   async function handleSubmit(
     targetScope: Scope,
-    periodHours: number,
+    period: Period,
     tokenBudget: number | null,
     costBudgetCents: number | null,
     groupId: number = -1
@@ -82,7 +82,7 @@ export default function TokenRateLimitsPanel({
     try {
       await createTokenRateLimit(
         targetScope,
-        periodHours,
+        period,
         tokenBudget,
         costBudgetCents,
         groupId
