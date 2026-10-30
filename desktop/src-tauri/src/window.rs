@@ -4,9 +4,7 @@ use std::process::Command;
 #[cfg(target_os = "macos")]
 use std::time::Duration;
 use tauri::webview::{DownloadEvent, NewWindowFeatures, NewWindowResponse};
-#[cfg(target_os = "macos")]
-use tauri::Webview;
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Wry};
+use tauri::{AppHandle, Manager, Webview, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Wry};
 #[cfg(target_os = "macos")]
 use tokio::time::sleep;
 use url::Url;
@@ -318,6 +316,11 @@ fn handle_new_window(
 }
 
 const POPUP_DEFAULT_SIZE: (f64, f64) = (650.0, 760.0);
+const POPUP_LABEL_PREFIX: &str = "popup-";
+
+pub fn is_popup_window(webview: &Webview) -> bool {
+    webview.label().starts_with(POPUP_LABEL_PREFIX)
+}
 
 /// The platform webview loads the requested URL into the returned window
 /// itself, so the window starts blank and must reuse the opener's webview
@@ -326,7 +329,7 @@ fn build_popup_window(
     app: &AppHandle,
     features: NewWindowFeatures,
 ) -> Result<WebviewWindow, String> {
-    let label = format!("popup-{}", uuid::Uuid::new_v4());
+    let label = format!("{POPUP_LABEL_PREFIX}{}", uuid::Uuid::new_v4());
     let blank = "about:blank"
         .parse()
         .map_err(|e| format!("Invalid popup URL: {e}"))?;
@@ -411,6 +414,10 @@ pub fn build_main_window(app: &AppHandle) -> Result<WebviewWindow, String> {
 /// load and would otherwise miss later in-app navigations.
 #[cfg(target_os = "macos")]
 pub fn eval_titlebar_script(webview: &Webview) {
+    // Popups keep the native title bar, so the drag strip would only cover content.
+    if is_popup_window(webview) {
+        return;
+    }
     if let Err(e) = webview.eval(TITLEBAR_SCRIPT) {
         log_backend_error(
             webview.app_handle(),

@@ -187,6 +187,12 @@ fn main() {
         .plugin(
             tauri::plugin::Builder::<Wry>::new("chat-external-navigation-handler")
                 .on_navigation(|webview, destination_url| {
+                    // A popup's webview has no URL before its first load, and
+                    // `url()` panics in wry then; popups also must follow
+                    // cross-origin OAuth redirects.
+                    if window::is_popup_window(webview) {
+                        return true;
+                    }
                     let Ok(current_url) = webview.url() else {
                         return true;
                     };

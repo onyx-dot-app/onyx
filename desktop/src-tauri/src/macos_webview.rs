@@ -16,7 +16,7 @@ use objc2::runtime::{AnyClass, AnyObject, Bool, Imp, Sel};
 use objc2::{msg_send, sel, MainThreadMarker};
 use objc2_app_kit::{NSAlert, NSAlertFirstButtonReturn, NSTextField};
 use objc2_foundation::{ns_string, NSSize, NSString};
-use tauri::WebviewWindow;
+use tauri::{Manager, WebviewWindow};
 
 use crate::debug_log::log_backend_error;
 
@@ -42,39 +42,39 @@ pub fn install_ui_delegate_extensions(window: &WebviewWindow) {
     }
 }
 
+type AlertImp = unsafe extern "C-unwind" fn(
+    &AnyObject,
+    Sel,
+    &AnyObject,
+    &NSString,
+    &AnyObject,
+    &Block<dyn Fn()>,
+);
+type ConfirmImp = unsafe extern "C-unwind" fn(
+    &AnyObject,
+    Sel,
+    &AnyObject,
+    &NSString,
+    &AnyObject,
+    &Block<dyn Fn(Bool)>,
+);
+type PromptImp = unsafe extern "C-unwind" fn(
+    &AnyObject,
+    Sel,
+    &AnyObject,
+    &NSString,
+    *mut NSString,
+    &AnyObject,
+    &Block<dyn Fn(*mut NSString)>,
+);
+type CloseImp = unsafe extern "C-unwind" fn(&AnyObject, Sel, &AnyObject);
+
 unsafe fn install(wk_webview: *mut AnyObject) {
     let delegate: *mut AnyObject = msg_send![wk_webview, UIDelegate];
     let Some(delegate) = delegate.as_ref() else {
         return;
     };
     let class = ptr::from_ref::<AnyClass>(delegate.class()).cast_mut();
-
-    type AlertImp = unsafe extern "C-unwind" fn(
-        &AnyObject,
-        Sel,
-        &AnyObject,
-        &NSString,
-        &AnyObject,
-        &Block<dyn Fn()>,
-    );
-    type ConfirmImp = unsafe extern "C-unwind" fn(
-        &AnyObject,
-        Sel,
-        &AnyObject,
-        &NSString,
-        &AnyObject,
-        &Block<dyn Fn(Bool)>,
-    );
-    type PromptImp = unsafe extern "C-unwind" fn(
-        &AnyObject,
-        Sel,
-        &AnyObject,
-        &NSString,
-        *mut NSString,
-        &AnyObject,
-        &Block<dyn Fn(*mut NSString)>,
-    );
-    type CloseImp = unsafe extern "C-unwind" fn(&AnyObject, Sel, &AnyObject);
 
     add_method(
         class,
@@ -100,6 +100,8 @@ unsafe fn install(wk_webview: *mut AnyObject) {
         std::mem::transmute::<CloseImp, Imp>(web_view_did_close),
         c"v@:@",
     );
+    // WebKit caches which delegate methods exist when the delegate is set.
+    let _: () = msg_send![wk_webview, setUIDelegate: delegate];
 }
 
 unsafe fn add_method(class: *mut AnyClass, name: Sel, imp: Imp, types: &CStr) {
@@ -162,8 +164,10 @@ unsafe extern "C-unwind" fn run_prompt(
         return;
     };
     let alert = new_alert(mtm, prompt, &[ns_string!("OK"), ns_string!("Cancel")]);
-    let field =
-        NSTextField::textFieldWithString(default_text.as_ref().unwrap_or(ns_string!("")), mtm);
+    let field = NSTextField::textFieldWithString(
+        default_text.as_ref().unwrap_or_else(|| ns_string!("")),
+        mtm,
+    );
     field.setFrameSize(NSSize::new(280.0, 24.0));
     alert.setAccessoryView(Some(&field));
     alert.window().setInitialFirstResponder(Some(&field));
