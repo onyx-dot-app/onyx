@@ -57,9 +57,10 @@ _F = TypeVar("_F", bound=Callable[..., list[Any]])
 
 _SLIM_DOC_SYNC_LABEL = "canvas_retrieve_all_slim_docs_perm_sync"
 _ACTIVE_ENROLLMENT_STATES = {"active", "invited"}
-# Canvas answers 404 on a course stage endpoint when that tool is disabled for
-# the course (e.g. "That page has been disabled for this course").
-_TOOL_DISABLED_STATUS_CODE = 404
+# Canvas answers 404 on a course stage endpoint both when that tool is disabled
+# for the course ("That page has been disabled for this course") and when the
+# course is gone. `_course_exists` tells the two apart.
+_NOT_FOUND_STATUS_CODE = 404
 # Matches the ids the crawl writes: canvas-<page|assignment|announcement>-<course id>-<object id>
 _DOC_ID_PATTERN = re.compile(r"^canvas-(page|assignment|announcement)-(\d+)-(\d+)$")
 
@@ -117,17 +118,22 @@ def _empty_if_tool_disabled(stage: CanvasStage) -> Callable[[_F], _F]:
     disabled for the course.
 
     Apply it below ``retry_builder`` so the 404 is handled before the retry
-    logic sees it. Any other error still propagates: returning [] for a
-    transient error would make pruning delete documents that still exist.
+    logic sees it. Any other error, and a 404 for a course that is gone, still
+    propagates: returning [] then would make pruning delete documents that
+    may still exist.
     """
 
     def decorator(fn: _F) -> _F:
         @functools.wraps(fn)
-        def wrapper(self: Any, course_id: int, *args: Any, **kwargs: Any) -> list[Any]:
+        def wrapper(
+            self: "CanvasConnector", course_id: int, *args: Any, **kwargs: Any
+        ) -> list[Any]:
             try:
                 return fn(self, course_id, *args, **kwargs)
             except OnyxError as e:
-                if e.status_code != _TOOL_DISABLED_STATUS_CODE:
+                if e.status_code != _NOT_FOUND_STATUS_CODE or not self._course_exists(
+                    course_id
+                ):
                     raise
                 logger.warning(
                     "Canvas %s is disabled for course %s. Skipping stage.",
@@ -459,6 +465,18 @@ class CanvasConnector(
         ):
             courses.extend(CanvasCourse.from_api(c) for c in page)
         return courses
+
+    @retry_builder(tries=3, delay=1, backoff=2)
+    def _course_exists(self, course_id: int) -> bool:
+        """Return False if Canvas answers 404 for the course itself. Used after
+        a stage 404 to tell a disabled tool from a course that is gone."""
+        try:
+            self.canvas_client.get(f"courses/{course_id}")
+        except OnyxError as e:
+            if e.status_code == _NOT_FOUND_STATUS_CODE:
+                return False
+            raise
+        return True
 
     @retry_builder(tries=3, delay=1, backoff=2)
     @_empty_if_tool_disabled(CanvasStage.PAGES)
@@ -875,12 +893,14 @@ class CanvasConnector(
             if oe.status_code in (401, 403):
                 _handle_canvas_api_error(oe)  # NoReturn — always raises
 
-            # 404 on a stage means that tool is disabled for the course. The
-            # other stages of the course are unaffected, so skip only this
-            # one and record no failure: counting it as one trips the
-            # failure threshold and aborts the run for accounts where the
-            # tool is disabled in several courses.
-            if oe.status_code == _TOOL_DISABLED_STATUS_CODE:
+            if oe.status_code == _NOT_FOUND_STATUS_CODE and self._course_exists(
+                course_id
+            ):
+                # The course exists, so the tool is disabled for it. The
+                # other stages are unaffected, so skip only this one and
+                # record no failure: counting it as one trips the failure
+                # threshold and aborts the run for accounts where the tool
+                # is disabled in several courses.
                 logger.warning(
                     "Canvas %s is disabled for course %s (HTTP 404: %s). Skipping stage.",
                     stage,
@@ -888,6 +908,22 @@ class CanvasConnector(
                     oe,
                 )
                 new_checkpoint.advance_stage()
+            elif oe.status_code == _NOT_FOUND_STATUS_CODE:
+                # The course itself is gone. Its other stages would hit the
+                # same 404, so skip the whole course.
+                logger.warning(
+                    "Canvas course %s not found while fetching %s (HTTP 404). Skipping course.",
+                    course_id,
+                    stage,
+                )
+                yield ConnectorFailure(
+                    failed_entity=EntityFailure(
+                        entity_id=f"canvas-course-{course_id}",
+                    ),
+                    failure_message=f"Canvas course {course_id} not found: {oe}",
+                    exception=oe,
+                )
+                new_checkpoint.advance_course()
             else:
                 logger.warning(
                     "Failed to fetch %s for course %s: %s. Skipping remainder of this stage.",

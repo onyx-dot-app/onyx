@@ -1354,20 +1354,57 @@ class TestLoadFromCheckpoint:
             stage=CanvasStage.PAGES,
         )
 
-        with patch.object(
-            connector,
-            "_fetch_stage_page",
-            side_effect=OnyxError(
-                OnyxErrorCode.NOT_FOUND,
-                "That page has been disabled for this course",
-                status_code_override=404,
+        with (
+            patch.object(
+                connector,
+                "_fetch_stage_page",
+                side_effect=OnyxError(
+                    OnyxErrorCode.NOT_FOUND,
+                    "That page has been disabled for this course",
+                    status_code_override=404,
+                ),
             ),
+            patch.object(connector, "_course_exists", return_value=True),
         ):
             items, new_cp = _run_checkpoint(connector, cp)
 
         assert items == []
         assert new_cp.current_course_index == 0
         assert new_cp.stage == CanvasStage.ASSIGNMENTS
+        assert new_cp.next_url is None
+        assert new_cp.has_more is True
+
+    def test_deleted_course_404_advances_course_and_yields_failure(self) -> None:
+        """A stage 404 for a course that no longer exists skips the whole
+        course and records a course-level failure."""
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True,
+            course_ids=[1, 2],
+            current_course_index=0,
+            stage=CanvasStage.PAGES,
+        )
+
+        with (
+            patch.object(
+                connector,
+                "_fetch_stage_page",
+                side_effect=OnyxError(
+                    OnyxErrorCode.NOT_FOUND,
+                    "The specified resource does not exist.",
+                    status_code_override=404,
+                ),
+            ),
+            patch.object(connector, "_course_exists", return_value=False),
+        ):
+            items, new_cp = _run_checkpoint(connector, cp)
+
+        assert len(items) == 1
+        assert isinstance(items[0], ConnectorFailure)
+        assert items[0].failed_entity is not None
+        assert items[0].failed_entity.entity_id == "canvas-course-1"
+        assert new_cp.current_course_index == 1
+        assert new_cp.stage == CanvasStage.PAGES
         assert new_cp.next_url is None
         assert new_cp.has_more is True
 
@@ -1380,14 +1417,17 @@ class TestLoadFromCheckpoint:
             stage=CanvasStage.ANNOUNCEMENTS,
         )
 
-        with patch.object(
-            connector,
-            "_fetch_stage_page",
-            side_effect=OnyxError(
-                OnyxErrorCode.NOT_FOUND,
-                "disabled",
-                status_code_override=404,
+        with (
+            patch.object(
+                connector,
+                "_fetch_stage_page",
+                side_effect=OnyxError(
+                    OnyxErrorCode.NOT_FOUND,
+                    "disabled",
+                    status_code_override=404,
+                ),
             ),
+            patch.object(connector, "_course_exists", return_value=True),
         ):
             items, new_cp = _run_checkpoint(connector, cp)
 
@@ -1962,6 +2002,28 @@ class TestRetrieveAllSlimDocsPermSync:
             c for c in mock_requests.get.call_args_list if c.args[0].endswith("/pages")
         ]
         assert len(pages_calls) == 1  # a disabled tool is not retried
+
+    @patch("tenacity.nap.time.sleep")
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_deleted_course_still_fails_sync(
+        self, mock_requests: MagicMock, _mock_sleep: MagicMock
+    ) -> None:
+        """A stage 404 for a course that is gone must fail the sync, not
+        yield an empty listing that would prune its documents."""
+        dispatcher = _make_url_dispatcher(courses=[_mock_course()])
+        not_found = {"errors": [{"message": "The specified resource does not exist."}]}
+
+        def _respond(url: str, **kwargs: Any) -> MagicMock:
+            if url.endswith("/pages") or url == f"{FAKE_BASE_URL}/api/v1/courses/1":
+                return _mock_response(404, not_found)
+            return dispatcher(url, **kwargs)
+
+        mock_requests.get.side_effect = _respond
+        connector = CanvasConnector(canvas_base_url=FAKE_BASE_URL)
+        connector.load_credentials({"canvas_access_token": FAKE_TOKEN})
+
+        with pytest.raises(OnyxError):
+            list(connector.retrieve_all_slim_docs_perm_sync())
 
     @pytest.mark.parametrize("status_code", [401, 403, 500])
     @patch("onyx.connectors.canvas.client.rl_requests")

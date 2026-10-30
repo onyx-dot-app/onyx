@@ -173,6 +173,7 @@ assignment and announcement text through the Canvas API and does not download co
     Pages and assignments without `updated_at`, and announcements without `posted_at`, are skipped on refresh.
     If a tool such as Pages is disabled in a course, Canvas returns HTTP 404 for that tool.
     Onyx skips only that tool and indexes the other content of the course.
+    A course that no longer exists is skipped for that indexing attempt.
   </Accordion>
 
   <Accordion title="Permission sync fails at connector creation">
