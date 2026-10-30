@@ -9,7 +9,9 @@ from onyx.configs.constants import (
     TokenRateLimitScope,
 )
 from onyx.server.query_and_chat.token_limit import BudgetUnit
-from onyx.server.token_rate_limits.models import MAX_TOKEN_BUDGET_THOUSANDS
+
+# 1T tokens; stored in thousands so the ceiling stays inside the int32 column.
+MAX_TOKEN_BUDGET_THOUSANDS = 1_000_000_000
 
 # The smallest value the Numeric(18, 6) column stores; less rounds to zero.
 MIN_COST_BUDGET_CENTS = 1e-6

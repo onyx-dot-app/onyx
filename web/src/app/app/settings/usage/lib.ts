@@ -5,7 +5,7 @@ import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { formatDateForApiParam } from "@/lib/dateUtils";
 import { buildApiPath } from "@/lib/urlBuilder";
-import type { Period } from "@/app/admin/token-rate-limits/types";
+import type { Period } from "@/lib/spendingLimits/types";
 
 export interface UsagePerDayByModel {
   day: string; // "YYYY-MM-DD"
