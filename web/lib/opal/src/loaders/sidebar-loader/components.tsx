@@ -1,16 +1,23 @@
 "use client";
 
 import "@opal/loaders/styles.css";
+import { useId } from "react";
 import { Section } from "@opal/layouts/general/components";
+import {
+  LineLoader,
+  type LineLoaderWidth,
+} from "@opal/loaders/line-loader/components";
+import { pick, seededRandom, type NonEmpty } from "@opal/loaders/random";
 import { useOpalStrings } from "@opal/strings";
-import { cn } from "@opal/utils";
 
-// Label widths the tabs cycle through, so a stack reads as a list.
-const LABEL_WIDTHS = ["w-3/4", "w-1/2", "w-2/3"] as const;
+// The label widths a random tab picks from.
+const LABEL_WIDTHS: NonEmpty<LineLoaderWidth> = ["1/2", "2/3", "3/4"];
 
 interface SidebarLoaderProps {
   /** How many sidebar tabs to stand in for. @default 1 */
   count?: number;
+  /** Width of every tab's label. Unset, each tab picks a random width. */
+  width?: LineLoaderWidth;
   /** Stand in for the folded sidebar's icon-only tabs. @default false */
   folded?: boolean;
 }
@@ -20,8 +27,13 @@ interface SidebarLoaderProps {
  * footprint, so the real tabs take their place without a shift. Folded, each
  * tab is a shimmering icon.
  */
-function SidebarLoader({ count = 1, folded = false }: SidebarLoaderProps) {
+function SidebarLoader({
+  count = 1,
+  width,
+  folded = false,
+}: SidebarLoaderProps) {
   const strings = useOpalStrings();
+  const random = seededRandom(useId());
   return (
     <Section
       role="status"
@@ -48,14 +60,11 @@ function SidebarLoader({ count = 1, folded = false }: SidebarLoaderProps) {
             padding={0.5}
             className="min-h-6 ms-0.5"
           >
-            <div
-              className={cn(
-                "opal-shimmer-block",
-                folded
-                  ? "size-4 rounded-full"
-                  : cn("h-3 rounded-04", LABEL_WIDTHS[index % 3])
-              )}
-            />
+            {folded ? (
+              <div className="opal-shimmer-block size-4 rounded-full" />
+            ) : (
+              <LineLoader width={width ?? pick(LABEL_WIDTHS, random)} />
+            )}
           </Section>
         </Section>
       ))}

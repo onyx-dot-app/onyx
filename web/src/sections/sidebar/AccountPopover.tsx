@@ -292,7 +292,7 @@ export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
     ],
   };
   if (userResolution === "loading") {
-    return <SidebarLoader folded={folded} />;
+    return <SidebarLoader width="full" folded={folded} />;
   }
 
   return (
