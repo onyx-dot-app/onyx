@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -173,3 +174,29 @@ def test_a_listing_cursor_that_does_not_advance_raises() -> None:
                 page_size=10,
                 continuation_token="cursor",
             )
+
+
+@pytest.mark.parametrize(("size", "expected"), [(3, b"raw"), (11, None)])
+def test_read_file_reads_stored_bytes_up_to_the_limit(
+    size: int, expected: bytes | None
+) -> None:
+    gateway = _gateway(
+        {
+            "authentication_method": "account_key",
+            "adls_account_name": "onyxtest",
+            "adls_account_key": "key",
+        }
+    )
+
+    with patch(f"{MODULE}.DataLakeServiceClient") as client_class:
+        file_system = client_class.return_value.get_file_system_client.return_value
+        file_client = file_system.get_file_client.return_value
+        downloader = file_client.download_file.return_value
+        downloader.size = size
+        downloader.properties.last_modified = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        downloader.readall.return_value = b"raw"
+        result = gateway.read_file(path="docs/a.txt.gz", max_bytes=10)
+
+    # A gzip-encoded file is not expanded in memory before the size check.
+    file_client.download_file.assert_called_once_with(decompress=False)
+    assert result.content == expected

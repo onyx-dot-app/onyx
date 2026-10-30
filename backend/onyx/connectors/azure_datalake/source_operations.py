@@ -11,7 +11,7 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any, ClassVar, TypeVar, cast
 
-from azure.core.credentials import AccessToken
+from azure.core.credentials import AccessToken, TokenCredential
 from azure.core.exceptions import (
     ClientAuthenticationError,
     HttpResponseError,
@@ -81,7 +81,7 @@ class AzureDataLakeRequestError(SourceApiError):
     """Azure Storage answered with an error the gateway does not map."""
 
 
-class _StorageTokenCredential:
+class _StorageTokenCredential(TokenCredential):
     """An azure-core token credential backed by the family's MSAL client.
     MSAL caches the token until shortly before it expires."""
 
@@ -189,9 +189,8 @@ class AzureDataLakeSourceOperations(SourceOperations):
                     credentials.authentication_method
                     is AzureDataLakeAuthMethod.ACCOUNT_KEY
                 ):
-                    # The credential model rejects an account key method
-                    # without a key.
-                    assert credentials.adls_account_key is not None
+                    if credentials.adls_account_key is None:
+                        raise CredentialInvalidError("The account key is missing.")
                     storage_credential: str | _StorageTokenCredential = (
                         credentials.adls_account_key
                     )
@@ -320,7 +319,9 @@ class AzureDataLakeSourceOperations(SourceOperations):
         file_client = self._file_system().get_file_client(path)
 
         def download() -> AzureDataLakeFile:
-            downloader = file_client.download_file()
+            # Stored bytes only: decompressing a gzip-encoded file would expand
+            # it in memory before the size check.
+            downloader = file_client.download_file(decompress=False)
             return AzureDataLakeFile(
                 size=downloader.size,
                 last_modified=_aware(downloader.properties.last_modified),
