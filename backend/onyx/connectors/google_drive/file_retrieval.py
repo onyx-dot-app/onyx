@@ -65,6 +65,17 @@ SHORTCUT_FIELDS = (
     "id, name, mimeType, shortcutDetails(targetId,targetMimeType,targetResourceKey)"
 )
 
+# What a corpus count reads per file: its type, its bytes (absent on native
+# Google files), where it sits, and a shortcut's target.
+COUNT_FILE_FIELDS = (
+    "nextPageToken, files(id, mimeType, size, modifiedTime, driveId, "
+    "owners(emailAddress), "
+    "shortcutDetails(targetId,targetMimeType,targetResourceKey))"
+)
+# The largest page files.list serves. A count reads nothing per file, so
+# bigger pages are pure savings.
+COUNT_PAGE_SIZE = 1000
+
 HIERARCHY_FIELDS = "id, name, parents, webViewLink, mimeType, driveId"
 
 HIERARCHY_FIELDS_WITH_PERMISSIONS = (
@@ -86,6 +97,73 @@ def generate_time_range_filter(
         time_stop = datetime.fromtimestamp(end, tz=timezone.utc).isoformat()
         time_range_filter += f" and {GoogleFields.MODIFIED_TIME.value} <= '{time_stop}'"
     return time_range_filter
+
+
+# Every file listing: documents only, nothing in the trash.
+_FILES_QUERY = f"mimeType != '{DRIVE_FOLDER_TYPE}' and trashed = false"
+
+
+def files_in_drive_query(
+    start: SecondsSinceUnixEpoch | None, end: SecondsSinceUnixEpoch | None
+) -> str:
+    """Query for a shared drive's files."""
+    return _FILES_QUERY + generate_time_range_filter(start, end)
+
+
+def my_drive_files_query(
+    include_shared_with_me: bool,
+    start: SecondsSinceUnixEpoch | None,
+    end: SecondsSinceUnixEpoch | None,
+) -> str:
+    """Query for a user's files in the USER corpus: owned only, or everything
+    they see."""
+    query = _FILES_QUERY
+    if not include_shared_with_me:
+        query += " and 'me' in owners"
+    return query + generate_time_range_filter(start, end)
+
+
+def oauth_files_query(
+    include_files_shared_with_me: bool,
+    include_my_drives: bool,
+    include_shared_drives: bool,
+    start: SecondsSinceUnixEpoch | None,
+    end: SecondsSinceUnixEpoch | None,
+) -> tuple[DriveCorpus, str]:
+    """The corpus and query of the one listing an OAuth user makes for files
+    outside the drives and folders listed on their own."""
+    should_get_all = (
+        include_shared_drives and include_my_drives and include_files_shared_with_me
+    )
+    corpus = DriveCorpus.ALL_DRIVES if should_get_all else DriveCorpus.USER
+    query = _FILES_QUERY + generate_time_range_filter(start, end)
+    if not should_get_all:
+        if include_files_shared_with_me and not include_my_drives:
+            query += " and not 'me' in owners"
+        if not include_files_shared_with_me and include_my_drives:
+            query += " and 'me' in owners"
+    return corpus, query
+
+
+def files_in_parent_query(
+    parent_id: str,
+    start: SecondsSinceUnixEpoch | None,
+    end: SecondsSinceUnixEpoch | None,
+) -> str:
+    """Query for one folder's own files."""
+    return f"{_FILES_QUERY} and '{parent_id}' in parents" + generate_time_range_filter(
+        start, end
+    )
+
+
+def owner_email(drive_file: GoogleDriveFileType) -> str | None:
+    """Lowercased owner of a My Drive file. Drive allows one owner; shared
+    drive files have none."""
+    owners = drive_file.get("owners") or []
+    if not owners:
+        return None
+    email = owners[0].get("emailAddress")
+    return email.lower() if isinstance(email, str) else None
 
 
 LINK_ONLY_PERMISSION_TYPES = {"domain", "anyone"}
@@ -116,7 +194,7 @@ def files_only(
         yield item
 
 
-def _get_folders_in_parent(
+def get_folders_in_parent(
     ops: GoogleDriveSourceOperations,
     user_email: str,
     parent_id: str | None = None,
@@ -372,15 +450,11 @@ def _get_files_in_parent(
     start: SecondsSinceUnixEpoch | None = None,
     end: SecondsSinceUnixEpoch | None = None,
 ) -> Iterator[GoogleDriveFileType]:
-    query = f"mimeType != '{DRIVE_FOLDER_TYPE}' and '{parent_id}' in parents"
-    query += " and trashed = false"
-    query += generate_time_range_filter(start, end)
-
     for file in files_only(
         ops.list_files(
             variant=DriveCorpus.ALL_DRIVES,
             user_email=user_email,
-            query=query,
+            query=files_in_parent_query(parent_id, start, end),
             fields=_get_fields_for_file_type(field_type),
             order_by=GoogleFields.MODIFIED_TIME.value,
             continue_on_404_or_403=True,
@@ -463,7 +537,7 @@ def crawl_folders_for_files(
                 "Skipping files since parent is already traversed: %s", parent_id
             )
 
-        for subfolder in _get_folders_in_parent(
+        for subfolder in get_folders_in_parent(
             ops=ops,
             user_email=user_email,
             parent_id=parent_id,
@@ -516,16 +590,11 @@ def get_files_in_shared_drive(
         ):
             update_traversed_ids_func(folder["id"])
 
-    # Get all files in the shared drive
-    file_query = f"mimeType != '{DRIVE_FOLDER_TYPE}'"
-    file_query += " and trashed = false"
-    file_query += generate_time_range_filter(start, end)
-
     for file in ops.list_files(
         variant=DriveCorpus.DRIVE,
         user_email=user_email,
         drive_id=drive_id,
-        query=file_query,
+        query=files_in_drive_query(start, end),
         fields=_get_fields_for_file_type(field_type),
         order_by=GoogleFields.MODIFIED_TIME.value,
         page_token=page_token,
@@ -585,19 +654,13 @@ def get_all_files_in_my_drive_and_shared(
         if found_folders:
             update_traversed_ids_func(ops.get_root_folder_id(user_email=user_email))
 
-    # Then get the files
-    file_query = f"mimeType != '{DRIVE_FOLDER_TYPE}'"
-    file_query += " and trashed = false"
-    if not include_shared_with_me:
-        file_query += " and 'me' in owners"
-    file_query += generate_time_range_filter(start, end)
     yield from _resolve_file_shortcuts(
         ops,
         user_email,
         ops.list_files(
             variant=DriveCorpus.USER,
             user_email=user_email,
-            query=file_query,
+            query=my_drive_files_query(include_shared_with_me, start, end),
             fields=_get_fields_for_file_type(field_type),
             order_by=GoogleFields.MODIFIED_TIME.value,
             page_token=page_token,
@@ -623,21 +686,13 @@ def get_all_files_for_oauth(
     if page_token:
         logger.info("Using page token: %s", page_token)
 
-    should_get_all = (
-        include_shared_drives and include_my_drives and include_files_shared_with_me
+    corpus, file_query = oauth_files_query(
+        include_files_shared_with_me,
+        include_my_drives,
+        include_shared_drives,
+        start,
+        end,
     )
-    corpus = DriveCorpus.ALL_DRIVES if should_get_all else DriveCorpus.USER
-
-    file_query = f"mimeType != '{DRIVE_FOLDER_TYPE}'"
-    file_query += " and trashed = false"
-    file_query += generate_time_range_filter(start, end)
-
-    if not should_get_all:
-        if include_files_shared_with_me and not include_my_drives:
-            file_query += " and not 'me' in owners"
-        if not include_files_shared_with_me and include_my_drives:
-            file_query += " and 'me' in owners"
-
     yield from _resolve_file_shortcuts(
         ops,
         user_email,
