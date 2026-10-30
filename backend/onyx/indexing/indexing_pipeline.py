@@ -1,6 +1,6 @@
 import time
 from collections import defaultdict
-from collections.abc import Callable, Generator, Iterator
+from collections.abc import Callable, Generator, Iterator, Mapping
 from contextlib import contextmanager, nullcontext
 from typing import NamedTuple, Protocol
 
@@ -39,8 +39,11 @@ from onyx.connectors.models import (
 )
 from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.document import (
+    PresentSearchSettingsRef,
     get_documents_by_ids,
-    update_docs_content_hash__no_commit,
+    present_index_content_hash,
+    record_present_index_write__no_commit,
+    record_reindex_write__no_commit,
     upsert_document_by_connector_credential_pair,
     upsert_documents,
 )
@@ -54,7 +57,10 @@ from onyx.db.index_attempt_metrics import (
 )
 from onyx.db.models import Document as DBDocument
 from onyx.db.models import IndexModelStatus
-from onyx.db.search_settings import get_active_search_settings
+from onyx.db.search_settings import (
+    get_active_search_settings,
+    get_current_search_settings,
+)
 from onyx.db.tag import upsert_document_tags
 from onyx.document_index.document_index_utils import get_multipass_config
 from onyx.document_index.document_metadata import DocumentMetadata
@@ -411,6 +417,7 @@ def embed_and_stream(
 def get_docs_to_update(
     documents: list[Document],
     db_docs: list[DBDocument],
+    doc_id_to_present_index_hash: Mapping[str, str | None],
     ignore_timestamp_gate: bool = False,
     ignore_content_hash_gate: bool = False,
 ) -> _DocsToUpdateResult:
@@ -428,7 +435,11 @@ def get_docs_to_update(
 
     Gate 2 — content hash skip (fallback):
       Applied when the timestamp has not advanced (absent or unchanged). Computes
-      DocumentBase.content_hash() and compares it to the stored hash. If equal, skip.
+      DocumentBase.content_hash() and compares it to the hash the PRESENT index holds
+      (`doc_id_to_present_index_hash`, see present_index_content_hash: after a reindex
+      swap the row's content_hash can describe the index that was swapped out). If
+      equal, skip. Gate 1 likewise trusts the row's timestamp only when content_hash
+      describes the PRESENT index.
 
       NOT applied when doc_updated_at is present and has advanced past what is stored —
       a timestamp advance is authoritative evidence of a change and must not be
@@ -451,6 +462,12 @@ def get_docs_to_update(
     doc_id_to_content_hash: dict[str, str] = {}
     for doc in documents:
         db_doc = id_to_db_doc_map.get(doc.id)
+        present_index_hash = (
+            doc_id_to_present_index_hash.get(doc.id) if db_doc is not None else None
+        )
+        row_matches_present_index = (
+            db_doc is not None and present_index_hash == db_doc.content_hash
+        )
         access_changed = bool(
             db_doc
             and doc.external_access is not None
@@ -475,6 +492,7 @@ def get_docs_to_update(
             and doc.id in id_update_time_map
             and not timestamp_advanced
             and not access_changed
+            and row_matches_present_index
         ):
             continue
 
@@ -483,7 +501,7 @@ def get_docs_to_update(
         # check so we never suppress a legitimate re-index (see docstring).
         content_hash = doc.content_hash()
         if not timestamp_advanced and not ignore_content_hash_gate:
-            if db_doc and db_doc.content_hash == content_hash and not access_changed:
+            if db_doc and present_index_hash == content_hash and not access_changed:
                 logger.debug("Skipping document %r — content hash unchanged", doc.id)
                 continue
 
@@ -502,6 +520,7 @@ def index_doc_batch_with_handler(
     request_id: str | None,
     tenant_id: str,
     adapter: IndexingBatchAdapter,
+    written_search_settings_id: int,
     ignore_time_skip: bool = False,
     index_to_secondary: bool = False,
     from_beginning: bool = False,
@@ -531,6 +550,7 @@ def index_doc_batch_with_handler(
                 request_id=request_id,
                 tenant_id=tenant_id,
                 adapter=adapter,
+                written_search_settings_id=written_search_settings_id,
                 ignore_time_skip=ignore_time_skip,
                 index_to_secondary=index_to_secondary,
                 from_beginning=from_beginning,
@@ -686,6 +706,12 @@ def index_doc_batch_prepare(
         db_session=db_session,
         document_ids=document_ids,
     )
+    present_ref = PresentSearchSettingsRef.from_settings(
+        get_current_search_settings(db_session)
+    )
+    doc_id_to_present_index_hash = {
+        db_doc.id: present_index_content_hash(db_doc, present_ref) for db_doc in db_docs
+    }
 
     # Capture previous file_ids BEFORE any writes so we know what to reap.
     previous_file_ids: dict[str, str] = {
@@ -695,6 +721,7 @@ def index_doc_batch_prepare(
     updatable_docs, doc_id_to_content_hash = get_docs_to_update(
         documents=documents,
         db_docs=db_docs,
+        doc_id_to_present_index_hash=doc_id_to_present_index_hash,
         ignore_timestamp_gate=ignore_time_skip or force_update,
         ignore_content_hash_gate=index_to_secondary or force_update,
     )
@@ -1508,6 +1535,7 @@ def index_doc_batch(
     force_update: bool = False,
     skip_document_row_writes: bool = False,
     on_prepared: Callable[[set[str]], None] | None = None,
+    written_search_settings_id: int,
     ignore_time_skip: bool = False,
     index_to_secondary: bool = False,
     from_beginning: bool = False,
@@ -1737,17 +1765,31 @@ def index_doc_batch(
             # vector DB. Doing this here (after the write) prevents a failed
             # index from storing a hash that would permanently skip the document
             # on the next sync. Hashes were pre-computed in get_docs_to_update.
-            # Skipped for FUTURE writes: stamping the PRESENT-only hash would make
-            # the PRESENT poll skip the doc (cross-index suppression).
-            if not index_to_secondary:
-                successfully_indexed_ids = {r.document_id for r in insertion_records}
-                update_docs_content_hash__no_commit(
-                    ids_to_new_hash={
-                        doc_id: context.doc_id_to_content_hash[doc_id]
-                        for doc_id in successfully_indexed_ids
-                        if doc_id in context.doc_id_to_content_hash
-                    },
-                    db_session=db_session,
+            successfully_indexed_ids = {r.document_id for r in insertion_records}
+            written_hashes = {
+                doc_id: context.doc_id_to_content_hash[doc_id]
+                for doc_id in successfully_indexed_ids
+                if doc_id in context.doc_id_to_content_hash
+            }
+            if written_hashes and index_to_secondary:
+                # A FUTURE index: record what it now holds instead of setting
+                # content_hash, which describes PRESENT and would make PRESENT indexing
+                # skip the doc.
+                record_reindex_write__no_commit(
+                    db_session,
+                    written_hashes,
+                    written_search_settings_id,
+                    PresentSearchSettingsRef.from_settings(
+                        get_current_search_settings(db_session)
+                    ),
+                    skip_docs_recorded_for_target=False,
+                )
+            elif written_hashes:
+                record_present_index_write__no_commit(
+                    db_session,
+                    written_hashes,
+                    written_search_settings_id,
+                    get_current_search_settings(db_session).id,
                 )
 
     try:
@@ -1787,11 +1829,18 @@ def run_indexing_pipeline(
     force_update: bool = False,
     skip_document_row_writes: bool = False,
     skip_spreadsheet_content: bool = False,
+    written_search_settings_id: int,
 ) -> IndexingPipelineResult:
     """Builds a pipeline which takes in a list (batch) of docs and indexes them.
 
-    index_to_secondary disables the content-hash gate + stamp for FUTURE writes so
-    they don't cross-suppress the PRESENT index's shared hash.
+    written_search_settings_id is the search settings of the index this call writes
+    to. Each doc row saves it next to the hash written. Pass the id the caller had when
+    the batch started, not a new lookup: a swap during the batch would give the wrong
+    index.
+
+    index_to_secondary marks a FUTURE write. It turns off the content-hash skip, which
+    compares against PRESENT. It also leaves content_hash alone, because content_hash
+    describes PRESENT, and saves the hash in secondary_content_hash instead.
 
     force_update bypasses both change gates. Needed when the document is
     unchanged at the source but must be re-chunked anyway (see
@@ -1865,6 +1914,7 @@ def run_indexing_pipeline(
             llm=llm,
             ignore_time_skip=ignore_time_skip,
             index_to_secondary=index_to_secondary,
+            written_search_settings_id=written_search_settings_id,
             from_beginning=from_beginning,
             force_update=force_update,
             skip_document_row_writes=skip_document_row_writes,

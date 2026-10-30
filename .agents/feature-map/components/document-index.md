@@ -133,6 +133,20 @@ then requires the new index to be not red and to answer a count query
 (`background/celery/tasks/index_reclaim/tasks.py:_new_index_can_serve`) before
 it deletes the old one.
 
+**Which index holds a document.** A `Document` row has `content_hash`, the
+version indexing last wrote into PRESENT, and a record of what one other index
+holds: `secondary_content_hash` with `secondary_search_settings_id`. The port and
+secondary indexing set the record with FUTURE's id when they write a document
+into FUTURE (`backend/onyx/db/document.py:record_reindex_write__no_commit`). A PRESENT write
+sets `content_hash` and, unless a newer index holds the document, the record
+(`backend/onyx/db/document.py:record_present_index_write__no_commit`); a PRESENT write that
+finishes after a swap records nothing, since its index is no longer PRESENT.
+The dedup gate reads the three fields through
+`backend/onyx/db/document.py:present_index_content_hash`: a record for PRESENT, or for the
+source of an INSTANT backfill, is what the index holds; a record for an older
+index means the document never reached PRESENT; otherwise `content_hash`. The
+swap changes no document rows.
+
 ## Contracts and traps
 
 1. `bump-last-modified` **A per-document metadata change must bump
@@ -221,6 +235,11 @@ it deletes the old one.
     do the same, or [[llm-providers]] shows a default that indexing does not use. The in-place
     endpoint refuses to turn the feature off while the `ENABLE_CONTEXTUAL_RAG`
     env flag is set ([[indexing-pipeline]]).
+13. `hash-record-per-generation` **Read the content hash through
+    `backend/onyx/db/document.py:present_index_content_hash`, and record a write with the
+    settings id of the index written.** `content_hash` alone can describe an
+    index that a swap retired. A writer passes the id resolved before its batch,
+    not at write time: a batch can straddle a swap.
 
 ## Decisions
 
@@ -231,6 +250,10 @@ it deletes the old one.
   only rows without the flag.
 - **The old index is kept for a soak period.** It allows a rollback while the new
   model is judged, and the PAST row stays forever as a record.
+- **The swap changes no document rows.** Stamping every row at the swap is a
+  whole-table update inside the swap transaction, which a large deployment
+  cannot afford. The gate resolves which index holds a document per row, on the
+  rows it touches.
 
 ## Known issues
 

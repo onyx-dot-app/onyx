@@ -98,12 +98,14 @@ crash. `indexing/chunk_batch_store.py:ChunkBatchStore` spills embedded chunks to
 local disk inside one docprocessing task, so a large batch is never in memory.
 
 **Dedup gate.** `indexing/indexing_pipeline.py:get_docs_to_update`
-decides which documents to re-chunk. Gate 1 skips a document whose
-`doc_updated_at` did not advance. Gate 2 skips one whose `content_hash()` is
-unchanged. An ACL change bypasses both. Docprocessing turns gate 1 off, because
-the connector already filtered by time. A FUTURE attempt turns gate 2 off.
-`force_update` turns both off, for the per-document retry and the tabular
-re-chunk migration.
+decides which documents to re-chunk. Both gates compare against the hash the
+PRESENT index holds, `backend/onyx/db/document.py:present_index_content_hash`
+([[document-index#hash-record-per-generation]]). Gate 1 skips a document whose
+`doc_updated_at` did not advance, when the row's `content_hash` is that hash.
+Gate 2 skips one whose `content_hash()` equals it. An ACL change bypasses both.
+Docprocessing turns gate 1 off, because the connector already filtered by time.
+A FUTURE attempt turns gate 2 off. `force_update` turns both off, for the
+per-document retry and the tabular re-chunk migration.
 
 **The write.** The enricher bakes access, document sets, boost, cc-pair IDs and
 hierarchy ancestors into each chunk. A later permission change reaches the index
@@ -246,9 +248,13 @@ the error type on purpose in auth code.
    ID, and the content hash cannot see that.
    `connectors/models.py:DocumentBase.content_hash` walks text and image
    sections only, so a changed spreadsheet looks unchanged to gate 2.
-9. `future-ignores-content-hash` **A FUTURE write must not read or stamp the
-   content hash.** The hash column is shared and belongs to PRESENT. If FUTURE
-   uses it, the two generations suppress each other's writes during a reindex.
+9. `future-ignores-content-hash` **A FUTURE write must not read the content
+   hash gate or stamp `content_hash`.** That column belongs to PRESENT. A FUTURE
+   write records its hash with FUTURE's settings id instead
+   (`backend/onyx/db/document.py:record_reindex_write__no_commit`,
+   [[document-index#hash-record-per-generation]]). If FUTURE used
+   `content_hash`, the two generations would suppress each other's writes
+   during a reindex.
 10. `targeted-reindex-outside-fence` **The attempt fence excludes targeted
    reindex on purpose.**
    `db/indexing_coordination.py:IndexingCoordination.try_create_index_attempt`

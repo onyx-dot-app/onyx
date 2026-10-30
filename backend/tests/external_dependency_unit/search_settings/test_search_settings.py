@@ -147,6 +147,7 @@ def _run_indexing_pipeline_with_mocks(
         tenant_id="public",
         adapter=MagicMock(),
         chunker=MagicMock(chunk_token_limit=512),
+        written_search_settings_id=1,  # no document is written
     )
 
 

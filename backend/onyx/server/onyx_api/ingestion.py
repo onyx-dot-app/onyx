@@ -214,6 +214,7 @@ def upsert_ingestion_doc(
         embedder=index_embedding_model,
         document_index=document_index,
         ignore_time_skip=True,
+        written_search_settings_id=active_search_settings.primary.id,
         db_session=db_session,
         tenant_id=tenant_id,
         document_batch=[document],
@@ -246,6 +247,7 @@ def upsert_ingestion_doc(
             # FUTURE write: skip content_hash dedup, else the primary run's hash
             # suppresses this into a no-op.
             index_to_secondary=True,
+            written_search_settings_id=sec_search_settings.id,
             db_session=db_session,
             tenant_id=tenant_id,
             document_batch=[document],

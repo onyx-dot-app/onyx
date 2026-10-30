@@ -256,3 +256,31 @@ def test_copier_writes_all_without_filter(mock_reembed: MagicMock) -> None:
     assert written == 2
     assert aborted is False
     future_index.index_raw_chunks.assert_called_once()
+
+
+@patch("onyx.document_index.opensearch.port_copy.re_embed_chunks")
+def test_copier_reports_docs_already_in_target(mock_reembed: MagicMock) -> None:
+    """A doc whose chunk the create-only write found already in FUTURE (benign 409)
+    is reported, so the port does not record it as written by this copy."""
+    present_client = MagicMock()
+    present_client.iter_chunks_for_doc_ids.return_value = [
+        [_chunk("doc_a"), _chunk("doc_b")]
+    ]
+    mock_reembed.side_effect = _passthrough_reembed
+    future_index = MagicMock()
+    future_index.index_raw_chunks.return_value = {"doc_b"}
+    existing: set[str] = set()
+
+    written, aborted = copy_present_chunks_to_future(
+        present_client=present_client,
+        future_index=future_index,
+        doc_ids=["doc_a", "doc_b"],
+        strategy=ReembedStrategy.MODEL_ONLY,
+        embedder=MagicMock(),
+        present_tokenizer=MagicMock(),
+        tenant_state=TenantState(tenant_id="public", multitenant=False),
+        on_docs_already_in_target=existing.update,
+    )
+
+    assert (written, aborted) == (2, False)
+    assert existing == {"doc_b"}

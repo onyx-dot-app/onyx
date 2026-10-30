@@ -99,6 +99,7 @@ def copy_present_chunks_to_future(
     surviving_doc_ids: Callable[[], set[str]] | None = None,
     should_abort: Callable[[], bool] | None = None,
     strip_stored_context: bool = False,
+    on_docs_already_in_target: Callable[[set[str]], None] | None = None,
 ) -> tuple[int, bool]:
     """Port one batch PRESENT -> FUTURE; returns (chunks written, aborted).
     aborted=True means should_abort stopped the copy mid-batch, so the caller must not
@@ -106,7 +107,10 @@ def copy_present_chunks_to_future(
 
     should_abort brackets each re-embed and precedes each write — it aborts a cancelled
     attempt and heartbeats so a slow-but-live port isn't stall-failed. surviving_doc_ids
-    drops chunks of docs deleted mid-batch (no resurrection)."""
+    drops chunks of docs deleted mid-batch (no resurrection). on_docs_already_in_target gets,
+    per write, the docs the create-only write found already in FUTURE (a secondary
+    indexing or earlier port write owns them), so the caller does not count them as
+    written by this copy."""
     if strategy is ReembedStrategy.COPY_VECTORS:
         return _copy_stored_vectors(
             present_client=present_client,
@@ -118,6 +122,7 @@ def copy_present_chunks_to_future(
             surviving_doc_ids=surviving_doc_ids,
             should_abort=should_abort,
             strip_stored_context=strip_stored_context,
+            on_docs_already_in_target=on_docs_already_in_target,
         )
     pages: Iterable[list[DocumentChunkWithoutVectors]]
     # Contextual RAG-on AUGMENTATION: buffer to reassemble each doc (chunks span PIT pages), then
@@ -156,7 +161,11 @@ def copy_present_chunks_to_future(
             strip_stored_context=strip_stored_context,
         )
         written, aborted = _write_port_chunks(
-            future_index, reembedded, surviving_doc_ids, should_abort
+            future_index,
+            reembedded,
+            surviving_doc_ids,
+            should_abort,
+            on_docs_already_in_target,
         )
         chunks_written += written
         if aborted:
@@ -174,6 +183,7 @@ def _copy_stored_vectors(
     surviving_doc_ids: Callable[[], set[str]] | None,
     should_abort: Callable[[], bool] | None,
     strip_stored_context: bool,
+    on_docs_already_in_target: Callable[[set[str]], None] | None,
 ) -> tuple[int, bool]:
     """COPY_VECTORS: write each PRESENT chunk with its stored content vector.
     Only a chunk whose stored context the FUTURE strips is re-embedded."""
@@ -197,7 +207,11 @@ def _copy_stored_vectors(
             strip_stored_context=True,
         )
         written, aborted = _write_port_chunks(
-            future_index, copied + reembedded, surviving_doc_ids, should_abort
+            future_index,
+            copied + reembedded,
+            surviving_doc_ids,
+            should_abort,
+            on_docs_already_in_target,
         )
         chunks_written += written
         if aborted:
@@ -210,6 +224,7 @@ def _write_port_chunks(
     chunks: list[DocumentChunk],
     surviving_doc_ids: Callable[[], set[str]] | None,
     should_abort: Callable[[], bool] | None,
+    on_docs_already_in_target: Callable[[set[str]], None] | None,
 ) -> tuple[int, bool]:
     """Writes one page of ported chunks create-only; returns (written, aborted)."""
     if not chunks:
@@ -238,7 +253,9 @@ def _write_port_chunks(
             sub = [c for c in sub if c.document_id in surviving]
             if not sub:
                 continue
-        future_index.index_raw_chunks(sub, use_create_only=True)
+        existing = future_index.index_raw_chunks(sub, use_create_only=True)
+        if existing and on_docs_already_in_target is not None:
+            on_docs_already_in_target(existing)
         written += len(sub)
     return written, False
 
@@ -272,68 +289,70 @@ def find_documents_missing_from_index(
 class PortCopier:
     """Resolves the OpenSearch handles, reembed strategy, and embedder once so
     copy_doc_batch runs with no DB session held. Build it while the search
-    settings are session-attached: the FUTURE provider credentials lazy-load,
+    settings are session-attached: the target's provider credentials lazy-load,
     and the AUGMENTATION contextual LLM/model-config resolution needs a session.
     """
 
     def __init__(
         self,
-        present_search_settings: SearchSettings,
-        future_search_settings: SearchSettings,
+        source_search_settings: SearchSettings,
+        target_search_settings: SearchSettings,
     ) -> None:
         self._strategy = select_reembed_strategy(
-            present_search_settings, future_search_settings
+            source_search_settings, target_search_settings
         )
         logger.info(
             "Porting %s into %s with the %s strategy",
-            present_search_settings.index_name,
-            future_search_settings.index_name,
+            source_search_settings.index_name,
+            target_search_settings.index_name,
             self._strategy.value,
         )
-        self._present_client = OpenSearchIndexClient(
-            index_name=present_search_settings.index_name
+        self._source_client = OpenSearchIndexClient(
+            index_name=source_search_settings.index_name
         )
         self._tenant_state = TenantState(
             tenant_id=get_current_tenant_id(), multitenant=MULTI_TENANT
         )
-        self._future_index = build_opensearch_document_index(future_search_settings)
+        self._target_index = build_opensearch_document_index(target_search_settings)
         self._embedder = DefaultIndexingEmbedder.from_db_search_settings(
-            future_search_settings
+            target_search_settings
         )
-        # The PRESENT model's tokenizer (what indexing used) — MODEL_ONLY needs it to
-        # reproduce the metadata-tail skip; the FUTURE embedder's would flip it.
-        self._present_tokenizer = get_tokenizer(
-            model_name=present_search_settings.model_name,
-            provider_type=present_search_settings.provider_type,
+        # The source model's tokenizer (what indexing used) — MODEL_ONLY needs it to
+        # reproduce the metadata-tail skip; the target embedder's would flip it.
+        self._source_tokenizer = get_tokenizer(
+            model_name=source_search_settings.model_name,
+            provider_type=source_search_settings.provider_type,
         )
         self._augmentation_ctx: AugmentationReembedContext | None = None
         if self._strategy is ReembedStrategy.AUGMENTATION:
-            self._augmentation_ctx = _build_augmentation_ctx(future_search_settings)
-        # Context left in PRESENT by a forward-only disable must not be embedded.
-        self._strip_stored_context = not future_search_settings.enable_contextual_rag
+            self._augmentation_ctx = _build_augmentation_ctx(target_search_settings)
+        # Context left in the source by a forward-only disable must not be embedded.
+        self._strip_stored_context = not target_search_settings.enable_contextual_rag
 
     def delete_port_written(self, document_ids: list[str]) -> int:
         """Delete only the port-written chunks of these docs from the target index —
         used by the orphan sweep to remove a resurrected doc while leaving a
         legitimately re-added one (unmarked chunks) intact. Returns chunks deleted."""
-        return self._future_index.delete_port_written_chunks(document_ids)
+        return self._target_index.delete_port_written_chunks(document_ids)
 
     def copy_doc_batch(
         self,
         doc_ids: list[str],
         surviving_doc_ids: Callable[[], set[str]] | None = None,
         should_abort: Callable[[], bool] | None = None,
+        on_docs_already_in_target: Callable[[set[str]], None] | None = None,
     ) -> tuple[int, bool]:
         return copy_present_chunks_to_future(
-            present_client=self._present_client,
-            future_index=self._future_index,
+            present_client=self._source_client,
+            future_index=self._target_index,
             doc_ids=doc_ids,
             strategy=self._strategy,
             embedder=self._embedder,
-            present_tokenizer=self._present_tokenizer,
+            present_tokenizer=self._source_tokenizer,
             tenant_state=self._tenant_state,
             augmentation_ctx=self._augmentation_ctx,
             surviving_doc_ids=surviving_doc_ids,
             should_abort=should_abort,
             strip_stored_context=self._strip_stored_context,
+            on_docs_already_in_target=on_docs_already_in_target,
         )

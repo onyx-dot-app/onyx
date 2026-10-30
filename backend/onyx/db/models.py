@@ -1323,6 +1323,17 @@ class Document(Base):
     # Null for documents indexed before this column was added.
     content_hash: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    # For reindexing: the hash this document was written with into the secondary
+    # (FUTURE) index, and that index's search settings id. After the swap those
+    # settings are PRESENT, so this pair describes the new PRESENT index while
+    # content_hash may still describe the old one. Outside a reindex, PRESENT writes
+    # keep it equal to content_hash. Read both through present_index_content_hash
+    # (db/document.py).
+    secondary_content_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    secondary_search_settings_id: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+
     # last time any document-index-relevant row metadata or the doc changed.
     # does not include last_synced
     last_modified: Mapped[datetime.datetime | None] = mapped_column(

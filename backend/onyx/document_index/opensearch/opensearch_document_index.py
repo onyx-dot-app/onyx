@@ -1189,8 +1189,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
 
     def index_raw_chunks(
         self, chunks: list[DocumentChunk], use_create_only: bool = False
-    ) -> None:
-        """Indexes raw document chunks into OpenSearch.
+    ) -> set[str]:
+        """Indexes raw document chunks into OpenSearch. Returns the document ids a
+        create-only write found already there (benign 409), else an empty set.
 
         Used by the reindex port. The reindex port
         passes use_create_only=True so its stale backlog snapshot can never
@@ -1208,7 +1209,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         # since the doc may already have been indexed during the OpenSearch
         # transition period. Port path (use_create_only=True): create-only, so
         # it never overwrites.
-        self._client.bulk_index_documents(
+        return self._client.bulk_index_documents(
             documents=chunks,
             tenant_state=self._tenant_state,
             update_if_exists=True,
