@@ -50,6 +50,7 @@ from onyx.db.search_settings import (
     get_active_search_settings_list,
 )
 from onyx.db.user_file import (
+    consume_user_file_processing_attempt,
     fetch_user_files_with_access_relationships,
     mark_user_file_reconcile_pending,
 )
@@ -632,8 +633,8 @@ def process_user_file_impl(
 
     documents: list[Document] = []
     try:
-        # Short read session: fetch what we need from UserFile then release the
-        # connection before the slow file-I/O and indexing pipeline phases.
+        # Short session: count the pickup and read what we need, then release
+        # the connection before the slow file-I/O and indexing pipeline phases.
         with get_session_with_current_tenant() as db_session:
             uf = db_session.get(UserFile, _as_uuid(user_file_id))
             if not uf:
@@ -648,6 +649,13 @@ def process_user_file_impl(
             ):
                 task_logger.info(
                     f"process_user_file_impl - Skipping id={user_file_id} status={uf.status}"
+                )
+                return
+
+            if not consume_user_file_processing_attempt(db_session, uf):
+                task_logger.error(
+                    f"process_user_file_impl - Marked FAILED id={user_file_id} "
+                    f"after {uf.processing_attempts - 1} pickups"
                 )
                 return
 
